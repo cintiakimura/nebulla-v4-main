@@ -5,6 +5,7 @@ import {
   Eye,
   EyeOff,
   FileStack,
+  FolderGit2,
   GripVertical,
   Maximize2,
   Minimize2,
@@ -70,7 +71,13 @@ function readStoredPreviewWidth(): number {
   return 400;
 }
 
-export function AppPreviewPanel({ pages }: { pages: FlowNode[] }) {
+export function AppPreviewPanel({
+  pages,
+  onOpenSourceControl,
+}: {
+  pages: FlowNode[];
+  onOpenSourceControl?: () => void;
+}) {
   const [panelOpen, setPanelOpen] = useState(false);
   const [panelWidth, setPanelWidth] = useState(readStoredPreviewWidth);
   const [viewport, setViewport] = useState<ViewportMode>('desktop');
@@ -198,12 +205,6 @@ export function AppPreviewPanel({ pages }: { pages: FlowNode[] }) {
   /** Compact browser-style chrome (~2 short rows), inspired by segmented + address bar layouts */
   const previewChrome = (
     <div className="shrink-0 border-b border-white/10 bg-[#080d14]">
-      <div className="flex items-center gap-2 px-2 pt-2">
-        <span className="rounded-md bg-white/[0.08] px-2.5 py-1 text-[12px] font-medium text-cyan-200/95">
-          Preview
-        </span>
-        <span className="flex-1" />
-      </div>
       <div className="flex items-center gap-1.5 px-2 py-2">
         <div
           ref={menuRef}
@@ -412,19 +413,27 @@ export function AppPreviewPanel({ pages }: { pages: FlowNode[] }) {
     <div className="pointer-events-none absolute inset-0 z-[50]">
       <div
         className="pointer-events-auto absolute left-0 top-0 z-[52] flex h-full w-10 flex-col items-center gap-2 border-r border-white/10 bg-[#040f1a]/90 py-3"
-        aria-label="App preview controls"
+        aria-label="Workspace tools"
       >
+        {onOpenSourceControl ? (
+          <button
+            type="button"
+            title="Source Control"
+            aria-label="Source Control"
+            onClick={() => onOpenSourceControl()}
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-[#060a14]/80 text-slate-400 hover:border-cyan-500/35 hover:text-cyan-300"
+          >
+            <FolderGit2 className="h-4 w-4" aria-hidden />
+          </button>
+        ) : null}
         <button
           type="button"
-          title={panelOpen ? 'Hide app preview' : 'Show app preview'}
+          title={panelOpen ? 'Hide live app preview' : 'Show live app preview'}
           aria-pressed={panelOpen}
           onClick={() => setPanelOpen((o) => !o)}
-          className="flex flex-col items-center justify-center gap-0.5 rounded-lg border border-cyan-500/25 bg-[#060a14]/80 p-2 text-cyan-300 hover:bg-cyan-500/10"
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-cyan-500/25 bg-[#060a14]/80 text-cyan-300 hover:bg-cyan-500/10"
         >
-          {panelOpen ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-          <span className="text-[8px] font-headline uppercase tracking-wider text-slate-500 [writing-mode:vertical-rl] rotate-180">
-            Preview
-          </span>
+          {panelOpen ? <EyeOff className="h-4 w-4" aria-hidden /> : <Eye className="h-4 w-4" aria-hidden />}
         </button>
       </div>
 

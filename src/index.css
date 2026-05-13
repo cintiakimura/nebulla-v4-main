@@ -1,7 +1,89 @@
 @import "tailwindcss";
 @plugin "@tailwindcss/typography";
 
+/* Dark-mode variant for future `dark:` utilities (html already has class="dark") */
+@custom-variant dark (&:is(.dark *));
+
+/*
+ * Semantic design tokens (shadcn-style) — Cosmic Night base.
+ * Values align with the existing MD3-inspired palette in @theme below (#020C17, cyan primary, etc.).
+ */
+:root,
+.dark {
+  --background: #020c17;
+  --foreground: #d4e7ff;
+  --card: #0b2134;
+  --card-foreground: #d4e7ff;
+  --popover: #0e273d;
+  --popover-foreground: #d4e7ff;
+  --primary: #c1fffe;
+  --primary-foreground: #006767;
+  --secondary: #081b2b;
+  --secondary-foreground: #d4e7ff;
+  --muted: #0e273d;
+  --muted-foreground: #96adc8;
+  --accent: #00e6e6;
+  --accent-foreground: #006767;
+  --destructive: #ff716c;
+  --destructive-foreground: #f7f9ff;
+  --border: #334a61;
+  --input: #081b2b;
+  --ring: #c1fffe;
+  --chart-1: #c1fffe;
+  --chart-2: #dfb7ff;
+  --chart-3: #ffabf3;
+  --chart-4: #00b4b4;
+  --chart-5: #a533ff;
+  --radius: 0.5rem;
+  --sidebar: #040f1a;
+  --sidebar-foreground: #d4e7ff;
+  --sidebar-primary: #c1fffe;
+  --sidebar-primary-foreground: #006767;
+  --sidebar-accent: #0e273d;
+  --sidebar-accent-foreground: #d4e7ff;
+  --sidebar-border: #334a61;
+  --sidebar-ring: #c1fffe;
+}
+
 @theme {
+  /* Tailwind semantic colors: bg-background, text-foreground, border-border, bg-card, … */
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  /* `secondary` / `secondary-foreground` stay MD3-style below (purple accent), not --secondary surface */
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+
+  /* Original Material / surface tokens (unchanged names for existing screens) */
   --color-on-tertiary-container: #660066;
   --color-primary-container: #00ffff;
   --color-on-primary-fixed-variant: #006262;
@@ -16,7 +98,6 @@
   --color-on-surface: #d4e7ff;
   --color-surface-variant: #0e273d;
   --color-surface-tint: #c1fffe;
-  --color-background: #020C17;
   --color-tertiary: #ffabf3;
   --color-outline: #607890;
   --color-error-container: #8a1a1e;
@@ -28,30 +109,31 @@
   --color-error: #ff716c;
   --color-on-secondary-fixed: #60009f;
   --color-on-primary: #006767;
-  --color-surface: #020C17;
+  --color-surface: #020c17;
   --color-on-secondary-fixed-variant: #8800de;
-  --color-primary: #c1fffe;
-  --color-surface-dim: #020C17;
   --color-on-primary-container: #005d5d;
+  --color-surface-dim: #020c17;
   --color-surface-bright: #112e46;
   --color-surface-container-highest: #0e273d;
-  --color-card: #0b2134;
-  --color-card-foreground: #d4e7ff;
-  --color-muted: #0e273d;
-  --color-muted-foreground: #96adc8;
-  --color-foreground: #d4e7ff;
 
-  --font-headline: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-  --font-body: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-  --font-label: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-headline: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
+  --font-body: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
+  --font-label: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
 }
 
 @layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+
   body {
-    background-color: var(--color-background);
-    background-image: radial-gradient(circle at 0% 0%, #0F0825 0%, transparent 50%),
-                      radial-gradient(circle at 100% 100%, #0F0825 0%, transparent 50%);
-    color: var(--color-on-surface);
+    background-color: var(--background);
+    background-image: radial-gradient(circle at 0% 0%, #0f0825 0%, transparent 50%),
+      radial-gradient(circle at 100% 100%, #0f0825 0%, transparent 50%);
+    color: var(--foreground);
     font-family: var(--font-body);
     overflow: hidden;
     height: 100vh;
@@ -66,11 +148,19 @@
   .nebula-glow:hover {
     box-shadow: 0 0 25px rgba(0, 230, 230, 0.1);
   }
-  .text-13 { font-size: 13px !important; }
-  .text-14 { font-size: 14px !important; }
-  .text-18 { font-size: 18px !important; }
-  .no-bold { font-weight: 400 !important; }
-  
+  .text-13 {
+    font-size: 13px !important;
+  }
+  .text-14 {
+    font-size: 14px !important;
+  }
+  .text-18 {
+    font-size: 18px !important;
+  }
+  .no-bold {
+    font-weight: 400 !important;
+  }
+
   .workspace-grid {
     display: grid;
     grid-template-columns: 64px 240px 1fr 320px;

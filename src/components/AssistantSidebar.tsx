@@ -16,12 +16,11 @@ function readOnboardingAutopilotDone(): boolean {
 }
 import { VoiceLinesIcon } from './VoiceLinesIcon';
 import { Logo } from './Logo';
-import { SwarmToggle } from '@/components/swarm/SwarmToggle';
 import { SwarmStatusBar } from '@/components/swarm/SwarmStatusBar';
 import { SwarmThinking } from '@/components/swarm/SwarmThinking';
 import { useSwarm } from './swarm/SwarmProvider';
 import { useModelSettings } from '@/components/settings/ModelSettingsContext';
-import { ModelSelector } from '@/components/settings/ModelSelector';
+import { ChatModelSelector } from '@/components/settings/ModelSelector';
 import { runNebulaSwarm } from '../lib/runNebulaSwarm';
 import { shouldPostSwarmHandoff, computePhaseSyncAfterResponse, buildSwarmConversationSummary } from '../lib/nebulaSwarmGate';
 import type { SwarmHandoffPacket, SwarmPhase, SwarmIntensity } from '@/types/swarm';
@@ -2017,15 +2016,14 @@ ${uiStudioApprovedCode || 'No approved UI code yet.'}`;
 
   return (
     <aside className="flex flex-col border-l border-white/5 bg-[#040f1a]/40 backdrop-blur-md shrink-0" style={{ width }}>
-      <div className="p-4 border-b border-white/5 flex flex-col gap-3">
+      <div className="p-3 border-b border-white/5 flex flex-col gap-2">
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2 min-w-0">
             <span className="text-13 font-headline text-slate-300 no-bold">Nebula Partner</span>
             {isLive && <span className="flex h-2 w-2 rounded-full bg-cyan-400 animate-pulse shrink-0" />}
           </div>
         </div>
-        <ModelSelector />
-        <SwarmToggle />
+        <ChatModelSelector />
         {freeTokenUsage ? (
           <div className="space-y-1 pt-1 border-t border-white/5">
             <div className="flex justify-between text-[10px] text-slate-500">

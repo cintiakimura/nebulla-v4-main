@@ -16,6 +16,9 @@ import {
   Eye,
   EyeOff,
   History,
+  LayoutGrid,
+  Settings,
+  Key,
 } from 'lucide-react';
 import { VersionHistoryModal } from './VersionHistoryModal';
 import {
@@ -28,7 +31,8 @@ import {
   type SecretCategory,
   type ProjectSettingsStored,
 } from '../lib/nebulaDashboardStorage';
-import { ModelSelector } from '@/components/settings/ModelSelector';
+import { ChatModelSelector, AgentsHandoffPref } from '@/components/settings/ModelSelector';
+import { SwarmToggle } from '@/components/swarm/SwarmToggle';
 
 export type DashboardTab = 'projects' | 'project-settings' | 'secrets' | 'dns';
 
@@ -61,17 +65,29 @@ export function Dashboard({
     <div className="flex-1 flex flex-col h-full bg-[#040f1a]/40 backdrop-blur-sm border border-white/5 rounded-lg overflow-hidden relative">
       {/* Dashboard Header */}
       <div className="h-14 border-b border-white/5 bg-white/5 flex items-center px-6 shrink-0">
-        <h2 className="text-lg font-headline text-cyan-300 flex items-center gap-2">
-          <span className="material-symbols-outlined">
-            {activeTab === 'projects' ? 'grid_view' :
-             activeTab === 'project-settings' ? 'dns' :
-             activeTab === 'secrets' ? 'key' :
-             activeTab === 'dns' ? 'public' : 'dashboard'}
+        <h2 className="text-lg font-headline text-cyan-300 flex items-center gap-2.5">
+          {activeTab === 'projects' ? (
+            <LayoutGrid className="h-5 w-5 shrink-0 text-cyan-400/90" aria-hidden />
+          ) : activeTab === 'project-settings' ? (
+            <Settings className="h-5 w-5 shrink-0 text-cyan-400/90" aria-hidden />
+          ) : activeTab === 'secrets' ? (
+            <Key className="h-5 w-5 shrink-0 text-cyan-400/90" aria-hidden />
+          ) : activeTab === 'dns' ? (
+            <Globe className="h-5 w-5 shrink-0 text-cyan-400/90" aria-hidden />
+          ) : (
+            <LayoutGrid className="h-5 w-5 shrink-0 text-cyan-400/90" aria-hidden />
+          )}
+          <span>
+            {activeTab === 'projects'
+              ? 'My Projects'
+              : activeTab === 'project-settings'
+                ? 'Project Settings'
+                : activeTab === 'secrets'
+                  ? 'Secrets'
+                  : activeTab === 'dns'
+                    ? 'DNS & Domain'
+                    : 'Dashboard'}
           </span>
-          {activeTab === 'projects' ? 'My Projects' :
-           activeTab === 'project-settings' ? 'Project Settings' :
-           activeTab === 'secrets' ? 'Secrets' :
-           activeTab === 'dns' ? 'DNS & domain' : 'Dashboard'}
         </h2>
       </div>
 
@@ -331,9 +347,11 @@ function ProjectSettingsTab({
       </div>
 
       <div className="space-y-5 rounded-xl border border-white/10 bg-white/5 p-6">
-        <div className="rounded-lg border border-cyan-500/20 bg-cyan-950/10 p-4">
-          <h4 className="text-sm font-headline text-cyan-200 mb-2">Model & agents</h4>
-          <ModelSelector />
+        <div className="rounded-lg border border-cyan-500/20 bg-cyan-950/10 p-4 space-y-4">
+          <h4 className="text-sm font-headline text-cyan-200">Model & agents</h4>
+          <ChatModelSelector />
+          <AgentsHandoffPref />
+          <SwarmToggle />
         </div>
         <div>
           <label className="block text-[10px] uppercase tracking-wider text-slate-500 font-headline mb-1">Project name</label>

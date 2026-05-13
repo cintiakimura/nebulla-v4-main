@@ -12,7 +12,6 @@ import {
   LogOut,
   Network,
   Palette,
-  Save,
   Server,
   Terminal,
   User,
@@ -30,6 +29,7 @@ import { Logo } from './components/Logo';
 import { SourceControlPanel } from './components/SourceControlPanel';
 import { UserProfilePage } from './components/UserProfilePage';
 import { AppPreviewPanel } from './components/AppPreviewPanel';
+import { WorkspaceSwarmButton } from './components/workspace/WorkspaceSwarmButton';
 import { readResponseJson } from './lib/apiFetch';
 import { fetchSessionUser, listCloudProjects, logoutNebula, type CloudProjectRow, type NebulaSessionUser } from './lib/nebulaCloud';
 import { setBrowserProjectKey, setBrowserProjectName, withProjectQuery, withProjectBody } from './lib/nebulaProjectApi';
@@ -51,13 +51,13 @@ const PANEL_LABEL: Record<MainPanel, string> = {
   'nebula-ui-studio': 'Nebulla UI Studio',
   'mind-map': 'Mind Map',
   'master-plan': 'Master Plan',
-  'project-rules': 'Project execution rules (code mode)',
-  'source-control': 'Source control',
+  'project-rules': 'Execution rules',
+  'source-control': 'Source Control',
   'my-projects': 'My Projects',
   secrets: 'Secrets',
   'project-settings': 'Project Settings',
-  dns: 'DNS',
-  'user-profile': 'User profile',
+  dns: 'DNS & domain',
+  'user-profile': 'User Profile',
 };
 
 const seedPages: Node[] = [
@@ -546,6 +546,7 @@ function App() {
           </p>
         </div>
         <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+          <WorkspaceSwarmButton onOpenProjectSettings={() => setMainPanel('project-settings')} />
           {sessionUser ? (
             <span
               className="text-xs text-slate-500 max-w-[200px] truncate hidden sm:inline"
@@ -597,20 +598,9 @@ function App() {
               >
                 <ChevronLeft className="w-4 h-4" aria-hidden />
               </button>
-              <NavBtn panel="source-control" title="Source control">
+              <NavBtn panel="source-control" title="Source Control">
                 <FolderGit2 className="w-5 h-5" />
               </NavBtn>
-              <button
-                type="button"
-                title="Save / Commit"
-                aria-label="Save / Commit"
-                onClick={() => setMainPanel('source-control')}
-                className={`p-2 rounded-lg transition-colors ${
-                  mainPanel === 'source-control' ? 'bg-cyan-500/20 text-cyan-300' : 'text-slate-500 hover:text-cyan-300'
-                }`}
-              >
-                <Save className="w-5 h-5" />
-              </button>
               <NavBtn panel="nebula-ui-studio" title="Nebulla UI Studio">
                 <Palette className="w-5 h-5" />
               </NavBtn>
@@ -630,11 +620,11 @@ function App() {
               <NavBtn panel="project-settings" title="Project Settings">
                 <Server className="w-5 h-5" />
               </NavBtn>
-              <NavBtn panel="dns" title="DNS">
+              <NavBtn panel="dns" title="DNS & domain">
                 <Globe className="w-5 h-5" />
               </NavBtn>
               <div className="w-8 h-px bg-white/10 my-1" />
-              <NavBtn panel="user-profile" title="User profile">
+              <NavBtn panel="user-profile" title="User Profile">
                 <User className="w-5 h-5" />
               </NavBtn>
             </>
@@ -660,7 +650,10 @@ function App() {
           <div className="flex-1 min-h-0 overflow-hidden relative min-h-0">
             {/* Reserve w-10 for vertical App preview rail; main IDE fills the rest */}
             <div className="absolute inset-0 left-10 overflow-hidden">{renderCenter()}</div>
-            <AppPreviewPanel pages={pages} />
+            <AppPreviewPanel
+              pages={pages}
+              onOpenSourceControl={() => setMainPanel('source-control')}
+            />
           </div>
 
           <div className="h-36 min-h-[6rem] max-h-[45vh] shrink-0 border-t border-white/10 bg-[#040f1a]/70 flex flex-col resize-y overflow-auto">

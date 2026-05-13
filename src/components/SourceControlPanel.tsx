@@ -256,7 +256,7 @@ export function SourceControlPanel({
         <div className="flex items-center gap-2 text-cyan-200">
           <FolderGit2 className="w-5 h-5 shrink-0" aria-hidden />
           <div>
-            <h2 className="text-sm font-headline tracking-wide">Source control</h2>
+            <h2 className="text-sm font-headline tracking-wide">Source Control</h2>
             <p className="text-[10px] text-slate-500 font-mono">
               App product: <span className="text-cyan-500/80">{data?.nebulaProjectRoot ?? 'not set'}</span>
               <span className="block text-slate-600 normal-case mt-0.5">
