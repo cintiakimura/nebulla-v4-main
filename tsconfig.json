@@ -29,5 +29,5 @@
     "allowImportingTsExtensions": true,
     "noEmit": true
   },
-  "exclude": ["node_modules", "v0-generated"]
+  "exclude": ["node_modules", "v0-generated", "0vgenerated-v2"]
 }
