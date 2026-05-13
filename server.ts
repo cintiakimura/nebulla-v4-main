@@ -37,8 +37,22 @@ import { getNebullaPersistRoot, getNebulaProjectDocsRoot } from "./lib/nebulaWor
 import { ensureCloudProjectWorkspace } from "./lib/nebulaCloudProjectRoot";
 import { getProjectKeyFromRequest } from "./lib/nebulaProjectKey";
 import { buildSwarmHandoffParallel } from "./lib/nebulaSwarmHandoff";
+import { readNebulaSwarmState } from "./lib/nebulaSwarmState";
+import {
+  addTokens,
+  checkAndEnforceLimit,
+  getMonthlyUsageSnapshot,
+  TokenLimitExceededError,
+} from "./lib/token-usage";
+import { getUserCapabilities } from "./lib/user-tier";
 
 type NebulaRequest = express.Request & { nebulaDiskKey?: string };
+
+function xaiUsageTotal(usage: unknown): number {
+  if (!usage || typeof usage !== "object") return 0;
+  const t = (usage as { total_tokens?: number }).total_tokens;
+  return typeof t === "number" && Number.isFinite(t) ? t : 0;
+}
 
 const REPO_ROOT = getNebullaPersistRoot();
 /** Bundled template docs (seed for new cloud projects). */
@@ -1460,15 +1474,33 @@ ${workflowContext}`;
     }
   });
 
+  app.get("/api/nebula-swarm/state", (req, res) => {
+    try {
+      const pp = projectPathsFor(req);
+      const swarmState = readNebulaSwarmState(pp.workspaceRoot);
+      return res.json({ swarmState });
+    } catch (err) {
+      console.error("/api/nebula-swarm/state:", err);
+      captureError(err instanceof Error ? err : new Error(String(err)), {
+        source: "server",
+        route: "/api/nebula-swarm/state",
+      });
+      return res.status(500).json({
+        error: err instanceof Error ? err.message : "Failed to read Nebula Swarm state",
+      });
+    }
+  });
+
   app.post("/api/nebula-swarm/handoff", async (req, res) => {
     try {
       /*
-       * Nebula Swarm handoff — support agents (Planner, Researcher, Tester on Grok 3; optional
-       * Reviewer on Grok 4.1 when intensity is `full_quality`).
+       * Nebula Swarm handoff — support agents run **only** per `lib/nebulaSwarmExecutionPlan.ts`
+       * (once Planner+Researcher; Tester/Reviewer on triggers). Client passes `swarmHints`.
        *
-       * - **GROK_SWARM_API_KEY** + **GROK_SWARM_MODEL** → parallel Grok 3 lane (subset by intensity).
-       * - **Reviewer** → `resolveNebullaGrokKeyForReq(req)` + **GROK_SWARM_REVIEWER_MODEL** (default
-       *   `grok-4-1-fast-reasoning`) when `swarmIntensity` is `full_quality`.
+       * - **GROK_SWARM_API_KEY** + **GROK_SWARM_MODEL** → Grok 3 lane for Planner / Researcher / Tester.
+       * - **Reviewer** (optional) → `resolveNebullaGrokKeyForReq(req)` + **GROK_SWARM_REVIEWER_MODEL**
+       *   when intensity is `full_quality` **and** the run plan includes Reviewer; missing main key
+       *   skips Reviewer instead of failing the whole request.
        */
       const swarmKey = process.env.GROK_SWARM_API_KEY?.trim() ?? "";
       if (!swarmKey || swarmKey.length < 20) {
@@ -1499,18 +1531,60 @@ ${workflowContext}`;
             : "Untitled Project";
       const runId =
         typeof body.runId === "string" && body.runId.trim() ? body.runId.trim() : `swarm-${Date.now()}`;
+      const contextSummary =
+        typeof body.contextSummary === "string" ? body.contextSummary.trim().slice(0, 2000) : "";
+      let focusPaths: string[] | undefined;
+      if (Array.isArray(body.focusPaths)) {
+        const fp = body.focusPaths
+          .slice(0, 3)
+          .map((p) => (typeof p === "string" ? p.trim().slice(0, 240) : ""))
+          .filter(Boolean);
+        if (fp.length > 0) focusPaths = fp;
+      }
+      let focusSnippets: Record<string, string> | undefined;
+      if (
+        body.focusSnippets &&
+        typeof body.focusSnippets === "object" &&
+        !Array.isArray(body.focusSnippets)
+      ) {
+        const raw = body.focusSnippets as Record<string, unknown>;
+        const out: Record<string, string> = {};
+        let total = 0;
+        for (const [k, v] of Object.entries(raw).slice(0, 3)) {
+          const key = String(k || "")
+            .trim()
+            .slice(0, 240);
+          const val = typeof v === "string" ? v.slice(0, 1800) : "";
+          if (!key || !val) continue;
+          if (total + val.length > 4500) break;
+          out[key] = val;
+          total += val.length;
+        }
+        if (Object.keys(out).length > 0) focusSnippets = out;
+      }
+      let swarmHints:
+        | import("./lib/nebulaSwarmExecutionPlan").SwarmHandoffHints
+        | undefined;
+      const rawHints = body.swarmHints;
+      if (rawHints && typeof rawHints === "object" && !Array.isArray(rawHints)) {
+        const h = rawHints as Record<string, unknown>;
+        swarmHints = {
+          priorUserMessageCount:
+            typeof h.priorUserMessageCount === "number" && Number.isFinite(h.priorUserMessageCount)
+              ? h.priorUserMessageCount
+              : undefined,
+          afterCodingTurn: Boolean(h.afterCodingTurn),
+          finalDeliveryCandidate: Boolean(h.finalDeliveryCandidate),
+        };
+      }
       const pp = projectPathsFor(req);
 
       let reviewerLane: { apiKey: string; model: string } | undefined;
       if (swarmIntensity === "full_quality") {
         const mainGrok = resolveNebullaGrokKeyForReq(req);
-        if (!mainGrok || mainGrok.length < 20) {
-          return res.status(401).json({
-            error:
-              "Full Quality swarm requires a Grok 4.1 key for the Reviewer pass: set GROK_API_KEY in .env, or send X-Grok-Api-Key / grokApiKey on this request (same as /api/grok/chat).",
-          });
+        if (mainGrok && mainGrok.length >= 20) {
+          reviewerLane = { apiKey: mainGrok, model: reviewerModel };
         }
-        reviewerLane = { apiKey: mainGrok, model: reviewerModel };
       }
 
       const handoff = await buildSwarmHandoffParallel(
@@ -1529,6 +1603,10 @@ ${workflowContext}`;
           runId,
           intensity: swarmIntensity,
           reviewerLane,
+          ...(contextSummary ? { contextSummary } : {}),
+          ...(focusPaths ? { focusPaths } : {}),
+          ...(focusSnippets ? { focusSnippets } : {}),
+          ...(swarmHints ? { swarmHints } : {}),
         }
       );
       return res.json({ handoff });
@@ -1574,6 +1652,33 @@ ${workflowContext}`;
       typeof userId === "string" && userId.trim() ? userId.trim() : "anonymous";
     const convProject =
       typeof projectName === "string" && projectName.trim() ? projectName.trim() : "Untitled Project";
+
+    try {
+      await checkAndEnforceLimit(convUserId);
+    } catch (limitErr: unknown) {
+      if (limitErr instanceof TokenLimitExceededError) {
+        return res.status(402).json({
+          error:
+            "You've reached your monthly limit. Upgrade to Pro for unlimited Grok 4 or Power for agents.",
+          code: limitErr.code,
+        });
+      }
+      throw limitErr;
+    }
+
+    const rawBody = (req.body || {}) as Record<string, unknown>;
+    const bodyChatModel =
+      typeof rawBody.chatModel === "string" ? rawBody.chatModel.trim().toLowerCase() : "";
+    const snap = convUserId !== "anonymous" ? await getMonthlyUsageSnapshot(convUserId) : null;
+    const tier = snap?.tier ?? "free";
+    const caps = getUserCapabilities({ tier });
+    const grok3Model = process.env.GROK_SWARM_MODEL?.trim() || "grok-3-fast";
+    const grok4Model = "grok-4-1-fast-reasoning";
+    let chatModelFamily: "grok-3" | "grok-4.1" = "grok-4.1";
+    if (caps.allowedChatModel === "grok-3") chatModelFamily = "grok-3";
+    else if (bodyChatModel === "grok-3" || bodyChatModel === "grok3") chatModelFamily = "grok-3";
+    else chatModelFamily = "grok-4.1";
+    const resolvedModel = chatModelFamily === "grok-3" ? grok3Model : grok4Model;
 
     let messagesForApi: { role: string; content?: string }[] = Array.isArray(messages) ? messages : [];
 
@@ -1635,7 +1740,7 @@ ${answer.slice(0, 8000)}`;
           Authorization: `Bearer ${apiKey}`,
         },
         body: JSON.stringify({
-          model: "grok-4-1-fast-reasoning",
+          model: resolvedModel,
           messages: messagesForApi,
           stream: false,
         }),
@@ -1652,6 +1757,7 @@ ${answer.slice(0, 8000)}`;
       }
 
       const data = await response.json();
+      let codeExtraTokens = 0;
       let responseText = data.choices?.[0]?.message?.content || "";
       /** Grok 4 text before optional Grok Code swap — used for Master Plan + Grok B summaries. */
       let grok4PlanningCapture = responseText;
@@ -1685,6 +1791,7 @@ CRITICAL OUTPUT CONTRACT (no deviation):
           });
           if (codeRes.ok) {
             const codeData = await codeRes.json();
+            codeExtraTokens = xaiUsageTotal(codeData.usage);
             const codeText = codeData.choices?.[0]?.message?.content || "";
             if (codeText.trim()) {
               responseText = codeText;
@@ -1788,6 +1895,17 @@ CRITICAL OUTPUT CONTRACT (no deviation):
 
       // We return the full responseText to the frontend so it can maintain state.
       // The frontend will be responsible for stripping tags for display.
+      try {
+        const mainTok = xaiUsageTotal(data.usage);
+        if (convUserId !== "anonymous" && mainTok > 0) {
+          await addTokens(convUserId, mainTok, chatModelFamily === "grok-3" ? "grok-3" : "grok-4");
+        }
+        if (convUserId !== "anonymous" && codeExtraTokens > 0) {
+          await addTokens(convUserId, codeExtraTokens, "grok-4");
+        }
+      } catch (btErr) {
+        console.warn("[billing] addTokens:", btErr);
+      }
       res.json(data);
     } catch (error) {
       console.error("Error calling GROK API:", error);
@@ -1856,6 +1974,12 @@ CRITICAL OUTPUT CONTRACT (no deviation):
   } else {
     const distPath = path.join(REPO_ROOT, "dist");
     const spaIndexHtml = path.join(distPath, "index.html");
+    if (!fs.existsSync(spaIndexHtml)) {
+      const msg = `[nebula] Production SPA missing: ${spaIndexHtml}. Run \`npm run build\` in the image/build step and ensure dist/ is copied into the runtime container.`;
+      console.error(msg);
+      captureError(new Error(msg), { source: "server", route: "startup", detail: "missing-dist" });
+      process.exit(1);
+    }
     const sendSpaIndex = (_req: express.Request, res: express.Response) => {
       // Never cache the SPA shell — stale index.html keeps users on old JS after deploy (CDN/browser).
       res.setHeader("Cache-Control", "private, no-store, no-cache, must-revalidate");
@@ -1907,6 +2031,7 @@ startServer().catch((err) => {
     source: "process",
     detail: "startServer",
   });
+  process.exit(1);
 });
 
 async function speak(text: string): Promise<Buffer> {

@@ -24,6 +24,7 @@ import { MindMap } from './components/MindMap';
 import { PencilStudio } from './components/PencilStudio';
 import { Dashboard, type DashboardTab } from './components/Dashboard';
 import { AssistantSidebar } from './components/AssistantSidebar';
+import { ModelSettingsProvider } from './components/settings/ModelSettingsContext';
 import { ExecutionRulesViewer } from './components/ExecutionRulesViewer';
 import { Logo } from './components/Logo';
 import { SourceControlPanel } from './components/SourceControlPanel';
@@ -32,6 +33,7 @@ import { AppPreviewPanel } from './components/AppPreviewPanel';
 import { readResponseJson } from './lib/apiFetch';
 import { fetchSessionUser, listCloudProjects, logoutNebula, type CloudProjectRow, type NebulaSessionUser } from './lib/nebulaCloud';
 import { setBrowserProjectKey, setBrowserProjectName, withProjectQuery, withProjectBody } from './lib/nebulaProjectApi';
+import { normalizeUserTier } from '@/lib/user-tier';
 
 type MainPanel =
   | 'nebula-ui-studio'
@@ -516,7 +518,8 @@ function App() {
   }
 
   return (
-    <div className="h-screen min-h-0 flex flex-col overflow-hidden bg-[#020C17] text-slate-100">
+    <ModelSettingsProvider billingTier={normalizeUserTier(sessionUser?.billingTier)}>
+      <div className="h-screen min-h-0 flex flex-col overflow-hidden bg-[#020C17] text-slate-100">
       <header className="h-16 shrink-0 border-b border-white/10 bg-[#040f1a]/70 backdrop-blur flex items-center gap-4 px-6">
         <div className="flex min-w-0 shrink-0 items-center gap-3">
           <Logo className="w-9 h-9" />
@@ -739,6 +742,7 @@ function App() {
         />
       </main>
     </div>
+    </ModelSettingsProvider>
   );
 }
 

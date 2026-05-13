@@ -5,6 +5,8 @@
 
 import type { Express, Request, Response } from "express";
 import { getProjectKeyFromRequest, sanitizeProjectKey } from "./lib/nebulaProjectKey";
+import { registerNebulaPgPool } from "./lib/nebulaPgPool";
+import { getMonthlyUsageSnapshot } from "./lib/token-usage";
 import cookieParser from "cookie-parser";
 import jwt from "jsonwebtoken";
 import pg from "pg";
@@ -226,6 +228,21 @@ async function ensureTables(p: pg.Pool) {
   await p.query(
     `CREATE INDEX IF NOT EXISTS idx_nebula_pw_reset_expires ON nebula_password_resets(expires_at);`
   );
+  await p.query(`ALTER TABLE nebula_users ADD COLUMN IF NOT EXISTS billing_tier TEXT NOT NULL DEFAULT 'free';`);
+  await p.query(`
+    CREATE TABLE IF NOT EXISTS nebula_token_usage_monthly (
+      user_id UUID NOT NULL REFERENCES nebula_users(id) ON DELETE CASCADE,
+      month_year TEXT NOT NULL,
+      total_tokens INTEGER NOT NULL DEFAULT 0,
+      grok3_tokens INTEGER NOT NULL DEFAULT 0,
+      grok4_tokens INTEGER NOT NULL DEFAULT 0,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      PRIMARY KEY (user_id, month_year)
+    );
+  `);
+  await p.query(
+    `CREATE INDEX IF NOT EXISTS idx_nebula_token_usage_month ON nebula_token_usage_monthly (month_year);`
+  );
 }
 
 function sessionSecret(): string {
@@ -413,10 +430,12 @@ export async function mountRenderStack(app: Express) {
   const dbUrl = process.env.DATABASE_URL?.trim() || "";
   let p = getPool();
   dbReady = false;
+  registerNebulaPgPool(null);
   if (p) {
     try {
       await ensureTables(p);
       dbReady = true;
+      registerNebulaPgPool(p);
       console.log("[nebula] PostgreSQL (Render) schema ready.");
     } catch (e) {
       console.error("[nebula] PostgreSQL init failed:", e);
@@ -428,6 +447,7 @@ export async function mountRenderStack(app: Express) {
       }
       dbReady = false;
       poolInitFailed = true;
+      registerNebulaPgPool(null);
       try {
         await p.end();
       } catch {
@@ -484,7 +504,8 @@ export async function mountRenderStack(app: Express) {
     try {
       const r = await p.query(
         `SELECT id, provider, provider_user_id, email, display_name, avatar_url, created_at,
-                (password_hash IS NOT NULL) AS has_password
+                (password_hash IS NOT NULL) AS has_password,
+                billing_tier
          FROM nebula_users WHERE id = $1`,
         [uid]
       );
@@ -497,6 +518,7 @@ export async function mountRenderStack(app: Express) {
         avatar_url: string | null;
         created_at: string;
         has_password: boolean;
+        billing_tier: string;
       };
       if (!row) return res.json({ user: null });
       const sessionEmail =
@@ -514,11 +536,45 @@ export async function mountRenderStack(app: Express) {
           accountEmail: row.email,
           signedUpAt: row.created_at,
           hasPassword: Boolean(row.has_password),
+          billingTier: row.billing_tier || "free",
         },
       });
     } catch (e) {
       console.error("[nebula] /api/auth/session:", e);
       res.status(500).json({ error: "Session lookup failed" });
+    }
+  });
+
+  app.get("/api/billing/token-usage", async (req, res) => {
+    const uid = readSession(req);
+    if (!uid || !hasDb()) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+    try {
+      const snap = await getMonthlyUsageSnapshot(uid);
+      if (!snap) {
+        return res.json({
+          tier: "free",
+          monthYear: "",
+          used: 0,
+          grok3Tokens: 0,
+          grok4Tokens: 0,
+          limit: null,
+          remaining: Number.POSITIVE_INFINITY,
+        });
+      }
+      return res.json({
+        tier: snap.tier,
+        monthYear: snap.monthYear,
+        used: snap.used,
+        grok3Tokens: snap.grok3Tokens,
+        grok4Tokens: snap.grok4Tokens,
+        limit: snap.limit,
+        remaining: Number.isFinite(snap.remaining) ? snap.remaining : null,
+      });
+    } catch (e) {
+      console.error("[nebula] /api/billing/token-usage:", e);
+      res.status(500).json({ error: "Token usage lookup failed" });
     }
   });
 

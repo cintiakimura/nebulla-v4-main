@@ -22,6 +22,17 @@ export interface SwarmHandoffPacket {
   reviewer?: any;
   notesForGrok: string;
   timestamp: string;
+  /** Mirrors `nebula-project/nebula-swarm-state.json` after this response. */
+  swarmStateSnapshot?: { plannerDone: boolean; researcherDone: boolean };
+  /** Server returned stubs only — no xAI support-agent calls (token savings). */
+  agentsSkipped?: boolean;
+  agentRun?: {
+    reasons: string[];
+    runPlanner: boolean;
+    runResearcher: boolean;
+    runTester: boolean;
+    runReviewer: boolean;
+  };
 }
 
 export interface SwarmState {

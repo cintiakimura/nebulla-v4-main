@@ -28,6 +28,7 @@ import {
   type SecretCategory,
   type ProjectSettingsStored,
 } from '../lib/nebulaDashboardStorage';
+import { ModelSelector } from '@/components/settings/ModelSelector';
 
 export type DashboardTab = 'projects' | 'project-settings' | 'secrets' | 'dns';
 
@@ -330,6 +331,10 @@ function ProjectSettingsTab({
       </div>
 
       <div className="space-y-5 rounded-xl border border-white/10 bg-white/5 p-6">
+        <div className="rounded-lg border border-cyan-500/20 bg-cyan-950/10 p-4">
+          <h4 className="text-sm font-headline text-cyan-200 mb-2">Model & agents</h4>
+          <ModelSelector />
+        </div>
         <div>
           <label className="block text-[10px] uppercase tracking-wider text-slate-500 font-headline mb-1">Project name</label>
           <input

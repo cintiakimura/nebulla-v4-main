@@ -15,6 +15,8 @@ export type NebulaSessionUser = {
   accountEmail?: string | null;
   signedUpAt?: string | null;
   hasPassword?: boolean;
+  /** From `nebula_users.billing_tier` — `free` | `pro` | `power`. */
+  billingTier?: 'free' | 'pro' | 'power';
 };
 
 export async function fetchSessionUser(): Promise<NebulaSessionUser | null> {
@@ -22,7 +24,12 @@ export async function fetchSessionUser(): Promise<NebulaSessionUser | null> {
     const res = await fetch('/api/auth/session', { credentials: 'include' });
     const data = await readResponseJson<{ user?: NebulaSessionUser | null }>(res);
     if (!res.ok || !data.user) return null;
-    return { ...data.user, role: 'user' };
+    const u = data.user;
+    return {
+      ...u,
+      role: u.role === 'admin' ? 'admin' : 'user',
+      billingTier: u.billingTier === 'pro' || u.billingTier === 'power' ? u.billingTier : 'free',
+    };
   } catch {
     return null;
   }

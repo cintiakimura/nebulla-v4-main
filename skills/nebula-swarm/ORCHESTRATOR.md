@@ -82,7 +82,7 @@ After support work, the runner merges outputs into one **handoff packet** for Gr
 
 Sections:
 
-- `intensity` — `light` | `balanced` | `full_quality` (Partner UI default: **full_quality**). **Light** = Planner + Researcher (Grok 3). **Balanced** = +Tester. **Full Quality** = + sequential **Reviewer** on **Grok 4.1** after the Grok 3 parallel pass, reviewing the draft packet before Grok’s main reply.
+- `intensity` — `light` | `balanced` | `full_quality` (Partner UI default: **full_quality**). **Runtime policy (Nebulla Partner):** Planner+Researcher **once**, only in **`pre_phase_0`**, tracked in `nebula-project/nebula-swarm-state.json`. Tester only on explicit test / run-tests / final-validation language. Reviewer (Full Quality) only on explicit review request or **big feature complete** phrasing — not routine coding turns. **Light/Balanced** = Grok 3 lane; **Full Quality** may add **Reviewer** (Grok 4.1) when selected.
 - `phase` — Current execution phase (0–4) or `pre_phase_0` for the gate.
 - `planner` — Ordered tasks and exit criteria for **this** phase only.
 - `researcher` — Citations, competitor notes, API doc pointers (no secrets).
@@ -90,6 +90,12 @@ Sections:
 - `reviewer` — Findings with severity; no code blocks that constitute “the patch” unless labeled **illustrative only — Grok must author final code**.
 
 Grok **does not** treat support-agent code snippets as authoritative; Grok authors all committed code.
+
+### 2.1 Nebula Partner — when the handoff runs (cost + law)
+
+The Partner client (`src/lib/nebulaSwarmGate.ts`) **does not** invoke the swarm API on every user message. It runs support agents on phase shifts, the first session message, explicit plan/research/swarm/step-by-step requests, major bug/blocker phrasing, or after a failed chat call — **not** on routine follow-ups (“yes”, small edits). Typical implementation work uses **direct Grok 4.1** only.
+
+The server (`lib/nebulaSwarmHandoff.ts`) **never** ingests the whole codebase: capped orchestrator + role prompts + execution-rules excerpt, optional **short conversation summary** and **≤3 focus paths / snippets** supplied by the client (`window.nebulaSwarmFocusPaths`, `window.nebulaSwarmFocusSnippets`), strict JSON output mode for support agents, and hard limits on user-line length. **Intensity** applies only when a handoff actually runs.
 
 ---
 

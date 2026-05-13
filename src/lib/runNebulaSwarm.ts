@@ -1,4 +1,5 @@
 import type { SwarmHandoffPacket, SwarmPhase, SwarmIntensity } from '@/types/swarm';
+import type { SwarmHandoffHints } from '@/lib/nebulaSwarmExecutionPlan';
 import { triggerSwarmOnMessage } from './triggerSwarmOnMessage';
 
 export type RunNebulaSwarmParams = {
@@ -7,15 +8,18 @@ export type RunNebulaSwarmParams = {
   projectName: string;
   runId: string;
   swarmIntensity: SwarmIntensity;
+  contextSummary?: string;
+  focusPaths?: string[];
+  focusSnippets?: Record<string, string>;
+  swarmHints?: SwarmHandoffHints;
 };
 
 /**
- * Nebula Swarm orchestration for a single chat turn.
+ * Nebula Swarm **handoff** API — invoked only when `shouldPostSwarmHandoff` is true
+ * (`src/lib/nebulaSwarmGate.ts`): routine turns stay a single `/api/grok/chat` (Grok 4.1).
  *
- * **Server** (`POST /api/nebula-swarm/handoff`, `lib/nebulaSwarmHandoff.ts`): Project Isolator;
- * Planner / Researcher / Tester on **Grok 3** (parallel, subset by intensity); optional **Reviewer**
- * on **Grok 4.1** after the draft packet when intensity is `full_quality`. Merged JSON is sent to
- * main chat Grok 4.1 in the user message (see `AssistantSidebar`).
+ * **Server** (`POST /api/nebula-swarm/handoff`, `lib/nebulaSwarmHandoff.ts`): runs agents per
+ * `buildSwarmAgentRunPlan` — P+R **once in `pre_phase_0` only**; Tester / Reviewer on **narrow** user text.
  */
 export async function runNebulaSwarm(
   params: RunNebulaSwarmParams,

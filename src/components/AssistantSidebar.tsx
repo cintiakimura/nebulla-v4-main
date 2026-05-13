@@ -1,8 +1,11 @@
-import React, { useState, useRef, useEffect, useMemo } from 'react';
+import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { ChevronDown, Hand, Mic, Paperclip, Rocket, Send } from 'lucide-react';
 
 const ONBOARDING_DONE_KEY = 'nebulla_onboarding_autopilot_done';
+
+const MONTHLY_LIMIT_MESSAGE =
+  "You've reached your monthly limit. Upgrade to Pro for unlimited Grok 4 or Power for agents.";
 
 function readOnboardingAutopilotDone(): boolean {
   try {
@@ -17,8 +20,12 @@ import { SwarmToggle } from '@/components/swarm/SwarmToggle';
 import { SwarmStatusBar } from '@/components/swarm/SwarmStatusBar';
 import { SwarmThinking } from '@/components/swarm/SwarmThinking';
 import { useSwarm } from './swarm/SwarmProvider';
+import { useModelSettings } from '@/components/settings/ModelSettingsContext';
+import { ModelSelector } from '@/components/settings/ModelSelector';
 import { runNebulaSwarm } from '../lib/runNebulaSwarm';
+import { shouldPostSwarmHandoff, computePhaseSyncAfterResponse, buildSwarmConversationSummary } from '../lib/nebulaSwarmGate';
 import type { SwarmHandoffPacket, SwarmPhase, SwarmIntensity } from '@/types/swarm';
+import type { NebulaSwarmStateFile } from '@/lib/nebulaSwarmState';
 import { fetchJson, readResponseJson } from '../lib/apiFetch';
 import { getStoredGrokApiKey } from '../lib/grokKey';
 import { withProjectBody, withProjectQuery } from '../lib/nebulaProjectApi';
@@ -125,6 +132,12 @@ function splitMasterPlanSectionsFromBlock(block: string): Partial<Record<number,
   return out;
 }
 
+const DEFAULT_SWARM_PERSISTED: NebulaSwarmStateFile = {
+  schemaVersion: 1,
+  plannerDone: false,
+  researcherDone: false,
+};
+
 export function AssistantSidebar({
   width = 320,
   userId = 'anonymous',
@@ -143,6 +156,7 @@ export function AssistantSidebar({
   onExitCodeMode?: () => void;
 }) {
   const swarm = useSwarm();
+  const modelSettings = useModelSettings();
 
   const [isLive, setIsLive] = useState(false);
   const [isAiSpeaking, setIsAiSpeaking] = useState(false);
@@ -162,6 +176,29 @@ export function AssistantSidebar({
   );
   const [masterPlan, setMasterPlan] = useState<any>(null);
   const [serverHasGrokKey, setServerHasGrokKey] = useState<boolean | null>(null);
+  const [swarmPersisted, setSwarmPersisted] = useState<NebulaSwarmStateFile>(DEFAULT_SWARM_PERSISTED);
+  const [freeTokenUsage, setFreeTokenUsage] = useState<{ used: number; limit: number } | null>(null);
+
+  const refreshFreeTokenUsage = useCallback(async () => {
+    if (userId === 'anonymous' || modelSettings.capabilities.tier !== 'free') {
+      setFreeTokenUsage(null);
+      return;
+    }
+    try {
+      const data = await fetchJson<{
+        used?: number;
+        limit?: number | null;
+        remaining?: number | null;
+      }>(withProjectQuery('/api/billing/token-usage'), { credentials: 'include' });
+      if (typeof data.limit === 'number' && data.limit > 0) {
+        setFreeTokenUsage({ used: Number(data.used ?? 0), limit: data.limit });
+      } else {
+        setFreeTokenUsage(null);
+      }
+    } catch {
+      setFreeTokenUsage(null);
+    }
+  }, [userId, modelSettings.capabilities.tier]);
 
   useEffect(() => {
     fetch(withProjectQuery('/api/config'))
@@ -171,6 +208,10 @@ export function AssistantSidebar({
       )
       .catch(() => setServerHasGrokKey(false));
   }, [activeProjectKey]);
+
+  useEffect(() => {
+    void refreshFreeTokenUsage();
+  }, [refreshFreeTokenUsage]);
 
   useEffect(() => {
     fetch(withProjectQuery('/api/master-plan/read'))
@@ -184,6 +225,27 @@ export function AssistantSidebar({
       })
       .catch(console.error);
   }, [activeProjectKey]);
+
+  useEffect(() => {
+    setSwarmPersisted(DEFAULT_SWARM_PERSISTED);
+    if (!swarm.isEnabled) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const data = await fetchJson<{ swarmState?: NebulaSwarmStateFile }>(
+          withProjectQuery('/api/nebula-swarm/state')
+        );
+        if (!cancelled && data.swarmState) {
+          setSwarmPersisted(data.swarmState);
+        }
+      } catch {
+        /* keep defaults / prior cache — avoid accidental double P+R */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [swarm.isEnabled, activeProjectKey]);
   const [inputText, setInputText] = useState('');
   const [buildQueue, setBuildQueue] = useState<string[]>([]);
   
@@ -288,12 +350,14 @@ export function AssistantSidebar({
 
   const handleSendText = async (
     overrideText?: string,
-    opts?: { onboardingAutopilot?: boolean },
+    opts?: { onboardingAutopilot?: boolean; forceSwarm?: boolean; skipSwarm?: boolean },
   ) => {
     if (codeMode) return;
     if (aboutAppActive && !opts?.onboardingAutopilot) return;
     const textToSend = overrideText || inputText;
     if (!textToSend.trim()) return;
+    /** User turns already in history before this send (used for swarm “first message of session” gate). */
+    const priorUserMessageCount = messages.filter((m) => m.role === 'user').length;
     const hasExplicitApproval = /\b(approve|approved|yes|yep|yeah|go ahead|move on|next tab|looks good|locked in|perfect)\b/i.test(
       textToSend
     );
@@ -301,6 +365,20 @@ export function AssistantSidebar({
     // If it's the first message, ensure Master Plan is open
     if (messages.length <= 1 && (window as any).openMasterPlan) {
       (window as any).openMasterPlan();
+    }
+
+    if (modelSettings.capabilities.tier === 'free' && userId !== 'anonymous') {
+      try {
+        const usage = await fetchJson<{
+          remaining?: number | null;
+        }>(withProjectQuery('/api/billing/token-usage'), { credentials: 'include' });
+        if (usage.remaining != null && usage.remaining <= 0) {
+          setMessages((prev) => [...prev, { role: 'system', text: MONTHLY_LIMIT_MESSAGE }]);
+          return;
+        }
+      } catch {
+        /* POST /api/grok/chat still enforces Free tier */
+      }
     }
 
     setMessages((prev) => [...prev, { role: 'user', text: textToSend }]);
@@ -736,21 +814,26 @@ ${uiStudioApprovedCode || 'No approved UI code yet.'}`;
       let grokUserMessageContent = textToSend;
 
       /*
-       * Nebula Swarm → Grok 4.1 (skills/nebula-swarm/)
+       * Nebula Swarm — `shouldPostSwarmHandoff` + `lib/nebulaSwarmExecutionPlan.ts`
        * ------------------------------------------------------------------
-       * When Swarm Mode is ON (and not onboarding autopilot):
-       *   1. startSwarm(phase, projectName) — UI status + active agents (by Swarm intensity).
-       *   2. runNebulaSwarm(...) — server loads swarm prompts + rules excerpt; runs Grok 3 agents in
-       *      parallel (subset for Light); optional Grok 4.1 Reviewer when intensity is Full Quality;
-       *      returns merged handoff JSON.
-       *   3. Build enhancedPrompt: handoff JSON + original user line → `grokUserMessageContent`
-       *      so Grok 4.1 receives the packet in the **user** message (system prompt stays execution
-       *      rules + Master Plan context only).
-       *   4. After a successful Grok response, addActivity "handoff delivered"; `finally` always
-       *      calls finishSwarm(...) to clear `isRunning` and set `lastHandoff` for SwarmThinking.
+       * Handoff runs only when the plan may call agents: P+R **once**, **Pre–Phase 0 only**;
+       * Tester on explicit test / final-validation wording; Reviewer (Full Quality) on “review” or
+       * big-feature-done wording. Everything else → this message is **only** `/api/grok/chat`.
+       * **Payload:** optional `contextSummary`, `focusPaths`, `focusSnippets` (scoped Tester/Reviewer).
        * ------------------------------------------------------------------
        */
-      if (swarm.isEnabled && !opts?.onboardingAutopilot) {
+      const runSwarmThisTurn = shouldPostSwarmHandoff({
+        swarmEnabled: swarm.isEnabled && modelSettings.agentsEnabled,
+        onboardingAutopilot: Boolean(opts?.onboardingAutopilot),
+        skipSwarm: opts?.skipSwarm,
+        forceSwarm: opts?.forceSwarm,
+        executionPhase: swarm.currentPhase,
+        userMessage: textToSend,
+        swarmIntensity: swarm.intensity,
+        swarmPersisted,
+      });
+
+      if (swarm.isEnabled && !opts?.onboardingAutopilot && runSwarmThisTurn) {
         const { startSwarm, addActivity, currentPhase, intensity } = swarm;
         const resolvedProjectName = projectName?.trim() || 'Untitled Project';
 
@@ -764,6 +847,19 @@ ${uiStudioApprovedCode || 'No approved UI code yet.'}`;
             : `swarm-${Date.now()}`;
 
         try {
+          const contextSummary =
+            priorUserMessageCount > 0 ? buildSwarmConversationSummary(messages) : undefined;
+          const focusPathsRaw =
+            typeof window !== 'undefined' && Array.isArray((window as unknown as { nebulaSwarmFocusPaths?: unknown }).nebulaSwarmFocusPaths)
+              ? ((window as unknown as { nebulaSwarmFocusPaths: string[] }).nebulaSwarmFocusPaths as string[])
+              : undefined;
+          const w = typeof window !== 'undefined' ? (window as unknown as Record<string, unknown>) : null;
+          const rawSnip = w?.nebulaSwarmFocusSnippets;
+          const focusSnippets =
+            rawSnip && typeof rawSnip === 'object' && !Array.isArray(rawSnip)
+              ? (rawSnip as Record<string, string>)
+              : undefined;
+
           swarmHandoffPacket = await runNebulaSwarm(
             {
               phase: currentPhase,
@@ -771,9 +867,22 @@ ${uiStudioApprovedCode || 'No approved UI code yet.'}`;
               projectName: resolvedProjectName,
               runId: swarmRunId,
               swarmIntensity: intensity,
+              ...(contextSummary ? { contextSummary } : {}),
+              ...(focusPathsRaw?.length ? { focusPaths: focusPathsRaw } : {}),
+              ...(focusSnippets && Object.keys(focusSnippets).length ? { focusSnippets } : {}),
             },
             grokHeaders
           );
+          if (swarmHandoffPacket.swarmStateSnapshot) {
+            setSwarmPersisted({
+              schemaVersion: 1,
+              plannerDone: swarmHandoffPacket.swarmStateSnapshot.plannerDone,
+              researcherDone: swarmHandoffPacket.swarmStateSnapshot.researcherDone,
+            });
+          }
+          if (swarmHandoffPacket.agentsSkipped) {
+            addActivity('Swarm handoff: no support agents ran (trigger-only policy).', 'info');
+          }
         } catch (swarmErr) {
           console.warn('[Swarm] runNebulaSwarm failed:', swarmErr);
           swarm.addActivity(
@@ -802,6 +911,7 @@ ${uiStudioApprovedCode || 'No approved UI code yet.'}`;
           withProjectBody({
             userId,
             projectName,
+            chatModel: modelSettings.chatModel,
             onboardingAutopilot: Boolean(opts?.onboardingAutopilot),
             messages: opts?.onboardingAutopilot
               ? [{ role: 'user', content: textToSend }]
@@ -832,6 +942,16 @@ ${uiStudioApprovedCode || 'No approved UI code yet.'}`;
       const planningPhase = data.choices?.[0]?.message?.planningPhase || '';
       const masterPlanSource = planningPhase || rawAssistantContent;
       setChatStatus('Grok 4 response received. Syncing Master Plan updates…');
+      void refreshFreeTokenUsage();
+
+      const phaseSync = computePhaseSyncAfterResponse({
+        current: swarm.currentPhase,
+        planningPhaseRaw: planningPhase,
+        rawAssistant: rawAssistantContent,
+      });
+      if (phaseSync.phaseChanged) {
+        swarm.setCurrentPhase(phaseSync.nextPhase);
+      }
 
       // GROK 4.1 Behavior: Immediate Frontend Master Plan Update
       // Guard: during onboarding autopilot / coding handoff, keep Master Plan writes backend-only.
@@ -1262,7 +1382,10 @@ ${uiStudioApprovedCode || 'No approved UI code yet.'}`;
       if (opts?.onboardingAutopilot) {
         setAboutAppActive(false);
       }
-      setMessages(prev => [...prev, { role: 'system', text: `Error: ${error.message || 'Failed to connect to GROK.'}` }]);
+      const rawMsg = typeof error?.message === 'string' ? error.message : 'Failed to connect to GROK.';
+      const displayMsg =
+        rawMsg.includes('monthly limit') || rawMsg.includes('Upgrade to Pro') ? rawMsg : `Error: ${rawMsg}`;
+      setMessages((prev) => [...prev, { role: 'system', text: displayMsg }]);
     } finally {
       if (swarmPipelineStarted) {
         const fallback: SwarmHandoffPacket = {
@@ -1901,7 +2024,26 @@ ${uiStudioApprovedCode || 'No approved UI code yet.'}`;
             {isLive && <span className="flex h-2 w-2 rounded-full bg-cyan-400 animate-pulse shrink-0" />}
           </div>
         </div>
+        <ModelSelector />
         <SwarmToggle />
+        {freeTokenUsage ? (
+          <div className="space-y-1 pt-1 border-t border-white/5">
+            <div className="flex justify-between text-[10px] text-slate-500">
+              <span>Monthly tokens (Free)</span>
+              <span className="tabular-nums text-slate-400">
+                {freeTokenUsage.used.toLocaleString()} / {freeTokenUsage.limit.toLocaleString()}
+              </span>
+            </div>
+            <div className="h-1.5 rounded-full bg-white/10 overflow-hidden">
+              <div
+                className="h-full bg-cyan-500/70 transition-[width]"
+                style={{
+                  width: `${Math.min(100, Math.round((freeTokenUsage.used / freeTokenUsage.limit) * 100))}%`,
+                }}
+              />
+            </div>
+          </div>
+        ) : null}
       </div>
       
       {buildQueue.length > 0 && (

@@ -1,18 +1,31 @@
 'use client';
 
+import { useModelSettings } from '@/components/settings/ModelSettingsContext';
 import { useSwarm } from './SwarmProvider';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import type { SwarmIntensity } from '@/types/swarm';
 
 const INTENSITY_OPTIONS: { value: SwarmIntensity; label: string; hint: string }[] = [
-  { value: 'light', label: 'Light', hint: 'Planner + Researcher' },
-  { value: 'balanced', label: 'Balanced', hint: '+ Tester' },
-  { value: 'full_quality', label: 'Full Quality', hint: '+ Reviewer (Grok 4.1)' },
+  { value: 'light', label: 'Light', hint: 'Grok 3 only — P+R once, Tester on triggers' },
+  { value: 'balanced', label: 'Balanced', hint: 'Grok 3 — P+R once, Tester on triggers' },
+  { value: 'full_quality', label: 'Full Quality', hint: '+ Grok 4.1 Reviewer on triggers' },
 ];
 
 export function SwarmToggle() {
+  const { capabilities } = useModelSettings();
   const { isEnabled, toggleSwarm, intensity, setSwarmIntensity } = useSwarm();
+
+  if (!capabilities.agentsEnabled) {
+    return (
+      <div className="flex flex-col gap-1 rounded-lg border border-white/10 px-4 py-3 bg-black/20 opacity-70">
+        <span className="font-medium text-sm text-slate-400">Swarm Mode</span>
+        <p className="text-[11px] text-slate-500 leading-snug">
+          Multi-agent swarm is available on the Power plan. Adjust chat model above on Free / Pro.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between border rounded-lg px-4 py-3 bg-card">
@@ -46,6 +59,13 @@ export function SwarmToggle() {
             </option>
           ))}
         </select>
+        <p className="text-[11px] text-muted-foreground max-w-[280px] sm:max-w-xs leading-snug">
+          Handoff only when agents may run: Planner+Researcher **once** in Pre–Phase 0; Tester when you ask
+          to run tests / final validation; Reviewer (Full Quality) on “review” or big-feature-done wording.
+          Normal coding = one Grok 4.1 call. Optional:{' '}
+          <code className="text-[10px]">window.nebulaSwarmFocusPaths</code> /{' '}
+          <code className="text-[10px]">nebulaSwarmFocusSnippets</code> for scoped context.
+        </p>
       </div>
     </div>
   );

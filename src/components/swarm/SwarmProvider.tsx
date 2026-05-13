@@ -21,6 +21,8 @@ function agentsForIntensity(i: SwarmIntensity): string[] {
 interface SwarmContextType extends SwarmState {
   toggleSwarm: () => void;
   setSwarmIntensity: (i: SwarmIntensity) => void;
+  /** Updates Nebula execution phase from Grok `planningPhase` / heuristics (swarm gating uses this). */
+  setCurrentPhase: (phase: SwarmState['currentPhase']) => void;
   startSwarm: (phase: SwarmState['currentPhase'], projectName: string) => void;
   finishSwarm: (handoff: SwarmHandoffPacket) => void;
   addActivity: (message: string, type?: 'info' | 'success' | 'warning' | 'error') => void;
@@ -50,6 +52,10 @@ export function SwarmProvider({ children }: { children: React.ReactNode }) {
       /* ignore */
     }
     setState((prev) => ({ ...prev, intensity }));
+  }, []);
+
+  const setCurrentPhase = useCallback((phase: SwarmState['currentPhase']) => {
+    setState((prev) => (prev.currentPhase === phase ? prev : { ...prev, currentPhase: phase }));
   }, []);
 
   const startSwarm = useCallback((phase: SwarmState['currentPhase'], projectName: string) => {
@@ -109,6 +115,7 @@ export function SwarmProvider({ children }: { children: React.ReactNode }) {
         ...state,
         toggleSwarm,
         setSwarmIntensity,
+        setCurrentPhase,
         startSwarm,
         finishSwarm,
         addActivity,
