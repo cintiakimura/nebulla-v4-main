@@ -1,0 +1,50 @@
+{
+  "name": "lifeorganizer",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "@prisma/client": "^7.8.0",
+    "axios": "^1.15.2",
+    "bcryptjs": "^3.0.3",
+    "cookie-parser": "^1.4.7",
+    "cors": "^2.8.6",
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1",
+    "helmet": "^8.1.0",
+    "jsonwebtoken": "^9.0.3",
+    "multer": "^2.1.1",
+    "pdf-parse": "^2.4.5",
+    "prisma": "^7.8.0",
+    "sharp": "^0.34.5",
+    "stripe": "^22.1.0",
+    "tesseract.js": "^7.0.0",
+    "ws": "^8.20.0"
+  },
+  "devDependencies": {
+    "@heroicons/react": "^2.2.0",
+    "@testing-library/react": "^16.3.2",
+    "autoprefixer": "^10.5.0",
+    "idb-keyval": "^6.2.2",
+    "jest": "^30.3.0",
+    "lucide-react": "^1.11.0",
+    "nodemon": "^3.1.14",
+    "postcss": "^8.5.10",
+    "react": "^19.2.5",
+    "react-dom": "^19.2.5",
+    "react-dropzone": "^15.0.0",
+    "react-router-dom": "^7.14.2",
+    "recharts": "^3.8.1",
+    "supertest": "^7.2.2",
+    "tailwindcss": "^4.2.4",
+    "vite": "^7.3.2",
+    "vite-plugin-pwa": "^1.2.0"
+  }
+}

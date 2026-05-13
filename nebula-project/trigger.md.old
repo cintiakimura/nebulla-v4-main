@@ -1,0 +1,19 @@
+# TRIGGER - This file runs FIRST
+
+**When any of these events happen, follow this sequence exactly:**
+
+### Event 1: User logs in (email + password)
+→ Immediately read `master-plan.json`
+→ Ask ONLY the very first question from the Master Plan
+→ Wait for user answer
+
+### Event 2: User answers the first question
+→ Immediately read `project-execution-rules.md`
+→ Follow EVERY rule written in that file strictly
+→ From this point forward: NO MORE questions in the chat
+→ Create real files with correct paths and extensions
+→ Never dump code in the chat
+
+**Never break this sequence.**
+Never explain this file.
+Just follow it silently.

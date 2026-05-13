@@ -1,0 +1,2052 @@
+import dotenv from "dotenv";
+import path from "path";
+import express from "express";
+import fs from "fs";
+import { exec, execFile, spawn } from "child_process";
+import { promisify } from "util";
+
+const execFileAsync = promisify(execFile);
+import {
+  appendConversationTurn,
+  appendWriterAuditEvent,
+  buildMemorySystemContent,
+  injectMemoryIntoMessages,
+} from "./conversationLog";
+import {
+  initGuardianProcessHandlers,
+  registerGuardianRoutes,
+  guardianExpressErrorHandler,
+  captureError,
+} from "./guardian/nebulaGuardian";
+import { mountRenderStack, getRenderPublicConfig, resolveNebulaProjectDiskKey } from "./renderStack";
+import {
+  resolvePencilApiKey,
+  resolvePencilMockupsUrl,
+  useBundledDemoMockupWithoutKey,
+  loadBundledDemoMockupSvg,
+  buildNebulaUiStudioPromptBody,
+  callPencilMockupsGenerate,
+} from "./lib/nebulaPencilDev";
+import {
+  callGrokGenerateUiSvg,
+  heuristicSvgEditRisks,
+  callGrokAnalyzeSvgEdit,
+  callGrokAdaptUserSvg,
+} from "./lib/nebulaUiStudioGrok";
+import { getNebullaPersistRoot, getNebulaProjectDocsRoot } from "./lib/nebulaWorkspaceRoot";
+import { ensureCloudProjectWorkspace } from "./lib/nebulaCloudProjectRoot";
+import { getProjectKeyFromRequest } from "./lib/nebulaProjectKey";
+import { buildSwarmHandoffParallel } from "./lib/nebulaSwarmHandoff";
+
+type NebulaRequest = express.Request & { nebulaDiskKey?: string };
+
+const REPO_ROOT = getNebullaPersistRoot();
+/** Bundled template docs (seed for new cloud projects). */
+const NEBULA_PROJECT_ROOT = getNebulaProjectDocsRoot(REPO_ROOT);
+
+const resolveWorkspaceRelative = (workspaceRoot: string, relativePath: string): string => {
+  const clean = String(relativePath || "").trim().replace(/^\.\/+/, "");
+  const target = path.resolve(workspaceRoot, clean);
+  if (!target.startsWith(workspaceRoot)) throw new Error("Access denied");
+  return target;
+};
+
+dotenv.config({ path: path.join(REPO_ROOT, ".env") });
+
+export const app = express();
+const PORT = Number(process.env.PORT) || 3000;
+
+async function startServer() {
+  initGuardianProcessHandlers();
+
+  // Behind Railway / Render / Fly / nginx / Docker — correct client IPs and secure cookies.
+  app.set("trust proxy", 1);
+
+  app.use(express.json({ limit: '50mb' }) as any);
+  app.use(express.urlencoded({ extended: true, limit: '50mb' }) as any);
+
+  await mountRenderStack(app);
+
+  app.use(async (req, _res, next) => {
+    try {
+      (req as NebulaRequest).nebulaDiskKey = await resolveNebulaProjectDiskKey(req);
+    } catch {
+      (req as NebulaRequest).nebulaDiskKey = getProjectKeyFromRequest(req);
+    }
+    next();
+  });
+
+  const projectDiskKey = (req: express.Request) =>
+    (req as NebulaRequest).nebulaDiskKey ?? getProjectKeyFromRequest(req);
+
+  // LOGGING MIDDLEWARE
+  app.use((req, res, next) => {
+    console.log(`${req.method} ${req.url}`);
+    next();
+  });
+  app.get("/api/health", (req, res) => {
+    res.json({ status: "ok" });
+  });
+
+  app.get("/api/config", (req, res) => {
+    const grok = process.env.GROK_API_KEY?.trim() ?? "";
+    const tts = process.env.GROK_TTS_NEW_API_KEY?.trim() ?? "";
+    const writer = process.env.GROK_3_API_KEY?.trim() ?? "";
+    const render = getRenderPublicConfig();
+    const publicSiteUrl = process.env.PUBLIC_SITE_URL?.trim() || "";
+    const pencilKey = resolvePencilApiKey();
+    const pp = ensureCloudProjectWorkspace(REPO_ROOT, NEBULA_PROJECT_ROOT, projectDiskKey(req));
+    res.json({
+      ...render,
+      publicSiteUrl,
+      githubClientId: process.env.GITHUB_CLIENT_ID || process.env.github_client_id,
+      builderPublicKey: process.env.BUILDER_PUBLIC_KEY,
+      hasGrokApiKey: grok.length >= 20,
+      hasGrokTtsKey: tts.length >= 20,
+      hasGrokWriterKey: writer.length >= 20,
+      pencilMockupsReady: Boolean(pencilKey),
+      nebulaUiStudioDemo: Boolean(!pencilKey && useBundledDemoMockupWithoutKey()),
+      workspaceMode: "cloud",
+      hasActiveWorkspace: true,
+      activeWorkspacePath: null,
+      cloudProjectKey: pp.projectKey,
+    });
+  });
+
+  /** Cloud workspace metadata (no local folder selection). */
+  app.get("/api/workspace/active", (req, res) => {
+    const pp = ensureCloudProjectWorkspace(REPO_ROOT, NEBULA_PROJECT_ROOT, projectDiskKey(req));
+    res.json({
+      mode: "cloud",
+      projectKey: pp.projectKey,
+      activePath: null,
+      configuredPath: null,
+      exists: true,
+    });
+  });
+
+  app.post("/api/workspace/active", (_req, res) => {
+    res.status(410).json({
+      error: "Local folder binding is disabled. Projects use server-side cloud workspaces per project key.",
+    });
+  });
+
+  const projectPathsFor = (req: express.Request) =>
+    ensureCloudProjectWorkspace(REPO_ROOT, NEBULA_PROJECT_ROOT, projectDiskKey(req));
+
+  /** Optional: download active cloud project as a tar.gz archive. */
+  app.get("/api/cloud-project/download", (req, res) => {
+    try {
+      const pp = projectPathsFor(req);
+      res.setHeader("Content-Type", "application/gzip");
+      res.setHeader("Content-Disposition", `attachment; filename="nebula-cloud-${pp.projectKey}.tar.gz"`);
+      const child = spawn("tar", ["-czf", "-", "-C", pp.workspaceRoot, "."], {
+        stdio: ["ignore", "pipe", "pipe"],
+      });
+      child.stderr.on("data", () => {});
+      child.stdout.pipe(res);
+      child.on("error", (err) => {
+        if (!res.headersSent) {
+          res.status(500).json({ error: err instanceof Error ? err.message : "tar failed" });
+        }
+      });
+      child.on("close", (code) => {
+        if (code !== 0 && !res.headersSent) {
+          res.status(500).json({ error: `tar exited ${code}` });
+        }
+      });
+    } catch (e) {
+      if (!res.headersSent) {
+        res.status(500).json({ error: e instanceof Error ? e.message : "download failed" });
+      }
+    }
+  });
+
+  const resolveNebullaGrokKeyForReq = (req: express.Request): string | undefined => {
+    const headerKey =
+      typeof req.headers["x-grok-api-key"] === "string" ? req.headers["x-grok-api-key"].trim() : "";
+    if (headerKey.length >= 20) return headerKey;
+    const bodyKey =
+      typeof (req.body as { grokApiKey?: unknown })?.grokApiKey === "string"
+        ? String((req.body as { grokApiKey?: string }).grokApiKey).trim()
+        : "";
+    if (bodyKey.length >= 20) return bodyKey;
+    const envKey = process.env.GROK_API_KEY?.trim() ?? "";
+    if (envKey.length >= 20) return envKey;
+    return undefined;
+  };
+
+  const readSkillDesignSystemExcerpt = (workspaceRoot: string): string => {
+    const candidates = [
+      path.join(workspaceRoot, "SKILL.md"),
+      path.join(NEBULA_PROJECT_ROOT, "SKILL.md"),
+      path.join(REPO_ROOT, "SKILL.md"),
+    ];
+    for (const skillPath of candidates) {
+      if (!fs.existsSync(skillPath)) continue;
+      try {
+        let raw = fs.readFileSync(skillPath, "utf8").replace(/^---[\s\S]*?---\s*/m, "").trim();
+        if (raw.length > 14000) raw = `${raw.slice(0, 14000)}\n…`;
+        return raw;
+      } catch {
+        /* try next */
+      }
+    }
+    return "";
+  };
+
+  const ensureNebulaUiStudioFileAt = (nebulaUiStudioPath: string) => {
+    if (!fs.existsSync(nebulaUiStudioPath)) {
+      fs.mkdirSync(path.dirname(nebulaUiStudioPath), { recursive: true });
+      fs.writeFileSync(
+        nebulaUiStudioPath,
+        `<!--
+NEBULA_UI_STUDIO_PROMPT
+No prompt generated yet.
+-->
+
+<!--
+NEBULA_UI_STUDIO_CODE
+No approved UI code yet.
+-->
+`,
+        "utf8"
+      );
+    }
+  };
+
+  const extractNebulaCommentSection = (
+    content: string,
+    key: "NEBULA_UI_STUDIO_PROMPT" | "NEBULA_UI_STUDIO_CODE"
+  ): string => {
+    const re = new RegExp(`<!--\\s*${key}\\n([\\s\\S]*?)-->`, "m");
+    const match = content.match(re);
+    return match?.[1]?.trim() || "";
+  };
+
+  const upsertNebulaCommentSection = (
+    content: string,
+    key: "NEBULA_UI_STUDIO_PROMPT" | "NEBULA_UI_STUDIO_CODE",
+    value: string
+  ): string => {
+    const normalized = value.trim() || (key === "NEBULA_UI_STUDIO_PROMPT" ? "No prompt generated yet." : "No approved UI code yet.");
+    const section = `<!--\n${key}\n${normalized}\n-->`;
+    const re = new RegExp(`<!--\\s*${key}[\\s\\S]*?-->`, "m");
+    if (re.test(content)) return content.replace(re, section);
+    return `${section}\n\n${content}`;
+  };
+
+  /** Hide legacy bundled Grok/orchestration copy in API responses so the Master Plan UI stays blank until real sections are written. */
+  function sanitizeMasterPlanForClientResponse(plan: Record<string, unknown>): Record<string, unknown> {
+    const out: Record<string, unknown> = { ...plan };
+    const checks: [string, (v: string) => boolean][] = [
+      ["1. Goal of the app", (v) => v.includes("First question exact wording, alone in that message")],
+      ["2. Tech Research", (v) => v.includes("**Market**: Competitors (Proloquo2Go")],
+      ["3. Features and KPIs", (v) => v.includes("8 core features grouped into 4 modules")],
+      ["4. Pages and navigation", (v) => v.includes("12 lean pages. Kid: Bottom tabs")],
+      ["5. UI/UX design", (v) => v.includes("Nebula UI Studio workflow (canonical)")],
+      ["6. Environment Setup", (v) => v.includes("## Render workspaces & internal identity (canonical)")],
+    ];
+    for (const [key, pred] of checks) {
+      const raw = out[key];
+      if (typeof raw !== "string") continue;
+      try {
+        if (pred(raw)) out[key] = "";
+      } catch {
+        /* ignore */
+      }
+    }
+    return out;
+  }
+
+  app.get("/api/master-plan/read", (req, res) => {
+    try {
+      const { masterPlanPath } = projectPathsFor(req);
+      if (!fs.existsSync(masterPlanPath)) {
+        return res.status(404).json({ error: "Master plan data not found" });
+      }
+      const plan = JSON.parse(fs.readFileSync(masterPlanPath, "utf8")) as Record<string, unknown>;
+      res.json(sanitizeMasterPlanForClientResponse(plan));
+    } catch (error) {
+      console.error("Error reading master plan:", error);
+      res.status(500).json({ error: "Failed to read master plan" });
+    }
+  });
+
+  app.post("/api/master-plan/update", (req, res) => {
+    const { tabIndex, content } = req.body;
+    if (tabIndex === undefined || content === undefined) {
+      return res.status(400).json({ error: "tabIndex and content are required" });
+    }
+
+    const tabNames: Record<number, string> = {
+      1: "1. Goal of the app",
+      2: "2. Tech Research",
+      3: "3. Features and KPIs",
+      4: "4. Pages and navigation",
+      5: "5. UI/UX design",
+      6: "6. Environment Setup"
+    };
+
+    const tabName = tabNames[tabIndex as number];
+    if (!tabName) {
+      return res.status(400).json({ error: "Invalid tabIndex. Must be 1-6." });
+    }
+
+    try {
+      const { masterPlanPath } = projectPathsFor(req);
+      let plan = {};
+      if (fs.existsSync(masterPlanPath)) {
+        plan = JSON.parse(fs.readFileSync(masterPlanPath, "utf8"));
+      }
+      
+      // Update the specific tab content using mapped tabName as key
+      (plan as any)[tabName] = content;
+
+      fs.writeFileSync(masterPlanPath, JSON.stringify(plan, null, 2), "utf8");
+      res.json({ success: true, tabName });
+    } catch (error) {
+      console.error("Error updating master plan:", error);
+      res.status(500).json({ error: "Failed to update master plan" });
+    }
+  });
+
+  // Silent Writer Endpoint
+  app.post("/api/write-spec", (req, res) => {
+    const { content } = req.body;
+    const { workspaceRoot } = projectPathsFor(req);
+    const specPath = path.join(workspaceRoot, "Nebula Architecture Spec.md");
+    try {
+      fs.writeFileSync(specPath, content, "utf8");
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error writing spec:", error);
+      res.status(500).json({ error: "Failed to write spec" });
+    }
+  });
+
+  // Example backend function: read file system
+  app.get("/api/fs/list", (req, res) => {
+    try {
+      const { workspaceRoot } = projectPathsFor(req);
+      const pathParam = req.query.path as string || ".";
+      const targetDir = resolveWorkspaceRelative(workspaceRoot, pathParam);
+      
+      if (!fs.existsSync(targetDir)) {
+        return res.status(404).json({ error: "Directory not found" });
+      }
+
+      const nebulaInternal = new Set([
+        'node_modules', 'dist', '.git', '.github', 'index.ts', 'README.md',
+        'package.json', 'package-lock.json', 'tsconfig.json', 'tsconfig.node.json',
+        'vite.config.ts', 'postcss.config.js', 'tailwind.config.js', 'components.json',
+        'metadata.json', 'server.ts', '.env.example', 'firebase-applet-config.json',
+        'master-plan.json', 'Nebula Architecture Spec.md', 'index.html', 'src', 'public',
+        'firebase-blueprint.json', 'firestore.rules', 'DRAFT_firestore.rules',
+        '.gitignore', 'nebula-ui-studio.md', 'nebula-sysh-ui-sysh-studio.md', 'guardian'
+      ]);
+
+      const items = fs.readdirSync(targetDir, { withFileTypes: true });
+      const files = items
+        .filter(item => {
+          const isHidden = item.name.startsWith('.');
+          const isInternal = nebulaInternal.has(item.name);
+          return !isHidden && !isInternal;
+        })
+        .map(item => ({
+          name: item.name,
+          isDirectory: item.isDirectory()
+        }))
+        .sort((a, b) => {
+          if (a.isDirectory && !b.isDirectory) return -1;
+          if (!a.isDirectory && b.isDirectory) return 1;
+          return a.name.localeCompare(b.name);
+        });
+
+      res.json({ files });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get("/api/files/content", (req, res) => {
+    try {
+      const { workspaceRoot } = projectPathsFor(req);
+      const filePath = req.query.path as string;
+      if (!filePath) return res.status(400).json({ error: "Path is required" });
+
+      const targetFile = resolveWorkspaceRelative(workspaceRoot, filePath);
+
+      if (!fs.existsSync(targetFile) || fs.statSync(targetFile).isDirectory()) {
+        return res.status(404).json({ error: "File not found" });
+      }
+
+      const content = fs.readFileSync(targetFile, "utf8");
+      res.json({ content });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  /** Bootstrap HTML for in-IDE preview: inject base + rewrite root-relative URLs under this project. */
+  app.get("/api/app-preview/bootstrap", (req, res) => {
+    try {
+      const pp = projectPathsFor(req);
+      const idx = path.join(pp.workspaceRoot, "index.html");
+      if (!fs.existsSync(idx)) {
+        return res
+          .status(200)
+          .type("html")
+          .send(
+            `<!DOCTYPE html><html><head><meta charset="utf-8"/><title>No preview</title></head><body style="background:#0a1628;color:#94a3b8;font-family:system-ui;padding:2rem">No <code>index.html</code> in this workspace yet.</body></html>`,
+          );
+      }
+      let html = fs.readFileSync(idx, "utf8");
+      const xfProto = (req.headers["x-forwarded-proto"] as string | undefined)?.split(",")[0]?.trim();
+      const proto = xfProto || req.protocol || "http";
+      const host = req.get("host") || `localhost:${PORT}`;
+      const baseHref = `${proto}://${host}/api/app-preview/p/${encodeURIComponent(pp.projectKey)}/`;
+      if (!/<base\s/i.test(html)) {
+        html = html.replace(/<head([^>]*)>/i, `<head$1><base href="${baseHref}">`);
+      }
+      html = html.replace(/(src|href)=(["'])\/(?!\/)/gi, "$1=$2");
+      res.type("html").send(html);
+    } catch (err: unknown) {
+      res.status(500).type("text/plain").send(err instanceof Error ? err.message : "bootstrap failed");
+    }
+  });
+
+  /** Raw workspace file for preview assets (URL path must match active project key). */
+  app.use((req, res, next) => {
+    if (req.method !== "GET" || !req.path.startsWith("/api/app-preview/p/")) return next();
+    try {
+      const asterisk = req.path.slice("/api/app-preview/p/".length);
+      const slash = asterisk.indexOf("/");
+      const projectKey = slash === -1 ? asterisk : asterisk.slice(0, slash);
+      const relEncoded = slash === -1 ? "" : asterisk.slice(slash + 1);
+      let relPath = relEncoded ? decodeURIComponent(relEncoded.replace(/\+/g, " ")) : "";
+      relPath = relPath.replace(/^\.\/+/, "").replace(/^\/+/, "");
+      if (!relPath) relPath = "index.html";
+
+      const diskKey = projectDiskKey(req as NebulaRequest);
+      if (projectKey !== diskKey) {
+        res.status(403).type("text/plain").send("Project key mismatch");
+        return;
+      }
+      const { workspaceRoot } = projectPathsFor(req);
+      const target = path.resolve(workspaceRoot, relPath);
+      if (!target.startsWith(workspaceRoot)) {
+        res.status(403).end();
+        return;
+      }
+      if (!fs.existsSync(target)) {
+        res.status(404).type("text/plain").send("Not found");
+        return;
+      }
+      const st = fs.statSync(target);
+      if (st.isDirectory()) {
+        res.status(403).type("text/plain").send("Directory listing disabled");
+        return;
+      }
+      res.sendFile(target);
+    } catch (err: unknown) {
+      res.status(500).type("text/plain").send(err instanceof Error ? err.message : "preview file failed");
+    }
+  });
+
+  const VERSION_HISTORY_DIR = path.join("nebulla-version-history", "snapshots");
+  const SNAPSHOT_TEXT_EXT = new Set([
+    ".html",
+    ".htm",
+    ".css",
+    ".js",
+    ".mjs",
+    ".cjs",
+    ".jsx",
+    ".ts",
+    ".tsx",
+    ".json",
+    ".md",
+    ".svg",
+    ".txt",
+    ".xml",
+    ".yml",
+    ".yaml",
+  ]);
+
+  app.get("/api/version-history/list", (req, res) => {
+    try {
+      const { workspaceRoot } = projectPathsFor(req);
+      const dir = path.join(workspaceRoot, VERSION_HISTORY_DIR);
+      if (!fs.existsSync(dir)) {
+        return res.json({ snapshots: [] as { id: string; createdAt: string; label: string; fileCount: number }[] });
+      }
+      const names = fs.readdirSync(dir).filter((n) => n.endsWith(".json"));
+      const snapshots: { id: string; createdAt: string; label: string; fileCount: number }[] = [];
+      for (const name of names) {
+        const abs = path.join(dir, name);
+        try {
+          const raw = fs.readFileSync(abs, "utf8");
+          const j = JSON.parse(raw) as { id?: string; createdAt?: string; label?: string; files?: Record<string, string> };
+          const id = typeof j.id === "string" ? j.id : name.replace(/\.json$/i, "");
+          const createdAt = typeof j.createdAt === "string" ? j.createdAt : "";
+          const label = typeof j.label === "string" ? j.label : "";
+          const fileCount = j.files && typeof j.files === "object" ? Object.keys(j.files).length : 0;
+          snapshots.push({ id, createdAt, label, fileCount });
+        } catch {
+          /* skip corrupt */
+        }
+      }
+      snapshots.sort((a, b) => (a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : 0));
+      res.json({ snapshots });
+    } catch (err: unknown) {
+      res.status(500).json({ error: err instanceof Error ? err.message : "list failed" });
+    }
+  });
+
+  app.get("/api/version-history/read", (req, res) => {
+    try {
+      const id = String(req.query.id || "").trim().replace(/[^a-zA-Z0-9._-]/g, "");
+      if (!id) return res.status(400).json({ error: "id is required" });
+      const { workspaceRoot } = projectPathsFor(req);
+      const safeName = id.endsWith(".json") ? id : `${id}.json`;
+      const abs = path.resolve(workspaceRoot, VERSION_HISTORY_DIR, safeName);
+      const root = path.resolve(workspaceRoot, VERSION_HISTORY_DIR);
+      if (!abs.startsWith(root) || !fs.existsSync(abs)) return res.status(404).json({ error: "Not found" });
+      const raw = fs.readFileSync(abs, "utf8");
+      res.type("json").send(raw);
+    } catch (err: unknown) {
+      res.status(500).json({ error: err instanceof Error ? err.message : "read failed" });
+    }
+  });
+
+  app.post("/api/version-history/snapshot", (req, res) => {
+    try {
+      const { workspaceRoot } = projectPathsFor(req);
+      const label = typeof req.body?.label === "string" ? req.body.label.trim().slice(0, 200) : "";
+      const dir = path.join(workspaceRoot, VERSION_HISTORY_DIR);
+      fs.mkdirSync(dir, { recursive: true });
+
+      const createdAt = new Date().toISOString();
+      const id = `snap-${createdAt.replace(/[:.]/g, "-")}`;
+      const files: Record<string, string> = {};
+      const maxPerFile = 120_000;
+      const maxFiles = 100;
+      let count = 0;
+
+      const all = collectWorkspaceFiles(workspaceRoot);
+      for (const row of all) {
+        if (count >= maxFiles) break;
+        const p = row.relativePath.replace(/\\/g, "/");
+        if (p.startsWith("nebulla-version-history/")) continue;
+        if (p.includes("node_modules/") || p.includes(".git/")) continue;
+        const ext = path.extname(p).toLowerCase();
+        if (!SNAPSHOT_TEXT_EXT.has(ext)) continue;
+        if (row.size > maxPerFile * 2) continue;
+        const abs = path.resolve(workspaceRoot, p);
+        if (!abs.startsWith(workspaceRoot)) continue;
+        try {
+          const body = fs.readFileSync(abs, "utf8");
+          files[p] = body.length > maxPerFile ? `${body.slice(0, maxPerFile)}\n\n… [truncated]` : body;
+          count += 1;
+        } catch {
+          /* skip binary / unreadable */
+        }
+      }
+
+      const payload = { version: 1 as const, id, createdAt, label, files };
+      const fileName = `${id}.json`;
+      fs.writeFileSync(path.join(dir, fileName), JSON.stringify(payload, null, 2), "utf8");
+      res.json({ ok: true, id, createdAt, label, fileCount: Object.keys(files).length });
+    } catch (err: unknown) {
+      res.status(500).json({ error: err instanceof Error ? err.message : "snapshot failed" });
+    }
+  });
+
+  app.post("/api/files/apply-generated", (req, res) => {
+    try {
+      const { workspaceRoot } = projectPathsFor(req);
+      const raw = typeof req.body?.content === "string" ? req.body.content : "";
+      if (!raw.trim()) return res.status(400).json({ error: "content is required" });
+
+      type FileBlock = { relativePath: string; body: string };
+      const blocks: FileBlock[] = [];
+
+      const addBlock = (p: string, b: string) => {
+        const cleanedPath = p.trim().replace(/^["'`]+|["'`]+$/g, "").replace(/^\.\/+/, "");
+        if (!cleanedPath) return;
+        blocks.push({ relativePath: cleanedPath, body: b.replace(/\r\n/g, "\n") });
+      };
+
+      // Pattern 1: ```file:path/to/file.ext ... ```
+      const reInline = /```(?:file|filepath)\s*:\s*([^\n`]+)\n([\s\S]*?)```/gi;
+      let m1: RegExpExecArray | null;
+      while ((m1 = reInline.exec(raw)) !== null) addBlock(m1[1], m1[2]);
+
+      // Pattern 2: File: path/to/file.ext \n ```lang ... ```
+      const reHeader = /(?:^|\n)\s*(?:File|FILE)\s*:\s*([^\n]+)\n```[^\n]*\n([\s\S]*?)```/g;
+      let m2: RegExpExecArray | null;
+      while ((m2 = reHeader.exec(raw)) !== null) addBlock(m2[1], m2[2]);
+
+      // Pattern 3: Raw multi-file format:
+      // src/main.jsx
+      // <code...>
+      // src/App.jsx
+      // <code...>
+      const pathLine = /^\s*(?:\.\/)?([A-Za-z0-9._-]+(?:\/[A-Za-z0-9._-]+)+\.[A-Za-z0-9]+)\s*$/;
+      const lines = raw.replace(/\r\n/g, "\n").split("\n");
+      let currentPath: string | null = null;
+      let currentBody: string[] = [];
+      const flushCurrent = () => {
+        if (!currentPath) return;
+        const body = currentBody.join("\n").trim();
+        if (body) addBlock(currentPath, body);
+        currentPath = null;
+        currentBody = [];
+      };
+      for (const line of lines) {
+        const m = line.match(pathLine);
+        if (m) {
+          flushCurrent();
+          currentPath = m[1];
+          continue;
+        }
+        if (currentPath) currentBody.push(line);
+      }
+      flushCurrent();
+
+      let fallbackPath: string | null = null;
+      if (blocks.length === 0) {
+        const trimmed = raw.trim();
+        // Heuristic fallback when model returns a single raw file body with no path wrapper.
+        if (/function\s+App\s*\(|export\s+default\s+App|<Route\s+path=|react-router/i.test(trimmed)) {
+          fallbackPath = "src/App.tsx";
+        } else if (/^<!DOCTYPE html>/i.test(trimmed) || /<html[\s>]/i.test(trimmed)) {
+          fallbackPath = "index.html";
+        } else if (/^import\s+.*from\s+['"][^'"]+['"]/m.test(trimmed) && /export\s+default/m.test(trimmed)) {
+          fallbackPath = "src/App.tsx";
+        }
+        if (fallbackPath) {
+          addBlock(fallbackPath, trimmed);
+        }
+      }
+      if (blocks.length === 0) {
+        return res.status(422).json({
+          error:
+            "No file blocks found. Expected format: ```file:path/to/file.ext ...``` or `File: path` followed by fenced code.",
+        });
+      }
+
+      const deny = /(^|\/)\.git(\/|$)|(^|\/)\.cursor(\/|$)|(^|\/)node_modules(\/|$)/i;
+      const written: string[] = [];
+      const skipped: string[] = [];
+      const seen = new Set<string>();
+
+      for (const b of blocks) {
+        if (seen.has(b.relativePath)) continue;
+        seen.add(b.relativePath);
+
+        if (deny.test(b.relativePath) || b.relativePath.includes("..")) {
+          skipped.push(b.relativePath);
+          continue;
+        }
+        const target = path.resolve(workspaceRoot, b.relativePath);
+        if (!target.startsWith(workspaceRoot)) {
+          skipped.push(b.relativePath);
+          continue;
+        }
+        fs.mkdirSync(path.dirname(target), { recursive: true });
+        fs.writeFileSync(target, b.body, "utf8");
+        written.push(b.relativePath);
+      }
+
+      res.json({
+        success: true,
+        written,
+        skipped,
+        parsedBlocks: blocks.length,
+        usedFallbackPath: fallbackPath || undefined,
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message || "Failed to apply generated files" });
+    }
+  });
+
+  function collectWorkspaceFiles(workspaceRoot: string): { relativePath: string; size: number; mtimeMs: number }[] {
+    const out: { relativePath: string; size: number; mtimeMs: number }[] = [];
+    if (!fs.existsSync(workspaceRoot)) return out;
+
+    const stack: string[] = [workspaceRoot];
+    while (stack.length > 0 && out.length < 3000) {
+      const dir = stack.pop()!;
+      let dirents: fs.Dirent[];
+      try {
+        dirents = fs.readdirSync(dir, { withFileTypes: true });
+      } catch {
+        continue;
+      }
+      for (const d of dirents) {
+        if (d.name === ".git" || d.name === "node_modules") continue;
+        const abs = path.join(dir, d.name);
+        if (d.isDirectory()) {
+          stack.push(abs);
+        } else {
+          try {
+            const st = fs.statSync(abs);
+            const rel = path.relative(workspaceRoot, abs).replace(/\\/g, "/");
+            out.push({ relativePath: rel, size: st.size, mtimeMs: st.mtimeMs });
+          } catch {
+            /* skip */
+          }
+        }
+      }
+    }
+    out.sort((a, b) => a.relativePath.localeCompare(b.relativePath));
+    return out;
+  }
+
+  function parseGitPorcelain(stdout: string): { status: string; path: string }[] {
+    const entries: { status: string; path: string }[] = [];
+    for (const line of stdout.split("\n")) {
+      if (!line.trim()) continue;
+      const status = line.slice(0, 2);
+      let rest = line.slice(3);
+      if (rest.startsWith('"') && rest.endsWith('"') && rest.length > 2) {
+        rest = rest.slice(1, -1).replace(/\\"/g, '"').replace(/\\\\/g, "\\");
+      }
+      let filePath = rest.trim();
+      if (filePath.includes(" -> ")) {
+        filePath = filePath.split(" -> ").pop()!.trim();
+      }
+      entries.push({ status, path: filePath.replace(/\\/g, "/") });
+    }
+    return entries;
+  }
+
+  /** Bundled Nebula / planning files — not the user app Grok writes under src/, public/, etc. */
+  function isNebulaOrchestrationPath(relPath: string): boolean {
+    const p = relPath.replace(/\\/g, "/").replace(/^\/+/, "");
+    if (!p) return true;
+    const exact = new Set([
+      "master-plan.json",
+      "project-execution-rules.md",
+      "environment-setup.md",
+      "Nebula Architecture Spec.md",
+      "SKILL.md",
+      "nebula-sysh-ui-sysh-studio.md",
+      "nebula-ui-studio.md",
+      "nebula-ui-studio.md",
+      "conversation-log.md",
+      "project-workflow.md",
+    ]);
+    if (exact.has(p)) return true;
+    const prefixes = [
+      "nebulla-version-history/",
+      "guardian/",
+      ".cursor/",
+      "conversation-logs/",
+      "dist/",
+      "build/",
+      "coverage/",
+    ];
+    for (const pre of prefixes) {
+      if (p.startsWith(pre)) return true;
+    }
+    return false;
+  }
+
+  function isUserAppProductPath(relPath: string): boolean {
+    const p = relPath.replace(/\\/g, "/").replace(/^\/+/, "");
+    if (!p || p.includes("..")) return false;
+    if (p.startsWith("node_modules/") || p.includes("/node_modules/")) return false;
+    if (p.startsWith(".git/")) return false;
+    return !isNebulaOrchestrationPath(p);
+  }
+
+  /** Git status + workspace tree for the active cloud project. */
+  app.get("/api/source-control/overview", async (req, res) => {
+    try {
+      const pp = projectPathsFor(req);
+      const workspaceRoot = pp.workspaceRoot;
+      const allFiles = collectWorkspaceFiles(workspaceRoot);
+      const nebulaFiles = allFiles.filter((f) => isUserAppProductPath(f.relativePath));
+      const nebulaProjectRelative = `cloud:${pp.projectKey}`;
+
+      let git: {
+        branch: string;
+        entries: { status: string; path: string }[];
+        error?: string;
+      } | null = null;
+
+      if (fs.existsSync(path.join(workspaceRoot, ".git"))) {
+        try {
+          const { stdout: branchOut } = await execFileAsync(
+            "git",
+            ["-C", workspaceRoot, "branch", "--show-current"],
+            { maxBuffer: 1024 * 1024, encoding: "utf8" }
+          );
+          const { stdout: porcOut } = await execFileAsync(
+            "git",
+            ["-C", workspaceRoot, "status", "--porcelain", "-u"],
+            { maxBuffer: 10 * 1024 * 1024, encoding: "utf8" }
+          );
+          git = {
+            branch: (branchOut || "unknown").trim() || "unknown",
+            entries: parseGitPorcelain(porcOut || "").filter((e) => isUserAppProductPath(e.path)),
+          };
+        } catch (e) {
+          git = {
+            branch: "?",
+            entries: [],
+            error: e instanceof Error ? e.message : String(e),
+          };
+        }
+      }
+
+      res.json({
+        nebulaProjectRoot: nebulaProjectRelative,
+        nebulaFiles,
+        git,
+      });
+    } catch (err: unknown) {
+      console.error("/api/source-control/overview:", err);
+      res.status(500).json({ error: err instanceof Error ? err.message : "overview failed" });
+    }
+  });
+
+  // Example backend function: execute terminal command
+  app.post("/api/terminal/exec", (req, res) => {
+    const { command } = req.body;
+    if (!command) {
+      return res.status(400).json({ output: "No command provided" });
+    }
+    const { workspaceRoot } = projectPathsFor(req);
+    
+    // Execute the command in the current working directory
+    exec(command, { cwd: workspaceRoot, timeout: 30000 }, (error, stdout, stderr) => {
+      let output = "";
+      if (stdout) output += stdout;
+      if (stderr) output += stderr;
+      
+      if (error) {
+        if (error.killed) {
+          output += "\n[Error: Command timed out after 30 seconds]";
+        } else if (!stdout && !stderr) {
+          output += `\n[Error: ${error.message}]`;
+        }
+      }
+      
+      res.json({ output: output || "Command executed successfully with no output." });
+    });
+  });
+
+  app.post("/api/render/deploy", async (_req, res) => {
+    try {
+      const renderApiKey = process.env.RENDER_API_KEY?.trim();
+      const serviceId = process.env.RENDER_SERVICE_ID?.trim();
+      const deployHookUrl = process.env.RENDER_DEPLOY_HOOK_URL?.trim();
+      const baseUrl = (process.env.RENDER_API_BASE_URL || "https://api.render.com/v1").replace(/\/$/, "");
+
+      if (serviceId && renderApiKey) {
+        const r = await fetch(`${baseUrl}/services/${serviceId}/deploys`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${renderApiKey}`,
+            "Content-Type": "application/json",
+            Accept: "application/json",
+          },
+        });
+        const bodyText = await r.text();
+        if (!r.ok) {
+          return res.status(r.status).json({ error: `Render deploy failed: ${bodyText.slice(0, 300)}` });
+        }
+        let payload: any = {};
+        try {
+          payload = bodyText ? JSON.parse(bodyText) : {};
+        } catch {
+          payload = {};
+        }
+        const deployId = payload?.id || payload?.deploy?.id || payload?.deployId || null;
+        const status = payload?.status || payload?.deploy?.status || "created";
+        return res.json({
+          ok: true,
+          mode: "service-api",
+          serviceId,
+          deployId,
+          status,
+          raw: payload,
+        });
+      }
+
+      if (deployHookUrl) {
+        const r = await fetch(deployHookUrl, { method: "POST" });
+        const bodyText = await r.text();
+        if (!r.ok) {
+          return res.status(r.status).json({ error: `Render deploy hook failed: ${bodyText.slice(0, 300)}` });
+        }
+        let payload: any = {};
+        try {
+          payload = bodyText ? JSON.parse(bodyText) : {};
+        } catch {
+          payload = {};
+        }
+        return res.json({
+          ok: true,
+          mode: "deploy-hook",
+          status: "triggered",
+          raw: payload,
+        });
+      }
+
+      return res.status(503).json({
+        error:
+          "Render deploy is not configured. Set RENDER_SERVICE_ID + RENDER_API_KEY, or set RENDER_DEPLOY_HOOK_URL.",
+      });
+    } catch (error) {
+      return res.status(500).json({
+        error: error instanceof Error ? error.message : "Unknown Render deploy error",
+      });
+    }
+  });
+
+  app.get("/api/render/deploy/status", async (req, res) => {
+    try {
+      const deployId = typeof req.query.deployId === "string" ? req.query.deployId.trim() : "";
+      if (!deployId) return res.status(400).json({ error: "deployId is required" });
+
+      const renderApiKey = process.env.RENDER_API_KEY?.trim();
+      const serviceId = process.env.RENDER_SERVICE_ID?.trim();
+      if (!renderApiKey || !serviceId) {
+        return res.status(503).json({ error: "RENDER_API_KEY and RENDER_SERVICE_ID are required for status polling" });
+      }
+      const baseUrl = (process.env.RENDER_API_BASE_URL || "https://api.render.com/v1").replace(/\/$/, "");
+      const r = await fetch(`${baseUrl}/services/${serviceId}/deploys/${deployId}`, {
+        headers: {
+          Authorization: `Bearer ${renderApiKey}`,
+          Accept: "application/json",
+        },
+      });
+      const bodyText = await r.text();
+      if (!r.ok) {
+        return res.status(r.status).json({ error: `Render deploy status failed: ${bodyText.slice(0, 300)}` });
+      }
+      let payload: any = {};
+      try {
+        payload = bodyText ? JSON.parse(bodyText) : {};
+      } catch {
+        payload = {};
+      }
+      const status =
+        payload?.status ||
+        payload?.deploy?.status ||
+        payload?.state ||
+        payload?.deploy?.state ||
+        "unknown";
+      const message =
+        payload?.message ||
+        payload?.deploy?.message ||
+        payload?.error ||
+        payload?.deploy?.error ||
+        "";
+      res.json({ ok: true, status, message, raw: payload });
+    } catch (error) {
+      res.status(500).json({
+        error: error instanceof Error ? error.message : "Unknown Render status polling error",
+      });
+    }
+  });
+
+  app.get("/auth/callback", (_req, res) => {
+    res.redirect(302, "/");
+  });
+
+  app.post("/api/leads", (req, res) => {
+    const { email, action } = req.body;
+    if (!email) return res.status(400).json({ error: "Email is required" });
+    
+    console.log(`[LEAD CAPTURED] Email: ${email}, Action: ${action}, Time: ${new Date().toISOString()}`);
+    // In a real app, we would save this to a database
+    res.json({ success: true });
+  });
+
+  // Stripe Integration (DISABLED until further notice)
+  app.post("/api/create-checkout-session", (req, res) => {
+    res.status(503).json({ 
+      error: "Payments are currently disabled", 
+      message: "Stripe integration is kept in the codebase but inactive per project settings." 
+    });
+  });
+
+  app.post("/api/nebula-ui-studio/prompt", (req, res) => {
+    const { prompt } = req.body || {};
+    if (typeof prompt !== "string" || !prompt.trim()) {
+      return res.status(400).json({ error: "prompt is required" });
+    }
+    try {
+      const { nebulaUiStudioPath } = projectPathsFor(req);
+      ensureNebulaUiStudioFileAt(nebulaUiStudioPath);
+      const existing = fs.readFileSync(nebulaUiStudioPath, "utf8");
+      const withPrompt = upsertNebulaCommentSection(existing, "NEBULA_UI_STUDIO_PROMPT", prompt);
+      const existingCode = extractNebulaCommentSection(withPrompt, "NEBULA_UI_STUDIO_CODE");
+      const finalContent = upsertNebulaCommentSection(withPrompt, "NEBULA_UI_STUDIO_CODE", existingCode || "No approved UI code yet.");
+      fs.writeFileSync(nebulaUiStudioPath, finalContent, "utf8");
+      res.json({ success: true });
+    } catch (err) {
+      console.error("Failed to save Nebula UI Studio prompt:", err);
+      res.status(500).json({ error: "Failed to save prompt" });
+    }
+  });
+
+  app.post("/api/nebula-ui-studio/generate", async (req, res) => {
+    const { pagesText, branding } = req.body;
+    const pencilKey = resolvePencilApiKey();
+    const pencilUrl = resolvePencilMockupsUrl();
+    const variationIndex = typeof req.body?.variationIndex === "number" ? req.body.variationIndex : 0;
+
+    try {
+      const { nebulaUiStudioPath, workspaceRoot } = projectPathsFor(req);
+      ensureNebulaUiStudioFileAt(nebulaUiStudioPath);
+      const uiStudioFile = fs.readFileSync(nebulaUiStudioPath, "utf8");
+      const storedPrompt = extractNebulaCommentSection(uiStudioFile, "NEBULA_UI_STUDIO_PROMPT");
+      const skillExcerpt = readSkillDesignSystemExcerpt(workspaceRoot);
+
+      const body = buildNebulaUiStudioPromptBody({
+        storedPrompt,
+        skillExcerpt,
+        pagesText: typeof pagesText === "string" ? pagesText : "",
+        branding,
+      });
+      const promptText = String((body as { prompt?: string }).prompt ?? "");
+
+      const grokKey = resolveNebullaGrokKeyForReq(req);
+
+      if (grokKey) {
+        try {
+          const { svg } = await callGrokGenerateUiSvg({
+            apiKey: grokKey,
+            fullPromptText: promptText,
+            variationIndex,
+          });
+          return res.json({ svg, usedPrompt: storedPrompt || "", source: "grok-4" });
+        } catch (grokErr) {
+          console.warn("[nebula-ui-studio/generate] Grok failed, fallback if Pencil key:", grokErr);
+          if (!pencilKey) {
+            return res.status(502).json({
+              error:
+                grokErr instanceof Error ? grokErr.message : "Grok UI generation failed and no Pencil fallback is configured.",
+            });
+          }
+        }
+      }
+
+      if (pencilKey) {
+        const result = await callPencilMockupsGenerate({ apiKey: pencilKey, apiUrl: pencilUrl, body });
+        if (result.ok === false) {
+          console.error("Nebula UI Studio Engine Error:", result.error);
+          return res.status(result.status).json({ error: result.error });
+        }
+        const raw = result.raw as Record<string, unknown>;
+        return res.json({ ...raw, svg: result.svg, usedPrompt: storedPrompt || "", source: "pencil" });
+      }
+
+      if (useBundledDemoMockupWithoutKey()) {
+        const svg = loadBundledDemoMockupSvg();
+        return res.json({
+          svg,
+          demoMode: true,
+          usedPrompt: storedPrompt || "",
+          message:
+            process.env.NODE_ENV === "production"
+              ? "Bundled demo mockup. Set GROK_API_KEY (recommended) or PENCIL_API_KEY for live generation."
+              : "Bundled demo mockup (dev). Set GROK_API_KEY or PENCIL_API_KEY for live output.",
+          source: "demo",
+        });
+      }
+
+      return res.status(500).json({
+        error:
+          "No generator available. Add GROK_API_KEY (Grok 4 UI) and/or PENCIL_API_KEY on the server, or set NEBULA_UI_STUDIO_DEMO=1 for bundled demo SVGs.",
+      });
+    } catch (error) {
+      console.error("Error calling Nebula UI Studio engine:", error);
+      captureError(error instanceof Error ? error : new Error(String(error)), {
+        source: "server",
+        route: "/api/nebula-ui-studio/generate",
+      });
+      res.status(500).json({ error: error instanceof Error ? error.message : "Failed to call Nebula UI Studio engine" });
+    }
+  });
+
+  app.post("/api/nebula-ui-studio/analyze-edit", async (req, res) => {
+    const { originalCode, editedCode } = req.body || {};
+    if (typeof originalCode !== "string" || typeof editedCode !== "string") {
+      return res.status(400).json({ error: "originalCode and editedCode strings are required" });
+    }
+    const grokKey = resolveNebullaGrokKeyForReq(req);
+    const heuristic = heuristicSvgEditRisks(originalCode, editedCode);
+    try {
+      if (grokKey) {
+        const ai = await callGrokAnalyzeSvgEdit({ apiKey: grokKey, originalCode, editedCode });
+        const merged = [...new Set([...heuristic, ...ai.warnings])];
+        return res.json({
+          warnings: merged,
+          summary: ai.summary,
+          source: "grok+heuristic",
+        });
+      }
+    } catch (e) {
+      console.warn("[analyze-edit] Grok analysis failed, heuristic only:", e);
+    }
+    res.json({ warnings: heuristic, summary: "", source: "heuristic" });
+  });
+
+  app.post("/api/nebula-ui-studio/adapt-edit", async (req, res) => {
+    const { editedCode, warningsSummary } = req.body || {};
+    if (typeof editedCode !== "string" || !editedCode.trim()) {
+      return res.status(400).json({ error: "editedCode is required" });
+    }
+    const grokKey = resolveNebullaGrokKeyForReq(req);
+    if (!grokKey) {
+      return res.status(400).json({ error: "Grok API key required to adapt SVG (server GROK_API_KEY or client key)." });
+    }
+    try {
+      const { svg } = await callGrokAdaptUserSvg({
+        apiKey: grokKey,
+        editedCode,
+        warningsSummary: typeof warningsSummary === "string" ? warningsSummary : "",
+      });
+      res.json({ svg });
+    } catch (e) {
+      console.error("[adapt-edit]", e);
+      res.status(500).json({ error: e instanceof Error ? e.message : "Adapt failed" });
+    }
+  });
+
+  app.post("/api/nebula-ui-studio/approve", (req, res) => {
+    const { code } = req.body || {};
+    if (typeof code !== "string" || !code.trim()) {
+      return res.status(400).json({ error: "code is required" });
+    }
+    try {
+      const { nebulaUiStudioPath, nebulaUiStudioOutputDir } = projectPathsFor(req);
+      ensureNebulaUiStudioFileAt(nebulaUiStudioPath);
+      const existing = fs.readFileSync(nebulaUiStudioPath, "utf8");
+      const promptText = extractNebulaCommentSection(existing, "NEBULA_UI_STUDIO_PROMPT") || "No prompt generated yet.";
+      const withPrompt = upsertNebulaCommentSection(existing, "NEBULA_UI_STUDIO_PROMPT", promptText);
+      const withCode = upsertNebulaCommentSection(withPrompt, "NEBULA_UI_STUDIO_CODE", code);
+      fs.writeFileSync(nebulaUiStudioPath, withCode, "utf8");
+      fs.mkdirSync(path.join(nebulaUiStudioOutputDir, "approved"), { recursive: true });
+      fs.writeFileSync(path.join(nebulaUiStudioOutputDir, "approved", "approved-ui.svg"), code.trim(), "utf8");
+      res.json({ success: true });
+    } catch (err) {
+      console.error("Failed to save Nebula UI Studio code:", err);
+      res.status(500).json({ error: "Failed to save approved code" });
+    }
+  });
+
+  app.get("/api/nebula-ui-studio/code", (req, res) => {
+    try {
+      const { nebulaUiStudioPath } = projectPathsFor(req);
+      ensureNebulaUiStudioFileAt(nebulaUiStudioPath);
+      const existing = fs.readFileSync(nebulaUiStudioPath, "utf8");
+      const code = extractNebulaCommentSection(existing, "NEBULA_UI_STUDIO_CODE");
+      res.json({ code: code || "" });
+    } catch (err) {
+      console.error("Failed to read Nebula UI Studio code:", err);
+      res.status(500).json({ error: "Failed to read Nebula UI Studio code" });
+    }
+  });
+
+  const readWorkflowFileSafe = (docsRoot: string, relPath: string): string => {
+    try {
+      const fp = path.join(docsRoot, relPath);
+      if (!fs.existsSync(fp)) return `[missing] ${relPath}`;
+      const raw = fs.readFileSync(fp, "utf8");
+      return raw.length > 20000 ? `${raw.slice(0, 20000)}\n...[truncated]` : raw;
+    } catch (e) {
+      return `[error reading ${relPath}] ${e instanceof Error ? e.message : String(e)}`;
+    }
+  };
+
+  const buildProjectWorkflowExecutionContext = (req: express.Request): string => {
+    const { workspaceRoot } = projectPathsFor(req);
+    const order = [
+      "project-execution-rules.md",
+      "master-plan.json",
+      "environment-setup.md",
+      "nebula-sysh-ui-sysh-studio.md",
+    ];
+    return order.map((p) => `\n=== ${p} ===\n${readWorkflowFileSafe(workspaceRoot, p)}`).join("\n");
+  };
+
+  app.post("/api/grok/execute-project-rules", async (req, res) => {
+    const { messages, grokApiKey: bodyGrokKey, userId, projectName } = req.body || {};
+    const headerKey =
+      typeof req.headers["x-grok-api-key"] === "string"
+        ? req.headers["x-grok-api-key"].trim()
+        : "";
+    const apiKey =
+      headerKey ||
+      (typeof bodyGrokKey === "string" ? bodyGrokKey.trim() : "") ||
+      process.env.GROK_API_KEY ||
+      "";
+
+    if (!apiKey) {
+      return res.status(401).json({
+        error:
+          "Grok API key is missing. Add GROK_API_KEY to your .env file, restart the server, or save your key under Dashboard → Secrets (stored in this browser only).",
+      });
+    }
+    if (apiKey.length < 20) {
+      return res.status(400).json({
+        error: "Your GROK_API_KEY appears to be invalid. Please check it in the Settings menu.",
+      });
+    }
+
+    const convUserId =
+      typeof userId === "string" && userId.trim() ? userId.trim() : "anonymous";
+    const convProject =
+      typeof projectName === "string" && projectName.trim() ? projectName.trim() : "Untitled Project";
+
+    try {
+      const workflowContext = buildProjectWorkflowExecutionContext(req);
+      const memory = buildMemorySystemContent(convUserId, convProject);
+      const incomingMessages: { role: string; content?: string }[] = Array.isArray(messages) ? messages : [];
+      const baseMessages = injectMemoryIntoMessages(incomingMessages, memory);
+      const executionSystemPrompt = `Execute project-execution-rules.md strictly (single orchestration file).
+Read and follow this context in exact order:
+${workflowContext}
+
+Rules:
+- Trigger source is Q1 approved.
+- Start execution immediately; no extra confirmation.
+- If coding should start now, include START_CODING in your response.
+- Do not output generic planning chat.
+- Never paste or restate the full "project-execution-rules.md" content in user-facing output.
+- If producing <START_MASTERPLAN>, include only canonical tab content (sections 1..6), never orchestration policy text.`;
+
+      const response = await fetch("https://api.x.ai/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+          model: "grok-4-1-fast-reasoning",
+          messages: [{ role: "system", content: executionSystemPrompt }, ...baseMessages.slice(-12)],
+          stream: false,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        return res.status(response.status).json({ error: errorText });
+      }
+      const data = await response.json();
+      return res.json(data);
+    } catch (error) {
+      console.error("Error running project execution rules:", error);
+      return res.status(500).json({
+        error: error instanceof Error ? error.message : "Failed to execute project rules",
+      });
+    }
+  });
+
+  const PRE_CODING_SUMMARY_KEY = "Pre-coding summary (Grok)";
+
+  /** Go: Grok 4 writes a short summary into master-plan.json only, then Grok Code runs (no full execution doc in MP). */
+  app.post("/api/grok/go-code", async (req, res) => {
+    const { messages, grokApiKey: bodyGrokKey, userId, projectName, userNote } = req.body || {};
+    const headerKey =
+      typeof req.headers["x-grok-api-key"] === "string"
+        ? req.headers["x-grok-api-key"].trim()
+        : "";
+    const apiKey =
+      headerKey ||
+      (typeof bodyGrokKey === "string" ? bodyGrokKey.trim() : "") ||
+      process.env.GROK_API_KEY ||
+      "";
+
+    if (!apiKey) {
+      return res.status(401).json({
+        error:
+          "Grok API key is missing. Add GROK_API_KEY to your .env file, restart the server, or save your key under Dashboard → Secrets (stored in this browser only).",
+      });
+    }
+    if (apiKey.length < 20) {
+      return res.status(400).json({
+        error: "Your GROK_API_KEY appears to be invalid. Please check it in the Settings menu.",
+      });
+    }
+
+    const convUserId =
+      typeof userId === "string" && userId.trim() ? userId.trim() : "anonymous";
+    const convProject =
+      typeof projectName === "string" && projectName.trim() ? projectName.trim() : "Untitled Project";
+
+    const note =
+      typeof userNote === "string" && userNote.trim() ? userNote.trim().slice(0, 4000) : "";
+
+    try {
+      const { masterPlanPath } = projectPathsFor(req);
+      let planSnapshot: Record<string, string> = {};
+      try {
+        if (fs.existsSync(masterPlanPath)) {
+          const raw = JSON.parse(fs.readFileSync(masterPlanPath, "utf8"));
+          if (raw && typeof raw === "object") {
+            for (const [k, v] of Object.entries(raw)) {
+              if (typeof v === "string") planSnapshot[k] = v;
+            }
+          }
+        }
+      } catch {
+        planSnapshot = {};
+      }
+
+      const compact: Record<string, string> = {};
+      for (const [k, v] of Object.entries(planSnapshot)) {
+        compact[k] = v.length > 2500 ? `${v.slice(0, 2500)}\n…[truncated]` : v;
+      }
+
+      const memory = buildMemorySystemContent(convUserId, convProject);
+      const phaseASystem = `You are Grok 4 (planning only). The user pressed **Go** to run a coding pass with Grok Code.
+
+Your ONLY output for this turn: a **short** pre-coding summary for the Master Plan file.
+
+Strict rules:
+- Emit EXACTLY one block: <PRE_CODING_SUMMARY>...</PRE_CODING_SUMMARY>
+- Inside: maximum 1200 characters. Use bullets or tight prose: scope, assumptions, first areas to implement, risks.
+- Do NOT paste project-execution-rules.md or long policy text.
+- Do NOT replace full Master Plan sections; this is a session brief only.
+- Do NOT emit START_CODING, ANSWER_Qn, or <START_MASTERPLAN> here.`;
+
+      const phaseAUser = `Current master-plan.json values (truncated per field):\n${JSON.stringify(compact, null, 2)}\n\nOptional user focus for this coding session:\n${note || "(none — infer next concrete steps from the plan)"}`;
+
+      let phaseAMessages: { role: string; content: string }[] = [
+        { role: "system", content: phaseASystem },
+        { role: "user", content: phaseAUser },
+      ];
+      phaseAMessages = injectMemoryIntoMessages(phaseAMessages, memory) as { role: string; content: string }[];
+
+      const g4Res = await fetch("https://api.x.ai/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+          model: "grok-4-1-fast-reasoning",
+          messages: phaseAMessages,
+          stream: false,
+        }),
+      });
+
+      if (!g4Res.ok) {
+        const errText = await g4Res.text();
+        return res.status(g4Res.status).json({ error: `Grok 4 summary phase failed: ${errText.slice(0, 500)}` });
+      }
+
+      const g4Data = await g4Res.json();
+      const g4Text = g4Data.choices?.[0]?.message?.content || "";
+      const sumMatch = g4Text.match(/<PRE_CODING_SUMMARY>([\s\S]*?)<\/PRE_CODING_SUMMARY>/i);
+      let summary = sumMatch ? sumMatch[1].trim() : "";
+      if (!summary) {
+        summary = g4Text
+          .replace(/<REASONING>[\s\S]*?<\/REASONING>/gi, "")
+          .replace(/<[^>]+>/g, " ")
+          .replace(/\s+/g, " ")
+          .trim()
+          .slice(0, 1200);
+      }
+      if (!summary) {
+        summary = "No summary generated; proceed from master plan tabs and project-execution-rules.md.";
+      }
+      summary = summary.slice(0, 2000);
+
+      let plan: Record<string, unknown> = {};
+      if (fs.existsSync(masterPlanPath)) {
+        try {
+          plan = JSON.parse(fs.readFileSync(masterPlanPath, "utf8"));
+        } catch {
+          plan = {};
+        }
+      }
+      plan[PRE_CODING_SUMMARY_KEY] = summary;
+      fs.writeFileSync(masterPlanPath, JSON.stringify(plan, null, 2), "utf8");
+      console.log(`[go-code] Wrote ${PRE_CODING_SUMMARY_KEY} (${summary.length} chars)`);
+
+      const workflowContext = buildProjectWorkflowExecutionContext(req);
+      const codeModel = process.env.GROK_CODE_MODEL?.trim() || "grok-code-fast-1";
+      const codeSystemPrompt = `You are Grok Code (coding phase). The user pressed **Go** in Nebula Partner.
+
+A short pre-coding summary was just saved to master-plan.json under the key "${PRE_CODING_SUMMARY_KEY}" (it appears again inside the master-plan snapshot below).
+
+Follow project-execution-rules.md strictly. Use the workflow context in order.
+
+CRITICAL OUTPUT CONTRACT (no deviation):
+- Output real code artifacts only (concrete files/diffs/commands) that can be applied directly.
+- Do NOT output plain-language planning, recap, policy restatement, or narrative explanation.
+- If a file must be created/updated, include explicit path + full content or patch for that file.
+- Prefer one or more clear file blocks over prose.
+- If information is missing, make minimal safe assumptions and proceed with best-effort code.
+
+${workflowContext}`;
+
+      const incomingMessages: { role: string; content?: string }[] = Array.isArray(messages) ? messages : [];
+      const normalized = incomingMessages.map((m) => ({
+        role: m.role === "model" ? "assistant" : m.role,
+        content: typeof m.content === "string" ? m.content : "",
+      }));
+      const withMem = injectMemoryIntoMessages(normalized, memory);
+      const codeMessages = [
+        { role: "system", content: codeSystemPrompt },
+        ...withMem.slice(-10),
+        {
+          role: "user",
+          content: `Run the coding pass now. Respect "${PRE_CODING_SUMMARY_KEY}" and the six canonical Master Plan tabs. Session focus from user: ${note || "(none)"}`,
+        },
+      ];
+
+      const codeRes = await fetch("https://api.x.ai/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+          model: codeModel,
+          messages: codeMessages,
+          stream: false,
+        }),
+      });
+
+      if (!codeRes.ok) {
+        const errText = await codeRes.text();
+        return res.status(200).json({
+          preCodingSummary: summary,
+          summarySaved: true,
+          codeError: errText.slice(0, 800),
+          choices: [],
+        });
+      }
+
+      const codeData = await codeRes.json();
+      const codeText = codeData.choices?.[0]?.message?.content || "";
+
+      try {
+        appendConversationTurn(convUserId, convProject, "user", `[Go] ${note || "start coding"}`);
+        if (codeText.trim()) {
+          appendConversationTurn(convUserId, convProject, "assistant", codeText.trim().slice(0, 8000));
+        }
+      } catch (logErr) {
+        console.error("go-code memory append failed:", logErr);
+      }
+
+      return res.json({
+        preCodingSummary: summary,
+        summarySaved: true,
+        choices: codeData.choices,
+        codeModel,
+      });
+    } catch (error) {
+      console.error("Error in /api/grok/go-code:", error);
+      captureError(error instanceof Error ? error : new Error(String(error)), {
+        source: "server",
+        route: "/api/grok/go-code",
+      });
+      return res.status(500).json({
+        error: error instanceof Error ? error.message : "Failed to run Go (code) pipeline",
+      });
+    }
+  });
+
+  app.post("/api/nebula-swarm/handoff", async (req, res) => {
+    try {
+      /*
+       * Nebula Swarm handoff — support agents (Planner, Researcher, Tester on Grok 3; optional
+       * Reviewer on Grok 4.1 when intensity is `full_quality`).
+       *
+       * - **GROK_SWARM_API_KEY** + **GROK_SWARM_MODEL** → parallel Grok 3 lane (subset by intensity).
+       * - **Reviewer** → `resolveNebullaGrokKeyForReq(req)` + **GROK_SWARM_REVIEWER_MODEL** (default
+       *   `grok-4-1-fast-reasoning`) when `swarmIntensity` is `full_quality`.
+       */
+      const swarmKey = process.env.GROK_SWARM_API_KEY?.trim() ?? "";
+      if (!swarmKey || swarmKey.length < 20) {
+        return res.status(401).json({
+          error:
+            "GROK_SWARM_API_KEY is missing or invalid (min ~20 chars). Add it to .env for Nebula Swarm support agents (Grok 3). Main Nebula Partner still uses GROK_API_KEY (Grok 4.1).",
+        });
+      }
+      const swarmModel = process.env.GROK_SWARM_MODEL?.trim() || "grok-3-fast";
+      const reviewerModel =
+        process.env.GROK_SWARM_REVIEWER_MODEL?.trim() || "grok-4-1-fast-reasoning";
+      const body = (req.body || {}) as Record<string, unknown>;
+      const rawIntensity = typeof body.swarmIntensity === "string" ? body.swarmIntensity.trim() : "";
+      const swarmIntensity =
+        rawIntensity === "light" || rawIntensity === "balanced" || rawIntensity === "full_quality"
+          ? rawIntensity
+          : "full_quality";
+      const userMessage = typeof body.userMessage === "string" ? body.userMessage.trim() : "";
+      if (!userMessage) {
+        return res.status(400).json({ error: "userMessage is required" });
+      }
+      const phase = typeof body.phase === "string" && body.phase.trim() ? body.phase.trim() : "pre_phase_0";
+      const projectName =
+        typeof body.projectName === "string" && body.projectName.trim()
+          ? body.projectName.trim()
+          : typeof req.query.projectName === "string"
+            ? String(req.query.projectName).trim()
+            : "Untitled Project";
+      const runId =
+        typeof body.runId === "string" && body.runId.trim() ? body.runId.trim() : `swarm-${Date.now()}`;
+      const pp = projectPathsFor(req);
+
+      let reviewerLane: { apiKey: string; model: string } | undefined;
+      if (swarmIntensity === "full_quality") {
+        const mainGrok = resolveNebullaGrokKeyForReq(req);
+        if (!mainGrok || mainGrok.length < 20) {
+          return res.status(401).json({
+            error:
+              "Full Quality swarm requires a Grok 4.1 key for the Reviewer pass: set GROK_API_KEY in .env, or send X-Grok-Api-Key / grokApiKey on this request (same as /api/grok/chat).",
+          });
+        }
+        reviewerLane = { apiKey: mainGrok, model: reviewerModel };
+      }
+
+      const handoff = await buildSwarmHandoffParallel(
+        {
+          planner: swarmKey,
+          researcher: swarmKey,
+          tester: swarmKey,
+          swarmModel,
+        },
+        {
+          repoRoot: REPO_ROOT,
+          workspaceRoot: pp.workspaceRoot,
+          userMessage,
+          phase,
+          projectName,
+          runId,
+          intensity: swarmIntensity,
+          reviewerLane,
+        }
+      );
+      return res.json({ handoff });
+    } catch (err) {
+      console.error("/api/nebula-swarm/handoff:", err);
+      captureError(err instanceof Error ? err : new Error(String(err)), {
+        source: "server",
+        route: "/api/nebula-swarm/handoff",
+      });
+      return res.status(500).json({
+        error: err instanceof Error ? err.message : "Swarm handoff failed",
+      });
+    }
+  });
+
+  app.post("/api/grok/chat", async (req, res) => {
+    const { messages, grokApiKey: bodyGrokKey, userId, projectName, onboardingAutopilot } = req.body || {};
+    const headerKey =
+      typeof req.headers["x-grok-api-key"] === "string"
+        ? req.headers["x-grok-api-key"].trim()
+        : "";
+    /** Main Nebula Partner + planning: **Grok 4.1** using **`GROK_API_KEY`** from `.env` (process.env), or client override. */
+    const apiKey =
+      headerKey ||
+      (typeof bodyGrokKey === "string" ? bodyGrokKey.trim() : "") ||
+      process.env.GROK_API_KEY ||
+      "";
+
+    if (!apiKey) {
+      console.error("GROK_API_KEY is not set (env, X-Grok-Api-Key header, or Settings)");
+      return res.status(401).json({
+        error:
+          "Grok API key is missing. Add GROK_API_KEY to your .env file, restart the server, or save your key under Dashboard → Secrets (stored in this browser only).",
+      });
+    }
+    if (apiKey.length < 20) {
+      const helpMsg = "Your GROK_API_KEY appears to be invalid. Please check it in the Settings menu.";
+      console.error(`Invalid GROK_API_KEY format detected: ${helpMsg}`);
+      return res.status(400).json({ error: helpMsg });
+    }
+
+    const convUserId =
+      typeof userId === "string" && userId.trim() ? userId.trim() : "anonymous";
+    const convProject =
+      typeof projectName === "string" && projectName.trim() ? projectName.trim() : "Untitled Project";
+
+    let messagesForApi: { role: string; content?: string }[] = Array.isArray(messages) ? messages : [];
+
+    if (Boolean(onboardingAutopilot)) {
+      const rawMsgs = Array.isArray(messages) ? messages : [];
+      const lastUser = [...rawMsgs].reverse().find((m) => m.role === "user");
+      const answer =
+        typeof lastUser?.content === "string" ? lastUser.content.trim() : "";
+      if (!answer) {
+        return res.status(400).json({ error: "User answer required for onboarding autopilot" });
+      }
+      const wf = buildProjectWorkflowExecutionContext(req);
+      const autopilotSystem = `ONBOARDING_AUTOPILOT — single model turn. No conversational filler. No permission questions. Do not ask follow-ups.
+
+The user answered ONLY the first discovery question (core feature of their app). Infer reasonable defaults for audience, stack, pages, integrations, and environment (aligned with project-execution-rules.md) without asking the user.
+
+Output in ONE reply, in this order:
+1) <START_MASTERPLAN> ... </END_MASTERPLAN> with ALL six sections using these exact headings inside the block:
+   ### 1. Goal of the app
+   ### 2. Tech Research
+   ### 3. Features and KPIs
+   ### 4. Pages and navigation
+   ### 5. UI/UX design
+   ### 6. Environment Setup
+   Each section must be substantive (not placeholders).
+2) <FINISH_MASTERPLAN>
+3) <START_CODING>
+
+Optional: include ANSWER_Qn + <GROK_B_SUMMARY_Qn> for tabs as needed. After the tags, no extra user-visible prose.
+
+Hard guard:
+- Never copy/paste orchestration policy text from project-execution-rules.md into any Master Plan section.
+- Master Plan sections must contain product-specific app content only (goal/research/features/pages/ui/environment), not internal workflow instructions.
+
+Workflow reference (read order; do not paste verbatim into chat output):
+${wf}
+
+User's only answer (core feature):
+${answer.slice(0, 8000)}`;
+
+      messagesForApi = [
+        { role: "system", content: autopilotSystem },
+        { role: "user", content: answer },
+      ];
+    }
+
+    try {
+      const memory = buildMemorySystemContent(convUserId, convProject);
+      messagesForApi = injectMemoryIntoMessages(messagesForApi, memory);
+    } catch (memErr) {
+      console.error("Conversation memory load failed:", memErr);
+    }
+
+    try {
+      const response = await fetch("https://api.x.ai/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+          model: "grok-4-1-fast-reasoning",
+          messages: messagesForApi,
+          stream: false,
+        }),
+      });
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`GROK API error (${response.status}):`, errorText);
+        try {
+          const errorData = JSON.parse(errorText);
+          return res.status(response.status).json(errorData);
+        } catch {
+          return res.status(response.status).json({ error: errorText });
+        }
+      }
+
+      const data = await response.json();
+      let responseText = data.choices?.[0]?.message?.content || "";
+      /** Grok 4 text before optional Grok Code swap — used for Master Plan + Grok B summaries. */
+      let grok4PlanningCapture = responseText;
+
+      if (/\bSTART_CODING\b/i.test(responseText)) {
+        const workflowContext = buildProjectWorkflowExecutionContext(req);
+        const codeModel = process.env.GROK_CODE_MODEL?.trim() || "grok-code-fast-1";
+        const codeSystemPrompt = `You are now in strict coding mode.
+Follow project-execution-rules.md exactly (single orchestration file).
+Use this context:
+${workflowContext}
+
+CRITICAL OUTPUT CONTRACT (no deviation):
+- Output real code artifacts only (concrete files/diffs/commands) that can be applied directly.
+- Do NOT output plain-language planning, recap, policy restatement, or narrative explanation.
+- If a file must be created/updated, include explicit path + full content or patch for that file.
+- Prefer one or more clear file blocks over prose.
+- If information is missing, make minimal safe assumptions and proceed with best-effort code.`;
+        try {
+          const codeRes = await fetch("https://api.x.ai/v1/chat/completions", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${apiKey}`,
+            },
+            body: JSON.stringify({
+              model: codeModel,
+              messages: [{ role: "system", content: codeSystemPrompt }, ...messagesForApi.slice(-12)],
+              stream: false,
+            }),
+          });
+          if (codeRes.ok) {
+            const codeData = await codeRes.json();
+            const codeText = codeData.choices?.[0]?.message?.content || "";
+            if (codeText.trim()) {
+              responseText = codeText;
+              data.choices = [
+                {
+                  message: {
+                    content: codeText,
+                    planningPhase: grok4PlanningCapture,
+                  },
+                },
+              ];
+            }
+          } else {
+            console.error("[GROK CODE] handoff failed:", await codeRes.text());
+          }
+        } catch (e) {
+          console.error("[GROK CODE] handoff error:", e);
+        }
+      }
+
+  // Grok B (writer): run as soon as meaningful summary content appears.
+  // ANSWER_Qn still works, but summaries alone are enough to start writing immediately.
+  const summarySource = grok4PlanningCapture;
+  const answerTabMatches = [...summarySource.matchAll(/\bANSWER_Q([1-6])\b/gi)];
+  const answerTabs = [...new Set(answerTabMatches.map((m) => parseInt(m[1], 10)))].sort(
+    (a, b) => a - b
+  );
+  const summaries = extractGrokBSummaries(summarySource);
+  const blockFallbackSummaries = extractSummariesFromMasterPlanBlock(summarySource);
+  const mergedSummaries: Partial<Record<number, string>> = {
+    ...blockFallbackSummaries,
+    ...summaries,
+  };
+  const summaryTabs = Object.keys(mergedSummaries)
+    .map((k) => parseInt(k, 10))
+    .filter((n) => Number.isInteger(n) && n >= 1 && n <= 6)
+    .sort((a, b) => a - b);
+  const shouldRunWriter = answerTabs.length > 0 || summaryTabs.length > 0;
+  if (shouldRunWriter) {
+    const targetTabs = answerTabs.length > 0 ? answerTabs : summaryTabs;
+    const summaryEntries = targetTabs
+      .map((idx) => {
+        const summary = mergedSummaries[idx];
+        return summary ? ({ tabIndex: idx, summary } as const) : null;
+      })
+      .filter((entry): entry is { tabIndex: number; summary: string } => entry !== null);
+
+    if (summaryEntries.length === 0) {
+      console.warn("[GROK B] Trigger ignored: missing <GROK_B_SUMMARY_Qn> payload.");
+    } else {
+      appendWriterAuditEvent({
+        userId: convUserId,
+        projectName: convProject,
+        triggeredQn: summaryEntries.map((x) => x.tabIndex),
+      });
+      console.log(
+        `[GROK B] Trigger: ANSWER_Q tabs=${summaryEntries.map((x) => x.tabIndex).join(",")}`
+      );
+      runGrokB(projectPathsFor(req).masterPlanPath, summaryEntries).catch((err) => {
+        console.error("[GROK B] Failed to update Master Plan:", err);
+      });
+    }
+  }
+
+      // Extract clean text for TTS (removing internal tags)
+      const cleanText = responseText
+        .replace(/<REASONING>[\s\S]*?<\/REASONING>/g, '')
+        .replace(/<START_MASTERPLAN>[\s\S]*?<END_MASTERPLAN>/g, '')
+        .replace(/<START_MASTERPLAN>/g, '')
+        .replace(/<END_MASTERPLAN>/g, '')
+        .replace(/<START_CODING>/g, '')
+        .replace(/START_CODING/g, '')
+        .replace(/<START_UIUX>/g, '')
+        .replace(/<FINISH_MASTERPLAN>/g, '')
+        .replace(/<APPROVE_MASTERPLAN>/g, '')
+        .replace(/<APPROVE_MINDMAP>/g, '')
+        .replace(/<APPROVE_UI>/g, '')
+        .replace(/<GROK_B_SUMMARY_Q([1-6])>[\s\S]*?<\/GROK_B_SUMMARY_Q\1>/g, '')
+        .replace(/\bANSWER_Q[1-6]\b/g, '')
+        .trim();
+
+      if (cleanText) {
+        // Voice chat flow: Audio is now handled via direct /api/speak endpoint to avoid base64 overhead
+        console.log("[TTS] Response ready for speech:", cleanText.substring(0, 50) + "...");
+      }
+
+      try {
+        const lastUser = [...messagesForApi]
+          .reverse()
+          .find((m) => m.role === "user");
+        if (lastUser && typeof lastUser.content === "string" && lastUser.content.length > 0) {
+          appendConversationTurn(convUserId, convProject, "user", lastUser.content);
+        }
+        if (cleanText) {
+          // Persist only user-visible assistant text; never store internal control tags in memory logs.
+          appendConversationTurn(convUserId, convProject, "assistant", cleanText);
+        }
+      } catch (logErr) {
+        console.error("Conversation memory append failed:", logErr);
+      }
+
+      // We return the full responseText to the frontend so it can maintain state.
+      // The frontend will be responsible for stripping tags for display.
+      res.json(data);
+    } catch (error) {
+      console.error("Error calling GROK API:", error);
+      captureError(error instanceof Error ? error : new Error(String(error)), {
+        source: "server",
+        route: "/api/grok/chat",
+      });
+      res.status(500).json({ error: "Failed to call GROK API", details: error instanceof Error ? error.message : String(error) });
+    }
+  });
+
+  const handleSpeak = async (req: express.Request, res: express.Response) => {
+    const textFromQuery = typeof req.query.text === "string" ? req.query.text : "";
+    const textFromBody = typeof req.body?.text === "string" ? req.body.text : "";
+    const text = (textFromBody || textFromQuery || "").trim();
+    if (!text) return res.status(400).json({ error: "Text is required" });
+
+    try {
+      const audio = await speak(text);
+      res.set({
+        "Content-Type": "audio/mpeg",
+        "Content-Length": audio.length.toString(),
+        "Cache-Control": "public, max-age=3600",
+      });
+      res.send(audio);
+    } catch (error) {
+      console.error("TTS endpoint failed:", error);
+      captureError(error instanceof Error ? error : new Error(String(error)), {
+        source: "server",
+        route: "/api/speak",
+      });
+      res.status(500).json({ error: "TTS failed" });
+    }
+  };
+
+  app.get("/api/speak", handleSpeak);
+  app.post("/api/speak", handleSpeak);
+
+  registerGuardianRoutes(app);
+  app.use(guardianExpressErrorHandler);
+
+  // 404 for unknown /api/* only (avoid Express 4 `app.use('/api/*')` quirks with `*`)
+  app.use((req, res, next) => {
+    if (!req.path.startsWith("/api/")) return next();
+    res.status(404).json({ error: `Path ${req.originalUrl} not found on this server` });
+  });
+
+  // Development: Vite middleware (HMR). Production: serve `dist/` SPA from the same process.
+  if (process.env.NODE_ENV !== "production") {
+    const hmrPort = Number(process.env.VITE_HMR_PORT) || 24678;
+    const { createServer: createViteServer } = await import("vite");
+    const vite = await createViteServer({
+      server: {
+        middlewareMode: true,
+        hmr:
+          process.env.DISABLE_HMR === "true"
+            ? false
+            : {
+                overlay: false,
+                port: hmrPort,
+              },
+      },
+      appType: "spa",
+    });
+    app.use((vite.middlewares) as any);
+  } else {
+    const distPath = path.join(REPO_ROOT, "dist");
+    const spaIndexHtml = path.join(distPath, "index.html");
+    const sendSpaIndex = (_req: express.Request, res: express.Response) => {
+      // Never cache the SPA shell — stale index.html keeps users on old JS after deploy (CDN/browser).
+      res.setHeader("Cache-Control", "private, no-store, no-cache, must-revalidate");
+      res.setHeader("Pragma", "no-cache");
+      res.sendFile(spaIndexHtml);
+    };
+    app.get("/privacy", sendSpaIndex);
+    app.get("/terms", sendSpaIndex);
+    app.get("/reset-password", sendSpaIndex);
+    app.use(
+      express.static(distPath, {
+        index: false,
+        setHeaders(res, filePath) {
+          const name = path.basename(filePath);
+          if (name === "index.html") {
+            res.setHeader("Cache-Control", "private, no-store, no-cache, must-revalidate");
+            return;
+          }
+          if (filePath.includes(`${path.sep}assets${path.sep}`) && /\.(js|css|mjs|woff2?)$/.test(name)) {
+            res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+          }
+        },
+      }) as any,
+    );
+    app.get("*", (req, res) => {
+      sendSpaIndex(req, res);
+    });
+  }
+
+  const httpServer = app.listen(PORT, "0.0.0.0", () => {
+    console.log(`Nebulla server listening on http://0.0.0.0:${PORT} (NODE_ENV=${process.env.NODE_ENV || "development"})`);
+  });
+  httpServer.on("error", (err: NodeJS.ErrnoException) => {
+    captureError(err, { source: "server", route: `listen:${PORT}`, detail: err.code });
+    if (err.code === "EADDRINUSE") {
+      console.error(
+        `[nebula] Port ${PORT} is already in use. Quit the other dev server, or run: PORT=${PORT + 1} npm run dev`
+      );
+    } else {
+      console.error(err);
+    }
+    process.exit(1);
+  });
+}
+
+startServer().catch((err) => {
+  console.error("Failed to start server:", err);
+  captureError(err instanceof Error ? err : new Error(String(err)), {
+    source: "process",
+    detail: "startServer",
+  });
+});
+
+async function speak(text: string): Promise<Buffer> {
+  // Use new Grok TTS API key for speech generation.
+  const apiKey = process.env.GROK_TTS_NEW_API_KEY;
+  
+  if (!apiKey) {
+    throw new Error("GROK_TTS_NEW_API_KEY is not set. Please check your environment variables.");
+  }
+
+  const response = await fetch("https://api.x.ai/v1/audio/speech", {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: "grok-tts-1",
+      input: text,
+      voice: "Eve",
+      response_format: "mp3",
+    }),
+  });
+
+  if (response.ok) {
+    return Buffer.from(await response.arrayBuffer());
+  }
+
+  const primaryError = await response.text();
+  console.warn(`[TTS] New endpoint failed (${response.status}). Trying compatibility fallback.`);
+
+  // Compatibility fallback while Grok TTS rollout stabilizes across accounts/regions.
+  const fallback = await fetch("https://api.x.ai/v1/tts", {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      text,
+      voice_id: "Eve",
+      output_format: {
+        codec: "mp3",
+        sample_rate: 44100,
+        bit_rate: 128000,
+      },
+      language: "en",
+    }),
+  });
+
+  if (!fallback.ok) {
+    const fallbackError = await fallback.text();
+    throw new Error(
+      `TTS Error (new=${response.status}, fallback=${fallback.status}) new="${primaryError}" fallback="${fallbackError}"`
+    );
+  }
+
+  return Buffer.from(await fallback.arrayBuffer());
+}
+
+const MASTER_PLAN_SECTION_TITLES = [
+  "1. Goal of the app",
+  "2. Tech Research",
+  "3. Features and KPIs",
+  "4. Pages and navigation",
+  "5. UI/UX design",
+  "6. Environment Setup",
+] as const;
+
+function extractGrokBSummaries(responseText: string): Partial<Record<number, string>> {
+  const out: Partial<Record<number, string>> = {};
+  const re = /<GROK_B_SUMMARY_Q([1-6])>([\s\S]*?)<\/GROK_B_SUMMARY_Q\1>/gi;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(responseText)) !== null) {
+    const tabIndex = parseInt(m[1], 10);
+    const summary = m[2].trim();
+    if (summary) out[tabIndex] = summary;
+  }
+  return out;
+}
+
+function extractSummariesFromMasterPlanBlock(responseText: string): Partial<Record<number, string>> {
+  const out: Partial<Record<number, string>> = {};
+  const blockMatch = responseText.match(/<START_MASTERPLAN>([\s\S]*?)<END_MASTERPLAN>/i);
+  if (!blockMatch) return out;
+  const newPlanContent = blockMatch[1].trim();
+  if (!newPlanContent) return out;
+
+  for (let i = 0; i < MASTER_PLAN_SECTION_TITLES.length; i++) {
+    const title = MASTER_PLAN_SECTION_TITLES[i];
+    const nextTitle = MASTER_PLAN_SECTION_TITLES[i + 1];
+    const escapedTitle = title.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const escapedNextTitle = nextTitle ? nextTitle.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") : null;
+    const regex = new RegExp(
+      `(?:###\\s*|\\*\\*|\\b)${escapedTitle}[\\s\\S]*?(?=(?:###\\s*|\\*\\*|\\b)${escapedNextTitle || "$"})`,
+      "i"
+    );
+    const match = newPlanContent.match(regex);
+    if (!match) continue;
+    let content = match[0].replace(new RegExp(`(?:###\\s*|\\*\\*|\\b)${escapedTitle}`, "i"), "").trim();
+    content = content.replace(/^[:\-\s]+/, "");
+    if (content) out[i + 1] = content;
+  }
+  return out;
+}
+
+/** Grok B — writer. Copies Grok 4 summaries into mapped Master Plan sections. */
+async function runGrokB(
+  masterPlanPath: string,
+  entries: { tabIndex: number; summary: string }[]
+) {
+  if (entries.length === 0) return;
+
+  try {
+    let plan: Record<string, string> = {};
+
+    if (fs.existsSync(masterPlanPath)) {
+      try {
+        plan = JSON.parse(fs.readFileSync(masterPlanPath, "utf8"));
+      } catch {
+        plan = {};
+      }
+    }
+
+    for (const entry of entries) {
+      if (entry.tabIndex < 1 || entry.tabIndex > MASTER_PLAN_SECTION_TITLES.length) continue;
+      const title = MASTER_PLAN_SECTION_TITLES[entry.tabIndex - 1];
+      const summary = entry.summary.trim();
+      if (summary) {
+        plan[title] = summary;
+      }
+    }
+
+    fs.writeFileSync(masterPlanPath, JSON.stringify(plan, null, 2), "utf8");
+    console.log(
+      `[GROK B] Master plan updated from Grok 4 summaries (tabs: ${entries
+        .map((e) => e.tabIndex)
+        .join(",")}).`
+    );
+  } catch (err) {
+    console.error("Grok B processing failed:", err);
+  }
+}

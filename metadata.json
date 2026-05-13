@@ -1,0 +1,7 @@
+{
+  "name": "Remix: nebula",
+  "description": "A dark-themed IDE workspace UI with file explorer, code preview, terminal, and AI assistant.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}

@@ -1,0 +1,80 @@
+@import "tailwindcss";
+@plugin "@tailwindcss/typography";
+
+@theme {
+  --color-on-tertiary-container: #660066;
+  --color-primary-container: #00ffff;
+  --color-on-primary-fixed-variant: #006262;
+  --color-primary-fixed: #00f5f5;
+  --color-surface-container: #081b2b;
+  --color-on-surface-variant: #96adc8;
+  --color-surface-container-low: #051422;
+  --color-secondary-container: #3c0066;
+  --color-primary-fixed-dim: #00e6e6;
+  --color-secondary: #dfb7ff;
+  --color-primary-dim: #00e6e6;
+  --color-on-surface: #d4e7ff;
+  --color-surface-variant: #0e273d;
+  --color-surface-tint: #c1fffe;
+  --color-background: #020C17;
+  --color-tertiary: #ffabf3;
+  --color-outline: #607890;
+  --color-error-container: #8a1a1e;
+  --color-inverse-surface: #f7f9ff;
+  --color-surface-container-high: #0b2134;
+  --color-surface-container-lowest: #000000;
+  --color-outline-variant: #334a61;
+  --color-secondary-dim: #a533ff;
+  --color-error: #ff716c;
+  --color-on-secondary-fixed: #60009f;
+  --color-on-primary: #006767;
+  --color-surface: #020C17;
+  --color-on-secondary-fixed-variant: #8800de;
+  --color-primary: #c1fffe;
+  --color-surface-dim: #020C17;
+  --color-on-primary-container: #005d5d;
+  --color-surface-bright: #112e46;
+  --color-surface-container-highest: #0e273d;
+  --color-card: #0b2134;
+  --color-card-foreground: #d4e7ff;
+  --color-muted: #0e273d;
+  --color-muted-foreground: #96adc8;
+  --color-foreground: #d4e7ff;
+
+  --font-headline: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-body: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-label: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+
+@layer base {
+  body {
+    background-color: var(--color-background);
+    background-image: radial-gradient(circle at 0% 0%, #0F0825 0%, transparent 50%),
+                      radial-gradient(circle at 100% 100%, #0F0825 0%, transparent 50%);
+    color: var(--color-on-surface);
+    font-family: var(--font-body);
+    overflow: hidden;
+    height: 100vh;
+  }
+}
+
+@layer utilities {
+  .glass-panel {
+    background: rgba(4, 15, 26, 0.4);
+    backdrop-filter: blur(20px);
+  }
+  .nebula-glow:hover {
+    box-shadow: 0 0 25px rgba(0, 230, 230, 0.1);
+  }
+  .text-13 { font-size: 13px !important; }
+  .text-14 { font-size: 14px !important; }
+  .text-18 { font-size: 18px !important; }
+  .no-bold { font-weight: 400 !important; }
+  
+  .workspace-grid {
+    display: grid;
+    grid-template-columns: 64px 240px 1fr 320px;
+    height: calc(100vh - 3rem - 2.5rem);
+    overflow: hidden;
+  }
+}

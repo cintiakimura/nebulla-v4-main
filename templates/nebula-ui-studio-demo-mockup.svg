@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="560" viewBox="0 0 800 560">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#0b2134"/>
+      <stop offset="100%" style="stop-color:#051422"/>
+    </linearGradient>
+  </defs>
+  <rect width="800" height="560" fill="url(#bg)"/>
+  <rect x="32" y="28" width="736" height="48" rx="8" fill="#0e273d" stroke="#334a61" stroke-width="1"/>
+  <text x="48" y="58" fill="#c1fffe" font-family="ui-sans-serif,system-ui,sans-serif" font-size="18" font-weight="600">Nebulla UI Studio</text>
+  <text x="520" y="58" fill="#64748b" font-family="ui-sans-serif,system-ui,sans-serif" font-size="12">Bundled demo mockup  add PENCIL_API_KEY for live Pencil.dev</text>
+  <rect x="32" y="92" width="220" height="420" rx="10" fill="#081b2b" stroke="#334a61"/>
+  <text x="52" y="124" fill="#96adc8" font-family="ui-sans-serif,system-ui,sans-serif" font-size="11">Navigation</text>
+  <rect x="52" y="140" width="180" height="10" rx="2" fill="#1e3a5f"/>
+  <rect x="52" y="162" width="160" height="10" rx="2" fill="#1e3a5f"/>
+  <rect x="52" y="184" width="170" height="10" rx="2" fill="#1e3a5f"/>
+  <rect x="276" y="92" width="492" height="200" rx="10" fill="#0e273d" stroke="#334a61"/>
+  <text x="296" y="124" fill="#c1fffe" font-family="ui-sans-serif,system-ui,sans-serif" font-size="14">Hero / primary flow</text>
+  <rect x="296" y="140" width="320" height="12" rx="3" fill="#334a61"/>
+  <rect x="296" y="164" width="420" height="8" rx="2" fill="#1e3a5f"/>
+  <rect x="296" y="182" width="380" height="8" rx="2" fill="#1e3a5f"/>
+  <rect x="296" y="220" width="120" height="36" rx="6" fill="#006767" stroke="#c1fffe" stroke-opacity="0.4"/>
+  <text x="316" y="242" fill="#c1fffe" font-family="ui-sans-serif,system-ui,sans-serif" font-size="11">Primary action</text>
+  <rect x="276" y="308" width="236" height="204" rx="10" fill="#0e273d" stroke="#334a61"/>
+  <text x="296" y="338" fill="#96adc8" font-family="ui-sans-serif,system-ui,sans-serif" font-size="12">Module A</text>
+  <rect x="296" y="352" width="196" height="64" rx="6" fill="#081b2b" stroke="#334a61"/>
+  <rect x="528" y="308" width="240" height="204" rx="10" fill="#0e273d" stroke="#334a61"/>
+  <text x="548" y="338" fill="#96adc8" font-family="ui-sans-serif,system-ui,sans-serif" font-size="12">Module B</text>
+  <rect x="548" y="352" width="200" height="64" rx="6" fill="#081b2b" stroke="#334a61"/>
+</svg>

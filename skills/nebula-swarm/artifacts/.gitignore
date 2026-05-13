@@ -1,0 +1,4 @@
+# Keep directory in git; ignore ephemeral swarm outputs
+*
+!.gitignore
+!.gitkeep

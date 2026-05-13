@@ -1,0 +1,17 @@
+node_modules/
+build/
+dist/
+coverage/
+.DS_Store
+*.log
+.env*
+!.env.example
+
+# Local conversation history (per user / project)
+conversation-logs/**/*.md
+
+# Nebula Guardian learned errors (local / deploy artifacts; keep out of git by default)
+guardian-data/
+# Per-project cloud workspaces on disk (Render / local dev)
+data/cloud-projects/
+.vercel

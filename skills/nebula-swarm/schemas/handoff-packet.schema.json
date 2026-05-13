@@ -1,0 +1,105 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nebulla.local/schemas/nebula-swarm-handoff-packet.json",
+  "title": "Nebula Swarm Handoff Packet",
+  "description": "Merged read-only outputs from support agents for Grok 4.1. Grok remains the sole code author and user-facing agent.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "phase", "projectIsolatorAck"],
+  "properties": {
+    "schemaVersion": {
+      "type": "string",
+      "const": "1.0.0"
+    },
+    "intensity": {
+      "type": "string",
+      "enum": ["light", "balanced", "full_quality"],
+      "description": "Which support agents ran before merge (UI + server)"
+    },
+    "runId": {
+      "type": "string",
+      "description": "Optional correlation id for artifacts/ subfolder"
+    },
+    "phase": {
+      "type": "string",
+      "enum": [
+        "pre_phase_0",
+        "0",
+        "1",
+        "2",
+        "3",
+        "4",
+        "5"
+      ],
+      "description": "Execution phase. 5 = post-first-generation per Project Execution Rules; swarm typically gates 0-4 and pre_phase_0."
+    },
+    "projectIsolatorAck": {
+      "type": "boolean",
+      "description": "Runner confirms support agents had no FORBIDDEN_WRITE violations"
+    },
+    "planner": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "markdown": { "type": "string" },
+        "orderedChecklist": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "parallelTracks": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "researcher": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "markdown": { "type": "string" },
+        "sources": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "title": { "type": "string" },
+              "url": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+    "tester": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "markdown": { "type": "string" },
+        "matrix": { "type": "array" }
+      }
+    },
+    "reviewer": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "markdown": { "type": "string" },
+        "findings": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "string" },
+              "severity": { "type": "string", "enum": ["P0", "P1", "P2"] },
+              "topic": { "type": "string" },
+              "observation": { "type": "string" },
+              "reference": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+    "notesForGrok": {
+      "type": "string",
+      "description": "Internal operator notes; not end-user chat"
+    }
+  }
+}
