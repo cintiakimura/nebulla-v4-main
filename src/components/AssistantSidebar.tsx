@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import ReactMarkdown from 'react-markdown';
-import { ChevronDown, Hand, Mic, Paperclip, Rocket, Send } from 'lucide-react';
+import { ArrowUp, ChevronDown, Hand, Mic, Paperclip, Rocket } from 'lucide-react';
 
 const ONBOARDING_DONE_KEY = 'nebulla_onboarding_autopilot_done';
 
@@ -2016,23 +2016,23 @@ ${uiStudioApprovedCode || 'No approved UI code yet.'}`;
 
   return (
     <aside className="flex shrink-0 flex-col border-l border-border bg-card/50 backdrop-blur-md" style={{ width }}>
-      <div className="p-3 border-b border-white/5 flex flex-col gap-2">
+      <div className="flex flex-col gap-2 border-b border-border bg-card/40 p-3">
         <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2 min-w-0">
-            <span className="text-13 font-headline text-slate-300 no-bold">Nebula Partner</span>
-            {isLive && <span className="flex h-2 w-2 rounded-full bg-cyan-400 animate-pulse shrink-0" />}
+          <div className="flex min-w-0 items-center gap-2">
+            <span className="text-13 font-headline text-foreground no-bold">Nebula Partner</span>
+            {isLive && <span className="flex h-2 w-2 shrink-0 animate-pulse rounded-full bg-primary" />}
           </div>
         </div>
         <ChatModelSelector />
         {freeTokenUsage ? (
-          <div className="space-y-1 pt-1 border-t border-white/5">
-            <div className="flex justify-between text-[10px] text-slate-500">
+          <div className="space-y-1 border-t border-border/60 pt-1">
+            <div className="flex justify-between text-[10px] text-muted-foreground">
               <span>Monthly tokens (Free)</span>
-              <span className="tabular-nums text-slate-400">
+              <span className="tabular-nums text-muted-foreground/90">
                 {freeTokenUsage.used.toLocaleString()} / {freeTokenUsage.limit.toLocaleString()}
               </span>
             </div>
-            <div className="h-1.5 rounded-full bg-white/10 overflow-hidden">
+            <div className="h-1.5 overflow-hidden rounded-full bg-muted">
               <div
                 className="h-full bg-cyan-500/70 transition-[width]"
                 style={{
@@ -2155,15 +2155,17 @@ ${uiStudioApprovedCode || 'No approved UI code yet.'}`;
         {!aboutAppActive && <div ref={messagesEndRef} />}
       </div>
 
-      <div className="p-4 border-t border-white/5 flex flex-col gap-3">
+      <div className="shrink-0 border-t border-border bg-card/60 p-3 backdrop-blur-sm">
         {showGrokSetupHint && (
-          <p className="text-[10px] text-amber-400/95 leading-snug border border-amber-500/20 bg-amber-500/5 rounded-lg px-2 py-1.5">
-            Grok key missing: add <span className="font-mono text-amber-300">GROK_API_KEY</span> to{' '}
-            <span className="font-mono text-amber-300">.env</span> and restart the server, or save it under{' '}
-            <span className="font-mono text-amber-300">Dashboard → Secrets</span> (this browser only).
+          <p className="mb-2 text-[10px] leading-snug text-amber-400/95 border border-amber-500/25 bg-amber-500/10 rounded-lg px-2 py-1.5">
+            Grok key missing: add <span className="font-mono text-amber-200">GROK_API_KEY</span> to{' '}
+            <span className="font-mono text-amber-200">.env</span> and restart the server, or save it under{' '}
+            <span className="font-mono text-amber-200">Dashboard → Secrets</span> (this browser only).
           </p>
         )}
-        <div className={`flex flex-col gap-2 rounded-xl border border-white/10 bg-white/[0.03] p-2 ${aboutAppActive ? 'opacity-40 pointer-events-none' : ''}`}>
+        <div
+          className={`flex flex-col gap-2 rounded-xl border border-border bg-background/80 p-2 shadow-sm ${aboutAppActive ? 'pointer-events-none opacity-40' : ''}`}
+        >
           <textarea
             id="assistant-input"
             name="assistant-input"
@@ -2176,7 +2178,7 @@ ${uiStudioApprovedCode || 'No approved UI code yet.'}`;
                 void handleSendText();
               }
             }}
-            className="min-h-[5rem] max-h-[55vh] w-full resize rounded-lg border border-white/10 bg-black/25 px-3 py-2.5 text-13 text-slate-200 no-bold placeholder:text-slate-600 transition-colors focus:border-cyan-500/45 focus:outline-none focus:ring-1 focus:ring-cyan-500/25 disabled:cursor-not-allowed disabled:opacity-40"
+            className="min-h-[5rem] max-h-[55vh] w-full resize-y rounded-lg border border-border bg-muted/40 px-3 py-2.5 text-13 text-foreground no-bold placeholder:text-muted-foreground transition-colors focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/30 disabled:cursor-not-allowed disabled:opacity-40"
             placeholder={
               codeMode
                 ? 'Development running…'
@@ -2186,38 +2188,25 @@ ${uiStudioApprovedCode || 'No approved UI code yet.'}`;
             }
             aria-label="Chat message"
           />
-          <div className="flex items-center justify-between gap-2 border-t border-white/5 pt-2">
-            <div className="flex items-center gap-1.5">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border/70 pt-2">
+            <div className="flex flex-wrap items-center gap-1.5">
               <button
                 type="button"
-                onClick={toggleLive}
+                onClick={() => alert('File upload initiated.')}
                 disabled={codeMode}
-                className={`flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/35 disabled:cursor-not-allowed disabled:opacity-35 ${
-                  isLive
-                    ? 'border-red-500/35 bg-red-500/15 text-red-300 shadow-[0_0_12px_rgba(248,113,113,0.15)]'
-                    : 'border-white/10 bg-white/5 text-slate-400 hover:border-cyan-500/30 hover:bg-cyan-500/10 hover:text-cyan-300'
-                }`}
-                title={isLive ? 'End talk (hands-free)' : 'Start talk (hands-free)'}
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-border bg-card text-muted-foreground transition-colors hover:border-ring/50 hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 disabled:cursor-not-allowed disabled:opacity-35"
+                title="Attach file"
               >
-                <VoiceLinesIcon className="h-4 w-4 shrink-0" active={isLive} />
-              </button>
-              <button
-                type="button"
-                onClick={interruptAiSpeech}
-                disabled={codeMode}
-                className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full border border-white/10 bg-white/5 text-slate-500 transition-colors hover:border-amber-500/25 hover:bg-amber-500/10 hover:text-amber-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500/30 disabled:cursor-not-allowed disabled:opacity-35"
-                title="Interrupt speech and listen again"
-              >
-                <Hand className="h-4 w-4 shrink-0" strokeWidth={1.75} aria-hidden />
+                <Paperclip className="h-4 w-4 shrink-0" strokeWidth={1.75} aria-hidden />
               </button>
               <button
                 type="button"
                 onClick={toggleTextRecording}
                 disabled={codeMode || isAiSpeaking || isLoading}
-                className={`flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/35 disabled:cursor-not-allowed disabled:opacity-35 ${
+                className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 disabled:cursor-not-allowed disabled:opacity-35 ${
                   isRecordingText
-                    ? 'border-red-500/35 bg-red-500/15 text-red-300 shadow-[0_0_12px_rgba(248,113,113,0.15)]'
-                    : 'border-white/10 bg-white/5 text-slate-400 hover:border-cyan-500/30 hover:bg-cyan-500/10 hover:text-cyan-300'
+                    ? 'border-destructive/40 bg-destructive/15 text-destructive'
+                    : 'border-border bg-card text-muted-foreground hover:border-ring/50 hover:bg-muted hover:text-foreground'
                 }`}
                 title={
                   isAiSpeaking
@@ -2231,24 +2220,37 @@ ${uiStudioApprovedCode || 'No approved UI code yet.'}`;
               >
                 <Mic className="h-4 w-4 shrink-0" strokeWidth={1.75} aria-hidden />
               </button>
-            </div>
-            <div className="flex items-center gap-1.5">
               <button
                 type="button"
-                onClick={() => alert('File upload initiated.')}
+                onClick={toggleLive}
                 disabled={codeMode}
-                className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full border border-white/10 bg-white/5 text-slate-400 transition-colors hover:border-cyan-500/30 hover:bg-cyan-500/10 hover:text-cyan-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/35 disabled:cursor-not-allowed disabled:opacity-35"
-                title="Attach file"
+                className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 disabled:cursor-not-allowed disabled:opacity-35 ${
+                  isLive
+                    ? 'border-destructive/35 bg-destructive/10 text-destructive'
+                    : 'border-border bg-card text-muted-foreground hover:border-ring/50 hover:bg-muted hover:text-foreground'
+                }`}
+                title={isLive ? 'End talk (hands-free)' : 'Start talk (hands-free)'}
               >
-                <Paperclip className="h-4 w-4 shrink-0" strokeWidth={1.75} aria-hidden />
+                <VoiceLinesIcon className="h-4 w-4 shrink-0" active={isLive} />
               </button>
+              <button
+                type="button"
+                onClick={interruptAiSpeech}
+                disabled={codeMode}
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-border bg-card text-muted-foreground transition-colors hover:border-amber-500/40 hover:bg-amber-500/10 hover:text-amber-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500/30 disabled:cursor-not-allowed disabled:opacity-35"
+                title="Interrupt speech and listen again"
+              >
+                <Hand className="h-4 w-4 shrink-0" strokeWidth={1.75} aria-hidden />
+              </button>
+            </div>
+            <div className="flex items-center gap-2">
               <button
                 type="button"
                 onClick={() => void handleGoCode()}
                 disabled={codeMode || isLoading}
                 title="Go: Grok 4 writes a short summary to Master Plan only, then Grok Code runs"
                 aria-label="Go: Grok 4 summary then Grok Code"
-                className="flex h-9 shrink-0 items-center gap-1 rounded-full border border-emerald-500/35 bg-emerald-500/10 px-2.5 text-[11px] font-headline text-emerald-200 transition-colors hover:border-emerald-400/50 hover:bg-emerald-500/20 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/40 disabled:cursor-not-allowed disabled:opacity-35"
+                className="flex h-9 shrink-0 items-center gap-1 rounded-lg border border-emerald-500/40 bg-emerald-500/15 px-3 text-[11px] font-headline text-emerald-100 transition-colors hover:border-emerald-400/60 hover:bg-emerald-500/25 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/40 disabled:cursor-not-allowed disabled:opacity-35"
               >
                 <Rocket className="h-3.5 w-3.5 shrink-0" strokeWidth={2} aria-hidden />
                 Go
@@ -2259,21 +2261,21 @@ ${uiStudioApprovedCode || 'No approved UI code yet.'}`;
                 disabled={codeMode || isLoading || !inputText.trim()}
                 title="Send message"
                 aria-busy={isLoading}
-                className={`flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/50 disabled:cursor-not-allowed ${
+                className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full border-2 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed ${
                   isLoading
-                    ? 'border-cyan-500/40 bg-cyan-500/20 text-cyan-100'
+                    ? 'border-primary/50 bg-primary/20 text-primary'
                     : inputText.trim()
-                      ? 'border-cyan-500/35 bg-cyan-500/15 text-cyan-200 hover:bg-cyan-500/25 hover:text-white'
-                      : 'border-white/10 bg-white/5 text-slate-600 hover:bg-white/5 hover:text-slate-600'
+                      ? 'border-primary bg-primary text-primary-foreground shadow-md shadow-primary/25 hover:bg-primary/90'
+                      : 'border-border bg-muted text-muted-foreground'
                 }`}
               >
                 {isLoading ? (
                   <span
-                    className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-cyan-300/35 border-t-cyan-100"
+                    className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-primary-foreground/30 border-t-primary-foreground"
                     aria-hidden
                   />
                 ) : (
-                  <Send className="h-4 w-4 shrink-0" strokeWidth={1.75} aria-hidden />
+                  <ArrowUp className="h-5 w-5 shrink-0" strokeWidth={2.25} aria-hidden />
                 )}
               </button>
             </div>

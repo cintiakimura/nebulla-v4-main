@@ -5,7 +5,7 @@ import {
   Eye,
   EyeOff,
   FileStack,
-  FolderGit2,
+  GitBranch,
   GripVertical,
   Maximize2,
   Minimize2,
@@ -449,7 +449,7 @@ export function AppPreviewPanel({
                   : 'border-border bg-card/80 text-muted-foreground hover:border-ring/40 hover:bg-muted/50 hover:text-foreground'
               }`}
             >
-              <FolderGit2 className="h-4 w-4" aria-hidden />
+              <GitBranch className="h-4 w-4" aria-hidden />
             </button>
           ) : null}
           {onToolRailResizeMouseDown ? (

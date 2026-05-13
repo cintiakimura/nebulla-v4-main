@@ -1,13 +1,17 @@
-import { StrictMode } from 'react';
-import { createRoot } from 'react-dom/client';
-import { SwarmProvider } from '@/components/swarm/SwarmProvider';
-import App from './App.tsx';
+import React from 'react';
+import ReactDOM from 'react-dom/client';
+import App from './App';
 import './index.css';
+import { SwarmProvider } from './components/swarm/SwarmProvider';
 
-createRoot(document.getElementById('root')!).render(
-  <StrictMode>
+/**
+ * Root: Cosmic Night theme comes from `index.css` (semantic tokens).
+ * SwarmProvider wraps the tree so status + chat can coordinate agent runs.
+ */
+ReactDOM.createRoot(document.getElementById('root')!).render(
+  <React.StrictMode>
     <SwarmProvider>
       <App />
     </SwarmProvider>
-  </StrictMode>,
+  </React.StrictMode>,
 );
