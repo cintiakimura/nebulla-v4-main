@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import './App.css'; // or index.css
 
 function App() {
   const [agentsEnabled, setAgentsEnabled] = useState(false);
