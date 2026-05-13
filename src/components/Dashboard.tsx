@@ -16,7 +16,6 @@ import {
   Eye,
   EyeOff,
   History,
-  LayoutGrid,
   Settings,
   Key,
 } from 'lucide-react';
@@ -35,6 +34,13 @@ import { ChatModelSelector, AgentsHandoffPref } from '@/components/settings/Mode
 import { SwarmToggle } from '@/components/swarm/SwarmToggle';
 
 export type DashboardTab = 'projects' | 'project-settings' | 'secrets' | 'dns';
+
+const DASH_TABS: { id: DashboardTab; label: string }[] = [
+  { id: 'projects', label: 'Projects' },
+  { id: 'project-settings', label: 'Settings' },
+  { id: 'secrets', label: 'Secrets' },
+  { id: 'dns', label: 'DNS' },
+];
 
 interface DashboardProps {
   activeTab: DashboardTab;
@@ -62,33 +68,22 @@ export function Dashboard({
   const [versionHistoryOpen, setVersionHistoryOpen] = useState(false);
 
   return (
-    <div className="flex-1 flex flex-col h-full bg-[#040f1a]/40 backdrop-blur-sm border border-white/5 rounded-lg overflow-hidden relative">
-      {/* Dashboard Header */}
-      <div className="h-14 border-b border-white/5 bg-white/5 flex items-center px-6 shrink-0">
-        <h2 className="text-lg font-headline text-cyan-300 flex items-center gap-2.5">
-          {activeTab === 'projects' ? (
-            <LayoutGrid className="h-5 w-5 shrink-0 text-cyan-400/90" aria-hidden />
-          ) : activeTab === 'project-settings' ? (
-            <Settings className="h-5 w-5 shrink-0 text-cyan-400/90" aria-hidden />
-          ) : activeTab === 'secrets' ? (
-            <Key className="h-5 w-5 shrink-0 text-cyan-400/90" aria-hidden />
-          ) : activeTab === 'dns' ? (
-            <Globe className="h-5 w-5 shrink-0 text-cyan-400/90" aria-hidden />
-          ) : (
-            <LayoutGrid className="h-5 w-5 shrink-0 text-cyan-400/90" aria-hidden />
-          )}
-          <span>
-            {activeTab === 'projects'
-              ? 'My Projects'
-              : activeTab === 'project-settings'
-                ? 'Project Settings'
-                : activeTab === 'secrets'
-                  ? 'Secrets'
-                  : activeTab === 'dns'
-                    ? 'DNS & Domain'
-                    : 'Dashboard'}
-          </span>
-        </h2>
+    <div className="flex h-full flex-1 flex-col overflow-hidden rounded-lg border border-border/60 bg-card/30 backdrop-blur-sm relative">
+      <div className="flex h-10 shrink-0 items-center gap-1 border-b border-border/60 bg-muted/20 px-2">
+        {DASH_TABS.map((tab) => (
+          <button
+            key={tab.id}
+            type="button"
+            onClick={() => onTabChange(tab.id)}
+            className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+              activeTab === tab.id
+                ? 'bg-background text-foreground shadow-sm ring-1 ring-border'
+                : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground'
+            }`}
+          >
+            {tab.label}
+          </button>
+        ))}
       </div>
 
       {/* Dashboard Content Area */}

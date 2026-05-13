@@ -5,8 +5,8 @@
 @custom-variant dark (&:is(.dark *));
 
 /*
- * Semantic design tokens (shadcn-style) — Cosmic Night base.
- * Values align with the existing MD3-inspired palette in @theme below (#020C17, cyan primary, etc.).
+ * Semantic design tokens (shadcn-style) — Cosmic Night base (#020C17, cyan primary).
+ * Shell utilities below mirror v0-generated IDE patterns while preserving MD3 @theme tokens.
  */
 :root,
 .dark {
@@ -141,6 +141,19 @@
 }
 
 @layer utilities {
+  /* v0-style frosted chrome — pair with semantic colors */
+  .ide-shell-header {
+    @apply border-b border-border bg-card/80 backdrop-blur-md;
+  }
+  .ide-nav-rail {
+    @apply border-border bg-sidebar;
+  }
+  .ide-panel-strip {
+    @apply shrink-0 border-border bg-muted/30 text-muted-foreground backdrop-blur-sm;
+  }
+  .ide-terminal-shell {
+    @apply shrink-0 border-border border-t bg-sidebar/90 backdrop-blur-sm;
+  }
   .glass-panel {
     background: rgba(4, 15, 26, 0.4);
     backdrop-filter: blur(20px);

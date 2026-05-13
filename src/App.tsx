@@ -30,6 +30,7 @@ import { SourceControlPanel } from './components/SourceControlPanel';
 import { UserProfilePage } from './components/UserProfilePage';
 import { AppPreviewPanel } from './components/AppPreviewPanel';
 import { WorkspaceSwarmButton } from './components/workspace/WorkspaceSwarmButton';
+import { Button } from '@/components/ui/button';
 import { readResponseJson } from './lib/apiFetch';
 import { fetchSessionUser, listCloudProjects, logoutNebula, type CloudProjectRow, type NebulaSessionUser } from './lib/nebulaCloud';
 import { setBrowserProjectKey, setBrowserProjectName, withProjectQuery, withProjectBody } from './lib/nebulaProjectApi';
@@ -48,16 +49,16 @@ type MainPanel =
   | 'user-profile';
 
 const PANEL_LABEL: Record<MainPanel, string> = {
-  'nebula-ui-studio': 'Nebulla UI Studio',
+  'nebula-ui-studio': 'UI Studio',
   'mind-map': 'Mind Map',
   'master-plan': 'Master Plan',
-  'project-rules': 'Execution rules',
+  'project-rules': 'Execution Rules',
   'source-control': 'Source Control',
   'my-projects': 'My Projects',
   secrets: 'Secrets',
   'project-settings': 'Project Settings',
-  dns: 'DNS & domain',
-  'user-profile': 'User Profile',
+  dns: 'DNS & Domains',
+  'user-profile': 'Account',
 };
 
 const seedPages: Node[] = [
@@ -177,6 +178,34 @@ function App() {
   const assistantWidthRef = useRef(assistantWidth);
   assistantWidthRef.current = assistantWidth;
 
+  const [previewToolRailPx, setPreviewToolRailPx] = useState(() => {
+    try {
+      const raw = localStorage.getItem('nebulla_preview_tool_rail_px');
+      const n = raw ? parseInt(raw, 10) : 40;
+      if (Number.isNaN(n)) return 40;
+      return Math.min(56, Math.max(36, n));
+    } catch {
+      return 40;
+    }
+  });
+  const previewRailDrag = useRef<{ startX: number; startW: number } | null>(null);
+  const previewToolRailPxRef = useRef(previewToolRailPx);
+  previewToolRailPxRef.current = previewToolRailPx;
+
+  const [terminalHeightPx, setTerminalHeightPx] = useState(() => {
+    try {
+      const raw = localStorage.getItem('nebulla_terminal_height_px');
+      const n = raw ? parseInt(raw, 10) : 144;
+      if (Number.isNaN(n)) return 144;
+      return Math.min(480, Math.max(120, n));
+    } catch {
+      return 144;
+    }
+  });
+  const terminalHeightRef = useRef(terminalHeightPx);
+  terminalHeightRef.current = terminalHeightPx;
+  const terminalResizeDrag = useRef<{ startY: number; startH: number } | null>(null);
+
   useEffect(() => {
     (window as unknown as { openMasterPlan?: () => void }).openMasterPlan = () => {
       setMainPanel('master-plan');
@@ -274,11 +303,27 @@ function App() {
   useEffect(() => {
     const onMove = (e: MouseEvent) => {
       const d = resizeDrag.current;
-      if (!d) return;
-      const delta = d.startX - e.clientX;
-      const next = Math.min(560, Math.max(260, d.startW + delta));
-      assistantWidthRef.current = next;
-      setAssistantWidth(next);
+      if (d) {
+        const delta = d.startX - e.clientX;
+        const next = Math.min(560, Math.max(260, d.startW + delta));
+        assistantWidthRef.current = next;
+        setAssistantWidth(next);
+      }
+      const tr = terminalResizeDrag.current;
+      if (tr) {
+        const deltaY = tr.startY - e.clientY;
+        const maxH = Math.round(typeof window !== 'undefined' ? window.innerHeight * 0.5 : 480);
+        const nextH = Math.min(maxH, Math.max(120, tr.startH + deltaY));
+        terminalHeightRef.current = nextH;
+        setTerminalHeightPx(nextH);
+      }
+      const pr = previewRailDrag.current;
+      if (pr) {
+        const deltaX = e.clientX - pr.startX;
+        const nextW = Math.min(56, Math.max(36, pr.startW + deltaX));
+        previewToolRailPxRef.current = nextW;
+        setPreviewToolRailPx(nextW);
+      }
     };
     const onUp = () => {
       if (resizeDrag.current) {
@@ -288,7 +333,23 @@ function App() {
           /* ignore */
         }
       }
+      if (terminalResizeDrag.current) {
+        try {
+          localStorage.setItem('nebulla_terminal_height_px', String(terminalHeightRef.current));
+        } catch {
+          /* ignore */
+        }
+      }
+      if (previewRailDrag.current) {
+        try {
+          localStorage.setItem('nebulla_preview_tool_rail_px', String(previewToolRailPxRef.current));
+        } catch {
+          /* ignore */
+        }
+      }
       resizeDrag.current = null;
+      terminalResizeDrag.current = null;
+      previewRailDrag.current = null;
       document.body.style.cursor = '';
       document.body.style.userSelect = '';
     };
@@ -299,6 +360,14 @@ function App() {
       window.removeEventListener('mouseup', onUp);
     };
   }, []);
+
+  useEffect(() => {
+    if (appStage !== 'studio') {
+      document.title = 'Nebulla IDE';
+      return;
+    }
+    document.title = `${PANEL_LABEL[mainPanel]} — ${projectName}`;
+  }, [appStage, mainPanel, projectName]);
 
   const pagesText = useMemo(() => {
     const sorted = [...pages].sort((a, b) => (a.position?.x ?? 0) - (b.position?.x ?? 0));
@@ -501,11 +570,15 @@ function App() {
       aria-label={title}
       aria-pressed={mainPanel === panel}
       onClick={() => setMainPanel(panel)}
-      className={`p-2 rounded-lg transition-colors ${
-        mainPanel === panel ? 'bg-cyan-500/20 text-cyan-300' : 'text-slate-500 hover:text-cyan-300'
+      className={`p-2 rounded-lg transition-all duration-200 ${
+        mainPanel === panel
+          ? 'bg-primary/20 text-primary shadow-lg shadow-primary/20 ring-1 ring-ring/25'
+          : 'text-muted-foreground hover:bg-sidebar-accent/80 hover:text-foreground'
       }`}
     >
-      {children}
+      <span className="inline-flex items-center justify-center" aria-hidden>
+        {children}
+      </span>
     </button>
   );
 
@@ -519,16 +592,16 @@ function App() {
 
   return (
     <ModelSettingsProvider billingTier={normalizeUserTier(sessionUser?.billingTier)}>
-      <div className="h-screen min-h-0 flex flex-col overflow-hidden bg-[#020C17] text-slate-100">
-      <header className="h-16 shrink-0 border-b border-white/10 bg-[#040f1a]/70 backdrop-blur flex items-center gap-4 px-6">
+      <div className="h-screen min-h-0 flex flex-col overflow-hidden bg-background text-foreground">
+      <header className="ide-shell-header flex h-14 shrink-0 items-center gap-4 px-4 sm:px-6">
         <div className="flex min-w-0 shrink-0 items-center gap-3">
           <Logo className="w-9 h-9" />
           <div className="min-w-0">
-            <p className="font-headline text-lg leading-tight text-cyan-300">nebulla beta</p>
-            <p className="text-xs leading-tight text-slate-400">
+            <p className="font-headline text-lg leading-tight text-primary">nebulla beta</p>
+            <p className="text-xs leading-tight text-muted-foreground">
               IDE Workspace
               <span
-                className="ml-2 font-mono text-[10px] text-slate-600 tabular-nums"
+                className="ml-2 font-mono text-[10px] text-muted-foreground/80 tabular-nums"
                 title="Client bundle build id — if this does not match your latest deploy, clear cache or hard-refresh"
               >
                 · {__NEBULLA_BUILD_ID__}
@@ -538,53 +611,49 @@ function App() {
         </div>
         <div className="min-w-0 flex-1 flex justify-center px-2">
           <p
-            className="truncate text-center text-sm text-slate-400 tabular-nums"
+            className="truncate text-center text-sm text-muted-foreground tabular-nums"
             title={projectName}
           >
-            <span className="text-slate-500">Project</span>{' '}
-            <span className="text-slate-200">{projectName}</span>
+            <span className="text-muted-foreground/80">Project</span>{' '}
+            <span className="text-foreground">{projectName}</span>
           </p>
         </div>
         <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
           <WorkspaceSwarmButton onOpenProjectSettings={() => setMainPanel('project-settings')} />
           {sessionUser ? (
             <span
-              className="text-xs text-slate-500 max-w-[200px] truncate hidden sm:inline"
+              className="text-xs text-muted-foreground max-w-[200px] truncate hidden sm:inline"
               title={sessionUser.email || sessionUser.displayName || undefined}
             >
               {sessionUser.email || sessionUser.displayName || 'Signed in'}
             </span>
           ) : null}
-          <a
-            href={withProjectQuery('/api/cloud-project/download')}
-            className="text-xs px-3 py-1.5 rounded-md border border-cyan-500/30 text-cyan-200 hover:bg-cyan-500/10"
-            download
-          >
-            Download project
-          </a>
-          <button
+          <Button variant="outline" size="sm" asChild>
+            <a href={withProjectQuery('/api/cloud-project/download')} download>
+              Download project
+            </a>
+          </Button>
+          <Button
             type="button"
+            variant="outline"
+            size="sm"
             onClick={() => void handleSignOut()}
-            className="text-xs px-3 py-1.5 rounded-md border border-white/15 text-slate-300 hover:text-white hover:border-white/30 inline-flex items-center gap-1.5"
             title="Sign out"
+            className="inline-flex items-center gap-1.5"
           >
             <LogOut className="w-3.5 h-3.5" aria-hidden />
             Sign out
-          </button>
-          <button
-            type="button"
-            onClick={() => setAppStage('landing')}
-            className="text-xs px-3 py-1.5 rounded-md border border-white/15 text-slate-300 hover:text-white hover:border-white/30"
-          >
+          </Button>
+          <Button type="button" variant="outline" size="sm" onClick={() => setAppStage('landing')}>
             Home
-          </button>
+          </Button>
         </div>
       </header>
 
-      <main className="flex-1 min-h-0 flex overflow-hidden bg-gradient-to-b from-[#0d0824] via-[#060c18] to-[#020810]">
+      <main className="flex min-h-0 flex-1 overflow-hidden bg-gradient-to-b from-background via-muted/15 to-background">
         <aside
-          className={`relative shrink-0 border-r border-white/10 bg-[#040f1a]/40 flex flex-col items-center py-4 gap-3 transition-[width,opacity] duration-200 overflow-hidden ${
-            navCollapsed ? 'w-0 border-transparent opacity-0 pointer-events-none' : 'w-16 opacity-100'
+          className={`ide-nav-rail relative shrink-0 flex flex-col items-center gap-3 border-r transition-[width,opacity] duration-200 overflow-hidden ${
+            navCollapsed ? 'w-0 border-transparent opacity-0 pointer-events-none' : 'w-16 opacity-100 py-4'
           }`}
         >
           {!navCollapsed ? (
@@ -592,7 +661,7 @@ function App() {
               <button
                 type="button"
                 onClick={() => setNavCollapsed(true)}
-                className="absolute top-2 right-0 z-10 translate-x-1/2 rounded-full border border-white/15 bg-[#040f1a] p-1 text-slate-400 hover:text-cyan-300 hover:border-cyan-500/40"
+                className="absolute top-2 right-0 z-10 translate-x-1/2 rounded-full border border-border bg-sidebar p-1 text-muted-foreground hover:text-primary hover:border-ring/40"
                 title="Collapse navigation"
                 aria-label="Collapse navigation"
               >
@@ -601,7 +670,7 @@ function App() {
               <NavBtn panel="source-control" title="Source Control">
                 <FolderGit2 className="w-5 h-5" />
               </NavBtn>
-              <NavBtn panel="nebula-ui-studio" title="Nebulla UI Studio">
+              <NavBtn panel="nebula-ui-studio" title="UI Studio">
                 <Palette className="w-5 h-5" />
               </NavBtn>
               <NavBtn panel="mind-map" title="Mind Map">
@@ -610,7 +679,7 @@ function App() {
               <NavBtn panel="master-plan" title="Master Plan">
                 <BookOpen className="w-5 h-5" />
               </NavBtn>
-              <div className="w-8 h-px bg-white/10 my-1" />
+              <div className="my-1 h-px w-8 bg-border" />
               <NavBtn panel="my-projects" title="My Projects">
                 <LayoutGrid className="w-5 h-5" />
               </NavBtn>
@@ -620,10 +689,10 @@ function App() {
               <NavBtn panel="project-settings" title="Project Settings">
                 <Server className="w-5 h-5" />
               </NavBtn>
-              <NavBtn panel="dns" title="DNS & domain">
+              <NavBtn panel="dns" title="DNS & Domains">
                 <Globe className="w-5 h-5" />
               </NavBtn>
-              <div className="w-8 h-px bg-white/10 my-1" />
+              <div className="my-1 h-px w-8 bg-border" />
               <NavBtn panel="user-profile" title="User Profile">
                 <User className="w-5 h-5" />
               </NavBtn>
@@ -634,7 +703,7 @@ function App() {
           <button
             type="button"
             onClick={() => setNavCollapsed(false)}
-            className="shrink-0 w-7 border-r border-white/10 bg-[#040f1a]/60 flex flex-col items-center justify-center text-slate-500 hover:text-cyan-300 hover:bg-white/5"
+            className="ide-nav-rail flex shrink-0 w-7 flex-col items-center justify-center border-r text-muted-foreground hover:bg-sidebar-accent/60 hover:text-primary"
             title="Show navigation"
             aria-label="Show navigation"
           >
@@ -643,33 +712,69 @@ function App() {
         ) : null}
 
         <section className="flex-1 min-h-0 flex flex-col overflow-hidden relative">
-          <div className="h-10 shrink-0 border-b border-white/10 bg-[#060a14]/80 px-4 flex items-center text-sm text-cyan-200">
+          <div className="ide-panel-strip flex h-10 shrink-0 items-center border-b px-4 text-sm font-medium text-foreground">
             {PANEL_LABEL[mainPanel]}
           </div>
 
-          <div className="flex-1 min-h-0 overflow-hidden relative min-h-0">
-            {/* Reserve w-10 for vertical App preview rail; main IDE fills the rest */}
-            <div className="absolute inset-0 left-10 overflow-hidden">{renderCenter()}</div>
+          <div className="relative min-h-0 flex-1 overflow-hidden">
+            <div
+              className="absolute inset-0 overflow-hidden"
+              style={{ left: previewToolRailPx }}
+            >
+              {renderCenter()}
+            </div>
             <AppPreviewPanel
               pages={pages}
+              toolRailWidthPx={previewToolRailPx}
+              sourceControlActive={mainPanel === 'source-control'}
               onOpenSourceControl={() => setMainPanel('source-control')}
+              onToolRailResizeMouseDown={(e) => {
+                e.preventDefault();
+                previewRailDrag.current = {
+                  startX: e.clientX,
+                  startW: previewToolRailPxRef.current,
+                };
+                document.body.style.cursor = 'col-resize';
+                document.body.style.userSelect = 'none';
+              }}
             />
           </div>
 
-          <div className="h-36 min-h-[6rem] max-h-[45vh] shrink-0 border-t border-white/10 bg-[#040f1a]/70 flex flex-col resize-y overflow-auto">
-            <div className="h-8 border-b border-white/10 px-3 flex items-center gap-2 text-xs text-cyan-300">
+          <button
+            type="button"
+            aria-label="Resize terminal height"
+            title="Drag to resize terminal"
+            onMouseDown={(e) => {
+              e.preventDefault();
+              terminalResizeDrag.current = {
+                startY: e.clientY,
+                startH: terminalHeightRef.current,
+              };
+              document.body.style.cursor = 'row-resize';
+              document.body.style.userSelect = 'none';
+            }}
+            className="group flex h-2 shrink-0 cursor-row-resize items-center justify-center border-t border-border bg-border/30 hover:bg-primary/25"
+          >
+            <span className="h-0.5 w-10 rounded-full bg-muted-foreground/40 group-hover:bg-primary/60" />
+          </button>
+
+          <div
+            className="ide-terminal-shell flex shrink-0 flex-col overflow-hidden border-t"
+            style={{ height: terminalHeightPx }}
+          >
+            <div className="ide-panel-strip flex h-8 items-center gap-2 border-b px-3 text-xs font-medium text-foreground">
               <Terminal className="w-4 h-4" />
               Terminal
             </div>
-            <div className="flex-1 p-3 font-mono text-xs text-slate-400 overflow-y-auto whitespace-pre-wrap">
+            <div className="flex-1 overflow-y-auto whitespace-pre-wrap p-3 font-mono text-xs text-muted-foreground">
               {terminalOutput.map((line, i) => (
-                <div key={i} className={line.startsWith('$ ') ? 'text-cyan-400' : ''}>
+                <div key={i} className={line.startsWith('$ ') ? 'text-primary' : ''}>
                   {line}
                 </div>
               ))}
             </div>
             <form
-              className="h-9 border-t border-white/10 px-3 flex items-center gap-2"
+              className="h-9 border-t border-border px-3 flex items-center gap-2"
               onSubmit={(e) => {
                 e.preventDefault();
                 if (!terminalInput.trim()) return;
@@ -678,30 +783,30 @@ function App() {
                 void runTerminalCommand(cmd);
               }}
             >
-              <span className="text-cyan-400 font-mono text-xs">$</span>
+              <span className="font-mono text-xs text-primary">$</span>
               <input
                 value={terminalInput}
                 onChange={(e) => setTerminalInput(e.target.value)}
                 disabled={terminalBusy}
                 placeholder={terminalBusy ? 'Running…' : 'Type a command and press Enter (cloud workspace)'}
-                className="w-full bg-transparent text-xs text-slate-200 outline-none placeholder:text-slate-600"
+                className="w-full bg-transparent text-xs text-foreground outline-none placeholder:text-muted-foreground/70"
               />
               <button
                 type="submit"
                 disabled={terminalBusy || !terminalInput.trim()}
-                className="text-[10px] px-2 py-1 rounded border border-white/15 text-slate-300 disabled:opacity-40"
+                className="rounded border border-border px-2 py-1 text-[10px] text-muted-foreground disabled:opacity-40 hover:bg-muted/50"
               >
                 Run
               </button>
               <button
                 type="button"
-                className="text-[10px] px-2 py-1 rounded border border-white/10 text-slate-500 hover:text-slate-300"
+                className="rounded border border-border/80 px-2 py-1 text-[10px] text-muted-foreground hover:bg-muted/40"
                 onClick={() => setTerminalOutput([])}
               >
                 Clear
               </button>
             </form>
-            <div className="h-6 border-t border-white/5 px-3 flex items-center text-[10px] text-slate-500">
+            <div className="flex h-6 items-center border-t border-border/60 px-3 text-[10px] text-muted-foreground/80">
               cloud workspace: {activeProjectKey}
             </div>
           </div>
@@ -717,9 +822,9 @@ function App() {
             document.body.style.cursor = 'col-resize';
             document.body.style.userSelect = 'none';
           }}
-          className="w-1.5 shrink-0 cursor-col-resize hover:bg-cyan-500/35 bg-white/5 flex items-center justify-center group"
+          className="group flex w-1.5 shrink-0 cursor-col-resize items-center justify-center bg-border/40 hover:bg-primary/35"
         >
-          <GripVertical className="w-3 h-3 text-slate-600 opacity-0 group-hover:opacity-100 pointer-events-none" aria-hidden />
+          <GripVertical className="pointer-events-none h-3 w-3 text-muted-foreground opacity-0 group-hover:opacity-100" aria-hidden />
         </button>
 
         <AssistantSidebar

@@ -74,9 +74,15 @@ function readStoredPreviewWidth(): number {
 export function AppPreviewPanel({
   pages,
   onOpenSourceControl,
+  toolRailWidthPx = 40,
+  sourceControlActive = false,
+  onToolRailResizeMouseDown,
 }: {
   pages: FlowNode[];
   onOpenSourceControl?: () => void;
+  toolRailWidthPx?: number;
+  sourceControlActive?: boolean;
+  onToolRailResizeMouseDown?: (e: React.MouseEvent) => void;
 }) {
   const [panelOpen, setPanelOpen] = useState(false);
   const [panelWidth, setPanelWidth] = useState(readStoredPreviewWidth);
@@ -412,29 +418,50 @@ export function AppPreviewPanel({
   return (
     <div className="pointer-events-none absolute inset-0 z-[50]">
       <div
-        className="pointer-events-auto absolute left-0 top-0 z-[52] flex h-full w-10 flex-col items-center gap-2 border-r border-white/10 bg-[#040f1a]/90 py-3"
+        className="pointer-events-auto absolute top-0 z-[52] flex h-full flex-col border-r border-border bg-sidebar/95 py-3"
+        style={{ left: 0, width: toolRailWidthPx }}
         aria-label="Workspace tools"
       >
-        {onOpenSourceControl ? (
+        <div className="relative flex h-full w-full flex-col items-center gap-2">
           <button
             type="button"
-            title="Source Control"
-            aria-label="Source Control"
-            onClick={() => onOpenSourceControl()}
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-[#060a14]/80 text-slate-400 hover:border-cyan-500/35 hover:text-cyan-300"
+            title={panelOpen ? 'Hide live app preview' : 'Show live app preview'}
+            aria-pressed={panelOpen}
+            onClick={() => setPanelOpen((o) => !o)}
+            className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border transition-colors ${
+              panelOpen
+                ? 'border-primary/40 bg-primary/15 text-primary shadow-sm shadow-primary/10'
+                : 'border-border bg-card/80 text-muted-foreground hover:border-ring/40 hover:bg-muted/50 hover:text-foreground'
+            }`}
           >
-            <FolderGit2 className="h-4 w-4" aria-hidden />
+            {panelOpen ? <EyeOff className="h-4 w-4" aria-hidden /> : <Eye className="h-4 w-4" aria-hidden />}
           </button>
-        ) : null}
-        <button
-          type="button"
-          title={panelOpen ? 'Hide live app preview' : 'Show live app preview'}
-          aria-pressed={panelOpen}
-          onClick={() => setPanelOpen((o) => !o)}
-          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-cyan-500/25 bg-[#060a14]/80 text-cyan-300 hover:bg-cyan-500/10"
-        >
-          {panelOpen ? <EyeOff className="h-4 w-4" aria-hidden /> : <Eye className="h-4 w-4" aria-hidden />}
-        </button>
+          {onOpenSourceControl ? (
+            <button
+              type="button"
+              title="Source Control"
+              aria-label="Source Control"
+              aria-pressed={sourceControlActive}
+              onClick={() => onOpenSourceControl()}
+              className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border transition-colors ${
+                sourceControlActive
+                  ? 'border-primary/45 bg-primary/15 text-primary shadow-sm shadow-primary/10'
+                  : 'border-border bg-card/80 text-muted-foreground hover:border-ring/40 hover:bg-muted/50 hover:text-foreground'
+              }`}
+            >
+              <FolderGit2 className="h-4 w-4" aria-hidden />
+            </button>
+          ) : null}
+          {onToolRailResizeMouseDown ? (
+            <button
+              type="button"
+              className="absolute inset-y-8 right-0 z-[54] w-1.5 translate-x-1/2 cursor-col-resize rounded-full border-0 bg-transparent p-0 hover:bg-primary/35"
+              aria-label="Resize tool rail"
+              title="Drag to resize tool rail"
+              onMouseDown={onToolRailResizeMouseDown}
+            />
+          ) : null}
+        </div>
       </div>
 
       {panelOpen ? (
@@ -446,8 +473,8 @@ export function AppPreviewPanel({
             onClick={() => setPanelOpen(false)}
           />
           <div
-            className="pointer-events-auto absolute left-10 top-0 z-[51] flex h-full flex-col overflow-visible border-r border-white/10 bg-[#020810]/98 shadow-[4px_0_24px_rgba(0,0,0,0.45)] backdrop-blur-sm"
-            style={{ width: panelWidth, maxWidth: 'min(100%, 720px)' }}
+            className="pointer-events-auto absolute top-0 z-[51] flex h-full flex-col overflow-visible border-r border-border bg-card/95 shadow-[4px_0_24px_rgba(0,0,0,0.35)] backdrop-blur-sm"
+            style={{ left: toolRailWidthPx, width: panelWidth, maxWidth: 'min(100%, 720px)' }}
           >
             <div
               className={`relative flex min-h-0 w-full flex-1 flex-col ${menuOpen ? 'overflow-visible' : 'overflow-hidden'}`}
@@ -460,7 +487,7 @@ export function AppPreviewPanel({
               aria-label="Resize preview panel"
               title="Drag to resize preview"
               onMouseDown={onResizeMouseDown}
-              className="absolute -right-1.5 top-0 z-[55] flex h-full w-3 cursor-col-resize items-center justify-center border-0 bg-transparent text-slate-600 hover:text-cyan-400/90"
+              className="absolute -right-1.5 top-0 z-[55] flex h-full w-3 cursor-col-resize items-center justify-center border-0 bg-transparent text-muted-foreground hover:bg-primary/20 hover:text-primary"
             >
               <GripVertical className="h-7 w-3.5 opacity-70" />
             </button>

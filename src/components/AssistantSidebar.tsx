@@ -2015,7 +2015,7 @@ ${uiStudioApprovedCode || 'No approved UI code yet.'}`;
   };
 
   return (
-    <aside className="flex flex-col border-l border-white/5 bg-[#040f1a]/40 backdrop-blur-md shrink-0" style={{ width }}>
+    <aside className="flex shrink-0 flex-col border-l border-border bg-card/50 backdrop-blur-md" style={{ width }}>
       <div className="p-3 border-b border-white/5 flex flex-col gap-2">
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2 min-w-0">
