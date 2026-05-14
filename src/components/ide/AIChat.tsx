@@ -1,26 +1,13 @@
 import { useCallback, useEffect, useState } from 'react';
-import {
-  Bot,
-  ChevronDown,
-  Hand,
-  Mic,
-  Paperclip,
-  Rocket,
-  Send,
-  User,
-  Zap,
-} from 'lucide-react';
+import { Bot, Hand, Mic, Paperclip, Rocket, Send, User } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { getUserCapabilities } from '@/lib/user-tier';
 import { fetchSessionUser } from '../../lib/nebulaCloud';
 import { GROK_CHAT_SETUP_HINT } from '../../lib/grokKey';
 import { readResponseJson } from '../../lib/apiFetch';
 import { getBrowserProjectName, withProjectQuery } from '../../lib/nebulaProjectApi';
 import { sendIdeAssistantGrokTurn } from '../../lib/ideAssistantGrokChat';
 import { ideContextSnippetForChat, useIdeWorkspace } from '@/components/ide/IdeWorkspaceContext';
-import { buildIdeSwarmFocusFromEditor } from '../../lib/ideSwarmFocus';
 import { fetchConversationLogEntries } from '../../lib/conversationLogClient';
-import { useSwarm } from '../swarm/SwarmProvider';
 
 type Message = {
   id: string;
@@ -91,10 +78,8 @@ function formatLogTimestamp(iso: string): string {
 
 export function AIChat() {
   const { chatModel, activePath, activeTab, diskProjectKey } = useIdeWorkspace();
-  const swarm = useSwarm();
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
-  const [swarmOpen, setSwarmOpen] = useState(true);
   const [accessoryHint, setAccessoryHint] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
@@ -199,13 +184,6 @@ export function AIChat() {
 
     const session = await fetchSessionUser();
     const userId = session?.uid?.trim() || 'anonymous';
-    const agentsEnabledForTier = getUserCapabilities({ tier: session?.billingTier }).agentsEnabled;
-
-    const swarmFocus = buildIdeSwarmFocusFromEditor(
-      activePath,
-      activeTab?.content ?? '',
-      Boolean(activeTab?.loading),
-    );
 
     try {
       const { assistantContent } = await sendIdeAssistantGrokTurn({
@@ -215,17 +193,6 @@ export function AIChat() {
         projectName,
         chatModel,
         ideAppendix,
-        agentsEnabledForTier,
-        swarmFocus,
-        swarm: {
-          isEnabled: swarm.isEnabled,
-          currentPhase: swarm.currentPhase,
-          intensity: swarm.intensity,
-          startSwarm: swarm.startSwarm,
-          addActivity: swarm.addActivity,
-          setCurrentPhase: swarm.setCurrentPhase,
-          finishSwarm: swarm.finishSwarm,
-        },
       });
       const raw = assistantContent.trim();
       const assistantMsg: Message = {
@@ -257,7 +224,7 @@ export function AIChat() {
     } finally {
       setSending(false);
     }
-  }, [input, sending, messages, chatModel, activePath, activeTab?.content, activeTab?.loading, swarm, serverHasGrokKey]);
+  }, [input, sending, messages, chatModel, activePath, activeTab?.content, serverHasGrokKey]);
 
   /** Only warn after we know the server lacks a key (avoid implying failure while `null`). */
   const showGrokKeyBanner = serverHasGrokKey === false;
@@ -273,11 +240,6 @@ export function AIChat() {
           <span className="h-1.5 w-1.5 rounded-full bg-primary/80" />
           Model: <span className="text-foreground">{modelLabel[chatModel] ?? chatModel}</span>
           <span className="text-muted-foreground/80">(top bar)</span>
-        </div>
-
-        <div className="type-label-sm flex items-center gap-1.5 rounded px-2 py-1 text-muted-foreground">
-          <Zap className="h-3 w-3 text-primary/80" />
-          <span>Lean swarm · planning in chat</span>
         </div>
       </div>
 
@@ -295,7 +257,10 @@ export function AIChat() {
       ) : null}
 
       {accessoryHint ? (
-        <p className="type-label-sm border-b border-amber-500/20 bg-amber-500/10 px-3 py-1.5 text-amber-100/95" role="status">
+        <p
+          className="type-label-sm shrink-0 border-b border-border/70 bg-muted/25 px-3 py-1.5 text-muted-foreground"
+          role="status"
+        >
           {accessoryHint}
         </p>
       ) : null}
@@ -305,30 +270,6 @@ export function AIChat() {
           {sendError}
         </p>
       ) : null}
-
-      <div className="tonal-seam-b shrink-0">
-        <button
-          type="button"
-          onClick={() => setSwarmOpen(!swarmOpen)}
-          className="btn-secondary-surface type-label-sm flex h-8 w-full items-center justify-between px-3 text-muted-foreground"
-        >
-          <div className="flex items-center gap-1.5">
-            <span className="h-1.5 w-1.5 rounded-full bg-primary/80" />
-            Quality agent
-          </div>
-          <ChevronDown className={cn('h-3 w-3 opacity-70 transition-transform', swarmOpen && 'rotate-180')} />
-        </button>
-
-        {swarmOpen && (
-          <div className="type-label-sm space-y-1.5 px-3 pb-2 leading-relaxed text-muted-foreground">
-            <p>
-              One support agent — <span className="text-foreground">Quality</span> (code review + test suggestions). It runs when
-              you click <span className="text-foreground">Inspect</span> in the top bar, scoped to the active editor file.
-            </p>
-            <p>IDE chat below uses Grok with the model selected in the top bar.</p>
-          </div>
-        )}
-      </div>
 
       <div className="flex-1 space-y-3 overflow-auto p-3">
         {messages.length === 0 && !sending ? (
@@ -423,8 +364,10 @@ export function AIChat() {
               <ChatRoundButton
                 label="Voice activity"
                 onClick={() => {
-                  setAccessoryHint('Voice pipeline is handled in the full Nebula Partner assistant.');
-                  window.setTimeout(() => setAccessoryHint(null), 3200);
+                  setAccessoryHint(
+                    'Voice chat runs in the full Nebula Partner assistant (sidebar). IDE chat here still uses Grok for text — type a message below.',
+                  );
+                  window.setTimeout(() => setAccessoryHint(null), 5200);
                 }}
               >
                 <SoundWaveIcon />
@@ -432,8 +375,8 @@ export function AIChat() {
               <ChatRoundButton
                 label="Raise hand"
                 onClick={() => {
-                  setAccessoryHint('Hands raised are shown to operators when live session mode is enabled.');
-                  window.setTimeout(() => setAccessoryHint(null), 3200);
+                  setAccessoryHint('Hands raised are shown when live session mode is enabled in Nebula Partner.');
+                  window.setTimeout(() => setAccessoryHint(null), 4200);
                 }}
               >
                 <Hand className="h-[18px] w-[18px]" />
@@ -441,8 +384,8 @@ export function AIChat() {
               <ChatRoundButton
                 label="Microphone"
                 onClick={() => {
-                  setAccessoryHint('Mic capture is wired in Nebula Partner (browser permissions).');
-                  window.setTimeout(() => setAccessoryHint(null), 3200);
+                  setAccessoryHint('Mic capture is available in Nebula Partner (browser permissions). This panel is text chat with Grok.');
+                  window.setTimeout(() => setAccessoryHint(null), 4200);
                 }}
               >
                 <Mic className="h-[18px] w-[18px]" />
@@ -453,8 +396,8 @@ export function AIChat() {
               <ChatRoundButton
                 label="Attach file"
                 onClick={() => {
-                  setAccessoryHint('Attach files from the full Assistant sidebar in Nebula Partner.');
-                  window.setTimeout(() => setAccessoryHint(null), 3200);
+                  setAccessoryHint('Attach files from the Assistant sidebar in Nebula Partner when you need uploads here.');
+                  window.setTimeout(() => setAccessoryHint(null), 4200);
                 }}
               >
                 <Paperclip className="h-[18px] w-[18px]" />

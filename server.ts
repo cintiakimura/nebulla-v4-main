@@ -80,6 +80,17 @@ const resolveWorkspaceRelative = (workspaceRoot: string, relativePath: string): 
 };
 
 dotenv.config({ path: path.join(REPO_ROOT, ".env") });
+const envLocalPath = path.join(REPO_ROOT, ".env.local");
+if (fs.existsSync(envLocalPath)) {
+  dotenv.config({ path: envLocalPath, override: true });
+}
+
+const grokEnvProbe = process.env.GROK_API_KEY?.trim() ?? "";
+if (grokEnvProbe.length < 20) {
+  console.warn(
+    "[nebula] GROK_API_KEY is missing or shorter than 20 characters after trim — Grok chat and tools will return 401 until set (Render: set in the service Environment, not only in a local .env file)."
+  );
+}
 
 export const app = express();
 const PORT = Number(process.env.PORT) || 3000;
@@ -2001,7 +2012,7 @@ ${workflowContext}`;
           code: limitErr.code,
         });
       }
-      throw limitErr;
+      console.warn("[grok/chat] Unexpected limit check error (continuing):", limitErr);
     }
 
     const rawBody = (req.body || {}) as Record<string, unknown>;

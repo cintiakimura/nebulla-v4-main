@@ -595,6 +595,7 @@ export function AssistantSidebar({
       }>(withProjectQuery('/api/grok/chat'), {
         method: 'POST',
         headers: grokHeaders,
+        credentials: 'include',
         signal: chatAbort.signal,
         body: JSON.stringify(
           withProjectBody({
@@ -712,6 +713,7 @@ export function AssistantSidebar({
           }>(withProjectQuery('/api/grok/go-code'), {
             method: 'POST',
             headers: goHeaders,
+            credentials: 'include',
             body: JSON.stringify(
               withProjectBody({
                 userId,
@@ -811,6 +813,7 @@ export function AssistantSidebar({
           }>(withProjectQuery('/api/grok/execute-project-rules'), {
             method: 'POST',
             headers: grokHeaders,
+            credentials: 'include',
             body: JSON.stringify(
               withProjectBody({
                 userId,
@@ -1220,6 +1223,7 @@ export function AssistantSidebar({
       }>(withProjectQuery('/api/grok/go-code'), {
         method: 'POST',
         headers: grokHeaders,
+        credentials: 'include',
         body: JSON.stringify(
           withProjectBody({
             userId,

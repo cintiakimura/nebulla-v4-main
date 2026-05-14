@@ -11,6 +11,7 @@
     "clean": "rm -rf dist",
     "lint": "tsc --noEmit",
     "test": "npm run lint",
+    "test:grok": "node scripts/test-grok-chat.mjs",
     "smoke:prod": "node scripts/smoke-remote.mjs"
   },
   "main": "server.ts",

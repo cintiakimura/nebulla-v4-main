@@ -31,6 +31,7 @@ export async function sendToGrok(message: string) {
     const data = await fetchJson<{ text?: string; message?: string }>('/api/grok/chat', {
       method: 'POST',
       headers,
+      credentials: 'include',
       body: JSON.stringify({ message }),
     });
     return data.text || data.message || data;

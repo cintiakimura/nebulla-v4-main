@@ -24,6 +24,7 @@ export async function sendToGROK(messages: ChatMessage[]): Promise<string> {
       {
         method: 'POST',
         headers,
+        credentials: 'include',
         body: JSON.stringify({
           messages,
           model: 'grok-4-1-fast-reasoning',
