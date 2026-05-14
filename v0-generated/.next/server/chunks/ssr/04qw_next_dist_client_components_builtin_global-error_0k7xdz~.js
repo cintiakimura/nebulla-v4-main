@@ -1,3 +1,0 @@
-module.exports=[2022,(a,b,c)=>{let{createClientModuleProxy:d}=a.r(64441);a.n(d("[project]/Downloads/nebulla-v4-main/v0-generated/node_modules/next/dist/client/components/builtin/global-error.js <module evaluation>"))},58880,(a,b,c)=>{let{createClientModuleProxy:d}=a.r(64441);a.n(d("[project]/Downloads/nebulla-v4-main/v0-generated/node_modules/next/dist/client/components/builtin/global-error.js"))},18910,a=>{"use strict";a.i(2022);var b=a.i(58880);a.n(b)},55579,a=>{a.n(a.i(18910))}];
-
-//# sourceMappingURL=04qw_next_dist_client_components_builtin_global-error_0k7xdz~.js.map

@@ -267,7 +267,10 @@ export function NebullaIDE() {
         </div>
       ) : null}
 
-      <TopBar onOpenAccount={() => setMyServicesOpen(true)} />
+      <TopBar
+        onOpenAccount={() => setMyServicesOpen(true)}
+        onOpenSourceControl={() => setNavId('source-control')}
+      />
 
       <div className="flex flex-1 overflow-hidden">
         <VerticalNav

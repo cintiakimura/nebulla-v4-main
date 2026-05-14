@@ -10,6 +10,7 @@ import {
 } from 'react';
 import { fetchJson } from '../../lib/apiFetch';
 import {
+  getBrowserProjectKey,
   getBrowserProjectName,
   withProjectBody,
   withProjectQuery,
@@ -31,6 +32,8 @@ export const IDE_CHAT_MODELS = ['grok-4.1', 'grok-3'] as const;
 export type IdeChatModelId = (typeof IDE_CHAT_MODELS)[number];
 
 type IdeWorkspaceValue = {
+  /** Browser/server disk scope for APIs (guest UUID, `default`, etc.) — bumps after `refreshTree`. */
+  diskProjectKey: string;
   workspacePaths: string[];
   /** Current git branch from `/api/source-control/overview`, when repo exists. */
   gitBranch: string | null;
@@ -61,6 +64,7 @@ export function useIdeWorkspace(): IdeWorkspaceValue {
 }
 
 export function IdeWorkspaceProvider({ children }: { children: ReactNode }) {
+  const [diskProjectKey, setDiskProjectKey] = useState(() => getBrowserProjectKey());
   const [workspacePaths, setWorkspacePaths] = useState<string[]>([]);
   const [gitBranch, setGitBranch] = useState<string | null>(null);
   const [overviewLoading, setOverviewLoading] = useState(true);
@@ -103,6 +107,7 @@ export function IdeWorkspaceProvider({ children }: { children: ReactNode }) {
       setGitBranch(null);
     } finally {
       setOverviewLoading(false);
+      setDiskProjectKey(getBrowserProjectKey());
     }
   }, []);
 
@@ -203,6 +208,7 @@ export function IdeWorkspaceProvider({ children }: { children: ReactNode }) {
 
   const value = useMemo<IdeWorkspaceValue>(
     () => ({
+      diskProjectKey,
       workspacePaths,
       gitBranch,
       overviewLoading,
@@ -222,6 +228,7 @@ export function IdeWorkspaceProvider({ children }: { children: ReactNode }) {
       clearSaveError,
     }),
     [
+      diskProjectKey,
       workspacePaths,
       gitBranch,
       overviewLoading,

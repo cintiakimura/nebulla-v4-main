@@ -58,7 +58,7 @@ export function useBundledDemoMockupWithoutKey(): boolean {
 
 export function loadBundledDemoMockupSvg(cwd: string = process.cwd()): string {
   const productRoot = getNebullaProductLayoutRoot(cwd);
-  const file = path.join(productRoot, "templates", "nebula-ui-studio-demo-mockup.svg");
+  const file = path.join(productRoot, "lib", "assets", "nebula-ui-studio-demo-mockup.svg");
   try {
     return fs.readFileSync(file, "utf8");
   } catch {

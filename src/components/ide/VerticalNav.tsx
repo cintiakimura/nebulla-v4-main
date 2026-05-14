@@ -13,7 +13,6 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { Logo } from '@/components/Logo';
 
 type NavItem = {
   id: string;
@@ -53,10 +52,6 @@ export function VerticalNav({
 
   return (
     <div className="surface-base tonal-seam-r flex h-full w-12 shrink-0 flex-col items-center py-3">
-      <div className="mb-3 flex items-center justify-center" title="Nebulla.beta">
-        <Logo className="h-7 w-7 shrink-0 opacity-95" />
-      </div>
-
       {onOpenMyServices ? (
         <div className="mb-1.5 flex w-full flex-col items-center px-0.5">
           <button

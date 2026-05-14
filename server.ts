@@ -11,13 +11,14 @@ import {
   appendWriterAuditEvent,
   buildMemorySystemContent,
   injectMemoryIntoMessages,
+  loadPrunedEntries,
 } from "./conversationLog";
 import {
   initGuardianProcessHandlers,
   registerGuardianRoutes,
   guardianExpressErrorHandler,
   captureError,
-} from "./guardian/nebulaGuardian";
+} from "./lib/nebulaGuardian";
 import { mountRenderStack, getRenderPublicConfig, resolveNebulaProjectDiskKey, readNebulaSessionUserId } from "./renderStack";
 import {
   resolvePencilApiKey,
@@ -192,11 +193,7 @@ async function startServer() {
   });
 
   const readSkillDesignSystemExcerpt = (workspaceRoot: string): string => {
-    const candidates = [
-      path.join(workspaceRoot, "SKILL.md"),
-      path.join(NEBULA_PROJECT_ROOT, "SKILL.md"),
-      path.join(REPO_ROOT, "SKILL.md"),
-    ];
+    const candidates = [path.join(workspaceRoot, "SKILL.md"), path.join(NEBULA_PROJECT_ROOT, "SKILL.md")];
     for (const skillPath of candidates) {
       if (!fs.existsSync(skillPath)) continue;
       try {
@@ -287,6 +284,23 @@ No approved UI code yet.
     }
   });
 
+  app.get("/api/conversation-log", (req, res) => {
+    try {
+      const uid = readNebulaSessionUserId(req) || "anonymous";
+      const pp = projectPathsFor(req);
+      const q = (req.query || {}) as Record<string, unknown>;
+      const projectLabel =
+        typeof q.projectName === "string" && q.projectName.trim()
+          ? String(q.projectName).trim()
+          : "Untitled project";
+      const entries = loadPrunedEntries({ userId: uid, projectKey: pp.projectKey, projectLabel });
+      res.json({ entries });
+    } catch (error) {
+      console.error("/api/conversation-log:", error);
+      res.status(500).json({ error: error instanceof Error ? error.message : "Failed to read conversation log" });
+    }
+  });
+
   app.post("/api/master-plan/update", (req, res) => {
     const { tabIndex, content } = req.body;
     if (tabIndex === undefined || content === undefined) {
@@ -357,7 +371,7 @@ No approved UI code yet.
         'metadata.json', 'server.ts', '.env.example', 'firebase-applet-config.json',
         'master-plan.json', 'Nebula Architecture Spec.md', 'index.html', 'src', 'public',
         'firebase-blueprint.json', 'firestore.rules', 'DRAFT_firestore.rules',
-        '.gitignore', 'nebula-ui-studio.md', 'guardian'
+        '.gitignore', 'nebula-ui-studio.md'
       ]);
 
       const items = fs.readdirSync(targetDir, { withFileTypes: true });
@@ -826,7 +840,6 @@ No approved UI code yet.
     const prefixes = [
       "generated-ui/",
       "nebulla-version-history/",
-      "guardian/",
       ".cursor/",
       "conversation-logs/",
       "dist/",
@@ -1572,10 +1585,12 @@ ${modelJson}`;
       typeof userId === "string" && userId.trim() ? userId.trim() : "anonymous";
     const convProject =
       typeof projectName === "string" && projectName.trim() ? projectName.trim() : "Untitled Project";
+    const ppExecRules = projectPathsFor(req);
+    const convScopeExec = { userId: convUserId, projectKey: ppExecRules.projectKey, projectLabel: convProject };
 
     try {
       const workflowContext = buildProjectWorkflowExecutionContext(req);
-      const memory = buildMemorySystemContent(convUserId, convProject);
+      const memory = buildMemorySystemContent(convScopeExec);
       const incomingMessages: { role: string; content?: string }[] = Array.isArray(messages) ? messages : [];
       const baseMessages = injectMemoryIntoMessages(incomingMessages, memory);
       const executionSystemPrompt = `Execute project-execution-rules.md strictly (single orchestration file).
@@ -1645,7 +1660,9 @@ Rules:
       typeof userNote === "string" && userNote.trim() ? userNote.trim().slice(0, 4000) : "";
 
     try {
-      const { masterPlanPath } = projectPathsFor(req);
+      const ppGo = projectPathsFor(req);
+      const { masterPlanPath } = ppGo;
+      const convScopeGo = { userId: convUserId, projectKey: ppGo.projectKey, projectLabel: convProject };
       let planSnapshot: Record<string, string> = {};
       try {
         if (fs.existsSync(masterPlanPath)) {
@@ -1665,7 +1682,7 @@ Rules:
         compact[k] = v.length > 2500 ? `${v.slice(0, 2500)}\n…[truncated]` : v;
       }
 
-      const memory = buildMemorySystemContent(convUserId, convProject);
+      const memory = buildMemorySystemContent(convScopeGo);
       const phaseASystem = `You are Grok 4 (planning only). The user pressed **Go** to run a coding pass with Grok Code.
 
 Your ONLY output for this turn: a **short** pre-coding summary for the Master Plan file.
@@ -1791,9 +1808,9 @@ ${workflowContext}`;
       const codeText = codeData.choices?.[0]?.message?.content || "";
 
       try {
-        appendConversationTurn(convUserId, convProject, "user", `[Go] ${note || "start coding"}`);
+        appendConversationTurn(convScopeGo, "user", `[Go] ${note || "start coding"}`);
         if (codeText.trim()) {
-          appendConversationTurn(convUserId, convProject, "assistant", codeText.trim().slice(0, 8000));
+          appendConversationTurn(convScopeGo, "assistant", codeText.trim().slice(0, 8000));
         }
       } catch (logErr) {
         console.error("go-code memory append failed:", logErr);
@@ -1987,6 +2004,8 @@ ${workflowContext}`;
       typeof userId === "string" && userId.trim() ? userId.trim() : "anonymous";
     const convProject =
       typeof projectName === "string" && projectName.trim() ? projectName.trim() : "Untitled Project";
+    const ppChat = projectPathsFor(req);
+    const convScopeChat = { userId: convUserId, projectKey: ppChat.projectKey, projectLabel: convProject };
 
     try {
       await checkAndEnforceLimit(convUserId);
@@ -2061,7 +2080,7 @@ ${answer.slice(0, 8000)}`;
     }
 
     try {
-      const memory = buildMemorySystemContent(convUserId, convProject);
+      const memory = buildMemorySystemContent(convScopeChat);
       messagesForApi = injectMemoryIntoMessages(messagesForApi, memory);
     } catch (memErr) {
       console.error("Conversation memory load failed:", memErr);
@@ -2179,6 +2198,7 @@ CRITICAL OUTPUT CONTRACT (no deviation):
     } else {
       appendWriterAuditEvent({
         userId: convUserId,
+        projectKey: ppChat.projectKey,
         projectName: convProject,
         triggeredQn: summaryEntries.map((x) => x.tabIndex),
       });
@@ -2218,11 +2238,11 @@ CRITICAL OUTPUT CONTRACT (no deviation):
           .reverse()
           .find((m) => m.role === "user");
         if (lastUser && typeof lastUser.content === "string" && lastUser.content.length > 0) {
-          appendConversationTurn(convUserId, convProject, "user", lastUser.content);
+          appendConversationTurn(convScopeChat, "user", lastUser.content);
         }
         if (cleanText) {
           // Persist only user-visible assistant text; never store internal control tags in memory logs.
-          appendConversationTurn(convUserId, convProject, "assistant", cleanText);
+          appendConversationTurn(convScopeChat, "assistant", cleanText);
         }
       } catch (logErr) {
         console.error("Conversation memory append failed:", logErr);

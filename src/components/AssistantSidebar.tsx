@@ -29,6 +29,7 @@ import { fetchJson, readResponseJson } from '../lib/apiFetch';
 import { getStoredGrokApiKey } from '../lib/grokKey';
 import { withProjectBody, withProjectQuery } from '../lib/nebulaProjectApi';
 import { buildNebulaAssistantSystemPrompt } from '../lib/nebulaAssistantSystemPrompt';
+import { fetchConversationLogEntries } from '../lib/conversationLogClient';
 
 const MASTER_PLAN_TITLES = [
   '1. Goal of the app',
@@ -223,6 +224,43 @@ export function AssistantSidebar({
       })
       .catch(console.error);
   }, [activeProjectKey]);
+
+  useEffect(() => {
+    if (codeMode) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const entries = await fetchConversationLogEntries();
+        if (cancelled) return;
+        if (entries.length === 0) {
+          setMessages(
+            readOnboardingAutopilotDone()
+              ? [
+                  {
+                    role: 'model',
+                    text: 'System initialized. Ready to collaborate.',
+                    fullText: 'System initialized. Ready to collaborate.',
+                  },
+                ]
+              : [],
+          );
+          return;
+        }
+        setMessages(
+          entries.map((e) => ({
+            role: e.role === 'assistant' ? 'model' : e.role === 'system' ? 'system' : 'user',
+            text: e.body,
+            fullText: e.body,
+          })),
+        );
+      } catch (e) {
+        console.warn('Conversation log load skipped:', e);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [userId, activeProjectKey, projectName, codeMode]);
 
   useEffect(() => {
     setSwarmPersisted(DEFAULT_SWARM_PERSISTED);
@@ -474,7 +512,7 @@ export function AssistantSidebar({
 
       /*
        * Nebula Swarm — **lean**: chat never invokes support agents (`shouldPostSwarmHandoff` is always false).
-       * Planning/research stay in main Grok 4.1. Use **Run and Test** in the IDE top bar for the
+       * Planning/research stay in main Grok 4.1. Use **Inspect** in the IDE top bar for the
        * Quality agent (recent files + review + test suggestions), one manual Grok 4.1 call.
        */
       const runSwarmThisTurn = shouldPostSwarmHandoff({

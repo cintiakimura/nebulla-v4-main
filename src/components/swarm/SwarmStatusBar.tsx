@@ -45,7 +45,7 @@ export function SwarmStatusBar() {
       <span className="text-muted-foreground">
         Intensity: <span className="text-foreground/90">{intensity.replace(/_/g, ' ')}</span>
         {' · '}
-        Support agents run only when you click Run and Test in the top bar.
+        Support agents run only when you click Inspect in the top bar.
       </span>
     </div>
   );

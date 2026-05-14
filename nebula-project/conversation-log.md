@@ -6,19 +6,21 @@ This document describes how Nebula stores **long-term conversation context** so 
 
 | Location | Purpose |
 |:---------|:--------|
-| **`conversation-logs/`** | Actual logs (not this file). One Markdown file per **user** × **project**. |
+| **`conversation-logs/`** | Actual logs (not this file). One Markdown file per **user** × **project key** (`projectKey` / disk scope). |
 | **`conversation-log.md`** (this file) | Human-readable specification only. |
+| **`conversationLog.ts`** (repo root) | Server module: append, load, retention, memory injection for Grok. |
 
 Directory layout:
 
 ```text
 conversation-logs/
   <safe-user-id>/
-    <safe-project-name>.md
+    <safe-project-key>.md
 ```
 
-- **User id**: Supabase user id when signed in; otherwise a stable anonymous id stored in the browser (`nebulla_device_user_id`).
-- **Project**: Current project name from the IDE (sanitized for filenames).
+- **User id**: session user id when signed in; otherwise `anonymous` (aligned with Grok `userId`).
+- **Project key**: Same value as the cloud workspace / browser `projectKey` (guest UUID, `default`, or cloud workspace id) — **not** the display name alone.
+- **Project label**: Stored inside each file’s metadata table for humans; path uses **key** only.
 - **Safe segments**: Non-alphanumeric characters are replaced so paths stay portable and safe.
 
 ## File format (each `*.md`)
@@ -42,7 +44,8 @@ What the model replied.
 
 ## Behavior
 
-1. **Before each chat request**, the server loads the pruned log for that user/project and injects it as an extra **system** message (after the main Nebula system prompt) so Grok sees prior dialogue.
-2. **After a successful reply**, the latest user message and assistant reply are **appended** to the same file.
+1. **Before each chat request**, the server loads the pruned log for that user / **project key** and injects it as an extra **system** message (after the main Nebula system prompt) so Grok sees prior dialogue.
+2. **After a successful reply** from `POST /api/grok/chat`, the latest user message and assistant reply are **appended** to the same file.
+3. **Clients** (Partner sidebar, IDE chat) call **`GET /api/conversation-log`** (with `projectKey` + `projectName` query from the browser) to restore the visible transcript after reload or project open.
 
 Restarting the dev server does not clear logs; they are files on disk under `conversation-logs/`.

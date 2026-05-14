@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState } from 'react';
-import { ChevronDown, Copy, FlaskConical, GitBranch, Loader2 } from 'lucide-react';
+import { ChevronDown, Copy, GitBranch } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useSwarm } from '@/components/swarm/SwarmProvider';
 import { Logo } from '@/components/Logo';
@@ -20,9 +20,12 @@ const models: { id: IdeChatModelId; name: string; badge: string | null }[] = [
 
 export function TopBar({
   onOpenAccount,
+  onOpenSourceControl,
 }: {
   /** Opens My services (API keys, GitHub, etc.). */
   onOpenAccount?: () => void;
+  /** Opens Source Control (git status & workspace files). */
+  onOpenSourceControl?: () => void;
 }) {
   const swarm = useSwarm();
   const { chatModel, setChatModel, activePath, activeTab, gitBranch } = useIdeWorkspace();
@@ -68,7 +71,7 @@ export function TopBar({
       Boolean(activeTab?.loading),
     );
     if (!focus.focusPaths?.length) {
-      swarm.addActivity('No file open in the editor — open a file so Run and Test can scope review to your code.', 'warning');
+      swarm.addActivity('No file open in the editor — open a file so Inspect can scope review to your code.', 'warning');
     }
 
     let planningSummary = '';
@@ -86,7 +89,7 @@ export function TopBar({
         {
           phase: swarm.currentPhase,
           userMessage:
-            'Manual Run and Test: analyze recently changed files only; provide code review findings and concrete test suggestions. Do not expand scope beyond the paths/snippets provided.',
+            'Manual Inspect (Quality): analyze recently changed files only; provide code review findings and concrete test suggestions. Do not expand scope beyond the paths/snippets provided.',
           projectName: name,
           runId,
           swarmIntensity: swarm.intensity,
@@ -139,12 +142,22 @@ export function TopBar({
             )}
           </button>
 
-          <div className="type-label-sm hidden items-center gap-1 tracking-wide md:flex">
-            <GitBranch className="h-3 w-3" />
-            <span className="max-w-[120px] truncate" title={gitBranch ?? undefined}>
-              {gitBranch ?? '—'}
-            </span>
-          </div>
+          <button
+            type="button"
+            onClick={() => onOpenSourceControl?.()}
+            disabled={!onOpenSourceControl}
+            title={
+              onOpenSourceControl
+                ? gitBranch
+                  ? `Source control · ${gitBranch}`
+                  : 'Source control'
+                : undefined
+            }
+            aria-label="Open source control"
+            className="btn-secondary-surface type-label-sm hidden h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:text-foreground disabled:pointer-events-none disabled:opacity-40 sm:inline-flex"
+          >
+            <GitBranch className="h-4 w-4" aria-hidden />
+          </button>
         </div>
 
         <div className="flex shrink-0 items-center gap-2 sm:gap-3">
@@ -152,17 +165,12 @@ export function TopBar({
             type="button"
             onClick={handleRunAndTest}
             disabled={runTestBusy || swarm.isRunning}
-            title="Run Quality on recently changed files (manual — one Grok 4.1 call)"
-            className="btn-primary-cta type-label-sm flex h-9 shrink-0 items-center gap-2 rounded-md px-3 py-0 tracking-wide sm:px-4"
+            title="Inspect — run Quality on recently changed files (manual, one Grok 4.1 call)"
+            aria-busy={runTestBusy || swarm.isRunning}
+            className="btn-primary-cta type-label-sm flex h-9 min-w-[5.5rem] shrink-0 items-center justify-center rounded-md px-3 py-0 tracking-wide sm:px-4"
             style={{ fontWeight: 500 }}
           >
-            {runTestBusy || swarm.isRunning ? (
-              <Loader2 className="h-4 w-4 shrink-0 animate-spin" aria-hidden />
-            ) : (
-              <FlaskConical className="h-4 w-4 shrink-0" aria-hidden />
-            )}
-            <span className="hidden sm:inline">Run and Test</span>
-            <span className="sm:hidden">Test</span>
+            <span>{runTestBusy || swarm.isRunning ? 'Running…' : 'Inspect'}</span>
           </button>
 
           <div className="relative" ref={modelWrapRef}>

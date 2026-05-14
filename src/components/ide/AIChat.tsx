@@ -17,6 +17,7 @@ import { getBrowserProjectName } from '../../lib/nebulaProjectApi';
 import { sendIdeAssistantGrokTurn } from '../../lib/ideAssistantGrokChat';
 import { ideContextSnippetForChat, useIdeWorkspace } from '@/components/ide/IdeWorkspaceContext';
 import { buildIdeSwarmFocusFromEditor } from '../../lib/ideSwarmFocus';
+import { fetchConversationLogEntries } from '../../lib/conversationLogClient';
 import { useSwarm } from '../swarm/SwarmProvider';
 
 type Message = {
@@ -74,8 +75,20 @@ const modelLabel: Record<string, string> = {
   'grok-3': 'Grok 3',
 };
 
+function formatLogTimestamp(iso: string): string {
+  try {
+    const d = new Date(iso);
+    if (!Number.isNaN(d.getTime())) {
+      return d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+    }
+  } catch {
+    /* ignore */
+  }
+  return new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+}
+
 export function AIChat() {
-  const { chatModel, activePath, activeTab } = useIdeWorkspace();
+  const { chatModel, activePath, activeTab, diskProjectKey } = useIdeWorkspace();
   const swarm = useSwarm();
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
@@ -87,6 +100,33 @@ export function AIChat() {
   useEffect(() => {
     setSendError(null);
   }, [activePath]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const entries = await fetchConversationLogEntries();
+        if (cancelled) return;
+        if (entries.length === 0) {
+          setMessages([]);
+          return;
+        }
+        setMessages(
+          entries.map((e, i) => ({
+            id: `log-${i}-${e.iso}`,
+            role: e.role === 'user' ? 'user' : 'assistant',
+            content: e.role === 'system' ? `[Context]\n${e.body}` : e.body,
+            timestamp: formatLogTimestamp(e.iso),
+          })),
+        );
+      } catch (e) {
+        console.warn('[AIChat] conversation log load skipped:', e);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [diskProjectKey]);
 
   const sendChat = useCallback(async () => {
     const text = input.trim();
@@ -214,7 +254,7 @@ export function AIChat() {
           <div className="type-label-sm space-y-1.5 px-3 pb-2 leading-relaxed text-muted-foreground">
             <p>
               One support agent — <span className="text-foreground">Quality</span> (code review + test suggestions). It runs when
-              you click <span className="text-foreground">Run and Test</span> in the top bar, scoped to the active editor file.
+              you click <span className="text-foreground">Inspect</span> in the top bar, scoped to the active editor file.
             </p>
             <p>IDE chat below uses Grok with the model selected in the top bar.</p>
           </div>
