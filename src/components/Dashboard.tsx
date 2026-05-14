@@ -468,6 +468,11 @@ function DnsTab() {
   );
 }
 
+/** Grok main key is server `.env` only; do not store or edit in browser Secrets (project-execution-rules.md). */
+function isServerReservedGrokSecretName(raw: string): boolean {
+  return raw.trim().toUpperCase() === 'GROK_API_KEY';
+}
+
 function ProjectSecretsEditor({ activeProjectKey }: { activeProjectKey: string }) {
   const [entries, setEntries] = useState<SecretEntry[]>([]);
   const [revealedId, setRevealedId] = useState<string | null>(null);
@@ -475,12 +480,18 @@ function ProjectSecretsEditor({ activeProjectKey }: { activeProjectKey: string }
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
   const persist = (next: SecretEntry[]) => {
-    setEntries(next);
-    saveProjectSecrets(activeProjectKey, next);
+    const cleaned = next.filter((e) => !isServerReservedGrokSecretName(e.name));
+    setEntries(cleaned);
+    saveProjectSecrets(activeProjectKey, cleaned);
   };
 
   useEffect(() => {
-    setEntries(loadProjectSecrets(activeProjectKey));
+    const raw = loadProjectSecrets(activeProjectKey);
+    const filtered = raw.filter((e) => !isServerReservedGrokSecretName(e.name));
+    setEntries(filtered);
+    if (filtered.length !== raw.length) {
+      saveProjectSecrets(activeProjectKey, filtered);
+    }
     setRevealedId(null);
     setRowMenuId(null);
     setCopiedId(null);
@@ -498,6 +509,7 @@ function ProjectSecretsEditor({ activeProjectKey }: { activeProjectKey: string }
   }, [rowMenuId]);
 
   const patchEntry = (id: string, patch: Partial<Pick<SecretEntry, 'name' | 'value'>>) => {
+    if (patch.name !== undefined && isServerReservedGrokSecretName(patch.name)) return;
     persist(entries.map((x) => (x.id === id ? { ...x, ...patch } : x)));
   };
 
@@ -548,6 +560,11 @@ function ProjectSecretsEditor({ activeProjectKey }: { activeProjectKey: string }
 
   return (
     <div className="space-y-4">
+      <p className="text-xs text-slate-500 leading-relaxed rounded-lg border border-white/10 bg-black/20 px-3 py-2">
+        <code className="text-cyan-300/90">GROK_API_KEY</code> is set on the server only (see{' '}
+        <code className="text-slate-400">.env</code> / <span className="text-slate-400">environment-setup.md</span>). It
+        cannot be added or edited here.
+      </p>
       <ul className="space-y-3">
         {entries.map((e) => (
           <li

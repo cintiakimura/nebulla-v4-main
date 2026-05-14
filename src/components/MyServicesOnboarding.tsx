@@ -6,21 +6,19 @@ import type { NebulaPublicConfig } from '../lib/nebulaPublicConfig';
 import { formatGithubConnectionStatus } from '../lib/githubDisplay';
 import { getBrowserProjectKey } from '../lib/nebulaProjectApi';
 import { getProjectSecretValue, upsertProjectSecret } from '../lib/nebulaSecretHelpers';
-import { getStoredGrokApiKey, setStoredGrokApiKey } from '../lib/grokKey';
 import { getStoredV0ApiKey, setStoredV0ApiKey } from '../lib/v0Key';
 import { fireSilentProjectManager } from '../lib/projectManagerClient';
 
-const GROK_ENV_NAME = 'GROK_API_KEY';
 const V0_ENV_NAME = 'V0_API_KEY';
 const V0_KEYS_URL = 'https://v0.dev/chat/settings/keys';
 
 function SecretNote() {
   return (
     <p className="text-[11px] text-slate-500 leading-relaxed border-t border-white/5 pt-3 mt-1">
-      Grok 4.1 chat and related tools use the server&apos;s <span className="text-slate-400">GROK_API_KEY</span> from
-      <span className="text-slate-400"> .env</span> (restart after changes). Other keys are stored in this browser under{' '}
-      <span className="text-slate-400">My Projects → Secrets</span> for your active project. v0 and similar integrations
-      still use Secrets here when configured.
+      Grok 4.1 and related AI use <span className="text-slate-400">GROK_API_KEY</span> and companion keys from the{' '}
+      <span className="text-slate-400">server .env</span> only — they are not collected in this UI. v0 and other
+      integrations can still use <span className="text-slate-400">My Projects → Secrets</span> in this browser when
+      configured.
     </p>
   );
 }
@@ -40,38 +38,14 @@ export function MyServicesOnboarding({
   const githubConnected = user?.provider === 'github';
 
   const [stayLoggedIn, setStayLoggedIn] = useState(true);
-  const [grokInput, setGrokInput] = useState('');
   const [v0Input, setV0Input] = useState('');
-  const [grokBusy, setGrokBusy] = useState(false);
   const [v0Busy, setV0Busy] = useState(false);
-  const [grokMsg, setGrokMsg] = useState<string | null>(null);
   const [v0Msg, setV0Msg] = useState<string | null>(null);
 
   const openGitHubOAuth = useCallback(() => {
     const q = stayLoggedIn ? 'remember=1' : 'remember=0';
     window.open(`/api/auth/github?${q}`, 'nebulla_github_oauth', 'width=520,height=720,scrollbars=yes');
   }, [stayLoggedIn]);
-
-  const saveGrok = useCallback(() => {
-    setGrokMsg(null);
-    const v = grokInput.trim();
-    if (!v) {
-      setGrokMsg('Optional: paste a key only if you want it stored in Secrets for a future release.');
-      return;
-    }
-    setGrokBusy(true);
-    try {
-      upsertProjectSecret(projectKey, GROK_ENV_NAME, v, 'api_key');
-      setStoredGrokApiKey(v);
-      setGrokInput('');
-      setGrokMsg('Saved locally under Secrets (optional). Chat still uses the server GROK_API_KEY.');
-      void fireSilentProjectManager({ grokApiKey: v });
-    } catch {
-      setGrokMsg('Could not save. Check browser storage permissions.');
-    } finally {
-      setGrokBusy(false);
-    }
-  }, [grokInput, projectKey]);
 
   const saveV0 = useCallback(() => {
     setV0Msg(null);
@@ -93,7 +67,6 @@ export function MyServicesOnboarding({
     }
   }, [projectKey, v0Input]);
 
-  const grokOnFile = Boolean(getProjectSecretValue(projectKey, GROK_ENV_NAME) ?? getStoredGrokApiKey());
   const v0OnFile = Boolean(getProjectSecretValue(projectKey, V0_ENV_NAME) ?? getStoredV0ApiKey());
 
   const handleContinue = useCallback(async () => {
@@ -143,8 +116,8 @@ export function MyServicesOnboarding({
               Welcome — wire up your workspace
             </h1>
             <p className="text-sm text-slate-400 leading-relaxed">
-              A quick, friendly setup. You can change these anytime under My Projects → Secrets, or reopen Account
-              (NB).
+              A quick, friendly setup. You can change v0 and other secrets anytime under My Projects → Secrets, or reopen
+              Account (NB).
             </p>
           </div>
 
@@ -200,63 +173,19 @@ export function MyServicesOnboarding({
             )}
           </section>
 
-          {/* 2. Grok */}
-          <section className="rounded-2xl border border-white/10 bg-[#121a25]/75 backdrop-blur-sm shadow-xl shadow-black/30 p-6 md:p-8 space-y-5">
+          {/* 2. Grok — server only; no user input */}
+          <section className="rounded-2xl border border-white/10 bg-[#121a25]/75 backdrop-blur-sm shadow-xl shadow-black/30 p-6 md:p-8 space-y-4">
             <div className="flex items-start gap-3">
               <KeyRound className="w-5 h-5 text-cyan-400/90 shrink-0 mt-0.5" aria-hidden />
-              <div className="min-w-0 space-y-1">
-                <h2 className="font-headline text-base text-slate-100">Grok API key (optional — reserved)</h2>
+              <div className="min-w-0 space-y-2">
+                <h2 className="font-headline text-base text-slate-100">Grok (server configuration)</h2>
                 <p className="text-sm text-slate-400 leading-relaxed">
-                  Chat and agents use the server <span className="text-slate-300">GROK_API_KEY</span> from{' '}
-                  <span className="text-slate-300">.env</span> for now. You can still save a key here for a future
-                  per-account option; it is not required to use Nebula.
+                  Per <span className="text-slate-300">project-execution-rules.md</span>, the main Grok brain uses{' '}
+                  <code className="text-cyan-300/90 text-[13px]">GROK_API_KEY</code> and related keys from the deployment{' '}
+                  <span className="text-slate-300">.env</span> — not from this screen. Ask your operator to set values
+                  listed in <span className="text-slate-300">environment-setup.md</span> and restart the server.
                 </p>
               </div>
-            </div>
-
-            <ul className="text-sm text-slate-300/95 space-y-2 list-none pl-0 border-l-2 border-cyan-500/30 pl-4">
-              <li>When per-user Grok keys return, saving here will let you use your own xAI billing and limits.</li>
-              <li>Until then, ensure your deployment has a valid server-side GROK_API_KEY.</li>
-            </ul>
-
-            <p className="text-sm text-slate-500 leading-relaxed italic border border-white/5 rounded-lg px-3 py-2 bg-black/20">
-              No action required in this screen for Grok chat while the server key is configured.
-            </p>
-
-            <div className="space-y-2">
-              <label className="block text-[10px] uppercase tracking-wider text-slate-500 font-headline" htmlFor="grok-key">
-                GROK_API_KEY (optional local copy)
-              </label>
-              <input
-                id="grok-key"
-                type="password"
-                autoComplete="off"
-                value={grokInput}
-                onChange={(e) => {
-                  setGrokInput(e.target.value);
-                  setGrokMsg(null);
-                }}
-                className="w-full bg-black/35 border border-white/10 rounded-xl px-3 py-3 text-sm text-slate-200 placeholder:text-slate-600 focus:border-cyan-500/40 focus:ring-1 focus:ring-cyan-500/25 outline-none"
-                placeholder={grokOnFile ? 'Key on file — paste a new key to replace' : 'xai-…'}
-              />
-              {grokOnFile && !grokInput ? (
-                <p className="text-xs text-emerald-400/90 flex items-center gap-1.5">
-                  <CheckCircle2 className="w-3.5 h-3.5 shrink-0" aria-hidden /> A Grok key is already saved.
-                </p>
-              ) : null}
-            </div>
-
-            <div className="flex flex-wrap items-center gap-3">
-              <button
-                type="button"
-                onClick={() => void saveGrok()}
-                disabled={grokBusy}
-                className="inline-flex items-center justify-center gap-2 rounded-xl bg-cyan-500/15 text-cyan-200 border border-cyan-500/35 px-5 py-2.5 text-sm font-headline hover:bg-cyan-500/25 transition-colors disabled:opacity-50"
-              >
-                {grokBusy ? <Loader2 className="w-4 h-4 animate-spin" aria-hidden /> : null}
-                Save Grok key
-              </button>
-              {grokMsg ? <p className="text-sm text-slate-400">{grokMsg}</p> : null}
             </div>
             <SecretNote />
           </section>
@@ -334,8 +263,8 @@ export function MyServicesOnboarding({
           </section>
 
           <div className="rounded-xl border border-white/10 bg-[#0a0e14]/80 p-5 text-xs text-slate-500 leading-relaxed">
-            Tip: open <span className="text-slate-400">My Projects → Secrets</span> anytime to view or edit environment
-            variables for your active project.
+            Tip: open <span className="text-slate-400">My Projects → Secrets</span> anytime to view or edit browser-stored
+            variables (excluding server-only Grok keys).
           </div>
         </div>
 

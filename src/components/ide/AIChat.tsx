@@ -331,8 +331,8 @@ export function AIChat() {
         {messages.length === 0 && !sending ? (
           <p className="type-body-md text-muted-foreground leading-relaxed">
             Partner chat: same workflow as Nebula (Master Plan discovery, then coding and UI Studio). The open file and
-            master plan are sent automatically. Add your Grok key under <span className="text-foreground/90">Account</span>{' '}
-            (top bar) or <span className="text-foreground/90">My Projects → Secrets</span> if chat fails to send.
+            master plan are sent automatically. Grok uses the server <span className="text-foreground/90">GROK_API_KEY</span>{' '}
+            from <span className="text-foreground/90">.env</span> — if chat fails, ask your operator to verify env and restart.
           </p>
         ) : null}
 
