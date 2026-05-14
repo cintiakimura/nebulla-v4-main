@@ -1,6 +1,6 @@
 # Project Manager (control plane)
 
-**Role:** infrastructure orchestration — not a chat persona. Runs **silently** (no user-facing messages).
+**Role:** infrastructure orchestration — not a chat persona. Product docs call this **Infrastructure Manager**; code and API paths use **Project Manager**. Runs **silently** (no user-facing messages).
 
 **Canonical spec:** `skills/nebula-swarm/agents/PROJECT_MANAGER.md`
 

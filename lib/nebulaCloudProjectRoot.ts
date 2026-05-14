@@ -11,7 +11,12 @@ export type CloudProjectPaths = {
   nebulaUiStudioOutputDir: string;
 };
 
-const DEFAULT_UI_STUDIO_MD = `<!--
+const DEFAULT_UI_STUDIO_MD = `> **Scope — Nebula Project (not Nebula Product)**  
+> This file is **Nebula Project** workspace state (persisted UI Studio prompt and code sections below). The Nebula **Product** code that reads and writes it lives outside \`nebula-project/\` (e.g. server routes under \`nebula-ui-studio\`). See **\`nebula-project/README.md\`**.
+
+---
+
+<!--
 NEBULA_UI_STUDIO_PROMPT
 No prompt generated yet.
 -->
@@ -44,7 +49,7 @@ export function ensureCloudProjectWorkspace(
   fs.mkdirSync(workspaceRoot, { recursive: true });
 
   const masterPlanPath = path.join(workspaceRoot, "master-plan.json");
-  const nebulaUiStudioPath = path.join(workspaceRoot, "nebula-sysh-ui-sysh-studio.md");
+  const nebulaUiStudioPath = path.join(workspaceRoot, "nebula-ui-studio.md");
   const nebulaUiStudioOutputDir = path.join(workspaceRoot, "nebulla-sysh-ui-sysh-studio");
 
   copyIfMissing(path.join(legacyTemplateRoot, "master-plan.json"), masterPlanPath);
@@ -52,15 +57,26 @@ export function ensureCloudProjectWorkspace(
     fs.writeFileSync(masterPlanPath, "{}", "utf8");
   }
 
-  copyIfMissing(path.join(legacyTemplateRoot, "nebula-sysh-ui-sysh-studio.md"), nebulaUiStudioPath);
+  const legacyUiStudioMd = path.join(workspaceRoot, "nebula-sysh-ui-sysh-studio.md");
+  if (!fs.existsSync(nebulaUiStudioPath) && fs.existsSync(legacyUiStudioMd)) {
+    try {
+      fs.renameSync(legacyUiStudioMd, nebulaUiStudioPath);
+    } catch {
+      /* ignore — seed from template below */
+    }
+  }
+
+  copyIfMissing(path.join(legacyTemplateRoot, "nebula-ui-studio.md"), nebulaUiStudioPath);
   if (!fs.existsSync(nebulaUiStudioPath)) {
     fs.writeFileSync(nebulaUiStudioPath, DEFAULT_UI_STUDIO_MD, "utf8");
   }
 
+  copyIfMissing(path.join(repoRoot, "project-workflow.md"), path.join(workspaceRoot, "project-workflow.md"));
   copyIfMissing(
     path.join(legacyTemplateRoot, "project-execution-rules.md"),
     path.join(workspaceRoot, "project-execution-rules.md")
   );
+  copyIfMissing(path.join(legacyTemplateRoot, "ui-studio.md"), path.join(workspaceRoot, "ui-studio.md"));
   copyIfMissing(
     path.join(legacyTemplateRoot, "environment-setup.md"),
     path.join(workspaceRoot, "environment-setup.md")

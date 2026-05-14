@@ -11,7 +11,7 @@ This document defines how **support agents** (Planner, Researcher, Tester, Revie
 - **Pre–Phase 0 gate** — Aligns with `project-workflow.md` steps 8–11 (read order, summary, user questions) before any development work. See `phases/PRE-PHASE-0-GATE.md`.
 - **Phase 0 – Foundation** — As defined in Project Execution Rules (read orchestration sources, schema/Prisma, auth, API/secrets, error-handling loop).
 - **Phase 1 – Core Features & Quality Control** — Features & KPIs, endpoints, secrets per feature, KPI pass before next feature.
-- **Phase 2 – User Interface: Competitor Baseline Analysis** — Competitor baseline, Pencil.dev + `nebula-sysh-ui-sysh-studio.md`, Studio iteration preference.
+- **Phase 2 – User Interface: Competitor Baseline Analysis** — Competitor baseline, Pencil.dev + `nebula-ui-studio.md`, Studio iteration preference.
 - **Phase 3 – Polish & User Experience** — Loading/error/empty, responsive, basic a11y, edge cases.
 - **Phase 4 – Production Readiness** — Full QA sweep, dedupe, performance, tests + per-feature report, final review.
 
@@ -45,7 +45,7 @@ Support agents may **read only** paths that are necessary for the active task, w
    - `project-workflow.md` (repo root, if present)
    - `nebula-project/master-plan.json`
    - `nebula-project/environment-setup.md`
-   - `nebula-project/nebula-sysh-ui-sysh-studio.md`
+   - `nebula-project/nebula-ui-studio.md`
    - `nebula-project/Nebula Architecture Spec.md`
 3. **This swarm pack** — `skills/nebula-swarm/**` (prompts, phase templates, schemas).
 

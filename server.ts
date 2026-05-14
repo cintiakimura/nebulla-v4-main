@@ -203,7 +203,12 @@ async function startServer() {
       fs.mkdirSync(path.dirname(nebulaUiStudioPath), { recursive: true });
       fs.writeFileSync(
         nebulaUiStudioPath,
-        `<!--
+        `> **Scope — Nebula Project (not Nebula Product)**  
+> This file is **Nebula Project** workspace state (persisted UI Studio prompt and code sections below). The Nebula **Product** code that reads and writes it lives outside \`nebula-project/\` (e.g. server routes under \`nebula-ui-studio\`). See **\`nebula-project/README.md\`**.
+
+---
+
+<!--
 NEBULA_UI_STUDIO_PROMPT
 No prompt generated yet.
 -->
@@ -346,7 +351,7 @@ No approved UI code yet.
         'metadata.json', 'server.ts', '.env.example', 'firebase-applet-config.json',
         'master-plan.json', 'Nebula Architecture Spec.md', 'index.html', 'src', 'public',
         'firebase-blueprint.json', 'firestore.rules', 'DRAFT_firestore.rules',
-        '.gitignore', 'nebula-ui-studio.md', 'nebula-sysh-ui-sysh-studio.md', 'guardian'
+        '.gitignore', 'nebula-ui-studio.md', 'guardian'
       ]);
 
       const items = fs.readdirSync(targetDir, { withFileTypes: true });
@@ -736,8 +741,6 @@ No approved UI code yet.
       "environment-setup.md",
       "Nebula Architecture Spec.md",
       "SKILL.md",
-      "nebula-sysh-ui-sysh-studio.md",
-      "nebula-ui-studio.md",
       "nebula-ui-studio.md",
       "conversation-log.md",
       "project-workflow.md",
@@ -1189,8 +1192,9 @@ No approved UI code yet.
       "project-workflow.md",
       "master-plan.json",
       "environment-setup.md",
-      "nebula-sysh-ui-sysh-studio.md",
+      "ui-studio.md",
       "project-execution-rules.md",
+      "nebula-ui-studio.md",
     ];
     return order.map((p) => `\n=== ${p} ===\n${readWorkflowFileSafe(workspaceRoot, p)}`).join("\n");
   };

@@ -1,23 +1,54 @@
-**Full Project Creation Workflow**
+> **Scope — Nebula Project (not Nebula Product)**  
+> This workflow describes **Nebula Project** methodology (rules and lifecycle for customer apps). It is typically mirrored from **`nebula-project/`** or kept in sync with those templates; it is **not** Nebula IDE implementation code. **Nebula Product** is the tool under `src/`, `lib/`, `public/`, etc. See **`nebula-project/README.md`**.
 
-0. **Project Manager (silent, automatic)** — before user-facing build steps: ensure each cloud project has a Render isolation id (`workspace_id`); optionally persist the user’s **main** `GROK_API_KEY` override (encrypted server-side). **Never** replace `GROK_SWARM_API_KEY` or `GROK_TTS_NEW_API_KEY` from user input (Nebula `.env` only). Refresh usage aggregates for monitoring. No chat messages.
+---
 
-1. User logs in with GitHub
-2. User creates a new project and gives it a name
-3. This immediately triggers the full **Environment Setup** on Render:
-   - Create new workspace under `nebula.dev.ai@gmail.com`
-   - Create project + project ID
-   - Create PostgreSQL database and get `DATABASE_URL`
-   - Copy all Platform Variables
-   - Generate `SESSION_SECRET`
-   - Set correct GitHub callback URL
-   - Store workspace ID and project ID internally
-4. Grok Chat begins asking the user questions to understand the project
-5. Generate Master Plan
-6. Generate Mind Map
-7. Trigger Pencil for UI mockups
-8. Grok reads all reference files in this exact order: `project-workflow.md` → `master-plan.json` → `environment-setup.md` → `nebula-sysh-ui-sysh-studio.md` → `project-execution-rules.md` (and reviews Secrets and Integrations for the active project)
-9. Grok creates a summary of the project, tech stack, and any missing pieces
-10. If anything is missing, Grok asks the user before coding
-11. Only then does Grok start development following the rules in this file
+**Project Workflow**
 
+**High-Level Project Creation Flow**
+
+1. **User Login**
+   - User logs in with GitHub or Email
+
+2. **Create New Project**
+   - User creates a new project and gives it a name
+
+3. **Connect Your Services (Onboarding)**
+   - Grok API Key (strongly recommended)
+   - v0 API Key (required for automatic UI generation)
+   - Infrastructure Manager runs silently in the background (Render setup, key storage, etc.)
+
+4. **Initial Setup**
+   - Grok 4.1 creates the Master Plan
+   - Optional: User provides logo, colors, or brand preferences
+   - Automatic first UI generation using v0 (powered by Grok 4.1 + Master Plan + brand info)
+
+5. **Foundation Phase (Phase 0)**
+   - Grok reads files in this exact order:
+     - `project-workflow.md`
+     - `master-plan.json`
+     - `environment-setup.md`
+     - `ui-studio.md`
+     - `project-execution-rules.md`
+   - Then open **`nebula-ui-studio.md`** (prompt/code sections) as described in `ui-studio.md`.
+   - Sets up database schema
+   - Implements authentication and base structure
+
+6. **Core Development**
+   - Grok 4.1 builds features following the Master Plan
+   - User can refine UI in Nebula UI Studio at any time
+   - Quality Agent ("Run and Test") can be triggered manually after major changes
+
+7. **Polish & Production Readiness (Phases 3–4)**
+   - Manual "Run and Test" recommended before final delivery
+
+8. **Normal Iteration (Phase 5)**
+   - After first complete delivery, development continues through normal chat
+   - Use "Run and Test" button after significant changes
+
+**Key Rules**
+- Grok 4.1 is the primary agent for planning, coding, and reasoning
+- Only the Quality Agent exists as support and is **manual only**
+- v0 is used **automatically once per project** for the initial UI
+- All subsequent UI changes happen in Nebula UI Studio
+- Infrastructure Manager handles Render and key management silently

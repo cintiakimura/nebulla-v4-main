@@ -1,32 +1,23 @@
 # Pre–Phase 0 Gate
 
-This gate matches **`project-workflow.md`** before any development: steps **8–11** and the Initial Conversation / Master Plan / `START_CODING` flow described in **`nebula-project/project-execution-rules.md`**. Nothing here starts **Phase 0 – Foundation** until Grok has completed the product’s required pre-code steps per those files.
+This gate matches **`project-workflow.md`** before any development: **Initial Setup (4)**, **Foundation Phase — read order (5)**, and the flows in **`nebula-project/project-execution-rules.md`**. Nothing here starts **Phase 0 – Foundation** until Grok has completed the product’s required pre-code steps per those files.
 
-**Grok 4.1** alone conducts user conversation (one question per turn where required), fills the Master Plan, emits coding markers, and enters Code Mode. Support agents assist **only** with internal prep.
+**Grok 4.1** alone conducts user conversation (one question per turn where required), fills the Master Plan, emits coding markers, and enters Code Mode. Optional **Quality Agent** prep is **manual only** (**Run and Test**), not a pre-phase gate.
 
 ---
 
 ## Gate checklist (Grok executes; others assist read-only)
 
-1. **Read order** — `project-workflow.md` → `master-plan.json` → `environment-setup.md` → `nebula-sysh-ui-sysh-studio.md` → `project-execution-rules.md`, plus Secrets & Integrations review (per workflow step 8).
-2. **Summary** — Project summary, tech stack, missing pieces (step 9).
-3. **User gaps** — If anything material is missing, Grok asks the user **before** coding (step 10).
-4. **Start development** — Only after the above does Grok begin **Phase 0** per execution rules (step 11).
+1. **Read order** — `project-workflow.md` → `master-plan.json` → `environment-setup.md` → `ui-studio.md` → `project-execution-rules.md` → `nebula-ui-studio.md` (per `project-workflow.md` §5 and `ui-studio.md`), plus Secrets & Integrations review.
+2. **Summary** — Project summary, tech stack, and missing pieces aligned with **Initial Setup (4)** in `project-workflow.md` and `project-execution-rules.md`.
+3. **User gaps** — If anything material is missing, Grok asks the user **before** coding.
+4. **Start development** — Only after the above does Grok begin **Foundation Phase (Phase 0)** per execution rules.
 
 ---
 
 ## Parallel support (orchestrator)
 
-Run in parallel when inputs are available:
-
-| Agent | Task |
-|-------|------|
-| **Planner** | Checklist for steps 8–11; explicit “blockers” list for Grok to resolve with user. |
-| **Researcher** | Early stack / integration / competitor landscape notes (no secrets). |
-| **Reviewer** | Readiness vs security/roles mentions in Master Plan; flags missing HIPAA/copyright/API-key clarity per execution rules Initial Conversation criteria. |
-| **Tester** | Outline future smoke scope from Pages and Navigation / Features (no code). |
-
-**Merge:** single handoff packet with `phase: "pre_phase_0"` for Grok.
+- **Quality Agent** — **manual only** (**Run and Test**); optional after large reads, not a gate blocker. No Planner/Researcher pipeline for new work.
 
 ---
 

@@ -1,3 +1,8 @@
+> **Scope — Nebula Project (not Nebula Product)**  
+> This file is part of **`nebula-project/`**: Nebula **Project** documentation (what variables *mean* and what implementers should expect). The code that *reads* these variables lives in **Nebula Product** (`lib/`, `server.ts`, etc.). See **`nebula-project/README.md`**.
+
+---
+
 # Environment setup — variable reference
 
 This document is the **canonical list** of environment variables Grok and implementers should expect on each project’s Render Web Service (and in local `.env` for development). **Update this file** whenever the platform adds, renames, or deprecates a variable so automation and planning stay aligned with runtime code.
