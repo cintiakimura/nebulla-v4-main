@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react';
-import { CheckCircle2, ExternalLink, Github, KeyRound, Loader2, Sparkles } from 'lucide-react';
+import { CheckCircle2, ExternalLink, Github, KeyRound, Loader2, Sparkles, X } from 'lucide-react';
 import { Logo } from './Logo';
 import type { NebulaSessionUser } from '../lib/nebulaCloud';
 import type { NebulaPublicConfig } from '../lib/nebulaPublicConfig';
@@ -29,16 +29,16 @@ function SecretNote() {
 export function MyServicesOnboarding({
   user,
   config,
-  onComplete,
+  onClose,
 }: {
-  user: NebulaSessionUser;
+  user: NebulaSessionUser | null;
   config: NebulaPublicConfig;
-  onComplete: () => void;
+  onClose: () => void;
 }) {
   const projectKey = getBrowserProjectKey();
   const cloudOk = Boolean(config.cloudStorageReady);
   const githubOk = Boolean(config.githubOAuthReady);
-  const githubConnected = user.provider === 'github';
+  const githubConnected = user?.provider === 'github';
 
   const [stayLoggedIn, setStayLoggedIn] = useState(true);
   const [grokInput, setGrokInput] = useState('');
@@ -103,8 +103,8 @@ export function MyServicesOnboarding({
       syncAllProjects: true,
       ...(k ? { grokApiKey: k } : {}),
     });
-    onComplete();
-  }, [onComplete]);
+    onClose();
+  }, [onClose]);
 
   return (
     <div className="min-h-screen bg-[#020814] text-slate-100 flex flex-col font-body relative overflow-x-hidden">
@@ -125,7 +125,18 @@ export function MyServicesOnboarding({
             <p className="text-xs text-slate-500 truncate">Connect GitHub and your API keys — Cosmic Night</p>
           </div>
         </div>
-        <Sparkles className="w-5 h-5 text-cyan-400/70 shrink-0 hidden sm:block" aria-hidden />
+        <div className="flex items-center gap-2 shrink-0">
+          <Sparkles className="w-5 h-5 text-cyan-400/70 hidden sm:block" aria-hidden />
+          <button
+            type="button"
+            onClick={onClose}
+            className="flex h-10 w-10 items-center justify-center rounded-xl border border-white/10 text-slate-400 hover:bg-white/5 hover:text-slate-200 transition-colors"
+            title="Close"
+            aria-label="Close My services"
+          >
+            <X className="h-5 w-5" aria-hidden />
+          </button>
+        </div>
       </header>
 
       <main className="relative z-10 flex-1 overflow-y-auto">
@@ -332,13 +343,13 @@ export function MyServicesOnboarding({
 
         <div className="sticky bottom-0 left-0 right-0 z-20 border-t border-white/10 bg-[#0a0e14]/95 backdrop-blur-md px-5 py-4 md:px-8">
           <div className="max-w-2xl mx-auto flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-            <p className="text-xs text-slate-500">You can add or change keys later. Continue when you are ready.</p>
+            <p className="text-xs text-slate-500">You can add or change keys later. Use Back to IDE or the close control when you are done.</p>
             <button
               type="button"
               onClick={() => void handleContinue()}
               className="shrink-0 rounded-xl px-6 py-3 font-headline text-sm text-[#0a0e14] bg-gradient-to-r from-cyan-300 to-sky-400 hover:from-cyan-200 hover:to-sky-300 shadow-lg shadow-cyan-950/30 transition-colors"
             >
-              Continue to Nebula
+              Back to IDE
             </button>
           </div>
         </div>

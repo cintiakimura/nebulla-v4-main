@@ -10,7 +10,8 @@ function parseGithubHandleFromNoreplyEmail(email: string): string | null {
 }
 
 /** One-line status for the My services GitHub card. */
-export function formatGithubConnectionStatus(user: NebulaSessionUser): string {
+export function formatGithubConnectionStatus(user: NebulaSessionUser | null): string {
+  if (!user) return 'Not signed in';
   if (user.provider !== 'github') {
     return 'Not connected to GitHub';
   }

@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { cn } from '@/lib/utils';
 import { AIChat } from '@/components/ide/AIChat';
 import { CodeEditor } from '@/components/ide/CodeEditor';
@@ -6,6 +6,9 @@ import { FileExplorer } from '@/components/ide/FileExplorer';
 import { TerminalPanel } from '@/components/ide/TerminalPanel';
 import { TopBar } from '@/components/ide/TopBar';
 import { VerticalNav } from '@/components/ide/VerticalNav';
+import { MyServicesOnboarding } from '@/components/MyServicesOnboarding';
+import { fetchSessionUser, type NebulaSessionUser } from '../../lib/nebulaCloud';
+import { fetchNebulaPublicConfig, type NebulaPublicConfig } from '../../lib/nebulaPublicConfig';
 
 const EXPLORER_MIN = 160;
 const EXPLORER_MAX = 480;
@@ -97,12 +100,51 @@ export function NebullaIDE() {
   const chat = useDragResize(CHAT_DEFAULT, CHAT_MIN, CHAT_MAX, 'horizontal-left');
   const terminal = useDragResize(TERMINAL_DEFAULT, TERMINAL_MIN, TERMINAL_MAX, 'vertical');
 
+  const [myServicesOpen, setMyServicesOpen] = useState(false);
+  const [myServicesUser, setMyServicesUser] = useState<NebulaSessionUser | null>(null);
+  const [myServicesConfig, setMyServicesConfig] = useState<NebulaPublicConfig>({});
+
+  const refreshMyServicesContext = useCallback(async () => {
+    const [cfg, u] = await Promise.all([fetchNebulaPublicConfig(), fetchSessionUser()]);
+    setMyServicesConfig(cfg);
+    setMyServicesUser(u);
+  }, []);
+
+  useEffect(() => {
+    if (!myServicesOpen) return;
+    void refreshMyServicesContext();
+  }, [myServicesOpen, refreshMyServicesContext]);
+
+  useEffect(() => {
+    if (!myServicesOpen) return;
+    const onMsg = (ev: MessageEvent) => {
+      if (ev.data?.type === 'OAUTH_AUTH_SUCCESS') void refreshMyServicesContext();
+    };
+    window.addEventListener('message', onMsg);
+    return () => window.removeEventListener('message', onMsg);
+  }, [myServicesOpen, refreshMyServicesContext]);
+
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-background text-foreground">
+      {myServicesOpen ? (
+        <div
+          className="fixed inset-0 z-[200] flex flex-col overflow-hidden"
+          role="dialog"
+          aria-modal="true"
+          aria-label="My services"
+        >
+          <MyServicesOnboarding
+            user={myServicesUser}
+            config={myServicesConfig}
+            onClose={() => setMyServicesOpen(false)}
+          />
+        </div>
+      ) : null}
+
       <TopBar />
 
       <div className="flex flex-1 overflow-hidden">
-        <VerticalNav />
+        <VerticalNav onOpenMyServices={() => setMyServicesOpen(true)} />
 
         <div className="surface-active tonal-seam-r hidden shrink-0 overflow-hidden md:block" style={{ width: explorer.size }}>
           <FileExplorer />

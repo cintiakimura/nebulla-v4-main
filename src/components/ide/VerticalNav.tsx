@@ -10,6 +10,7 @@ import {
   Palette,
   Search,
   Settings,
+  Sparkles,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -34,7 +35,7 @@ const items: NavItem[] = [
   { id: 'search', icon: <Search className="h-5 w-5" />, label: 'Search' },
 ];
 
-export function VerticalNav() {
+export function VerticalNav({ onOpenMyServices }: { onOpenMyServices?: () => void }) {
   const [activeItem, setActiveItem] = useState('explorer');
 
   return (
@@ -49,6 +50,20 @@ export function VerticalNav() {
           style={{ backgroundColor: 'transparent' }}
         />
       </div>
+
+      {onOpenMyServices ? (
+        <div className="mb-1.5 flex w-full flex-col items-center px-0.5">
+          <button
+            type="button"
+            onClick={onOpenMyServices}
+            title="My services"
+            aria-label="My services — GitHub and API keys"
+            className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors duration-300 ease-out hover:bg-secondary hover:text-primary"
+          >
+            <Sparkles className="h-5 w-5" aria-hidden />
+          </button>
+        </div>
+      ) : null}
 
       <nav
         className="flex min-h-0 w-full flex-1 flex-col items-center gap-0.5 overflow-y-auto px-0.5"
