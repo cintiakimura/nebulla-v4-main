@@ -1,5 +1,5 @@
 /**
- * Billing / capability tiers for Nebula Partner (chat model + agents).
+ * Billing / capability tiers (chat model family and token caps).
  */
 
 export type UserTier = "free" | "pro" | "power";
@@ -14,8 +14,6 @@ export type UserCapabilities = {
   monthlyTokenLimit: number | null;
   /** Default or max chat lane for the tier. */
   allowedChatModel: ChatModelFamily;
-  /** Multi-agent swarm (Planner / Researcher / …) — Power only. */
-  agentsEnabled: boolean;
   /** Power: metered usage / billing (product flag; integrate with Stripe etc.). */
   usageBasedBilling: boolean;
 };
@@ -31,7 +29,7 @@ export function normalizeUserTier(raw: string | null | undefined): UserTier {
 }
 
 /**
- * Resolves what the product allows for chat model, agents, and token caps.
+ * Resolves what the product allows for chat model and token caps.
  */
 export function getUserCapabilities(user: { tier?: string | null } | null | undefined): UserCapabilities {
   const tier = normalizeUserTier(user?.tier ?? undefined);
@@ -40,7 +38,6 @@ export function getUserCapabilities(user: { tier?: string | null } | null | unde
       tier: "pro",
       monthlyTokenLimit: null,
       allowedChatModel: "grok-4.1",
-      agentsEnabled: false,
       usageBasedBilling: false,
     };
   }
@@ -49,7 +46,6 @@ export function getUserCapabilities(user: { tier?: string | null } | null | unde
       tier: "power",
       monthlyTokenLimit: null,
       allowedChatModel: "grok-4.1",
-      agentsEnabled: true,
       usageBasedBilling: true,
     };
   }
@@ -57,7 +53,6 @@ export function getUserCapabilities(user: { tier?: string | null } | null | unde
     tier: "free",
     monthlyTokenLimit: FREE_TIER_MONTHLY_TOKEN_LIMIT,
     allowedChatModel: "grok-3",
-    agentsEnabled: false,
     usageBasedBilling: false,
   };
 }

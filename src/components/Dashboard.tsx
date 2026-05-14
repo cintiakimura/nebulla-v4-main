@@ -30,8 +30,7 @@ import {
   type SecretCategory,
   type ProjectSettingsStored,
 } from '../lib/nebulaDashboardStorage';
-import { ChatModelSelector, AgentsHandoffPref } from '@/components/settings/ModelSelector';
-import { SwarmToggle } from '@/components/swarm/SwarmToggle';
+import { ChatModelSelector } from '@/components/settings/ModelSelector';
 
 export type DashboardTab = 'projects' | 'project-settings' | 'secrets' | 'dns';
 
@@ -343,10 +342,8 @@ function ProjectSettingsTab({
 
       <div className="space-y-5 rounded-xl border border-white/10 bg-white/5 p-6">
         <div className="rounded-lg border border-cyan-500/20 bg-cyan-950/10 p-4 space-y-4">
-          <h4 className="text-sm font-headline text-cyan-200">Model & agents</h4>
+          <h4 className="text-sm font-headline text-cyan-200">Model</h4>
           <ChatModelSelector />
-          <AgentsHandoffPref />
-          <SwarmToggle />
         </div>
         <div>
           <label className="block text-[10px] uppercase tracking-wider text-slate-500 font-headline mb-1">Project name</label>

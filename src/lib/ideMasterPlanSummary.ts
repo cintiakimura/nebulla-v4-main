@@ -1,8 +1,8 @@
 /**
- * Bounded excerpt of `master-plan.json` for swarm `contextSummary`, matching the
+ * Bounded excerpt of `master-plan.json` for Inspect (Quality) `contextSummary`, matching the
  * same JSON source the IDE Grok chat loads via `/api/master-plan/read`.
  */
-export function compactMasterPlanForSwarm(latestMP: Record<string, unknown>): string {
+export function compactMasterPlanForInspect(latestMP: Record<string, unknown>): string {
   if (!latestMP || typeof latestMP !== 'object') return '';
   if (Object.keys(latestMP).length === 0) return '';
   try {

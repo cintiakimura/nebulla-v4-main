@@ -1,7 +1,7 @@
 /**
- * Lean Nebula Swarm — **no** Planner, Researcher, Tester, or Reviewer on chat turns.
- * Grok 4.1 handles planning/research in the main chat. A single **Quality** agent runs **only** when
- * `manualRunAndTest` is true (see `POST /api/nebula-swarm/handoff` + TopBar "Run and Test").
+ * Inspect (Quality) handoff plan — **no** Planner, Researcher, Tester, or Reviewer on chat turns.
+ * Grok 4.1 handles planning in the main chat. **Quality** runs **only** when
+ * `manualRunAndTest` is true (see `POST /api/nebula-swarm/handoff` + TopBar **Inspect**).
  */
 
 import type { NebulaSwarmStateFile } from "./nebulaSwarmState";

@@ -136,31 +136,14 @@ export function AIChat() {
     const text = input.trim();
     if (!text || sending) return;
 
-    let hasServerKey = serverHasGrokKey;
-    if (hasServerKey === null) {
+    if (serverHasGrokKey === null) {
       try {
         const r = await fetch(withProjectQuery('/api/config'), { credentials: 'include' });
         const cfg = (await readResponseJson(r)) as { hasGrokApiKey?: boolean };
-        hasServerKey = r.ok && Boolean(cfg.hasGrokApiKey);
-        setServerHasGrokKey(hasServerKey);
+        setServerHasGrokKey(r.ok && Boolean(cfg.hasGrokApiKey));
       } catch {
-        hasServerKey = false;
         setServerHasGrokKey(false);
       }
-    }
-    if (!hasServerKey) {
-      const ts = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: `k-${Date.now()}`,
-          role: 'assistant',
-          content: GROK_CHAT_SETUP_HINT,
-          timestamp: ts,
-        },
-      ]);
-      setSendError(null);
-      return;
     }
 
     const userMsg: Message = {
@@ -250,9 +233,6 @@ export function AIChat() {
         >
           <p className="type-label-sm font-headline text-amber-100">Grok is not configured on the server</p>
           <p className="type-body-md mt-1 leading-relaxed text-amber-50/95">{GROK_CHAT_SETUP_HINT}</p>
-          {serverHasGrokKey === null ? (
-            <p className="type-label-sm mt-1 text-amber-200/80">Checking server configuration…</p>
-          ) : null}
         </div>
       ) : null}
 
@@ -278,10 +258,10 @@ export function AIChat() {
               <p>Checking connection to the server…</p>
             ) : serverHasGrokKey ? (
               <>
-                <p className="text-foreground/90 font-headline text-sm">Partner chat</p>
+                <p className="text-foreground/90 font-headline text-sm">IDE chat</p>
                 <p>
-                  Same workflow as Nebula: Master Plan discovery, then coding and UI Studio. Your open file and master
-                  plan are sent automatically when you message below.
+                  Grok uses the model selected in the top bar. Your open file, master plan, and UI Studio context are
+                  included automatically with each message.
                 </p>
               </>
             ) : (
@@ -353,7 +333,7 @@ export function AIChat() {
                 void sendChat();
               }
             }}
-            placeholder="Message Nebula Partner…"
+            placeholder="Message Grok…"
             rows={3}
             disabled={sending}
             className="type-body-md min-h-[4.5rem] w-full resize-y bg-transparent text-foreground outline-none placeholder:text-muted-foreground disabled:opacity-50"
@@ -365,7 +345,7 @@ export function AIChat() {
                 label="Voice activity"
                 onClick={() => {
                   setAccessoryHint(
-                    'Voice chat runs in the full Nebula Partner assistant (sidebar). IDE chat here still uses Grok for text — type a message below.',
+                    'Voice replies play from the main assistant sidebar. This panel stays text-first with Grok.',
                   );
                   window.setTimeout(() => setAccessoryHint(null), 5200);
                 }}
@@ -375,7 +355,7 @@ export function AIChat() {
               <ChatRoundButton
                 label="Raise hand"
                 onClick={() => {
-                  setAccessoryHint('Hands raised are shown when live session mode is enabled in Nebula Partner.');
+                  setAccessoryHint('Hands raised appear when live session mode is enabled in the main assistant.');
                   window.setTimeout(() => setAccessoryHint(null), 4200);
                 }}
               >
@@ -384,7 +364,7 @@ export function AIChat() {
               <ChatRoundButton
                 label="Microphone"
                 onClick={() => {
-                  setAccessoryHint('Mic capture is available in Nebula Partner (browser permissions). This panel is text chat with Grok.');
+                  setAccessoryHint('Mic capture is available in the main assistant (browser permissions). This panel is text chat with Grok.');
                   window.setTimeout(() => setAccessoryHint(null), 4200);
                 }}
               >
@@ -396,7 +376,7 @@ export function AIChat() {
               <ChatRoundButton
                 label="Attach file"
                 onClick={() => {
-                  setAccessoryHint('Attach files from the Assistant sidebar in Nebula Partner when you need uploads here.');
+                  setAccessoryHint('Attach files from the main assistant sidebar when you need uploads in chat.');
                   window.setTimeout(() => setAccessoryHint(null), 4200);
                 }}
               >

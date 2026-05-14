@@ -3,23 +3,14 @@
 import React, { createContext, useContext, useState, useCallback } from 'react';
 import { SwarmState, SwarmHandoffPacket, SwarmIntensity } from '@/types/swarm';
 
-const SWARM_INTENSITY_STORAGE_KEY = 'nebula-swarm-intensity';
+/** Single Inspect (Quality) lane — intensity is fixed for API compatibility. */
+const INSPECT_INTENSITY: SwarmIntensity = 'balanced';
 
-function readStoredIntensity(): SwarmIntensity {
-  if (typeof window === 'undefined') return 'full_quality';
-  const v = localStorage.getItem(SWARM_INTENSITY_STORAGE_KEY);
-  if (v === 'light' || v === 'balanced' || v === 'full_quality') return v;
-  return 'full_quality';
-}
-
-function agentsForLeanManual(): string[] {
+function agentsForInspect(): string[] {
   return ['quality'];
 }
 
 interface SwarmContextType extends SwarmState {
-  toggleSwarm: () => void;
-  setSwarmIntensity: (i: SwarmIntensity) => void;
-  /** Updates Nebula execution phase from Grok `planningPhase` / heuristics (swarm gating uses this). */
   setCurrentPhase: (phase: SwarmState['currentPhase']) => void;
   startSwarm: (phase: SwarmState['currentPhase'], projectName: string) => void;
   finishSwarm: (handoff: SwarmHandoffPacket) => void;
@@ -32,26 +23,12 @@ const SwarmContext = createContext<SwarmContextType | undefined>(undefined);
 
 export function SwarmProvider({ children }: { children: React.ReactNode }) {
   const [state, setState] = useState<SwarmState>(() => ({
-    isEnabled: true,
-    intensity: readStoredIntensity(),
+    intensity: INSPECT_INTENSITY,
     isRunning: false,
     currentPhase: 'pre_phase_0',
     activeAgents: [],
     activityLog: [],
   }));
-
-  const toggleSwarm = useCallback(() => {
-    setState((prev) => ({ ...prev, isEnabled: !prev.isEnabled }));
-  }, []);
-
-  const setSwarmIntensity = useCallback((intensity: SwarmIntensity) => {
-    try {
-      localStorage.setItem(SWARM_INTENSITY_STORAGE_KEY, intensity);
-    } catch {
-      /* ignore */
-    }
-    setState((prev) => ({ ...prev, intensity }));
-  }, []);
 
   const setCurrentPhase = useCallback((phase: SwarmState['currentPhase']) => {
     setState((prev) => (prev.currentPhase === phase ? prev : { ...prev, currentPhase: phase }));
@@ -59,7 +36,7 @@ export function SwarmProvider({ children }: { children: React.ReactNode }) {
 
   const startSwarm = useCallback((phase: SwarmState['currentPhase'], projectName: string) => {
     setState((prev) => {
-      const activeAgents = agentsForLeanManual();
+      const activeAgents = agentsForInspect();
       return {
         ...prev,
         isRunning: true,
@@ -69,7 +46,7 @@ export function SwarmProvider({ children }: { children: React.ReactNode }) {
           ...prev.activityLog,
           {
             timestamp: new Date().toISOString(),
-            message: `Quality run starting — ${projectName}, phase ${phase}`,
+            message: `Inspect (Quality) starting — ${projectName}`,
             type: 'info' as const,
           },
         ],
@@ -87,7 +64,7 @@ export function SwarmProvider({ children }: { children: React.ReactNode }) {
         ...prev.activityLog,
         {
           timestamp: new Date().toISOString(),
-          message: 'Quality run complete — handoff ready',
+          message: 'Inspect (Quality) complete',
           type: 'success' as const,
         },
       ],
@@ -120,8 +97,6 @@ export function SwarmProvider({ children }: { children: React.ReactNode }) {
     <SwarmContext.Provider
       value={{
         ...state,
-        toggleSwarm,
-        setSwarmIntensity,
         setCurrentPhase,
         startSwarm,
         finishSwarm,

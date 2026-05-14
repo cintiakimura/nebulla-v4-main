@@ -1749,7 +1749,7 @@ Strict rules:
 
       const workflowContext = buildProjectWorkflowExecutionContext(req);
       const codeModel = process.env.GROK_CODE_MODEL?.trim() || "grok-code-fast-1";
-      const codeSystemPrompt = `You are Grok Code (coding phase). The user pressed **Go** in Nebula Partner.
+      const codeSystemPrompt = `You are Grok Code (coding phase). The user pressed **Go** in the Nebulla assistant.
 
 A short pre-coding summary was just saved to master-plan.json under the key "${PRE_CODING_SUMMARY_KEY}" (it appears again inside the master-plan snapshot below).
 
@@ -2008,7 +2008,7 @@ ${workflowContext}`;
       if (limitErr instanceof TokenLimitExceededError) {
         return res.status(402).json({
           error:
-            "You've reached your monthly limit. Upgrade to Pro for unlimited Grok 4 or Power for agents.",
+            "You've reached your monthly limit. Upgrade to Pro for unlimited Grok 4.",
           code: limitErr.code,
         });
       }

@@ -1,6 +1,6 @@
 export type SwarmPhase = 'pre_phase_0' | 'phase_0' | 'phase_1' | 'phase_2' | 'phase_3' | 'phase_4' | 'phase_5';
 
-/** Kept for settings UI; Quality agent always uses Grok 4.1 when Run and Test fires. */
+/** Passed through Inspect handoff payloads; Quality uses Grok 4.1 on the server. */
 export type SwarmIntensity = 'light' | 'balanced' | 'full_quality';
 
 export interface SwarmAgentOutput {
@@ -16,7 +16,7 @@ export interface SwarmHandoffPacket {
   phase: SwarmPhase;
   runId: string;
   projectName: string;
-  /** Legacy keys — stubs in lean mode; real output is in `quality` when Run and Test ran. */
+  /** Legacy packet shape — stubs; Inspect (Quality) output is in `quality`. */
   planner: unknown;
   researcher: unknown;
   tester: unknown;
@@ -33,7 +33,7 @@ export interface SwarmHandoffPacket {
 }
 
 export interface SwarmState {
-  isEnabled: boolean;
+  /** Fixed for Inspect handoff API compatibility. */
   intensity: SwarmIntensity;
   isRunning: boolean;
   currentPhase: SwarmPhase;

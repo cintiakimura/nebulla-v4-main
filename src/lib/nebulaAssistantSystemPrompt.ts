@@ -1,5 +1,5 @@
 /**
- * Shared Nebula Partner system prompt (Master Plan + UI Studio context).
+ * Shared assistant system prompt (Master Plan + UI Studio context).
  * Single source for AssistantSidebar and IDE chat alignment.
  */
 export function buildNebulaAssistantSystemPrompt(

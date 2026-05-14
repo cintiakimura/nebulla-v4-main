@@ -1,14 +1,9 @@
-import type { SwarmPhase, SwarmIntensity } from '@/types/swarm';
-import type { NebulaSwarmStateFile } from '@/lib/nebulaSwarmState';
+import type { SwarmPhase } from '@/types/swarm';
 
 /**
- * Nebula Swarm — **client** gate for `POST /api/nebula-swarm/handoff` on chat sends.
- *
- * Lean mode: chat never triggers support agents (no extra LLM round-trip). **Run and Test** uses
- * the same handoff endpoint with `manualRunAndTest: true` from the TopBar.
+ * Map Grok `planningPhase` (or similar free text) to execution phase for UI / heuristics.
  */
 
-/** Map Grok `planningPhase` (or similar free text) to our swarm phase enum. */
 export function mapPlanningPhaseToSwarmPhase(raw: string | undefined | null): SwarmPhase | null {
   if (raw == null || typeof raw !== 'string') return null;
   const s = raw.toLowerCase().replace(/\s+/g, ' ');
@@ -22,56 +17,12 @@ export function mapPlanningPhaseToSwarmPhase(raw: string | undefined | null): Sw
   return null;
 }
 
-/** Compact prior-turn context for swarm user payload (not full chat). Max ~1.2k chars server-side. */
-export function buildSwarmConversationSummary(
-  messages: Array<{ role: string; text?: string }>,
-  opts?: { maxBubbles?: number; maxCharsPerBubble?: number; maxTotal?: number }
-): string {
-  const maxBubbles = opts?.maxBubbles ?? 8;
-  const maxCharsPerBubble = opts?.maxCharsPerBubble ?? 140;
-  const maxTotal = opts?.maxTotal ?? 1_200;
-  const tail = messages
-    .filter((m) => m.role === 'user' || m.role === 'model')
-    .slice(-maxBubbles);
-  const parts: string[] = [];
-  for (const m of tail) {
-    const t = (m.text || '').replace(/\s+/g, ' ').trim().slice(0, maxCharsPerBubble);
-    if (!t) continue;
-    parts.push(m.role === 'user' ? `U:${t}` : `A:${t}`);
-  }
-  const s = parts.join('\n');
-  return s.length <= maxTotal ? s : s.slice(-maxTotal);
-}
-
-export type NebulaSwarmHandoffGateInput = {
-  swarmEnabled: boolean;
-  onboardingAutopilot: boolean;
-  skipSwarm?: boolean;
-  forceSwarm?: boolean;
-  executionPhase: SwarmPhase;
-  userMessage: string;
-  swarmIntensity: SwarmIntensity;
-  /** From `nebula-project/nebula-swarm-state.json` via GET /api/nebula-swarm/state. */
-  swarmPersisted: NebulaSwarmStateFile;
-};
-
-/**
- * Lean swarm: support agents **never** run on chat sends. Use **Run and Test** (manual) only.
- */
-export function shouldPostSwarmHandoff(_ctx: NebulaSwarmHandoffGateInput): boolean {
-  return false;
-}
-
 export type PhaseSyncInput = {
   current: SwarmPhase;
   planningPhaseRaw: string | undefined;
   rawAssistant: string;
 };
 
-/**
- * Derive next execution phase. Phase transitions **no longer** imply a swarm handoff — swarm is
- * trigger-only after bootstrap (see `shouldPostSwarmHandoff`).
- */
 export function computePhaseSyncAfterResponse(input: PhaseSyncInput): {
   nextPhase: SwarmPhase;
   phaseChanged: boolean;

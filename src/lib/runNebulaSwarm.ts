@@ -17,8 +17,8 @@ export type RunNebulaSwarmParams = {
 };
 
 /**
- * Nebula Swarm **handoff** — used for **manual Run and Test** (Quality agent) or legacy callers.
- * Chat turns do not call this (`shouldPostSwarmHandoff` is always false).
+ * Quality **handoff** — `POST /api/nebula-swarm/handoff` with `manualRunAndTest: true` from **Inspect** (TopBar).
+ * Main chat does not call this.
  */
 export async function runNebulaSwarm(
   params: RunNebulaSwarmParams,

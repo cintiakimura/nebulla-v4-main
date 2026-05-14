@@ -1,11 +1,11 @@
-import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { ArrowUp, ChevronDown, Hand, Mic, Paperclip, Rocket } from 'lucide-react';
 
 const ONBOARDING_DONE_KEY = 'nebulla_onboarding_autopilot_done';
 
 const MONTHLY_LIMIT_MESSAGE =
-  "You've reached your monthly limit. Upgrade to Pro for unlimited Grok 4 or Power for agents.";
+  "You've reached your monthly limit. Upgrade to Pro for unlimited Grok 4.";
 
 function readOnboardingAutopilotDone(): boolean {
   try {
@@ -17,14 +17,10 @@ function readOnboardingAutopilotDone(): boolean {
 import { VoiceLinesIcon } from './VoiceLinesIcon';
 import { Logo } from './Logo';
 import { SwarmStatusBar } from '@/components/swarm/SwarmStatusBar';
-import { SwarmThinking } from '@/components/swarm/SwarmThinking';
 import { useSwarm } from './swarm/SwarmProvider';
 import { useModelSettings } from '@/components/settings/ModelSettingsContext';
 import { ChatModelSelector } from '@/components/settings/ModelSelector';
-import { runNebulaSwarm } from '../lib/runNebulaSwarm';
-import { shouldPostSwarmHandoff, computePhaseSyncAfterResponse, buildSwarmConversationSummary } from '../lib/nebulaSwarmGate';
-import type { SwarmHandoffPacket, SwarmPhase, SwarmIntensity } from '@/types/swarm';
-import type { NebulaSwarmStateFile } from '@/lib/nebulaSwarmState';
+import { computePhaseSyncAfterResponse } from '../lib/nebulaSwarmGate';
 import { fetchJson, readResponseJson } from '../lib/apiFetch';
 import { GROK_CHAT_SETUP_HINT } from '../lib/grokKey';
 import { withProjectBody, withProjectQuery } from '../lib/nebulaProjectApi';
@@ -133,10 +129,6 @@ function splitMasterPlanSectionsFromBlock(block: string): Partial<Record<number,
   return out;
 }
 
-const DEFAULT_SWARM_PERSISTED: NebulaSwarmStateFile = {
-  schemaVersion: 2,
-};
-
 export function AssistantSidebar({
   width = 320,
   userId = 'anonymous',
@@ -150,7 +142,7 @@ export function AssistantSidebar({
   projectName?: string;
   /** Server cloud workspace id (matches App active project). */
   activeProjectKey?: string;
-  /** When true, Nebula Partner does not send chat; orchestration is code-only per project-execution-rules.md */
+  /** When true, the assistant sidebar does not send chat; orchestration is code-only per project-execution-rules.md */
   codeMode?: boolean;
   onExitCodeMode?: () => void;
 }) {
@@ -175,7 +167,6 @@ export function AssistantSidebar({
   );
   const [masterPlan, setMasterPlan] = useState<any>(null);
   const [serverHasGrokKey, setServerHasGrokKey] = useState<boolean | null>(null);
-  const [swarmPersisted, setSwarmPersisted] = useState<NebulaSwarmStateFile>(DEFAULT_SWARM_PERSISTED);
   const [freeTokenUsage, setFreeTokenUsage] = useState<{ used: number; limit: number } | null>(null);
 
   const refreshFreeTokenUsage = useCallback(async () => {
@@ -262,26 +253,6 @@ export function AssistantSidebar({
     };
   }, [userId, activeProjectKey, projectName, codeMode]);
 
-  useEffect(() => {
-    setSwarmPersisted(DEFAULT_SWARM_PERSISTED);
-    if (!swarm.isEnabled) return;
-    let cancelled = false;
-    void (async () => {
-      try {
-        const data = await fetchJson<{ swarmState?: NebulaSwarmStateFile }>(
-          withProjectQuery('/api/nebula-swarm/state')
-        );
-        if (!cancelled && data.swarmState) {
-          setSwarmPersisted(data.swarmState);
-        }
-      } catch {
-        /* keep defaults / prior cache — avoid accidental double P+R */
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [swarm.isEnabled, activeProjectKey]);
   const [inputText, setInputText] = useState('');
   const [buildQueue, setBuildQueue] = useState<string[]>([]);
   
@@ -384,16 +355,11 @@ export function AssistantSidebar({
     setIsRecordingText(false);
   };
 
-  const handleSendText = async (
-    overrideText?: string,
-    opts?: { onboardingAutopilot?: boolean; forceSwarm?: boolean; skipSwarm?: boolean },
-  ) => {
+  const handleSendText = async (overrideText?: string, opts?: { onboardingAutopilot?: boolean }) => {
     if (codeMode) return;
     if (aboutAppActive && !opts?.onboardingAutopilot) return;
     const textToSend = overrideText || inputText;
     if (!textToSend.trim()) return;
-    /** User turns already in history before this send (used for swarm “first message of session” gate). */
-    const priorUserMessageCount = messages.filter((m) => m.role === 'user').length;
     const hasExplicitApproval = /\b(approve|approved|yes|yep|yeah|go ahead|move on|next tab|looks good|locked in|perfect)\b/i.test(
       textToSend
     );
@@ -436,35 +402,15 @@ export function AssistantSidebar({
       autoSendTimerRef.current = null;
     }
 
-    let swarmHandoffPacket: SwarmHandoffPacket | null = null;
-    let swarmPipelineStarted = false;
-
     try {
-      let hasServerKey = serverHasGrokKey;
-      if (hasServerKey === null) {
-        try {
-          const r = await fetch(withProjectQuery('/api/config'));
-          const cfg = (await readResponseJson(r)) as { hasGrokApiKey?: boolean };
-          hasServerKey = Boolean(cfg.hasGrokApiKey);
-          setServerHasGrokKey(hasServerKey);
-        } catch {
-          hasServerKey = false;
-          setServerHasGrokKey(false);
-        }
-      }
-      if (!hasServerKey) {
-        setMessages((prev) => [
-          ...prev,
-          {
-            role: 'system',
-            text: GROK_CHAT_SETUP_HINT,
-          },
-        ]);
-        setIsLoading(false);
-        return;
+      try {
+        const r = await fetch(withProjectQuery('/api/config'));
+        const cfg = (await readResponseJson(r)) as { hasGrokApiKey?: boolean };
+        setServerHasGrokKey(r.ok && Boolean(cfg.hasGrokApiKey));
+      } catch {
+        setServerHasGrokKey(false);
       }
 
-      // Fetch latest master plan before sending (skipped for onboarding autopilot — server builds messages)
       let latestMP: Record<string, unknown> = {};
       let uiStudioApprovedCode = '';
       let systemPrompt = '';
@@ -504,87 +450,7 @@ export function AssistantSidebar({
         'Content-Type': 'application/json',
       };
 
-      /** Last user `content` sent to `/api/grok/chat` (may include swarm handoff when enabled). */
-      let grokUserMessageContent = textToSend;
-
-      /*
-       * Nebula Swarm — **lean**: chat never invokes support agents (`shouldPostSwarmHandoff` is always false).
-       * Planning/research stay in main Grok 4.1. Use **Inspect** in the IDE top bar for the
-       * Quality agent (recent files + review + test suggestions), one manual Grok 4.1 call.
-       */
-      const runSwarmThisTurn = shouldPostSwarmHandoff({
-        swarmEnabled: swarm.isEnabled && modelSettings.agentsEnabled,
-        onboardingAutopilot: Boolean(opts?.onboardingAutopilot),
-        skipSwarm: opts?.skipSwarm,
-        forceSwarm: opts?.forceSwarm,
-        executionPhase: swarm.currentPhase,
-        userMessage: textToSend,
-        swarmIntensity: swarm.intensity,
-        swarmPersisted,
-      });
-
-      if (swarm.isEnabled && !opts?.onboardingAutopilot && runSwarmThisTurn) {
-        const { startSwarm, addActivity, currentPhase, intensity } = swarm;
-        const resolvedProjectName = projectName?.trim() || 'Untitled Project';
-
-        swarmPipelineStarted = true;
-        startSwarm(currentPhase, resolvedProjectName);
-        addActivity(`Swarm handoff starting (${intensity.replace(/_/g, ' ')})`, 'info');
-
-        const swarmRunId =
-          typeof crypto !== 'undefined' && 'randomUUID' in crypto
-            ? crypto.randomUUID()
-            : `swarm-${Date.now()}`;
-
-        try {
-          const contextSummary =
-            priorUserMessageCount > 0 ? buildSwarmConversationSummary(messages) : undefined;
-          const focusPathsRaw =
-            typeof window !== 'undefined' && Array.isArray((window as unknown as { nebulaSwarmFocusPaths?: unknown }).nebulaSwarmFocusPaths)
-              ? ((window as unknown as { nebulaSwarmFocusPaths: string[] }).nebulaSwarmFocusPaths as string[])
-              : undefined;
-          const w = typeof window !== 'undefined' ? (window as unknown as Record<string, unknown>) : null;
-          const rawSnip = w?.nebulaSwarmFocusSnippets;
-          const focusSnippets =
-            rawSnip && typeof rawSnip === 'object' && !Array.isArray(rawSnip)
-              ? (rawSnip as Record<string, string>)
-              : undefined;
-
-          swarmHandoffPacket = await runNebulaSwarm(
-            {
-              phase: currentPhase,
-              userMessage: textToSend,
-              projectName: resolvedProjectName,
-              runId: swarmRunId,
-              swarmIntensity: intensity,
-              ...(contextSummary ? { contextSummary } : {}),
-              ...(focusPathsRaw?.length ? { focusPaths: focusPathsRaw } : {}),
-              ...(focusSnippets && Object.keys(focusSnippets).length ? { focusSnippets } : {}),
-            },
-            grokHeaders
-          );
-          if (swarmHandoffPacket.swarmStateSnapshot) {
-            setSwarmPersisted({
-              schemaVersion: 2,
-              qualityLastRunAt: swarmHandoffPacket.swarmStateSnapshot.qualityLastRunAt,
-            });
-          }
-          if (swarmHandoffPacket.agentsSkipped) {
-            addActivity('Swarm handoff: no support agents ran (trigger-only policy).', 'info');
-          }
-        } catch (swarmErr) {
-          console.warn('[Swarm] runNebulaSwarm failed:', swarmErr);
-          swarm.addActivity(
-            `Swarm handoff failed: ${swarmErr instanceof Error ? swarmErr.message : String(swarmErr)}`,
-            'warning'
-          );
-        }
-
-        if (swarmHandoffPacket) {
-          const enhancedPrompt = `Handoff Packet from Swarm:\n${JSON.stringify(swarmHandoffPacket, null, 2)}\n\nUser Request: ${textToSend}`;
-          grokUserMessageContent = enhancedPrompt.slice(0, 100_000);
-        }
-      }
+      const grokUserMessageContent = textToSend;
 
       grokChatAbortRef.current?.abort();
       const chatAbort = new AbortController();
@@ -624,9 +490,6 @@ export function AssistantSidebar({
       });
       if (grokChatAbortRef.current === chatAbort) {
         grokChatAbortRef.current = null;
-      }
-      if (swarmPipelineStarted && swarmHandoffPacket) {
-        swarm.addActivity('Swarm completed - handoff delivered to Grok', 'success');
       }
       const rawAssistantContent = data.choices?.[0]?.message?.content || '';
       const planningPhase = data.choices?.[0]?.message?.planningPhase || '';
@@ -1087,28 +950,6 @@ export function AssistantSidebar({
             : `Error: ${rawMsg}`;
       setMessages((prev) => [...prev, { role: 'system', text: displayMsg }]);
     } finally {
-      if (swarmPipelineStarted) {
-        const fallback: SwarmHandoffPacket = {
-          schemaVersion: '1.0.0',
-          intensity: swarm.intensity,
-          phase: swarm.currentPhase,
-          runId: `fallback-${Date.now()}`,
-          projectName,
-          planner: { skipped: true },
-          researcher: { skipped: true },
-          tester: { skipped: true },
-          reviewer: { skipped: true },
-          agentsSkipped: true,
-          agentRun: {
-            reasons: ['Pipeline finished without merged handoff (error or skipped append).'],
-            runQuality: false,
-          },
-          notesForGrok:
-            'Quality run finished without a merged handoff (error or skipped append). Continue from the user message and project-execution-rules.md.',
-          timestamp: new Date().toISOString(),
-        };
-        swarm.finishSwarm(swarmHandoffPacket ?? fallback);
-      }
       setIsLoading(false);
     }
   };
@@ -1117,41 +958,6 @@ export function AssistantSidebar({
     return () => stopRealtimeCodingStatus();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  /** Dev: `await window.runNebulaSwarm(text, phase, projectName?, runId?, intensity?, manualRunAndTest?)` */
-  useEffect(() => {
-    const swarmIntensity = swarm.intensity;
-    (window as unknown as { runNebulaSwarm?: unknown }).runNebulaSwarm = async (
-      userMessage: string,
-      phase: SwarmPhase,
-      pname?: string,
-      runIdArg?: string,
-      overrideIntensity?: SwarmIntensity,
-      manualRunAndTest?: boolean
-    ) => {
-      const h: Record<string, string> = { 'Content-Type': 'application/json' };
-      const runId =
-        typeof runIdArg === 'string' && runIdArg.trim()
-          ? runIdArg.trim()
-          : typeof crypto !== 'undefined' && 'randomUUID' in crypto
-            ? crypto.randomUUID()
-            : `swarm-${Date.now()}`;
-      return runNebulaSwarm(
-        {
-          userMessage,
-          phase,
-          projectName: pname || projectName,
-          runId,
-          swarmIntensity: overrideIntensity ?? swarmIntensity,
-          manualRunAndTest: Boolean(manualRunAndTest),
-        },
-        h
-      );
-    };
-    return () => {
-      delete (window as unknown as { runNebulaSwarm?: unknown }).runNebulaSwarm;
-    };
-  }, [projectName, swarm.intensity]);
 
   const handleAboutAppGo = () => {
     const answer = aboutAppInput.trim();
@@ -1165,27 +971,12 @@ export function AssistantSidebar({
   const handleGoCode = async () => {
     if (codeMode || isLoading) return;
     const userNote = inputText.trim();
-    let hasServerKey = serverHasGrokKey;
-    if (hasServerKey === null) {
-      try {
-        const r = await fetch(withProjectQuery('/api/config'));
-        const cfg = (await readResponseJson(r)) as { hasGrokApiKey?: boolean };
-        hasServerKey = Boolean(cfg.hasGrokApiKey);
-        setServerHasGrokKey(hasServerKey);
-      } catch {
-        hasServerKey = false;
-        setServerHasGrokKey(false);
-      }
-    }
-    if (!hasServerKey) {
-      setMessages((prev) => [
-        ...prev,
-        {
-          role: 'system',
-          text: GROK_CHAT_SETUP_HINT,
-        },
-      ]);
-      return;
+    try {
+      const r = await fetch(withProjectQuery('/api/config'));
+      const cfg = (await readResponseJson(r)) as { hasGrokApiKey?: boolean };
+      setServerHasGrokKey(r.ok && Boolean(cfg.hasGrokApiKey));
+    } catch {
+      setServerHasGrokKey(false);
     }
 
     if ((window as any).openMasterPlan) (window as any).openMasterPlan();
@@ -1698,14 +1489,7 @@ export function AssistantSidebar({
     }, 1000);
   };
 
-  const showGrokSetupHint = serverHasGrokKey !== true;
-
-  const lastAssistantMessageIndex = useMemo(() => {
-    for (let i = messages.length - 1; i >= 0; i--) {
-      if (messages[i].role === 'model') return i;
-    }
-    return -1;
-  }, [messages]);
+  const showGrokSetupHint = serverHasGrokKey === false;
 
   const handleRevertMessage = (idx: number) => {
     if (codeMode) return;
@@ -1723,7 +1507,7 @@ export function AssistantSidebar({
       <div className="flex flex-col gap-2 border-b border-border bg-card/40 p-3">
         <div className="flex items-center justify-between gap-2">
           <div className="flex min-w-0 items-center gap-2">
-            <span className="text-13 font-headline text-foreground no-bold">Nebula Partner</span>
+            <span className="text-13 font-headline text-foreground no-bold">Assistant</span>
             {isLive && <span className="flex h-2 w-2 shrink-0 animate-pulse rounded-full bg-primary" />}
           </div>
         </div>
@@ -1835,7 +1619,6 @@ export function AssistantSidebar({
                     </div>
                   </details>
                 )}
-                {idx === lastAssistantMessageIndex ? <SwarmThinking /> : null}
               </div>
             ) : msg.role === 'user' ? (
               <div className="flex flex-col gap-2 items-end">
@@ -1899,7 +1682,7 @@ export function AssistantSidebar({
                 ? 'Development running…'
                 : isLive
                   ? 'Listening or type here…'
-                  : 'Message Nebula Partner…'
+                  : 'Message the assistant…'
             }
             aria-label="Chat message"
           />

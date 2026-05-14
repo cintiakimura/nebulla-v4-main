@@ -1,5 +1,4 @@
 import { fetchJson, readResponseJson } from './apiFetch';
-import { GROK_CHAT_SETUP_HINT } from './grokKey';
 import { withProjectBody, withProjectQuery } from './nebulaProjectApi';
 import { buildNebulaAssistantSystemPrompt } from './nebulaAssistantSystemPrompt';
 
@@ -51,18 +50,6 @@ export async function sendIdeAssistantGrokTurn(options: {
   signal?: AbortSignal;
 }): Promise<{ assistantContent: string; planningPhase: string }> {
   const { textToSend, history, userId, projectName, chatModel, ideAppendix, signal } = options;
-
-  let hasServerKey = false;
-  try {
-    const r = await fetch(withProjectQuery('/api/config'), { credentials: 'include' });
-    const cfg = (await readResponseJson(r)) as { hasGrokApiKey?: boolean };
-    hasServerKey = r.ok && Boolean(cfg.hasGrokApiKey);
-  } catch {
-    hasServerKey = false;
-  }
-  if (!hasServerKey) {
-    throw new Error(GROK_CHAT_SETUP_HINT);
-  }
 
   const { latestMP, uiStudioApprovedCode } = await fetchMasterPlanAndUiStudio();
   const systemPrompt =

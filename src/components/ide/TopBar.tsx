@@ -10,7 +10,7 @@ import { useClickOutside } from '../../lib/useClickOutside';
 import { type IdeChatModelId, useIdeWorkspace } from '@/components/ide/IdeWorkspaceContext';
 import { buildIdeSwarmFocusFromEditor } from '../../lib/ideSwarmFocus';
 import { fetchMasterPlanAndUiStudio } from '../../lib/ideAssistantGrokChat';
-import { compactMasterPlanForSwarm } from '../../lib/ideMasterPlanSummary';
+import { compactMasterPlanForInspect } from '../../lib/ideMasterPlanSummary';
 
 const models: { id: IdeChatModelId; name: string; badge: string | null }[] = [
   { id: 'grok-4.1', name: 'Grok 4.1', badge: 'Latest' },
@@ -74,7 +74,7 @@ export function TopBar({
     let planningSummary = '';
     try {
       const { latestMP } = await fetchMasterPlanAndUiStudio();
-      planningSummary = compactMasterPlanForSwarm(latestMP).slice(0, 2000);
+      planningSummary = compactMasterPlanForInspect(latestMP).slice(0, 2000);
     } catch {
       /* same as chat: handoff still runs with workspace-only context */
     }

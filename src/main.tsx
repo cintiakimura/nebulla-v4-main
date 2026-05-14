@@ -18,7 +18,7 @@ if (activeGuestId?.trim() && guestRows.some((e) => e.id === activeGuestId)) {
 
 /**
  * Root: Cosmic Night theme comes from `index.css` (semantic tokens).
- * SwarmProvider wraps the tree so status + chat can coordinate agent runs.
+ * SwarmProvider holds Inspect (Quality) run state and activity for the status strip.
  */
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
