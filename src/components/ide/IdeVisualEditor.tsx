@@ -4,7 +4,8 @@
  * SPEC (authoritative behavior — read before changing):
  * - Unlocks after first v0: immutable folder `generated-ui/v0-original-<project>-<timestamp>/` with manifest
  *   (or legacy `generated-ui/v0-base/manifest.json`), or `NEBULA_VISUAL_EDITOR_DEV_UNLOCK=true`.
- * - Layout: LEFT pages | CENTER interactive preview from structured model | RIGHT properties when selection exists.
+ * - When ineligible, the studio still renders as a **high-fidelity mock** (local preview model + tools); disk apply is gated.
+ * - Layout: LEFT pages + layers | CENTER interactive preview | RIGHT properties; top toolbar always visible.
  * - Grok chat stays in the main Assistant sidebar — no chat column here.
  * - Safe files: original v0 copy is never modified. On "Save Changes & Update Code", server backs up only paths
  *   Grok will touch under `generated-ui/versions/<timestamp>/`, then writes `src/` (etc.). Preview model lives in
@@ -23,15 +24,20 @@ import {
   Check,
   Copy,
   History,
+  Layers,
   Loader2,
   Maximize2,
   Minimize2,
+  MousePointer2,
+  Move,
   PanelLeft,
+  Pipette,
   RotateCcw,
   Save,
+  Scaling,
+  Trash2,
   Type,
 } from 'lucide-react';
-import { getStoredGrokApiKey } from '../../lib/grokKey';
 import { getBrowserProjectName, withProjectBody, withProjectQuery } from '../../lib/nebulaProjectApi';
 
 export type VisualStyle = {
@@ -71,6 +77,8 @@ export type EditorModel = {
   pages: Record<string, PageModel>;
 };
 
+export type StudioTool = 'select' | 'move' | 'resize' | 'text' | 'color';
+
 const defaultStyle = (): VisualStyle => ({
   backgroundColor: '#0f172a',
   color: '#e2e8f0',
@@ -91,8 +99,10 @@ const defaultStyle = (): VisualStyle => ({
 
 function buildDefaultModel(): EditorModel {
   const root = 'root-home';
-  const hero = 'hero-1';
   const side = 'sidebar-1';
+  const hero = 'hero-1';
+  const title = 'hero-title';
+  const sub = 'hero-sub';
   const btn = 'btn-1';
   return {
     pages: {
@@ -104,7 +114,14 @@ function buildDefaultModel(): EditorModel {
             role: 'page-root',
             type: 'container',
             children: [side, hero],
-            style: { ...defaultStyle(), backgroundColor: '#020617', paddingTop: 0, paddingLeft: 0, paddingRight: 0, paddingBottom: 0 },
+            style: {
+              ...defaultStyle(),
+              backgroundColor: '#080A14',
+              paddingTop: 0,
+              paddingLeft: 0,
+              paddingRight: 0,
+              paddingBottom: 0,
+            },
           },
           [side]: {
             id: side,
@@ -113,30 +130,81 @@ function buildDefaultModel(): EditorModel {
             children: [],
             style: {
               ...defaultStyle(),
-              width: '220px',
+              width: '200px',
               height: '100%',
-              backgroundColor: '#0c1222',
+              backgroundColor: '#0D1117',
               borderRadius: 0,
+              paddingTop: 20,
+              boxShadow: 'inset -1px 0 0 #21262D',
             },
           },
           [hero]: {
             id: hero,
             role: 'hero',
             type: 'container',
-            children: [btn],
-            style: { ...defaultStyle(), backgroundColor: '#082f49', width: '100%', height: '240px' },
+            children: [title, sub, btn],
+            style: {
+              ...defaultStyle(),
+              backgroundColor: '#0D1117',
+              width: '100%',
+              height: '320px',
+              paddingTop: 28,
+              paddingLeft: 28,
+              paddingRight: 28,
+              paddingBottom: 24,
+            },
+          },
+          [title]: {
+            id: title,
+            role: 'hero-title',
+            type: 'text',
+            text: 'Nebulla Workspace',
+            style: {
+              ...defaultStyle(),
+              backgroundColor: 'transparent',
+              color: '#E8EAED',
+              paddingTop: 0,
+              paddingBottom: 8,
+              width: '100%',
+              height: 'auto',
+              borderRadius: 0,
+              boxShadow: 'none',
+            },
+          },
+          [sub]: {
+            id: sub,
+            role: 'hero-sub',
+            type: 'text',
+            text: 'Live preview · Cosmic Night (#080A14 / #00D4D4) — inspired by 0vgenerated-v2 shell',
+            style: {
+              ...defaultStyle(),
+              backgroundColor: 'transparent',
+              color: '#6E7681',
+              paddingTop: 0,
+              paddingBottom: 20,
+              width: '100%',
+              height: 'auto',
+              borderRadius: 0,
+              boxShadow: 'none',
+            },
           },
           [btn]: {
             id: btn,
             role: 'cta-primary',
             type: 'button',
-            text: 'Get started',
+            text: 'Open Explorer',
             style: {
               ...defaultStyle(),
-              backgroundColor: '#06b6d4',
-              color: '#020617',
+              backgroundColor: '#00D4D4',
+              color: '#080A14',
               width: 'auto',
               height: 'auto',
+              paddingTop: 10,
+              paddingBottom: 10,
+              paddingLeft: 20,
+              paddingRight: 20,
+              borderRadius: 8,
+              boxShadow: '0 0 24px rgba(0,212,212,0.25)',
             },
           },
         },
@@ -148,8 +216,53 @@ function buildDefaultModel(): EditorModel {
             id: 'root-dash',
             role: 'page-root',
             type: 'container',
-            children: [],
-            style: { ...defaultStyle(), backgroundColor: '#020617' },
+            children: ['dash-head', 'dash-grid'],
+            style: { ...defaultStyle(), backgroundColor: '#080A14', paddingTop: 20, paddingLeft: 20, paddingRight: 20 },
+          },
+          'dash-head': {
+            id: 'dash-head',
+            role: 'section-title',
+            type: 'text',
+            text: 'Dashboard',
+            style: {
+              ...defaultStyle(),
+              backgroundColor: 'transparent',
+              color: '#E8EAED',
+              paddingBottom: 16,
+              borderRadius: 0,
+              boxShadow: 'none',
+            },
+          },
+          'dash-grid': {
+            id: 'dash-grid',
+            role: 'metrics-row',
+            type: 'container',
+            children: ['m1', 'm2', 'm3'],
+            style: {
+              ...defaultStyle(),
+              backgroundColor: 'transparent',
+              paddingTop: 0,
+              borderRadius: 0,
+              boxShadow: 'none',
+            },
+          },
+          m1: {
+            id: 'm1',
+            role: 'metric-card',
+            type: 'box',
+            style: { ...defaultStyle(), backgroundColor: '#0D1117', width: '32%', height: '100px', borderRadius: 10 },
+          },
+          m2: {
+            id: 'm2',
+            role: 'metric-card',
+            type: 'box',
+            style: { ...defaultStyle(), backgroundColor: '#0D1117', width: '32%', height: '100px', borderRadius: 10 },
+          },
+          m3: {
+            id: 'm3',
+            role: 'metric-card',
+            type: 'box',
+            style: { ...defaultStyle(), backgroundColor: '#0D1117', width: '32%', height: '100px', borderRadius: 10 },
           },
         },
       },
@@ -160,8 +273,53 @@ function buildDefaultModel(): EditorModel {
             id: 'root-set',
             role: 'page-root',
             type: 'container',
-            children: [],
-            style: { ...defaultStyle(), backgroundColor: '#020617' },
+            children: ['set-title', 'set-row-a', 'set-row-b'],
+            style: { ...defaultStyle(), backgroundColor: '#080A14', paddingTop: 20, paddingLeft: 20, paddingRight: 20 },
+          },
+          'set-title': {
+            id: 'set-title',
+            role: 'section-title',
+            type: 'text',
+            text: 'Settings',
+            style: {
+              ...defaultStyle(),
+              backgroundColor: 'transparent',
+              color: '#E8EAED',
+              paddingBottom: 16,
+              borderRadius: 0,
+              boxShadow: 'none',
+            },
+          },
+          'set-row-a': {
+            id: 'set-row-a',
+            role: 'settings-row',
+            type: 'text',
+            text: 'API keys · Grok & v0',
+            style: {
+              ...defaultStyle(),
+              backgroundColor: '#0D1117',
+              color: '#B8BCC2',
+              paddingTop: 12,
+              paddingBottom: 12,
+              paddingLeft: 16,
+              marginBottom: 8,
+              borderRadius: 8,
+            },
+          },
+          'set-row-b': {
+            id: 'set-row-b',
+            role: 'settings-row',
+            type: 'text',
+            text: 'Theme · Cosmic Night (default)',
+            style: {
+              ...defaultStyle(),
+              backgroundColor: '#0D1117',
+              color: '#B8BCC2',
+              paddingTop: 12,
+              paddingBottom: 12,
+              paddingLeft: 16,
+              borderRadius: 8,
+            },
           },
         },
       },
@@ -197,16 +355,17 @@ export function IdeVisualEditor({
   const [isFullscreen, setIsFullscreen] = useState(false);
   const shellRef = useRef<HTMLDivElement>(null);
   const previewRef = useRef<HTMLDivElement>(null);
+  const baselineRef = useRef<EditorModel | null>(null);
+  const [studioTool, setStudioTool] = useState<StudioTool>('select');
+  const [leftTab, setLeftTab] = useState<'pages' | 'layers'>('pages');
+  const [mockNotice, setMockNotice] = useState('');
 
   const pageIds = useMemo(() => Object.keys(model.pages), [model.pages]);
   const page = model.pages[activePage];
   const selected = selectedId && page ? page.nodes[selectedId] : null;
 
   const persistHeaders = (): Record<string, string> => {
-    const k = getStoredGrokApiKey();
-    const h: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (k) h['x-grok-api-key'] = k;
-    return h;
+    return { 'Content-Type': 'application/json' };
   };
 
   const pushUndo = useCallback(() => {
@@ -230,15 +389,27 @@ export function IdeVisualEditor({
   }, [loadEligibility]);
 
   useEffect(() => {
-    if (!eligible) return;
+    if (eligible === null) return;
+    if (!eligible) {
+      baselineRef.current = cloneModel(model);
+      return;
+    }
     void (async () => {
       try {
         const r = await fetch(withProjectQuery('/api/visual-ui-editor/preview-model'));
-        if (!r.ok) return;
+        if (!r.ok) {
+          baselineRef.current = cloneModel(model);
+          return;
+        }
         const d = (await r.json()) as { model?: EditorModel | null };
-        if (d.model && typeof d.model === 'object' && d.model.pages) setModel(d.model);
+        if (d.model && typeof d.model === 'object' && d.model.pages) {
+          setModel(d.model);
+          baselineRef.current = cloneModel(d.model);
+        } else {
+          baselineRef.current = cloneModel(model);
+        }
       } catch {
-        /* keep default */
+        baselineRef.current = cloneModel(model);
       }
     })();
   }, [eligible]);
@@ -341,6 +512,13 @@ export function IdeVisualEditor({
     });
   };
 
+  const collectSubtreeIds = (pg: PageModel, rootId: string, acc: Set<string>) => {
+    acc.add(rootId);
+    const n = pg.nodes[rootId];
+    if (!n?.children) return;
+    for (const c of n.children) collectSubtreeIds(pg, c, acc);
+  };
+
   const onPreviewClick = (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
     setSelectedId(id);
@@ -353,6 +531,32 @@ export function IdeVisualEditor({
   const clearSelection = () => {
     setSelectedId(null);
     setMenuPos(null);
+  };
+
+  const deleteSelectedNode = () => {
+    if (!selectedId || !page || selectedId === page.rootId) return;
+    pushUndo();
+    setModel((m) => {
+      const next = cloneModel(m);
+      const pg = next.pages[activePage];
+      const toRemove = new Set<string>();
+      collectSubtreeIds(pg, selectedId, toRemove);
+      const parent = Object.values(pg.nodes).find((n) => n.children?.includes(selectedId));
+      if (parent?.children) {
+        parent.children = parent.children.filter((id) => id !== selectedId);
+      }
+      for (const id of toRemove) delete pg.nodes[id];
+      return next;
+    });
+    clearSelection();
+  };
+
+  const revertVisualToBaseline = () => {
+    if (!baselineRef.current) return;
+    pushUndo();
+    setModel(cloneModel(baselineRef.current));
+    clearSelection();
+    setMockNotice('');
   };
 
   const toggleFullscreen = async () => {
@@ -380,6 +584,12 @@ export function IdeVisualEditor({
   };
 
   const runApplyToCode = async () => {
+    if (!eligible) {
+      setMockNotice('Preview mode: Save would run Grok 4.1 and write files under generated-ui/versions/… — complete the v0 pipeline to enable disk apply.');
+      setApplyConfirmOpen(false);
+      setBusy(false);
+      return;
+    }
     setBusy(true);
     setError('');
     try {
@@ -391,7 +601,6 @@ export function IdeVisualEditor({
           withProjectBody({
             pageId: activePage,
             previewModel: model,
-            grokApiKey: getStoredGrokApiKey(),
           }),
         ),
       });
@@ -424,7 +633,10 @@ export function IdeVisualEditor({
         const r = await fetch(withProjectQuery('/api/visual-ui-editor/preview-model'));
         if (r.ok) {
           const d = (await r.json()) as { model?: EditorModel | null };
-          if (d.model && typeof d.model === 'object' && d.model.pages) setModel(d.model);
+          if (d.model && typeof d.model === 'object' && d.model.pages) {
+            setModel(d.model);
+            baselineRef.current = cloneModel(d.model);
+          }
         }
       } catch {
         /* keep local model */
@@ -453,7 +665,10 @@ export function IdeVisualEditor({
         const r = await fetch(withProjectQuery('/api/visual-ui-editor/preview-model'));
         if (r.ok) {
           const d = (await r.json()) as { model?: EditorModel | null };
-          if (d.model && typeof d.model === 'object' && d.model.pages) setModel(d.model);
+          if (d.model && typeof d.model === 'object' && d.model.pages) {
+            setModel(d.model);
+            baselineRef.current = cloneModel(d.model);
+          }
         }
       } catch {
         /* keep local model */
@@ -499,12 +714,24 @@ export function IdeVisualEditor({
       width: st.width as React.CSSProperties['width'],
       height: st.height as React.CSSProperties['height'],
       borderRadius: st.borderRadius,
-      boxShadow: st.boxShadow,
       opacity: st.opacity,
-      cursor: node.type === 'container' ? 'default' : 'pointer',
+      cursor:
+        studioTool === 'move'
+          ? 'move'
+          : studioTool === 'resize'
+            ? 'nwse-resize'
+            : studioTool === 'text'
+              ? 'text'
+              : studioTool === 'color'
+                ? 'crosshair'
+                : node.type === 'container'
+                  ? 'default'
+                  : 'pointer',
       position: 'relative',
-      outline: selectedId === id ? '2px solid #2563eb' : undefined,
-      outlineOffset: 2,
+      boxShadow:
+        selectedId === id
+          ? `0 0 0 2px #2563eb, 0 0 0 4px rgba(37,99,235,0.35)${st.boxShadow ? `, ${st.boxShadow}` : ''}`
+          : st.boxShadow,
     };
 
     const inner =
@@ -536,22 +763,30 @@ export function IdeVisualEditor({
         >
           {node.text || 'Button'}
         </button>
+      ) : node.type === 'box' ? (
+        <div className="h-full min-h-[48px] w-full rounded-md border border-white/10 bg-gradient-to-br from-cyan-500/10 to-transparent" aria-hidden />
       ) : null;
 
     const isRoot = node.id === page.rootId;
+    const rowClass =
+      node.role === 'metrics-row'
+        ? 'flex w-full flex-row flex-wrap items-stretch justify-between gap-3'
+        : isRoot
+          ? 'flex min-h-[200px] w-full flex-1 flex-row items-stretch gap-0'
+          : 'flex w-full flex-col gap-2';
     const kids = node.children?.length ? (
-      <div
-        className={
-          isRoot
-            ? 'flex min-h-[200px] w-full flex-1 flex-row items-stretch gap-0'
-            : 'flex w-full flex-col gap-2'
-        }
-      >
+      <div className={rowClass}>
         {node.children.map((cid, i) => (
           <div
             key={cid}
             className={
-              isRoot ? (i === 0 ? 'shrink-0 self-stretch' : 'min-w-0 flex-1 self-stretch') : ''
+              isRoot && node.role !== 'metrics-row'
+                ? i === 0
+                  ? 'shrink-0 self-stretch'
+                  : 'min-w-0 flex-1 self-stretch'
+                : node.role === 'metrics-row'
+                  ? 'min-w-0 flex-1'
+                  : ''
             }
           >
             {renderNode(cid)}
@@ -574,36 +809,35 @@ export function IdeVisualEditor({
     );
   };
 
+  const renderLayerRows = (nodeId: string, depth: number): React.ReactNode => {
+    if (!page) return null;
+    const node = page.nodes[nodeId];
+    if (!node) return null;
+    return (
+      <React.Fragment key={nodeId}>
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            setSelectedId(nodeId);
+            setMenuPos({ top: 12, left: 12 });
+          }}
+          className={`mb-0.5 w-full rounded-md py-1.5 text-left text-[11px] ${
+            selectedId === nodeId ? 'bg-cyan-500/20 text-cyan-50 ring-1 ring-cyan-500/40' : 'text-slate-400 hover:bg-white/5'
+          }`}
+          style={{ paddingLeft: 8 + depth * 10 }}
+        >
+          <span className="text-slate-500">{node.type}</span> · {node.role}
+        </button>
+        {node.children?.map((cid) => renderLayerRows(cid, depth + 1))}
+      </React.Fragment>
+    );
+  };
+
   if (eligible === null) {
     return (
       <div className="flex h-full items-center justify-center bg-[#050a14] text-slate-400">
         <Loader2 className="h-8 w-8 animate-spin text-cyan-400" />
-      </div>
-    );
-  }
-
-  if (!eligible) {
-    return (
-      <div className="flex h-full flex-col items-center justify-center gap-4 bg-[#050a14] px-8 text-center text-slate-300">
-        <PanelLeft className="h-10 w-10 text-cyan-500/50" />
-        <h2 className="font-headline text-lg text-cyan-100">Visual UI Editor is locked</h2>
-        <p className="max-w-lg text-sm text-slate-400">{eligibilityReason}</p>
-        <p className="max-w-lg text-xs text-slate-500">
-          The v0 pipeline must finish once and store the full output under{' '}
-          <code className="text-cyan-300">generated-ui/v0-original-&lt;project&gt;-&lt;timestamp&gt;/</code> (immutable). A pointer
-          manifest may also exist at <code className="text-cyan-300">generated-ui/v0-base/manifest.json</code>. Each code apply backs
-          up only the files Grok touches under <code className="text-cyan-300">generated-ui/versions/&lt;timestamp&gt;/</code> before
-          writing to <code className="text-cyan-300">src/</code> (and other allowed app paths).
-        </p>
-        {import.meta.env.DEV ? (
-          <button
-            type="button"
-            onClick={() => void simulateV0CompleteDev()}
-            className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-2 text-xs text-amber-100"
-          >
-            Dev only: simulate v0 manifest
-          </button>
-        ) : null}
       </div>
     );
   }
@@ -613,45 +847,136 @@ export function IdeVisualEditor({
       ref={shellRef}
       className="flex h-full min-h-0 w-full flex-col overflow-hidden bg-[#050a14] text-slate-200 shadow-[inset_0_1px_0_rgba(34,211,238,0.06)]"
     >
-      <header className="flex h-11 shrink-0 items-center justify-between gap-2 border-b border-cyan-500/25 bg-[#040d18] px-3">
-        <div className="flex min-w-0 items-center gap-2">
-          <span className="font-headline text-xs tracking-wide text-cyan-100">Visual UI Editor</span>
-          <span className="text-[10px] text-slate-500">Wix-style · Cosmic Night</span>
+      {!eligible ? (
+        <div className="flex shrink-0 flex-col gap-2 border-b border-amber-500/25 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-50/95 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-start gap-2">
+            <PanelLeft className="mt-0.5 h-4 w-4 shrink-0 text-amber-300" />
+            <div>
+              <span className="font-headline text-xs text-amber-100">Preview mode</span>
+              <p className="mt-0.5 text-[11px] text-amber-100/80">{eligibilityReason}</p>
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            {import.meta.env.DEV ? (
+              <button
+                type="button"
+                onClick={() => void simulateV0CompleteDev()}
+                className="rounded border border-amber-400/40 bg-black/20 px-2 py-1 text-[10px] text-amber-50"
+              >
+                Dev: simulate v0 manifest
+              </button>
+            ) : null}
+          </div>
         </div>
-        <div className="flex flex-wrap items-center justify-end gap-2">
-          <button
-            type="button"
-            onClick={() => void toggleFullscreen()}
-            className="rounded border border-white/15 px-2 py-1 text-[10px] text-slate-300"
-          >
-            {isFullscreen ? <Minimize2 className="inline h-3 w-3" /> : <Maximize2 className="inline h-3 w-3" />}
+      ) : null}
+
+      {mockNotice ? (
+        <div className="border-b border-cyan-500/30 bg-cyan-500/10 px-3 py-2 text-[11px] text-cyan-50">
+          {mockNotice}{' '}
+          <button type="button" className="underline" onClick={() => setMockNotice('')}>
+            Dismiss
           </button>
-          <button
-            type="button"
-            onClick={() => void sessionUndo()}
-            className="rounded border border-white/15 px-2 py-1 text-[10px] text-slate-300"
-            title="Revert last batch of visual edits (session)"
-          >
-            <RotateCcw className="mr-1 inline h-3 w-3" />
-            Undo visual
-          </button>
-          <button
-            type="button"
-            onClick={() => setRestoreOriginalConfirmOpen(true)}
-            className="rounded border border-cyan-500/35 px-2 py-1 text-[10px] text-cyan-100"
-            title="Copy immutable v0 output back into src/ (and allowed paths)"
-          >
-            <History className="mr-1 inline h-3 w-3" />
-            Restore Original v0
-          </button>
-          <button
-            type="button"
-            onClick={() => setRevertConfirmOpen(true)}
-            className="rounded border border-rose-500/30 px-2 py-1 text-[10px] text-rose-200"
-            title="Restore files from the last apply’s per-file backup only"
-          >
-            Undo last apply
-          </button>
+        </div>
+      ) : null}
+
+      <header className="flex shrink-0 flex-col gap-2 border-b border-cyan-500/25 bg-[#040d18] px-2 py-2 sm:px-3">
+        <div className="flex min-w-0 items-center justify-between gap-2">
+          <div className="flex min-w-0 items-center gap-2">
+            <span className="font-headline text-xs tracking-wide text-cyan-100">Nebula UI Studio</span>
+            <span className="hidden text-[10px] text-slate-500 sm:inline">Cosmic Night · manual mock</span>
+          </div>
+          <div className="flex shrink-0 items-center gap-1">
+            <button
+              type="button"
+              onClick={() => void toggleFullscreen()}
+              className="rounded border border-white/15 p-1.5 text-slate-300"
+              title="Fullscreen"
+            >
+              {isFullscreen ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
+            </button>
+            <button
+              type="button"
+              onClick={() => void sessionUndo()}
+              className="rounded border border-white/15 px-2 py-1 text-[10px] text-slate-300"
+              title="Undo last visual edit batch"
+            >
+              <RotateCcw className="mr-1 inline h-3 w-3" />
+              Undo
+            </button>
+            <button
+              type="button"
+              onClick={() => setRevertConfirmOpen(true)}
+              className="hidden rounded border border-rose-500/30 px-2 py-1 text-[10px] text-rose-200 sm:inline"
+              title="Undo last code apply (from backups)"
+            >
+              Undo last apply
+            </button>
+          </div>
+        </div>
+
+        <div className="flex min-w-0 flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex flex-wrap items-center gap-1">
+            {(
+              [
+                { id: 'select' as const, Icon: MousePointer2, label: 'Select' },
+                { id: 'move' as const, Icon: Move, label: 'Drag / Move' },
+                { id: 'resize' as const, Icon: Scaling, label: 'Resize' },
+                { id: 'text' as const, Icon: Type, label: 'Text Edit' },
+                { id: 'color' as const, Icon: Pipette, label: 'Color Picker' },
+              ] as const
+            ).map(({ id, Icon, label }) => (
+              <button
+                key={id}
+                type="button"
+                title={label}
+                onClick={() => setStudioTool(id)}
+                className={`flex items-center gap-1 rounded-md border px-2 py-1.5 text-[10px] ${
+                  studioTool === id
+                    ? 'border-cyan-500/50 bg-cyan-500/15 text-cyan-50'
+                    : 'border-white/10 bg-black/20 text-slate-400 hover:border-white/20 hover:text-slate-200'
+                }`}
+              >
+                <Icon className="h-3.5 w-3.5 shrink-0" />
+                <span className="hidden sm:inline">{label}</span>
+              </button>
+            ))}
+            <button
+              type="button"
+              disabled={!selected}
+              onClick={() => applySimilarAllPages()}
+              className="rounded-md border border-violet-500/35 bg-violet-500/10 px-2 py-1.5 text-[10px] text-violet-100 disabled:opacity-40"
+              title="Apply selected element style to matching roles on every page"
+            >
+              Apply to All Pages
+            </button>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => setApplyConfirmOpen(true)}
+              className="rounded-lg bg-cyan-500 px-4 py-2 text-xs font-headline text-black shadow-[0_0_18px_rgba(34,211,238,0.35)] hover:bg-cyan-400 disabled:opacity-40 sm:px-5 sm:py-2.5 sm:text-sm"
+            >
+              <Save className="mr-1.5 inline h-3.5 w-3.5 sm:h-4 sm:w-4" />
+              Save Changes &amp; Update Code
+            </button>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => {
+                if (!eligible) {
+                  revertVisualToBaseline();
+                  return;
+                }
+                setRestoreOriginalConfirmOpen(true);
+              }}
+              className="rounded-lg border border-white/15 px-3 py-2 text-[11px] text-slate-300 hover:bg-white/5 sm:text-xs"
+              title={eligible ? 'Restore immutable v0 copy into workspace' : 'Reset preview to the snapshot from when this session loaded'}
+            >
+              Revert to Original
+            </button>
+          </div>
         </div>
       </header>
 
@@ -660,27 +985,51 @@ export function IdeVisualEditor({
       ) : null}
 
       <div className="flex min-h-0 flex-1">
-        <aside className="flex w-44 shrink-0 flex-col border-r border-cyan-500/20 bg-[#040d18]">
-          <div className="border-b border-white/10 px-2 py-2 text-[10px] font-headline uppercase tracking-wider text-cyan-400/90">
-            Pages
+        <aside className="flex w-52 shrink-0 flex-col border-r border-cyan-500/20 bg-[#040d18]">
+          <div className="flex border-b border-white/10">
+            <button
+              type="button"
+              onClick={() => setLeftTab('pages')}
+              className={`flex-1 py-2 text-center text-[10px] font-headline uppercase tracking-wider ${
+                leftTab === 'pages' ? 'bg-cyan-500/15 text-cyan-100' : 'text-slate-500 hover:bg-white/5'
+              }`}
+            >
+              Pages
+            </button>
+            <button
+              type="button"
+              onClick={() => setLeftTab('layers')}
+              className={`flex flex-1 items-center justify-center gap-1 py-2 text-center text-[10px] font-headline uppercase tracking-wider ${
+                leftTab === 'layers' ? 'bg-cyan-500/15 text-cyan-100' : 'text-slate-500 hover:bg-white/5'
+              }`}
+            >
+              <Layers className="h-3 w-3" />
+              Layers
+            </button>
           </div>
-          <nav className="flex-1 overflow-y-auto p-1">
-            {pageIds.map((pid) => (
-              <button
-                key={pid}
-                type="button"
-                onClick={() => {
-                  setActivePage(pid);
-                  clearSelection();
-                }}
-                className={`mb-0.5 w-full rounded-md px-2 py-2 text-left text-xs ${
-                  activePage === pid ? 'bg-cyan-500/20 text-cyan-50 ring-1 ring-cyan-500/40' : 'text-slate-400 hover:bg-white/5'
-                }`}
-              >
-                {pid}
-              </button>
-            ))}
-          </nav>
+          {leftTab === 'pages' ? (
+            <nav className="flex-1 overflow-y-auto p-1">
+              {pageIds.map((pid) => (
+                <button
+                  key={pid}
+                  type="button"
+                  onClick={() => {
+                    setActivePage(pid);
+                    clearSelection();
+                  }}
+                  className={`mb-0.5 w-full rounded-md px-2 py-2 text-left text-xs ${
+                    activePage === pid ? 'bg-cyan-500/20 text-cyan-50 ring-1 ring-cyan-500/40' : 'text-slate-400 hover:bg-white/5'
+                  }`}
+                >
+                  {pid}
+                </button>
+              ))}
+            </nav>
+          ) : (
+            <div className="flex-1 overflow-y-auto p-1">
+              {page ? renderLayerRows(page.rootId, 0) : null}
+            </div>
+          )}
         </aside>
 
         <main
@@ -689,16 +1038,60 @@ export function IdeVisualEditor({
           onClick={() => clearSelection()}
         >
           <div className="mx-auto max-w-5xl rounded-xl border border-cyan-500/20 bg-[#0a1628] p-4 shadow-[0_0_48px_rgba(34,211,238,0.12)]">
-            <div className="mb-2 text-[10px] uppercase tracking-wider text-cyan-500/80">Live preview (structured model)</div>
+            <div className="mb-2 flex flex-wrap items-center justify-between gap-2 text-[10px] uppercase tracking-wider text-cyan-500/80">
+              <span>Live preview · {activePage}</span>
+              <span className="text-slate-500 normal-case">0vgenerated-v2–style shell (mock)</span>
+            </div>
             {page ? renderNode(page.rootId) : null}
           </div>
           {selectedId && menuPos ? (
             <div
-              className="pointer-events-auto absolute z-20 flex min-w-[160px] flex-col overflow-hidden rounded-lg border border-cyan-500/40 bg-[#0c1a2e] py-1 text-[11px] shadow-xl"
+              className="pointer-events-auto absolute z-20 flex min-w-[180px] flex-col overflow-hidden rounded-lg border border-blue-500/50 bg-[#0c1a2e] py-1 text-[11px] shadow-xl"
               style={{ top: menuPos.top, left: menuPos.left }}
               onClick={(e) => e.stopPropagation()}
             >
-              <span className="px-2 py-1 text-[10px] text-slate-500">Quick actions</span>
+              <span className="px-2 py-1 text-[10px] text-slate-500">Element</span>
+              <button
+                type="button"
+                className="px-3 py-1.5 text-left hover:bg-white/10"
+                onClick={() => {
+                  const n = selected;
+                  if (!n || (n.type !== 'text' && n.type !== 'button')) return;
+                  const nv = window.prompt('Edit text', n.text || '');
+                  if (nv !== null && selectedId) updateNodeText(selectedId, nv);
+                }}
+              >
+                <Type className="mr-1 inline h-3 w-3" /> Edit Text
+              </button>
+              <button
+                type="button"
+                className="px-3 py-1.5 text-left hover:bg-white/10"
+                onClick={() => {
+                  setStudioTool('color');
+                  const v = window.prompt('Background color (hex)', selected?.style.backgroundColor || '#0D1117');
+                  if (v && selectedId) updateSelectedStyle({ backgroundColor: v });
+                }}
+              >
+                <Pipette className="mr-1 inline h-3 w-3" /> Color
+              </button>
+              <button
+                type="button"
+                className="px-3 py-1.5 text-left hover:bg-white/10"
+                onClick={() => {
+                  const v = window.prompt('Width (CSS)', selected?.style.width || 'auto');
+                  if (v != null && selectedId) updateSelectedStyle({ width: v });
+                }}
+              >
+                <Scaling className="mr-1 inline h-3 w-3" /> Size
+              </button>
+              <button
+                type="button"
+                className="px-3 py-1.5 text-left text-rose-200 hover:bg-rose-500/15"
+                onClick={() => deleteSelectedNode()}
+              >
+                <Trash2 className="mr-1 inline h-3 w-3" /> Delete
+              </button>
+              <div className="my-1 border-t border-white/10" />
               <button type="button" className="px-3 py-1.5 text-left hover:bg-white/10" onClick={() => moveSelectedInParent(-1)}>
                 <ArrowUp className="mr-1 inline h-3 w-3" /> Move up
               </button>
@@ -706,13 +1099,7 @@ export function IdeVisualEditor({
                 <ArrowDown className="mr-1 inline h-3 w-3" /> Move down
               </button>
               <button type="button" className="px-3 py-1.5 text-left hover:bg-white/10" onClick={() => applySimilarOnPage()}>
-                <Copy className="mr-1 inline h-3 w-3" /> Match style (this page)
-              </button>
-              <button type="button" className="px-3 py-1.5 text-left hover:bg-white/10" onClick={() => applySimilarAllPages()}>
-                <Copy className="mr-1 inline h-3 w-3" /> Match style (all pages)
-              </button>
-              <button type="button" className="px-3 py-1.5 text-left hover:bg-white/10 text-amber-100/90" onClick={() => setSelectedId(null)}>
-                Close menu
+                <Copy className="mr-1 inline h-3 w-3" /> Match style (page)
               </button>
             </div>
           ) : null}
@@ -849,19 +1236,11 @@ export function IdeVisualEditor({
         </aside>
       </div>
 
-      <footer className="flex shrink-0 items-center justify-between gap-3 border-t border-cyan-500/25 bg-[#040d18] px-4 py-3">
-        <p className="text-[10px] text-slate-500">
-          Use the main <strong className="text-slate-400">Assistant</strong> for Grok chat. Most edits here are visual to save tokens.
+      <footer className="shrink-0 border-t border-cyan-500/20 bg-[#040d18] px-3 py-2">
+        <p className="text-center text-[10px] text-slate-500">
+          Use the main <strong className="text-slate-400">Assistant</strong> for Grok chat. Toolbar tools are a mock surface — disk writes
+          require v0 base + <strong className="text-slate-400">Save Changes &amp; Update Code</strong> (Grok 4.1).
         </p>
-        <button
-          type="button"
-          disabled={busy}
-          onClick={() => setApplyConfirmOpen(true)}
-          className="rounded-lg bg-cyan-500 px-5 py-2.5 text-sm font-headline text-black shadow-[0_0_20px_rgba(34,211,238,0.35)] hover:bg-cyan-400 disabled:opacity-40"
-        >
-          <Save className="mr-2 inline h-4 w-4" />
-          Save Changes &amp; Update Code
-        </button>
       </footer>
 
       {applyConfirmOpen ? (

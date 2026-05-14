@@ -1,5 +1,5 @@
 import { fetchJson, readResponseJson } from './apiFetch';
-import { getStoredGrokApiKey } from './grokKey';
+import { GROK_CHAT_SETUP_HINT } from './grokKey';
 import { withProjectBody, withProjectQuery } from './nebulaProjectApi';
 import { buildNebulaAssistantSystemPrompt } from './nebulaAssistantSystemPrompt';
 import {
@@ -109,7 +109,6 @@ export async function sendIdeAssistantGrokTurn(options: {
     signal,
   } = options;
 
-  const storedGrok = getStoredGrokApiKey();
   let hasServerKey = false;
   try {
     const r = await fetch(withProjectQuery('/api/config'));
@@ -118,10 +117,8 @@ export async function sendIdeAssistantGrokTurn(options: {
   } catch {
     hasServerKey = false;
   }
-  if (!storedGrok && !hasServerKey) {
-    throw new Error(
-      'Grok API key is missing. Add GROK_API_KEY to your .env and restart the server, or save your key under Account (top bar) or My Projects → Secrets.',
-    );
+  if (!hasServerKey) {
+    throw new Error(GROK_CHAT_SETUP_HINT);
   }
 
   const { latestMP, uiStudioApprovedCode } = await fetchMasterPlanAndUiStudio();
@@ -132,7 +129,6 @@ export async function sendIdeAssistantGrokTurn(options: {
       : '');
 
   const grokHeaders: Record<string, string> = { 'Content-Type': 'application/json' };
-  if (storedGrok) grokHeaders['X-Grok-Api-Key'] = storedGrok;
 
   let grokUserMessageContent = textToSend;
   let swarmHandoffPacket: SwarmHandoffPacket | null = null;

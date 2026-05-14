@@ -1,4 +1,6 @@
-/** Browser-only storage for Grok key when .env is not set (local dev / Settings). */
+/** Same guidance as server `NEBULA_GROK_KEY_SETUP_HINT` (kept in client bundle). */
+export const GROK_CHAT_SETUP_HINT =
+  "Grok is configured on the server: set GROK_API_KEY in the Nebula .env file and restart the process. (Browser-stored Grok keys are temporarily unused.)";
 export const NEBULLA_GROK_KEY_STORAGE = 'nebulla_grok_api_key';
 
 export function getStoredGrokApiKey(): string | undefined {

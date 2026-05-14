@@ -4,7 +4,6 @@
  */
 
 import { fetchJson } from './apiFetch';
-import { getStoredGrokApiKey } from './grokKey';
 
 export interface ChatMessage {
   role: 'user' | 'assistant' | 'system';
@@ -19,8 +18,6 @@ export async function sendToGROK(messages: ChatMessage[]): Promise<string> {
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
     };
-    const stored = getStoredGrokApiKey();
-    if (stored) headers['X-Grok-Api-Key'] = stored;
 
     const data = await fetchJson<{ choices?: { message?: { content?: string } }[] }>(
       '/api/grok/chat',

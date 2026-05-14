@@ -28,7 +28,7 @@ import {
   buildNebulaUiStudioPromptBody,
   callPencilMockupsGenerate,
 } from "./lib/nebulaPencilDev";
-import { createResolveMainGrokApiKey } from "./lib/nebulaMainGrokResolver";
+import { createResolveMainGrokApiKey, createResolveMainGrokApiKeyDetailed, NEBULA_GROK_KEY_SETUP_HINT } from "./lib/nebulaMainGrokResolver";
 import {
   callGrokGenerateUiSvg,
   heuristicSvgEditRisks,
@@ -85,6 +85,7 @@ export const app = express();
 const PORT = Number(process.env.PORT) || 3000;
 
 const resolveMainGrokApiKey = createResolveMainGrokApiKey(readNebulaSessionUserId);
+const resolveMainGrokApiKeyDetailed = createResolveMainGrokApiKeyDetailed(readNebulaSessionUserId);
 
 async function startServer() {
   initGuardianProcessHandlers();
@@ -132,6 +133,7 @@ async function startServer() {
       githubClientId: process.env.GITHUB_CLIENT_ID || process.env.github_client_id,
       builderPublicKey: process.env.BUILDER_PUBLIC_KEY,
       hasGrokApiKey: grok.length >= 20,
+      grokKeyHint: NEBULA_GROK_KEY_SETUP_HINT,
       hasGrokTtsKey: tts.length >= 20,
       hasGrokWriterKey: writer.length >= 20,
       pencilMockupsReady: Boolean(pencilKey),
@@ -1115,11 +1117,7 @@ No approved UI code yet.
       });
       const promptText = String((body as { prompt?: string }).prompt ?? "");
 
-      const bodyGrokForStudio =
-        typeof (req.body as { grokApiKey?: unknown })?.grokApiKey === "string"
-          ? String((req.body as { grokApiKey?: string }).grokApiKey).trim()
-          : "";
-      const grokKey = await resolveMainGrokApiKey(req, bodyGrokForStudio || undefined);
+      const grokKey = await resolveMainGrokApiKey(req);
 
       if (grokKey) {
         try {
@@ -1183,11 +1181,7 @@ No approved UI code yet.
     if (typeof originalCode !== "string" || typeof editedCode !== "string") {
       return res.status(400).json({ error: "originalCode and editedCode strings are required" });
     }
-    const bodyGrokForStudio =
-      typeof (req.body as { grokApiKey?: unknown })?.grokApiKey === "string"
-        ? String((req.body as { grokApiKey?: string }).grokApiKey).trim()
-        : "";
-    const grokKey = await resolveMainGrokApiKey(req, bodyGrokForStudio || undefined);
+    const grokKey = await resolveMainGrokApiKey(req);
     const heuristic = heuristicSvgEditRisks(originalCode, editedCode);
     try {
       if (grokKey) {
@@ -1210,13 +1204,11 @@ No approved UI code yet.
     if (typeof editedCode !== "string" || !editedCode.trim()) {
       return res.status(400).json({ error: "editedCode is required" });
     }
-    const bodyGrokForStudio =
-      typeof (req.body as { grokApiKey?: unknown })?.grokApiKey === "string"
-        ? String((req.body as { grokApiKey?: string }).grokApiKey).trim()
-        : "";
-    const grokKey = await resolveMainGrokApiKey(req, bodyGrokForStudio || undefined);
+    const grokKey = await resolveMainGrokApiKey(req);
     if (!grokKey) {
-      return res.status(400).json({ error: "Grok API key required to adapt SVG (server GROK_API_KEY or client key)." });
+      return res.status(400).json({
+        error: "Grok API key missing. Set GROK_API_KEY in the server .env file and restart.",
+      });
     }
     try {
       const { svg } = await callGrokAdaptUserSvg({
@@ -1374,14 +1366,11 @@ No approved UI code yet.
   });
 
   app.post("/api/visual-ui-editor/apply-visual-changes", async (req, res) => {
-    const apiKey = await resolveMainGrokApiKey(
-      req,
-      typeof (req.body as { grokApiKey?: string })?.grokApiKey === "string"
-        ? (req.body as { grokApiKey?: string }).grokApiKey
-        : undefined
-    );
+    const apiKey = await resolveMainGrokApiKey(req);
     if (!apiKey) {
-      return res.status(401).json({ error: "Grok API key required for code apply." });
+      return res.status(401).json({
+        error: "Grok API key missing. Set GROK_API_KEY in the server .env file and restart.",
+      });
     }
     try {
       const { workspaceRoot } = projectPathsFor(req);
@@ -1566,18 +1555,17 @@ ${modelJson}`;
   };
 
   app.post("/api/grok/execute-project-rules", async (req, res) => {
-    const { messages, grokApiKey: bodyGrokKey, userId, projectName } = req.body || {};
-    const apiKey = await resolveMainGrokApiKey(req, typeof bodyGrokKey === "string" ? bodyGrokKey : undefined);
+    const { messages, userId, projectName } = req.body || {};
+    const apiKey = await resolveMainGrokApiKey(req);
 
     if (!apiKey) {
       return res.status(401).json({
-        error:
-          "Grok API key is missing. Add GROK_API_KEY to your .env file, restart the server, or save your key under Account (IDE) or My Projects → Secrets (this browser only).",
+        error: "Grok API key is missing. Set GROK_API_KEY in the server .env file and restart.",
       });
     }
     if (apiKey.length < 20) {
       return res.status(400).json({
-        error: "Your GROK_API_KEY appears to be invalid. Please check it in the Settings menu.",
+        error: "GROK_API_KEY in .env appears invalid. Update the value and restart the server.",
       });
     }
 
@@ -1636,18 +1624,17 @@ Rules:
 
   /** Go: Grok 4 writes a short summary into master-plan.json only, then Grok Code runs (no full execution doc in MP). */
   app.post("/api/grok/go-code", async (req, res) => {
-    const { messages, grokApiKey: bodyGrokKey, userId, projectName, userNote } = req.body || {};
-    const apiKey = await resolveMainGrokApiKey(req, typeof bodyGrokKey === "string" ? bodyGrokKey : undefined);
+    const { messages, userId, projectName, userNote } = req.body || {};
+    const apiKey = await resolveMainGrokApiKey(req);
 
     if (!apiKey) {
       return res.status(401).json({
-        error:
-          "Grok API key is missing. Add GROK_API_KEY to your .env file, restart the server, or save your key under Account (IDE) or My Projects → Secrets (this browser only).",
+        error: "Grok API key is missing. Set GROK_API_KEY in the server .env file and restart.",
       });
     }
     if (apiKey.length < 20) {
       return res.status(400).json({
-        error: "Your GROK_API_KEY appears to be invalid. Please check it in the Settings menu.",
+        error: "GROK_API_KEY in .env appears invalid. Update the value and restart the server.",
       });
     }
 
@@ -1939,7 +1926,7 @@ ${workflowContext}`;
         if (!mainGrok || mainGrok.length < 20) {
           return res.status(401).json({
             error:
-              "Grok API key is required for Run and Test (Quality agent uses Grok 4.1). Set GROK_API_KEY on the server, or send X-Grok-Api-Key / save your key in Settings.",
+              "Grok API key is required for Run and Test (Quality agent uses Grok 4.1). Set GROK_API_KEY on the server .env and restart.",
           });
         }
         qualityLane = { apiKey: mainGrok, model: qualityModel };
@@ -1984,22 +1971,19 @@ ${workflowContext}`;
   });
 
   app.post("/api/grok/chat", async (req, res) => {
-    const { messages, grokApiKey: bodyGrokKey, userId, projectName, onboardingAutopilot } = req.body || {};
-    const apiKey = await resolveMainGrokApiKey(req, typeof bodyGrokKey === "string" ? bodyGrokKey : undefined);
+    const { messages, userId, projectName, onboardingAutopilot } = req.body || {};
+    const keyRes = await resolveMainGrokApiKeyDetailed(req);
 
-    if (!apiKey) {
-      console.error("GROK_API_KEY is not set (env, X-Grok-Api-Key header, or Settings)");
-      return res.status(401).json({
-        error:
-          "Grok API key is missing. Add GROK_API_KEY to your .env file, restart the server, or save your key under Account (IDE) or My Projects → Secrets (this browser only).",
+    if (keyRes.ok === false) {
+      const status = keyRes.code === "INVALID_LENGTH" ? 400 : 401;
+      console.error(`[grok/chat] ${keyRes.code}: ${keyRes.message}`);
+      return res.status(status).json({
+        error: keyRes.message,
+        code: keyRes.code,
+        hint: keyRes.hint,
       });
     }
-    if (apiKey.length < 20) {
-      const helpMsg = "Your GROK_API_KEY appears to be invalid. Please check it in the Settings menu.";
-      console.error(`Invalid GROK_API_KEY format detected: ${helpMsg}`);
-      return res.status(400).json({ error: helpMsg });
-    }
-
+    const apiKey = keyRes.apiKey;
     const convUserId =
       typeof userId === "string" && userId.trim() ? userId.trim() : "anonymous";
     const convProject =
@@ -2101,13 +2085,29 @@ ${answer.slice(0, 8000)}`;
       });
       if (!response.ok) {
         const errorText = await response.text();
-        console.error(`GROK API error (${response.status}):`, errorText);
+        console.error(`GROK API error (${response.status}):`, errorText.slice(0, 500));
+        let parsed: Record<string, unknown> = {};
         try {
-          const errorData = JSON.parse(errorText);
-          return res.status(response.status).json(errorData);
+          parsed = JSON.parse(errorText) as Record<string, unknown>;
         } catch {
-          return res.status(response.status).json({ error: errorText });
+          parsed = {};
         }
+        const upstreamMsg =
+          (typeof parsed.error === "string" && parsed.error) ||
+          (typeof parsed.message === "string" && parsed.message) ||
+          errorText.slice(0, 400);
+        const hint =
+          response.status === 401 || /invalid.*api.*key|incorrect.*api.*key|unauthor/i.test(String(upstreamMsg))
+            ? NEBULA_GROK_KEY_SETUP_HINT
+            : undefined;
+        return res.status(response.status).json({
+          ...parsed,
+          error:
+            response.status === 401
+              ? `Grok rejected this API key (401). ${upstreamMsg}`
+              : upstreamMsg,
+          ...(hint ? { hint } : {}),
+        });
       }
 
       const data = await response.json();

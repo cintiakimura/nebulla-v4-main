@@ -39,10 +39,13 @@ export async function readResponseJson<T>(response: Response): Promise<T> {
  */
 export async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(url, init);
-  const data = await readResponseJson<T & { error?: string }>(response);
+  const data = await readResponseJson<T & { error?: string; hint?: string }>(response);
   if (!response.ok) {
     const msg = (data as { error?: string }).error;
-    throw new Error(typeof msg === "string" && msg ? msg : `Request failed: ${response.status}`);
+    const hint = (data as { hint?: string }).hint;
+    const base = typeof msg === "string" && msg ? msg : `Request failed: ${response.status}`;
+    const combined = hint ? `${base}\n\n${hint}` : base;
+    throw new Error(combined);
   }
   return data as T;
 }

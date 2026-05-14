@@ -1,31 +1,67 @@
 import type express from "express";
-import { getNebulaPgPool } from "./nebulaPgPool";
-import { getUserGrokApiKeyDecrypted } from "./nebulaUserGrokStore";
+
+/** Shown in API errors and product UI when no usable Grok key is available. */
+export const NEBULA_GROK_KEY_SETUP_HINT =
+  "Set GROK_API_KEY in the server .env file and restart the Nebula process. Per-user Grok keys in the app are temporarily disabled.";
+
+const MIN_KEY_LEN = 20;
+
+export type MainGrokKeySource = "env";
+
+export type MainGrokResolveOk = { ok: true; apiKey: string; source: MainGrokKeySource };
+
+export type MainGrokResolveErr = {
+  ok: false;
+  code: "MISSING" | "INVALID_LENGTH";
+  message: string;
+  hint: string;
+};
+
+export type MainGrokResolveResult = MainGrokResolveOk | MainGrokResolveErr;
+
+function resolveEnvGrokKey(): MainGrokResolveResult {
+  const env = process.env.GROK_API_KEY?.trim() ?? "";
+  if (!env) {
+    return {
+      ok: false,
+      code: "MISSING",
+      message: "GROK_API_KEY is not set on the server.",
+      hint: NEBULA_GROK_KEY_SETUP_HINT,
+    };
+  }
+  if (env.length < MIN_KEY_LEN) {
+    return {
+      ok: false,
+      code: "INVALID_LENGTH",
+      message: "GROK_API_KEY is set in the environment but is too short to be valid.",
+      hint: NEBULA_GROK_KEY_SETUP_HINT,
+    };
+  }
+  return { ok: true, apiKey: env, source: "env" };
+}
 
 /**
- * Resolves the **main** Grok key for chat / UI tools.
- * Order: `X-Grok-Api-Key` → explicit body override → **encrypted per-user key (PostgreSQL)** → `GROK_API_KEY` env.
- * Does **not** read `GROK_SWARM_API_KEY` or `GROK_TTS_NEW_API_KEY` (those remain Nebula `.env` only).
+ * Resolves the **main** Grok key for chat, swarm quality lane, UI tools, and code paths.
+ * Uses **`GROK_API_KEY` from the server environment only** (no header, body, or per-user DB overrides).
  */
-export function createResolveMainGrokApiKey(readSessionUid: (req: express.Request) => string | null) {
-  return async function resolveMainGrokApiKey(req: express.Request, bodyGrokOverride?: string): Promise<string> {
-    const headerKey =
-      typeof req.headers["x-grok-api-key"] === "string" ? req.headers["x-grok-api-key"].trim() : "";
-    if (headerKey.length >= 20) return headerKey;
-    const bodyKey = typeof bodyGrokOverride === "string" ? bodyGrokOverride.trim() : "";
-    if (bodyKey.length >= 20) return bodyKey;
-    const uid = readSessionUid(req);
-    if (uid) {
-      const pool = getNebulaPgPool();
-      if (pool) {
-        try {
-          const dec = await getUserGrokApiKeyDecrypted(pool, uid);
-          if (dec && dec.length >= 20) return dec;
-        } catch {
-          /* ignore */
-        }
-      }
-    }
-    return process.env.GROK_API_KEY?.trim() ?? "";
+export function createResolveMainGrokApiKey(_readSessionUid: (req: express.Request) => string | null) {
+  void _readSessionUid;
+  return async function resolveMainGrokApiKey(
+    _req: express.Request,
+    _bodyGrokOverride?: string
+  ): Promise<string> {
+    const r = resolveEnvGrokKey();
+    return r.ok ? r.apiKey : "";
+  };
+}
+
+/** Same as {@link createResolveMainGrokApiKey} with explicit error codes for `/api/grok/chat`. */
+export function createResolveMainGrokApiKeyDetailed(_readSessionUid: (req: express.Request) => string | null) {
+  void _readSessionUid;
+  return async function resolveMainGrokApiKeyDetailed(
+    _req: express.Request,
+    _bodyGrokOverride?: string
+  ): Promise<MainGrokResolveResult> {
+    return resolveEnvGrokKey();
   };
 }

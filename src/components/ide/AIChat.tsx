@@ -13,7 +13,9 @@ import {
 import { cn } from '@/lib/utils';
 import { getUserCapabilities } from '@/lib/user-tier';
 import { fetchSessionUser } from '../../lib/nebulaCloud';
-import { getBrowserProjectName } from '../../lib/nebulaProjectApi';
+import { GROK_CHAT_SETUP_HINT } from '../../lib/grokKey';
+import { readResponseJson } from '../../lib/apiFetch';
+import { getBrowserProjectName, withProjectQuery } from '../../lib/nebulaProjectApi';
 import { sendIdeAssistantGrokTurn } from '../../lib/ideAssistantGrokChat';
 import { ideContextSnippetForChat, useIdeWorkspace } from '@/components/ide/IdeWorkspaceContext';
 import { buildIdeSwarmFocusFromEditor } from '../../lib/ideSwarmFocus';
@@ -96,6 +98,23 @@ export function AIChat() {
   const [accessoryHint, setAccessoryHint] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
+  const [serverHasGrokKey, setServerHasGrokKey] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const r = await fetch(withProjectQuery('/api/config'));
+        const cfg = (await readResponseJson(r)) as { hasGrokApiKey?: boolean };
+        if (!cancelled) setServerHasGrokKey(r.ok && Boolean(cfg.hasGrokApiKey));
+      } catch {
+        if (!cancelled) setServerHasGrokKey(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     setSendError(null);
@@ -131,6 +150,33 @@ export function AIChat() {
   const sendChat = useCallback(async () => {
     const text = input.trim();
     if (!text || sending) return;
+
+    let hasServerKey = serverHasGrokKey;
+    if (hasServerKey === null) {
+      try {
+        const r = await fetch(withProjectQuery('/api/config'));
+        const cfg = (await readResponseJson(r)) as { hasGrokApiKey?: boolean };
+        hasServerKey = r.ok && Boolean(cfg.hasGrokApiKey);
+        setServerHasGrokKey(hasServerKey);
+      } catch {
+        hasServerKey = false;
+        setServerHasGrokKey(false);
+      }
+    }
+    if (!hasServerKey) {
+      const ts = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: `k-${Date.now()}`,
+          role: 'assistant',
+          content: GROK_CHAT_SETUP_HINT,
+          timestamp: ts,
+        },
+      ]);
+      setSendError(null);
+      return;
+    }
 
     const userMsg: Message = {
       id: `u-${Date.now()}`,
@@ -191,20 +237,27 @@ export function AIChat() {
       setMessages((prev) => [...prev, assistantMsg]);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      setSendError(msg);
+      const isKeyHelp =
+        msg.includes('Grok API key') ||
+        msg.includes('Please add your Grok') ||
+        msg.includes('401') ||
+        msg.includes('rejected this API key');
+      setSendError(isKeyHelp ? null : msg);
       setMessages((prev) => [
         ...prev,
         {
           id: `e-${Date.now()}`,
           role: 'assistant',
-          content: `Request failed: ${msg}`,
+          content: isKeyHelp ? msg.replace(/\n\n+/g, '\n\n') : `Something went wrong: ${msg}`,
           timestamp: new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }),
         },
       ]);
     } finally {
       setSending(false);
     }
-  }, [input, sending, messages, chatModel, activePath, activeTab?.content, activeTab?.loading, swarm]);
+  }, [input, sending, messages, chatModel, activePath, activeTab?.content, activeTab?.loading, swarm, serverHasGrokKey]);
+
+  const showGrokKeyBanner = serverHasGrokKey !== true;
 
   const handleGo = () => {
     void sendChat();
@@ -224,6 +277,19 @@ export function AIChat() {
           <span>Lean swarm · planning in chat</span>
         </div>
       </div>
+
+      {showGrokKeyBanner ? (
+        <div
+          className="shrink-0 border-b border-amber-500/40 bg-gradient-to-r from-amber-500/20 via-amber-500/12 to-transparent px-3 py-3"
+          role="status"
+        >
+          <p className="type-label-sm font-headline text-amber-100">Grok is not configured on the server</p>
+          <p className="type-body-md mt-1 leading-relaxed text-amber-50/95">{GROK_CHAT_SETUP_HINT}</p>
+          {serverHasGrokKey === null ? (
+            <p className="type-label-sm mt-1 text-amber-200/80">Checking server configuration…</p>
+          ) : null}
+        </div>
+      ) : null}
 
       {accessoryHint ? (
         <p className="type-label-sm border-b border-amber-500/20 bg-amber-500/10 px-3 py-1.5 text-amber-100/95" role="status">

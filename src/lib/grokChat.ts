@@ -18,7 +18,6 @@ export enum Modality {
 }
 
 import { fetchJson } from './apiFetch';
-import { getStoredGrokApiKey } from './grokKey';
 
 /**
  * Simple GROK client
@@ -28,8 +27,6 @@ export async function sendToGrok(message: string) {
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
     };
-    const stored = getStoredGrokApiKey();
-    if (stored) headers['X-Grok-Api-Key'] = stored;
 
     const data = await fetchJson<{ text?: string; message?: string }>('/api/grok/chat', {
       method: 'POST',

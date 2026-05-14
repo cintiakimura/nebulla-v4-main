@@ -26,7 +26,7 @@ import { shouldPostSwarmHandoff, computePhaseSyncAfterResponse, buildSwarmConver
 import type { SwarmHandoffPacket, SwarmPhase, SwarmIntensity } from '@/types/swarm';
 import type { NebulaSwarmStateFile } from '@/lib/nebulaSwarmState';
 import { fetchJson, readResponseJson } from '../lib/apiFetch';
-import { getStoredGrokApiKey } from '../lib/grokKey';
+import { GROK_CHAT_SETUP_HINT } from '../lib/grokKey';
 import { withProjectBody, withProjectQuery } from '../lib/nebulaProjectApi';
 import { buildNebulaAssistantSystemPrompt } from '../lib/nebulaAssistantSystemPrompt';
 import { fetchConversationLogEntries } from '../lib/conversationLogClient';
@@ -440,7 +440,6 @@ export function AssistantSidebar({
     let swarmPipelineStarted = false;
 
     try {
-      const storedGrok = getStoredGrokApiKey();
       let hasServerKey = serverHasGrokKey;
       if (hasServerKey === null) {
         try {
@@ -453,13 +452,12 @@ export function AssistantSidebar({
           setServerHasGrokKey(false);
         }
       }
-      if (!storedGrok && !hasServerKey) {
+      if (!hasServerKey) {
         setMessages((prev) => [
           ...prev,
           {
             role: 'system',
-            text:
-              'Grok API key is missing. Add GROK_API_KEY to your .env file and restart the server, or save your key under Account or My Projects → Secrets (this browser only).',
+            text: GROK_CHAT_SETUP_HINT,
           },
         ]);
         setIsLoading(false);
@@ -505,7 +503,6 @@ export function AssistantSidebar({
       const grokHeaders: Record<string, string> = {
         'Content-Type': 'application/json',
       };
-      if (storedGrok) grokHeaders['X-Grok-Api-Key'] = storedGrok;
 
       /** Last user `content` sent to `/api/grok/chat` (may include swarm handoff when enabled). */
       let grokUserMessageContent = textToSend;
@@ -699,7 +696,6 @@ export function AssistantSidebar({
         startRealtimeCodingStatus('Grok Code starting implementation');
         setMessages((prev) => [...prev, { role: 'system', text: 'Grok Code started. Building implementation now…' }]);
         const goHeaders: Record<string, string> = { 'Content-Type': 'application/json' };
-        if (storedGrok) goHeaders['X-Grok-Api-Key'] = storedGrok;
         const goPayloadMessages = [
           { role: 'assistant' as const, content: codingSource.slice(0, 12000) },
           {
@@ -1075,8 +1071,17 @@ export function AssistantSidebar({
         setAboutAppActive(false);
       }
       const rawMsg = typeof error?.message === 'string' ? error.message : 'Failed to connect to GROK.';
+      const isKeyHelp =
+        rawMsg.includes('Grok API key') ||
+        rawMsg.includes('Please add your Grok') ||
+        rawMsg.includes('401') ||
+        rawMsg.includes('rejected this API key');
       const displayMsg =
-        rawMsg.includes('monthly limit') || rawMsg.includes('Upgrade to Pro') ? rawMsg : `Error: ${rawMsg}`;
+        isKeyHelp
+          ? rawMsg.replace(/\n\n+/g, '\n\n')
+          : rawMsg.includes('monthly limit') || rawMsg.includes('Upgrade to Pro')
+            ? rawMsg
+            : `Error: ${rawMsg}`;
       setMessages((prev) => [...prev, { role: 'system', text: displayMsg }]);
     } finally {
       if (swarmPipelineStarted) {
@@ -1122,8 +1127,6 @@ export function AssistantSidebar({
       manualRunAndTest?: boolean
     ) => {
       const h: Record<string, string> = { 'Content-Type': 'application/json' };
-      const k = getStoredGrokApiKey();
-      if (k) h['X-Grok-Api-Key'] = k;
       const runId =
         typeof runIdArg === 'string' && runIdArg.trim()
           ? runIdArg.trim()
@@ -1159,7 +1162,6 @@ export function AssistantSidebar({
   const handleGoCode = async () => {
     if (codeMode || isLoading) return;
     const userNote = inputText.trim();
-    const storedGrok = getStoredGrokApiKey();
     let hasServerKey = serverHasGrokKey;
     if (hasServerKey === null) {
       try {
@@ -1172,13 +1174,12 @@ export function AssistantSidebar({
         setServerHasGrokKey(false);
       }
     }
-    if (!storedGrok && !hasServerKey) {
+    if (!hasServerKey) {
       setMessages((prev) => [
         ...prev,
         {
           role: 'system',
-          text:
-            'Grok API key is missing. Add GROK_API_KEY to your .env file and restart the server, or save your key under Account or My Projects → Secrets (this browser only).',
+          text: GROK_CHAT_SETUP_HINT,
         },
       ]);
       return;
@@ -1198,7 +1199,6 @@ export function AssistantSidebar({
     setChatStatus('Grok 4: writing short Master Plan summary only, then Grok Code…');
 
     const grokHeaders: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (storedGrok) grokHeaders['X-Grok-Api-Key'] = storedGrok;
 
     const payloadMessages = [
       {
@@ -1694,8 +1694,7 @@ export function AssistantSidebar({
     }, 1000);
   };
 
-  const showGrokSetupHint =
-    !getStoredGrokApiKey() && serverHasGrokKey === false;
+  const showGrokSetupHint = serverHasGrokKey !== true;
 
   const lastAssistantMessageIndex = useMemo(() => {
     for (let i = messages.length - 1; i >= 0; i--) {
@@ -1761,6 +1760,19 @@ export function AssistantSidebar({
       ) : null}
 
       <SwarmStatusBar />
+
+      {!aboutAppActive && showGrokSetupHint ? (
+        <div
+          className="shrink-0 border-b border-amber-500/40 bg-gradient-to-r from-amber-500/20 via-amber-500/10 to-transparent px-4 py-3"
+          role="status"
+        >
+          <p className="text-xs font-headline tracking-wide text-amber-100">Grok is not configured on the server</p>
+          <p className="mt-1 text-[11px] leading-relaxed text-amber-50/95">{GROK_CHAT_SETUP_HINT}</p>
+          {serverHasGrokKey === null ? (
+            <p className="mt-1 text-[10px] text-amber-200/70">Checking server configuration…</p>
+          ) : null}
+        </div>
+      ) : null}
 
       <div className="flex-1 p-4 overflow-y-auto flex flex-col gap-4">
         {!codeMode && aboutAppActive ? (
@@ -1858,10 +1870,8 @@ export function AssistantSidebar({
 
       <div className="shrink-0 border-t border-border bg-card/60 p-3 backdrop-blur-sm">
         {showGrokSetupHint && (
-          <p className="mb-2 text-[10px] leading-snug text-amber-400/95 border border-amber-500/25 bg-amber-500/10 rounded-lg px-2 py-1.5">
-            Grok key missing: add <span className="font-mono text-amber-200">GROK_API_KEY</span> to{' '}
-            <span className="font-mono text-amber-200">.env</span> and restart the server, or save it under{' '}
-            <span className="font-mono text-amber-200">Account or My Projects → Secrets</span> (this browser only).
+          <p className="mb-2 text-[10px] leading-snug text-amber-100/95 border border-amber-500/30 bg-amber-500/10 rounded-lg px-2 py-1.5">
+            {GROK_CHAT_SETUP_HINT}
           </p>
         )}
         <div

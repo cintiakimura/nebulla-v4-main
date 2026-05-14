@@ -17,11 +17,10 @@ const V0_KEYS_URL = 'https://v0.dev/chat/settings/keys';
 function SecretNote() {
   return (
     <p className="text-[11px] text-slate-500 leading-relaxed border-t border-white/5 pt-3 mt-1">
-      Keys are stored in this browser under{' '}
-      <span className="text-slate-400">My Projects → Secrets</span> (sidebar) for your active project
-      (same store the IDE uses). When you are signed in, your main Grok key can also be copied to the server encrypted
-      (Project Manager — silent) so chat works without pasting the key on every device. Other browser-only secrets stay on
-      this device until you clear site data.
+      Grok 4.1 chat and related tools use the server&apos;s <span className="text-slate-400">GROK_API_KEY</span> from
+      <span className="text-slate-400"> .env</span> (restart after changes). Other keys are stored in this browser under{' '}
+      <span className="text-slate-400">My Projects → Secrets</span> for your active project. v0 and similar integrations
+      still use Secrets here when configured.
     </p>
   );
 }
@@ -57,7 +56,7 @@ export function MyServicesOnboarding({
     setGrokMsg(null);
     const v = grokInput.trim();
     if (!v) {
-      setGrokMsg('Paste your Grok API key first.');
+      setGrokMsg('Optional: paste a key only if you want it stored in Secrets for a future release.');
       return;
     }
     setGrokBusy(true);
@@ -65,7 +64,7 @@ export function MyServicesOnboarding({
       upsertProjectSecret(projectKey, GROK_ENV_NAME, v, 'api_key');
       setStoredGrokApiKey(v);
       setGrokInput('');
-      setGrokMsg('Saved. GROK_API_KEY is in Secrets and ready for chat.');
+      setGrokMsg('Saved locally under Secrets (optional). Chat still uses the server GROK_API_KEY.');
       void fireSilentProjectManager({ grokApiKey: v });
     } catch {
       setGrokMsg('Could not save. Check browser storage permissions.');
@@ -98,10 +97,8 @@ export function MyServicesOnboarding({
   const v0OnFile = Boolean(getProjectSecretValue(projectKey, V0_ENV_NAME) ?? getStoredV0ApiKey());
 
   const handleContinue = useCallback(async () => {
-    const k = getStoredGrokApiKey();
     await fireSilentProjectManager({
       syncAllProjects: true,
-      ...(k ? { grokApiKey: k } : {}),
     });
     onClose();
   }, [onClose]);
@@ -208,27 +205,27 @@ export function MyServicesOnboarding({
             <div className="flex items-start gap-3">
               <KeyRound className="w-5 h-5 text-cyan-400/90 shrink-0 mt-0.5" aria-hidden />
               <div className="min-w-0 space-y-1">
-                <h2 className="font-headline text-base text-slate-100">Grok API key (recommended)</h2>
+                <h2 className="font-headline text-base text-slate-100">Grok API key (optional — reserved)</h2>
                 <p className="text-sm text-slate-400 leading-relaxed">
-                  Connect your own Grok API key to unlock full control and maximum performance.
+                  Chat and agents use the server <span className="text-slate-300">GROK_API_KEY</span> from{' '}
+                  <span className="text-slate-300">.env</span> for now. You can still save a key here for a future
+                  per-account option; it is not required to use Nebula.
                 </p>
               </div>
             </div>
 
             <ul className="text-sm text-slate-300/95 space-y-2 list-none pl-0 border-l-2 border-cyan-500/30 pl-4">
-              <li>Choose the best model for each task (Grok 4.1, Grok 3, and more).</li>
-              <li>Remove Nebula message and credit limits tied to our shared keys.</li>
-              <li>Higher quality, faster responses, and stronger reasoning when you need it.</li>
-              <li>Pay only for what you use — transparent usage on your xAI account.</li>
+              <li>When per-user Grok keys return, saving here will let you use your own xAI billing and limits.</li>
+              <li>Until then, ensure your deployment has a valid server-side GROK_API_KEY.</li>
             </ul>
 
             <p className="text-sm text-slate-500 leading-relaxed italic border border-white/5 rounded-lg px-3 py-2 bg-black/20">
-              Professional developers know: owning your API key is the key to consistent, higher-quality results.
+              No action required in this screen for Grok chat while the server key is configured.
             </p>
 
             <div className="space-y-2">
               <label className="block text-[10px] uppercase tracking-wider text-slate-500 font-headline" htmlFor="grok-key">
-                GROK_API_KEY (main key)
+                GROK_API_KEY (optional local copy)
               </label>
               <input
                 id="grok-key"

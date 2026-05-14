@@ -3,7 +3,6 @@ import { ChevronDown, Copy, GitBranch } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useSwarm } from '@/components/swarm/SwarmProvider';
 import { Logo } from '@/components/Logo';
-import { getStoredGrokApiKey } from '../../lib/grokKey';
 import { runNebulaSwarm } from '../../lib/runNebulaSwarm';
 import { getBrowserProjectName, withProjectQuery } from '../../lib/nebulaProjectApi';
 import { readResponseJson } from '../../lib/apiFetch';
@@ -42,7 +41,6 @@ export function TopBar({
   const handleRunAndTest = useCallback(async () => {
     if (runTestBusy || swarm.isRunning) return;
     const name = getBrowserProjectName().trim() || 'my-awesome-app';
-    const storedGrok = getStoredGrokApiKey();
     let hasServerKey = false;
     try {
       const r = await fetch(withProjectQuery('/api/config'));
@@ -51,16 +49,15 @@ export function TopBar({
     } catch {
       hasServerKey = false;
     }
-    if (!storedGrok && !hasServerKey) {
+    if (!hasServerKey) {
       swarm.addActivity(
-        'Grok API key missing — add GROK_API_KEY to .env or save a key under My services → Secrets.',
+        'Grok API key missing — set GROK_API_KEY in the server .env file and restart.',
         'error',
       );
       return;
     }
 
     const grokHeaders: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (storedGrok) grokHeaders['X-Grok-Api-Key'] = storedGrok;
 
     const runId =
       typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `run-test-${Date.now()}`;

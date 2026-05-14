@@ -4,14 +4,14 @@
 - Grok 4.1 is the primary agent for planning, reasoning, and coding.
 - Only one support agent exists: **Quality Agent** (merged Tester + Reviewer) — triggered **manually** by the user with the **"Run and Test"** button.
 - v0 by Vercel is used **automatically once per project** for the initial high-quality UI generation.
-- All user-provided API keys (Grok, v0) are respected and used when available.
+- The main Grok brain reads **`GROK_API_KEY` from the server environment** (Nebula Product `.env` / host secrets). Optional per-user Grok overrides are temporarily disabled in the IDE.
 - **Nebula Project** (rules in this folder) is strictly separated from **Nebula Product** (the IDE itself).
 
 **Infrastructure Manager (Silent)**
 Runs automatically on onboarding and new project creation:
 - Creates Render project + database
 - Stores Render workspace/project IDs
-- Handles and validates user Grok and v0 API keys (encrypted at rest)
+- Handles and validates user **v0** API keys (and optional future per-user Grok storage); main Grok uses server `GROK_API_KEY`.
 
 **Voice & TTS Behavior**
 - TTS starts speaking as soon as Grok 4.1 outputs text (streaming).
