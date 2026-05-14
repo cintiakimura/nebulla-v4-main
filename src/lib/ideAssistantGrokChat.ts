@@ -111,7 +111,7 @@ export async function sendIdeAssistantGrokTurn(options: {
 
   let hasServerKey = false;
   try {
-    const r = await fetch(withProjectQuery('/api/config'));
+    const r = await fetch(withProjectQuery('/api/config'), { credentials: 'include' });
     const cfg = (await readResponseJson(r)) as { hasGrokApiKey?: boolean };
     hasServerKey = r.ok && Boolean(cfg.hasGrokApiKey);
   } catch {

@@ -104,7 +104,7 @@ export function AIChat() {
     let cancelled = false;
     void (async () => {
       try {
-        const r = await fetch(withProjectQuery('/api/config'));
+        const r = await fetch(withProjectQuery('/api/config'), { credentials: 'include' });
         const cfg = (await readResponseJson(r)) as { hasGrokApiKey?: boolean };
         if (!cancelled) setServerHasGrokKey(r.ok && Boolean(cfg.hasGrokApiKey));
       } catch {
@@ -154,7 +154,7 @@ export function AIChat() {
     let hasServerKey = serverHasGrokKey;
     if (hasServerKey === null) {
       try {
-        const r = await fetch(withProjectQuery('/api/config'));
+        const r = await fetch(withProjectQuery('/api/config'), { credentials: 'include' });
         const cfg = (await readResponseJson(r)) as { hasGrokApiKey?: boolean };
         hasServerKey = r.ok && Boolean(cfg.hasGrokApiKey);
         setServerHasGrokKey(hasServerKey);
@@ -239,6 +239,8 @@ export function AIChat() {
       const msg = e instanceof Error ? e.message : String(e);
       const isKeyHelp =
         msg.includes('Grok API key') ||
+        msg.includes('GROK_API_KEY') ||
+        msg.includes('Grok chat is unavailable') ||
         msg.includes('Please add your Grok') ||
         msg.includes('401') ||
         msg.includes('rejected this API key');
@@ -257,7 +259,8 @@ export function AIChat() {
     }
   }, [input, sending, messages, chatModel, activePath, activeTab?.content, activeTab?.loading, swarm, serverHasGrokKey]);
 
-  const showGrokKeyBanner = serverHasGrokKey !== true;
+  /** Only warn after we know the server lacks a key (avoid implying failure while `null`). */
+  const showGrokKeyBanner = serverHasGrokKey === false;
 
   const handleGo = () => {
     void sendChat();
@@ -329,11 +332,28 @@ export function AIChat() {
 
       <div className="flex-1 space-y-3 overflow-auto p-3">
         {messages.length === 0 && !sending ? (
-          <p className="type-body-md text-muted-foreground leading-relaxed">
-            Partner chat: same workflow as Nebula (Master Plan discovery, then coding and UI Studio). The open file and
-            master plan are sent automatically. Grok uses the server <span className="text-foreground/90">GROK_API_KEY</span>{' '}
-            from <span className="text-foreground/90">.env</span> — if chat fails, ask your operator to verify env and restart.
-          </p>
+          <div className="type-body-md text-muted-foreground leading-relaxed space-y-2">
+            {serverHasGrokKey === null ? (
+              <p>Checking connection to the server…</p>
+            ) : serverHasGrokKey ? (
+              <>
+                <p className="text-foreground/90 font-headline text-sm">Partner chat</p>
+                <p>
+                  Same workflow as Nebula: Master Plan discovery, then coding and UI Studio. Your open file and master
+                  plan are sent automatically when you message below.
+                </p>
+              </>
+            ) : (
+              <>
+                <p className="text-amber-200/95 font-headline text-sm">Grok is not available on this server</p>
+                <p>
+                  The API reports no usable <code className="text-foreground/90">GROK_API_KEY</code>. Set it in the project
+                  root <code className="text-foreground/90">.env</code> (key must be at least 20 characters after trimming),
+                  restart <code className="text-foreground/90">npm run dev</code>, and reload the page.
+                </p>
+              </>
+            )}
+          </div>
         ) : null}
 
         {messages.map((message) => (
