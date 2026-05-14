@@ -68,6 +68,15 @@ export function writeActiveGuestProjectId(id: string) {
   localStorage.setItem(ACTIVE_KEY, id);
 }
 
+/** Call when switching to a non-guest workspace (e.g. `default`) so startup does not restore a stale guest id. */
+export function clearActiveGuestProjectId() {
+  try {
+    localStorage.removeItem(ACTIVE_KEY);
+  } catch {
+    /* ignore */
+  }
+}
+
 /** If no index exists but legacy single-project blob does, migrate once. */
 export function migrateLegacyGuestProject(
   fallbackName: string,

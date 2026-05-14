@@ -3,14 +3,20 @@ import { IdeVisualEditor } from '@/components/ide/IdeVisualEditor';
 import { cn } from '@/lib/utils';
 import { AIChat } from '@/components/ide/AIChat';
 import { CodeEditor } from '@/components/ide/CodeEditor';
-import { FileExplorer } from '@/components/ide/FileExplorer';
 import { TerminalPanel } from '@/components/ide/TerminalPanel';
 import { TopBar } from '@/components/ide/TopBar';
 import { VerticalNav } from '@/components/ide/VerticalNav';
 import { MyServicesOnboarding } from '@/components/MyServicesOnboarding';
+import { MasterPlan } from '@/components/MasterPlan';
+import { SourceControlPanel } from '@/components/SourceControlPanel';
+import { AppPreviewPanel } from '@/components/AppPreviewPanel';
+import { ExplorerPanel } from '@/components/ExplorerPanel';
+import { IdeDashboardEmbed } from '@/components/ide/IdeDashboardEmbed';
+import { IdeWorkspaceProvider, useIdeWorkspace } from '@/components/ide/IdeWorkspaceContext';
+import { MindMapIdeRoute } from '@/components/ide/MindMapIdeRoute';
 import { fetchSessionUser, type NebulaSessionUser } from '../../lib/nebulaCloud';
 import { fetchNebulaPublicConfig, type NebulaPublicConfig } from '../../lib/nebulaPublicConfig';
-import { getBrowserProjectName } from '../../lib/nebulaProjectApi';
+import { getBrowserProjectKey, getBrowserProjectName } from '../../lib/nebulaProjectApi';
 
 const EXPLORER_MIN = 160;
 const EXPLORER_MAX = 480;
@@ -23,6 +29,34 @@ const CHAT_DEFAULT = 320;
 const TERMINAL_MIN = 80;
 const TERMINAL_MAX = 560;
 const TERMINAL_DEFAULT = 192;
+
+function IdeExplorerSidebar() {
+  const { openFile } = useIdeWorkspace();
+  return (
+    <ExplorerPanel projectKey={getBrowserProjectKey()} onOpenFile={(path) => void openFile(path)} />
+  );
+}
+
+function IdeSearchView({ onBack }: { onBack: () => void }) {
+  return (
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background">
+      <div className="tonal-seam-b flex h-10 shrink-0 items-center border-b border-white/5 px-3">
+        <button type="button" className="type-label-sm text-muted-foreground hover:text-foreground" onClick={onBack}>
+          ← Explorer
+        </button>
+      </div>
+      <div className="flex flex-1 flex-col items-center justify-center gap-4 p-8 text-center">
+        <h2 className="font-headline text-lg text-foreground">Search</h2>
+        <p className="max-w-md text-sm text-muted-foreground">
+          Use the file tree and chat to navigate the workspace. A global search palette can ship with the workspace index API.
+        </p>
+        <button type="button" className="btn-primary-cta rounded-md px-4 py-2 text-sm" onClick={onBack}>
+          Back to Explorer
+        </button>
+      </div>
+    </div>
+  );
+}
 
 function useDragResize(
   initial: number,
@@ -97,8 +131,79 @@ function ResizeHandle({
   );
 }
 
+function IdeMainByNav({
+  navId,
+  onSelectNav,
+}: {
+  navId: string;
+  onSelectNav: (id: string) => void;
+}) {
+  const projectName = getBrowserProjectName().trim() || 'Untitled project';
+
+  if (navId === 'master-plan') {
+    return (
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+        <MasterPlan projectKey={getBrowserProjectKey()} onClose={() => onSelectNav('explorer')} />
+      </div>
+    );
+  }
+
+  if (navId === 'source-control') {
+    return (
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+        <SourceControlPanel projectName={projectName} />
+      </div>
+    );
+  }
+
+  if (navId === 'mind-map') {
+    return <MindMapIdeRoute />;
+  }
+
+  if (navId === 'projects') {
+    return <IdeDashboardEmbed initialTab="projects" />;
+  }
+
+  if (navId === 'secrets') {
+    return <IdeDashboardEmbed initialTab="secrets" />;
+  }
+
+  if (navId === 'dns') {
+    return <IdeDashboardEmbed initialTab="dns" />;
+  }
+
+  if (navId === 'search') {
+    return <IdeSearchView onBack={() => onSelectNav('explorer')} />;
+  }
+
+  return (
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background">
+      <div className="tonal-seam-b flex h-10 shrink-0 items-center border-b border-white/5 px-3">
+        <button
+          type="button"
+          className="type-label-sm text-muted-foreground hover:text-foreground"
+          onClick={() => onSelectNav('explorer')}
+        >
+          ← Explorer
+        </button>
+      </div>
+      <div className="flex flex-1 flex-col items-center justify-center p-8 text-center">
+        <p className="text-sm text-muted-foreground">Unknown panel.</p>
+        <button
+          type="button"
+          className="btn-secondary-surface mt-4 rounded-md px-3 py-1.5 text-sm"
+          onClick={() => onSelectNav('explorer')}
+        >
+          Explorer
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export function NebullaIDE() {
   const [navId, setNavId] = useState('explorer');
+  const [uiStudioTab, setUiStudioTab] = useState<'design' | 'preview'>('design');
   const explorer = useDragResize(EXPLORER_DEFAULT, EXPLORER_MIN, EXPLORER_MAX, 'horizontal-right');
   const chat = useDragResize(CHAT_DEFAULT, CHAT_MIN, CHAT_MAX, 'horizontal-left');
   const terminal = useDragResize(TERMINAL_DEFAULT, TERMINAL_MIN, TERMINAL_MAX, 'vertical');
@@ -111,6 +216,10 @@ export function NebullaIDE() {
     const [cfg, u] = await Promise.all([fetchNebulaPublicConfig(), fetchSessionUser()]);
     setMyServicesConfig(cfg);
     setMyServicesUser(u);
+  }, []);
+
+  useEffect(() => {
+    document.title = 'Nebulla.beta — Workspace';
   }, []);
 
   useEffect(() => {
@@ -127,8 +236,22 @@ export function NebullaIDE() {
     return () => window.removeEventListener('message', onMsg);
   }, [myServicesOpen, refreshMyServicesContext]);
 
+  useEffect(() => {
+    if (navId === 'visual-ui-editor') setUiStudioTab('design');
+  }, [navId]);
+
+  const selectNavItem = useCallback((id: string) => {
+    if (id === 'project-settings') {
+      setMyServicesOpen(true);
+      setNavId('explorer');
+      return;
+    }
+    setNavId(id);
+  }, []);
+
   return (
-    <div className="flex h-screen flex-col overflow-hidden bg-background text-foreground">
+    <IdeWorkspaceProvider>
+      <div className="flex h-screen flex-col overflow-hidden bg-background text-foreground">
       {myServicesOpen ? (
         <div
           className="fixed inset-0 z-[200] flex flex-col overflow-hidden"
@@ -144,23 +267,65 @@ export function NebullaIDE() {
         </div>
       ) : null}
 
-      <TopBar />
+      <TopBar onOpenAccount={() => setMyServicesOpen(true)} />
 
       <div className="flex flex-1 overflow-hidden">
         <VerticalNav
           onOpenMyServices={() => setMyServicesOpen(true)}
           activeItem={navId}
-          onSelectItem={setNavId}
+          onSelectItem={selectNavItem}
         />
 
         {navId === 'visual-ui-editor' ? (
           <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-            <IdeVisualEditor onLock={() => setNavId('explorer')} projectDisplayName={getBrowserProjectName()} />
+            <div className="tonal-seam-b flex shrink-0 gap-1 border-b border-white/5 px-2 py-1.5">
+              <button
+                type="button"
+                onClick={() => setUiStudioTab('design')}
+                className={cn(
+                  'type-label-sm rounded-md px-3 py-1.5 transition-colors',
+                  uiStudioTab === 'design'
+                    ? 'active-tab-sheen text-primary'
+                    : 'text-muted-foreground hover:bg-secondary hover:text-foreground',
+                )}
+              >
+                Design
+              </button>
+              <button
+                type="button"
+                onClick={() => setUiStudioTab('preview')}
+                className={cn(
+                  'type-label-sm rounded-md px-3 py-1.5 transition-colors',
+                  uiStudioTab === 'preview'
+                    ? 'active-tab-sheen text-primary'
+                    : 'text-muted-foreground hover:bg-secondary hover:text-foreground',
+                )}
+              >
+                Preview
+              </button>
+            </div>
+            <div className="min-h-0 flex-1 overflow-hidden">
+              {uiStudioTab === 'design' ? (
+                <IdeVisualEditor onLock={() => setNavId('explorer')} projectDisplayName={getBrowserProjectName()} />
+              ) : (
+                <AppPreviewPanel
+                  pages={[
+                    {
+                      id: 'preview-root',
+                      type: 'pageNode',
+                      position: { x: 0, y: 0 },
+                      data: { label: getBrowserProjectName().trim() || 'Workspace' },
+                    },
+                  ]}
+                  onOpenSourceControl={() => setNavId('source-control')}
+                />
+              )}
+            </div>
           </div>
-        ) : (
+        ) : navId === 'explorer' ? (
           <>
             <div className="surface-active tonal-seam-r hidden shrink-0 overflow-hidden md:block" style={{ width: explorer.size }}>
-              <FileExplorer />
+              <IdeExplorerSidebar />
             </div>
 
             <ResizeHandle onMouseDown={explorer.onMouseDown} orientation="horizontal" />
@@ -183,8 +348,11 @@ export function NebullaIDE() {
               <AIChat />
             </div>
           </>
+        ) : (
+          <IdeMainByNav navId={navId} onSelectNav={setNavId} />
         )}
       </div>
     </div>
+    </IdeWorkspaceProvider>
   );
 }

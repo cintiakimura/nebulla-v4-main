@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import {
   ChevronDown,
   ChevronRight,
@@ -9,58 +9,11 @@ import {
   Folder,
   FolderOpen,
   MoreHorizontal,
+  RefreshCw,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-
-type FileNode = {
-  name: string;
-  type: 'file' | 'folder';
-  children?: FileNode[];
-};
-
-const fileTree: FileNode[] = [
-  {
-    name: 'src',
-    type: 'folder',
-    children: [
-      {
-        name: 'app',
-        type: 'folder',
-        children: [
-          { name: 'layout.tsx', type: 'file' },
-          { name: 'page.tsx', type: 'file' },
-          { name: 'globals.css', type: 'file' },
-        ],
-      },
-      {
-        name: 'components',
-        type: 'folder',
-        children: [
-          { name: 'Button.tsx', type: 'file' },
-          { name: 'Card.tsx', type: 'file' },
-        ],
-      },
-      {
-        name: 'hooks',
-        type: 'folder',
-        children: [
-          { name: 'useAuth.ts', type: 'file' },
-          { name: 'useTheme.ts', type: 'file' },
-        ],
-      },
-      {
-        name: 'lib',
-        type: 'folder',
-        children: [
-          { name: 'supabase.ts', type: 'file' },
-          { name: 'utils.ts', type: 'file' },
-        ],
-      },
-    ],
-  },
-  { name: 'package.json', type: 'file' },
-  { name: 'tsconfig.json', type: 'file' },
-];
+import { buildWorkspaceFileTree, type WorkspaceTreeNode } from '../../lib/workspaceFileTree';
+import { useIdeWorkspace } from '@/components/ide/IdeWorkspaceContext';
 
 function getFileIcon(name: string) {
   const ext = name.split('.').pop()?.toLowerCase();
@@ -82,17 +35,17 @@ function getFileIcon(name: string) {
 function FileTreeNode({
   node,
   depth = 0,
-  selectedFile,
-  onSelect,
+  selectedPath,
+  onOpenFile,
 }: {
-  node: FileNode;
+  node: WorkspaceTreeNode;
   depth?: number;
-  selectedFile: string | null;
-  onSelect: (name: string) => void;
+  selectedPath: string | null;
+  onOpenFile: (path: string) => void;
 }) {
   const [isOpen, setIsOpen] = useState(depth < 2);
-  const isFolder = node.type === 'folder';
-  const isSelected = selectedFile === node.name;
+  const isFolder = !node.isFile;
+  const isSelected = selectedPath === node.path;
 
   return (
     <div>
@@ -102,7 +55,7 @@ function FileTreeNode({
           if (isFolder) {
             setIsOpen(!isOpen);
           } else {
-            onSelect(node.name);
+            void onOpenFile(node.path);
           }
         }}
         className={cn(
@@ -139,10 +92,16 @@ function FileTreeNode({
           {node.name}
         </span>
       </button>
-      {isFolder && isOpen && node.children && (
+      {isFolder && isOpen && node.children.length > 0 && (
         <div>
-          {node.children.map((child, i) => (
-            <FileTreeNode key={i} node={child} depth={depth + 1} selectedFile={selectedFile} onSelect={onSelect} />
+          {node.children.map((child) => (
+            <FileTreeNode
+              key={child.path}
+              node={child}
+              depth={depth + 1}
+              selectedPath={selectedPath}
+              onOpenFile={onOpenFile}
+            />
           ))}
         </div>
       )}
@@ -151,23 +110,68 @@ function FileTreeNode({
 }
 
 export function FileExplorer() {
-  const [selectedFile, setSelectedFile] = useState<string | null>('useAuth.ts');
+  const { workspacePaths, overviewLoading, overviewError, refreshTree, openFile, activePath } = useIdeWorkspace();
+  const [explorerHint, setExplorerHint] = useState<string | null>(null);
+  const tree = useMemo(() => buildWorkspaceFileTree(workspacePaths), [workspacePaths]);
 
   return (
     <div className="surface-active flex h-full flex-col">
       <div className="tonal-seam-b flex h-8 items-center justify-between px-3">
         <span className="type-label-sm tracking-[0.12em] uppercase">Explorer</span>
-        <button
-          type="button"
-          className="btn-secondary-surface rounded p-0.5 text-muted-foreground"
-        >
-          <MoreHorizontal className="h-3.5 w-3.5" />
-        </button>
+        <div className="flex items-center gap-0.5">
+          <button
+            type="button"
+            title="Refresh file tree"
+            aria-label="Refresh file tree"
+            className="btn-secondary-surface rounded p-0.5 text-muted-foreground disabled:opacity-40"
+            disabled={overviewLoading}
+            onClick={() => {
+              void refreshTree();
+              setExplorerHint('Refreshing workspace…');
+              window.setTimeout(() => setExplorerHint(null), 1600);
+            }}
+          >
+            <RefreshCw className={cn('h-3.5 w-3.5', overviewLoading && 'animate-spin')} />
+          </button>
+          <button
+            type="button"
+            title="Explorer actions"
+            aria-label="Explorer actions"
+            className="btn-secondary-surface rounded p-0.5 text-muted-foreground"
+            onClick={() => {
+              setExplorerHint('Files load from the active cloud workspace (source control overview).');
+              window.setTimeout(() => setExplorerHint(null), 3200);
+            }}
+          >
+            <MoreHorizontal className="h-3.5 w-3.5" />
+          </button>
+        </div>
       </div>
+      {explorerHint ? (
+        <p className="type-label-sm border-b border-cyan-500/20 bg-cyan-500/10 px-3 py-1.5 text-cyan-100/90" role="status">
+          {explorerHint}
+        </p>
+      ) : null}
+      {overviewError ? (
+        <p className="type-label-sm border-b border-red-500/25 bg-red-500/10 px-3 py-2 text-red-100/90" role="alert">
+          {overviewError}
+        </p>
+      ) : null}
       <div className="flex-1 overflow-auto py-1">
-        {fileTree.map((node, i) => (
-          <FileTreeNode key={i} node={node} selectedFile={selectedFile} onSelect={setSelectedFile} />
-        ))}
+        {overviewLoading && tree.length === 0 ? (
+          <p className="type-label-sm px-3 py-2 text-muted-foreground">Loading workspace…</p>
+        ) : tree.length === 0 ? (
+          <p className="type-label-sm px-3 py-2 text-muted-foreground">No files in this workspace yet.</p>
+        ) : (
+          tree.map((node) => (
+            <FileTreeNode
+              key={node.path || node.name}
+              node={node}
+              selectedPath={activePath}
+              onOpenFile={openFile}
+            />
+          ))
+        )}
       </div>
     </div>
   );

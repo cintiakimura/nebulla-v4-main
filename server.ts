@@ -402,6 +402,77 @@ No approved UI code yet.
     }
   });
 
+  /** Save UTF-8 workspace file (same path rules as source-control product files). */
+  app.put("/api/files/content", (req, res) => {
+    try {
+      const { workspaceRoot } = projectPathsFor(req);
+      const relRaw = typeof req.body?.path === "string" ? req.body.path : "";
+      const content = typeof req.body?.content === "string" ? req.body.content : undefined;
+      const rel = relRaw.replace(/^\.\/+/, "").replace(/\\/g, "/");
+      if (!rel) return res.status(400).json({ error: "path is required" });
+      if (content === undefined) return res.status(400).json({ error: "content is required" });
+      if (!isUserAppProductPath(rel)) {
+        return res.status(403).json({ error: "Path not allowed for save" });
+      }
+      const target = resolveWorkspaceRelative(workspaceRoot, rel);
+      if (fs.existsSync(target) && fs.statSync(target).isDirectory()) {
+        return res.status(400).json({ error: "Path is a directory" });
+      }
+      fs.mkdirSync(path.dirname(target), { recursive: true });
+      fs.writeFileSync(target, content.replace(/\r\n/g, "\n"), "utf8");
+      res.json({ ok: true });
+    } catch (err: unknown) {
+      res.status(500).json({ error: err instanceof Error ? err.message : "save failed" });
+    }
+  });
+
+  /** IDE mind map graph (React Flow JSON) — workspace-scoped, product path. */
+  const MIND_MAP_WORKSPACE_REL = "nebulla-ide/mind-map.json";
+
+  app.get("/api/workspace/mind-map", (req, res) => {
+    try {
+      const { workspaceRoot } = projectPathsFor(req);
+      if (!isUserAppProductPath(MIND_MAP_WORKSPACE_REL)) {
+        return res.status(403).json({ error: "Mind map path not allowed" });
+      }
+      const target = resolveWorkspaceRelative(workspaceRoot, MIND_MAP_WORKSPACE_REL);
+      if (!fs.existsSync(target)) {
+        return res.json({ pages: [], edges: [] });
+      }
+      const raw = fs.readFileSync(target, "utf8");
+      const j = JSON.parse(raw) as { pages?: unknown; edges?: unknown };
+      const pages = Array.isArray(j.pages) ? j.pages : [];
+      const edges = Array.isArray(j.edges) ? j.edges : [];
+      res.json({ pages, edges });
+    } catch (err: unknown) {
+      res.status(500).json({ error: err instanceof Error ? err.message : "mind map read failed" });
+    }
+  });
+
+  app.put("/api/workspace/mind-map", (req, res) => {
+    try {
+      const { workspaceRoot } = projectPathsFor(req);
+      if (!isUserAppProductPath(MIND_MAP_WORKSPACE_REL)) {
+        return res.status(403).json({ error: "Mind map path not allowed" });
+      }
+      const pages = req.body?.pages;
+      const edges = req.body?.edges;
+      if (!Array.isArray(pages) || !Array.isArray(edges)) {
+        return res.status(400).json({ error: "pages and edges must be arrays" });
+      }
+      const payload = JSON.stringify({ version: 1, pages, edges });
+      if (payload.length > 900_000) {
+        return res.status(413).json({ error: "Mind map payload too large" });
+      }
+      const target = resolveWorkspaceRelative(workspaceRoot, MIND_MAP_WORKSPACE_REL);
+      fs.mkdirSync(path.dirname(target), { recursive: true });
+      fs.writeFileSync(target, payload, "utf8");
+      res.json({ ok: true });
+    } catch (err: unknown) {
+      res.status(500).json({ error: err instanceof Error ? err.message : "mind map write failed" });
+    }
+  });
+
   /** Bootstrap HTML for in-IDE preview: inject base + rewrite root-relative URLs under this project. */
   app.get("/api/app-preview/bootstrap", (req, res) => {
     try {
@@ -1488,7 +1559,7 @@ ${modelJson}`;
     if (!apiKey) {
       return res.status(401).json({
         error:
-          "Grok API key is missing. Add GROK_API_KEY to your .env file, restart the server, or save your key under Dashboard → Secrets (stored in this browser only).",
+          "Grok API key is missing. Add GROK_API_KEY to your .env file, restart the server, or save your key under Account (IDE) or My Projects → Secrets (this browser only).",
       });
     }
     if (apiKey.length < 20) {
@@ -1556,7 +1627,7 @@ Rules:
     if (!apiKey) {
       return res.status(401).json({
         error:
-          "Grok API key is missing. Add GROK_API_KEY to your .env file, restart the server, or save your key under Dashboard → Secrets (stored in this browser only).",
+          "Grok API key is missing. Add GROK_API_KEY to your .env file, restart the server, or save your key under Account (IDE) or My Projects → Secrets (this browser only).",
       });
     }
     if (apiKey.length < 20) {
@@ -1903,7 +1974,7 @@ ${workflowContext}`;
       console.error("GROK_API_KEY is not set (env, X-Grok-Api-Key header, or Settings)");
       return res.status(401).json({
         error:
-          "Grok API key is missing. Add GROK_API_KEY to your .env file, restart the server, or save your key under Dashboard → Secrets (stored in this browser only).",
+          "Grok API key is missing. Add GROK_API_KEY to your .env file, restart the server, or save your key under Account (IDE) or My Projects → Secrets (this browser only).",
       });
     }
     if (apiKey.length < 20) {

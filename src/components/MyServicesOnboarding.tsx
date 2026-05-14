@@ -17,8 +17,8 @@ const V0_KEYS_URL = 'https://v0.dev/chat/settings/keys';
 function SecretNote() {
   return (
     <p className="text-[11px] text-slate-500 leading-relaxed border-t border-white/5 pt-3 mt-1">
-      Keys are stored in this browser as{' '}
-      <span className="text-slate-400">Dashboard → Secrets / Environment Variables</span> for your active project
+      Keys are stored in this browser under{' '}
+      <span className="text-slate-400">My Projects → Secrets</span> (sidebar) for your active project
       (same store the IDE uses). When you are signed in, your main Grok key can also be copied to the server encrypted
       (Project Manager — silent) so chat works without pasting the key on every device. Other browser-only secrets stay on
       this device until you clear site data.
@@ -146,7 +146,8 @@ export function MyServicesOnboarding({
               Welcome — wire up your workspace
             </h1>
             <p className="text-sm text-slate-400 leading-relaxed">
-              A quick, friendly setup. You can change these anytime under Dashboard → Secrets.
+              A quick, friendly setup. You can change these anytime under My Projects → Secrets, or reopen Account
+              (NB).
             </p>
           </div>
 
@@ -336,7 +337,7 @@ export function MyServicesOnboarding({
           </section>
 
           <div className="rounded-xl border border-white/10 bg-[#0a0e14]/80 p-5 text-xs text-slate-500 leading-relaxed">
-            Tip: open <span className="text-slate-400">Dashboard → Secrets</span> anytime to view or edit environment
+            Tip: open <span className="text-slate-400">My Projects → Secrets</span> anytime to view or edit environment
             variables for your active project.
           </div>
         </div>

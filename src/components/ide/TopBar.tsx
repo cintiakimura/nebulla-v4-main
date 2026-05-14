@@ -1,60 +1,99 @@
-import { useCallback, useState } from 'react';
-import { ChevronDown, FlaskConical, GitBranch, Loader2 } from 'lucide-react';
+import { useCallback, useRef, useState } from 'react';
+import { ChevronDown, Copy, FlaskConical, GitBranch, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useSwarm } from '@/components/swarm/SwarmProvider';
+import { Logo } from '@/components/Logo';
 import { getStoredGrokApiKey } from '../../lib/grokKey';
 import { runNebulaSwarm } from '../../lib/runNebulaSwarm';
-import { getBrowserProjectName } from '../../lib/nebulaProjectApi';
+import { getBrowserProjectName, withProjectQuery } from '../../lib/nebulaProjectApi';
+import { readResponseJson } from '../../lib/apiFetch';
+import { useClickOutside } from '../../lib/useClickOutside';
+import { type IdeChatModelId, useIdeWorkspace } from '@/components/ide/IdeWorkspaceContext';
+import { buildIdeSwarmFocusFromEditor } from '../../lib/ideSwarmFocus';
+import { fetchMasterPlanAndUiStudio } from '../../lib/ideAssistantGrokChat';
+import { compactMasterPlanForSwarm } from '../../lib/ideMasterPlanSummary';
 
-const LOGO_URL = '/kyn-logo.png';
-
-const models = [
-  { id: 'grok-4.1', name: 'Grok 4.1', badge: 'Latest' as string | null },
+const models: { id: IdeChatModelId; name: string; badge: string | null }[] = [
+  { id: 'grok-4.1', name: 'Grok 4.1', badge: 'Latest' },
   { id: 'grok-3', name: 'Grok 3', badge: null },
 ];
 
-export function TopBar() {
+export function TopBar({
+  onOpenAccount,
+}: {
+  /** Opens My services (API keys, GitHub, etc.). */
+  onOpenAccount?: () => void;
+}) {
   const swarm = useSwarm();
-  const [selectedModel, setSelectedModel] = useState('grok-4.1');
+  const { chatModel, setChatModel, activePath, activeTab, gitBranch } = useIdeWorkspace();
   const [isModelOpen, setIsModelOpen] = useState(false);
   const [runTestBusy, setRunTestBusy] = useState(false);
+  const [projectCopied, setProjectCopied] = useState(false);
+  const modelWrapRef = useRef<HTMLDivElement>(null);
+
+  const projectName = getBrowserProjectName().trim() || 'Untitled project';
+
+  const closeModelMenu = useCallback(() => setIsModelOpen(false), []);
+  useClickOutside(modelWrapRef, closeModelMenu, isModelOpen);
 
   const handleRunAndTest = useCallback(async () => {
     if (runTestBusy || swarm.isRunning) return;
-    const projectName = getBrowserProjectName().trim() || 'my-awesome-app';
+    const name = getBrowserProjectName().trim() || 'my-awesome-app';
     const storedGrok = getStoredGrokApiKey();
+    let hasServerKey = false;
+    try {
+      const r = await fetch(withProjectQuery('/api/config'));
+      const cfg = (await readResponseJson(r)) as { hasGrokApiKey?: boolean };
+      hasServerKey = r.ok && Boolean(cfg.hasGrokApiKey);
+    } catch {
+      hasServerKey = false;
+    }
+    if (!storedGrok && !hasServerKey) {
+      swarm.addActivity(
+        'Grok API key missing — add GROK_API_KEY to .env or save a key under My services → Secrets.',
+        'error',
+      );
+      return;
+    }
+
     const grokHeaders: Record<string, string> = { 'Content-Type': 'application/json' };
     if (storedGrok) grokHeaders['X-Grok-Api-Key'] = storedGrok;
 
     const runId =
       typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `run-test-${Date.now()}`;
 
-    const w = typeof window !== 'undefined' ? (window as unknown as Record<string, unknown>) : null;
-    const rawPaths = w?.nebulaSwarmFocusPaths;
-    const focusPaths =
-      Array.isArray(rawPaths) && rawPaths.length
-        ? (rawPaths as string[]).slice(0, 12)
-        : undefined;
-    const rawSnip = w?.nebulaSwarmFocusSnippets;
-    const focusSnippets =
-      rawSnip && typeof rawSnip === 'object' && !Array.isArray(rawSnip)
-        ? (rawSnip as Record<string, string>)
-        : undefined;
+    const focus = buildIdeSwarmFocusFromEditor(
+      activePath,
+      activeTab?.content ?? '',
+      Boolean(activeTab?.loading),
+    );
+    if (!focus.focusPaths?.length) {
+      swarm.addActivity('No file open in the editor — open a file so Run and Test can scope review to your code.', 'warning');
+    }
+
+    let planningSummary = '';
+    try {
+      const { latestMP } = await fetchMasterPlanAndUiStudio();
+      planningSummary = compactMasterPlanForSwarm(latestMP).slice(0, 2000);
+    } catch {
+      /* same as chat: handoff still runs with workspace-only context */
+    }
 
     setRunTestBusy(true);
-    swarm.startSwarm(swarm.currentPhase, projectName);
+    swarm.startSwarm(swarm.currentPhase, name);
     try {
       const handoff = await runNebulaSwarm(
         {
           phase: swarm.currentPhase,
           userMessage:
             'Manual Run and Test: analyze recently changed files only; provide code review findings and concrete test suggestions. Do not expand scope beyond the paths/snippets provided.',
-          projectName,
+          projectName: name,
           runId,
           swarmIntensity: swarm.intensity,
           manualRunAndTest: true,
-          ...(focusPaths?.length ? { focusPaths } : {}),
-          ...(focusSnippets && Object.keys(focusSnippets).length ? { focusSnippets } : {}),
+          ...(planningSummary ? { contextSummary: planningSummary } : {}),
+          ...(focus.focusPaths?.length ? { focusPaths: focus.focusPaths } : {}),
+          ...(focus.focusSnippets && Object.keys(focus.focusSnippets).length ? { focusSnippets: focus.focusSnippets } : {}),
         },
         grokHeaders,
       );
@@ -65,35 +104,46 @@ export function TopBar() {
     } finally {
       setRunTestBusy(false);
     }
-  }, [runTestBusy, swarm]);
+  }, [runTestBusy, swarm, activePath, activeTab?.content, activeTab?.loading]);
+
+  const copyProjectName = useCallback(async () => {
+    try {
+      await navigator.clipboard.writeText(projectName);
+      setProjectCopied(true);
+      window.setTimeout(() => setProjectCopied(false), 2000);
+    } catch {
+      /* ignore */
+    }
+  }, [projectName]);
 
   return (
     <div className="surface-active tonal-seam-b flex h-12 flex-col">
       <div className="flex h-12 items-center justify-between px-3">
         <div className="flex min-w-0 items-center gap-3">
           <div className="flex shrink-0 items-center gap-2">
-            <img
-              src={LOGO_URL}
-              alt=""
-              width={22}
-              height={22}
-              className="object-contain opacity-90"
-              style={{ width: 22, height: 22, background: 'transparent' }}
-            />
-            <span className="kyn-logotype text-foreground">kyn</span>
+            <Logo className="h-[22px] w-[22px] shrink-0 opacity-95" />
+            <span className="app-logotype text-foreground">Nebulla.beta</span>
           </div>
 
           <button
             type="button"
-            className="btn-secondary-surface type-title-sm hidden items-center gap-1.5 rounded-md px-2 py-1 text-muted-foreground sm:flex"
+            onClick={() => void copyProjectName()}
+            title={projectCopied ? 'Copied!' : 'Active project — click to copy name'}
+            className="btn-secondary-surface type-title-sm hidden max-w-[200px] items-center gap-1.5 truncate rounded-md px-2 py-1 text-muted-foreground sm:flex"
           >
-            my-awesome-app
-            <ChevronDown className="h-3 w-3 opacity-70" />
+            <span className="truncate">{projectName}</span>
+            {projectCopied ? (
+              <span className="shrink-0 text-[10px] text-primary">Copied</span>
+            ) : (
+              <Copy className="h-3 w-3 shrink-0 opacity-50" aria-hidden />
+            )}
           </button>
 
           <div className="type-label-sm hidden items-center gap-1 tracking-wide md:flex">
             <GitBranch className="h-3 w-3" />
-            <span>main</span>
+            <span className="max-w-[120px] truncate" title={gitBranch ?? undefined}>
+              {gitBranch ?? '—'}
+            </span>
           </div>
         </div>
 
@@ -115,14 +165,14 @@ export function TopBar() {
             <span className="sm:hidden">Test</span>
           </button>
 
-          <div className="relative">
+          <div className="relative" ref={modelWrapRef}>
             <button
               type="button"
               onClick={() => setIsModelOpen(!isModelOpen)}
               className="btn-secondary-surface type-label-sm flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-muted-foreground"
             >
               <span className="h-1.5 w-1.5 rounded-full bg-primary/80" />
-              {models.find((m) => m.id === selectedModel)?.name}
+              {models.find((m) => m.id === chatModel)?.name}
               <ChevronDown className={cn('h-3 w-3 opacity-70 transition-transform', isModelOpen && 'rotate-180')} />
             </button>
 
@@ -133,12 +183,12 @@ export function TopBar() {
                     key={model.id}
                     type="button"
                     onClick={() => {
-                      setSelectedModel(model.id);
+                      setChatModel(model.id);
                       setIsModelOpen(false);
                     }}
                     className={cn(
                       'btn-secondary-surface type-label-sm flex w-full items-center justify-between rounded px-2.5 py-1.5',
-                      selectedModel === model.id && 'active-tab-sheen text-primary',
+                      chatModel === model.id && 'active-tab-sheen text-primary',
                     )}
                   >
                     <span>{model.name}</span>
@@ -153,11 +203,18 @@ export function TopBar() {
             )}
           </div>
 
-          <div className="surface-float flex h-7 w-7 items-center justify-center rounded-full">
+          <button
+            type="button"
+            onClick={onOpenAccount}
+            title="Account & My services"
+            aria-label="Account and My services"
+            className="surface-float flex h-7 w-7 items-center justify-center rounded-full transition-opacity hover:opacity-90 disabled:opacity-40"
+            disabled={!onOpenAccount}
+          >
             <span className="text-[10px] tracking-wide text-foreground" style={{ fontWeight: 500 }}>
-              JD
+              NB
             </span>
-          </div>
+          </button>
         </div>
       </div>
     </div>

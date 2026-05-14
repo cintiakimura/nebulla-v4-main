@@ -178,7 +178,11 @@ export function MasterPlan({
             ) : activeContent.trim() ? (
               <ReactMarkdown>{activeContent}</ReactMarkdown>
             ) : (
-              <p className="text-slate-600 text-sm not-prose">No content yet.</p>
+              <p className="text-slate-500 text-sm not-prose leading-relaxed">
+                No content in this section yet. Use <strong className="text-slate-300">Partner chat</strong> (right
+                panel on Explorer) for the guided interview — the Master Plan fills as Grok saves each tab. You can also
+                paste or edit here after generation.
+              </p>
             )}
           </div>
         </div>

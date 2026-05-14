@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ChevronDown, ChevronRight, FileCode, Folder, RefreshCw } from 'lucide-react';
 import { readResponseJson } from '../lib/apiFetch';
-import { withProjectQuery } from '../lib/nebulaProjectApi';
+import { getBrowserProjectName, withProjectQuery } from '../lib/nebulaProjectApi';
 
 type Overview = {
   nebulaFiles: { relativePath: string; size: number; mtimeMs: number }[];
@@ -51,11 +51,13 @@ function TreeRows({
   depth,
   expanded,
   toggle,
+  onOpenFile,
 }: {
   nodes: TreeNode[];
   depth: number;
   expanded: Record<string, boolean>;
   toggle: (path: string) => void;
+  onOpenFile?: (relativePath: string) => void;
 }) {
   return (
     <>
@@ -66,7 +68,11 @@ function TreeRows({
             className="flex w-full items-center gap-1.5 rounded-md px-2 py-1 text-left text-sm text-foreground/90 hover:bg-muted/60"
             style={{ paddingLeft: 8 + depth * 14 }}
             onClick={() => {
-              if (!n.isFile) toggle(n.path);
+              if (n.isFile) {
+                onOpenFile?.(n.path);
+                return;
+              }
+              toggle(n.path);
             }}
           >
             {!n.isFile ? (
@@ -86,7 +92,13 @@ function TreeRows({
             <span className="truncate font-mono text-xs">{n.name}</span>
           </button>
           {!n.isFile && expanded[n.path] && n.children.length > 0 ? (
-            <TreeRows nodes={n.children} depth={depth + 1} expanded={expanded} toggle={toggle} />
+            <TreeRows
+              nodes={n.children}
+              depth={depth + 1}
+              expanded={expanded}
+              toggle={toggle}
+              onOpenFile={onOpenFile}
+            />
           ) : null}
         </div>
       ))}
@@ -94,7 +106,14 @@ function TreeRows({
   );
 }
 
-export function ExplorerPanel({ projectKey }: { projectKey: string }) {
+export function ExplorerPanel({
+  projectKey,
+  onOpenFile,
+}: {
+  projectKey: string;
+  /** When set, clicking a file row opens it in the IDE editor (or other host). */
+  onOpenFile?: (relativePath: string) => void;
+}) {
   const [data, setData] = useState<Overview | null>(null);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
@@ -136,7 +155,9 @@ export function ExplorerPanel({ projectKey }: { projectKey: string }) {
       <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border/60 bg-muted/20 px-4 py-3">
         <div>
           <h2 className="text-sm font-semibold text-foreground">Files</h2>
-          <p className="text-[11px] text-muted-foreground">Workspace tree · project {projectKey}</p>
+          <p className="text-[11px] text-muted-foreground">
+            Workspace tree · {getBrowserProjectName().trim() || projectKey}
+          </p>
         </div>
         <button
           type="button"
@@ -153,7 +174,9 @@ export function ExplorerPanel({ projectKey }: { projectKey: string }) {
         {!err && !loading && tree.length === 0 ? (
           <p className="px-2 py-6 text-center text-sm text-muted-foreground">No files in workspace yet.</p>
         ) : null}
-        {tree.length > 0 ? <TreeRows nodes={tree} depth={0} expanded={expanded} toggle={toggle} /> : null}
+        {tree.length > 0 ? (
+          <TreeRows nodes={tree} depth={0} expanded={expanded} toggle={toggle} onOpenFile={onOpenFile} />
+        ) : null}
       </div>
     </div>
   );

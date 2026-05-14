@@ -13,8 +13,7 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-
-const LOGO_URL = '/kyn-logo.png';
+import { Logo } from '@/components/Logo';
 
 type NavItem = {
   id: string;
@@ -23,15 +22,15 @@ type NavItem = {
 };
 
 const items: NavItem[] = [
-  { id: 'explorer', icon: <FolderTree className="h-5 w-5" />, label: 'Explorer / Files' },
+  { id: 'explorer', icon: <FolderTree className="h-5 w-5" />, label: 'Explorer' },
   { id: 'master-plan', icon: <BookMarked className="h-5 w-5" />, label: 'Master Plan' },
   { id: 'mind-map', icon: <Network className="h-5 w-5" />, label: 'Mind Map' },
-  { id: 'visual-ui-editor', icon: <Palette className="h-5 w-5" />, label: 'Visual UI Editor' },
+  { id: 'visual-ui-editor', icon: <Palette className="h-5 w-5" />, label: 'Nebula UI Studio' },
   { id: 'source-control', icon: <GitBranch className="h-5 w-5" />, label: 'Source Control' },
   { id: 'projects', icon: <LayoutGrid className="h-5 w-5" />, label: 'My Projects' },
   { id: 'secrets', icon: <KeyRound className="h-5 w-5" />, label: 'Secrets' },
-  { id: 'project-settings', icon: <Settings className="h-5 w-5" />, label: 'Project Settings' },
-  { id: 'dns', icon: <Globe className="h-5 w-5" />, label: 'DNS Settings' },
+  { id: 'project-settings', icon: <Settings className="h-5 w-5" />, label: 'Settings' },
+  { id: 'dns', icon: <Globe className="h-5 w-5" />, label: 'DNS' },
   { id: 'search', icon: <Search className="h-5 w-5" />, label: 'Search' },
 ];
 
@@ -54,15 +53,8 @@ export function VerticalNav({
 
   return (
     <div className="surface-base tonal-seam-r flex h-full w-12 shrink-0 flex-col items-center py-3">
-      <div className="mb-3 flex items-center justify-center">
-        <img
-          src={LOGO_URL}
-          alt="kyn"
-          width={28}
-          height={28}
-          className="h-7 w-7 object-contain"
-          style={{ backgroundColor: 'transparent' }}
-        />
+      <div className="mb-3 flex items-center justify-center" title="Nebulla.beta">
+        <Logo className="h-7 w-7 shrink-0 opacity-95" />
       </div>
 
       {onOpenMyServices ? (
