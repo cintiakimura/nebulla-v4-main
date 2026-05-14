@@ -7,6 +7,7 @@ import type { Express, Request, Response } from "express";
 import { getProjectKeyFromRequest, sanitizeProjectKey } from "./lib/nebulaProjectKey";
 import { registerNebulaPgPool } from "./lib/nebulaPgPool";
 import { getMonthlyUsageSnapshot } from "./lib/token-usage";
+import { saveUserGrokApiKey } from "./lib/nebulaUserGrokStore";
 import cookieParser from "cookie-parser";
 import jwt from "jsonwebtoken";
 import pg from "pg";
@@ -243,6 +244,8 @@ async function ensureTables(p: pg.Pool) {
   await p.query(
     `CREATE INDEX IF NOT EXISTS idx_nebula_token_usage_month ON nebula_token_usage_monthly (month_year);`
   );
+  await p.query(`ALTER TABLE nebula_users ADD COLUMN IF NOT EXISTS grok_api_key_encrypted TEXT;`);
+  await p.query(`ALTER TABLE nebula_users ADD COLUMN IF NOT EXISTS grok_key_validated_at TIMESTAMPTZ;`);
 }
 
 function sessionSecret(): string {
@@ -270,6 +273,11 @@ function readSession(req: Request): string | null {
     /* invalid */
   }
   return null;
+}
+
+/** Exported for main Grok resolution in `server.ts` (session-scoped user key override). */
+export function readNebulaSessionUserId(req: Request): string | null {
+  return readSession(req);
 }
 
 function requestDerivedBaseUrl(req: Request): string | null {
@@ -495,6 +503,77 @@ export async function mountRenderStack(app: Express) {
       row.workspace_id = rw.id;
     }
   };
+
+  const runProjectManagerSilently = async (
+    pool: pg.Pool,
+    uid: string,
+    opts: { projectName?: string; grokApiKey?: string; syncAllProjects?: boolean }
+  ): Promise<{
+    grokSaved: boolean;
+    renderTouched: boolean;
+    usage: {
+      monthYear: string;
+      used: number;
+      grok3Tokens: number;
+      grok4Tokens: number;
+      tier: string;
+      limit: number | null;
+      remaining: number | null;
+    } | null;
+  }> => {
+    let grokSaved = false;
+    let renderTouched = false;
+    if (opts.grokApiKey && opts.grokApiKey.length >= 20) {
+      const r = await saveUserGrokApiKey(pool, uid, opts.grokApiKey);
+      grokSaved = r.ok;
+    }
+    if (opts.syncAllProjects) {
+      const r = await pool.query(
+        `SELECT name, pages, edges, workspace_id, updated_at FROM nebula_projects WHERE user_id = $1::uuid ORDER BY updated_at DESC`,
+        [uid]
+      );
+      const rows = r.rows as ProjectListRow[];
+      await backfillMissingWorkspaceIds(uid, rows);
+      renderTouched = rows.length > 0;
+    } else if (opts.projectName?.trim()) {
+      const r = await pool.query(
+        `SELECT name, pages, edges, workspace_id, updated_at FROM nebula_projects WHERE user_id = $1::uuid AND name = $2`,
+        [uid, opts.projectName.trim()]
+      );
+      const rows = r.rows as ProjectListRow[];
+      await backfillMissingWorkspaceIds(uid, rows);
+      renderTouched = rows.some((x) => Boolean(x.workspace_id && String(x.workspace_id).trim()));
+    }
+    const snap = await getMonthlyUsageSnapshot(uid);
+    const usage = snap
+      ? {
+          monthYear: snap.monthYear,
+          used: snap.used,
+          grok3Tokens: snap.grok3Tokens,
+          grok4Tokens: snap.grok4Tokens,
+          tier: snap.tier,
+          limit: snap.limit,
+          remaining: Number.isFinite(snap.remaining) ? snap.remaining : null,
+        }
+      : null;
+    return { grokSaved, renderTouched, usage };
+  };
+
+  app.post("/api/control-plane/project-manager/run", async (req, res) => {
+    const uid = readSession(req);
+    if (!uid) return res.status(401).json({ error: "Unauthorized" });
+    if (!hasDb() || !p) return res.status(503).json({ error: "Database not configured" });
+    const projectName = typeof req.body?.projectName === "string" ? req.body.projectName.trim() : "";
+    const grokApiKey = typeof req.body?.grokApiKey === "string" ? req.body.grokApiKey.trim() : "";
+    const syncAllProjects = Boolean(req.body?.syncAllProjects);
+    try {
+      const result = await runProjectManagerSilently(p, uid, { projectName, grokApiKey, syncAllProjects });
+      res.json({ ok: true, ...result });
+    } catch (e) {
+      console.error("[nebula] /api/control-plane/project-manager/run:", e);
+      res.status(500).json({ ok: false, error: "project_manager_failed" });
+    }
+  });
 
   app.get("/api/auth/session", async (req, res) => {
     const uid = readSession(req);
@@ -955,6 +1034,7 @@ export async function mountRenderStack(app: Express) {
          RETURNING name, pages, edges, workspace_id, updated_at`,
         [uid, trimmed, JSON.stringify(pages ?? []), JSON.stringify(edges ?? []), workspaceId]
       );
+      void runProjectManagerSilently(p, uid, { projectName: trimmed }).catch(() => {});
       res.json({ ok: true });
     } catch (e) {
       console.error("[nebula] POST /api/projects:", e);

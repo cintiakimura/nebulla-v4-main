@@ -12,10 +12,8 @@ function readStoredIntensity(): SwarmIntensity {
   return 'full_quality';
 }
 
-function agentsForIntensity(i: SwarmIntensity): string[] {
-  if (i === 'light') return ['planner', 'researcher'];
-  if (i === 'balanced') return ['planner', 'researcher', 'tester'];
-  return ['planner', 'researcher', 'tester', 'reviewer'];
+function agentsForLeanManual(): string[] {
+  return ['quality'];
 }
 
 interface SwarmContextType extends SwarmState {
@@ -25,6 +23,7 @@ interface SwarmContextType extends SwarmState {
   setCurrentPhase: (phase: SwarmState['currentPhase']) => void;
   startSwarm: (phase: SwarmState['currentPhase'], projectName: string) => void;
   finishSwarm: (handoff: SwarmHandoffPacket) => void;
+  cancelSwarmRun: () => void;
   addActivity: (message: string, type?: 'info' | 'success' | 'warning' | 'error') => void;
   clearActivity: () => void;
 }
@@ -60,7 +59,7 @@ export function SwarmProvider({ children }: { children: React.ReactNode }) {
 
   const startSwarm = useCallback((phase: SwarmState['currentPhase'], projectName: string) => {
     setState((prev) => {
-      const activeAgents = agentsForIntensity(prev.intensity);
+      const activeAgents = agentsForLeanManual();
       return {
         ...prev,
         isRunning: true,
@@ -70,7 +69,7 @@ export function SwarmProvider({ children }: { children: React.ReactNode }) {
           ...prev.activityLog,
           {
             timestamp: new Date().toISOString(),
-            message: `Swarm started (${prev.intensity.replace(/_/g, ' ')}) — ${projectName}, phase ${phase}`,
+            message: `Quality run starting — ${projectName}, phase ${phase}`,
             type: 'info' as const,
           },
         ],
@@ -88,10 +87,18 @@ export function SwarmProvider({ children }: { children: React.ReactNode }) {
         ...prev.activityLog,
         {
           timestamp: new Date().toISOString(),
-          message: 'Swarm completed — handoff ready for Grok',
+          message: 'Quality run complete — handoff ready',
           type: 'success' as const,
         },
       ],
+    }));
+  }, []);
+
+  const cancelSwarmRun = useCallback(() => {
+    setState((prev) => ({
+      ...prev,
+      isRunning: false,
+      activeAgents: [],
     }));
   }, []);
 
@@ -118,6 +125,7 @@ export function SwarmProvider({ children }: { children: React.ReactNode }) {
         setCurrentPhase,
         startSwarm,
         finishSwarm,
+        cancelSwarmRun,
         addActivity,
         clearActivity,
       }}

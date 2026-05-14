@@ -1,11 +1,8 @@
 import { useState } from 'react';
 import {
   Bot,
-  Check,
   ChevronDown,
-  Circle,
   Hand,
-  Loader2,
   Mic,
   Paperclip,
   Rocket,
@@ -48,28 +45,6 @@ const models = [
   { id: 'grok-4.1', name: 'Grok 4.1' },
   { id: 'grok-3', name: 'Grok 3' },
 ];
-
-type AgentStatus = 'idle' | 'running' | 'done';
-
-type Agent = {
-  id: string;
-  name: string;
-  task: string;
-  status: AgentStatus;
-};
-
-const swarmAgents: Agent[] = [
-  { id: 'a1', name: 'Planner', task: 'Analyzing auth requirements', status: 'done' },
-  { id: 'a2', name: 'Coder', task: 'Generating session middleware', status: 'running' },
-  { id: 'a3', name: 'Reviewer', task: 'Waiting for code output', status: 'idle' },
-  { id: 'a4', name: 'Tester', task: 'Waiting for review', status: 'idle' },
-];
-
-function AgentStatusIcon({ status }: { status: AgentStatus }) {
-  if (status === 'done') return <Check className="h-3 w-3 text-[#3FB950]" />;
-  if (status === 'running') return <Loader2 className="h-3 w-3 animate-spin text-primary" />;
-  return <Circle className="h-3 w-3 text-muted-foreground/40" />;
-}
 
 function SoundWaveIcon({ className }: { className?: string }) {
   return (
@@ -116,8 +91,6 @@ export function AIChat() {
   const [input, setInput] = useState('');
   const [selectedModel, setSelectedModel] = useState('grok-4.1');
   const [isModelOpen, setIsModelOpen] = useState(false);
-  const [agentsEnabled, setAgentsEnabled] = useState(true);
-  const [isAgentsOpen, setIsAgentsOpen] = useState(false);
   const [swarmOpen, setSwarmOpen] = useState(true);
 
   const handleSend = () => {
@@ -173,95 +146,36 @@ export function AIChat() {
           )}
         </div>
 
-        <div className="relative">
-          <button
-            type="button"
-            onClick={() => setIsAgentsOpen(!isAgentsOpen)}
-            className={cn(
-              'btn-secondary-surface type-label-sm flex items-center gap-1.5 rounded px-2 py-1 transition-colors duration-300 ease-out',
-              agentsEnabled ? 'active-tab-sheen text-primary' : 'text-muted-foreground',
-            )}
-          >
-            <Zap className="h-3 w-3" />
-            Agents
-            <ChevronDown className={cn('h-3 w-3 opacity-70 transition-transform', isAgentsOpen && 'rotate-180')} />
-          </button>
-          {isAgentsOpen && (
-            <div className="elevation-popover absolute left-0 top-full z-50 mt-1 min-w-[140px] rounded-md p-1">
-              <button
-                type="button"
-                onClick={() => {
-                  setAgentsEnabled(true);
-                  setIsAgentsOpen(false);
-                }}
-                className={cn(
-                  'btn-secondary-surface type-label-sm flex w-full rounded px-2 py-1 text-left',
-                  agentsEnabled && 'active-tab-sheen text-primary',
-                )}
-              >
-                Enable Agents
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setAgentsEnabled(false);
-                  setIsAgentsOpen(false);
-                }}
-                className={cn(
-                  'btn-secondary-surface type-label-sm flex w-full rounded px-2 py-1 text-left',
-                  !agentsEnabled && 'active-tab-sheen text-primary',
-                )}
-              >
-                Disable Agents
-              </button>
-            </div>
-          )}
+        <div className="type-label-sm flex items-center gap-1.5 rounded px-2 py-1 text-muted-foreground">
+          <Zap className="h-3 w-3 text-primary/80" />
+          <span>Lean swarm · planning in chat</span>
         </div>
       </div>
 
-      {agentsEnabled && (
-        <div className="tonal-seam-b shrink-0">
-          <button
-            type="button"
-            onClick={() => setSwarmOpen(!swarmOpen)}
-            className="btn-secondary-surface type-label-sm flex h-8 w-full items-center justify-between px-3 text-muted-foreground"
-          >
-            <div className="flex items-center gap-1.5">
-              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-primary/80" />
-              Swarm Status
-            </div>
-            <ChevronDown className={cn('h-3 w-3 opacity-70 transition-transform', swarmOpen && 'rotate-180')} />
-          </button>
+      <div className="tonal-seam-b shrink-0">
+        <button
+          type="button"
+          onClick={() => setSwarmOpen(!swarmOpen)}
+          className="btn-secondary-surface type-label-sm flex h-8 w-full items-center justify-between px-3 text-muted-foreground"
+        >
+          <div className="flex items-center gap-1.5">
+            <span className="h-1.5 w-1.5 rounded-full bg-primary/80" />
+            Quality agent
+          </div>
+          <ChevronDown className={cn('h-3 w-3 opacity-70 transition-transform', swarmOpen && 'rotate-180')} />
+        </button>
 
-          {swarmOpen && (
-            <div className="flex flex-col gap-0.5 px-3 pb-2">
-              {swarmAgents.map((agent) => (
-                <div key={agent.id} className="flex items-center gap-2 py-1">
-                  <AgentStatusIcon status={agent.status} />
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-1.5">
-                      <span className="type-label-sm text-foreground" style={{ fontWeight: 500 }}>
-                        {agent.name}
-                      </span>
-                      <span
-                        className={cn(
-                          'type-label-sm rounded-full px-1.5 py-px',
-                          agent.status === 'done' && 'bg-[#3FB950]/15 text-[#3FB950]',
-                          agent.status === 'running' && 'active-tab-sheen text-primary',
-                          agent.status === 'idle' && 'text-muted-foreground',
-                        )}
-                      >
-                        {agent.status}
-                      </span>
-                    </div>
-                    <p className="type-label-sm truncate opacity-90">{agent.task}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
+        {swarmOpen && (
+          <div className="type-label-sm space-y-1.5 px-3 pb-2 leading-relaxed text-muted-foreground">
+            <p>
+              One support agent — <span className="text-foreground">Quality</span> (code review + test
+              suggestions). It runs only when you click <span className="text-foreground">Run and Test</span> in
+              the top bar, scoped to recently changed files.
+            </p>
+            <p>Grok 4.1 handles planning and research in normal chat messages.</p>
+          </div>
+        )}
+      </div>
 
       <div className="flex-1 space-y-3 overflow-auto p-3">
         {messages.map((message) => (

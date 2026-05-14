@@ -3,6 +3,7 @@
  */
 
 import { readResponseJson } from './apiFetch';
+import { fireSilentProjectManager } from './projectManagerClient';
 
 export type NebulaSessionUser = {
   uid: string;
@@ -88,7 +89,9 @@ export async function upsertCloudProject(payload: {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
   });
-  return res.ok;
+  if (!res.ok) return false;
+  void fireSilentProjectManager({ projectName: payload.name });
+  return true;
 }
 
 export async function deleteCloudProject(name: string): Promise<boolean> {

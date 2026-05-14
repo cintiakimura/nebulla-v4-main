@@ -4,5 +4,5 @@
   "3. Features and KPIs": "",
   "4. Pages and navigation": "",
   "5. UI/UX design": "",
-  "6. Environment Setup": ""
+  "6. Environment Setup": "- **Project Manager (silent):** on onboarding / new project, binds Render project id to `nebula_projects.workspace_id`; optionally stores user **GROK_API_KEY** only (encrypted server-side); reads monthly token usage. Does not chat.\n- **Grok split:** user may override **GROK_API_KEY** (main). **GROK_SWARM_API_KEY** and **GROK_TTS_NEW_API_KEY** are **Nebula `.env` only** — never replaced from user Secrets.\n- **v0:** `V0_API_KEY` via Dashboard Secrets / My services (best UI generation).\n- **Render / DB:** follow `environment-setup.md` §2 for `DATABASE_URL`, `PUBLIC_SITE_URL`, and service env sync."
 }

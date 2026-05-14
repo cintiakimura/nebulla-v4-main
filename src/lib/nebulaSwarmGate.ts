@@ -1,17 +1,11 @@
 import type { SwarmPhase, SwarmIntensity } from '@/types/swarm';
 import type { NebulaSwarmStateFile } from '@/lib/nebulaSwarmState';
-import { anyAgentRuns, buildSwarmAgentRunPlan } from '@/lib/nebulaSwarmExecutionPlan';
 
 /**
- * Nebula Swarm — **client** gate for `POST /api/nebula-swarm/handoff`.
+ * Nebula Swarm — **client** gate for `POST /api/nebula-swarm/handoff` on chat sends.
  *
- * Aligns with `project-execution-rules.md`: minimize extra LLM calls during active coding.
- * We only hit the handoff route when the server-side plan can run **at least one** support agent
- * (Planner+Researcher once, **Pre–Phase 0 only**; Tester / Reviewer on **narrow** message triggers — see
- * `lib/nebulaSwarmExecutionPlan.ts`).
- *
- * Normal follow-ups (“change this button”, small fixes) → **no handoff HTTP call**; main Grok 4.1
- * only. When the server returns `agentsSkipped`, it still sends `notesForGrok` inside the packet.
+ * Lean mode: chat never triggers support agents (no extra LLM round-trip). **Run and Test** uses
+ * the same handoff endpoint with `manualRunAndTest: true` from the TopBar.
  */
 
 /** Map Grok `planningPhase` (or similar free text) to our swarm phase enum. */
@@ -62,21 +56,10 @@ export type NebulaSwarmHandoffGateInput = {
 };
 
 /**
- * Returns true only when the handoff API should run — i.e. when `buildSwarmAgentRunPlan` may
- * execute at least one agent. Avoids a round-trip on routine coding turns.
+ * Lean swarm: support agents **never** run on chat sends. Use **Run and Test** (manual) only.
  */
-export function shouldPostSwarmHandoff(ctx: NebulaSwarmHandoffGateInput): boolean {
-  if (!ctx.swarmEnabled || ctx.onboardingAutopilot || ctx.skipSwarm) return false;
-  if (ctx.forceSwarm) return true;
-
-  const plan = buildSwarmAgentRunPlan({
-    state: ctx.swarmPersisted,
-    phase: ctx.executionPhase,
-    userMessage: ctx.userMessage,
-    intensity: ctx.swarmIntensity,
-  });
-
-  return anyAgentRuns(plan);
+export function shouldPostSwarmHandoff(_ctx: NebulaSwarmHandoffGateInput): boolean {
+  return false;
 }
 
 export type PhaseSyncInput = {

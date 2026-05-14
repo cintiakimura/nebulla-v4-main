@@ -15,12 +15,15 @@ export type TriggerSwarmParams = {
   focusPaths?: string[];
   /** Path → snippet from client only (`window.nebulaSwarmFocusSnippets`); max 3 keys, capped values. */
   focusSnippets?: Record<string, string>;
-  /** Drives `buildSwarmAgentRunPlan` on the server (bootstrap vs trigger-only Tester/Reviewer). */
+  /** Drives `buildSwarmAgentRunPlan` on the server (manual Run and Test only in lean mode). */
   swarmHints?: SwarmHandoffHints;
+  /** Manual **Run and Test** — single Quality agent on Grok 4.1. */
+  manualRunAndTest?: boolean;
 };
 
 /**
- * HTTP client for `POST /api/nebula-swarm/handoff`. Called only when `shouldPostSwarmHandoff` is true.
+ * HTTP client for `POST /api/nebula-swarm/handoff`.
+ * Pass `manualRunAndTest: true` for the **Run and Test** Quality agent (Grok 4.1).
  */
 export async function triggerSwarmOnMessage(
   params: TriggerSwarmParams,
@@ -42,8 +45,8 @@ export async function triggerSwarmOnMessage(
   if (params.focusSnippets && Object.keys(params.focusSnippets).length > 0) {
     body.focusSnippets = params.focusSnippets;
   }
-  if (params.swarmHints && typeof params.swarmHints === 'object') {
-    body.swarmHints = params.swarmHints;
+  if (params.manualRunAndTest) {
+    body.manualRunAndTest = true;
   }
   const data = await fetchJson<{ handoff?: SwarmHandoffPacket; error?: string }>(
     withProjectQuery('/api/nebula-swarm/handoff'),

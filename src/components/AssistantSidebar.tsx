@@ -132,9 +132,7 @@ function splitMasterPlanSectionsFromBlock(block: string): Partial<Record<number,
 }
 
 const DEFAULT_SWARM_PERSISTED: NebulaSwarmStateFile = {
-  schemaVersion: 1,
-  plannerDone: false,
-  researcherDone: false,
+  schemaVersion: 2,
 };
 
 export function AssistantSidebar({
@@ -692,7 +690,7 @@ NEBULA UI STUDIO WRITE CONTRACT (PROMPT/CODE BOUNDARIES) — UNBREAKABLE:
 
 TAB 6 HIDDEN RULES (Environment Setup) — BACKEND ONLY:
 - This tab is internal-only and hidden from the client.
-- Pre-coding read sequence is mandatory and strict: read **project-execution-rules.md** first (single orchestration file), then master-plan.json, then environment-setup.md, then nebula-sysh-ui-sysh-studio.md; also review the active project's Secrets and Integrations page before starting implementation.
+- Pre-coding read sequence is mandatory and strict: read **project-workflow.md** first, then **master-plan.json**, then **environment-setup.md**, then **nebula-sysh-ui-sysh-studio.md**, then **project-execution-rules.md** (orchestration + phases); also review the active project's Secrets and Integrations page before starting implementation. **Project Manager** has already run silently for Render ids and optional user **GROK_API_KEY** — do not re-announce it in chat.
 - Read the approved UI code from nebula-sysh-ui-sysh-studio.md (NEBULA_UI_STUDIO_CODE) and nebulla-sysh-ui-sysh-studio/approved/approved-ui.svg when planning implementation and Tab 6.
 - Build Environment Setup (Tab 6) using that approved UI as the source of truth for layout, screens, and components.
 - The plan must use approved UI details: colors, layout, components, and Tailwind classes.
@@ -813,13 +811,9 @@ ${uiStudioApprovedCode || 'No approved UI code yet.'}`;
       let grokUserMessageContent = textToSend;
 
       /*
-       * Nebula Swarm — `shouldPostSwarmHandoff` + `lib/nebulaSwarmExecutionPlan.ts`
-       * ------------------------------------------------------------------
-       * Handoff runs only when the plan may call agents: P+R **once**, **Pre–Phase 0 only**;
-       * Tester on explicit test / final-validation wording; Reviewer (Full Quality) on “review” or
-       * big-feature-done wording. Everything else → this message is **only** `/api/grok/chat`.
-       * **Payload:** optional `contextSummary`, `focusPaths`, `focusSnippets` (scoped Tester/Reviewer).
-       * ------------------------------------------------------------------
+       * Nebula Swarm — **lean**: chat never invokes support agents (`shouldPostSwarmHandoff` is always false).
+       * Planning/research stay in main Grok 4.1. Use **Run and Test** in the IDE top bar for the
+       * Quality agent (recent files + review + test suggestions), one manual Grok 4.1 call.
        */
       const runSwarmThisTurn = shouldPostSwarmHandoff({
         swarmEnabled: swarm.isEnabled && modelSettings.agentsEnabled,
@@ -874,9 +868,8 @@ ${uiStudioApprovedCode || 'No approved UI code yet.'}`;
           );
           if (swarmHandoffPacket.swarmStateSnapshot) {
             setSwarmPersisted({
-              schemaVersion: 1,
-              plannerDone: swarmHandoffPacket.swarmStateSnapshot.plannerDone,
-              researcherDone: swarmHandoffPacket.swarmStateSnapshot.researcherDone,
+              schemaVersion: 2,
+              qualityLastRunAt: swarmHandoffPacket.swarmStateSnapshot.qualityLastRunAt,
             });
           }
           if (swarmHandoffPacket.agentsSkipped) {
@@ -1396,8 +1389,14 @@ ${uiStudioApprovedCode || 'No approved UI code yet.'}`;
           planner: { skipped: true },
           researcher: { skipped: true },
           tester: { skipped: true },
+          reviewer: { skipped: true },
+          agentsSkipped: true,
+          agentRun: {
+            reasons: ['Pipeline finished without merged handoff (error or skipped append).'],
+            runQuality: false,
+          },
           notesForGrok:
-            'Swarm pipeline finished without a merged handoff (error or skipped append). Continue from the user message and project-execution-rules.md.',
+            'Quality run finished without a merged handoff (error or skipped append). Continue from the user message and project-execution-rules.md.',
           timestamp: new Date().toISOString(),
         };
         swarm.finishSwarm(swarmHandoffPacket ?? fallback);
@@ -1411,7 +1410,7 @@ ${uiStudioApprovedCode || 'No approved UI code yet.'}`;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  /** Dev: `await window.runNebulaSwarm(text, phase, projectName?, runId?, swarmIntensity?)` */
+  /** Dev: `await window.runNebulaSwarm(text, phase, projectName?, runId?, intensity?, manualRunAndTest?)` */
   useEffect(() => {
     const swarmIntensity = swarm.intensity;
     (window as unknown as { runNebulaSwarm?: unknown }).runNebulaSwarm = async (
@@ -1419,7 +1418,8 @@ ${uiStudioApprovedCode || 'No approved UI code yet.'}`;
       phase: SwarmPhase,
       pname?: string,
       runIdArg?: string,
-      overrideIntensity?: SwarmIntensity
+      overrideIntensity?: SwarmIntensity,
+      manualRunAndTest?: boolean
     ) => {
       const h: Record<string, string> = { 'Content-Type': 'application/json' };
       const k = getStoredGrokApiKey();
@@ -1437,6 +1437,7 @@ ${uiStudioApprovedCode || 'No approved UI code yet.'}`;
           projectName: pname || projectName,
           runId,
           swarmIntensity: overrideIntensity ?? swarmIntensity,
+          manualRunAndTest: Boolean(manualRunAndTest),
         },
         h
       );

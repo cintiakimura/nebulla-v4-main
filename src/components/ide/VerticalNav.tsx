@@ -13,8 +13,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
-const LOGO_URL =
-  'https://hebbkx1anhila5yf.public.blob.vercel-storage.com/remove_the_white_background_and_make_it_completely_transparent._keep_only_the-1pg6kruCIHQfV8QOCTqPuyHhugp3iJ.png';
+const LOGO_URL = '/kyn-logo.png';
 
 type NavItem = {
   id: string;
@@ -43,7 +42,7 @@ export function VerticalNav() {
       <div className="mb-3 flex items-center justify-center">
         <img
           src={LOGO_URL}
-          alt="Nebulla"
+          alt="kyn"
           width={28}
           height={28}
           className="h-7 w-7 object-contain"

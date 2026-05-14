@@ -1,5 +1,8 @@
 **Project Execution Rules**
 
+**Layer 0 — Project Manager (silent, automatic)**  
+Runs on onboarding / new project creation (and optional manual control-plane sync). It binds **Render project ids** to `nebula_projects.workspace_id`, persists **only** the user’s **`GROK_API_KEY`** override when provided (encrypted at rest), validates key shape, and reads **token usage** aggregates. It does **not** change **`GROK_SWARM_API_KEY`** or **`GROK_TTS_NEW_API_KEY`** (those remain Nebula platform `.env`). It does **not** post to Nebula Partner chat.
+
 **Full Project Creation Workflow**
 
 1. User logs in with GitHub
@@ -61,7 +64,8 @@ When Grok builds or works on any project, the interface must follow this layout:
 Each project must have its own separate conversation log stored in `conversationLog.ts`. Conversation history must be kept for **at least 180 days**.
 
 **Phase 0 – Foundation**
-- Read and fully comprehend all files first (`project-execution-rules.md` as the single orchestration source, then `master-plan.json`, `environment-setup.md`, `nebula-sysh-ui-sysh-studio.md`) and review Secrets and Integrations for the active project
+- **Read order:** `project-workflow.md` → `master-plan.json` → `environment-setup.md` → `nebula-sysh-ui-sysh-studio.md` → `project-execution-rules.md` (this file for phases and policies).
+- Review Secrets and Integrations for the active project
 - Create schema / Prisma models based on **Pages and Navigation** tab (including roles and RLS where needed)
 - Set up Authentication system (currently GitHub — ask the user if they want additional login methods like Google)
 - **Base API Structure**: Analyze existing files. If we are missing any external APIs, Client IDs, secrets or tokens, ask the user in chat what to use and add them to Secrets and Integrations

@@ -7,9 +7,9 @@ import { Label } from '@/components/ui/label';
 import type { SwarmIntensity } from '@/types/swarm';
 
 const INTENSITY_OPTIONS: { value: SwarmIntensity; label: string; hint: string }[] = [
-  { value: 'light', label: 'Light', hint: 'Grok 3 only — P+R once, Tester on triggers' },
-  { value: 'balanced', label: 'Balanced', hint: 'Grok 3 — P+R once, Tester on triggers' },
-  { value: 'full_quality', label: 'Full Quality', hint: '+ Grok 4.1 Reviewer on triggers' },
+  { value: 'light', label: 'Light', hint: 'Reserved — Quality uses Grok 4.1 when Run and Test runs' },
+  { value: 'balanced', label: 'Balanced', hint: 'Reserved — manual Quality only' },
+  { value: 'full_quality', label: 'Full Quality', hint: 'Default — manual Run and Test on Grok 4.1' },
 ];
 
 export function SwarmToggle() {
@@ -60,11 +60,11 @@ export function SwarmToggle() {
           ))}
         </select>
         <p className="text-[11px] text-muted-foreground max-w-[280px] sm:max-w-xs leading-snug">
-          Handoff only when agents may run: Planner+Researcher **once** in Pre–Phase 0; Tester when you ask
-          to run tests / final validation; Reviewer (Full Quality) on “review” or big-feature-done wording.
-          Normal coding = one Grok 4.1 call. Optional:{' '}
+          Chat stays a single Grok 4.1 stream (planning and research there). The only support agent is Quality
+          (review plus test ideas). It runs only when you click Run and Test in the IDE top bar, scoped to
+          recently changed files plus optional{' '}
           <code className="text-[10px]">window.nebulaSwarmFocusPaths</code> /{' '}
-          <code className="text-[10px]">nebulaSwarmFocusSnippets</code> for scoped context.
+          <code className="text-[10px]">nebulaSwarmFocusSnippets</code>.
         </p>
       </div>
     </div>

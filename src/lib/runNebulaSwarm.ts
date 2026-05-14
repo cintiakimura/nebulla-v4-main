@@ -12,14 +12,13 @@ export type RunNebulaSwarmParams = {
   focusPaths?: string[];
   focusSnippets?: Record<string, string>;
   swarmHints?: SwarmHandoffHints;
+  /** Manual Run and Test — Quality agent only. */
+  manualRunAndTest?: boolean;
 };
 
 /**
- * Nebula Swarm **handoff** API — invoked only when `shouldPostSwarmHandoff` is true
- * (`src/lib/nebulaSwarmGate.ts`): routine turns stay a single `/api/grok/chat` (Grok 4.1).
- *
- * **Server** (`POST /api/nebula-swarm/handoff`, `lib/nebulaSwarmHandoff.ts`): runs agents per
- * `buildSwarmAgentRunPlan` — P+R **once in `pre_phase_0` only**; Tester / Reviewer on **narrow** user text.
+ * Nebula Swarm **handoff** — used for **manual Run and Test** (Quality agent) or legacy callers.
+ * Chat turns do not call this (`shouldPostSwarmHandoff` is always false).
  */
 export async function runNebulaSwarm(
   params: RunNebulaSwarmParams,

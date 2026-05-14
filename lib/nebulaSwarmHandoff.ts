@@ -1,16 +1,10 @@
 /**
- * Nebula Swarm — server-side handoff builder.
+ * Nebula Swarm — server-side handoff (lean).
  *
- * **Strict agent rules (usage policy):**
- * - **Planner** — at most **once** per project, **only** in Pre–Phase 0 (`pre_phase_0`).
- * - **Researcher** — same single turn as Planner.
- * - **Tester** — explicit “run tests” / “test” / fix-failing-tests language, or explicit final-validation / ship-check phrasing.
- * - **Reviewer** — user says “review” / “code review”, or message signals a **big feature** completed; Full Quality only.
- * - State file: `nebula-project/nebula-swarm-state.json` (see `nebulaSwarmState.ts`).
- * - Payload caps + JSON mode keep tokens low; agents never receive the full codebase.
- *
- * **API keys:** `GROK_SWARM_API_KEY` (Grok 3) + optional Reviewer on `GROK_API_KEY` (Grok 4.1).
- * Project Isolator: swarm pack + rules excerpt only — no repo reads.
+ * - **No** Planner, Researcher, Tester, or Reviewer on normal chat handoffs.
+ * - Main Grok 4.1 handles planning/research in user chat.
+ * - Single **Quality** agent (code review + test suggestions) runs **only** when `manualRunAndTest`
+ *   is set (TopBar "Run and Test"), scoped to recently changed git paths + optional client snippets.
  */
 
 import fs from "fs";
@@ -22,6 +16,7 @@ import {
   type SwarmIntensity,
 } from "./nebulaSwarmExecutionPlan";
 import { readNebulaSwarmState, writeNebulaSwarmState } from "./nebulaSwarmState";
+import { getRecentlyChangedGitPaths } from "./nebulaSwarmGitPaths";
 
 export type { SwarmIntensity };
 
@@ -35,28 +30,19 @@ const SWARM_PHASES = new Set([
   "phase_5",
 ]);
 
-/** Caps — tuned to reduce average tokens per swarm invocation. */
 const CAP = {
   userMessage: 4_000,
   contextSummary: 1_200,
-  focusPathList: 3,
-  focusPathChars: 200,
+  focusPathList: 8,
+  focusPathChars: 240,
   focusSnippetPerFile: 1_800,
-  focusSnippetTotal: 4_500,
-  orchestratorRead: 4_000,
-  orchestratorInject: 1_800,
+  focusSnippetTotal: 5_500,
+  orchestratorRead: 3_000,
+  orchestratorInject: 1_400,
   rulesRead: 4_500,
   rulesInject: 3_000,
-  plannerRoleRead: 3_000,
-  plannerRoleInject: 2_000,
-  researcherRoleRead: 2_800,
-  researcherRoleInject: 1_800,
-  testerRoleRead: 2_800,
-  testerRoleInject: 1_800,
-  reviewerRoleRead: 2_800,
-  reviewerRoleInject: 2_200,
-  reviewerDraftJson: 14_000,
-  reviewerUserMsg: 2_500,
+  qualityRoleRead: 4_000,
+  qualityRoleInject: 3_200,
   safeJsonMarkdownFallback: 4_000,
 } as const;
 
@@ -136,9 +122,7 @@ async function grokChatCompletionJson(
   return { text, ms };
 }
 
-/**
- * Bearer tokens for swarm support agents on the **Grok 3** lane (same key repeated is fine).
- */
+/** Legacy shape: `tester` key reused as unused placeholder when Quality runs. */
 export type SwarmHandoffAgentKeys = {
   planner: string;
   researcher: string;
@@ -156,32 +140,23 @@ export type SwarmHandoffServerResult = {
   researcher: Record<string, unknown>;
   tester: Record<string, unknown>;
   reviewer?: Record<string, unknown>;
+  /** Single merged Quality agent output (manual Run and Test). */
+  quality?: Record<string, unknown>;
   notesForGrok: string;
   timestamp: string;
-  /** Latest durable flags after this handoff (for client cache). */
-  swarmStateSnapshot?: { plannerDone: boolean; researcherDone: boolean };
-  /** True when no xAI support agents ran (plan said skip — token savings). */
+  swarmStateSnapshot?: { schemaVersion: 2; qualityLastRunAt?: string };
   agentsSkipped?: boolean;
-  /** Why each agent did/did not run (debug + client UX). */
   agentRun?: {
     reasons: string[];
-    runPlanner: boolean;
-    runResearcher: boolean;
-    runTester: boolean;
-    runReviewer: boolean;
+    runQuality: boolean;
   };
 };
 
-/** Injected when the handoff route returns early — keeps Grok aligned without re-planning. */
 export const NO_SWARM_AGENTS_NOTE =
-  "No swarm support agents ran this turn (Planner+Researcher: once, Pre–Phase 0 only; Tester: explicit test/final-validation wording; Reviewer: explicit review or big-feature-done wording). No new planning/research needed — proceed with master-plan.json and project-execution-rules.md unless the user changes scope.";
+  "Lean swarm: no support agents ran on this chat turn. Planning and research stay in main Grok 4.1. Use **Run and Test** when you want a scoped Quality pass on recently changed files.";
 
 function stubSkipped(agent: string, reason: string): Record<string, unknown> {
   return { _skipped: true, _agent: agent, markdown: "", reason };
-}
-
-function agentOk(o: Record<string, unknown>): boolean {
-  return o.error !== true;
 }
 
 type HandoffOpts = {
@@ -192,31 +167,38 @@ type HandoffOpts = {
   projectName: string;
   runId: string;
   intensity: SwarmIntensity;
-  /** Grok 4.1 lane — required when Reviewer is in the run plan. */
-  reviewerLane?: { apiKey: string; model: string };
-  /** Short recap of recent chat (client-built); never full thread. */
+  /** Manual "Run and Test" — single Quality call on Grok 4.1. */
+  manualRunAndTest?: boolean;
+  qualityLane?: { apiKey: string; model: string };
   contextSummary?: string;
-  /** Up to 3 paths — labels only (Tester/Reviewer scope). */
   focusPaths?: string[];
-  /** Optional path → small code chunk from client only. Max 3 keys; values hard-capped. */
   focusSnippets?: Record<string, string>;
-  /** Client hints: after coding, final delivery, explicit test/review keywords, etc. */
   swarmHints?: SwarmHandoffHints;
 };
+
+function mergeFocusPaths(gitPaths: string[], clientPaths: string[] | undefined): string[] {
+  const s = new Set<string>();
+  for (const p of gitPaths) {
+    const t = String(p || "").trim().slice(0, CAP.focusPathChars);
+    if (t) s.add(t);
+  }
+  if (clientPaths) {
+    for (const p of clientPaths) {
+      const t = String(p || "").trim().slice(0, CAP.focusPathChars);
+      if (t) s.add(t);
+    }
+  }
+  return [...s].slice(0, CAP.focusPathList);
+}
 
 function assembleUserBlock(
   o: HandoffOpts,
   phase: string,
   intensity: SwarmIntensity,
-  scopeLine: string
+  scopeLine: string,
+  paths: string[]
 ): string {
   const summary = (o.contextSummary || "").trim().slice(0, CAP.contextSummary);
-  const paths = Array.isArray(o.focusPaths)
-    ? o.focusPaths
-        .slice(0, CAP.focusPathList)
-        .map((p) => String(p || "").trim().slice(0, CAP.focusPathChars))
-        .filter(Boolean)
-    : [];
   const parts = [
     `Swarm phase: ${phase}`,
     `Project: ${o.projectName}`,
@@ -227,7 +209,7 @@ function assembleUserBlock(
     o.userMessage.slice(0, CAP.userMessage),
   ];
   if (summary) parts.push("", "Recent chat (summary, not full history):", summary);
-  if (paths.length) parts.push("", "Focus paths (labels only):", paths.join("\n"));
+  if (paths.length) parts.push("", "Recently changed / focus paths (labels only):", paths.join("\n"));
   const snippets = o.focusSnippets && typeof o.focusSnippets === "object" ? o.focusSnippets : null;
   if (snippets) {
     const keys = Object.keys(snippets).slice(0, 3);
@@ -251,10 +233,30 @@ function assembleUserBlock(
   return parts.join("\n");
 }
 
-/**
- * Runs support agents per **execution plan** (P+R once in **pre_phase_0** only; Tester / Reviewer on
- * narrow user phrases). Persists `nebula-project/nebula-swarm-state.json` when Planner+Researcher succeed.
- */
+function skippedResult(
+  intensity: SwarmIntensity,
+  phase: string,
+  opts: HandoffOpts,
+  agentRun: SwarmHandoffServerResult["agentRun"]
+): SwarmHandoffServerResult {
+  const snap = readNebulaSwarmState(opts.workspaceRoot);
+  return {
+    schemaVersion: "1.0.0",
+    intensity,
+    phase,
+    runId: opts.runId,
+    projectName: opts.projectName,
+    planner: stubSkipped("planner", "removed_lean_swarm"),
+    researcher: stubSkipped("researcher", "removed_lean_swarm"),
+    tester: stubSkipped("tester", "removed_lean_swarm"),
+    notesForGrok: NO_SWARM_AGENTS_NOTE,
+    timestamp: new Date().toISOString(),
+    agentsSkipped: true,
+    agentRun,
+    swarmStateSnapshot: { schemaVersion: 2, qualityLastRunAt: snap.qualityLastRunAt },
+  };
+}
+
 export async function buildSwarmHandoffParallel(
   agentKeys: SwarmHandoffAgentKeys,
   opts: HandoffOpts
@@ -262,61 +264,46 @@ export async function buildSwarmHandoffParallel(
   const state = readNebulaSwarmState(opts.workspaceRoot);
   const phase = SWARM_PHASES.has(opts.phase) ? opts.phase : "pre_phase_0";
   const { intensity } = opts;
+
   const plan = buildSwarmAgentRunPlan({
     state,
     phase,
     userMessage: opts.userMessage,
     intensity,
     hints: opts.swarmHints,
+    manualRunAndTest: Boolean(opts.manualRunAndTest),
   });
 
   const agentRun = {
     reasons: plan.reasons,
-    runPlanner: plan.runPlanner,
-    runResearcher: plan.runResearcher,
-    runTester: plan.runTester,
-    runReviewer: plan.runReviewer,
+    runQuality: plan.runQuality,
   };
 
-  // Zero LLM calls when the plan selects no agents — normal coding turns stay cheap.
   if (!anyAgentRuns(plan)) {
-    const snap0 = readNebulaSwarmState(opts.workspaceRoot);
-    return {
-      schemaVersion: "1.0.0",
-      intensity,
-      phase,
-      runId: opts.runId,
-      projectName: opts.projectName,
-      planner: stubSkipped("planner", "no_agent_run_planned"),
-      researcher: stubSkipped("researcher", "no_agent_run_planned"),
-      tester: stubSkipped("tester", "no_agent_run_planned"),
-      notesForGrok: NO_SWARM_AGENTS_NOTE,
-      timestamp: new Date().toISOString(),
-      agentsSkipped: true,
-      agentRun,
-      swarmStateSnapshot: {
-        plannerDone: snap0.plannerDone,
-        researcherDone: snap0.researcherDone,
-      },
-    };
+    return skippedResult(intensity, phase, opts, agentRun);
   }
+
+  if (!opts.manualRunAndTest || !opts.qualityLane?.apiKey) {
+    return skippedResult(intensity, phase, opts, {
+      ...agentRun,
+      reasons: [...plan.reasons, "quality_lane_missing"],
+    });
+  }
+
+  const gitPaths = getRecentlyChangedGitPaths(opts.workspaceRoot, 24);
+  const mergedPaths = mergeFocusPaths(gitPaths, opts.focusPaths);
+  const optsWithPaths: HandoffOpts = { ...opts, focusPaths: mergedPaths };
 
   const swarmRoot = path.join(opts.repoRoot, "skills", "nebula-swarm");
   const orchestrator = readTextFile(path.join(swarmRoot, "ORCHESTRATOR.md"), CAP.orchestratorRead);
-  const plannerRole = readTextFile(path.join(swarmRoot, "agents", "PLANNER.md"), CAP.plannerRoleRead);
-  const researcherRole = readTextFile(path.join(swarmRoot, "agents", "RESEARCHER.md"), CAP.researcherRoleRead);
-  const testerRole = readTextFile(path.join(swarmRoot, "agents", "TESTER.md"), CAP.testerRoleRead);
-  const reviewerRole = readTextFile(path.join(swarmRoot, "agents", "REVIEWER.md"), CAP.reviewerRoleRead);
-
+  const qualityRole = readTextFile(path.join(swarmRoot, "agents", "QUALITY.md"), CAP.qualityRoleRead);
   const rulesPath = path.join(opts.workspaceRoot, "project-execution-rules.md");
   const executionRulesExcerpt = readTextFile(rulesPath, CAP.rulesRead);
 
   const jsonContract = [
     "Output: a single JSON object only (no markdown fences, no text outside JSON).",
-    'Keys: "markdown" (string, max ~500 chars, dense facts/checklists),',
-    '"bullets" (array of max 5 strings, each max 90 chars),',
-    '"warnings" (array of max 3 strings).',
-    "Omit bullets/warnings if empty. No repetition; no preamble.",
+    'Keys: "markdown" (string), "bullets" (array of strings), "warnings" (array of strings).',
+    "Omit bullets/warnings if empty. No preamble.",
   ].join(" ");
 
   const orchHint =
@@ -324,181 +311,57 @@ export async function buildSwarmHandoffParallel(
       ? `\n\nOrchestrator (excerpt):\n${orchestrator.slice(0, CAP.orchestratorInject)}`
       : "";
 
-  const commonFooter = [
+  const systemParts = [
+    "Nebula Swarm QUALITY (read-only). Reply JSON only per contract.",
+    jsonContract,
+    qualityRole.slice(0, CAP.qualityRoleInject),
+    orchHint,
     "",
-    "Execution rules excerpt (reference; do not paste into user chat):",
+    "Execution rules excerpt (reference):",
     executionRulesExcerpt.slice(0, CAP.rulesInject) || "(missing project-execution-rules.md)",
-  ].join("\n");
+  ];
 
-  const systemFor = (
-    agent: "planner" | "researcher" | "tester" | "reviewer",
-    roleText: string,
-    extra?: string
-  ) =>
-    [
-      `Nebula Swarm ${agent.toUpperCase()} (read-only). Reply JSON only per contract.`,
-      jsonContract,
-      extra || "",
-      roleText,
-      orchHint,
-      commonFooter,
-    ]
-      .filter(Boolean)
-      .join("\n");
+  const userBlock = assembleUserBlock(
+    optsWithPaths,
+    phase,
+    intensity,
+    "Manual Run and Test: review + test suggestions **only** for paths/snippets above (recently changed files). If the path list is empty, state that scope is unknown and avoid inventing files.",
+    mergedPaths
+  );
 
-  const useJson = true;
+  const qr = await grokChatCompletionJson(
+    "Swarm quality",
+    opts.qualityLane.apiKey,
+    opts.qualityLane.model,
+    systemParts.join("\n"),
+    userBlock,
+    true
+  );
 
-  // Default stubs: explain why P/R did not run this turn (once-per-project or not selected).
-  let planner: Record<string, unknown> = state.plannerDone
-    ? stubSkipped("planner", "once_per_project_complete")
-    : stubSkipped("planner", "not_run_this_turn");
-  let researcher: Record<string, unknown> = state.researcherDone
-    ? stubSkipped("researcher", "once_per_project_complete")
-    : stubSkipped("researcher", "not_run_this_turn");
-  let tester: Record<string, unknown> = stubSkipped("tester", "not_triggered_this_turn");
-  let reviewer: Record<string, unknown> | undefined;
+  const quality = { ...safeJsonObject(qr.text), _agent: "quality", _durationMs: qr.ms, _model: opts.qualityLane.model };
 
-  if (plan.runPlanner && plan.runResearcher) {
-    const ub = assembleUserBlock(
-      opts,
-      phase,
-      intensity,
-      "Bootstrap / Pre–Phase 0 only. One-time project alignment — do not assume post-bootstrap scope."
-    );
-    const [ps, rs] = await Promise.all([
-      grokChatCompletionJson(
-        "Swarm planner",
-        agentKeys.planner,
-        agentKeys.swarmModel,
-        systemFor("planner", plannerRole.slice(0, CAP.plannerRoleInject)),
-        ub,
-        useJson
-      ),
-      grokChatCompletionJson(
-        "Swarm researcher",
-        agentKeys.researcher,
-        agentKeys.swarmModel,
-        systemFor("researcher", researcherRole.slice(0, CAP.researcherRoleInject)),
-        ub,
-        useJson
-      ),
-    ]);
-    planner = { ...safeJsonObject(ps.text), _agent: "planner", _durationMs: ps.ms };
-    researcher = { ...safeJsonObject(rs.text), _agent: "researcher", _durationMs: rs.ms };
-    if (agentOk(planner) && agentOk(researcher)) {
-      writeNebulaSwarmState(opts.workspaceRoot, {
-        schemaVersion: 1,
-        plannerDone: true,
-        researcherDone: true,
-      });
-    }
-  }
+  const now = new Date().toISOString();
+  writeNebulaSwarmState(opts.workspaceRoot, {
+    schemaVersion: 2,
+    qualityLastRunAt: now,
+  });
 
-  if (plan.runTester) {
-    const ub = assembleUserBlock(
-      opts,
-      phase,
-      intensity,
-      "Testing scope: ONLY focus paths/snippets above + user message — not whole-repo QA."
-    );
-    const tr = await grokChatCompletionJson(
-      "Swarm tester",
-      agentKeys.tester,
-      agentKeys.swarmModel,
-      systemFor("tester", testerRole.slice(0, CAP.testerRoleInject)),
-      ub,
-      useJson
-    );
-    tester = { ...safeJsonObject(tr.text), _agent: "tester", _durationMs: tr.ms };
-  }
+  const notesForGrok =
+    "Quality agent (manual Run and Test) completed on recently changed / client-scoped files. Use `quality` in the handoff packet internally; keep the user reply natural and concise.";
 
-  if (plan.runReviewer && opts.reviewerLane?.apiKey) {
-    const draftForReviewer = JSON.stringify({
-      phase,
-      projectName: opts.projectName,
-      runId: opts.runId,
-      planner,
-      researcher,
-      tester,
-    }).slice(0, CAP.reviewerDraftJson);
-
-    const reviewerSystem = systemFor(
-      "reviewer",
-      reviewerRole.slice(0, CAP.reviewerRoleInject),
-      "markdown: P0/P1/P2 findings + short exit checks for main Grok. No patches, no secrets."
-    );
-
-    const reviewerUser = [
-      "Draft handoff (support outputs; may include skipped stubs):",
-      draftForReviewer,
-      "",
-      "Scoped context (modified files/snippets only):",
-      assembleUserBlock(
-        opts,
-        phase,
-        intensity,
-        "Review scope: ONLY modified snippets/paths in this payload — not entire codebase."
-      ).slice(0, CAP.reviewerUserMsg + 2_000),
-    ].join("\n");
-
-    try {
-      const rev = await grokChatCompletionJson(
-        "Swarm reviewer",
-        opts.reviewerLane.apiKey,
-        opts.reviewerLane.model,
-        reviewerSystem,
-        reviewerUser,
-        useJson
-      );
-      reviewer = {
-        ...safeJsonObject(rev.text),
-        _agent: "reviewer",
-        _durationMs: rev.ms,
-        _model: opts.reviewerLane.model,
-      };
-    } catch (e) {
-      reviewer = {
-        markdown: "",
-        error: true,
-        _agent: "reviewer",
-        warnings: [e instanceof Error ? e.message : String(e)],
-      };
-    }
-  } else if (plan.runReviewer && !opts.reviewerLane?.apiKey) {
-    reviewer = {
-      _skipped: true,
-      _agent: "reviewer",
-      markdown: "",
-      warnings: [
-        "Reviewer was planned but skipped: no Grok 4.1 key (GROK_API_KEY or X-Grok-Api-Key on this request).",
-      ],
-    };
-  }
-
-  const ranParts = [
-    plan.runPlanner && plan.runResearcher ? "P+R bootstrap" : "",
-    plan.runTester ? "Tester" : "",
-    plan.runReviewer ? "Reviewer" : "",
-  ].filter(Boolean);
-  const notesForGrok = `Swarm agents executed this turn: ${ranParts.join(" + ") || "none"}. Use packet internally; obey project-execution-rules.md; natural user reply.`;
-
-  const snap1 = readNebulaSwarmState(opts.workspaceRoot);
   return {
     schemaVersion: "1.0.0",
     intensity,
     phase,
     runId: opts.runId,
     projectName: opts.projectName,
-    planner,
-    researcher,
-    tester,
-    ...(reviewer !== undefined ? { reviewer } : {}),
+    planner: stubSkipped("planner", "removed_lean_swarm"),
+    researcher: stubSkipped("researcher", "removed_lean_swarm"),
+    tester: stubSkipped("tester", "use_quality_field"),
+    quality,
     notesForGrok,
-    timestamp: new Date().toISOString(),
+    timestamp: now,
     agentRun,
-    swarmStateSnapshot: {
-      plannerDone: snap1.plannerDone,
-      researcherDone: snap1.researcherDone,
-    },
+    swarmStateSnapshot: { schemaVersion: 2, qualityLastRunAt: now },
   };
 }

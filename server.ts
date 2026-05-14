@@ -18,7 +18,7 @@ import {
   guardianExpressErrorHandler,
   captureError,
 } from "./guardian/nebulaGuardian";
-import { mountRenderStack, getRenderPublicConfig, resolveNebulaProjectDiskKey } from "./renderStack";
+import { mountRenderStack, getRenderPublicConfig, resolveNebulaProjectDiskKey, readNebulaSessionUserId } from "./renderStack";
 import {
   resolvePencilApiKey,
   resolvePencilMockupsUrl,
@@ -27,6 +27,7 @@ import {
   buildNebulaUiStudioPromptBody,
   callPencilMockupsGenerate,
 } from "./lib/nebulaPencilDev";
+import { createResolveMainGrokApiKey } from "./lib/nebulaMainGrokResolver";
 import {
   callGrokGenerateUiSvg,
   heuristicSvgEditRisks,
@@ -69,6 +70,8 @@ dotenv.config({ path: path.join(REPO_ROOT, ".env") });
 
 export const app = express();
 const PORT = Number(process.env.PORT) || 3000;
+
+const resolveMainGrokApiKey = createResolveMainGrokApiKey(readNebulaSessionUserId);
 
 async function startServer() {
   initGuardianProcessHandlers();
@@ -175,20 +178,6 @@ async function startServer() {
       }
     }
   });
-
-  const resolveNebullaGrokKeyForReq = (req: express.Request): string | undefined => {
-    const headerKey =
-      typeof req.headers["x-grok-api-key"] === "string" ? req.headers["x-grok-api-key"].trim() : "";
-    if (headerKey.length >= 20) return headerKey;
-    const bodyKey =
-      typeof (req.body as { grokApiKey?: unknown })?.grokApiKey === "string"
-        ? String((req.body as { grokApiKey?: string }).grokApiKey).trim()
-        : "";
-    if (bodyKey.length >= 20) return bodyKey;
-    const envKey = process.env.GROK_API_KEY?.trim() ?? "";
-    if (envKey.length >= 20) return envKey;
-    return undefined;
-  };
 
   const readSkillDesignSystemExcerpt = (workspaceRoot: string): string => {
     const candidates = [
@@ -1032,7 +1021,11 @@ No approved UI code yet.
       });
       const promptText = String((body as { prompt?: string }).prompt ?? "");
 
-      const grokKey = resolveNebullaGrokKeyForReq(req);
+      const bodyGrokForStudio =
+        typeof (req.body as { grokApiKey?: unknown })?.grokApiKey === "string"
+          ? String((req.body as { grokApiKey?: string }).grokApiKey).trim()
+          : "";
+      const grokKey = await resolveMainGrokApiKey(req, bodyGrokForStudio || undefined);
 
       if (grokKey) {
         try {
@@ -1096,7 +1089,11 @@ No approved UI code yet.
     if (typeof originalCode !== "string" || typeof editedCode !== "string") {
       return res.status(400).json({ error: "originalCode and editedCode strings are required" });
     }
-    const grokKey = resolveNebullaGrokKeyForReq(req);
+    const bodyGrokForStudio =
+      typeof (req.body as { grokApiKey?: unknown })?.grokApiKey === "string"
+        ? String((req.body as { grokApiKey?: string }).grokApiKey).trim()
+        : "";
+    const grokKey = await resolveMainGrokApiKey(req, bodyGrokForStudio || undefined);
     const heuristic = heuristicSvgEditRisks(originalCode, editedCode);
     try {
       if (grokKey) {
@@ -1119,7 +1116,11 @@ No approved UI code yet.
     if (typeof editedCode !== "string" || !editedCode.trim()) {
       return res.status(400).json({ error: "editedCode is required" });
     }
-    const grokKey = resolveNebullaGrokKeyForReq(req);
+    const bodyGrokForStudio =
+      typeof (req.body as { grokApiKey?: unknown })?.grokApiKey === "string"
+        ? String((req.body as { grokApiKey?: string }).grokApiKey).trim()
+        : "";
+    const grokKey = await resolveMainGrokApiKey(req, bodyGrokForStudio || undefined);
     if (!grokKey) {
       return res.status(400).json({ error: "Grok API key required to adapt SVG (server GROK_API_KEY or client key)." });
     }
@@ -1185,25 +1186,18 @@ No approved UI code yet.
   const buildProjectWorkflowExecutionContext = (req: express.Request): string => {
     const { workspaceRoot } = projectPathsFor(req);
     const order = [
-      "project-execution-rules.md",
+      "project-workflow.md",
       "master-plan.json",
       "environment-setup.md",
       "nebula-sysh-ui-sysh-studio.md",
+      "project-execution-rules.md",
     ];
     return order.map((p) => `\n=== ${p} ===\n${readWorkflowFileSafe(workspaceRoot, p)}`).join("\n");
   };
 
   app.post("/api/grok/execute-project-rules", async (req, res) => {
     const { messages, grokApiKey: bodyGrokKey, userId, projectName } = req.body || {};
-    const headerKey =
-      typeof req.headers["x-grok-api-key"] === "string"
-        ? req.headers["x-grok-api-key"].trim()
-        : "";
-    const apiKey =
-      headerKey ||
-      (typeof bodyGrokKey === "string" ? bodyGrokKey.trim() : "") ||
-      process.env.GROK_API_KEY ||
-      "";
+    const apiKey = await resolveMainGrokApiKey(req, typeof bodyGrokKey === "string" ? bodyGrokKey : undefined);
 
     if (!apiKey) {
       return res.status(401).json({
@@ -1271,15 +1265,7 @@ Rules:
   /** Go: Grok 4 writes a short summary into master-plan.json only, then Grok Code runs (no full execution doc in MP). */
   app.post("/api/grok/go-code", async (req, res) => {
     const { messages, grokApiKey: bodyGrokKey, userId, projectName, userNote } = req.body || {};
-    const headerKey =
-      typeof req.headers["x-grok-api-key"] === "string"
-        ? req.headers["x-grok-api-key"].trim()
-        : "";
-    const apiKey =
-      headerKey ||
-      (typeof bodyGrokKey === "string" ? bodyGrokKey.trim() : "") ||
-      process.env.GROK_API_KEY ||
-      "";
+    const apiKey = await resolveMainGrokApiKey(req, typeof bodyGrokKey === "string" ? bodyGrokKey : undefined);
 
     if (!apiKey) {
       return res.status(401).json({
@@ -1493,35 +1479,29 @@ ${workflowContext}`;
 
   app.post("/api/nebula-swarm/handoff", async (req, res) => {
     try {
-      /*
-       * Nebula Swarm handoff — support agents run **only** per `lib/nebulaSwarmExecutionPlan.ts`
-       * (once Planner+Researcher; Tester/Reviewer on triggers). Client passes `swarmHints`.
-       *
-       * - **GROK_SWARM_API_KEY** + **GROK_SWARM_MODEL** → Grok 3 lane for Planner / Researcher / Tester.
-       * - **Reviewer** (optional) → `resolveNebullaGrokKeyForReq(req)` + **GROK_SWARM_REVIEWER_MODEL**
-       *   when intensity is `full_quality` **and** the run plan includes Reviewer; missing main key
-       *   skips Reviewer instead of failing the whole request.
-       */
-      const swarmKey = process.env.GROK_SWARM_API_KEY?.trim() ?? "";
-      if (!swarmKey || swarmKey.length < 20) {
-        return res.status(401).json({
-          error:
-            "GROK_SWARM_API_KEY is missing or invalid (min ~20 chars). Add it to .env for Nebula Swarm support agents (Grok 3). Main Nebula Partner still uses GROK_API_KEY (Grok 4.1).",
-        });
-      }
-      const swarmModel = process.env.GROK_SWARM_MODEL?.trim() || "grok-3-fast";
-      const reviewerModel =
-        process.env.GROK_SWARM_REVIEWER_MODEL?.trim() || "grok-4-1-fast-reasoning";
+      /** Lean swarm: chat never runs agents. `manualRunAndTest` → single Quality call on Grok 4.1. */
       const body = (req.body || {}) as Record<string, unknown>;
+      const manualRunAndTest = Boolean(body.manualRunAndTest);
+      const swarmKey = process.env.GROK_SWARM_API_KEY?.trim() ?? "";
+      const swarmModel = process.env.GROK_SWARM_MODEL?.trim() || "grok-3-fast";
+      const qualityModel =
+        process.env.GROK_SWARM_REVIEWER_MODEL?.trim() || "grok-4-1-fast-reasoning";
+
       const rawIntensity = typeof body.swarmIntensity === "string" ? body.swarmIntensity.trim() : "";
       const swarmIntensity =
         rawIntensity === "light" || rawIntensity === "balanced" || rawIntensity === "full_quality"
           ? rawIntensity
           : "full_quality";
-      const userMessage = typeof body.userMessage === "string" ? body.userMessage.trim() : "";
+
+      let userMessage = typeof body.userMessage === "string" ? body.userMessage.trim() : "";
+      if (manualRunAndTest && !userMessage) {
+        userMessage =
+          "Manual Run and Test: run code review and test suggestions scoped to recently modified files only.";
+      }
       if (!userMessage) {
         return res.status(400).json({ error: "userMessage is required" });
       }
+
       const phase = typeof body.phase === "string" && body.phase.trim() ? body.phase.trim() : "pre_phase_0";
       const projectName =
         typeof body.projectName === "string" && body.projectName.trim()
@@ -1536,7 +1516,7 @@ ${workflowContext}`;
       let focusPaths: string[] | undefined;
       if (Array.isArray(body.focusPaths)) {
         const fp = body.focusPaths
-          .slice(0, 3)
+          .slice(0, 12)
           .map((p) => (typeof p === "string" ? p.trim().slice(0, 240) : ""))
           .filter(Boolean);
         if (fp.length > 0) focusPaths = fp;
@@ -1579,19 +1559,25 @@ ${workflowContext}`;
       }
       const pp = projectPathsFor(req);
 
-      let reviewerLane: { apiKey: string; model: string } | undefined;
-      if (swarmIntensity === "full_quality") {
-        const mainGrok = resolveNebullaGrokKeyForReq(req);
-        if (mainGrok && mainGrok.length >= 20) {
-          reviewerLane = { apiKey: mainGrok, model: reviewerModel };
+      const mainGrok = (await resolveMainGrokApiKey(req)) || "";
+      let qualityLane: { apiKey: string; model: string } | undefined;
+      if (manualRunAndTest) {
+        if (!mainGrok || mainGrok.length < 20) {
+          return res.status(401).json({
+            error:
+              "Grok API key is required for Run and Test (Quality agent uses Grok 4.1). Set GROK_API_KEY on the server, or send X-Grok-Api-Key / save your key in Settings.",
+          });
         }
+        qualityLane = { apiKey: mainGrok, model: qualityModel };
       }
+
+      const laneKey = swarmKey.length >= 20 ? swarmKey : "unused-lean-swarm-placeholder-key";
 
       const handoff = await buildSwarmHandoffParallel(
         {
-          planner: swarmKey,
-          researcher: swarmKey,
-          tester: swarmKey,
+          planner: laneKey,
+          researcher: laneKey,
+          tester: laneKey,
           swarmModel,
         },
         {
@@ -1602,7 +1588,8 @@ ${workflowContext}`;
           projectName,
           runId,
           intensity: swarmIntensity,
-          reviewerLane,
+          manualRunAndTest,
+          ...(qualityLane ? { qualityLane } : {}),
           ...(contextSummary ? { contextSummary } : {}),
           ...(focusPaths ? { focusPaths } : {}),
           ...(focusSnippets ? { focusSnippets } : {}),
@@ -1624,16 +1611,7 @@ ${workflowContext}`;
 
   app.post("/api/grok/chat", async (req, res) => {
     const { messages, grokApiKey: bodyGrokKey, userId, projectName, onboardingAutopilot } = req.body || {};
-    const headerKey =
-      typeof req.headers["x-grok-api-key"] === "string"
-        ? req.headers["x-grok-api-key"].trim()
-        : "";
-    /** Main Nebula Partner + planning: **Grok 4.1** using **`GROK_API_KEY`** from `.env` (process.env), or client override. */
-    const apiKey =
-      headerKey ||
-      (typeof bodyGrokKey === "string" ? bodyGrokKey.trim() : "") ||
-      process.env.GROK_API_KEY ||
-      "";
+    const apiKey = await resolveMainGrokApiKey(req, typeof bodyGrokKey === "string" ? bodyGrokKey : undefined);
 
     if (!apiKey) {
       console.error("GROK_API_KEY is not set (env, X-Grok-Api-Key header, or Settings)");

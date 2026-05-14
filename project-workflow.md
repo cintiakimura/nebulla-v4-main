@@ -1,5 +1,7 @@
 **Full Project Creation Workflow**
 
+0. **Project Manager (silent, automatic)** — before user-facing build steps: ensure each cloud project has a Render isolation id (`workspace_id`); optionally persist the user’s **main** `GROK_API_KEY` override (encrypted server-side). **Never** replace `GROK_SWARM_API_KEY` or `GROK_TTS_NEW_API_KEY` from user input (Nebula `.env` only). Refresh usage aggregates for monitoring. No chat messages.
+
 1. User logs in with GitHub
 2. User creates a new project and gives it a name
 3. This immediately triggers the full **Environment Setup** on Render:

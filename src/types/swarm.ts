@@ -1,12 +1,12 @@
 export type SwarmPhase = 'pre_phase_0' | 'phase_0' | 'phase_1' | 'phase_2' | 'phase_3' | 'phase_4' | 'phase_5';
 
-/** Sub-agents before Grok 4.1 main reply. Default: full_quality. */
+/** Kept for settings UI; Quality agent always uses Grok 4.1 when Run and Test fires. */
 export type SwarmIntensity = 'light' | 'balanced' | 'full_quality';
 
 export interface SwarmAgentOutput {
-  agent: 'planner' | 'researcher' | 'tester' | 'reviewer';
+  agent: 'quality';
   status: 'running' | 'completed' | 'error';
-  output: any;
+  output: unknown;
   durationMs?: number;
 }
 
@@ -16,28 +16,24 @@ export interface SwarmHandoffPacket {
   phase: SwarmPhase;
   runId: string;
   projectName: string;
-  planner: any;
-  researcher: any;
-  tester: any;
-  reviewer?: any;
+  /** Legacy keys — stubs in lean mode; real output is in `quality` when Run and Test ran. */
+  planner: unknown;
+  researcher: unknown;
+  tester: unknown;
+  reviewer?: unknown;
+  quality?: unknown;
   notesForGrok: string;
   timestamp: string;
-  /** Mirrors `nebula-project/nebula-swarm-state.json` after this response. */
-  swarmStateSnapshot?: { plannerDone: boolean; researcherDone: boolean };
-  /** Server returned stubs only — no xAI support-agent calls (token savings). */
+  swarmStateSnapshot?: { schemaVersion: 2; qualityLastRunAt?: string };
   agentsSkipped?: boolean;
   agentRun?: {
     reasons: string[];
-    runPlanner: boolean;
-    runResearcher: boolean;
-    runTester: boolean;
-    runReviewer: boolean;
+    runQuality: boolean;
   };
 }
 
 export interface SwarmState {
   isEnabled: boolean;
-  /** Planner+Researcher / +Tester / +Reviewer(Grok4.1). */
   intensity: SwarmIntensity;
   isRunning: boolean;
   currentPhase: SwarmPhase;
