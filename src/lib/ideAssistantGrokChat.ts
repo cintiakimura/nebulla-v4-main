@@ -45,11 +45,10 @@ export async function sendIdeAssistantGrokTurn(options: {
   history: IdeChatTurnMessage[];
   userId: string;
   projectName: string;
-  chatModel: string;
   ideAppendix: string;
   signal?: AbortSignal;
 }): Promise<{ assistantContent: string; planningPhase: string }> {
-  const { textToSend, history, userId, projectName, chatModel, ideAppendix, signal } = options;
+  const { textToSend, history, userId, projectName, ideAppendix, signal } = options;
 
   const { latestMP, uiStudioApprovedCode } = await fetchMasterPlanAndUiStudio();
   const systemPrompt =
@@ -87,7 +86,8 @@ export async function sendIdeAssistantGrokTurn(options: {
         withProjectBody({
           userId,
           projectName,
-          chatModel,
+          /** IDE panel always uses main `GROK_API_KEY` with Grok 4.1 — never Grok 3 / swarm settings. */
+          chatModel: 'grok-4.1',
           onboardingAutopilot: false,
           messages: messagesPayload,
         }),

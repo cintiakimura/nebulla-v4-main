@@ -26,6 +26,12 @@ import { GROK_CHAT_SETUP_HINT } from '../lib/grokKey';
 import { withProjectBody, withProjectQuery } from '../lib/nebulaProjectApi';
 import { buildNebulaAssistantSystemPrompt } from '../lib/nebulaAssistantSystemPrompt';
 import { fetchConversationLogEntries } from '../lib/conversationLogClient';
+import {
+  MIC_REENABLE_AFTER_TTS_MS,
+  splitTextForTts,
+  TTS_START_DEBOUNCE_MS,
+  VOICE_SILENCE_BEFORE_SEND_MS,
+} from '../lib/voiceTtsShared';
 
 const MASTER_PLAN_TITLES = [
   '1. Goal of the app',
@@ -35,69 +41,6 @@ const MASTER_PLAN_TITLES = [
   '5. UI/UX design',
   '6. Environment Setup',
 ] as const;
-
-/**
- * Hands-free mode: pause after last finalized speech chunk before auto-send.
- * Too short → sends mid-thought (“cuts me off”). Too long → feels sluggish.
- */
-const HANDS_FREE_AUTOSEND_PAUSE_MS = 3000;
-
-/**
- * Long replies were one huge TTS request: slow time-to-first-audio and occasional failures on long text.
- * We synthesize in chunks under this size and play them back-to-back (mic stays off for the whole run).
- */
-const MAX_TTS_CHUNK_CHARS = 560;
-
-/**
- * Tiny debounce before the first TTS `/api/speak` call: coalesces back-to-back completions without a perceptible gap.
- * Keeps 0ms effective delay for normal turns; safer than 0 when multiple updates fire in one frame.
- */
-const TTS_START_DEBOUNCE_MS = 50;
-
-function stripForTtsSpokenText(s: string): string {
-  return s
-    .replace(/\*\*([^*]+)\*\*/g, '$1')
-    .replace(/\*([^*\n]+)\*/g, '$1')
-    .replace(/`+/g, '')
-    .replace(/^#{1,6}\s+/gm, '');
-}
-
-function splitTextForTts(text: string): string[] {
-  const t = stripForTtsSpokenText(text);
-  const paras = t
-    .split(/\n\s*\n/)
-    .map((p) => p.replace(/\s+/g, ' ').trim())
-    .filter(Boolean);
-  const chunks: string[] = [];
-  for (const para of paras) {
-    if (para.length <= MAX_TTS_CHUNK_CHARS) {
-      chunks.push(para);
-      continue;
-    }
-    const sentences = para.match(/[^.!?]+[.!?]+|[^.!?]+$/g) || [para];
-    let buf = '';
-    for (const raw of sentences) {
-      const s = raw.trim();
-      if (!s) continue;
-      const next = buf ? `${buf} ${s}` : s;
-      if (next.length <= MAX_TTS_CHUNK_CHARS) {
-        buf = next;
-      } else {
-        if (buf) chunks.push(buf);
-        if (s.length <= MAX_TTS_CHUNK_CHARS) {
-          buf = s;
-        } else {
-          for (let i = 0; i < s.length; i += MAX_TTS_CHUNK_CHARS) {
-            chunks.push(s.slice(i, i + MAX_TTS_CHUNK_CHARS).trim());
-          }
-          buf = '';
-        }
-      }
-    }
-    if (buf) chunks.push(buf);
-  }
-  return chunks.filter(Boolean);
-}
 
 function splitMasterPlanSectionsFromBlock(block: string): Partial<Record<number, string>> {
   const lines = block.split('\n');
@@ -309,6 +252,8 @@ export function AssistantSidebar({
   /** Abort in-flight `/api/grok/chat` so Revert / interrupt can cancel the pending reply. */
   const grokChatAbortRef = useRef<AbortController | null>(null);
   const q1ExecutionTriggeredRef = useRef(false);
+  /** After Grok TTS ends, wait before turning the mic channel back on (project-execution-rules.md). */
+  const micPostTtsUnlockTimerRef = useRef<number | null>(null);
 
   const stopLiveRecognitionSafe = () => {
     const r = liveRecognitionRef.current;
@@ -344,6 +289,10 @@ export function AssistantSidebar({
 
   /** No speech-to-text while Grok TTS is playing (avoids self-listening). Snapshots prior listen state. */
   const pauseListeningForOutgoingTts = () => {
+    if (micPostTtsUnlockTimerRef.current != null) {
+      window.clearTimeout(micPostTtsUnlockTimerRef.current);
+      micPostTtsUnlockTimerRef.current = null;
+    }
     resumeLiveAfterTtsRef.current = Boolean(
       isLiveRef.current &&
         (liveRecognitionRef.current != null || deferredLiveRecognitionStartRef.current)
@@ -771,6 +720,10 @@ export function AssistantSidebar({
 
       if (cleanText && !isCodingTurn) {
         try {
+          if (micPostTtsUnlockTimerRef.current != null) {
+            window.clearTimeout(micPostTtsUnlockTimerRef.current);
+            micPostTtsUnlockTimerRef.current = null;
+          }
           if (ttsDebounceTimerRef.current) {
             window.clearTimeout(ttsDebounceTimerRef.current);
             ttsDebounceTimerRef.current = null;
@@ -1321,7 +1274,7 @@ export function AssistantSidebar({
           if (currentText && currentText.trim()) {
             handleSendText(currentText);
           }
-        }, HANDS_FREE_AUTOSEND_PAUSE_MS);
+        }, VOICE_SILENCE_BEFORE_SEND_MS);
       };
 
       recognition.onend = () => {
@@ -1373,7 +1326,7 @@ export function AssistantSidebar({
 
   resumeLiveAfterDictationEndsRef.current = resumeLiveSttAfterDictationEnds;
 
-  resumeListeningAfterOutgoingTtsRef.current = () => {
+  function resumeMicChannelsAfterTts() {
     if (isLiveRef.current) {
       if (deferredLiveRecognitionStartRef.current) {
         deferredLiveRecognitionStartRef.current = false;
@@ -1408,11 +1361,22 @@ export function AssistantSidebar({
         resumeLiveSttAfterDictationEnds();
       }
     }
+  }
+
+  resumeListeningAfterOutgoingTtsRef.current = () => {
+    if (micPostTtsUnlockTimerRef.current != null) {
+      window.clearTimeout(micPostTtsUnlockTimerRef.current);
+      micPostTtsUnlockTimerRef.current = null;
+    }
+    micPostTtsUnlockTimerRef.current = window.setTimeout(() => {
+      micPostTtsUnlockTimerRef.current = null;
+      resumeMicChannelsAfterTts();
+    }, MIC_REENABLE_AFTER_TTS_MS);
   };
 
   const connectLive = async () => {
     try {
-      setMessages(prev => [...prev, { role: 'system', text: 'Hands-free mode active. I auto-send after ~3s silence at the end of your turn. Tap Hand (interrupt) to cancel audio or a pending send; use Revert on a user bubble to undo that send and edit.' }]);
+      setMessages(prev => [...prev, { role: 'system', text: 'Hands-free mode active. I auto-send after ~2.5s silence at the end of your turn. Tap Hand (interrupt) to cancel audio or a pending send; use Revert on a user bubble to undo that send and edit.' }]);
       startAudioCapture();
     } catch (err: any) {
       console.error("Failed to connect", err);
@@ -1469,7 +1433,11 @@ export function AssistantSidebar({
     }
     setIsAiSpeaking(false);
     isAiSpeakingRef.current = false;
-    resumeListeningAfterOutgoingTtsRef.current();
+    if (micPostTtsUnlockTimerRef.current != null) {
+      window.clearTimeout(micPostTtsUnlockTimerRef.current);
+      micPostTtsUnlockTimerRef.current = null;
+    }
+    resumeMicChannelsAfterTts();
   };
 
   const stopRealtimeCodingStatus = () => {
@@ -1708,7 +1676,7 @@ export function AssistantSidebar({
                 }`}
                 title={
                   isAiSpeaking
-                    ? 'Mic paused while Nebula is speaking'
+                    ? 'Mic paused while Grok is speaking (TTS)'
                     : isRecordingText
                       ? 'Stop dictation'
                       : isLive

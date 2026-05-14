@@ -14,7 +14,6 @@ import { compactMasterPlanForInspect } from '../../lib/ideMasterPlanSummary';
 
 const models: { id: IdeChatModelId; name: string; badge: string | null }[] = [
   { id: 'grok-4.1', name: 'Grok 4.1', badge: 'Latest' },
-  { id: 'grok-3', name: 'Grok 3', badge: null },
 ];
 
 export function TopBar({
@@ -44,14 +43,14 @@ export function TopBar({
     let hasServerKey = false;
     try {
       const r = await fetch(withProjectQuery('/api/config'));
-      const cfg = (await readResponseJson(r)) as { hasGrokApiKey?: boolean };
-      hasServerKey = r.ok && Boolean(cfg.hasGrokApiKey);
+      const cfg = (await readResponseJson(r)) as { hasGrokSwarmApiKey?: boolean };
+      hasServerKey = r.ok && Boolean(cfg.hasGrokSwarmApiKey);
     } catch {
       hasServerKey = false;
     }
     if (!hasServerKey) {
       swarm.addActivity(
-        'Grok API key missing — set GROK_API_KEY in the server .env file and restart.',
+        'Inspect requires GROK_SWARM_API_KEY (20+ characters) in the server .env — normal IDE chat uses GROK_API_KEY only.',
         'error',
       );
       return;
@@ -162,7 +161,7 @@ export function TopBar({
             type="button"
             onClick={handleRunAndTest}
             disabled={runTestBusy || swarm.isRunning}
-            title="Inspect — run Quality on recently changed files (manual, one Grok 4.1 call)"
+            title="Inspect — Quality agent on recently changed files (uses GROK_SWARM_API_KEY + Grok 3-class model)"
             aria-busy={runTestBusy || swarm.isRunning}
             className="btn-primary-cta type-label-sm flex h-9 min-w-[5.5rem] shrink-0 items-center justify-center rounded-md px-3 py-0 tracking-wide sm:px-4"
             style={{ fontWeight: 500 }}

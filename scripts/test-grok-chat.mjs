@@ -195,7 +195,7 @@ async function main() {
     }
     if (hasKey && chat.res.status === 404 && String(chat.body?.error || "").includes("model")) {
       console.log(
-        "Note: x.ai rejected the resolved model (often Free tier → Grok 3 / GROK_SWARM_MODEL). Adjust env or tier; route + key still exercised.\n",
+        "Note: x.ai rejected the resolved model (often Free tier → Grok 3). Adjust env or tier; route + key still exercised.\n",
       );
     }
 

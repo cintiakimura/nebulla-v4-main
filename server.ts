@@ -132,6 +132,7 @@ async function startServer() {
 
   app.get("/api/config", (req, res) => {
     const grok = process.env.GROK_API_KEY?.trim() ?? "";
+    const grokSwarm = process.env.GROK_SWARM_API_KEY?.trim() ?? "";
     const tts = process.env.GROK_TTS_NEW_API_KEY?.trim() ?? "";
     const writer = process.env.GROK_3_API_KEY?.trim() ?? "";
     const render = getRenderPublicConfig();
@@ -144,6 +145,7 @@ async function startServer() {
       githubClientId: process.env.GITHUB_CLIENT_ID || process.env.github_client_id,
       builderPublicKey: process.env.BUILDER_PUBLIC_KEY,
       hasGrokApiKey: grok.length >= 20,
+      hasGrokSwarmApiKey: grokSwarm.length >= 20,
       grokKeyHint: NEBULA_GROK_KEY_SETUP_HINT,
       hasGrokTtsKey: tts.length >= 20,
       hasGrokWriterKey: writer.length >= 20,
@@ -1851,13 +1853,11 @@ ${workflowContext}`;
 
   app.post("/api/nebula-swarm/handoff", async (req, res) => {
     try {
-      /** Lean swarm: chat never runs agents. `manualRunAndTest` → single Quality call on Grok 4.1. */
+      /** Lean swarm: chat never runs agents. `manualRunAndTest` → single Quality (Inspect) call using `GROK_SWARM_API_KEY` + Grok 3-class model. */
       const body = (req.body || {}) as Record<string, unknown>;
       const manualRunAndTest = Boolean(body.manualRunAndTest);
       const swarmKey = process.env.GROK_SWARM_API_KEY?.trim() ?? "";
-      const swarmModel = process.env.GROK_SWARM_MODEL?.trim() || "grok-3-fast";
-      const qualityModel =
-        process.env.GROK_SWARM_REVIEWER_MODEL?.trim() || "grok-4-1-fast-reasoning";
+      const swarmModel = process.env.GROK_SWARM_MODEL?.trim() || "grok-3";
 
       const rawIntensity = typeof body.swarmIntensity === "string" ? body.swarmIntensity.trim() : "";
       const swarmIntensity =
@@ -1931,16 +1931,15 @@ ${workflowContext}`;
       }
       const pp = projectPathsFor(req);
 
-      const mainGrok = (await resolveMainGrokApiKey(req)) || "";
       let qualityLane: { apiKey: string; model: string } | undefined;
       if (manualRunAndTest) {
-        if (!mainGrok || mainGrok.length < 20) {
+        if (!swarmKey || swarmKey.length < 20) {
           return res.status(401).json({
             error:
-              "Grok API key is required for Run and Test (Quality agent uses Grok 4.1). Set GROK_API_KEY on the server .env and restart.",
+              "Inspect (Quality) requires GROK_SWARM_API_KEY (20+ characters) in the server .env. Normal chat uses GROK_API_KEY only — do not use the swarm key for /api/grok/chat.",
           });
         }
-        qualityLane = { apiKey: mainGrok, model: qualityModel };
+        qualityLane = { apiKey: swarmKey, model: swarmModel };
       }
 
       const laneKey = swarmKey.length >= 20 ? swarmKey : "unused-lean-swarm-placeholder-key";
@@ -2021,7 +2020,8 @@ ${workflowContext}`;
     const snap = convUserId !== "anonymous" ? await getMonthlyUsageSnapshot(convUserId) : null;
     const tier = snap?.tier ?? "free";
     const caps = getUserCapabilities({ tier });
-    const grok3Model = process.env.GROK_SWARM_MODEL?.trim() || "grok-3-fast";
+    /** Grok 3-class model for normal chat when tier/UI selects Grok 3 — always `GROK_API_KEY`, never swarm env. */
+    const grok3Model = "grok-3";
     const grok4Model = "grok-4-1-fast-reasoning";
     let chatModelFamily: "grok-3" | "grok-4.1" = "grok-4.1";
     if (caps.allowedChatModel === "grok-3") chatModelFamily = "grok-3";

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Bot, Hand, Mic, Paperclip, Rocket, Send, User } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { fetchSessionUser } from '../../lib/nebulaCloud';
@@ -8,6 +8,29 @@ import { getBrowserProjectName, withProjectQuery } from '../../lib/nebulaProject
 import { sendIdeAssistantGrokTurn } from '../../lib/ideAssistantGrokChat';
 import { ideContextSnippetForChat, useIdeWorkspace } from '@/components/ide/IdeWorkspaceContext';
 import { fetchConversationLogEntries } from '../../lib/conversationLogClient';
+import {
+  MIC_REENABLE_AFTER_TTS_MS,
+  splitTextForTts,
+  stripAssistantTagsForVoice,
+  TTS_START_DEBOUNCE_MS,
+  VOICE_SILENCE_BEFORE_SEND_MS,
+} from '../../lib/voiceTtsShared';
+
+/** WebKit speech types (not always present in TS `lib` for this project). */
+type IdeSpeechRecognitionResult = { isFinal: boolean; 0: { transcript: string } };
+type IdeSpeechRecognitionResultList = { length: number; [index: number]: IdeSpeechRecognitionResult };
+type IdeSpeechRecognitionEvent = { resultIndex: number; results: IdeSpeechRecognitionResultList };
+type IdeSpeechRecognitionErrorEvent = { error: string };
+type IdeSpeechRecognition = {
+  continuous: boolean;
+  interimResults: boolean;
+  lang: string;
+  start: () => void;
+  stop: () => void;
+  onresult: ((event: IdeSpeechRecognitionEvent) => void) | null;
+  onerror: ((event: IdeSpeechRecognitionErrorEvent) => void) | null;
+  onend: (() => void) | null;
+};
 
 type Message = {
   id: string;
@@ -61,7 +84,6 @@ function ChatRoundButton({
 
 const modelLabel: Record<string, string> = {
   'grok-4.1': 'Grok 4.1',
-  'grok-3': 'Grok 3',
 };
 
 function formatLogTimestamp(iso: string): string {
@@ -84,6 +106,93 @@ export function AIChat() {
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
   const [serverHasGrokKey, setServerHasGrokKey] = useState<boolean | null>(null);
+  const [isRecordingVoice, setIsRecordingVoice] = useState(false);
+  /** True while TTS audio is playing; mic stays off (project-execution-rules.md). */
+  const [isTtsPlaying, setIsTtsPlaying] = useState(false);
+  /** Mic stays off for `MIC_REENABLE_AFTER_TTS_MS` after TTS ends. */
+  const [micCooldown, setMicCooldown] = useState(false);
+
+  const messagesRef = useRef(messages);
+  const inputRef = useRef(input);
+  useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
+  useEffect(() => {
+    inputRef.current = input;
+  }, [input]);
+
+  const voiceRecognitionRef = useRef<IdeSpeechRecognition | null>(null);
+  const voiceDraftRef = useRef('');
+  const voiceIdleTimerRef = useRef<number | null>(null);
+  const ttsRunIdRef = useRef(0);
+  const ttsDebounceTimerRef = useRef<number | null>(null);
+  const ttsAbortRef = useRef<AbortController | null>(null);
+  const ttsObjectUrlRef = useRef<string | null>(null);
+  const ttsChunkResolveRef = useRef<(() => void) | null>(null);
+  const micCooldownTimerRef = useRef<number | null>(null);
+
+  const micInputBlocked = isTtsPlaying || micCooldown;
+
+  const clearVoiceIdleTimer = () => {
+    if (voiceIdleTimerRef.current != null) {
+      window.clearTimeout(voiceIdleTimerRef.current);
+      voiceIdleTimerRef.current = null;
+    }
+  };
+
+  const clearMicCooldownTimer = () => {
+    if (micCooldownTimerRef.current != null) {
+      window.clearTimeout(micCooldownTimerRef.current);
+      micCooldownTimerRef.current = null;
+    }
+  };
+
+  const stopVoiceRecognition = () => {
+    clearVoiceIdleTimer();
+    const r = voiceRecognitionRef.current;
+    if (r) {
+      try {
+        r.stop();
+      } catch {
+        /* ignore */
+      }
+    }
+    voiceDraftRef.current = '';
+    setIsRecordingVoice(false);
+  };
+
+  const interruptVoiceAndTts = useCallback(() => {
+    stopVoiceRecognition();
+    ttsRunIdRef.current += 1;
+    ttsChunkResolveRef.current?.();
+    ttsChunkResolveRef.current = null;
+    if (ttsDebounceTimerRef.current != null) {
+      window.clearTimeout(ttsDebounceTimerRef.current);
+      ttsDebounceTimerRef.current = null;
+    }
+    if (ttsAbortRef.current) {
+      ttsAbortRef.current.abort();
+      ttsAbortRef.current = null;
+    }
+    const w = window as unknown as { nebula_ide_currentAudio?: HTMLAudioElement | null };
+    const audio = w.nebula_ide_currentAudio;
+    w.nebula_ide_currentAudio = null;
+    if (audio) {
+      try {
+        audio.pause();
+        audio.currentTime = 0;
+      } catch {
+        /* ignore */
+      }
+    }
+    if (ttsObjectUrlRef.current) {
+      URL.revokeObjectURL(ttsObjectUrlRef.current);
+      ttsObjectUrlRef.current = null;
+    }
+    clearMicCooldownTimer();
+    setIsTtsPlaying(false);
+    setMicCooldown(false);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -132,9 +241,73 @@ export function AIChat() {
     };
   }, [diskProjectKey]);
 
-  const sendChat = useCallback(async () => {
-    const text = input.trim();
+  const scheduleVoiceAutoSend = useCallback((transcript: string) => {
+    clearVoiceIdleTimer();
+    const t = transcript.trim();
+    if (!t) return;
+    voiceIdleTimerRef.current = window.setTimeout(() => {
+      voiceIdleTimerRef.current = null;
+      void sendChatRef.current(t);
+    }, VOICE_SILENCE_BEFORE_SEND_MS);
+  }, []);
+
+  useEffect(() => {
+    if (!('webkitSpeechRecognition' in window)) return;
+    const SR = (window as unknown as { webkitSpeechRecognition: new () => IdeSpeechRecognition }).webkitSpeechRecognition;
+    const recognition = new SR();
+    recognition.continuous = false;
+    recognition.interimResults = true;
+    recognition.lang = 'en-US';
+
+    recognition.onresult = (event: IdeSpeechRecognitionEvent) => {
+      let finalText = '';
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        if (event.results[i].isFinal) {
+          finalText += event.results[i][0].transcript;
+        }
+      }
+      if (finalText) {
+        voiceDraftRef.current = `${voiceDraftRef.current}${voiceDraftRef.current ? ' ' : ''}${finalText}`.trim();
+        setInput(voiceDraftRef.current);
+        inputRef.current = voiceDraftRef.current;
+      }
+    };
+
+    recognition.onerror = (ev: IdeSpeechRecognitionErrorEvent) => {
+      if (ev.error === 'aborted') return;
+      console.warn('[AIChat] speech recognition:', ev.error);
+      setAccessoryHint(`Voice input: ${ev.error === 'not-allowed' ? 'allow the microphone for this site.' : ev.error}`);
+      window.setTimeout(() => setAccessoryHint(null), 4500);
+      stopVoiceRecognition();
+    };
+
+    recognition.onend = () => {
+      setIsRecordingVoice(false);
+      const draft = voiceDraftRef.current.trim();
+      voiceDraftRef.current = '';
+      if (draft) {
+        scheduleVoiceAutoSend(draft);
+      }
+    };
+
+    voiceRecognitionRef.current = recognition;
+    return () => {
+      try {
+        recognition.stop();
+      } catch {
+        /* ignore */
+      }
+      voiceRecognitionRef.current = null;
+    };
+  }, [scheduleVoiceAutoSend]);
+
+  const sendChatRef = useRef<(override?: string) => Promise<void>>(async () => {});
+
+  const sendChat = useCallback(async (textOverride?: string) => {
+    const text = (textOverride ?? inputRef.current).trim();
     if (!text || sending) return;
+
+    if (micInputBlocked) return;
 
     if (serverHasGrokKey === null) {
       try {
@@ -146,21 +319,30 @@ export function AIChat() {
       }
     }
 
+    clearVoiceIdleTimer();
+    stopVoiceRecognition();
+
+    const prior = messagesRef.current;
     const userMsg: Message = {
       id: `u-${Date.now()}`,
       role: 'user',
       content: text,
       timestamp: new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }),
     };
-    setMessages((prev) => [...prev, userMsg]);
+    setMessages((p) => {
+      const next = [...p, userMsg];
+      messagesRef.current = next;
+      return next;
+    });
     setInput('');
+    inputRef.current = '';
     setSending(true);
     setSendError(null);
 
     const projectName = getBrowserProjectName().trim() || 'Untitled project';
     const ideAppendix = ideContextSnippetForChat(activePath, activeTab?.content ?? '');
 
-    const historyForApi = [...messages, userMsg].map((m) => ({
+    const historyForApi = [...prior, userMsg].map((m) => ({
       role: m.role,
       content: m.content,
     })) as { role: 'user' | 'assistant'; content: string }[];
@@ -174,17 +356,25 @@ export function AIChat() {
         history: historyForApi,
         userId,
         projectName,
-        chatModel,
         ideAppendix,
       });
       const raw = assistantContent.trim();
+      const spoken = stripAssistantTagsForVoice(raw);
       const assistantMsg: Message = {
         id: `a-${Date.now()}`,
         role: 'assistant',
         content: raw || '(Empty response)',
         timestamp: new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }),
       };
-      setMessages((prev) => [...prev, assistantMsg]);
+      setMessages((p) => {
+        const next = [...p, assistantMsg];
+        messagesRef.current = next;
+        return next;
+      });
+
+      if (spoken) {
+        void playTtsForText(spoken);
+      }
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       const isKeyHelp =
@@ -195,21 +385,170 @@ export function AIChat() {
         msg.includes('401') ||
         msg.includes('rejected this API key');
       setSendError(isKeyHelp ? null : msg);
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: `e-${Date.now()}`,
-          role: 'assistant',
-          content: isKeyHelp ? msg.replace(/\n\n+/g, '\n\n') : `Something went wrong: ${msg}`,
-          timestamp: new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }),
-        },
-      ]);
+      setMessages((p) => {
+        const next = [
+          ...p,
+          {
+            id: `e-${Date.now()}`,
+            role: 'assistant' as const,
+            content: isKeyHelp ? msg.replace(/\n\n+/g, '\n\n') : `Something went wrong: ${msg}`,
+            timestamp: new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }),
+          },
+        ];
+        messagesRef.current = next;
+        return next;
+      });
     } finally {
       setSending(false);
     }
-  }, [input, sending, messages, chatModel, activePath, activeTab?.content, serverHasGrokKey]);
+  }, [sending, activePath, activeTab?.content, serverHasGrokKey, micInputBlocked]);
 
-  /** Only warn after we know the server lacks a key (avoid implying failure while `null`). */
+  sendChatRef.current = sendChat;
+
+  const playTtsForText = async (plain: string) => {
+    stopVoiceRecognition();
+    if (ttsDebounceTimerRef.current != null) {
+      window.clearTimeout(ttsDebounceTimerRef.current);
+      ttsDebounceTimerRef.current = null;
+    }
+    if (ttsAbortRef.current) {
+      ttsAbortRef.current.abort();
+      ttsAbortRef.current = null;
+    }
+    ttsRunIdRef.current += 1;
+    const runId = ttsRunIdRef.current;
+    const controller = new AbortController();
+    ttsAbortRef.current = controller;
+
+    clearMicCooldownTimer();
+    setMicCooldown(false);
+
+    ttsDebounceTimerRef.current = window.setTimeout(async () => {
+      ttsDebounceTimerRef.current = null;
+      if (runId !== ttsRunIdRef.current) return;
+
+      const chunks = splitTextForTts(plain);
+      if (chunks.length === 0) return;
+
+      setIsTtsPlaying(true);
+
+      const finishPlayback = () => {
+        if (runId !== ttsRunIdRef.current) return;
+        setIsTtsPlaying(false);
+        const w = window as unknown as { nebula_ide_currentAudio?: HTMLAudioElement | null };
+        w.nebula_ide_currentAudio = null;
+        if (ttsObjectUrlRef.current) {
+          URL.revokeObjectURL(ttsObjectUrlRef.current);
+          ttsObjectUrlRef.current = null;
+        }
+        setMicCooldown(true);
+        clearMicCooldownTimer();
+        micCooldownTimerRef.current = window.setTimeout(() => {
+          micCooldownTimerRef.current = null;
+          setMicCooldown(false);
+        }, MIC_REENABLE_AFTER_TTS_MS);
+      };
+
+      try {
+        for (let i = 0; i < chunks.length; i++) {
+          if (runId !== ttsRunIdRef.current || controller.signal.aborted) {
+            finishPlayback();
+            return;
+          }
+          const speakRes = await fetch(withProjectQuery('/api/speak'), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({ text: chunks[i] }),
+            signal: controller.signal,
+          });
+          if (!speakRes.ok) {
+            const errBody = await speakRes.text();
+            throw new Error(`TTS failed (${speakRes.status}): ${errBody.slice(0, 120)}`);
+          }
+          const audioBlob = await speakRes.blob();
+          const audioUrl = URL.createObjectURL(audioBlob);
+          if (ttsObjectUrlRef.current) URL.revokeObjectURL(ttsObjectUrlRef.current);
+          ttsObjectUrlRef.current = audioUrl;
+
+          await new Promise<void>((resolve) => {
+            if (runId !== ttsRunIdRef.current) {
+              URL.revokeObjectURL(audioUrl);
+              resolve();
+              return;
+            }
+            const audio = new Audio(audioUrl);
+            const w = window as unknown as { nebula_ide_currentAudio?: HTMLAudioElement | null };
+            w.nebula_ide_currentAudio = audio;
+            let doneOnce = false;
+            const done = () => {
+              if (doneOnce) return;
+              doneOnce = true;
+              ttsChunkResolveRef.current = null;
+              try {
+                URL.revokeObjectURL(audioUrl);
+              } catch {
+                /* ignore */
+              }
+              if (ttsObjectUrlRef.current === audioUrl) ttsObjectUrlRef.current = null;
+              resolve();
+            };
+            ttsChunkResolveRef.current = done;
+            audio.onended = done;
+            audio.onerror = done;
+            audio.play().catch((err) => {
+              if ((err as { name?: string })?.name !== 'AbortError') {
+                console.warn('[AIChat] TTS playback', err);
+              }
+              done();
+            });
+          });
+        }
+        finishPlayback();
+      } catch (e) {
+        const aborted = (e as { name?: string })?.name === 'AbortError';
+        if (!aborted && runId === ttsRunIdRef.current) {
+          console.warn('[AIChat] TTS', e);
+        }
+        finishPlayback();
+      }
+    }, TTS_START_DEBOUNCE_MS);
+  };
+
+  const toggleVoiceMic = () => {
+    if (sending || micInputBlocked) return;
+    const r = voiceRecognitionRef.current;
+    if (!r) {
+      setAccessoryHint('Speech recognition is not supported in this browser.');
+      window.setTimeout(() => setAccessoryHint(null), 4000);
+      return;
+    }
+    if (isRecordingVoice) {
+      try {
+        r.stop();
+      } catch {
+        /* ignore */
+      }
+      return;
+    }
+    clearVoiceIdleTimer();
+    voiceDraftRef.current = '';
+    try {
+      r.start();
+      setIsRecordingVoice(true);
+    } catch (err) {
+      console.warn('[AIChat] mic start', err);
+      setAccessoryHint('Could not start the microphone — check browser permissions.');
+      window.setTimeout(() => setAccessoryHint(null), 4500);
+    }
+  };
+
+  useEffect(() => {
+    return () => {
+      interruptVoiceAndTts();
+    };
+  }, [interruptVoiceAndTts]);
+
   const showGrokKeyBanner = serverHasGrokKey === false;
 
   const handleGo = () => {
@@ -222,7 +561,7 @@ export function AIChat() {
         <div className="type-label-sm flex items-center gap-1.5 text-muted-foreground">
           <span className="h-1.5 w-1.5 rounded-full bg-primary/80" />
           Model: <span className="text-foreground">{modelLabel[chatModel] ?? chatModel}</span>
-          <span className="text-muted-foreground/80">(top bar)</span>
+          <span className="text-muted-foreground/80">(IDE uses Grok 4.1 + server GROK_API_KEY)</span>
         </div>
       </div>
 
@@ -260,8 +599,13 @@ export function AIChat() {
               <>
                 <p className="text-foreground/90 font-headline text-sm">IDE chat</p>
                 <p>
-                  Grok uses the model selected in the top bar. Your open file, master plan, and UI Studio context are
-                  included automatically with each message.
+                  Grok 4.1 uses the server <code className="text-foreground/90">GROK_API_KEY</code> and the model from the top bar.
+                  Your open file, master plan, and UI Studio context are sent with each message.
+                </p>
+                <p>
+                  Tap the <strong className="text-foreground/90">microphone</strong> to dictate; after you finish speaking, the app waits{' '}
+                  {VOICE_SILENCE_BEFORE_SEND_MS / 1000}s, then sends to Grok and reads the reply aloud (TTS). The mic stays off while TTS
+                  is playing and for {MIC_REENABLE_AFTER_TTS_MS / 1000}s after playback ends.
                 </p>
               </>
             ) : (
@@ -326,7 +670,10 @@ export function AIChat() {
         <div className="surface-float rounded-lg border border-transparent p-2 ring-1 ring-[color-mix(in_srgb,var(--outline-variant)_12%,transparent)] transition-[box-shadow,background-color] duration-300 ease-out focus-within:ring-[color-mix(in_srgb,var(--outline-variant)_22%,transparent)]">
           <textarea
             value={input}
-            onChange={(e) => setInput(e.target.value)}
+            onChange={(e) => {
+              setInput(e.target.value);
+              inputRef.current = e.target.value;
+            }}
             onKeyDown={(e) => {
               if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
@@ -335,17 +682,17 @@ export function AIChat() {
             }}
             placeholder="Message Grok…"
             rows={3}
-            disabled={sending}
+            disabled={sending || micInputBlocked}
             className="type-body-md min-h-[4.5rem] w-full resize-y bg-transparent text-foreground outline-none placeholder:text-muted-foreground disabled:opacity-50"
           />
 
           <div className="mt-2 flex items-center justify-between gap-3">
             <div className="flex items-center gap-1.5">
               <ChatRoundButton
-                label="Voice activity"
+                label="Hands-free (sidebar)"
                 onClick={() => {
                   setAccessoryHint(
-                    'Voice replies play from the main assistant sidebar. This panel stays text-first with Grok.',
+                    'Continuous hands-free mode lives in the main Assistant sidebar. Here, use the microphone for push-to-talk.',
                   );
                   window.setTimeout(() => setAccessoryHint(null), 5200);
                 }}
@@ -353,22 +700,27 @@ export function AIChat() {
                 <SoundWaveIcon />
               </ChatRoundButton>
               <ChatRoundButton
-                label="Raise hand"
+                label="Interrupt Grok voice"
                 onClick={() => {
-                  setAccessoryHint('Hands raised appear when live session mode is enabled in the main assistant.');
-                  window.setTimeout(() => setAccessoryHint(null), 4200);
+                  interruptVoiceAndTts();
+                  setAccessoryHint('Stopped voice playback and any pending dictation send.');
+                  window.setTimeout(() => setAccessoryHint(null), 3200);
                 }}
               >
                 <Hand className="h-[18px] w-[18px]" />
               </ChatRoundButton>
               <ChatRoundButton
-                label="Microphone"
-                onClick={() => {
-                  setAccessoryHint('Mic capture is available in the main assistant (browser permissions). This panel is text chat with Grok.');
-                  window.setTimeout(() => setAccessoryHint(null), 4200);
-                }}
+                label={isRecordingVoice ? 'Stop dictation' : 'Speak (push-to-talk)'}
+                onClick={() => toggleVoiceMic()}
+                disabled={sending || micInputBlocked}
               >
-                <Mic className="h-[18px] w-[18px]" />
+                <Mic
+                  className={cn(
+                    'h-[18px] w-[18px]',
+                    isRecordingVoice ? 'text-destructive' : '',
+                    micInputBlocked ? 'opacity-50' : '',
+                  )}
+                />
               </ChatRoundButton>
             </div>
 
@@ -376,7 +728,7 @@ export function AIChat() {
               <ChatRoundButton
                 label="Attach file"
                 onClick={() => {
-                  setAccessoryHint('Attach files from the main assistant sidebar when you need uploads in chat.');
+                  setAccessoryHint('File uploads: use the main Assistant sidebar for now.');
                   window.setTimeout(() => setAccessoryHint(null), 4200);
                 }}
               >
@@ -385,13 +737,17 @@ export function AIChat() {
               <button
                 type="button"
                 onClick={handleGo}
-                disabled={!input.trim() || sending}
+                disabled={!input.trim() || sending || micInputBlocked}
                 className="btn-primary-cta flex h-9 shrink-0 items-center gap-1.5 rounded-full px-4 text-[0.8125rem] disabled:opacity-40"
               >
                 <Rocket className="h-3.5 w-3.5" />
                 Go
               </button>
-              <ChatRoundButton label="Send message" onClick={() => void sendChat()} disabled={!input.trim() || sending}>
+              <ChatRoundButton
+                label="Send message"
+                onClick={() => void sendChat()}
+                disabled={!input.trim() || sending || micInputBlocked}
+              >
                 <Send className="h-[18px] w-[18px]" />
               </ChatRoundButton>
             </div>

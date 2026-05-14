@@ -28,7 +28,8 @@ export type EditorTab = {
   loading: boolean;
 };
 
-export const IDE_CHAT_MODELS = ['grok-4.1', 'grok-3'] as const;
+/** IDE right-sidebar chat uses Grok 4.1 + `GROK_API_KEY` only (project execution rules). */
+export const IDE_CHAT_MODELS = ['grok-4.1'] as const;
 export type IdeChatModelId = (typeof IDE_CHAT_MODELS)[number];
 
 type IdeWorkspaceValue = {
