@@ -11,12 +11,8 @@ export type CloudProjectPaths = {
   nebulaUiStudioOutputDir: string;
 };
 
-const DEFAULT_UI_STUDIO_MD = `> **Scope — Nebula Project (not Nebula Product)**  
-> This file is **Nebula Project** workspace state (persisted UI Studio prompt and code sections below). The Nebula **Product** code that reads and writes it lives outside \`nebula-project/\` (e.g. server routes under \`nebula-ui-studio\`). See **\`nebula-project/README.md\`**.
-
----
-
-<!--
+/** Used only when `nebula-project/nebula-ui-studio.md` is missing from the repo. */
+const MINIMAL_UI_STUDIO_FALLBACK = `<!--
 NEBULA_UI_STUDIO_PROMPT
 No prompt generated yet.
 -->
@@ -68,10 +64,13 @@ export function ensureCloudProjectWorkspace(
 
   copyIfMissing(path.join(legacyTemplateRoot, "nebula-ui-studio.md"), nebulaUiStudioPath);
   if (!fs.existsSync(nebulaUiStudioPath)) {
-    fs.writeFileSync(nebulaUiStudioPath, DEFAULT_UI_STUDIO_MD, "utf8");
+    fs.writeFileSync(nebulaUiStudioPath, MINIMAL_UI_STUDIO_FALLBACK, "utf8");
   }
 
-  copyIfMissing(path.join(repoRoot, "project-workflow.md"), path.join(workspaceRoot, "project-workflow.md"));
+  copyIfMissing(
+    path.join(legacyTemplateRoot, "project-workflow.md"),
+    path.join(workspaceRoot, "project-workflow.md")
+  );
   copyIfMissing(
     path.join(legacyTemplateRoot, "project-execution-rules.md"),
     path.join(workspaceRoot, "project-execution-rules.md")

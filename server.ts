@@ -37,6 +37,18 @@ import {
 import { getNebullaPersistRoot, getNebulaProjectDocsRoot } from "./lib/nebulaWorkspaceRoot";
 import { ensureCloudProjectWorkspace } from "./lib/nebulaCloudProjectRoot";
 import { getProjectKeyFromRequest } from "./lib/nebulaProjectKey";
+import {
+  isVisualEditorEligible,
+  markV0FirstGenerationComplete,
+  readEditorState,
+  writeEditorState,
+  writeTimestampVersionDir,
+  restoreImmutableV0IntoWorkspace,
+  restoreVersionBackupIntoWorkspace,
+  resolveOriginalV0FolderRel,
+  sanitizeProjectNameForVersions,
+  visualEditorPreviewAbs,
+} from "./lib/visualUiEditorWorkspace";
 import { buildSwarmHandoffParallel } from "./lib/nebulaSwarmHandoff";
 import { readNebulaSwarmState } from "./lib/nebulaSwarmState";
 import {
@@ -201,14 +213,8 @@ async function startServer() {
   const ensureNebulaUiStudioFileAt = (nebulaUiStudioPath: string) => {
     if (!fs.existsSync(nebulaUiStudioPath)) {
       fs.mkdirSync(path.dirname(nebulaUiStudioPath), { recursive: true });
-      fs.writeFileSync(
-        nebulaUiStudioPath,
-        `> **Scope — Nebula Project (not Nebula Product)**  
-> This file is **Nebula Project** workspace state (persisted UI Studio prompt and code sections below). The Nebula **Product** code that reads and writes it lives outside \`nebula-project/\` (e.g. server routes under \`nebula-ui-studio\`). See **\`nebula-project/README.md\`**.
-
----
-
-<!--
+      const seedPath = path.join(NEBULA_PROJECT_ROOT, "nebula-ui-studio.md");
+      const fallback = `<!--
 NEBULA_UI_STUDIO_PROMPT
 No prompt generated yet.
 -->
@@ -217,9 +223,9 @@ No prompt generated yet.
 NEBULA_UI_STUDIO_CODE
 No approved UI code yet.
 -->
-`,
-        "utf8"
-      );
+`;
+      const body = fs.existsSync(seedPath) ? fs.readFileSync(seedPath, "utf8") : fallback;
+      fs.writeFileSync(nebulaUiStudioPath, body, "utf8");
     }
   };
 
@@ -747,6 +753,7 @@ No approved UI code yet.
     ]);
     if (exact.has(p)) return true;
     const prefixes = [
+      "generated-ui/",
       "nebulla-version-history/",
       "guardian/",
       ".cursor/",
@@ -1175,6 +1182,282 @@ No approved UI code yet.
     }
   });
 
+  const isAllowedVisualEditorWriteRel = (rel: string): boolean => {
+    const n = rel.replace(/\\/g, "/").replace(/^\/+/, "");
+    if (!n || n.includes("..")) return false;
+    const prefixes = ["src/", "app/", "pages/", "components/", "public/"];
+    return prefixes.some((p) => n.startsWith(p));
+  };
+
+  app.get("/api/visual-ui-editor/eligibility", (req, res) => {
+    try {
+      const { workspaceRoot } = projectPathsFor(req);
+      if (process.env.NEBULA_VISUAL_EDITOR_DEV_UNLOCK === "true") {
+        return res.json({
+          eligible: true,
+          reason: "dev_unlock_env",
+          dev: true,
+          originalV0FolderRel: resolveOriginalV0FolderRel(workspaceRoot),
+        });
+      }
+      const r = isVisualEditorEligible(workspaceRoot);
+      return res.json({
+        eligible: r.eligible,
+        reason: r.reason,
+        originalV0FolderRel: resolveOriginalV0FolderRel(workspaceRoot),
+      });
+    } catch (e) {
+      return res.status(500).json({ error: e instanceof Error ? e.message : "eligibility failed" });
+    }
+  });
+
+  app.post("/api/visual-ui-editor/v0-first-generation-complete", (req, res) => {
+    try {
+      const { workspaceRoot } = projectPathsFor(req);
+      const body = (req.body || {}) as {
+        projectDisplayName?: string;
+        files?: Record<string, string>;
+        source?: string;
+        notes?: string;
+      };
+      const projectNameSafe = sanitizeProjectNameForVersions(
+        typeof body.projectDisplayName === "string" && body.projectDisplayName.trim()
+          ? body.projectDisplayName
+          : getProjectKeyFromRequest(req)
+      );
+      const files = body.files && typeof body.files === "object" ? body.files : undefined;
+      markV0FirstGenerationComplete(workspaceRoot, projectNameSafe, {
+        files,
+        source: typeof body.source === "string" ? body.source : "v0-pipeline",
+        notes: typeof body.notes === "string" ? body.notes : undefined,
+      });
+      return res.json({ ok: true });
+    } catch (e) {
+      console.error("[visual-ui-editor] v0-first-generation-complete", e);
+      return res.status(500).json({ error: e instanceof Error ? e.message : "failed" });
+    }
+  });
+
+  app.post("/api/visual-ui-editor/version-snapshot", (req, res) => {
+    try {
+      const { workspaceRoot } = projectPathsFor(req);
+      const body = (req.body || {}) as { files?: Record<string, string> };
+      const files = body.files && typeof body.files === "object" ? body.files : null;
+      if (!files || Object.keys(files).length === 0) {
+        return res.status(400).json({ error: "files map required" });
+      }
+      const rel = writeTimestampVersionDir(workspaceRoot, files);
+      return res.json({ ok: true, snapshotRel: rel });
+    } catch (e) {
+      console.error("[visual-ui-editor] version-snapshot", e);
+      return res.status(500).json({ error: e instanceof Error ? e.message : "failed" });
+    }
+  });
+
+  app.post("/api/visual-ui-editor/revert-last-coded", (req, res) => {
+    try {
+      const { workspaceRoot } = projectPathsFor(req);
+      const st = readEditorState(workspaceRoot);
+      const target = st.lastApplyVersionFolderRel;
+      if (!target || typeof target !== "string") {
+        return res.status(400).json({ error: "No per-file backup from the last code apply yet." });
+      }
+      const { restored } = restoreVersionBackupIntoWorkspace(workspaceRoot, target);
+      return res.json({ ok: true, restored });
+    } catch (e) {
+      console.error("[visual-ui-editor] revert-last-coded", e);
+      return res.status(500).json({ error: e instanceof Error ? e.message : "failed" });
+    }
+  });
+
+  app.post("/api/visual-ui-editor/restore-original-v0", (req, res) => {
+    try {
+      const { workspaceRoot } = projectPathsFor(req);
+      const gate = isVisualEditorEligible(workspaceRoot);
+      if (!gate.eligible && process.env.NEBULA_VISUAL_EDITOR_DEV_UNLOCK !== "true") {
+        return res.status(403).json({ error: gate.reason || "Visual editor not eligible." });
+      }
+      const orig = resolveOriginalV0FolderRel(workspaceRoot);
+      if (!orig) {
+        return res.status(400).json({ error: "No immutable v0 original folder is registered for this project." });
+      }
+      const { restored } = restoreImmutableV0IntoWorkspace(workspaceRoot, orig);
+      return res.json({ ok: true, originalV0FolderRel: orig, restored });
+    } catch (e) {
+      console.error("[visual-ui-editor] restore-original-v0", e);
+      return res.status(500).json({ error: e instanceof Error ? e.message : "failed" });
+    }
+  });
+
+  app.post("/api/visual-ui-editor/apply-visual-changes", async (req, res) => {
+    const apiKey = await resolveMainGrokApiKey(
+      req,
+      typeof (req.body as { grokApiKey?: string })?.grokApiKey === "string"
+        ? (req.body as { grokApiKey?: string }).grokApiKey
+        : undefined
+    );
+    if (!apiKey) {
+      return res.status(401).json({ error: "Grok API key required for code apply." });
+    }
+    try {
+      const { workspaceRoot } = projectPathsFor(req);
+      const gate = isVisualEditorEligible(workspaceRoot);
+      if (!gate.eligible && process.env.NEBULA_VISUAL_EDITOR_DEV_UNLOCK !== "true") {
+        return res.status(403).json({ error: gate.reason || "Visual editor not eligible." });
+      }
+
+      const body = (req.body || {}) as {
+        pageId?: string;
+        previewModel?: unknown;
+        grokApiKey?: string;
+      };
+
+      const modelJson = JSON.stringify(body.previewModel ?? {}, null, 2).slice(0, 28000);
+      const sys = `You are Grok 4.1 in Nebula Visual UI Editor APPLY mode.
+The user edited a structured preview model (Wix-like) without typing prompts. You must translate those edits into real repository files.
+
+When your JSON is applied, the server first copies the current workspace contents of every path you list in "files" into generated-ui/versions/<timestamp>/ (only those paths), then writes your new contents into src/, app/, pages/, components/, or public/. The immutable v0-original folder is never modified.
+
+OUTPUT CONTRACT (strict):
+- Return ONE JSON object only (no markdown fences, no prose). Shape:
+  { "files": { "relative/path": "full file utf8 content" } }
+- Only include files that actually need edits.
+- Allowed relative path prefixes: src/, app/, pages/, components/, public/
+- Preserve TypeScript/React validity. Use Tailwind + shadcn patterns when applicable.
+
+PAGE: ${String(body.pageId || "Home")}
+VISUAL_MODEL_JSON:
+${modelJson}`;
+
+      const gRes = await fetch("https://api.x.ai/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+          model: process.env.GROK_VISUAL_APPLY_MODEL?.trim() || "grok-4-1-fast-reasoning",
+          messages: [
+            { role: "system", content: sys },
+            {
+              role: "user",
+              content:
+                "Produce the JSON object { \"files\": { ... } } now. If nothing should change return { \"files\": {} }.",
+            },
+          ],
+          temperature: 0.2,
+          max_tokens: 32000,
+        }),
+      });
+      const gData = (await gRes.json()) as {
+        choices?: { message?: { content?: string } }[];
+        error?: { message?: string };
+      };
+      if (!gRes.ok) {
+        const errMsg =
+          typeof gData?.error?.message === "string"
+            ? gData.error.message
+            : `Grok apply failed (${gRes.status})`;
+        return res.status(502).json({ error: errMsg, detail: JSON.stringify(gData).slice(0, 800) });
+      }
+      let raw = String(gData.choices?.[0]?.message?.content || "").trim();
+      const fence = raw.match(/\{[\s\S]*\}/);
+      if (fence) raw = fence[0];
+      let parsed: { files?: Record<string, string> };
+      try {
+        parsed = JSON.parse(raw) as { files?: Record<string, string> };
+      } catch {
+        return res.status(422).json({ error: "Grok did not return parseable JSON.", raw: raw.slice(0, 2000) });
+      }
+      const outFiles = parsed.files && typeof parsed.files === "object" ? parsed.files : {};
+      const grokPaths = Object.keys(outFiles).filter((rel) => isAllowedVisualEditorWriteRel(rel));
+
+      const preBackup: Record<string, string> = {};
+      for (const rel of grokPaths) {
+        const dest = path.join(workspaceRoot, rel);
+        if (fs.existsSync(dest) && fs.statSync(dest).isFile()) {
+          try {
+            preBackup[rel] = fs.readFileSync(dest, "utf8");
+          } catch {
+            /* skip unreadable */
+          }
+        }
+      }
+      const newFiles = grokPaths.filter((rel) => !preBackup[rel]);
+
+      let versionBackupRel: string | null = null;
+      if (grokPaths.length > 0) {
+        const versionManifest = JSON.stringify(
+          {
+            createdAt: new Date().toISOString(),
+            grokPaths,
+            backedUpPaths: Object.keys(preBackup),
+            newFiles,
+          },
+          null,
+          2
+        );
+        versionBackupRel = writeTimestampVersionDir(workspaceRoot, {
+          ...preBackup,
+          "version-manifest.json": versionManifest,
+        });
+        const st0 = readEditorState(workspaceRoot);
+        writeEditorState(workspaceRoot, { ...st0, lastApplyVersionFolderRel: versionBackupRel });
+      }
+
+      const written: Record<string, string> = {};
+      for (const [rel, content] of Object.entries(outFiles)) {
+        if (typeof content !== "string") continue;
+        if (!isAllowedVisualEditorWriteRel(rel)) continue;
+        const dest = path.join(workspaceRoot, rel);
+        fs.mkdirSync(path.dirname(dest), { recursive: true });
+        fs.writeFileSync(dest, content, "utf8");
+        written[rel] = content;
+      }
+
+      return res.json({
+        ok: true,
+        versionBackupRel,
+        writtenPaths: Object.keys(written),
+      });
+    } catch (e) {
+      console.error("[visual-ui-editor] apply-visual-changes", e);
+      return res.status(500).json({ error: e instanceof Error ? e.message : "failed" });
+    }
+  });
+
+  app.get("/api/visual-ui-editor/preview-model", (req, res) => {
+    try {
+      const { workspaceRoot } = projectPathsFor(req);
+      const primary = visualEditorPreviewAbs(workspaceRoot);
+      const legacy = path.join(workspaceRoot, "generated-ui", "v0-base", "preview-model.json");
+      const p = fs.existsSync(primary) ? primary : legacy;
+      if (!fs.existsSync(p)) return res.json({ model: null });
+      const raw = fs.readFileSync(p, "utf8");
+      return res.json({ model: JSON.parse(raw) });
+    } catch (e) {
+      return res.status(500).json({ error: e instanceof Error ? e.message : "failed" });
+    }
+  });
+
+  app.put("/api/visual-ui-editor/preview-model", (req, res) => {
+    try {
+      const { workspaceRoot } = projectPathsFor(req);
+      const gate = isVisualEditorEligible(workspaceRoot);
+      if (!gate.eligible && process.env.NEBULA_VISUAL_EDITOR_DEV_UNLOCK !== "true") {
+        return res.status(403).json({ error: gate.reason || "not eligible" });
+      }
+      const m = (req.body as { model?: unknown })?.model;
+      if (m === undefined) return res.status(400).json({ error: "model required" });
+      const dir = path.dirname(visualEditorPreviewAbs(workspaceRoot));
+      fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(visualEditorPreviewAbs(workspaceRoot), JSON.stringify(m, null, 2), "utf8");
+      return res.json({ ok: true });
+    } catch (e) {
+      return res.status(500).json({ error: e instanceof Error ? e.message : "failed" });
+    }
+  });
+
   const readWorkflowFileSafe = (docsRoot: string, relPath: string): string => {
     try {
       const fp = path.join(docsRoot, relPath);
@@ -1192,9 +1475,8 @@ No approved UI code yet.
       "project-workflow.md",
       "master-plan.json",
       "environment-setup.md",
-      "ui-studio.md",
-      "project-execution-rules.md",
       "nebula-ui-studio.md",
+      "project-execution-rules.md",
     ];
     return order.map((p) => `\n=== ${p} ===\n${readWorkflowFileSafe(workspaceRoot, p)}`).join("\n");
   };

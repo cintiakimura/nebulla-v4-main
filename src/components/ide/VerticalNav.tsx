@@ -26,7 +26,7 @@ const items: NavItem[] = [
   { id: 'explorer', icon: <FolderTree className="h-5 w-5" />, label: 'Explorer / Files' },
   { id: 'master-plan', icon: <BookMarked className="h-5 w-5" />, label: 'Master Plan' },
   { id: 'mind-map', icon: <Network className="h-5 w-5" />, label: 'Mind Map' },
-  { id: 'ui-studio', icon: <Palette className="h-5 w-5" />, label: 'Nebulla UI Studio' },
+  { id: 'visual-ui-editor', icon: <Palette className="h-5 w-5" />, label: 'Visual UI Editor' },
   { id: 'source-control', icon: <GitBranch className="h-5 w-5" />, label: 'Source Control' },
   { id: 'projects', icon: <LayoutGrid className="h-5 w-5" />, label: 'My Projects' },
   { id: 'secrets', icon: <KeyRound className="h-5 w-5" />, label: 'Secrets' },
@@ -35,8 +35,22 @@ const items: NavItem[] = [
   { id: 'search', icon: <Search className="h-5 w-5" />, label: 'Search' },
 ];
 
-export function VerticalNav({ onOpenMyServices }: { onOpenMyServices?: () => void }) {
-  const [activeItem, setActiveItem] = useState('explorer');
+export function VerticalNav({
+  onOpenMyServices,
+  activeItem: activeItemProp,
+  onSelectItem,
+}: {
+  onOpenMyServices?: () => void;
+  /** When set, nav selection is controlled by the parent (e.g. IDE shell). */
+  activeItem?: string;
+  onSelectItem?: (id: string) => void;
+}) {
+  const [activeItemUncontrolled, setActiveItemUncontrolled] = useState('explorer');
+  const activeItem = activeItemProp ?? activeItemUncontrolled;
+  const setActiveItem = (id: string) => {
+    onSelectItem?.(id);
+    if (activeItemProp === undefined) setActiveItemUncontrolled(id);
+  };
 
   return (
     <div className="surface-base tonal-seam-r flex h-full w-12 shrink-0 flex-col items-center py-3">

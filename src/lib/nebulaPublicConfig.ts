@@ -3,6 +3,8 @@ export type NebulaPublicConfig = {
   githubOAuthReady?: boolean;
   databaseConnectionFailed?: boolean;
   databaseUrlConfigured?: boolean;
+  pencilMockupsReady?: boolean;
+  nebulaUiStudioDemo?: boolean;
 };
 
 export async function fetchNebulaPublicConfig(): Promise<NebulaPublicConfig> {

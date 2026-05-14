@@ -8,7 +8,7 @@ This gate matches **`project-workflow.md`** before any development: **Initial Se
 
 ## Gate checklist (Grok executes; others assist read-only)
 
-1. **Read order** — `project-workflow.md` → `master-plan.json` → `environment-setup.md` → `ui-studio.md` → `project-execution-rules.md` → `nebula-ui-studio.md` (per `project-workflow.md` §5 and `ui-studio.md`), plus Secrets & Integrations review.
+1. **Read order** — `project-workflow.md` → `master-plan.json` → `environment-setup.md` → `nebula-ui-studio.md` → `project-execution-rules.md` (per `project-workflow.md` step 6), plus Secrets & Integrations review.
 2. **Summary** — Project summary, tech stack, and missing pieces aligned with **Initial Setup (4)** in `project-workflow.md` and `project-execution-rules.md`.
 3. **User gaps** — If anything material is missing, Grok asks the user **before** coding.
 4. **Start development** — Only after the above does Grok begin **Foundation Phase (Phase 0)** per execution rules.

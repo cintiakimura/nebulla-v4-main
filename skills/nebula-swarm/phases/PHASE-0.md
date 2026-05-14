@@ -1,6 +1,6 @@
 # Phase 0 – Foundation (Swarm assist)
 
-**Law:** `nebula-project/project-execution-rules.md` — **Phase 0 – Foundation** (read orchestration sources in order: `project-workflow.md` → `master-plan.json` → `environment-setup.md` → `ui-studio.md` → `project-execution-rules.md` → `nebula-ui-studio.md`; Secrets & Integrations; Prisma/schema from **Pages and Navigation**; auth; base API structure; error handling with run/fix up to 5 attempts).
+**Law:** `nebula-project/project-execution-rules.md` — **Phase 0 – Foundation** (read orchestration sources in order: `project-workflow.md` → `master-plan.json` → `environment-setup.md` → `nebula-ui-studio.md` → `project-execution-rules.md`; Secrets & Integrations; Prisma/schema from **Pages and Navigation**; auth; base API structure; error handling with run/fix up to 5 attempts).
 
 This file adds **parallel support** only. Phase numbering and goals are **unchanged**.
 

@@ -15,9 +15,9 @@ When documentation in this folder refers to “the platform” or “the server,
 ### Key files in this folder
 
 - **`project-execution-rules.md`** — Phase model and non‑negotiable execution rules for implementation.
-- **`project-workflow.md`** — Canonical read order and high-level lifecycle (the active copy may also live at the repo root for syncing into workspaces; see note in that file).
+- **`project-workflow.md`** — Canonical read order and high-level lifecycle (mirrored at the repo root for convenience; cloud workspaces seed from this folder).
 - **`environment-setup.md`** — Canonical environment variable reference for deployments.
-- **`nebula-ui-studio.md`** — Persisted Nebula UI Studio prompt and generated UI code sections (machine-oriented HTML comments).
+- **`nebula-ui-studio.md`** — Workspace file the **Nebula Product** (IDE) reads/writes for UI Studio prompt and code (`NEBULA_UI_STUDIO_*` HTML comments); prose in that file describes the **product** feature, not methodology.
 - **`ui-studio.md`** — Short pointer into the UI Studio workflow and `nebula-ui-studio.md`.
 - **`master-plan.json`**, **`Nebula Architecture Spec.md`**, **`SKILL.md`** — Planning and agent guidance as applicable to the template.
 

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { IdeVisualEditor } from '@/components/ide/IdeVisualEditor';
 import { cn } from '@/lib/utils';
 import { AIChat } from '@/components/ide/AIChat';
 import { CodeEditor } from '@/components/ide/CodeEditor';
@@ -9,6 +10,7 @@ import { VerticalNav } from '@/components/ide/VerticalNav';
 import { MyServicesOnboarding } from '@/components/MyServicesOnboarding';
 import { fetchSessionUser, type NebulaSessionUser } from '../../lib/nebulaCloud';
 import { fetchNebulaPublicConfig, type NebulaPublicConfig } from '../../lib/nebulaPublicConfig';
+import { getBrowserProjectName } from '../../lib/nebulaProjectApi';
 
 const EXPLORER_MIN = 160;
 const EXPLORER_MAX = 480;
@@ -96,6 +98,7 @@ function ResizeHandle({
 }
 
 export function NebullaIDE() {
+  const [navId, setNavId] = useState('explorer');
   const explorer = useDragResize(EXPLORER_DEFAULT, EXPLORER_MIN, EXPLORER_MAX, 'horizontal-right');
   const chat = useDragResize(CHAT_DEFAULT, CHAT_MIN, CHAT_MAX, 'horizontal-left');
   const terminal = useDragResize(TERMINAL_DEFAULT, TERMINAL_MIN, TERMINAL_MAX, 'vertical');
@@ -144,31 +147,43 @@ export function NebullaIDE() {
       <TopBar />
 
       <div className="flex flex-1 overflow-hidden">
-        <VerticalNav onOpenMyServices={() => setMyServicesOpen(true)} />
+        <VerticalNav
+          onOpenMyServices={() => setMyServicesOpen(true)}
+          activeItem={navId}
+          onSelectItem={setNavId}
+        />
 
-        <div className="surface-active tonal-seam-r hidden shrink-0 overflow-hidden md:block" style={{ width: explorer.size }}>
-          <FileExplorer />
-        </div>
-
-        <ResizeHandle onMouseDown={explorer.onMouseDown} orientation="horizontal" />
-
-        <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
-          <div className="flex-1 overflow-hidden">
-            <CodeEditor />
+        {navId === 'visual-ui-editor' ? (
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+            <IdeVisualEditor onLock={() => setNavId('explorer')} projectDisplayName={getBrowserProjectName()} />
           </div>
+        ) : (
+          <>
+            <div className="surface-active tonal-seam-r hidden shrink-0 overflow-hidden md:block" style={{ width: explorer.size }}>
+              <FileExplorer />
+            </div>
 
-          <ResizeHandle onMouseDown={terminal.onMouseDown} orientation="vertical" />
+            <ResizeHandle onMouseDown={explorer.onMouseDown} orientation="horizontal" />
 
-          <div className="shrink-0 overflow-hidden" style={{ height: terminal.size }}>
-            <TerminalPanel />
-          </div>
-        </div>
+            <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+              <div className="flex-1 overflow-hidden">
+                <CodeEditor />
+              </div>
 
-        <ResizeHandle onMouseDown={chat.onMouseDown} orientation="horizontal" />
+              <ResizeHandle onMouseDown={terminal.onMouseDown} orientation="vertical" />
 
-        <div className="surface-active tonal-seam-l hidden shrink-0 overflow-hidden lg:block" style={{ width: chat.size }}>
-          <AIChat />
-        </div>
+              <div className="shrink-0 overflow-hidden" style={{ height: terminal.size }}>
+                <TerminalPanel />
+              </div>
+            </div>
+
+            <ResizeHandle onMouseDown={chat.onMouseDown} orientation="horizontal" />
+
+            <div className="surface-active tonal-seam-l hidden shrink-0 overflow-hidden lg:block" style={{ width: chat.size }}>
+              <AIChat />
+            </div>
+          </>
+        )}
       </div>
     </div>
   );

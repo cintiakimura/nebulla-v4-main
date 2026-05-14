@@ -51,7 +51,7 @@ No markdown, no chat copy, no secrets in the payload.
 Project Manager runs **before** Grok reads long-form docs for implementation. Operational sequence:
 
 1. **Project Manager** — Render id + optional user `GROK_API_KEY` persistence + usage read.  
-2. **project-workflow.md** → **master-plan.json** → **environment-setup.md** → **ui-studio.md** → **project-execution-rules.md** → **nebula-ui-studio.md** (then coding phases).
+2. **project-workflow.md** → **master-plan.json** → **environment-setup.md** → **nebula-ui-studio.md** → **project-execution-rules.md** (then coding phases).
 
 ## Forbidden
 

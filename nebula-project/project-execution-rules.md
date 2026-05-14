@@ -1,80 +1,88 @@
-> **Scope — Nebula Project (not Nebula Product)**  
-> This document lives under **`nebula-project/`**: methodology, rules, and standards (“Law of the Land”) for how user projects are built. It is **not** the Nebula IDE source. The IDE and runtime that *apply* these rules are **Nebula Product** (`src/`, `lib/`, `public/`, etc.). See **`nebula-project/README.md`**.
+## Nebula Project Documentation
+
+This folder contains the Nebula Project — the rules, methodology and standards.
+
+It is separate from the Nebula Product (the IDE itself located in `src/`, `lib/`, etc.).
+
+Grok must always follow the rules defined in this folder when building user projects.
 
 ---
 
 **Project Execution Rules**
 
-**Core Principles**
-- Grok 4.1 is the main coding and reasoning agent.
-- Only one support agent exists: **Quality Agent** (merged Tester + Reviewer) — triggered **manually** by the user via the **"Run and Test"** button.
-- Planner and Researcher agents have been removed. Grok 4.1 handles planning and research in single calls.
-- v0 (by Vercel) is used **automatically once per project** for the initial high-quality UI generation.
-- All user API keys (Grok, v0) are stored securely per user.
-- Nebula Project (rules) is strictly separated from Nebula Product (the IDE itself).
+**Core Philosophy**
+- Grok 4.1 is the main agent for planning, reasoning, coding, and UI prompt creation.
+- Only one support agent exists: **Quality Agent** (merged Tester + Reviewer) — triggered **manually** by the user with the **"Run and Test"** button.
+- v0 by Vercel is used **automatically once per project** for the initial high-quality UI generation.
+- All user API keys (Grok + v0) are respected and used when provided.
+- **Nebula Project** (rules in this folder) is strictly separated from **Nebula Product** (the IDE).
 
-**Layer 0 — Infrastructure Manager (silent)**
-Runs automatically on new project creation and onboarding:
-- Creates Render project + database
-- Stores Render workspace/project IDs
-- Handles user-provided **GROK_API_KEY** (encrypted server-side when signed in) and **v0** keys via Secrets / onboarding (browser; see `environment-setup.md`)
-- Performs initial setup and validation
+**Infrastructure Manager (Silent)**
+Runs automatically on new project creation:
+- Creates Render workspace, project, and PostgreSQL database
+- Stores Render IDs internally
+- Handles and validates user-provided Grok and v0 API keys (encrypted at rest)
 
-**Full Project Creation Flow**
+**Voice & TTS Behavior**
+- TTS starts speaking incrementally as Grok 4.1 outputs text (streaming).
+- Microphone is automatically muted while TTS is speaking.
+- Microphone re-enables automatically after 5 seconds of inactivity.
+- User can interrupt TTS by speaking or clicking the button "stop/raise hand"
 
-1. User logs in (GitHub or Email)
-2. User creates a new project
-3. Onboarding: "Connect Your Services" (Grok API key + optional v0 API key)
-4. Infrastructure Manager runs silently (Render + key storage)
-5. Grok 4.1 creates Master Plan + brand handling
-6. Automatic first UI generation with v0 (using user's key + Master Plan + brand info)
-7. Phase 0 Foundation begins
+**Initial Master Plan Interview**
+Grok acts as a chill, experienced 28-year-old senior full-stack developer.
 
-**Technology Stack (Fixed)**
-- Frontend: React + Tailwind + shadcn/ui + Lucide
-- UI Generation: v0 by Vercel (once per project)
-- Backend: Next.js API Routes (or Vite + Express depending on final stack)
-- Database: PostgreSQL on Render
-- Deployment: Render
+**Rules:**
+- Ask one question at a time.
+- Wait ~2.5 seconds after the user stops speaking.
+- Briefly explain why each question matters.
+- Always confirm understanding after each answer.
+- Politely push back on vague or incomplete answers.
+- Only proceed when the user confirms.
 
-**Brand & Visual Identity (Optional)**
-At the end of initial setup, Grok asks:
-"Do you have a logo, primary colors, or typography preferences for this project?"
+**Mandatory Information to Collect:**
+1. Core purpose of the app
+2. Target users and roles/permissions
+3. Key features and priorities
+4. Data model and external integrations
+5. Security / compliance requirements
+6. Brand & visuals (logo, colors, typography) — optional
+
+Once all mandatory information is gathered, Grok provides a clean summary and asks for final confirmation before generating the Master Plan and triggering automatic v0 UI generation.
 
 **Phase 0 – Foundation**
-- Read order: `project-workflow.md` → `master-plan.json` → `environment-setup.md` → `ui-studio.md` → this file
-- Set up database schema from Master Plan
-- Implement authentication
-- Create base project structure
-- Run first automatic UI generation with v0
+Read order: `project-workflow.md` → `master-plan.json` → `environment-setup.md` → `nebula-ui-studio.md` → this file.
+- Create database schema (saved in `Nebula Architecture Spec.md`)
+- Set up authentication and base structure
+- Automatic v0 UI generation (first version)
 
 **Phase 1 – Core Features**
-- Build features one by one from Master Plan
+- Build features one by one from the Master Plan
 - Each feature must be functional before moving to the next
 
 **Phase 2 – User Interface**
-- First version is generated automatically with v0
-- Subsequent changes and refinements happen in **Nebula UI Studio** using Grok 4.1
+- Grok 4.1 creates a highly detailed prompt for v0 using Master Plan + brand information
+- The prompt is stored in `nebula-ui-studio.md` for future reference
+- v0 is called automatically (using user's v0 API key) to generate the first UI version
+- All generated files and components are saved in the project
+- Future UI refinements are done in Nebula UI Studio with Grok 4.1
 
-**Phase 3 – Polish & UX**
+**Phase 3 – Polish & User Experience**
 - Loading, error, empty states
 - Responsive design and basic accessibility
 
 **Phase 4 – Production Readiness**
-- Full testing and review (manual "Run and Test")
-- Performance optimization
-- Final cleanup
+- Manual "Run and Test" recommended
+- Performance optimization and final cleanup
 
 **Phase 5 – Normal Iteration**
-After first complete delivery, development continues through normal chat + manual "Run and Test" when needed.
-
-**Important Rules**
-- Grok 4.1 writes all code
-- Quality Agent is only triggered manually
-- Never use Pencil.dev anymore — use v0 for initial UI
-- All user API keys are respected and used when provided
-- Keep communication minimal and useful
+- Normal chat + manual "Run and Test" after significant changes
+- Free editing in Nebula UI Studio
 
 **"Run and Test" Button**
-- User can trigger the Quality Agent anytime after major changes
-- It performs code review + test suggestions on changed files only
+- Manually triggered by the user
+- Analyzes only recently changed files
+- Performs code review + testing recommendations
+
+**Single Source of Truth**
+`project-execution-rules.md` is the highest authority. Grok must always follow the rules defined here when building user projects.
