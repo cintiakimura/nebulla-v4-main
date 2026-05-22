@@ -15,7 +15,7 @@ These names and **values are shared across every Nebula project**: copy the same
 
 | Variable | Role |
 |----------|------|
-| `GROK_API_KEY` | Grok 4 — primary brain (chat, orchestration). **Read from server environment only** in the current product build (no `X-Grok-Api-Key` / per-user override in the request path). |
+| `GROK_API_KEY_LUMEN` | Grok 4 — primary brain (chat, orchestration). **Read from server environment only** in the current product build (no `X-Grok-Api-Key` / per-user override in the request path). |
 | `GROK_SWARM_API_KEY` | Nebula-owned swarm / sidecar Grok usage — **set only in Nebula `.env`**. |
 | `GROK_TTS_NEW_API_KEY` | Grok TTS (new API) — **set only in Nebula `.env`**. |
 | `NEBULA_SECRETS_ENCRYPTION_KEY` | Optional dedicated key for **AES-256-GCM** encryption of secrets at rest (falls back to `SESSION_SECRET` in dev). Reserved for future per-user Grok storage. |

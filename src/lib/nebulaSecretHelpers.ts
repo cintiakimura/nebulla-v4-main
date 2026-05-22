@@ -20,7 +20,8 @@ export function upsertProjectSecret(
   category: SecretCategory = 'api_key',
 ): void {
   const trimmedName = name.trim();
-  if (trimmedName.toUpperCase() === 'GROK_API_KEY') {
+  const upper = trimmedName.toUpperCase();
+  if (upper === 'GROK_API_KEY_LUMEN' || upper === 'GROK_API_KEY') {
     return;
   }
   const entries: SecretEntry[] = loadProjectSecrets(projectKey).map((x) => ({ ...x }));

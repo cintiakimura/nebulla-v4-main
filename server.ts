@@ -28,7 +28,12 @@ import {
   buildNebulaUiStudioPromptBody,
   callPencilMockupsGenerate,
 } from "./lib/nebulaPencilDev";
-import { createResolveMainGrokApiKey, createResolveMainGrokApiKeyDetailed, NEBULA_GROK_KEY_SETUP_HINT } from "./lib/nebulaMainGrokResolver";
+import {
+  createResolveMainGrokApiKey,
+  createResolveMainGrokApiKeyDetailed,
+  MAIN_GROK_ENV_VAR,
+  NEBULA_GROK_KEY_SETUP_HINT,
+} from "./lib/nebulaMainGrokResolver";
 import {
   callGrokGenerateUiSvg,
   heuristicSvgEditRisks,
@@ -79,10 +84,10 @@ if (fs.existsSync(envLocalPath)) {
   dotenv.config({ path: envLocalPath, override: true });
 }
 
-const grokEnvProbe = process.env.GROK_API_KEY?.trim() ?? "";
+const grokEnvProbe = process.env[MAIN_GROK_ENV_VAR]?.trim() ?? "";
 if (grokEnvProbe.length < 20) {
   console.warn(
-    "[nebula] GROK_API_KEY is missing or shorter than 20 characters after trim — Grok chat and tools will return 401 until set (Render: set in the service Environment, not only in a local .env file)."
+    `[nebula] ${MAIN_GROK_ENV_VAR} is missing or shorter than 20 characters after trim — Grok chat and tools will return 401 until set (Render: set in the service Environment, not only in a local .env file).`
   );
 }
 
@@ -125,7 +130,7 @@ async function startServer() {
   });
 
   app.get("/api/config", (req, res) => {
-    const grok = process.env.GROK_API_KEY?.trim() ?? "";
+    const grok = process.env[MAIN_GROK_ENV_VAR]?.trim() ?? "";
     const grokSwarm = process.env.GROK_SWARM_API_KEY?.trim() ?? "";
     const tts = process.env.GROK_TTS_NEW_API_KEY?.trim() ?? "";
     const writer = process.env.GROK_3_API_KEY?.trim() ?? "";
@@ -1163,15 +1168,15 @@ No approved UI code yet.
           usedPrompt: storedPrompt || "",
           message:
             process.env.NODE_ENV === "production"
-              ? "Bundled demo mockup. Set GROK_API_KEY (recommended) or PENCIL_API_KEY for live generation."
-              : "Bundled demo mockup (dev). Set GROK_API_KEY or PENCIL_API_KEY for live output.",
+              ? `Bundled demo mockup. Set ${MAIN_GROK_ENV_VAR} (recommended) or PENCIL_API_KEY for live generation.`
+              : `Bundled demo mockup (dev). Set ${MAIN_GROK_ENV_VAR} or PENCIL_API_KEY for live output.`,
           source: "demo",
         });
       }
 
       return res.status(500).json({
         error:
-          "No generator available. Add GROK_API_KEY (Grok 4 UI) and/or PENCIL_API_KEY on the server, or set NEBULA_UI_STUDIO_DEMO=1 for bundled demo SVGs.",
+          `No generator available. Add ${MAIN_GROK_ENV_VAR} (Grok 4 UI) and/or PENCIL_API_KEY on the server, or set NEBULA_UI_STUDIO_DEMO=1 for bundled demo SVGs.`,
       });
     } catch (error) {
       console.error("Error calling Nebula UI Studio engine:", error);
@@ -1214,7 +1219,7 @@ No approved UI code yet.
     const grokKey = await resolveMainGrokApiKey(req);
     if (!grokKey) {
       return res.status(400).json({
-        error: "Grok API key missing. Set GROK_API_KEY in the server .env file and restart.",
+        error: `Grok API key missing. Set ${MAIN_GROK_ENV_VAR} in the server .env file and restart.`,
       });
     }
     try {
@@ -1376,7 +1381,7 @@ No approved UI code yet.
     const apiKey = await resolveMainGrokApiKey(req);
     if (!apiKey) {
       return res.status(401).json({
-        error: "Grok API key missing. Set GROK_API_KEY in the server .env file and restart.",
+        error: `Grok API key missing. Set ${MAIN_GROK_ENV_VAR} in the server .env file and restart.`,
       });
     }
     try {
@@ -1567,12 +1572,12 @@ ${modelJson}`;
 
     if (!apiKey) {
       return res.status(401).json({
-        error: "Grok API key is missing. Set GROK_API_KEY in the server .env file and restart.",
+        error: `Grok API key is missing. Set ${MAIN_GROK_ENV_VAR} in the server .env file and restart.`,
       });
     }
     if (apiKey.length < 20) {
       return res.status(400).json({
-        error: "GROK_API_KEY in .env appears invalid. Update the value and restart the server.",
+        error: `${MAIN_GROK_ENV_VAR} in .env appears invalid. Update the value and restart the server.`,
       });
     }
 
@@ -1636,12 +1641,12 @@ Rules:
 
     if (!apiKey) {
       return res.status(401).json({
-        error: "Grok API key is missing. Set GROK_API_KEY in the server .env file and restart.",
+        error: `Grok API key is missing. Set ${MAIN_GROK_ENV_VAR} in the server .env file and restart.`,
       });
     }
     if (apiKey.length < 20) {
       return res.status(400).json({
-        error: "GROK_API_KEY in .env appears invalid. Update the value and restart the server.",
+        error: `${MAIN_GROK_ENV_VAR} in .env appears invalid. Update the value and restart the server.`,
       });
     }
 
@@ -1745,7 +1750,7 @@ Strict rules:
 
       const workflowContext = buildProjectWorkflowExecutionContext(req);
       const codeModel = process.env.GROK_CODE_MODEL?.trim() || "grok-code-fast-1";
-      const codeSystemPrompt = `You are Grok Code (coding phase; same GROK_API_KEY as the main brain). The user pressed **Go** in the Nebulla assistant.
+      const codeSystemPrompt = `You are Grok Code (coding phase; same ${MAIN_GROK_ENV_VAR} as the main brain). The user pressed **Go** in the Nebulla assistant.
 
 A short pre-coding summary was just saved to master-plan.json under the key "${PRE_CODING_SUMMARY_KEY}" (it appears again inside the master-plan snapshot below).
 
@@ -1931,7 +1936,7 @@ ${workflowContext}`;
         if (!swarmKey || swarmKey.length < 20) {
           return res.status(401).json({
             error:
-              "Inspect (Quality) requires GROK_SWARM_API_KEY (20+ characters) in the server .env. Normal chat uses GROK_API_KEY only — do not use the swarm key for /api/grok/chat.",
+              `Inspect (Quality) requires GROK_SWARM_API_KEY (20+ characters) in the server .env. Normal chat uses ${MAIN_GROK_ENV_VAR} only — do not use the swarm key for /api/grok/chat.`,
           });
         }
         qualityLane = { apiKey: swarmKey, model: swarmModel };
@@ -2010,7 +2015,7 @@ ${workflowContext}`;
     }
 
     /**
-     * Main `/api/grok/chat` brain: **always** grok-4 on `GROK_API_KEY` (normal chat + coding handoff).
+     * Main `/api/grok/chat` brain: **always** grok-4 on `GROK_API_KEY_LUMEN` (normal chat + coding handoff).
      * Billing tier must not change the xAI model id (IDE + Assistant normal chat).
      * Optional operator override: `GROK_CHAT_MODEL_GROK41`.
      */
@@ -2117,7 +2122,7 @@ ${answer.slice(0, 8000)}`;
       if (/\bSTART_CODING\b/i.test(responseText)) {
         const workflowContext = buildProjectWorkflowExecutionContext(req);
         const codeModel = process.env.GROK_CODE_MODEL?.trim() || "grok-code-fast-1";
-        const codeSystemPrompt = `You are now in strict coding mode (same GROK_API_KEY as the main brain).
+        const codeSystemPrompt = `You are now in strict coding mode (same ${MAIN_GROK_ENV_VAR} as the main brain).
 Follow project-execution-rules.md exactly (single orchestration file).
 Use this context:
 ${workflowContext}

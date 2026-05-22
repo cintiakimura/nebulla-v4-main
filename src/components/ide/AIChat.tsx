@@ -513,6 +513,7 @@ export function AIChat() {
       const msg = e instanceof Error ? e.message : String(e);
       const isKeyHelp =
         msg.includes('Grok API key') ||
+        msg.includes('GROK_API_KEY_LUMEN') ||
         msg.includes('GROK_API_KEY') ||
         msg.includes('Grok chat is unavailable') ||
         msg.includes('Please add your Grok') ||
@@ -709,7 +710,7 @@ export function AIChat() {
         <div className="type-label-sm flex items-center gap-1.5 text-muted-foreground">
           <span className="h-1.5 w-1.5 rounded-full bg-primary/80" />
           Model: <span className="text-foreground">{modelLabel[chatModel] ?? chatModel}</span>
-          <span className="text-muted-foreground/80">(IDE uses Grok 4.1 + server GROK_API_KEY)</span>
+          <span className="text-muted-foreground/80">(IDE uses Grok 4.1 + server GROK_API_KEY_LUMEN)</span>
         </div>
       </div>
 
@@ -747,7 +748,7 @@ export function AIChat() {
               <>
                 <p className="text-foreground/90 font-headline text-sm">IDE chat</p>
                 <p>
-                  Grok 4.1 is the primary agent here. Messages use the server <code className="text-foreground/90">GROK_API_KEY</code>{' '}
+                  Grok 4.1 is the primary agent here. Messages use the server <code className="text-foreground/90">GROK_API_KEY_LUMEN</code>{' '}
                   (per <code className="text-foreground/90">project-execution-rules.md</code>). Your open file, master plan, and UI Studio
                   context are included with each turn.
                 </p>
@@ -764,7 +765,7 @@ export function AIChat() {
               <>
                 <p className="text-amber-200/95 font-headline text-sm">Grok is not available on this server</p>
                 <p>
-                  The API reports no usable <code className="text-foreground/90">GROK_API_KEY</code>. Set it in the project
+                  The API reports no usable <code className="text-foreground/90">GROK_API_KEY_LUMEN</code>. Set it in the project
                   root <code className="text-foreground/90">.env</code> (key must be at least 20 characters after trimming),
                   restart <code className="text-foreground/90">npm run dev</code>, and reload the page.
                 </p>

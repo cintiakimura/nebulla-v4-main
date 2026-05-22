@@ -15,7 +15,7 @@ const V0_KEYS_URL = 'https://v0.dev/chat/settings/keys';
 function SecretNote() {
   return (
     <p className="text-[11px] text-slate-500 leading-relaxed border-t border-white/5 pt-3 mt-1">
-      Grok 4.1 and related AI use <span className="text-slate-400">GROK_API_KEY</span> and companion keys from the{' '}
+      Grok 4.1 and related AI use <span className="text-slate-400">GROK_API_KEY_LUMEN</span> and companion keys from the{' '}
       <span className="text-slate-400">server .env</span> only — they are not collected in this UI. v0 and other
       integrations can still use <span className="text-slate-400">My Projects → Secrets</span> in this browser when
       configured.
@@ -181,7 +181,7 @@ export function MyServicesOnboarding({
                 <h2 className="font-headline text-base text-slate-100">Grok (server configuration)</h2>
                 <p className="text-sm text-slate-400 leading-relaxed">
                   Per <span className="text-slate-300">project-execution-rules.md</span>, the main Grok brain uses{' '}
-                  <code className="text-cyan-300/90 text-[13px]">GROK_API_KEY</code> and related keys from the deployment{' '}
+                  <code className="text-cyan-300/90 text-[13px]">GROK_API_KEY_LUMEN</code> and related keys from the deployment{' '}
                   <span className="text-slate-300">.env</span> — not from this screen. Ask your operator to set values
                   listed in <span className="text-slate-300">environment-setup.md</span> and restart the server.
                 </p>

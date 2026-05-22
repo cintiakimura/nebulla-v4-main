@@ -1,8 +1,11 @@
 import type express from "express";
 
+/** Server env var for main Grok 4 (chat, coding, UI tools, Master Plan orchestration). */
+export const MAIN_GROK_ENV_VAR = "GROK_API_KEY_LUMEN";
+
 /** Shown in API errors and product UI when no usable Grok key is available. */
 export const NEBULA_GROK_KEY_SETUP_HINT =
-  "Set GROK_API_KEY in the server .env file and restart the Nebula process. Per-user Grok keys in the app are temporarily disabled.";
+  `Set ${MAIN_GROK_ENV_VAR} in the server .env file and restart the Nebula process. Per-user Grok keys in the app are temporarily disabled.`;
 
 const MIN_KEY_LEN = 20;
 
@@ -20,12 +23,12 @@ export type MainGrokResolveErr = {
 export type MainGrokResolveResult = MainGrokResolveOk | MainGrokResolveErr;
 
 function resolveEnvGrokKey(): MainGrokResolveResult {
-  const env = process.env.GROK_API_KEY?.trim() ?? "";
+  const env = process.env[MAIN_GROK_ENV_VAR]?.trim() ?? "";
   if (!env) {
     return {
       ok: false,
       code: "MISSING",
-      message: "GROK_API_KEY is not set on the server.",
+      message: `${MAIN_GROK_ENV_VAR} is not set on the server.`,
       hint: NEBULA_GROK_KEY_SETUP_HINT,
     };
   }
@@ -33,7 +36,7 @@ function resolveEnvGrokKey(): MainGrokResolveResult {
     return {
       ok: false,
       code: "INVALID_LENGTH",
-      message: "GROK_API_KEY is set in the environment but is too short to be valid.",
+      message: `${MAIN_GROK_ENV_VAR} is set in the environment but is too short to be valid.`,
       hint: NEBULA_GROK_KEY_SETUP_HINT,
     };
   }
@@ -41,8 +44,8 @@ function resolveEnvGrokKey(): MainGrokResolveResult {
 }
 
 /**
- * Resolves the **main** Grok key for chat, swarm quality lane, UI tools, and code paths.
- * Uses **`GROK_API_KEY` from the server environment only** (no header, body, or per-user DB overrides).
+ * Resolves the **main** Grok key for chat, UI tools, and code paths.
+ * Uses **`GROK_API_KEY_LUMEN` from the server environment only** (no header, body, or per-user DB overrides).
  */
 export function createResolveMainGrokApiKey(_readSessionUid: (req: express.Request) => string | null) {
   void _readSessionUid;
