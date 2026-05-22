@@ -5,6 +5,8 @@ export type NebulaPublicConfig = {
   databaseUrlConfigured?: boolean;
   pencilMockupsReady?: boolean;
   nebulaUiStudioDemo?: boolean;
+  hasV0ApiKey?: boolean;
+  v0KeyHint?: string;
 };
 
 export async function fetchNebulaPublicConfig(): Promise<NebulaPublicConfig> {

@@ -3,6 +3,9 @@ import type express from "express";
 /** Server env var for main Grok 4 (chat, coding, UI tools, Master Plan orchestration). */
 export const MAIN_GROK_ENV_VAR = "GROK_API_KEY_LUMEN";
 
+/** TEMPORARY: quota fallback for `/api/grok/chat` — see `lib/nebulaClaudeFallback.ts`. */
+export { tryClaudeQuotaFallback, isGrokQuotaLimitError } from "./nebulaClaudeFallback";
+
 /** Shown in API errors and product UI when no usable Grok key is available. */
 export const NEBULA_GROK_KEY_SETUP_HINT =
   `Set ${MAIN_GROK_ENV_VAR} in the server .env file and restart the Nebula process. Per-user Grok keys in the app are temporarily disabled.`;

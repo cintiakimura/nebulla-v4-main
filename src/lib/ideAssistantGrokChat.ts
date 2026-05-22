@@ -47,7 +47,7 @@ export async function sendIdeAssistantGrokTurn(options: {
   projectName: string;
   ideAppendix: string;
   signal?: AbortSignal;
-}): Promise<{ assistantContent: string; planningPhase: string }> {
+}): Promise<{ assistantContent: string; planningPhase: string; claudeFallbackNotice?: string }> {
   const { textToSend, history, userId, projectName, ideAppendix, signal } = options;
 
   const { latestMP, uiStudioApprovedCode } = await fetchMasterPlanAndUiStudio();
@@ -75,7 +75,10 @@ export async function sendIdeAssistantGrokTurn(options: {
   });
   const messagesPayload = [{ role: 'system' as const, content: systemPrompt }, ...mapped];
 
-  const data = await fetchJson<{ choices?: { message?: { content?: string; planningPhase?: string } }[] }>(
+  const data = await fetchJson<{
+    choices?: { message?: { content?: string; planningPhase?: string } }[];
+    claudeFallbackNotice?: string;
+  }>(
     withProjectQuery('/api/grok/chat'),
     {
       method: 'POST',
@@ -98,5 +101,10 @@ export async function sendIdeAssistantGrokTurn(options: {
   const rawAssistantContent = data.choices?.[0]?.message?.content || '';
   const planningPhase = data.choices?.[0]?.message?.planningPhase || '';
 
-  return { assistantContent: rawAssistantContent.trim(), planningPhase };
+  return {
+    assistantContent: rawAssistantContent.trim(),
+    planningPhase,
+    claudeFallbackNotice:
+      typeof data.claudeFallbackNotice === 'string' ? data.claudeFallbackNotice : undefined,
+  };
 }

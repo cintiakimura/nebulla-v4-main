@@ -468,7 +468,7 @@ function DnsTab() {
 /** Grok main key is server `.env` only; do not store or edit in browser Secrets (project-execution-rules.md). */
 function isServerReservedGrokSecretName(raw: string): boolean {
   const n = raw.trim().toUpperCase();
-  return n === 'GROK_API_KEY_LUMEN' || n === 'GROK_API_KEY';
+  return n === 'GROK_API_KEY_LUMEN' || n === 'GROK_API_KEY' || n === 'V0_API_KEY';
 }
 
 function ProjectSecretsEditor({ activeProjectKey }: { activeProjectKey: string }) {

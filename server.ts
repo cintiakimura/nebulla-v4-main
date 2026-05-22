@@ -31,9 +31,19 @@ import {
 import {
   createResolveMainGrokApiKey,
   createResolveMainGrokApiKeyDetailed,
+  isGrokQuotaLimitError,
   MAIN_GROK_ENV_VAR,
   NEBULA_GROK_KEY_SETUP_HINT,
+  tryClaudeQuotaFallback,
 } from "./lib/nebulaMainGrokResolver";
+import {
+  isAllowedV0WriteRel,
+  pickPrimaryUiFile,
+  v0CreateChat,
+  v0SendChatMessage,
+  type V0FileEntry,
+} from "./lib/nebulaV0Client";
+import { NEBULA_V0_KEY_SETUP_HINT, resolveV0ApiKey, V0_ENV_VAR } from "./lib/nebulaV0Resolver";
 import {
   callGrokGenerateUiSvg,
   heuristicSvgEditRisks,
@@ -65,6 +75,53 @@ function xaiUsageTotal(usage: unknown): number {
   if (!usage || typeof usage !== "object") return 0;
   const t = (usage as { total_tokens?: number }).total_tokens;
   return typeof t === "number" && Number.isFinite(t) ? t : 0;
+}
+
+/** Strip orchestration tags before persisting assistant text to conversation memory. */
+function stripAssistantTagsForMemory(text: string): string {
+  return text
+    .replace(/<REASONING>[\s\S]*?<\/REASONING>/g, "")
+    .replace(/<START_MASTERPLAN>[\s\S]*?<\/END_MASTERPLAN>/g, "")
+    .replace(/<START_MASTERPLAN>/g, "")
+    .replace(/<END_MASTERPLAN>/g, "")
+    .replace(/<START_CODING>/g, "")
+    .replace(/START_CODING/g, "")
+    .replace(/<START_UIUX>/g, "")
+    .replace(/<FINISH_MASTERPLAN>/g, "")
+    .replace(/<APPROVE_MASTERPLAN>/g, "")
+    .replace(/<APPROVE_MINDMAP>/g, "")
+    .replace(/<APPROVE_UI>/g, "")
+    .replace(/<GROK_B_SUMMARY_Q([1-6])>[\s\S]*?<\/GROK_B_SUMMARY_Q\1>/g, "")
+    .replace(/\bANSWER_Q[1-6]\b/g, "")
+    .trim();
+}
+
+/** TEMPORARY: one-shot Claude response when Grok quota is exceeded (see lib/nebulaClaudeFallback.ts). */
+async function respondWithClaudeQuotaFallback(
+  messagesForApi: { role: string; content?: string }[],
+  convScopeChat: { userId: string; projectKey: string; projectLabel: string },
+  res: express.Response
+): Promise<boolean> {
+  const payload = await tryClaudeQuotaFallback(messagesForApi);
+  if (!payload) return false;
+
+  const responseText = payload.choices?.[0]?.message?.content || "";
+  const cleanText = stripAssistantTagsForMemory(responseText);
+
+  try {
+    const lastUser = [...messagesForApi].reverse().find((m) => m.role === "user");
+    if (lastUser && typeof lastUser.content === "string" && lastUser.content.length > 0) {
+      appendConversationTurn(convScopeChat, "user", lastUser.content);
+    }
+    if (cleanText) {
+      appendConversationTurn(convScopeChat, "assistant", cleanText);
+    }
+  } catch (logErr) {
+    console.error("Conversation memory append failed (Claude fallback):", logErr);
+  }
+
+  res.json(payload);
+  return true;
 }
 
 const REPO_ROOT = getNebullaPersistRoot();
@@ -137,6 +194,7 @@ async function startServer() {
     const render = getRenderPublicConfig();
     const publicSiteUrl = process.env.PUBLIC_SITE_URL?.trim() || "";
     const pencilKey = resolvePencilApiKey();
+    const v0Key = process.env[V0_ENV_VAR]?.trim() ?? "";
     const pp = ensureCloudProjectWorkspace(REPO_ROOT, NEBULA_PROJECT_ROOT, projectDiskKey(req));
     res.json({
       ...render,
@@ -148,6 +206,8 @@ async function startServer() {
       grokKeyHint: NEBULA_GROK_KEY_SETUP_HINT,
       hasGrokTtsKey: tts.length >= 20,
       hasGrokWriterKey: writer.length >= 20,
+      hasV0ApiKey: v0Key.length >= 8,
+      v0KeyHint: NEBULA_V0_KEY_SETUP_HINT,
       pencilMockupsReady: Boolean(pencilKey),
       nebulaUiStudioDemo: Boolean(!pencilKey && useBundledDemoMockupWithoutKey()),
       workspaceMode: "cloud",
@@ -259,6 +319,112 @@ No approved UI code yet.
     const re = new RegExp(`<!--\\s*${key}[\\s\\S]*?-->`, "m");
     if (re.test(content)) return content.replace(re, section);
     return `${section}\n\n${content}`;
+  };
+
+  const writeV0FilesToWorkspace = (
+    workspaceRoot: string,
+    files: V0FileEntry[]
+  ): { written: string[]; skipped: string[]; filesMap: Record<string, string> } => {
+    const written: string[] = [];
+    const skipped: string[] = [];
+    const filesMap: Record<string, string> = {};
+    const seen = new Set<string>();
+    for (const f of files) {
+      const rel = f.name.replace(/\\/g, "/").replace(/^\/+/, "");
+      if (seen.has(rel)) continue;
+      seen.add(rel);
+      if (!isAllowedV0WriteRel(rel)) {
+        skipped.push(rel);
+        continue;
+      }
+      const target = path.resolve(workspaceRoot, rel);
+      if (!target.startsWith(workspaceRoot)) {
+        skipped.push(rel);
+        continue;
+      }
+      fs.mkdirSync(path.dirname(target), { recursive: true });
+      fs.writeFileSync(target, f.content, "utf8");
+      written.push(rel);
+      filesMap[rel] = f.content;
+    }
+    return { written, skipped, filesMap };
+  };
+
+  const runV0UiStudioPass = async (opts: {
+    req: express.Request;
+    message: string;
+    chatId?: string;
+    projectDisplayName?: string;
+  }): Promise<
+    | {
+        ok: true;
+        chatId: string;
+        written: string[];
+        skipped: string[];
+        demoUrl?: string;
+        primaryCode: string;
+      }
+    | { ok: false; status: number; error: string; hint?: string }
+  > => {
+    const keyRes = resolveV0ApiKey();
+    if (keyRes.ok === false) {
+      return {
+        ok: false,
+        status: keyRes.code === "INVALID_LENGTH" ? 400 : 401,
+        error: keyRes.message,
+        hint: keyRes.hint,
+      };
+    }
+
+    const v0Call = opts.chatId
+      ? await v0SendChatMessage(keyRes.apiKey, opts.chatId, opts.message)
+      : await v0CreateChat(keyRes.apiKey, opts.message);
+
+    if (v0Call.ok === false) {
+      return { ok: false, status: v0Call.status, error: v0Call.error };
+    }
+
+    const { workspaceRoot, nebulaUiStudioPath } = projectPathsFor(opts.req);
+    const allFilesMap: Record<string, string> = {};
+    for (const f of v0Call.result.files) {
+      const rel = f.name.replace(/\\/g, "/").replace(/^\/+/, "");
+      if (rel) allFilesMap[rel] = f.content;
+    }
+    if (Object.keys(allFilesMap).length === 0) {
+      return {
+        ok: false,
+        status: 422,
+        error: "v0 returned no files. Try a more specific UI prompt in nebula-ui-studio.md.",
+      };
+    }
+
+    const projectNameSafe = sanitizeProjectNameForVersions(
+      opts.projectDisplayName?.trim() || getProjectKeyFromRequest(opts.req)
+    );
+    markV0FirstGenerationComplete(workspaceRoot, projectNameSafe, {
+      files: allFilesMap,
+      source: "v0-api",
+      notes: "Nebula UI Studio v0 generation",
+    });
+
+    const { written, skipped } = writeV0FilesToWorkspace(workspaceRoot, v0Call.result.files);
+
+    ensureNebulaUiStudioFileAt(nebulaUiStudioPath);
+    const existing = fs.readFileSync(nebulaUiStudioPath, "utf8");
+    const promptText = extractNebulaCommentSection(existing, "NEBULA_UI_STUDIO_PROMPT") || "No prompt generated yet.";
+    const withPrompt = upsertNebulaCommentSection(existing, "NEBULA_UI_STUDIO_PROMPT", promptText);
+    const primaryCode = pickPrimaryUiFile(v0Call.result.files);
+    const withCode = upsertNebulaCommentSection(withPrompt, "NEBULA_UI_STUDIO_CODE", primaryCode);
+    fs.writeFileSync(nebulaUiStudioPath, withCode, "utf8");
+
+    return {
+      ok: true,
+      chatId: v0Call.result.chatId,
+      written,
+      skipped,
+      demoUrl: v0Call.result.demoUrl,
+      primaryCode,
+    };
   };
 
   /** Hide legacy bundled Grok/orchestration copy in API responses so the Master Plan UI stays blank until real sections are written. */
@@ -1108,6 +1274,86 @@ No approved UI code yet.
     }
   });
 
+  app.post("/api/nebula-ui-studio/v0-generate", async (req, res) => {
+    try {
+      const { nebulaUiStudioPath, workspaceRoot } = projectPathsFor(req);
+      ensureNebulaUiStudioFileAt(nebulaUiStudioPath);
+      const uiStudioFile = fs.readFileSync(nebulaUiStudioPath, "utf8");
+      const storedPrompt = extractNebulaCommentSection(uiStudioFile, "NEBULA_UI_STUDIO_PROMPT");
+      const skillExcerpt = readSkillDesignSystemExcerpt(workspaceRoot);
+      const body = req.body || {};
+      const pagesText = typeof body.pagesText === "string" ? body.pagesText : "";
+      const extra = typeof body.message === "string" ? body.message.trim() : "";
+      const promptText = [
+        storedPrompt && storedPrompt !== "No prompt generated yet." ? storedPrompt : "",
+        skillExcerpt ? `Design system:\n${skillExcerpt}` : "",
+        pagesText ? `Pages and navigation:\n${pagesText}` : "",
+        extra,
+        "Generate production-ready UI with React, Tailwind CSS, and shadcn/ui. Output app files under src/ or app/.",
+      ]
+        .filter(Boolean)
+        .join("\n\n");
+
+      const pass = await runV0UiStudioPass({
+        req,
+        message: promptText,
+        projectDisplayName:
+          typeof body.projectDisplayName === "string" ? body.projectDisplayName : undefined,
+      });
+      if (pass.ok === false) {
+        return res.status(pass.status).json({
+          error: pass.hint ?? pass.error,
+          hint: pass.hint,
+        });
+      }
+      return res.json({
+        ok: true,
+        source: "v0",
+        chatId: pass.chatId,
+        written: pass.written,
+        skipped: pass.skipped,
+        demoUrl: pass.demoUrl,
+      });
+    } catch (e) {
+      console.error("[nebula-ui-studio/v0-generate]", e);
+      return res.status(500).json({ error: e instanceof Error ? e.message : "v0 generation failed" });
+    }
+  });
+
+  app.post("/api/nebula-ui-studio/v0-update", async (req, res) => {
+    const body = req.body || {};
+    const message = typeof body.message === "string" ? body.message.trim() : "";
+    const chatId = typeof body.chatId === "string" ? body.chatId.trim() : "";
+    if (!message) return res.status(400).json({ error: "message is required" });
+    if (!chatId) return res.status(400).json({ error: "chatId is required for v0 updates" });
+    try {
+      const pass = await runV0UiStudioPass({
+        req,
+        message,
+        chatId,
+        projectDisplayName:
+          typeof body.projectDisplayName === "string" ? body.projectDisplayName : undefined,
+      });
+      if (pass.ok === false) {
+        return res.status(pass.status).json({
+          error: pass.hint ?? pass.error,
+          hint: pass.hint,
+        });
+      }
+      return res.json({
+        ok: true,
+        source: "v0",
+        chatId: pass.chatId,
+        written: pass.written,
+        skipped: pass.skipped,
+        demoUrl: pass.demoUrl,
+      });
+    } catch (e) {
+      console.error("[nebula-ui-studio/v0-update]", e);
+      return res.status(500).json({ error: e instanceof Error ? e.message : "v0 update failed" });
+    }
+  });
+
   app.post("/api/nebula-ui-studio/generate", async (req, res) => {
     const { pagesText, branding } = req.body;
     const pencilKey = resolvePencilApiKey();
@@ -1128,6 +1374,30 @@ No approved UI code yet.
         branding,
       });
       const promptText = String((body as { prompt?: string }).prompt ?? "");
+
+      const v0KeyRes = resolveV0ApiKey();
+      if (v0KeyRes.ok) {
+        const v0Pass = await runV0UiStudioPass({
+          req,
+          message: `${promptText}\n\nVariation index: ${variationIndex}. Deliver shadcn/Tailwind UI files under src/ or app/.`,
+          projectDisplayName:
+            typeof req.body?.projectDisplayName === "string" ? req.body.projectDisplayName : undefined,
+        });
+        if (v0Pass.ok === true) {
+          const svg = loadBundledDemoMockupSvg();
+          return res.json({
+            svg,
+            usedPrompt: storedPrompt || "",
+            source: "v0",
+            chatId: v0Pass.chatId,
+            written: v0Pass.written,
+            demoUrl: v0Pass.demoUrl,
+          });
+        }
+        console.warn("[nebula-ui-studio/generate] v0 failed, falling back:", v0Pass.error);
+      } else if (Boolean(req.body?.requireV0)) {
+        return res.status(401).json({ error: NEBULA_V0_KEY_SETUP_HINT, hint: NEBULA_V0_KEY_SETUP_HINT });
+      }
 
       const grokKey = await resolveMainGrokApiKey(req);
 
@@ -1175,8 +1445,8 @@ No approved UI code yet.
       }
 
       return res.status(500).json({
-        error:
-          `No generator available. Add ${MAIN_GROK_ENV_VAR} (Grok 4 UI) and/or PENCIL_API_KEY on the server, or set NEBULA_UI_STUDIO_DEMO=1 for bundled demo SVGs.`,
+        error: `No generator available. Add ${V0_ENV_VAR}, ${MAIN_GROK_ENV_VAR}, and/or PENCIL_API_KEY on the server, or set NEBULA_UI_STUDIO_DEMO=1 for bundled demo SVGs.`,
+        hint: NEBULA_V0_KEY_SETUP_HINT,
       });
     } catch (error) {
       console.error("Error calling Nebula UI Studio engine:", error);
@@ -2001,19 +2271,6 @@ ${workflowContext}`;
     const ppChat = projectPathsFor(req);
     const convScopeChat = { userId: convUserId, projectKey: ppChat.projectKey, projectLabel: convProject };
 
-    try {
-      await checkAndEnforceLimit(convUserId);
-    } catch (limitErr: unknown) {
-      if (limitErr instanceof TokenLimitExceededError) {
-        return res.status(402).json({
-          error:
-            "You've reached your monthly limit. Upgrade to Pro for unlimited Grok 4.",
-          code: limitErr.code,
-        });
-      }
-      console.warn("[grok/chat] Unexpected limit check error (continuing):", limitErr);
-    }
-
     /**
      * Main `/api/grok/chat` brain: **always** grok-4 on `GROK_API_KEY_LUMEN` (normal chat + coding handoff).
      * Billing tier must not change the xAI model id (IDE + Assistant normal chat).
@@ -2074,6 +2331,22 @@ ${answer.slice(0, 8000)}`;
     }
 
     try {
+      await checkAndEnforceLimit(convUserId);
+    } catch (limitErr: unknown) {
+      if (limitErr instanceof TokenLimitExceededError) {
+        if (await respondWithClaudeQuotaFallback(messagesForApi, convScopeChat, res)) {
+          return;
+        }
+        return res.status(402).json({
+          error:
+            "You've reached your monthly limit. Upgrade to Pro for unlimited Grok 4.",
+          code: limitErr.code,
+        });
+      }
+      console.warn("[grok/chat] Unexpected limit check error (continuing):", limitErr);
+    }
+
+    try {
       const response = await fetch("https://api.x.ai/v1/chat/completions", {
         method: "POST",
         headers: {
@@ -2089,6 +2362,11 @@ ${answer.slice(0, 8000)}`;
       if (!response.ok) {
         const errorText = await response.text();
         console.error(`GROK API error (${response.status}):`, errorText.slice(0, 500));
+        if (isGrokQuotaLimitError(response.status, errorText)) {
+          if (await respondWithClaudeQuotaFallback(messagesForApi, convScopeChat, res)) {
+            return;
+          }
+        }
         let parsed: Record<string, unknown> = {};
         try {
           parsed = JSON.parse(errorText) as Record<string, unknown>;
@@ -2215,22 +2493,7 @@ CRITICAL OUTPUT CONTRACT (no deviation):
     }
   }
 
-      // Extract clean text for TTS (removing internal tags)
-      const cleanText = responseText
-        .replace(/<REASONING>[\s\S]*?<\/REASONING>/g, '')
-        .replace(/<START_MASTERPLAN>[\s\S]*?<END_MASTERPLAN>/g, '')
-        .replace(/<START_MASTERPLAN>/g, '')
-        .replace(/<END_MASTERPLAN>/g, '')
-        .replace(/<START_CODING>/g, '')
-        .replace(/START_CODING/g, '')
-        .replace(/<START_UIUX>/g, '')
-        .replace(/<FINISH_MASTERPLAN>/g, '')
-        .replace(/<APPROVE_MASTERPLAN>/g, '')
-        .replace(/<APPROVE_MINDMAP>/g, '')
-        .replace(/<APPROVE_UI>/g, '')
-        .replace(/<GROK_B_SUMMARY_Q([1-6])>[\s\S]*?<\/GROK_B_SUMMARY_Q\1>/g, '')
-        .replace(/\bANSWER_Q[1-6]\b/g, '')
-        .trim();
+      const cleanText = stripAssistantTagsForMemory(responseText);
 
       if (cleanText) {
         // Voice chat flow: Audio is now handled via direct /api/speak endpoint to avoid base64 overhead

@@ -359,6 +359,8 @@ export function IdeVisualEditor({
   const [studioTool, setStudioTool] = useState<StudioTool>('select');
   const [leftTab, setLeftTab] = useState<'pages' | 'layers'>('pages');
   const [mockNotice, setMockNotice] = useState('');
+  const [hasV0ApiKey, setHasV0ApiKey] = useState<boolean | null>(null);
+  const [v0ChatId, setV0ChatId] = useState<string | null>(null);
 
   const pageIds = useMemo(() => Object.keys(model.pages), [model.pages]);
   const page = model.pages[activePage];
@@ -387,6 +389,22 @@ export function IdeVisualEditor({
   useEffect(() => {
     void loadEligibility();
   }, [loadEligibility]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const r = await fetch('/api/config');
+        const cfg = (await r.json()) as { hasV0ApiKey?: boolean };
+        if (!cancelled) setHasV0ApiKey(Boolean(cfg.hasV0ApiKey));
+      } catch {
+        if (!cancelled) setHasV0ApiKey(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     if (eligible === null) return;
@@ -680,6 +698,49 @@ export function IdeVisualEditor({
     }
   };
 
+  const runV0Generation = async () => {
+    if (hasV0ApiKey === false) {
+      setError('Please add your V0_API_KEY in .env');
+      return;
+    }
+    setBusy(true);
+    setError('');
+    try {
+      const res = await fetch(withProjectQuery('/api/nebula-ui-studio/v0-generate'), {
+        method: 'POST',
+        headers: persistHeaders(),
+        body: JSON.stringify(
+          withProjectBody({
+            projectDisplayName: projectLabel,
+          }),
+        ),
+      });
+      const data = (await res.json()) as {
+        error?: string;
+        hint?: string;
+        chatId?: string;
+        written?: string[];
+        demoUrl?: string;
+      };
+      if (!res.ok) {
+        throw new Error(data.hint || data.error || 'v0 generation failed');
+      }
+      if (typeof data.chatId === 'string') setV0ChatId(data.chatId);
+      const n = data.written?.length ?? 0;
+      setMockNotice(
+        n > 0
+          ? `v0 wrote ${n} file(s) to the workspace. Open Preview or continue in the visual editor.`
+          : 'v0 generation finished.',
+      );
+      await loadEligibility();
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'v0 generation failed';
+      setError(msg.includes('V0_API_KEY') ? 'Please add your V0_API_KEY in .env' : msg);
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const simulateV0CompleteDev = async () => {
     if (!import.meta.env.DEV) return;
     setBusy(true);
@@ -857,6 +918,17 @@ export function IdeVisualEditor({
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              disabled={busy || hasV0ApiKey === null}
+              onClick={() => void runV0Generation()}
+              className="rounded border border-cyan-400/50 bg-cyan-500/15 px-2 py-1 text-[10px] font-headline text-cyan-50 hover:bg-cyan-500/25 disabled:opacity-40"
+            >
+              {busy ? 'Running v0…' : 'Generate UI with v0'}
+            </button>
+            {hasV0ApiKey === false ? (
+              <span className="text-[10px] text-amber-200/90">Please add your V0_API_KEY in .env</span>
+            ) : null}
             {import.meta.env.DEV ? (
               <button
                 type="button"

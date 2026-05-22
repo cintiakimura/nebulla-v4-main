@@ -482,7 +482,7 @@ export function AIChat() {
     const userId = session?.uid?.trim() || 'anonymous';
 
     try {
-      const { assistantContent } = await sendIdeAssistantGrokTurn({
+      const { assistantContent, claudeFallbackNotice } = await sendIdeAssistantGrokTurn({
         textToSend: text,
         history: historyForApi,
         userId,
@@ -491,14 +491,24 @@ export function AIChat() {
       });
       const raw = assistantContent.trim();
       const spoken = stripAssistantTagsForVoice(raw);
-      const assistantMsg: Message = {
+      const ts = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+      const toAppend: Message[] = [];
+      if (claudeFallbackNotice?.trim()) {
+        toAppend.push({
+          id: `fb-${Date.now()}`,
+          role: 'assistant',
+          content: claudeFallbackNotice.trim(),
+          timestamp: ts,
+        });
+      }
+      toAppend.push({
         id: `a-${Date.now()}`,
         role: 'assistant',
         content: raw || '(Empty response)',
-        timestamp: new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }),
-      };
+        timestamp: ts,
+      });
       setMessages((p) => {
-        const next = [...p, assistantMsg];
+        const next = [...p, ...toAppend];
         messagesRef.current = next;
         return next;
       });

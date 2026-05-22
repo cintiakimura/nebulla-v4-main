@@ -407,6 +407,7 @@ export function AssistantSidebar({
 
       const data = await fetchJson<{
         choices?: { message?: { content?: string; planningPhase?: string } }[];
+        claudeFallbackNotice?: string;
       }>(withProjectQuery('/api/grok/chat'), {
         method: 'POST',
         headers: grokHeaders,
@@ -443,6 +444,12 @@ export function AssistantSidebar({
       const rawAssistantContent = data.choices?.[0]?.message?.content || '';
       const planningPhase = data.choices?.[0]?.message?.planningPhase || '';
       const masterPlanSource = planningPhase || rawAssistantContent;
+      if (typeof data.claudeFallbackNotice === 'string' && data.claudeFallbackNotice.trim()) {
+        setMessages((prev) => [
+          ...prev,
+          { role: 'system', text: data.claudeFallbackNotice!.trim() },
+        ]);
+      }
       setChatStatus('Grok 4 response received. Syncing Master Plan updates…');
       void refreshFreeTokenUsage();
 
