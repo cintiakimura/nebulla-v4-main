@@ -1,6 +1,6 @@
 /**
  * GROK Service for Nebulla
- * Handles communication with GROK 4.1 (The unified reasoning model)
+ * Handles communication with grok-4 (the unified reasoning model)
  */
 
 import { fetchJson } from './apiFetch';
@@ -27,13 +27,13 @@ export async function sendToGROK(messages: ChatMessage[]): Promise<string> {
         credentials: 'include',
         body: JSON.stringify({
           messages,
-          model: 'grok-4-1-fast-reasoning',
+          model: 'grok-4',
         }),
       }
     );
     return data.choices?.[0]?.message?.content || '';
   } catch (error) {
-    console.error('Error calling GROK 4.1:', error);
+    console.error('Error calling grok-4:', error);
     throw error;
   }
 }

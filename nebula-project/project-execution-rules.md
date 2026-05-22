@@ -1,10 +1,11 @@
 **Project Execution Rules**
 
 **Core Philosophy**
-- Grok 4.1 is the primary agent for planning, reasoning, and coding.
+- Grok 4 is the primary agent for planning, reasoning, and coding.
 - Only one support agent exists: **Quality Agent** (merged Tester + Reviewer) — triggered **manually** by the user with the **"Run and Test"** button.
 - v0 by Vercel is used **automatically once per project** for the initial high-quality UI generation.
-- The main Grok brain reads **`GROK_API_KEY` from the server environment** (Nebula Product `.env` / host secrets). **User-facing Grok API key input is disabled** in the product (My services, Secrets, Account); operators set Grok-related keys only in server env per **`environment-setup.md`** (defaults for chat, swarm, TTS, and writers).
+- The main Grok brain reads **`GROK_API_KEY` from the server environment** (Nebula Product `.env` / host secrets) for **both** normal chat and the coding phase — never a separate user-facing coding key. **User-facing Grok API key input is disabled** in the product (My services, Secrets, Account); operators set Grok-related keys only in server env per **`environment-setup.md`** (defaults for chat, swarm, TTS, and writers).
+- **Chat vs build:** In normal conversation, Grok replies in natural prose (no implementation code fences in chat). When the user wants to build or change code, Grok must use **START_CODING** / **Go** and **file blocks** (`\`\`\`file:path\` …) for server apply — not markdown code snippets in chat.
 - **Nebula Project** (rules in this folder) is strictly separated from **Nebula Product** (the IDE itself).
 
 **Infrastructure Manager (Silent)**
@@ -14,7 +15,7 @@ Runs automatically on onboarding and new project creation:
 - Handles and validates user **v0** API keys; main Grok uses server `GROK_API_KEY` only (no user Grok key collection in UI).
 
 **Voice & TTS Behavior**
-- TTS starts speaking as soon as Grok 4.1 outputs text (streaming).
+- TTS starts speaking as soon as Grok 4 outputs text (streaming).
 - Microphone is automatically muted while TTS is speaking.
 - Microphone re-enables automatically after 5 seconds of inactivity.
 
@@ -51,7 +52,7 @@ Once all mandatory information is gathered and confirmed, Grok provides a clean 
 
 **Phase 2 – User Interface**
 - First version generated automatically with v0
-- Subsequent changes done in Nebula UI Studio using Grok 4.1
+- Subsequent changes done in Nebula UI Studio using Grok 4
 
 **Phase 3 – Polish & UX**
 - Loading, error, empty states

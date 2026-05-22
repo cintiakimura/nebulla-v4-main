@@ -2,9 +2,9 @@
  * Nebula Swarm — server-side handoff (lean).
  *
  * - **No** Planner, Researcher, Tester, or Reviewer on normal chat handoffs.
- * - Main Grok 4.1 handles planning/research in user chat.
+ * - Main Grok 4 handles planning/research in user chat.
  * - Single **Quality** agent (code review + test suggestions) runs **only** when `manualRunAndTest`
- *   is set (TopBar Inspect), using **`GROK_SWARM_API_KEY`** + `GROK_SWARM_MODEL` (default `grok-3`),
+ *   is set (TopBar Inspect), using **`GROK_SWARM_API_KEY`** + `GROK_SWARM_MODEL` (default `grok-3-mini`),
  *   scoped to recently changed git paths + optional client snippets. Normal chat uses `GROK_API_KEY` only.
  */
 
@@ -168,7 +168,7 @@ type HandoffOpts = {
   projectName: string;
   runId: string;
   intensity: SwarmIntensity;
-  /** Manual "Run and Test" / Inspect — single Quality call using `GROK_SWARM_API_KEY` + swarm model (default grok-3). */
+  /** Manual "Run and Test" / Inspect — single Quality call using `GROK_SWARM_API_KEY` + swarm model (default grok-3-mini). */
   manualRunAndTest?: boolean;
   qualityLane?: { apiKey: string; model: string };
   contextSummary?: string;

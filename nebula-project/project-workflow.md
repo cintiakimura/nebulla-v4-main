@@ -15,11 +15,11 @@
    - Infrastructure Manager runs silently (Render setup, key storage, database creation).
 
 4. **Master Plan Interview**
-   - Grok 4.1 conducts a structured but natural interview.
+   - Grok 4 conducts a structured but natural interview.
    - Mandatory information is collected (core purpose, users, features, data, security, brand).
 
 5. **Automatic Initial Setup**
-   - Grok 4.1 generates the full Master Plan.
+   - Grok 4 generates the full Master Plan.
    - Automatic v0 UI generation (first high-quality version).
    - Database schema is created.
 
@@ -47,7 +47,7 @@
     - Chat transcripts persist per project (`conversationLog.ts` + `GET /api/conversation-log`) so sessions resume with context.
 
 **Key Principles**
-- Grok 4.1 is the main agent.
+- Grok 4 is the main agent.
 - Quality Agent is manual only ("Run and Test" button).
 - v0 is used automatically once per project for initial UI.
 - All user API keys are respected and used when provided.

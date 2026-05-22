@@ -161,7 +161,7 @@ export function TopBar({
             type="button"
             onClick={handleRunAndTest}
             disabled={runTestBusy || swarm.isRunning}
-            title="Inspect — Quality agent on recently changed files (uses GROK_SWARM_API_KEY + Grok 3-class model)"
+            title="Inspect — Quality agent (GROK_SWARM_API_KEY + grok-3-mini by default)"
             aria-busy={runTestBusy || swarm.isRunning}
             className="btn-primary-cta type-label-sm flex h-9 min-w-[5.5rem] shrink-0 items-center justify-center rounded-md px-3 py-0 tracking-wide sm:px-4"
             style={{ fontWeight: 500 }}

@@ -455,7 +455,7 @@ export function AssistantSidebar({
         swarm.setCurrentPhase(phaseSync.nextPhase);
       }
 
-      // GROK 4.1 Behavior: Immediate Frontend Master Plan Update
+      // Grok 4 behavior: Immediate Frontend Master Plan Update
       // Guard: during onboarding autopilot / coding handoff, keep Master Plan writes backend-only.
       const backendOnlyMasterPlanTurn =
         Boolean(opts?.onboardingAutopilot) ||
@@ -481,7 +481,7 @@ export function AssistantSidebar({
         setChatStatus('Master Plan captured in backend only (hidden during first-generation flow).');
       }
 
-      // GROK 4.1 Behavior: Automated Workflow Transitions
+      // Grok 4 behavior: Automated Workflow Transitions
       if (masterPlanSource.includes('<APPROVE_MASTERPLAN>') && hasExplicitApproval) {
         if ((window as any).syncMindMapFromMasterPlan) await (window as any).syncMindMapFromMasterPlan();
         if ((window as any).openMindMap) (window as any).openMindMap();
@@ -497,7 +497,7 @@ export function AssistantSidebar({
         }
       }
 
-      // GROK 4.1 Behavior: Sync Mind Map from Master Plan when finished
+      // Grok 4 behavior: Sync Mind Map from Master Plan when finished
       if (masterPlanSource.includes('<FINISH_MASTERPLAN>') && (window as any).syncMindMapFromMasterPlan) {
         await (window as any).syncMindMapFromMasterPlan();
       }
@@ -671,7 +671,7 @@ export function AssistantSidebar({
         }
       }
 
-      // GROK 4.1 Behavior: Trigger UI/UX Workflow
+      // Grok 4 behavior: Trigger UI/UX Workflow
       if (masterPlanSource.includes('<START_UIUX>') && (window as any).startUIUXWorkflow) {
         (window as any).startUIUXWorkflow();
       }

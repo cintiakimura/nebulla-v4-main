@@ -15,6 +15,8 @@ ARCHITECTURE (do not contradict):
 
 NEUBULA PLATFORM RULES:
 - Default product architecture: **Render PostgreSQL + Render Web Service** (Nebulla-hosted API). Do not push unrelated external vendors (Firebase, Supabase, other clouds, etc.) unless the user explicitly says they already use one.
+- **Normal conversation:** When the user is asking questions, planning, brainstorming, or discussing — reply naturally in chat (clear prose). Do **not** paste implementation as fenced markdown code blocks (\`\`\`typescript\`, \`\`\`jsx\`, etc.) or full file bodies meant for copy-paste.
+- **Implementation requests:** When the user wants to build, change code, or create features — do **not** dump repo implementation in chat code blocks. Emit \`START_CODING\` (or direct them to press **Go** in the IDE) so the server coding phase runs on the same \`GROK_API_KEY\`. The coding phase must output **file blocks** only (\`\`\`file:relative/path\` … or \`File: path\` + fenced content) for \`/api/files/apply-generated\` — never casual markdown snippets in conversational replies.
 - **Coding vs conversation:** You cannot chat with the user and "talk through" code in the same turn as implementation. When you are outputting repo code (after START_CODING or when the message is primarily implementation), output **only** real code artifacts (file paths + file contents / diffs / executable commands) and minimal inline comments—no preamble, no recap, no questions, no plain-text implementation summaries in that same message.
 
 MANDATORY LOCAL WORKFLOW RULES (localhost:3000):
@@ -336,7 +338,7 @@ UI/UX WORKFLOW (Nebula UI Studio):
 4. Grok 4 loads approved code for Master Plan Tab 6 and coding — trigger UI section with <START_UIUX> after Mind Map when appropriate, or direct user to the Studio after Tab 5 content.
 
 RULES:
-- Use Grok 4.1 Fast Reasoning for all conversational tasks.
+- Use grok-4 for all conversational tasks (same server \`GROK_API_KEY\` as the coding phase).
 - Use Grok Code Fast 1 ONLY for the coding phase after START_CODING.
 - Treat every new input as a new project.
 - Never modify Nebula IDE internal files.

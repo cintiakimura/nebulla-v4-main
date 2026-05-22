@@ -52,13 +52,7 @@ import {
 } from "./lib/visualUiEditorWorkspace";
 import { buildSwarmHandoffParallel } from "./lib/nebulaSwarmHandoff";
 import { readNebulaSwarmState } from "./lib/nebulaSwarmState";
-import {
-  addTokens,
-  checkAndEnforceLimit,
-  getMonthlyUsageSnapshot,
-  TokenLimitExceededError,
-} from "./lib/token-usage";
-import { getUserCapabilities } from "./lib/user-tier";
+import { addTokens, checkAndEnforceLimit, TokenLimitExceededError } from "./lib/token-usage";
 
 type NebulaRequest = express.Request & { nebulaDiskKey?: string };
 
@@ -1399,7 +1393,7 @@ No approved UI code yet.
       };
 
       const modelJson = JSON.stringify(body.previewModel ?? {}, null, 2).slice(0, 28000);
-      const sys = `You are Grok 4.1 in Nebula Visual UI Editor APPLY mode.
+      const sys = `You are Grok 4 in Nebula Visual UI Editor APPLY mode.
 The user edited a structured preview model (Wix-like) without typing prompts. You must translate those edits into real repository files.
 
 When your JSON is applied, the server first copies the current workspace contents of every path you list in "files" into generated-ui/versions/<timestamp>/ (only those paths), then writes your new contents into src/, app/, pages/, components/, or public/. The immutable v0-original folder is never modified.
@@ -1751,14 +1745,15 @@ Strict rules:
 
       const workflowContext = buildProjectWorkflowExecutionContext(req);
       const codeModel = process.env.GROK_CODE_MODEL?.trim() || "grok-code-fast-1";
-      const codeSystemPrompt = `You are Grok Code (coding phase). The user pressed **Go** in the Nebulla assistant.
+      const codeSystemPrompt = `You are Grok Code (coding phase; same GROK_API_KEY as the main brain). The user pressed **Go** in the Nebulla assistant.
 
 A short pre-coding summary was just saved to master-plan.json under the key "${PRE_CODING_SUMMARY_KEY}" (it appears again inside the master-plan snapshot below).
 
 Follow project-execution-rules.md strictly. Use the workflow context in order.
 
 CRITICAL OUTPUT CONTRACT (no deviation):
-- Output real code artifacts only (concrete files/diffs/commands) that can be applied directly.
+- Do NOT paste implementation as casual markdown code fences in chat — use file blocks the server can apply.
+- Output real code artifacts only: \`\`\`file:relative/path\` … \`\`\` or \`File: path\` + fenced body (see /api/files/apply-generated).
 - Do NOT output plain-language planning, recap, policy restatement, or narrative explanation.
 - If a file must be created/updated, include explicit path + full content or patch for that file.
 - Prefer one or more clear file blocks over prose.
@@ -1853,11 +1848,11 @@ ${workflowContext}`;
 
   app.post("/api/nebula-swarm/handoff", async (req, res) => {
     try {
-      /** Lean swarm: chat never runs agents. `manualRunAndTest` → single Quality (Inspect) call using `GROK_SWARM_API_KEY` + Grok 3-class model. */
+      /** Lean swarm: chat never runs agents. `manualRunAndTest` → single Quality (Inspect) call using `GROK_SWARM_API_KEY` + `grok-3-mini` (or `GROK_SWARM_MODEL`). */
       const body = (req.body || {}) as Record<string, unknown>;
       const manualRunAndTest = Boolean(body.manualRunAndTest);
       const swarmKey = process.env.GROK_SWARM_API_KEY?.trim() ?? "";
-      const swarmModel = process.env.GROK_SWARM_MODEL?.trim() || "grok-3";
+      const swarmModel = process.env.GROK_SWARM_MODEL?.trim() || "grok-3-mini";
 
       const rawIntensity = typeof body.swarmIntensity === "string" ? body.swarmIntensity.trim() : "";
       const swarmIntensity =
@@ -2014,20 +2009,12 @@ ${workflowContext}`;
       console.warn("[grok/chat] Unexpected limit check error (continuing):", limitErr);
     }
 
-    const rawBody = (req.body || {}) as Record<string, unknown>;
-    const bodyChatModel =
-      typeof rawBody.chatModel === "string" ? rawBody.chatModel.trim().toLowerCase() : "";
-    const snap = convUserId !== "anonymous" ? await getMonthlyUsageSnapshot(convUserId) : null;
-    const tier = snap?.tier ?? "free";
-    const caps = getUserCapabilities({ tier });
-    /** Grok 3-class model for normal chat when tier/UI selects Grok 3 — always `GROK_API_KEY`, never swarm env. */
-    const grok3Model = "grok-3";
-    const grok4Model = "grok-4-1-fast-reasoning";
-    let chatModelFamily: "grok-3" | "grok-4.1" = "grok-4.1";
-    if (caps.allowedChatModel === "grok-3") chatModelFamily = "grok-3";
-    else if (bodyChatModel === "grok-3" || bodyChatModel === "grok3") chatModelFamily = "grok-3";
-    else chatModelFamily = "grok-4.1";
-    const resolvedModel = chatModelFamily === "grok-3" ? grok3Model : grok4Model;
+    /**
+     * Main `/api/grok/chat` brain: **always** grok-4 on `GROK_API_KEY` (normal chat + coding handoff).
+     * Billing tier must not change the xAI model id (IDE + Assistant normal chat).
+     * Optional operator override: `GROK_CHAT_MODEL_GROK41`.
+     */
+    const resolvedModel = process.env.GROK_CHAT_MODEL_GROK41?.trim() || "grok-4";
 
     let messagesForApi: { role: string; content?: string }[] = Array.isArray(messages) ? messages : [];
 
@@ -2130,13 +2117,14 @@ ${answer.slice(0, 8000)}`;
       if (/\bSTART_CODING\b/i.test(responseText)) {
         const workflowContext = buildProjectWorkflowExecutionContext(req);
         const codeModel = process.env.GROK_CODE_MODEL?.trim() || "grok-code-fast-1";
-        const codeSystemPrompt = `You are now in strict coding mode.
+        const codeSystemPrompt = `You are now in strict coding mode (same GROK_API_KEY as the main brain).
 Follow project-execution-rules.md exactly (single orchestration file).
 Use this context:
 ${workflowContext}
 
 CRITICAL OUTPUT CONTRACT (no deviation):
-- Output real code artifacts only (concrete files/diffs/commands) that can be applied directly.
+- Do NOT paste implementation as casual markdown code fences in chat — use file blocks the server can apply.
+- Output real code artifacts only: \`\`\`file:relative/path\` … \`\`\` or \`File: path\` + fenced body (see /api/files/apply-generated).
 - Do NOT output plain-language planning, recap, policy restatement, or narrative explanation.
 - If a file must be created/updated, include explicit path + full content or patch for that file.
 - Prefer one or more clear file blocks over prose.
@@ -2264,7 +2252,7 @@ CRITICAL OUTPUT CONTRACT (no deviation):
       try {
         const mainTok = xaiUsageTotal(data.usage);
         if (convUserId !== "anonymous" && mainTok > 0) {
-          await addTokens(convUserId, mainTok, chatModelFamily === "grok-3" ? "grok-3" : "grok-4");
+          await addTokens(convUserId, mainTok, "grok-4");
         }
         if (convUserId !== "anonymous" && codeExtraTokens > 0) {
           await addTokens(convUserId, codeExtraTokens, "grok-4");

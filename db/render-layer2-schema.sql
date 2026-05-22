@@ -166,7 +166,7 @@ CREATE TABLE IF NOT EXISTS ai_runs (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
   trigger_source TEXT NOT NULL,          -- e.g., ANSWER_Q1, manual, cron
-  model_name TEXT NOT NULL,              -- e.g., grok-4-1-fast-reasoning
+  model_name TEXT NOT NULL,              -- e.g., grok-4
   status llm_run_status NOT NULL DEFAULT 'queued',
   request_payload JSONB NOT NULL DEFAULT '{}'::jsonb,
   response_payload JSONB NOT NULL DEFAULT '{}'::jsonb,

@@ -11,7 +11,7 @@ The first UI pass is generated **automatically** using **v0** (using the user’
 ## What this studio is for
 
 - **Manual refinement** of the UI once the initial v0 output exists.
-- **Iterative edits**: you describe changes in natural language; **Grok 4.1** carries out updates through Nebula UI Studio (analysis, adaptation, approval, and the product’s wiring into the repo).
+- **Iterative edits**: you describe changes in natural language; **Grok 4** carries out updates through Nebula UI Studio (analysis, adaptation, approval, and the product’s wiring into the repo).
 - **Avoid full v0 re-runs** unless you want a broad redesign; routine polish should stay in the studio.
 
 ## Best practices in the studio

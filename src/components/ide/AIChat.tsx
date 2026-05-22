@@ -111,6 +111,7 @@ export function AIChat() {
   const [isTtsPlaying, setIsTtsPlaying] = useState(false);
   /** Mic stays off for `MIC_REENABLE_AFTER_TTS_MS` after TTS ends. */
   const [micCooldown, setMicCooldown] = useState(false);
+  const [isHandsFree, setIsHandsFree] = useState(false);
 
   const messagesRef = useRef(messages);
   const inputRef = useRef(input);
@@ -130,8 +131,21 @@ export function AIChat() {
   const ttsObjectUrlRef = useRef<string | null>(null);
   const ttsChunkResolveRef = useRef<(() => void) | null>(null);
   const micCooldownTimerRef = useRef<number | null>(null);
+  const liveHandsFreeRecognitionRef = useRef<IdeSpeechRecognition | null>(null);
+  const handsFreeIdleTimerRef = useRef<number | null>(null);
+  const micInputBlockedRef = useRef(false);
+  const sendingRef = useRef(false);
+  const isHandsFreeRef = useRef(false);
+  const handsFreeResumeAfterTtsRef = useRef(false);
 
   const micInputBlocked = isTtsPlaying || micCooldown;
+
+  useEffect(() => {
+    micInputBlockedRef.current = micInputBlocked;
+  }, [micInputBlocked]);
+  useEffect(() => {
+    sendingRef.current = sending;
+  }, [sending]);
 
   const clearVoiceIdleTimer = () => {
     if (voiceIdleTimerRef.current != null) {
@@ -161,8 +175,32 @@ export function AIChat() {
     setIsRecordingVoice(false);
   };
 
+  const clearHandsFreeIdleTimer = () => {
+    if (handsFreeIdleTimerRef.current != null) {
+      window.clearTimeout(handsFreeIdleTimerRef.current);
+      handsFreeIdleTimerRef.current = null;
+    }
+  };
+
+  const stopHandsFree = useCallback(() => {
+    clearHandsFreeIdleTimer();
+    const r = liveHandsFreeRecognitionRef.current;
+    if (r) {
+      try {
+        r.stop();
+      } catch {
+        /* ignore */
+      }
+      liveHandsFreeRecognitionRef.current = null;
+    }
+    isHandsFreeRef.current = false;
+    setIsHandsFree(false);
+  }, []);
+
   const interruptVoiceAndTts = useCallback(() => {
     stopVoiceRecognition();
+    stopHandsFree();
+    handsFreeResumeAfterTtsRef.current = false;
     ttsRunIdRef.current += 1;
     ttsChunkResolveRef.current?.();
     ttsChunkResolveRef.current = null;
@@ -192,7 +230,98 @@ export function AIChat() {
     clearMicCooldownTimer();
     setIsTtsPlaying(false);
     setMicCooldown(false);
+  }, [stopHandsFree]);
+
+  const scheduleHandsFreeAutoSend = useCallback(() => {
+    clearHandsFreeIdleTimer();
+    handsFreeIdleTimerRef.current = window.setTimeout(() => {
+      handsFreeIdleTimerRef.current = null;
+      const t = inputRef.current.trim();
+      if (!t || micInputBlockedRef.current || sendingRef.current) return;
+      void sendChatRef.current(t);
+    }, VOICE_SILENCE_BEFORE_SEND_MS);
   }, []);
+
+  const startHandsFree = useCallback(() => {
+    if (!('webkitSpeechRecognition' in window)) {
+      setAccessoryHint('Speech recognition is not supported in this browser.');
+      window.setTimeout(() => setAccessoryHint(null), 4000);
+      return;
+    }
+    if (micInputBlockedRef.current || sendingRef.current) return;
+    stopVoiceRecognition();
+    stopHandsFree();
+    const SR = (window as unknown as { webkitSpeechRecognition: new () => IdeSpeechRecognition }).webkitSpeechRecognition;
+    const recognition = new SR();
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.lang = 'en-US';
+
+    recognition.onresult = (event: IdeSpeechRecognitionEvent) => {
+      if (!isHandsFreeRef.current || micInputBlockedRef.current || sendingRef.current) return;
+      let finalText = '';
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        if (event.results[i].isFinal) {
+          finalText += event.results[i][0].transcript;
+        }
+      }
+      if (!finalText) return;
+      const next = `${inputRef.current}${inputRef.current ? ' ' : ''}${finalText}`.trim();
+      setInput(next);
+      inputRef.current = next;
+      scheduleHandsFreeAutoSend();
+    };
+
+    recognition.onerror = (ev: IdeSpeechRecognitionErrorEvent) => {
+      if (ev.error === 'aborted') return;
+      console.warn('[AIChat] hands-free speech:', ev.error);
+      setAccessoryHint(
+        `Open talk: ${ev.error === 'not-allowed' ? 'allow the microphone for this site.' : ev.error}`,
+      );
+      window.setTimeout(() => setAccessoryHint(null), 4500);
+      stopHandsFree();
+    };
+
+    recognition.onend = () => {
+      if (!isHandsFreeRef.current || micInputBlockedRef.current) return;
+      try {
+        recognition.start();
+      } catch (e) {
+        console.warn('[AIChat] hands-free restart', e);
+      }
+    };
+
+    try {
+      recognition.start();
+      liveHandsFreeRecognitionRef.current = recognition;
+      isHandsFreeRef.current = true;
+      setIsHandsFree(true);
+      setAccessoryHint('Open talk is on — I listen continuously and send after a short pause when you finish a phrase.');
+      window.setTimeout(() => setAccessoryHint(null), 4200);
+    } catch (err) {
+      console.warn('[AIChat] hands-free start', err);
+      setAccessoryHint('Could not start open talk — check browser permissions.');
+      window.setTimeout(() => setAccessoryHint(null), 4500);
+    }
+  }, [stopHandsFree, scheduleHandsFreeAutoSend]);
+
+  const toggleHandsFree = useCallback(() => {
+    if (isHandsFreeRef.current) {
+      stopHandsFree();
+      setAccessoryHint('Open talk stopped.');
+      window.setTimeout(() => setAccessoryHint(null), 2200);
+      return;
+    }
+    void startHandsFree();
+  }, [startHandsFree, stopHandsFree]);
+
+  const startHandsFreeForResumeRef = useRef<() => void>(() => {});
+
+  useEffect(() => {
+    startHandsFreeForResumeRef.current = () => {
+      void startHandsFree();
+    };
+  }, [startHandsFree]);
 
   useEffect(() => {
     let cancelled = false;
@@ -285,6 +414,7 @@ export function AIChat() {
       setIsRecordingVoice(false);
       const draft = voiceDraftRef.current.trim();
       voiceDraftRef.current = '';
+      if (isHandsFreeRef.current) return;
       if (draft) {
         scheduleVoiceAutoSend(draft);
       }
@@ -292,6 +422,7 @@ export function AIChat() {
 
     voiceRecognitionRef.current = recognition;
     return () => {
+      stopHandsFree();
       try {
         recognition.stop();
       } catch {
@@ -299,7 +430,7 @@ export function AIChat() {
       }
       voiceRecognitionRef.current = null;
     };
-  }, [scheduleVoiceAutoSend]);
+  }, [scheduleVoiceAutoSend, stopHandsFree]);
 
   const sendChatRef = useRef<(override?: string) => Promise<void>>(async () => {});
 
@@ -374,6 +505,9 @@ export function AIChat() {
 
       if (spoken) {
         void playTtsForText(spoken);
+      } else {
+        handsFreeResumeAfterTtsRef.current = false;
+        stopHandsFree();
       }
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
@@ -401,12 +535,11 @@ export function AIChat() {
     } finally {
       setSending(false);
     }
-  }, [sending, activePath, activeTab?.content, serverHasGrokKey, micInputBlocked]);
+  }, [sending, activePath, activeTab?.content, serverHasGrokKey, micInputBlocked, stopHandsFree]);
 
   sendChatRef.current = sendChat;
 
   const playTtsForText = async (plain: string) => {
-    stopVoiceRecognition();
     if (ttsDebounceTimerRef.current != null) {
       window.clearTimeout(ttsDebounceTimerRef.current);
       ttsDebounceTimerRef.current = null;
@@ -428,7 +561,15 @@ export function AIChat() {
       if (runId !== ttsRunIdRef.current) return;
 
       const chunks = splitTextForTts(plain);
-      if (chunks.length === 0) return;
+      if (chunks.length === 0) {
+        handsFreeResumeAfterTtsRef.current = false;
+        return;
+      }
+
+      const resumeHandsFree = isHandsFreeRef.current;
+      stopVoiceRecognition();
+      stopHandsFree();
+      handsFreeResumeAfterTtsRef.current = resumeHandsFree;
 
       setIsTtsPlaying(true);
 
@@ -446,6 +587,12 @@ export function AIChat() {
         micCooldownTimerRef.current = window.setTimeout(() => {
           micCooldownTimerRef.current = null;
           setMicCooldown(false);
+          if (handsFreeResumeAfterTtsRef.current) {
+            handsFreeResumeAfterTtsRef.current = false;
+            if (!micInputBlockedRef.current && !sendingRef.current) {
+              startHandsFreeForResumeRef.current();
+            }
+          }
         }, MIC_REENABLE_AFTER_TTS_MS);
       };
 
@@ -531,6 +678,7 @@ export function AIChat() {
       }
       return;
     }
+    stopHandsFree();
     clearVoiceIdleTimer();
     voiceDraftRef.current = '';
     try {
@@ -599,13 +747,17 @@ export function AIChat() {
               <>
                 <p className="text-foreground/90 font-headline text-sm">IDE chat</p>
                 <p>
-                  Grok 4.1 uses the server <code className="text-foreground/90">GROK_API_KEY</code> and the model from the top bar.
-                  Your open file, master plan, and UI Studio context are sent with each message.
+                  Grok 4.1 is the primary agent here. Messages use the server <code className="text-foreground/90">GROK_API_KEY</code>{' '}
+                  (per <code className="text-foreground/90">project-execution-rules.md</code>). Your open file, master plan, and UI Studio
+                  context are included with each turn.
                 </p>
                 <p>
-                  Tap the <strong className="text-foreground/90">microphone</strong> to dictate; after you finish speaking, the app waits{' '}
-                  {VOICE_SILENCE_BEFORE_SEND_MS / 1000}s, then sends to Grok and reads the reply aloud (TTS). The mic stays off while TTS
-                  is playing and for {MIC_REENABLE_AFTER_TTS_MS / 1000}s after playback ends.
+                  <strong className="text-foreground/90">Voice</strong> (same doc): tap the <strong className="text-foreground/90">wave</strong>{' '}
+                  icon for <strong className="text-foreground/90">open talk</strong> (continuous listen + auto-send after a short pause), or
+                  the <strong className="text-foreground/90">microphone</strong> for a single push-to-talk phrase. Grok transcribes your speech,
+                  Grok 4.1 replies, then TTS reads the answer aloud. The mic is off while TTS plays; after playback it stays muted for{' '}
+                  {MIC_REENABLE_AFTER_TTS_MS / 1000}s, then the mic can turn on again (open talk resumes automatically if it was on before the
+                  reply).
                 </p>
               </>
             ) : (
@@ -689,15 +841,13 @@ export function AIChat() {
           <div className="mt-2 flex items-center justify-between gap-3">
             <div className="flex items-center gap-1.5">
               <ChatRoundButton
-                label="Hands-free (sidebar)"
-                onClick={() => {
-                  setAccessoryHint(
-                    'Continuous hands-free mode lives in the main Assistant sidebar. Here, use the microphone for push-to-talk.',
-                  );
-                  window.setTimeout(() => setAccessoryHint(null), 5200);
-                }}
+                label={isHandsFree ? 'Stop open talk (hands-free)' : 'Start open talk (hands-free)'}
+                onClick={() => toggleHandsFree()}
+                disabled={sending || micInputBlocked}
               >
-                <SoundWaveIcon />
+                <SoundWaveIcon
+                  className={cn(isHandsFree ? 'text-primary' : '', micInputBlocked ? 'opacity-50' : '')}
+                />
               </ChatRoundButton>
               <ChatRoundButton
                 label="Interrupt Grok voice"
@@ -712,13 +862,13 @@ export function AIChat() {
               <ChatRoundButton
                 label={isRecordingVoice ? 'Stop dictation' : 'Speak (push-to-talk)'}
                 onClick={() => toggleVoiceMic()}
-                disabled={sending || micInputBlocked}
+                disabled={sending || micInputBlocked || isHandsFree}
               >
                 <Mic
                   className={cn(
                     'h-[18px] w-[18px]',
                     isRecordingVoice ? 'text-destructive' : '',
-                    micInputBlocked ? 'opacity-50' : '',
+                    micInputBlocked || isHandsFree ? 'opacity-50' : '',
                   )}
                 />
               </ChatRoundButton>
