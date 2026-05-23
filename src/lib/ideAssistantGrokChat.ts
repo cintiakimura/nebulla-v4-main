@@ -89,7 +89,7 @@ export async function sendIdeAssistantGrokTurn(options: {
         withProjectBody({
           userId,
           projectName,
-          /** IDE panel always uses main `GROK_API_KEY_LUMEN` with grok-4 — never Grok 3 / swarm settings. */
+          /** IDE panel always uses main `MAIN_AI_API_KEY` with grok-4 — never Grok 3 / swarm settings. */
           chatModel: 'grok-4.1',
           onboardingAutopilot: false,
           messages: messagesPayload,

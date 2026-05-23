@@ -468,7 +468,7 @@ function DnsTab() {
 /** Grok main key is server `.env` only; do not store or edit in browser Secrets (project-execution-rules.md). */
 function isServerReservedGrokSecretName(raw: string): boolean {
   const n = raw.trim().toUpperCase();
-  return n === 'GROK_API_KEY_LUMEN' || n === 'GROK_API_KEY' || n === 'V0_API_KEY';
+  return n === 'MAIN_AI_API_KEY' || n === 'GROK_API_KEY_LUMEN' || n === 'GROK_API_KEY' || n === 'V0_API_KEY';
 }
 
 function ProjectSecretsEditor({ activeProjectKey }: { activeProjectKey: string }) {
@@ -559,7 +559,7 @@ function ProjectSecretsEditor({ activeProjectKey }: { activeProjectKey: string }
   return (
     <div className="space-y-4">
       <p className="text-xs text-slate-500 leading-relaxed rounded-lg border border-white/10 bg-black/20 px-3 py-2">
-        <code className="text-cyan-300/90">GROK_API_KEY_LUMEN</code> is set on the server only (see{' '}
+        <code className="text-cyan-300/90">MAIN_AI_API_KEY</code> is set on the server only (see{' '}
         <code className="text-slate-400">.env</code> / <span className="text-slate-400">environment-setup.md</span>). It
         cannot be added or edited here.
       </p>

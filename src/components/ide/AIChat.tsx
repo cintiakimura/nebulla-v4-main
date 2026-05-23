@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Bot, Hand, Mic, Paperclip, Rocket, Send, User } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { fetchSessionUser } from '../../lib/nebulaCloud';
-import { GROK_CHAT_SETUP_HINT } from '../../lib/grokKey';
+import { MAIN_AI_CHAT_SETUP_HINT, serverReportsMainAiKey } from '../../lib/grokKey';
 import { readResponseJson } from '../../lib/apiFetch';
 import { getBrowserProjectName, withProjectQuery } from '../../lib/nebulaProjectApi';
 import { sendIdeAssistantGrokTurn } from '../../lib/ideAssistantGrokChat';
@@ -333,8 +333,8 @@ export function AIChat() {
     void (async () => {
       try {
         const r = await fetch(withProjectQuery('/api/config'), { credentials: 'include' });
-        const cfg = (await readResponseJson(r)) as { hasGrokApiKey?: boolean };
-        if (!cancelled) setServerHasGrokKey(r.ok && Boolean(cfg.hasGrokApiKey));
+        const cfg = (await readResponseJson(r)) as { hasMainAiApiKey?: boolean; hasGrokApiKey?: boolean };
+        if (!cancelled) setServerHasGrokKey(r.ok && serverReportsMainAiKey(cfg));
       } catch {
         if (!cancelled) setServerHasGrokKey(false);
       }
@@ -449,8 +449,8 @@ export function AIChat() {
     if (serverHasGrokKey === null) {
       try {
         const r = await fetch(withProjectQuery('/api/config'), { credentials: 'include' });
-        const cfg = (await readResponseJson(r)) as { hasGrokApiKey?: boolean };
-        setServerHasGrokKey(r.ok && Boolean(cfg.hasGrokApiKey));
+        const cfg = (await readResponseJson(r)) as { hasMainAiApiKey?: boolean; hasGrokApiKey?: boolean };
+        setServerHasGrokKey(r.ok && serverReportsMainAiKey(cfg));
       } catch {
         setServerHasGrokKey(false);
       }
@@ -555,6 +555,7 @@ export function AIChat() {
       const msg = e instanceof Error ? e.message : String(e);
       const isKeyHelp =
         msg.includes('Grok API key') ||
+        msg.includes('MAIN_AI_API_KEY') ||
         msg.includes('GROK_API_KEY_LUMEN') ||
         msg.includes('GROK_API_KEY') ||
         msg.includes('Grok chat is unavailable') ||
@@ -749,8 +750,8 @@ export function AIChat() {
     if (serverHasGrokKey === null) {
       try {
         const r = await fetch(withProjectQuery('/api/config'), { credentials: 'include' });
-        const cfg = (await readResponseJson(r)) as { hasGrokApiKey?: boolean };
-        setServerHasGrokKey(r.ok && Boolean(cfg.hasGrokApiKey));
+        const cfg = (await readResponseJson(r)) as { hasMainAiApiKey?: boolean; hasGrokApiKey?: boolean };
+        setServerHasGrokKey(r.ok && serverReportsMainAiKey(cfg));
       } catch {
         setServerHasGrokKey(false);
       }
@@ -808,7 +809,7 @@ export function AIChat() {
         <div className="type-label-sm flex items-center gap-1.5 text-muted-foreground">
           <span className="h-1.5 w-1.5 rounded-full bg-primary/80" />
           Model: <span className="text-foreground">{modelLabel[chatModel] ?? chatModel}</span>
-          <span className="text-muted-foreground/80">(IDE uses Grok 4.1 + server GROK_API_KEY_LUMEN)</span>
+          <span className="text-muted-foreground/80">(IDE uses Grok 4.1 + server MAIN_AI_API_KEY)</span>
         </div>
       </div>
 
@@ -818,7 +819,7 @@ export function AIChat() {
           role="status"
         >
           <p className="type-label-sm font-headline text-amber-100">Grok is not configured on the server</p>
-          <p className="type-body-md mt-1 leading-relaxed text-amber-50/95">{GROK_CHAT_SETUP_HINT}</p>
+          <p className="type-body-md mt-1 leading-relaxed text-amber-50/95">{MAIN_AI_CHAT_SETUP_HINT}</p>
         </div>
       ) : null}
 
@@ -846,7 +847,7 @@ export function AIChat() {
               <>
                 <p className="text-foreground/90 font-headline text-sm">IDE chat</p>
                 <p>
-                  Grok 4.1 is the primary agent here. Messages use the server <code className="text-foreground/90">GROK_API_KEY_LUMEN</code>{' '}
+                  Grok 4.1 is the default model here. Messages use the server <code className="text-foreground/90">MAIN_AI_API_KEY</code>{' '}
                   (per <code className="text-foreground/90">project-execution-rules.md</code>). Your open file, master plan, and UI Studio
                   context are included with each turn.
                 </p>
@@ -863,7 +864,7 @@ export function AIChat() {
               <>
                 <p className="text-amber-200/95 font-headline text-sm">Grok is not available on this server</p>
                 <p>
-                  The API reports no usable <code className="text-foreground/90">GROK_API_KEY_LUMEN</code>. Set it in the project
+                  The API reports no usable <code className="text-foreground/90">MAIN_AI_API_KEY</code>. Set it in the project
                   root <code className="text-foreground/90">.env</code> (key must be at least 20 characters after trimming),
                   restart <code className="text-foreground/90">npm run dev</code>, and reload the page.
                 </p>

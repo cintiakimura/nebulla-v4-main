@@ -21,7 +21,12 @@ export function upsertProjectSecret(
 ): void {
   const trimmedName = name.trim();
   const upper = trimmedName.toUpperCase();
-  if (upper === 'GROK_API_KEY_LUMEN' || upper === 'GROK_API_KEY' || upper === 'V0_API_KEY') {
+  if (
+    upper === 'MAIN_AI_API_KEY' ||
+    upper === 'GROK_API_KEY_LUMEN' ||
+    upper === 'GROK_API_KEY' ||
+    upper === 'V0_API_KEY'
+  ) {
     return;
   }
   const entries: SecretEntry[] = loadProjectSecrets(projectKey).map((x) => ({ ...x }));

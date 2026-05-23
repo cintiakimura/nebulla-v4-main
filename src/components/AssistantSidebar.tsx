@@ -22,7 +22,7 @@ import { useModelSettings } from '@/components/settings/ModelSettingsContext';
 import { ChatModelSelector } from '@/components/settings/ModelSelector';
 import { computePhaseSyncAfterResponse } from '../lib/nebulaSwarmGate';
 import { fetchJson, readResponseJson } from '../lib/apiFetch';
-import { GROK_CHAT_SETUP_HINT } from '../lib/grokKey';
+import { MAIN_AI_CHAT_SETUP_HINT, serverReportsMainAiKey } from '../lib/grokKey';
 import { withProjectBody, withProjectQuery } from '../lib/nebulaProjectApi';
 import { buildNebulaAssistantSystemPrompt } from '../lib/nebulaAssistantSystemPrompt';
 import { fetchConversationLogEntries } from '../lib/conversationLogClient';
@@ -139,8 +139,8 @@ export function AssistantSidebar({
   useEffect(() => {
     fetch(withProjectQuery('/api/config'))
       .then(async (r) => readResponseJson(r))
-      .then((cfg: { hasGrokApiKey?: boolean }) =>
-        setServerHasGrokKey(Boolean(cfg.hasGrokApiKey))
+      .then((cfg: { hasMainAiApiKey?: boolean; hasGrokApiKey?: boolean }) =>
+        setServerHasGrokKey(serverReportsMainAiKey(cfg))
       )
       .catch(() => setServerHasGrokKey(false));
   }, [activeProjectKey]);
@@ -388,8 +388,8 @@ export function AssistantSidebar({
     try {
       try {
         const r = await fetch(withProjectQuery('/api/config'));
-        const cfg = (await readResponseJson(r)) as { hasGrokApiKey?: boolean };
-        setServerHasGrokKey(r.ok && Boolean(cfg.hasGrokApiKey));
+        const cfg = (await readResponseJson(r)) as { hasMainAiApiKey?: boolean; hasGrokApiKey?: boolean };
+        setServerHasGrokKey(r.ok && serverReportsMainAiKey(cfg));
       } catch {
         setServerHasGrokKey(false);
       }
@@ -1564,7 +1564,7 @@ export function AssistantSidebar({
           role="status"
         >
           <p className="text-xs font-headline tracking-wide text-amber-100">Grok is not configured on the server</p>
-          <p className="mt-1 text-[11px] leading-relaxed text-amber-50/95">{GROK_CHAT_SETUP_HINT}</p>
+          <p className="mt-1 text-[11px] leading-relaxed text-amber-50/95">{MAIN_AI_CHAT_SETUP_HINT}</p>
           {serverHasGrokKey === null ? (
             <p className="mt-1 text-[10px] text-amber-200/70">Checking server configuration…</p>
           ) : null}
@@ -1667,7 +1667,7 @@ export function AssistantSidebar({
       <div className="shrink-0 border-t border-border bg-card/60 p-3 backdrop-blur-sm">
         {showGrokSetupHint && (
           <p className="mb-2 text-[10px] leading-snug text-amber-100/95 border border-amber-500/30 bg-amber-500/10 rounded-lg px-2 py-1.5">
-            {GROK_CHAT_SETUP_HINT}
+            {MAIN_AI_CHAT_SETUP_HINT}
           </p>
         )}
         <div

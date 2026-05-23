@@ -15,13 +15,13 @@ These names and **values are shared across every Nebula project**: copy the same
 
 | Variable | Role |
 |----------|------|
-| `GROK_API_KEY_LUMEN` | Grok 4 — primary brain (chat, orchestration). **Read from server environment only** in the current product build (no `X-Grok-Api-Key` / per-user override in the request path). |
+| `MAIN_AI_API_KEY` | Main AI brain (chat, coding, orchestration). Default model **grok-4** on xAI when using an xAI key. **Read from server environment only** (no per-user override in the request path). Legacy alias: `GROK_API_KEY_LUMEN`. |
 | `GROK_SWARM_API_KEY` | Nebula-owned swarm / sidecar Grok usage — **set only in Nebula `.env`**. |
 | `GROK_TTS_NEW_API_KEY` | Grok TTS (new API) — **set only in Nebula `.env`**. |
 | `NEBULA_SECRETS_ENCRYPTION_KEY` | Optional dedicated key for **AES-256-GCM** encryption of secrets at rest (falls back to `SESSION_SECRET` in dev). Reserved for future per-user Grok storage. |
 | `GROK_3_API_KEY` | Grok B — Master Plan writer (separate from the main brain). |
 | `PENCIL_API_KEY` | Nebula UI Studio → Pencil.dev mockups API. |
-| `V0_API_KEY` | v0 by Vercel — Nebula UI Studio first-pass UI generation. **Read from server environment only** (same pattern as `GROK_API_KEY_LUMEN`). |
+| `V0_API_KEY` | v0 by Vercel — Nebula UI Studio first-pass UI generation. **Read from server environment only** (same pattern as `MAIN_AI_API_KEY`). |
 
 Optional related keys (only if your deployment diverges from defaults): `PENCIL_API_URL`, model overrides such as `GROK_B_MODEL` — see `.env.example` and server code.
 

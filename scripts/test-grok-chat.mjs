@@ -76,8 +76,8 @@ async function main() {
     ok("GET /api/health", health.res.ok, `status ${health.res.status}`);
 
     const cfg = await jsonFetch(q("/api/config"));
-    hasKey = Boolean(cfg.body?.hasGrokApiKey);
-    ok("GET /api/config", cfg.res.ok, `hasGrokApiKey=${hasKey}`);
+    hasKey = Boolean(cfg.body?.hasMainAiApiKey ?? cfg.body?.hasGrokApiKey);
+    ok("GET /api/config", cfg.res.ok, `hasMainAiApiKey=${hasKey}`);
 
     const mp = await jsonFetch(q("/api/master-plan/read"));
     ok("GET /api/master-plan/read", mp.res.ok || mp.res.status === 404, `status ${mp.res.status}`);
@@ -191,7 +191,7 @@ async function main() {
       (ui.res.ok || ui.res.status === 404);
 
     if (!hasKey && chat.res.status === 401) {
-      console.log("Note: Server has no GROK_API_KEY_LUMEN (≥20 chars) — 401 on Grok POSTs is expected.\n");
+      console.log("Note: Server has no MAIN_AI_API_KEY (≥20 chars) — 401 on main AI POSTs is expected.\n");
     }
     if (hasKey && chat.res.status === 404 && String(chat.body?.error || "").includes("model")) {
       console.log(

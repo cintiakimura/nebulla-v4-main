@@ -56,7 +56,7 @@ export function TopBar({
     }
     if (!hasServerKey) {
       swarm.addActivity(
-        'Inspect requires GROK_SWARM_API_KEY (20+ characters) in the server .env — normal IDE chat uses GROK_API_KEY_LUMEN only.',
+        'Inspect requires GROK_SWARM_API_KEY (20+ characters) in the server .env — normal IDE chat uses MAIN_AI_API_KEY only.',
         'error',
       );
       return;
