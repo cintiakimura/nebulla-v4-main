@@ -2,7 +2,12 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Bot, Hand, Mic, Paperclip, Rocket, Send, User } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { fetchSessionUser } from '../../lib/nebulaCloud';
-import { MAIN_AI_CHAT_SETUP_HINT, serverReportsMainAiKey } from '../../lib/grokKey';
+import {
+  FREE_TIER_MONTHLY_LIMIT_MESSAGE,
+  isMonthlyUsageLimitError,
+  MAIN_AI_CHAT_SETUP_HINT,
+  serverReportsMainAiKey,
+} from '../../lib/grokKey';
 import { readResponseJson } from '../../lib/apiFetch';
 import { getBrowserProjectName, withProjectQuery } from '../../lib/nebulaProjectApi';
 import { sendIdeAssistantGrokTurn } from '../../lib/ideAssistantGrokChat';
@@ -555,6 +560,7 @@ export function AIChat() {
       const msg = e instanceof Error ? e.message : String(e);
       const isKeyHelp =
         msg.includes('Grok API key') ||
+        msg.includes('Main AI') ||
         msg.includes('MAIN_AI_API_KEY') ||
         msg.includes('GROK_API_KEY_LUMEN') ||
         msg.includes('GROK_API_KEY') ||
@@ -562,14 +568,16 @@ export function AIChat() {
         msg.includes('Please add your Grok') ||
         msg.includes('401') ||
         msg.includes('rejected this API key');
-      setSendError(isKeyHelp ? null : msg);
+      const isUsageLimit = isMonthlyUsageLimitError(msg);
+      setSendError(isKeyHelp || isUsageLimit ? null : msg);
       setMessages((p) => {
+        const displayMsg = isUsageLimit ? FREE_TIER_MONTHLY_LIMIT_MESSAGE : msg;
         const next = [
           ...p,
           {
             id: `e-${Date.now()}`,
             role: 'assistant' as const,
-            content: isKeyHelp ? msg.replace(/\n\n+/g, '\n\n') : `Something went wrong: ${msg}`,
+            content: isKeyHelp ? displayMsg.replace(/\n\n+/g, '\n\n') : `Something went wrong: ${displayMsg}`,
             timestamp: new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }),
           },
         ];

@@ -11,3 +11,16 @@ export function serverReportsMainAiKey(cfg: {
 }): boolean {
   return Boolean(cfg.hasMainAiApiKey ?? cfg.hasGrokApiKey);
 }
+
+/** Matches server `FREE_TIER_MONTHLY_LIMIT_MESSAGE` (Nebula billing, not xAI). */
+export const FREE_TIER_MONTHLY_LIMIT_MESSAGE =
+  "You've reached your monthly AI usage limit on the Free plan. Upgrade to Pro for unlimited access.";
+
+export function isMonthlyUsageLimitError(message: string): boolean {
+  const m = message.toLowerCase();
+  return (
+    m.includes('monthly') && (m.includes('limit') || m.includes('usage')) ||
+    m.includes('token_limit_exceeded') ||
+    m.includes('upgrade to pro')
+  );
+}

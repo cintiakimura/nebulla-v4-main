@@ -19,6 +19,14 @@ export const NEBULA_GROK_KEY_SETUP_HINT = MAIN_AI_KEY_SETUP_HINT;
 /** TEMPORARY: quota fallback for `/api/grok/chat` — see `lib/nebulaClaudeFallback.ts`. */
 export { tryClaudeQuotaFallback, isGrokQuotaLimitError } from "./nebulaClaudeFallback";
 
+export {
+  detectMainAiProvider,
+  mainAiProviderLabel,
+  resolveMainAiChatModel,
+  FREE_TIER_MONTHLY_LIMIT_MESSAGE,
+  type MainAiProvider,
+} from "./nebulaMainAiProvider";
+
 const MIN_KEY_LEN = 20;
 
 export type MainGrokKeySource = "env";

@@ -79,12 +79,13 @@ function toAnthropicPayload(messages: OpenAiStyleChatMessage[]): {
 
 export async function callClaudeChatCompletion(
   messages: OpenAiStyleChatMessage[],
-  apiKey: string
+  apiKey: string,
+  model: string = CLAUDE_FALLBACK_MODEL
 ): Promise<{ ok: true; content: string } | { ok: false; status: number; error: string }> {
   const { system, messages: anthropicMessages } = toAnthropicPayload(messages);
 
   const body: Record<string, unknown> = {
-    model: CLAUDE_FALLBACK_MODEL,
+    model,
     max_tokens: 8192,
     messages: anthropicMessages,
   };

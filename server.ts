@@ -36,7 +36,11 @@ import {
   MAIN_AI_KEY_SETUP_HINT,
   readMainAiApiKeyFromEnv,
   tryClaudeQuotaFallback,
+  detectMainAiProvider,
+  resolveMainAiChatModel,
+  FREE_TIER_MONTHLY_LIMIT_MESSAGE,
 } from "./lib/nebulaMainGrokResolver";
+import { callClaudeChatCompletion } from "./lib/nebulaClaudeFallback";
 import {
   isAllowedV0WriteRel,
   pickPrimaryUiFile,
@@ -326,6 +330,8 @@ async function startServer() {
 
   app.get("/api/config", (req, res) => {
     const grok = readMainAiApiKeyFromEnv();
+    const mainAiProvider = grok.length >= 20 ? detectMainAiProvider(grok) : "unknown";
+    const mainAiChatModel = grok.length >= 20 ? resolveMainAiChatModel(mainAiProvider) : undefined;
     const grokSwarm = process.env.GROK_SWARM_API_KEY?.trim() ?? "";
     const tts = process.env.GROK_TTS_NEW_API_KEY?.trim() ?? "";
     const writer = process.env.GROK_3_API_KEY?.trim() ?? "";
@@ -341,6 +347,8 @@ async function startServer() {
       builderPublicKey: process.env.BUILDER_PUBLIC_KEY,
       hasMainAiApiKey: grok.length >= 20,
       hasGrokApiKey: grok.length >= 20,
+      mainAiProvider,
+      mainAiChatModel,
       hasGrokSwarmApiKey: grokSwarm.length >= 20,
       mainAiKeyHint: MAIN_AI_KEY_SETUP_HINT,
       grokKeyHint: MAIN_AI_KEY_SETUP_HINT,
@@ -2447,6 +2455,7 @@ ${workflowContext}`;
       });
     }
     const apiKey = keyRes.apiKey;
+    const mainAiProvider = detectMainAiProvider(apiKey);
     const convUserId =
       typeof userId === "string" && userId.trim() ? userId.trim() : "anonymous";
     const convProject =
@@ -2454,12 +2463,8 @@ ${workflowContext}`;
     const ppChat = projectPathsFor(req);
     const convScopeChat = { userId: convUserId, projectKey: ppChat.projectKey, projectLabel: convProject };
 
-    /**
-     * Main `/api/grok/chat` brain: **always** grok-4 on `MAIN_AI_API_KEY` (normal chat + coding handoff).
-     * Billing tier must not change the xAI model id (IDE + Assistant normal chat).
-     * Optional operator override: `GROK_CHAT_MODEL_GROK41`.
-     */
-    const resolvedModel = process.env.GROK_CHAT_MODEL_GROK41?.trim() || "grok-4";
+    /** Default chat model for detected provider; override with MAIN_AI_CHAT_MODEL. */
+    const resolvedModel = resolveMainAiChatModel(mainAiProvider);
 
     let messagesForApi: { role: string; content?: string }[] = Array.isArray(messages) ? messages : [];
 
@@ -2517,16 +2522,52 @@ ${answer.slice(0, 8000)}`;
       await checkAndEnforceLimit(convUserId);
     } catch (limitErr: unknown) {
       if (limitErr instanceof TokenLimitExceededError) {
-        if (await respondWithClaudeQuotaFallback(messagesForApi, convScopeChat, res)) {
+        if (mainAiProvider === "xai" && (await respondWithClaudeQuotaFallback(messagesForApi, convScopeChat, res))) {
           return;
         }
         return res.status(402).json({
-          error:
-            "You've reached your monthly limit. Upgrade to Pro for unlimited Grok 4.",
+          error: FREE_TIER_MONTHLY_LIMIT_MESSAGE,
           code: limitErr.code,
         });
       }
       console.warn("[grok/chat] Unexpected limit check error (continuing):", limitErr);
+    }
+
+    if (mainAiProvider === "anthropic") {
+      const claudeResult = await callClaudeChatCompletion(messagesForApi, apiKey, resolvedModel);
+      if (claudeResult.ok === false) {
+        console.error(`[main-ai/chat] Anthropic error (${claudeResult.status}):`, claudeResult.error);
+        return res.status(claudeResult.status >= 400 && claudeResult.status < 600 ? claudeResult.status : 502).json({
+          error: claudeResult.error,
+          provider: "anthropic",
+        });
+      }
+      const responseText = claudeResult.content;
+      const cleanText = stripAssistantTagsForMemory(responseText);
+      try {
+        const lastUser = [...messagesForApi].reverse().find((m) => m.role === "user");
+        if (lastUser && typeof lastUser.content === "string" && lastUser.content.length > 0) {
+          appendConversationTurn(convScopeChat, "user", lastUser.content);
+        }
+        if (cleanText) {
+          appendConversationTurn(convScopeChat, "assistant", cleanText);
+        }
+      } catch (logErr) {
+        console.error("Conversation memory append failed (Anthropic):", logErr);
+      }
+      return res.json({
+        choices: [{ message: { content: responseText } }],
+        mainAiProvider: "anthropic",
+        mainAiModel: resolvedModel,
+      });
+    }
+
+    if (mainAiProvider === "openai") {
+      return res.status(501).json({
+        error:
+          "OpenAI keys in MAIN_AI_API_KEY are not wired yet. Use an xAI (xai-…) or Anthropic (sk-ant-…) key, or set CLAUDE_API_KEY for Grok quota fallback.",
+        provider: "openai",
+      });
     }
 
     try {
@@ -2545,7 +2586,7 @@ ${answer.slice(0, 8000)}`;
       if (!response.ok) {
         const errorText = await response.text();
         console.error(`GROK API error (${response.status}):`, errorText.slice(0, 500));
-        if (isGrokQuotaLimitError(response.status, errorText)) {
+        if (mainAiProvider === "xai" && isGrokQuotaLimitError(response.status, errorText)) {
           if (await respondWithClaudeQuotaFallback(messagesForApi, convScopeChat, res)) {
             return;
           }
@@ -2568,8 +2609,9 @@ ${answer.slice(0, 8000)}`;
           ...parsed,
           error:
             response.status === 401
-              ? `Grok rejected this API key (401). ${upstreamMsg}`
+              ? `Main AI provider rejected this API key (401). ${upstreamMsg}`
               : upstreamMsg,
+          provider: mainAiProvider,
           ...(hint ? { hint } : {}),
         });
       }

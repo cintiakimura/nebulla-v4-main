@@ -5,7 +5,7 @@ import { ArrowUp, ChevronDown, Hand, Mic, Paperclip, Rocket } from 'lucide-react
 const ONBOARDING_DONE_KEY = 'nebulla_onboarding_autopilot_done';
 
 const MONTHLY_LIMIT_MESSAGE =
-  "You've reached your monthly limit. Upgrade to Pro for unlimited Grok 4.";
+  "You've reached your monthly AI usage limit on the Free plan. Upgrade to Pro for unlimited access.";
 
 function readOnboardingAutopilotDone(): boolean {
   try {
