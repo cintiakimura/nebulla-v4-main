@@ -1,0 +1,320 @@
+import { useCallback, useEffect, useState } from 'react';
+import { CheckCircle2, FolderOpen, Github, Loader2, Plus } from 'lucide-react';
+import { Logo } from '@/components/Logo';
+import {
+  bindGuestWorkspace,
+  createAndSelectCloudProject,
+  ensureCloudWorkspaceReady,
+  fetchSessionUser,
+  listCloudProjects,
+  selectCloudProjectByName,
+  type CloudProjectRow,
+  type NebulaSessionUser,
+  type WorkspaceReadyResult,
+} from '../../lib/nebulaCloud';
+import { fetchNebulaPublicConfig, type NebulaPublicConfig } from '../../lib/nebulaPublicConfig';
+import { getBrowserProjectKey, getBrowserProjectName } from '../../lib/nebulaProjectApi';
+
+export type WorkspaceContext = {
+  projectName: string;
+  projectKey: string;
+  user: NebulaSessionUser | null;
+  mode: 'cloud' | 'guest';
+};
+
+export function WorkspaceSetupGate({ onReady }: { onReady: (ctx: WorkspaceContext) => void }) {
+  const [phase, setPhase] = useState<WorkspaceReadyResult>({ status: 'loading' });
+  const [config, setConfig] = useState<NebulaPublicConfig>({});
+  const [projects, setProjects] = useState<CloudProjectRow[]>([]);
+  const [user, setUser] = useState<NebulaSessionUser | null>(null);
+  const [newProjectName, setNewProjectName] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [stayLoggedIn, setStayLoggedIn] = useState(true);
+
+  const finishReady = useCallback(
+    (ctx: WorkspaceContext) => {
+      onReady(ctx);
+    },
+    [onReady],
+  );
+
+  const runEnsure = useCallback(async () => {
+    setError(null);
+    setBusy(true);
+    try {
+      const cfg = await fetchNebulaPublicConfig();
+      setConfig(cfg);
+      const result = await ensureCloudWorkspaceReady();
+      setPhase(result);
+
+      if (result.status === 'ready') {
+        finishReady({
+          projectName: result.projectName,
+          projectKey: result.projectKey,
+          user: result.user,
+          mode: result.mode,
+        });
+        return;
+      }
+      if (result.status === 'needs_project') {
+        setUser(result.user);
+        setProjects(result.projects);
+      }
+      if (result.status === 'needs_login') {
+        setConfig(result.config);
+      }
+      if (result.status === 'no_database') {
+        setConfig(result.config);
+      }
+      if (result.status === 'error') {
+        setError(result.message);
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Workspace setup failed');
+      setPhase({ status: 'error', message: 'Workspace setup failed' });
+    } finally {
+      setBusy(false);
+    }
+  }, [finishReady]);
+
+  useEffect(() => {
+    void runEnsure();
+  }, [runEnsure]);
+
+  useEffect(() => {
+    const onOAuth = (ev: MessageEvent) => {
+      if (ev.data?.type === 'OAUTH_AUTH_SUCCESS') {
+        void runEnsure();
+      }
+    };
+    window.addEventListener('message', onOAuth);
+    return () => window.removeEventListener('message', onOAuth);
+  }, [runEnsure]);
+
+  const openGitHubOAuth = () => {
+    const q = stayLoggedIn ? 'remember=1' : 'remember=0';
+    window.open(`/api/auth/github?${q}`, 'nebulla_github_oauth', 'width=520,height=720,scrollbars=yes');
+  };
+
+  const handleSelectProject = async (name: string) => {
+    setBusy(true);
+    setError(null);
+    try {
+      const ok = await selectCloudProjectByName(name);
+      if (!ok) {
+        setError('Could not switch to that project.');
+        return;
+      }
+      const u = await fetchSessionUser();
+      finishReady({
+        projectName: getBrowserProjectName().trim() || name,
+        projectKey: getBrowserProjectKey(),
+        user: u,
+        mode: 'cloud',
+      });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleCreateProject = async () => {
+    const name = newProjectName.trim() || 'Untitled Project';
+    setBusy(true);
+    setError(null);
+    try {
+      const ok = await createAndSelectCloudProject(name);
+      if (!ok) {
+        setError('Could not create project. Are you signed in?');
+        return;
+      }
+      const again = await ensureCloudWorkspaceReady();
+      if (again.status === 'ready') {
+        finishReady({
+          projectName: again.projectName,
+          projectKey: again.projectKey,
+          user: again.user,
+          mode: 'cloud',
+        });
+      }
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleGuestContinue = () => {
+    const g = bindGuestWorkspace();
+    finishReady({
+      projectName: g.projectName,
+      projectKey: g.projectKey,
+      user: null,
+      mode: 'guest',
+    });
+  };
+
+  const loadProjectsForPicker = async () => {
+    const u = await fetchSessionUser();
+    if (!u) return;
+    setUser(u);
+    setProjects(await listCloudProjects());
+    setPhase({ status: 'needs_project', config, user: u, projects: await listCloudProjects() });
+  };
+
+  if (phase.status === 'ready') {
+    return null;
+  }
+
+  const githubOk = Boolean(config.githubOAuthReady);
+  const cloudOk = Boolean(config.cloudStorageReady);
+
+  return (
+    <div
+      className="fixed inset-0 z-[300] flex items-center justify-center bg-[#020814]/95 p-4 backdrop-blur-sm"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Workspace setup"
+    >
+      <div className="w-full max-w-md rounded-2xl border border-white/10 bg-[#0a0e14] p-6 shadow-2xl shadow-black/50">
+        <div className="mb-6 flex items-center gap-3">
+          <Logo className="h-9 w-9 shrink-0" />
+          <div>
+            <h1 className="font-headline text-lg text-slate-50">Workspace required</h1>
+            <p className="text-xs text-slate-500">Sign in and pick a project so Grok can write files.</p>
+          </div>
+        </div>
+
+        {phase.status === 'loading' || busy ? (
+          <div className="flex items-center justify-center gap-2 py-8 text-sm text-slate-400">
+            <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+            Setting up workspace…
+          </div>
+        ) : null}
+
+        {error ? (
+          <p className="mb-4 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-100">
+            {error}
+          </p>
+        ) : null}
+
+        {phase.status === 'no_database' ? (
+          <div className="space-y-3 text-sm text-slate-400">
+            <p>
+              Cloud projects need <code className="text-cyan-300/90">DATABASE_URL</code> on the server. Without it,
+              GitHub login and file storage cannot run.
+            </p>
+            <button
+              type="button"
+              onClick={handleGuestContinue}
+              className="w-full rounded-xl border border-white/15 py-2.5 text-sm text-slate-200 hover:bg-white/5"
+            >
+              Continue with local guest workspace
+            </button>
+          </div>
+        ) : null}
+
+        {phase.status === 'needs_login' ? (
+          <div className="space-y-4">
+            <p className="text-sm text-slate-400 leading-relaxed">
+              Sign in with GitHub to get a cloud project folder. Grok sends{' '}
+              <code className="text-slate-300">projectName</code> and{' '}
+              <code className="text-slate-300">projectKey</code> on every coding request.
+            </p>
+            <button
+              type="button"
+              onClick={openGitHubOAuth}
+              disabled={!cloudOk || !githubOk}
+              className="flex w-full items-center justify-center gap-2 rounded-xl bg-white py-3 text-[15px] font-medium text-[#0d1117] disabled:opacity-45"
+            >
+              <Github className="h-5 w-5" aria-hidden />
+              Login with GitHub
+            </button>
+            {!githubOk && cloudOk ? (
+              <p className="text-xs text-amber-400/90">
+                Set <code className="text-slate-400">GITHUB_CLIENT_ID</code> and{' '}
+                <code className="text-slate-400">GITHUB_CLIENT_SECRET</code> on the server.
+              </p>
+            ) : null}
+            <label className="flex items-center gap-2 text-xs text-slate-500">
+              <input
+                type="checkbox"
+                checked={stayLoggedIn}
+                onChange={(e) => setStayLoggedIn(e.target.checked)}
+                className="rounded border-white/20"
+              />
+              Stay signed in
+            </label>
+            <button
+              type="button"
+              onClick={handleGuestContinue}
+              className="w-full text-xs text-slate-500 underline-offset-2 hover:text-slate-300 hover:underline"
+            >
+              Continue without account (local only)
+            </button>
+          </div>
+        ) : null}
+
+        {phase.status === 'needs_project' ? (
+          <div className="space-y-4">
+            {user ? (
+              <p className="text-sm text-emerald-400/90 flex items-center gap-2">
+                <CheckCircle2 className="h-4 w-4 shrink-0" aria-hidden />
+                Signed in as {user.displayName || user.email || 'user'}
+              </p>
+            ) : null}
+            <p className="text-sm text-slate-400">Choose an active project for this IDE session:</p>
+            <ul className="max-h-40 space-y-1 overflow-y-auto rounded-lg border border-white/10 bg-black/30 p-1">
+              {(projects.length > 0 ? projects : phase.projects).map(
+                (p) => (
+                  <li key={p.name}>
+                    <button
+                      type="button"
+                      onClick={() => void handleSelectProject(p.name)}
+                      className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm text-slate-200 hover:bg-white/10"
+                    >
+                      <FolderOpen className="h-4 w-4 shrink-0 text-cyan-400/80" aria-hidden />
+                      <span className="truncate">{p.name}</span>
+                    </button>
+                  </li>
+                ),
+              )}
+            </ul>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={newProjectName}
+                onChange={(e) => setNewProjectName(e.target.value)}
+                placeholder="New project name"
+                className="min-w-0 flex-1 rounded-lg border border-white/10 bg-black/40 px-3 py-2 text-sm text-slate-100"
+              />
+              <button
+                type="button"
+                onClick={() => void handleCreateProject()}
+                className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-cyan-500/40 bg-cyan-500/15 px-3 py-2 text-sm text-cyan-100"
+              >
+                <Plus className="h-4 w-4" aria-hidden />
+                Create
+              </button>
+            </div>
+            <button
+              type="button"
+              onClick={() => void loadProjectsForPicker()}
+              className="text-xs text-slate-500 hover:text-slate-300"
+            >
+              Refresh project list
+            </button>
+          </div>
+        ) : null}
+
+        {phase.status === 'error' ? (
+          <button
+            type="button"
+            onClick={() => void runEnsure()}
+            className="mt-2 w-full rounded-xl border border-white/15 py-2.5 text-sm text-slate-200"
+          >
+            Retry
+          </button>
+        ) : null}
+      </div>
+    </div>
+  );
+}

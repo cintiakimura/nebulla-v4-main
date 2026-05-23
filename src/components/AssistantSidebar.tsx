@@ -754,8 +754,8 @@ export function AssistantSidebar({
 
       // VOICE (Grok A / TTS): speak after a short delay; skip when this turn is coding-only (Grok 4 must not narrate while shipping code)
       const isCodingTurn = /<\s*START_CODING\s*>|\bSTART_CODING\b/.test(masterPlanSource);
-      if (isCodingTurn && (window as any).openCodingMode) {
-        setChatStatus('Grok switched to coding mode. Opening project rules file…');
+      if (isCodingTurn) {
+        setChatStatus('Grok switched to coding mode — running Go Code and applying files…');
         await runGoCodePipeline(masterPlanSource, textToSend);
       }
 

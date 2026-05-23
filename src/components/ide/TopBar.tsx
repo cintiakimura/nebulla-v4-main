@@ -17,9 +17,15 @@ const models: { id: IdeChatModelId; name: string; badge: string | null }[] = [
 ];
 
 export function TopBar({
+  workspaceLabel,
+  onSwitchWorkspace,
   onOpenAccount,
   onOpenSourceControl,
 }: {
+  /** Active cloud/local project name from workspace gate. */
+  workspaceLabel?: string;
+  /** Re-open project picker (sign-in / switch project). */
+  onSwitchWorkspace?: () => void;
   /** Opens My services (API keys, GitHub, etc.). */
   onOpenAccount?: () => void;
   /** Opens Source Control (git status & workspace files). */
@@ -32,7 +38,7 @@ export function TopBar({
   const [projectCopied, setProjectCopied] = useState(false);
   const modelWrapRef = useRef<HTMLDivElement>(null);
 
-  const projectName = getBrowserProjectName().trim() || 'Untitled project';
+  const projectName = workspaceLabel?.trim() || getBrowserProjectName().trim() || 'Untitled project';
 
   const closeModelMenu = useCallback(() => setIsModelOpen(false), []);
   useClickOutside(modelWrapRef, closeModelMenu, isModelOpen);
@@ -126,12 +132,20 @@ export function TopBar({
 
           <button
             type="button"
-            onClick={() => void copyProjectName()}
-            title={projectCopied ? 'Copied!' : 'Active project — click to copy name'}
-            className="btn-secondary-surface type-title-sm hidden max-w-[200px] items-center gap-1.5 truncate rounded-md px-2 py-1 text-muted-foreground sm:flex"
+            onClick={() => (onSwitchWorkspace ? onSwitchWorkspace() : void copyProjectName())}
+            title={
+              onSwitchWorkspace
+                ? 'Switch or create project'
+                : projectCopied
+                  ? 'Copied!'
+                  : 'Active project — click to copy name'
+            }
+            className="btn-secondary-surface type-title-sm hidden max-w-[220px] items-center gap-1.5 truncate rounded-md px-2 py-1 text-muted-foreground sm:flex"
           >
             <span className="truncate">{projectName}</span>
-            {projectCopied ? (
+            {onSwitchWorkspace ? (
+              <span className="shrink-0 text-[10px] text-primary/80">Switch</span>
+            ) : projectCopied ? (
               <span className="shrink-0 text-[10px] text-primary">Copied</span>
             ) : (
               <Copy className="h-3 w-3 shrink-0 opacity-50" aria-hidden />

@@ -14,9 +14,17 @@ import { ExplorerPanel } from '@/components/ExplorerPanel';
 import { IdeDashboardEmbed } from '@/components/ide/IdeDashboardEmbed';
 import { IdeWorkspaceProvider, useIdeWorkspace } from '@/components/ide/IdeWorkspaceContext';
 import { MindMapIdeRoute } from '@/components/ide/MindMapIdeRoute';
-import { fetchSessionUser, type NebulaSessionUser } from '../../lib/nebulaCloud';
+import {
+  ensureCloudWorkspaceReady,
+  fetchSessionUser,
+  type NebulaSessionUser,
+} from '../../lib/nebulaCloud';
 import { fetchNebulaPublicConfig, type NebulaPublicConfig } from '../../lib/nebulaPublicConfig';
 import { getBrowserProjectKey, getBrowserProjectName } from '../../lib/nebulaProjectApi';
+import {
+  WorkspaceSetupGate,
+  type WorkspaceContext,
+} from '@/components/ide/WorkspaceSetupGate';
 
 const EXPLORER_MIN = 160;
 const EXPLORER_MAX = 480;
@@ -30,10 +38,10 @@ const TERMINAL_MIN = 80;
 const TERMINAL_MAX = 560;
 const TERMINAL_DEFAULT = 192;
 
-function IdeExplorerSidebar() {
+function IdeExplorerSidebar({ projectKey }: { projectKey: string }) {
   const { openFile } = useIdeWorkspace();
   return (
-    <ExplorerPanel projectKey={getBrowserProjectKey()} onOpenFile={(path) => void openFile(path)} />
+    <ExplorerPanel projectKey={projectKey} onOpenFile={(path) => void openFile(path)} />
   );
 }
 
@@ -211,6 +219,8 @@ export function NebullaIDE() {
   const [myServicesOpen, setMyServicesOpen] = useState(false);
   const [myServicesUser, setMyServicesUser] = useState<NebulaSessionUser | null>(null);
   const [myServicesConfig, setMyServicesConfig] = useState<NebulaPublicConfig>({});
+  const [workspaceCtx, setWorkspaceCtx] = useState<WorkspaceContext | null>(null);
+  const [workspaceProjectKey, setWorkspaceProjectKey] = useState(() => getBrowserProjectKey());
 
   const refreshMyServicesContext = useCallback(async () => {
     const [cfg, u] = await Promise.all([fetchNebulaPublicConfig(), fetchSessionUser()]);
@@ -222,19 +232,45 @@ export function NebullaIDE() {
     document.title = 'Nebulla.beta — Workspace';
   }, []);
 
+  const handleWorkspaceReady = useCallback((ctx: WorkspaceContext) => {
+    setWorkspaceCtx(ctx);
+    setWorkspaceProjectKey(ctx.projectKey);
+  }, []);
+
+  useEffect(() => {
+    const onWorkspaceSync = () => setWorkspaceProjectKey(getBrowserProjectKey());
+    window.addEventListener('nebula-workspace-context-synced', onWorkspaceSync);
+    window.addEventListener('nebula-files-applied', onWorkspaceSync);
+    return () => {
+      window.removeEventListener('nebula-workspace-context-synced', onWorkspaceSync);
+      window.removeEventListener('nebula-files-applied', onWorkspaceSync);
+    };
+  }, []);
+
   useEffect(() => {
     if (!myServicesOpen) return;
     void refreshMyServicesContext();
   }, [myServicesOpen, refreshMyServicesContext]);
 
   useEffect(() => {
-    if (!myServicesOpen) return;
     const onMsg = (ev: MessageEvent) => {
-      if (ev.data?.type === 'OAUTH_AUTH_SUCCESS') void refreshMyServicesContext();
+      if (ev.data?.type !== 'OAUTH_AUTH_SUCCESS') return;
+      void (async () => {
+        const ready = await ensureCloudWorkspaceReady();
+        if (ready.status === 'ready') {
+          handleWorkspaceReady({
+            projectName: ready.projectName,
+            projectKey: ready.projectKey,
+            user: ready.user,
+            mode: ready.mode,
+          });
+        }
+        void refreshMyServicesContext();
+      })();
     };
     window.addEventListener('message', onMsg);
     return () => window.removeEventListener('message', onMsg);
-  }, [myServicesOpen, refreshMyServicesContext]);
+  }, [handleWorkspaceReady, refreshMyServicesContext]);
 
   useEffect(() => {
     if (navId === 'visual-ui-editor') setUiStudioTab('design');
@@ -252,6 +288,7 @@ export function NebullaIDE() {
   return (
     <IdeWorkspaceProvider>
       <div className="flex h-screen flex-col overflow-hidden bg-background text-foreground">
+      {!workspaceCtx ? <WorkspaceSetupGate onReady={handleWorkspaceReady} /> : null}
       {myServicesOpen ? (
         <div
           className="fixed inset-0 z-[200] flex flex-col overflow-hidden"
@@ -268,6 +305,12 @@ export function NebullaIDE() {
       ) : null}
 
       <TopBar
+        workspaceLabel={
+          workspaceCtx
+            ? `${workspaceCtx.projectName}${workspaceCtx.mode === 'guest' ? ' (local)' : ''}`
+            : undefined
+        }
+        onSwitchWorkspace={() => setWorkspaceCtx(null)}
         onOpenAccount={() => setMyServicesOpen(true)}
         onOpenSourceControl={() => setNavId('source-control')}
       />
@@ -328,7 +371,7 @@ export function NebullaIDE() {
         ) : navId === 'explorer' ? (
           <>
             <div className="surface-active tonal-seam-r hidden shrink-0 overflow-hidden md:block" style={{ width: explorer.size }}>
-              <IdeExplorerSidebar />
+              <IdeExplorerSidebar projectKey={workspaceProjectKey} />
             </div>
 
             <ResizeHandle onMouseDown={explorer.onMouseDown} orientation="horizontal" />

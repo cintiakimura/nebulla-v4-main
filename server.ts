@@ -240,27 +240,30 @@ async function startServer() {
     res.json({ status: "ok" });
   });
 
-  app.get("/api/storage/status", (_req, res) => {
+  app.get("/api/storage/status", async (_req, res) => {
     const missing = getMissingR2EnvVars();
     if (missing.length > 0) {
       return res.json({
         configured: false,
         missing,
-        hint: `Set ${missing.join(", ")} in .env for Cloudflare R2.`,
+        hint: `Set ${missing.join(", ")} (or R2_* aliases) in .env / Render for Cloudflare R2.`,
       });
     }
-    void probeR2Bucket()
-      .then((probe) => {
-        res.json({
-          configured: true,
-          bucket: process.env.CLOUDFLARE_R2_BUCKET_NAME?.trim(),
-          reachable: probe.ok,
-          ...(probe.ok === false ? { error: probe.error } : {}),
-        });
-      })
-      .catch((e) => {
-        res.status(500).json({ error: e instanceof Error ? e.message : "R2 status check failed" });
+    const resolved = resolveR2Config();
+    const bucket = resolved.ok === true ? resolved.config.bucketName : undefined;
+    try {
+      const probe = await probeR2Bucket();
+      return res.json({
+        configured: true,
+        bucket,
+        reachable: probe.ok,
+        ...(probe.ok === false ? { error: probe.error } : {}),
       });
+    } catch (e) {
+      return res.status(500).json({
+        error: e instanceof Error ? e.message : "R2 status check failed",
+      });
+    }
   });
 
   app.post(

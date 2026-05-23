@@ -6,6 +6,11 @@ import { GROK_CHAT_SETUP_HINT } from '../../lib/grokKey';
 import { readResponseJson } from '../../lib/apiFetch';
 import { getBrowserProjectName, withProjectQuery } from '../../lib/nebulaProjectApi';
 import { sendIdeAssistantGrokTurn } from '../../lib/ideAssistantGrokChat';
+import {
+  handlePostGrokCodingTurn,
+  runGoCodeAndApply,
+} from '../../lib/nebulaGrokCodingPipeline';
+import { syncActiveCloudProjectFromSession } from '../../lib/nebulaCloud';
 import { ideContextSnippetForChat, useIdeWorkspace } from '@/components/ide/IdeWorkspaceContext';
 import { fetchConversationLogEntries } from '../../lib/conversationLogClient';
 import {
@@ -333,6 +338,7 @@ export function AIChat() {
       } catch {
         if (!cancelled) setServerHasGrokKey(false);
       }
+      if (!cancelled) await syncActiveCloudProjectFromSession();
     })();
     return () => {
       cancelled = true;
@@ -482,7 +488,7 @@ export function AIChat() {
     const userId = session?.uid?.trim() || 'anonymous';
 
     try {
-      const { assistantContent, claudeFallbackNotice } = await sendIdeAssistantGrokTurn({
+      const { assistantContent, planningPhase, claudeFallbackNotice } = await sendIdeAssistantGrokTurn({
         textToSend: text,
         history: historyForApi,
         userId,
@@ -512,6 +518,32 @@ export function AIChat() {
         messagesRef.current = next;
         return next;
       });
+
+      try {
+        const coding = await handlePostGrokCodingTurn({
+          assistantContent: raw,
+          planningPhase,
+          userId,
+          projectName,
+          userNote: text,
+        });
+        if (coding.ran && coding.statusMessage?.trim()) {
+          const codeTs = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+          const statusMsg: Message = {
+            id: `code-${Date.now()}`,
+            role: 'assistant',
+            content: coding.statusMessage.trim(),
+            timestamp: codeTs,
+          };
+          setMessages((p) => {
+            const next = [...p, statusMsg];
+            messagesRef.current = next;
+            return next;
+          });
+        }
+      } catch (codingErr) {
+        console.warn('[AIChat] coding apply:', codingErr);
+      }
 
       if (spoken) {
         void playTtsForText(spoken);
@@ -710,9 +742,65 @@ export function AIChat() {
 
   const showGrokKeyBanner = serverHasGrokKey === false;
 
-  const handleGo = () => {
-    void sendChat();
-  };
+  const handleGo = useCallback(async () => {
+    const userNote = inputRef.current.trim();
+    if (sending || micInputBlocked) return;
+
+    if (serverHasGrokKey === null) {
+      try {
+        const r = await fetch(withProjectQuery('/api/config'), { credentials: 'include' });
+        const cfg = (await readResponseJson(r)) as { hasGrokApiKey?: boolean };
+        setServerHasGrokKey(r.ok && Boolean(cfg.hasGrokApiKey));
+      } catch {
+        setServerHasGrokKey(false);
+      }
+    }
+
+    clearVoiceIdleTimer();
+    stopVoiceRecognition();
+
+    const ts = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+    const userMsg: Message = {
+      id: `go-${Date.now()}`,
+      role: 'user',
+      content: userNote ? `Go — ${userNote}` : 'Go — implement project',
+      timestamp: ts,
+    };
+    setMessages((p) => {
+      const next = [...p, userMsg];
+      messagesRef.current = next;
+      return next;
+    });
+    setInput('');
+    inputRef.current = '';
+    setSending(true);
+    setSendError(null);
+    setAccessoryHint('Grok 4 summary → Grok Code → writing files to workspace…');
+
+    const session = await fetchSessionUser();
+    const userId = session?.uid?.trim() || 'anonymous';
+    const projectName = getBrowserProjectName().trim() || 'Untitled project';
+
+    try {
+      const go = await runGoCodeAndApply({ userId, projectName, userNote });
+      const statusMsg: Message = {
+        id: `go-${Date.now()}-status`,
+        role: 'assistant',
+        content: go.statusMessage,
+        timestamp: new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }),
+      };
+      setMessages((p) => {
+        const next = [...p, statusMsg];
+        messagesRef.current = next;
+        return next;
+      });
+    } catch (e) {
+      setSendError(e instanceof Error ? e.message : 'Go failed');
+    } finally {
+      setSending(false);
+      setAccessoryHint(null);
+    }
+  }, [micInputBlocked, sending, serverHasGrokKey, stopVoiceRecognition]);
 
   return (
     <div className="surface-active tonal-seam-l flex h-full flex-col">

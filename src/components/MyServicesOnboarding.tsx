@@ -1,7 +1,13 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { CheckCircle2, ExternalLink, Github, KeyRound, Loader2, Sparkles, X } from 'lucide-react';
 import { Logo } from './Logo';
-import type { NebulaSessionUser } from '../lib/nebulaCloud';
+import {
+  ensureCloudWorkspaceReady,
+  fetchSessionUser,
+  listCloudProjects,
+  type NebulaSessionUser,
+} from '../lib/nebulaCloud';
+import { getBrowserProjectName } from '../lib/nebulaProjectApi';
 import type { NebulaPublicConfig } from '../lib/nebulaPublicConfig';
 import { formatGithubConnectionStatus } from '../lib/githubDisplay';
 import { getBrowserProjectKey } from '../lib/nebulaProjectApi';
@@ -41,6 +47,35 @@ export function MyServicesOnboarding({
   const [v0Input, setV0Input] = useState('');
   const [v0Busy, setV0Busy] = useState(false);
   const [v0Msg, setV0Msg] = useState<string | null>(null);
+  const [activeCloudProject, setActiveCloudProject] = useState<string | null>(null);
+
+  useEffect(() => {
+    void (async () => {
+      const u = await fetchSessionUser();
+      if (!u) {
+        setActiveCloudProject(null);
+        return;
+      }
+      await ensureCloudWorkspaceReady();
+      setActiveCloudProject(getBrowserProjectName().trim() || null);
+      const rows = await listCloudProjects();
+      if (rows.length > 0 && !getBrowserProjectName().trim()) {
+        setActiveCloudProject(rows[0].name);
+      }
+    })();
+  }, [user?.uid]);
+
+  useEffect(() => {
+    const onOAuth = (ev: MessageEvent) => {
+      if (ev.data?.type !== 'OAUTH_AUTH_SUCCESS') return;
+      void (async () => {
+        await ensureCloudWorkspaceReady();
+        setActiveCloudProject(getBrowserProjectName().trim() || null);
+      })();
+    };
+    window.addEventListener('message', onOAuth);
+    return () => window.removeEventListener('message', onOAuth);
+  }, []);
 
   const openGitHubOAuth = useCallback(() => {
     const q = stayLoggedIn ? 'remember=1' : 'remember=0';
@@ -172,6 +207,22 @@ export function MyServicesOnboarding({
               </div>
             )}
           </section>
+
+          {githubConnected && cloudOk ? (
+            <section className="rounded-2xl border border-white/10 bg-[#121a25]/75 p-6 space-y-2">
+              <h2 className="font-headline text-base text-slate-100">Active workspace</h2>
+              <p className="text-sm text-slate-400">
+                Grok coding uses project{' '}
+                <code className="text-cyan-300/90">{activeCloudProject || '—'}</code> on every API call (
+                <code className="text-slate-400">projectName</code> + <code className="text-slate-400">projectKey</code>
+                ).
+              </p>
+              <p className="text-xs text-slate-500">
+                To create or switch projects, close this panel and use the workspace setup dialog (click the project name
+                in the top bar).
+              </p>
+            </section>
+          ) : null}
 
           {/* 2. Grok — server only; no user input */}
           <section className="rounded-2xl border border-white/10 bg-[#121a25]/75 backdrop-blur-sm shadow-xl shadow-black/30 p-6 md:p-8 space-y-4">

@@ -18,7 +18,34 @@ const REQUIRED_ENV = [
   "CLOUDFLARE_R2_BUCKET_NAME",
 ] as const;
 
+/** Legacy / short names still accepted (e.g. R2_ACCOUNT_ID in existing .env files). */
+const R2_ENV_ALIASES: Record<R2EnvVar, readonly string[]> = {
+  CLOUDFLARE_ACCOUNT_ID: ["R2_ACCOUNT_ID"],
+  CLOUDFLARE_ACCESS_KEY_ID: ["R2_ACCESS_KEY_ID"],
+  CLOUDFLARE_SECRET_ACCESS_KEY: ["R2_SECRET_ACCESS_KEY"],
+  CLOUDFLARE_R2_BUCKET_NAME: ["R2_BUCKET_NAME"],
+};
+
+const R2_PUBLIC_URL_KEYS = ["CLOUDFLARE_R2_PUBLIC_URL", "R2_PUBLIC_URL"] as const;
+
 export type R2EnvVar = (typeof REQUIRED_ENV)[number];
+
+function readR2EnvValue(canonical: R2EnvVar): string {
+  const keys = [canonical, ...(R2_ENV_ALIASES[canonical] ?? [])];
+  for (const key of keys) {
+    const v = process.env[key]?.trim();
+    if (v) return v;
+  }
+  return "";
+}
+
+function readR2PublicUrl(): string {
+  for (const key of R2_PUBLIC_URL_KEYS) {
+    const v = process.env[key]?.trim();
+    if (v) return v.replace(/\/+$/, "");
+  }
+  return "";
+}
 
 export type R2Config = {
   accountId: string;
@@ -43,7 +70,7 @@ export class R2NotConfiguredError extends Error {
 
   constructor(missing: R2EnvVar[]) {
     const hint =
-      "Cloudflare R2 is not configured. Set CLOUDFLARE_ACCOUNT_ID, CLOUDFLARE_ACCESS_KEY_ID, CLOUDFLARE_SECRET_ACCESS_KEY, and CLOUDFLARE_R2_BUCKET_NAME in .env (optional: CLOUDFLARE_R2_PUBLIC_URL).";
+      "Cloudflare R2 is not configured. Set CLOUDFLARE_ACCOUNT_ID, CLOUDFLARE_ACCESS_KEY_ID, CLOUDFLARE_SECRET_ACCESS_KEY, and CLOUDFLARE_R2_BUCKET_NAME (or aliases R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET_NAME). Optional public URL: CLOUDFLARE_R2_PUBLIC_URL or R2_PUBLIC_URL.";
     super(hint);
     this.name = "R2NotConfiguredError";
     this.missing = missing;
@@ -57,8 +84,7 @@ let cachedConfig: R2Config | null = null;
 export function getMissingR2EnvVars(): R2EnvVar[] {
   const missing: R2EnvVar[] = [];
   for (const key of REQUIRED_ENV) {
-    const v = process.env[key]?.trim() ?? "";
-    if (!v) missing.push(key);
+    if (!readR2EnvValue(key)) missing.push(key);
   }
   return missing;
 }
@@ -76,15 +102,15 @@ export function resolveR2Config(): R2ResolveResult {
       message: `Missing R2 environment variable(s): ${missing.join(", ")}`,
     };
   }
-  const publicRaw = process.env.CLOUDFLARE_R2_PUBLIC_URL?.trim();
+  const publicUrl = readR2PublicUrl() || undefined;
   return {
     ok: true,
     config: {
-      accountId: process.env.CLOUDFLARE_ACCOUNT_ID!.trim(),
-      accessKeyId: process.env.CLOUDFLARE_ACCESS_KEY_ID!.trim(),
-      secretAccessKey: process.env.CLOUDFLARE_SECRET_ACCESS_KEY!.trim(),
-      bucketName: process.env.CLOUDFLARE_R2_BUCKET_NAME!.trim(),
-      publicUrl: publicRaw ? publicRaw.replace(/\/+$/, "") : undefined,
+      accountId: readR2EnvValue("CLOUDFLARE_ACCOUNT_ID"),
+      accessKeyId: readR2EnvValue("CLOUDFLARE_ACCESS_KEY_ID"),
+      secretAccessKey: readR2EnvValue("CLOUDFLARE_SECRET_ACCESS_KEY"),
+      bucketName: readR2EnvValue("CLOUDFLARE_R2_BUCKET_NAME"),
+      publicUrl,
     },
   };
 }

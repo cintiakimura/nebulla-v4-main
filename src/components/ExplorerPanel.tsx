@@ -141,6 +141,16 @@ export function ExplorerPanel({
     void load();
   }, [load]);
 
+  useEffect(() => {
+    const refresh = () => void load();
+    window.addEventListener('nebula-files-applied', refresh);
+    window.addEventListener('nebula-workspace-context-synced', refresh);
+    return () => {
+      window.removeEventListener('nebula-files-applied', refresh);
+      window.removeEventListener('nebula-workspace-context-synced', refresh);
+    };
+  }, [load]);
+
   const tree = useMemo(() => {
     const paths = (data?.nebulaFiles ?? []).map((f) => f.relativePath);
     return buildTree(paths);
