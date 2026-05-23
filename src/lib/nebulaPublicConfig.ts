@@ -7,6 +7,9 @@ export type NebulaPublicConfig = {
   nebulaUiStudioDemo?: boolean;
   hasV0ApiKey?: boolean;
   v0KeyHint?: string;
+  hasR2Storage?: boolean;
+  r2MissingEnv?: string[];
+  r2StorageHint?: string;
 };
 
 export async function fetchNebulaPublicConfig(): Promise<NebulaPublicConfig> {

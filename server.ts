@@ -68,6 +68,16 @@ import {
 import { buildSwarmHandoffParallel } from "./lib/nebulaSwarmHandoff";
 import { readNebulaSwarmState } from "./lib/nebulaSwarmState";
 import { addTokens, checkAndEnforceLimit, TokenLimitExceededError } from "./lib/token-usage";
+import multer from "multer";
+import {
+  contentTypeFromFilename,
+  getMissingR2EnvVars,
+  isR2Configured,
+  probeR2Bucket,
+  resolveR2Config,
+  uploadProjectAsset,
+  type UploadToR2Result,
+} from "./lib/nebulaR2Storage";
 
 type NebulaRequest = express.Request & { nebulaDiskKey?: string };
 
@@ -148,6 +158,50 @@ if (grokEnvProbe.length < 20) {
   );
 }
 
+const r2MissingOnBoot = getMissingR2EnvVars();
+if (r2MissingOnBoot.length > 0) {
+  console.warn(
+    `[nebula] Cloudflare R2 not configured (missing: ${r2MissingOnBoot.join(", ")}). File uploads and R2-backed assets will return 503 until set.`
+  );
+}
+
+const uploadMemory = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 25 * 1024 * 1024, files: 1 },
+});
+
+async function tryUploadBufferToR2(params: {
+  projectKey: string;
+  category: "images" | "assets" | "generated";
+  filename: string;
+  body: Buffer;
+  contentType?: string;
+}): Promise<UploadToR2Result | null> {
+  if (!isR2Configured()) return null;
+  try {
+    return await uploadProjectAsset(params);
+  } catch (err) {
+    console.warn("[r2] upload failed:", err);
+    return null;
+  }
+}
+
+async function r2FieldsForSvg(
+  projectKey: string,
+  svg: string,
+  filename: string
+): Promise<{ assetKey?: string; assetUrl?: string }> {
+  const uploaded = await tryUploadBufferToR2({
+    projectKey,
+    category: "generated",
+    filename,
+    body: Buffer.from(svg, "utf8"),
+    contentType: "image/svg+xml",
+  });
+  if (!uploaded) return {};
+  return { assetKey: uploaded.key, assetUrl: uploaded.url };
+}
+
 export const app = express();
 const PORT = Number(process.env.PORT) || 3000;
 
@@ -186,6 +240,86 @@ async function startServer() {
     res.json({ status: "ok" });
   });
 
+  app.get("/api/storage/status", (_req, res) => {
+    const missing = getMissingR2EnvVars();
+    if (missing.length > 0) {
+      return res.json({
+        configured: false,
+        missing,
+        hint: `Set ${missing.join(", ")} in .env for Cloudflare R2.`,
+      });
+    }
+    void probeR2Bucket()
+      .then((probe) => {
+        res.json({
+          configured: true,
+          bucket: process.env.CLOUDFLARE_R2_BUCKET_NAME?.trim(),
+          reachable: probe.ok,
+          ...(probe.ok === false ? { error: probe.error } : {}),
+        });
+      })
+      .catch((e) => {
+        res.status(500).json({ error: e instanceof Error ? e.message : "R2 status check failed" });
+      });
+  });
+
+  app.post(
+    "/api/storage/upload",
+    (req, res, next) => {
+      uploadMemory.single("file")(req, res, (err: unknown) => {
+        if (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          return res.status(400).json({ error: msg });
+        }
+        next();
+      });
+    },
+    async (req, res) => {
+      const keyRes = resolveR2Config();
+      if (keyRes.ok === false) {
+        return res.status(503).json({
+          error: keyRes.message,
+          missing: keyRes.missing,
+          hint: `Set ${keyRes.missing.join(", ")} in .env for Cloudflare R2.`,
+        });
+      }
+      const file = req.file;
+      if (!file?.buffer?.length) {
+        return res.status(400).json({ error: "file is required (multipart field name: file)" });
+      }
+      const rawCategory = typeof req.body?.category === "string" ? req.body.category.trim().toLowerCase() : "assets";
+      const category =
+        rawCategory === "images" || rawCategory === "generated" ? rawCategory : "assets";
+      const filename =
+        (typeof req.body?.filename === "string" && req.body.filename.trim()) ||
+        file.originalname ||
+        "upload.bin";
+      try {
+        const pk = projectDiskKey(req);
+        const uploaded = await uploadProjectAsset({
+          projectKey: pk,
+          category,
+          filename,
+          body: file.buffer,
+          contentType: file.mimetype || contentTypeFromFilename(filename),
+        });
+        return res.json({
+          ok: true,
+          key: uploaded.key,
+          url: uploaded.url,
+          bucket: uploaded.bucket,
+          contentType: file.mimetype || contentTypeFromFilename(filename),
+          size: file.size,
+        });
+      } catch (e) {
+        console.error("[storage/upload]", e);
+        return res.status(500).json({
+          error: e instanceof Error ? e.message : "Upload to R2 failed",
+        });
+      }
+    }
+  );
+
   app.get("/api/config", (req, res) => {
     const grok = process.env[MAIN_GROK_ENV_VAR]?.trim() ?? "";
     const grokSwarm = process.env.GROK_SWARM_API_KEY?.trim() ?? "";
@@ -208,6 +342,12 @@ async function startServer() {
       hasGrokWriterKey: writer.length >= 20,
       hasV0ApiKey: v0Key.length >= 8,
       v0KeyHint: NEBULA_V0_KEY_SETUP_HINT,
+      hasR2Storage: isR2Configured(),
+      r2MissingEnv: r2MissingOnBoot,
+      r2StorageHint:
+        r2MissingOnBoot.length > 0
+          ? `Set ${r2MissingOnBoot.join(", ")} in .env for Cloudflare R2 uploads.`
+          : undefined,
       pencilMockupsReady: Boolean(pencilKey),
       nebulaUiStudioDemo: Boolean(!pencilKey && useBundledDemoMockupWithoutKey()),
       workspaceMode: "cloud",
@@ -1385,6 +1525,7 @@ No approved UI code yet.
         });
         if (v0Pass.ok === true) {
           const svg = loadBundledDemoMockupSvg();
+          const r2 = await r2FieldsForSvg(projectDiskKey(req), svg, `v0-variation-${variationIndex}.svg`);
           return res.json({
             svg,
             usedPrompt: storedPrompt || "",
@@ -1392,6 +1533,7 @@ No approved UI code yet.
             chatId: v0Pass.chatId,
             written: v0Pass.written,
             demoUrl: v0Pass.demoUrl,
+            ...r2,
           });
         }
         console.warn("[nebula-ui-studio/generate] v0 failed, falling back:", v0Pass.error);
@@ -1408,7 +1550,12 @@ No approved UI code yet.
             fullPromptText: promptText,
             variationIndex,
           });
-          return res.json({ svg, usedPrompt: storedPrompt || "", source: "grok-4" });
+          const r2 = await r2FieldsForSvg(
+            projectDiskKey(req),
+            svg,
+            `grok-variation-${variationIndex}.svg`
+          );
+          return res.json({ svg, usedPrompt: storedPrompt || "", source: "grok-4", ...r2 });
         } catch (grokErr) {
           console.warn("[nebula-ui-studio/generate] Grok failed, fallback if Pencil key:", grokErr);
           if (!pencilKey) {
@@ -1427,11 +1574,21 @@ No approved UI code yet.
           return res.status(result.status).json({ error: result.error });
         }
         const raw = result.raw as Record<string, unknown>;
-        return res.json({ ...raw, svg: result.svg, usedPrompt: storedPrompt || "", source: "pencil" });
+        const r2 = await r2FieldsForSvg(
+          projectDiskKey(req),
+          result.svg,
+          `pencil-variation-${variationIndex}.svg`
+        );
+        return res.json({ ...raw, svg: result.svg, usedPrompt: storedPrompt || "", source: "pencil", ...r2 });
       }
 
       if (useBundledDemoMockupWithoutKey()) {
         const svg = loadBundledDemoMockupSvg();
+        const r2 = await r2FieldsForSvg(
+          projectDiskKey(req),
+          svg,
+          `demo-variation-${variationIndex}.svg`
+        );
         return res.json({
           svg,
           demoMode: true,
@@ -1441,6 +1598,7 @@ No approved UI code yet.
               ? `Bundled demo mockup. Set ${MAIN_GROK_ENV_VAR} (recommended) or PENCIL_API_KEY for live generation.`
               : `Bundled demo mockup (dev). Set ${MAIN_GROK_ENV_VAR} or PENCIL_API_KEY for live output.`,
           source: "demo",
+          ...r2,
         });
       }
 
@@ -1498,29 +1656,48 @@ No approved UI code yet.
         editedCode,
         warningsSummary: typeof warningsSummary === "string" ? warningsSummary : "",
       });
-      res.json({ svg });
+      const r2 = await r2FieldsForSvg(projectDiskKey(req), svg, "adapted-ui.svg");
+      res.json({ svg, ...r2 });
     } catch (e) {
       console.error("[adapt-edit]", e);
       res.status(500).json({ error: e instanceof Error ? e.message : "Adapt failed" });
     }
   });
 
-  app.post("/api/nebula-ui-studio/approve", (req, res) => {
+  app.post("/api/nebula-ui-studio/approve", async (req, res) => {
     const { code } = req.body || {};
     if (typeof code !== "string" || !code.trim()) {
       return res.status(400).json({ error: "code is required" });
     }
     try {
+      const trimmed = code.trim();
+      const pk = projectDiskKey(req);
       const { nebulaUiStudioPath, nebulaUiStudioOutputDir } = projectPathsFor(req);
       ensureNebulaUiStudioFileAt(nebulaUiStudioPath);
       const existing = fs.readFileSync(nebulaUiStudioPath, "utf8");
       const promptText = extractNebulaCommentSection(existing, "NEBULA_UI_STUDIO_PROMPT") || "No prompt generated yet.";
       const withPrompt = upsertNebulaCommentSection(existing, "NEBULA_UI_STUDIO_PROMPT", promptText);
-      const withCode = upsertNebulaCommentSection(withPrompt, "NEBULA_UI_STUDIO_CODE", code);
+
+      const r2 = await tryUploadBufferToR2({
+        projectKey: pk,
+        category: "generated",
+        filename: "approved-ui.svg",
+        body: Buffer.from(trimmed, "utf8"),
+        contentType: "image/svg+xml",
+      });
+
+      const codeForStudio = r2?.url
+        ? `R2 asset URL: ${r2.url}\n\n${trimmed}`
+        : trimmed;
+      const withCode = upsertNebulaCommentSection(withPrompt, "NEBULA_UI_STUDIO_CODE", codeForStudio);
       fs.writeFileSync(nebulaUiStudioPath, withCode, "utf8");
       fs.mkdirSync(path.join(nebulaUiStudioOutputDir, "approved"), { recursive: true });
-      fs.writeFileSync(path.join(nebulaUiStudioOutputDir, "approved", "approved-ui.svg"), code.trim(), "utf8");
-      res.json({ success: true });
+      fs.writeFileSync(path.join(nebulaUiStudioOutputDir, "approved", "approved-ui.svg"), trimmed, "utf8");
+      res.json({
+        success: true,
+        ...(r2 ? { assetKey: r2.key, assetUrl: r2.url } : {}),
+        storage: r2 ? "r2" : "local",
+      });
     } catch (err) {
       console.error("Failed to save Nebula UI Studio code:", err);
       res.status(500).json({ error: "Failed to save approved code" });

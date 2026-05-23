@@ -26,6 +26,7 @@ import { GROK_CHAT_SETUP_HINT } from '../lib/grokKey';
 import { withProjectBody, withProjectQuery } from '../lib/nebulaProjectApi';
 import { buildNebulaAssistantSystemPrompt } from '../lib/nebulaAssistantSystemPrompt';
 import { fetchConversationLogEntries } from '../lib/conversationLogClient';
+import { uploadFileToR2 } from '../lib/nebulaStorageClient';
 import {
   MIC_REENABLE_AFTER_TTS_MS,
   splitTextForTts,
@@ -111,6 +112,8 @@ export function AssistantSidebar({
   const [masterPlan, setMasterPlan] = useState<any>(null);
   const [serverHasGrokKey, setServerHasGrokKey] = useState<boolean | null>(null);
   const [freeTokenUsage, setFreeTokenUsage] = useState<{ used: number; limit: number } | null>(null);
+  const [uploadBusy, setUploadBusy] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const refreshFreeTokenUsage = useCallback(async () => {
     if (userId === 'anonymous' || modelSettings.capabilities.tier !== 'free') {
@@ -198,7 +201,38 @@ export function AssistantSidebar({
 
   const [inputText, setInputText] = useState('');
   const [buildQueue, setBuildQueue] = useState<string[]>([]);
-  
+
+  const handleFileAttachClick = () => {
+    if (codeMode || uploadBusy) return;
+    fileInputRef.current?.click();
+  };
+
+  const handleFileSelected = useCallback(
+    async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      e.target.value = '';
+      if (!file || codeMode) return;
+      setUploadBusy(true);
+      setChatStatus('Uploading to Cloudflare R2…');
+      try {
+        const result = await uploadFileToR2(file, { projectKey: activeProjectKey });
+        if (!result.ok) {
+          const hint = result.hint ?? result.error;
+          setMessages((prev) => [...prev, { role: 'model', text: hint, fullText: hint }]);
+          return;
+        }
+        const attachmentLine = result.url
+          ? `[Attached ${file.name}](${result.url})`
+          : `[Attached ${file.name}] (storage key: ${result.key})`;
+        setInputText((prev) => (prev.trim() ? `${prev.trim()}\n${attachmentLine}` : attachmentLine));
+      } finally {
+        setUploadBusy(false);
+        setChatStatus(null);
+      }
+    },
+    [activeProjectKey, codeMode],
+  );
+
   const sessionRef = useRef<any>(null);
   const sessionPromiseRef = useRef<Promise<any> | null>(null);
   const chatSessionRef = useRef<any>(null);
@@ -1639,11 +1673,20 @@ export function AssistantSidebar({
         <div
           className={`flex flex-col gap-2 rounded-xl border border-border bg-background/80 p-2 shadow-sm ${aboutAppActive ? 'pointer-events-none opacity-40' : ''}`}
         >
+          <input
+            ref={fileInputRef}
+            type="file"
+            className="hidden"
+            accept="image/*,.svg,.pdf,.json,.webp,.png,.jpg,.jpeg,.gif"
+            onChange={(e) => void handleFileSelected(e)}
+            aria-hidden
+            tabIndex={-1}
+          />
           <textarea
             id="assistant-input"
             name="assistant-input"
             value={inputText}
-            disabled={codeMode || aboutAppActive}
+            disabled={codeMode || aboutAppActive || uploadBusy}
             onChange={(e) => setInputText(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === 'Enter' && !e.shiftKey) {
@@ -1665,10 +1708,10 @@ export function AssistantSidebar({
             <div className="flex flex-wrap items-center gap-1.5">
               <button
                 type="button"
-                onClick={() => alert('File upload initiated.')}
-                disabled={codeMode}
+                onClick={handleFileAttachClick}
+                disabled={codeMode || uploadBusy}
                 className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-border bg-card text-muted-foreground transition-colors hover:border-ring/50 hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 disabled:cursor-not-allowed disabled:opacity-35"
-                title="Attach file"
+                title={uploadBusy ? 'Uploading…' : 'Attach file (Cloudflare R2)'}
               >
                 <Paperclip className="h-4 w-4 shrink-0" strokeWidth={1.75} aria-hidden />
               </button>

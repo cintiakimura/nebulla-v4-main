@@ -889,7 +889,7 @@ export function AIChat() {
               <ChatRoundButton
                 label="Attach file"
                 onClick={() => {
-                  setAccessoryHint('File uploads: use the main Assistant sidebar for now.');
+                  setAccessoryHint('Attach files in the main Assistant sidebar (stored in Cloudflare R2).');
                   window.setTimeout(() => setAccessoryHint(null), 4200);
                 }}
               >
