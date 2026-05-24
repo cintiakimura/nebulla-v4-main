@@ -2,7 +2,7 @@ import { CLAUDE_FALLBACK_MODEL } from "./nebulaClaudeFallback";
 
 export type MainAiProvider = "xai" | "anthropic" | "openai" | "unknown";
 
-/** Infer upstream API from key shape (MAIN_AI_API_KEY is provider-agnostic). */
+/** Infer upstream API from key shape (MAIN_API_KEY_GROK / legacy MAIN_AI_API_KEY is provider-agnostic). */
 export function detectMainAiProvider(apiKey: string): MainAiProvider {
   const k = apiKey.trim();
   if (k.startsWith("sk-ant-")) return "anthropic";

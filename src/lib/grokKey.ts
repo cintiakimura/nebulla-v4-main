@@ -1,6 +1,6 @@
 /** Same guidance as server `MAIN_AI_KEY_SETUP_HINT` (kept in client bundle). */
 export const MAIN_AI_CHAT_SETUP_HINT =
-  'Main AI chat failed: the server does not have a valid MAIN_AI_API_KEY in its environment (at least 20 characters after trimming). Ask your operator to set it in the project .env, restart the dev server or redeploy, then reload. Default model is grok-4 when using an xAI key.';
+  'Main AI chat failed: the server does not have a valid MAIN_API_KEY_GROK in its environment (at least 20 characters after trimming). Ask your operator to set it in the project .env or Render Environment, restart or redeploy, then reload. Default model is grok-4 when using an xAI key. Legacy: MAIN_AI_API_KEY.';
 
 /** @deprecated Use {@link MAIN_AI_CHAT_SETUP_HINT}. */
 export const GROK_CHAT_SETUP_HINT = MAIN_AI_CHAT_SETUP_HINT;

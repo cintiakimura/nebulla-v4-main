@@ -22,6 +22,7 @@ export function upsertProjectSecret(
   const trimmedName = name.trim();
   const upper = trimmedName.toUpperCase();
   if (
+    upper === 'MAIN_API_KEY_GROK' ||
     upper === 'MAIN_AI_API_KEY' ||
     upper === 'GROK_API_KEY_LUMEN' ||
     upper === 'GROK_API_KEY' ||

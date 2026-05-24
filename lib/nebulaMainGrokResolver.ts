@@ -1,17 +1,17 @@
 import type express from "express";
 
-/** Server env var for the main AI brain (chat, coding, UI tools, Master Plan). Default model: grok-4 on xAI. */
-export const MAIN_AI_ENV_VAR = "MAIN_AI_API_KEY";
+/** Canonical server env var for the main Grok / xAI brain (chat, coding, UI tools, Master Plan). */
+export const MAIN_AI_ENV_VAR = "MAIN_API_KEY_GROK";
 
-/** Legacy names still read if `MAIN_AI_API_KEY` is unset (migration). */
-const LEGACY_MAIN_AI_ENV_VARS = ["GROK_API_KEY_LUMEN"] as const;
+/** Older names still read when `MAIN_API_KEY_GROK` is unset (migration). */
+const LEGACY_MAIN_AI_ENV_VARS = ["MAIN_AI_API_KEY", "GROK_API_KEY_LUMEN"] as const;
 
 /** @deprecated Use {@link MAIN_AI_ENV_VAR}. */
 export const MAIN_GROK_ENV_VAR = MAIN_AI_ENV_VAR;
 
 /** Shown in API errors and product UI when no usable main AI key is available. */
 export const MAIN_AI_KEY_SETUP_HINT =
-  `Set ${MAIN_AI_ENV_VAR} in the server .env file and restart the Nebula process (default chat model: grok-4 on xAI when using an xAI key). Per-user API overrides in the app are temporarily disabled.`;
+  `Set ${MAIN_AI_ENV_VAR} in the server .env or Render Environment (default chat model: grok-4 on xAI when using an xAI key). Legacy aliases: MAIN_AI_API_KEY, GROK_API_KEY_LUMEN. Per-user API overrides in the app are temporarily disabled.`;
 
 /** @deprecated Use {@link MAIN_AI_KEY_SETUP_HINT}. */
 export const NEBULA_GROK_KEY_SETUP_HINT = MAIN_AI_KEY_SETUP_HINT;
@@ -29,6 +29,18 @@ export {
 
 const MIN_KEY_LEN = 20;
 
+/** Strip wrapping quotes and accidental newlines from Render / .env pastes. */
+function sanitizeEnvSecret(raw: string): string {
+  let s = raw.trim();
+  if (
+    (s.startsWith('"') && s.endsWith('"')) ||
+    (s.startsWith("'") && s.endsWith("'"))
+  ) {
+    s = s.slice(1, -1).trim();
+  }
+  return s.replace(/[\r\n]+/g, "");
+}
+
 export type MainGrokKeySource = "env";
 
 export type MainGrokResolveOk = { ok: true; apiKey: string; source: MainGrokKeySource };
@@ -42,15 +54,21 @@ export type MainGrokResolveErr = {
 
 export type MainGrokResolveResult = MainGrokResolveOk | MainGrokResolveErr;
 
-/** Read main AI key from env (`MAIN_AI_API_KEY`, then legacy aliases). */
+/** Read main AI key: `MAIN_API_KEY_GROK`, then legacy `MAIN_AI_API_KEY`, `GROK_API_KEY_LUMEN`. */
 export function readMainAiApiKeyFromEnv(): string {
-  const primary = process.env[MAIN_AI_ENV_VAR]?.trim() ?? "";
+  const primary = sanitizeEnvSecret(process.env[MAIN_AI_ENV_VAR] ?? "");
   if (primary) return primary;
   for (const legacy of LEGACY_MAIN_AI_ENV_VARS) {
-    const v = process.env[legacy]?.trim() ?? "";
+    const v = sanitizeEnvSecret(process.env[legacy] ?? "");
     if (v) return v;
   }
   return "";
+}
+
+/** Last 4 chars of the configured key (for matching local vs Render without exposing the secret). */
+export function mainAiApiKeyTail(): string | undefined {
+  const k = readMainAiApiKeyFromEnv();
+  return k.length >= 8 ? k.slice(-4) : undefined;
 }
 
 function resolveEnvMainAiKey(): MainGrokResolveResult {
@@ -59,7 +77,7 @@ function resolveEnvMainAiKey(): MainGrokResolveResult {
     return {
       ok: false,
       code: "MISSING",
-      message: `${MAIN_AI_ENV_VAR} is not set on the server.`,
+      message: `${MAIN_AI_ENV_VAR} is not set on the server (legacy: ${LEGACY_MAIN_AI_ENV_VARS.join(", ")}).`,
       hint: MAIN_AI_KEY_SETUP_HINT,
     };
   }
@@ -76,7 +94,7 @@ function resolveEnvMainAiKey(): MainGrokResolveResult {
 
 /**
  * Resolves the **main** AI key for chat, UI tools, and code paths.
- * Uses **`MAIN_AI_API_KEY` from the server environment only** (no header, body, or per-user DB overrides).
+ * Uses server env only (`MAIN_API_KEY_GROK` preferred; no header, body, or per-user DB overrides).
  */
 export function createResolveMainGrokApiKey(_readSessionUid: (req: express.Request) => string | null) {
   void _readSessionUid;

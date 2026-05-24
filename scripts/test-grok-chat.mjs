@@ -191,7 +191,7 @@ async function main() {
       (ui.res.ok || ui.res.status === 404);
 
     if (!hasKey && chat.res.status === 401) {
-      console.log("Note: Server has no MAIN_AI_API_KEY (≥20 chars) — 401 on main AI POSTs is expected.\n");
+      console.log("Note: Server has no MAIN_API_KEY_GROK (≥20 chars) — 401 on main AI POSTs is expected.\n");
     }
     if (hasKey && chat.res.status === 404 && String(chat.body?.error || "").includes("model")) {
       console.log(

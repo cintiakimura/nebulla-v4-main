@@ -34,6 +34,7 @@ import {
   isGrokQuotaLimitError,
   MAIN_AI_ENV_VAR,
   MAIN_AI_KEY_SETUP_HINT,
+  mainAiApiKeyTail,
   readMainAiApiKeyFromEnv,
   tryClaudeQuotaFallback,
   detectMainAiProvider,
@@ -164,7 +165,7 @@ if (fs.existsSync(envLocalPath)) {
 const mainAiEnvProbe = readMainAiApiKeyFromEnv();
 if (mainAiEnvProbe.length < 20) {
   console.warn(
-    `[nebula] ${MAIN_AI_ENV_VAR} is missing or shorter than 20 characters after trim — main AI chat and tools will return 401 until set (Render: set in the service Environment, not only in a local .env file). Legacy alias: GROK_API_KEY_LUMEN.`
+    `[nebula] ${MAIN_AI_ENV_VAR} is missing or shorter than 20 characters after trim — main AI chat and tools will return 401 until set (Render: set in the service Environment, not only in a local .env file). Legacy: MAIN_AI_API_KEY, GROK_API_KEY_LUMEN.`
   );
 }
 
@@ -360,6 +361,7 @@ async function startServer() {
       builderPublicKey: process.env.BUILDER_PUBLIC_KEY,
       hasMainAiApiKey: grok.length >= 20,
       hasGrokApiKey: grok.length >= 20,
+      mainAiKeyTail: mainAiApiKeyTail(),
       freeTierTokenLimitDisabled: isFreeTierTokenLimitDisabled(),
       mainAiProvider,
       mainAiChatModel,
@@ -2579,7 +2581,7 @@ ${answer.slice(0, 8000)}`;
     if (mainAiProvider === "openai") {
       return res.status(501).json({
         error:
-          "OpenAI keys in MAIN_AI_API_KEY are not wired yet. Use an xAI (xai-…) or Anthropic (sk-ant-…) key, or set CLAUDE_API_KEY for Grok quota fallback.",
+          "OpenAI keys in MAIN_API_KEY_GROK are not wired yet. Use an xAI (xai-…) or Anthropic (sk-ant-…) key, or set CLAUDE_API_KEY for Grok quota fallback.",
         provider: "openai",
       });
     }
@@ -2615,15 +2617,19 @@ ${answer.slice(0, 8000)}`;
           (typeof parsed.error === "string" && parsed.error) ||
           (typeof parsed.message === "string" && parsed.message) ||
           errorText.slice(0, 400);
-        const hint =
-          response.status === 401 || /invalid.*api.*key|incorrect.*api.*key|unauthor/i.test(String(upstreamMsg))
-            ? MAIN_AI_KEY_SETUP_HINT
-            : undefined;
+        const isAuthKeyError =
+          response.status === 401 ||
+          /invalid.*api.*key|incorrect.*api.*key|unauthor/i.test(String(upstreamMsg));
+        const onRender = process.env.RENDER === "true" || Boolean(process.env.RENDER_SERVICE_ID?.trim());
+        const renderKeyHint = onRender
+          ? ` On Render: open your web service → Environment → set MAIN_API_KEY_GROK to a fresh key from https://console.x.ai (no quotes), save, then redeploy.`
+          : "";
+        const hint = isAuthKeyError ? `${MAIN_AI_KEY_SETUP_HINT}${renderKeyHint}` : undefined;
         return res.status(response.status).json({
           ...parsed,
           error:
             response.status === 401
-              ? `Main AI provider rejected this API key (401). ${upstreamMsg}`
+              ? `Main AI provider rejected this API key (401). ${upstreamMsg}${renderKeyHint}`
               : upstreamMsg,
           provider: mainAiProvider,
           ...(hint ? { hint } : {}),

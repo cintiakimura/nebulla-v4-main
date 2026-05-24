@@ -9,6 +9,8 @@ export type NebulaPublicConfig = {
   v0KeyHint?: string;
   hasR2Storage?: boolean;
   hasMainAiApiKey?: boolean;
+  /** Last 4 characters of MAIN_API_KEY_GROK (compare local vs Render /api/config). */
+  mainAiKeyTail?: string;
   /** When true, Nebula Free-tier monthly token cap is not enforced. */
   freeTierTokenLimitDisabled?: boolean;
   r2MissingEnv?: string[];
