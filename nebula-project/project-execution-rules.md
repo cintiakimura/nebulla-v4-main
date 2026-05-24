@@ -5,7 +5,11 @@
 - Only one support agent exists: **Quality Agent** (merged Tester + Reviewer) — triggered **manually** by the user with the **"Run and Test"** button.
 - v0 by Vercel is used **automatically once per project** for the initial high-quality UI generation.
 - The main Grok brain reads **`MAIN_API_KEY_GROK` from the server environment** (Nebula Product `.env` / host secrets) for **both** normal chat and the coding phase — never a separate user-facing coding key. **User-facing Grok API key input is disabled** in the product (My services, Secrets, Account); operators set Grok-related keys only in server env per **`environment-setup.md`** (defaults for chat, swarm, TTS, and writers).
-- **Chat vs build:** In normal conversation, Grok replies in natural prose (no implementation code fences in chat). When the user wants to build or change code, Grok must use **START_CODING** / **Go** and **file blocks** (`\`\`\`file:path\` …) for server apply — not markdown code snippets in chat.
+- **Chat vs build (IDE + Assistant):**
+  - **Conversation:** Short natural prose only — no Master Plan section dumps, no `\`\`\`typescript\` / \`\`\`python\` fences, no full file bodies in chat bubbles.
+  - **Master Plan:** Written **only** inside `<START_MASTERPLAN>…</END_MASTERPLAN>` (server persists to `master-plan.json` and the **Master Plan** tab). Chat may show a one-line confirmation, never the six sections inline.
+  - **Implementation:** **START_CODING** and/or user **Go** → Grok Code outputs **only** `\`\`\`file:relative/path\` … \`\`\`` blocks (or `File: path` + fence). Server applies via `/api/files/apply-generated`. User reviews files in the explorer, not in chat.
+  - **Forbidden in chat:** Pasting route handlers, components, SQL, or plan text as markdown code blocks; using `"""file:` instead of `\`\`\`file:`; mixing onboarding prose with file dumps in the same turn.
 - **Nebula Project** (rules in this folder) is strictly separated from **Nebula Product** (the IDE itself).
 
 **Infrastructure Manager (Silent)**

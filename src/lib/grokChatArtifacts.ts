@@ -1,0 +1,165 @@
+import { fetchJson } from './apiFetch';
+import { withProjectBody, withProjectQuery } from './nebulaProjectApi';
+
+export const MASTER_PLAN_TAB_NAMES = [
+  '1. Goal of the app',
+  '2. Tech Research',
+  '3. Features and KPIs',
+  '4. Pages and navigation',
+  '5. UI/UX design',
+  '6. Environment Setup',
+] as const;
+
+const ORCHESTRATION_DUMP_RE =
+  /Project Execution Rules|INITIAL ONBOARDING|START_CODING|AUTOMATED WORKFLOW|TAB \d HIDDEN RULES/i;
+
+/** Normalize common model mistakes before `/api/files/apply-generated`. */
+export function normalizeGrokFileBlockSyntax(raw: string): string {
+  return raw
+    .replace(/"""file:/gi, '```file:')
+    .replace(/'''file:/gi, '```file:')
+    .replace(/```\s*file:/gi, '```file:');
+}
+
+export function splitMasterPlanSectionsFromBlock(block: string): Partial<Record<number, string>> {
+  const lines = block.split('\n');
+  const out: Partial<Record<number, string>> = {};
+  let current: number | null = null;
+  const headingRe =
+    /^\s{0,3}(?:#{2,4}\s*)?(\d)\.\s*(Goal of the app|Tech Research|Features and KPIs|Pages and navigation|UI\/UX design|Environment Setup)\s*$/i;
+  for (const line of lines) {
+    const m = line.match(headingRe);
+    if (m) {
+      current = Number(m[1]);
+      if (current >= 1 && current <= 6 && !out[current]) out[current] = '';
+      continue;
+    }
+    if (current) out[current] = `${out[current] ?? ''}${line}\n`;
+  }
+  for (let i = 1; i <= 6; i++) {
+    const rawSection = (out[i] ?? '').trim();
+    if (!rawSection) {
+      delete out[i];
+      continue;
+    }
+    if (ORCHESTRATION_DUMP_RE.test(rawSection)) delete out[i];
+    else out[i] = rawSection;
+  }
+  return out;
+}
+
+export async function persistMasterPlanFromAssistantSource(source: string): Promise<number> {
+  const match = source.match(/<START_MASTERPLAN>([\s\S]*?)<\/END_MASTERPLAN>/i);
+  if (!match) return 0;
+  const parsed = splitMasterPlanSectionsFromBlock(match[1].trim());
+  let saved = 0;
+  for (let tabIndex = 1; tabIndex <= 6; tabIndex++) {
+    const content = (parsed[tabIndex] ?? '').trim();
+    if (!content) continue;
+    try {
+      await fetchJson(withProjectQuery('/api/master-plan/update'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(withProjectBody({ tabIndex, content })),
+      });
+      saved++;
+    } catch (e) {
+      console.warn('[grokChatArtifacts] master plan tab save failed:', tabIndex, e);
+    }
+  }
+  if (saved > 0) {
+    try {
+      window.dispatchEvent(new CustomEvent('nebula-master-plan-updated'));
+    } catch {
+      /* ignore */
+    }
+  }
+  return saved;
+}
+
+export type IdeChatDisplayResult = {
+  displayText: string;
+  filePaths: string[];
+  hadMasterPlan: boolean;
+  hadCodingTag: boolean;
+};
+
+/** Strip orchestration tags, Master Plan bodies, and code fences from IDE chat bubbles. */
+export function formatAssistantForIdeChatDisplay(raw: string): IdeChatDisplayResult {
+  const normalized = normalizeGrokFileBlockSyntax(raw);
+  const filePaths: string[] = [];
+
+  const hadMasterPlan = /<START_MASTERPLAN>[\s\S]*?<\/END_MASTERPLAN>/i.test(normalized);
+  const hadCodingTag = /<\s*START_CODING\s*>|\bSTART_CODING\b/i.test(normalized);
+
+  let text = normalized
+    .replace(/<REASONING>[\s\S]*?<\/REASONING>/gi, '')
+    .replace(/<START_MASTERPLAN>[\s\S]*?<\/END_MASTERPLAN>/gi, '')
+    .replace(/<START_MASTERPLAN>[\s\S]*$/gi, '')
+    .replace(/<\/END_MASTERPLAN>/gi, '')
+    .replace(/<START_CODING>/gi, '')
+    .replace(/\bSTART_CODING\b/gi, '')
+    .replace(/<FINISH_MASTERPLAN>/gi, '')
+    .replace(/<APPROVE_MASTERPLAN>/gi, '')
+    .replace(/<APPROVE_MINDMAP>/gi, '')
+    .replace(/<APPROVE_UI>/gi, '')
+    .replace(/<START_UIUX>/gi, '')
+    .replace(/<NEBULA_UI_STUDIO_PROMPT>[\s\S]*?<\/NEBULA_UI_STUDIO_PROMPT>/gi, '')
+    .replace(/<GROK_B_SUMMARY_Q([1-6])>[\s\S]*?<\/GROK_B_SUMMARY_Q\1>/gi, '')
+    .replace(/\bANSWER_Q[1-6]\b/gi, '')
+    .replace(/Already fill up the question tab\./gi, '');
+
+  text = text.replace(/```(?:file|filepath)\s*:\s*([^\n`]+)\n[\s\S]*?```/gi, (_m, p: string) => {
+    const path = p.trim().replace(/^["'`]+|["'`]+$/g, '');
+    if (path) filePaths.push(path);
+    return '';
+  });
+
+  text = text.replace(/(?:^|\n)\s*(?:File|FILE)\s*:\s*([^\n]+)\n```[^\n]*\n[\s\S]*?```/gi, (_m, p: string) => {
+    const path = p.trim();
+    if (path) filePaths.push(path);
+    return '';
+  });
+
+  text = text.replace(/```[\w.-]*\n[\s\S]*?```/g, '');
+
+  text = text
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+
+  const notes: string[] = [];
+  if (hadMasterPlan) {
+    notes.push('Master Plan saved to the Master Plan tab — open it in the left nav to review (not shown here in chat).');
+  }
+  if (filePaths.length > 0) {
+    const preview = filePaths.slice(0, 5).join(', ');
+    const more = filePaths.length > 5 ? ` (+${filePaths.length - 5} more)` : '';
+    notes.push(`Code artifacts applied to workspace: ${preview}${more}. Check the file explorer.`);
+  } else if (hadCodingTag) {
+    notes.push('Coding phase started — files are written to the workspace by Grok Code (not pasted in chat).');
+  }
+
+  if (!text && notes.length > 0) {
+    text = notes.join('\n\n');
+  } else if (notes.length > 0) {
+    text = `${text}\n\n${notes.join('\n\n')}`;
+  }
+
+  if (!text) {
+    text = hadCodingTag || hadMasterPlan || filePaths.length > 0
+      ? 'Done — see Master Plan tab and workspace files.'
+      : '(No conversational reply — check Master Plan and file explorer.)';
+  }
+
+  return { displayText: text, filePaths, hadMasterPlan, hadCodingTag };
+}
+
+/** Extra rules appended for IDE right-panel chat only. */
+export const IDE_CHAT_EXECUTION_APPENDIX = `
+IDE CHAT SURFACE (project-execution-rules.md — strict):
+- **Never** paste Master Plan section bodies, \`<START_MASTERPLAN>\` blocks, or full implementation code in this chat.
+- Master Plan updates belong **only** inside \`<START_MASTERPLAN>…</END_MASTERPLAN>\` tags (server saves to master-plan.json / Master Plan tab). User sees a short confirmation in chat, not the full plan text.
+- Implementation belongs **only** in \`\`\`file:relative/path\` fenced blocks (or after START_CODING / user presses Go). The server applies files to the workspace — **never** show \`\`\`typescript\`, \`\`\`python\`, or multi-hundred-line code fences in chat.
+- For planning questions: short prose only. For build requests: emit START_CODING (or tell user to press Go) — do not dump files in chat prose.
+`.trim();

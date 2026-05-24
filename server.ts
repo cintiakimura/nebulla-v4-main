@@ -1015,8 +1015,9 @@ No approved UI code yet.
   app.post("/api/files/apply-generated", (req, res) => {
     try {
       const { workspaceRoot } = projectPathsFor(req);
-      const raw = typeof req.body?.content === "string" ? req.body.content : "";
+      let raw = typeof req.body?.content === "string" ? req.body.content : "";
       if (!raw.trim()) return res.status(400).json({ error: "content is required" });
+      raw = raw.replace(/"""file:/gi, "```file:").replace(/'''file:/gi, "```file:");
 
       type FileBlock = { relativePath: string; body: string };
       const blocks: FileBlock[] = [];

@@ -1,4 +1,5 @@
 import { fetchJson } from './apiFetch';
+import { normalizeGrokFileBlockSyntax } from './grokChatArtifacts';
 import { withProjectBody, withProjectQuery } from './nebulaProjectApi';
 
 const START_CODING_RE = /<\s*START_CODING\s*>|\bSTART_CODING\b/i;
@@ -39,7 +40,7 @@ export function notifyWorkspaceFilesChanged(): void {
 }
 
 export async function applyGeneratedFiles(content: string): Promise<ApplyGeneratedResult> {
-  const clean = stripNonFileArtifacts(content);
+  const clean = stripNonFileArtifacts(normalizeGrokFileBlockSyntax(content));
   if (!clean) {
     return {
       ok: false,

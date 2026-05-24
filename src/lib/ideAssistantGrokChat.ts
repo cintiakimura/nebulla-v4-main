@@ -1,5 +1,6 @@
 import { fetchJson, readResponseJson } from './apiFetch';
 import { withProjectBody, withProjectQuery } from './nebulaProjectApi';
+import { IDE_CHAT_EXECUTION_APPENDIX } from './grokChatArtifacts';
 import { buildNebulaAssistantSystemPrompt } from './nebulaAssistantSystemPrompt';
 
 export type IdeChatTurnMessage = { role: 'user' | 'assistant' | 'system'; content: string };
@@ -53,6 +54,7 @@ export async function sendIdeAssistantGrokTurn(options: {
   const { latestMP, uiStudioApprovedCode } = await fetchMasterPlanAndUiStudio();
   const systemPrompt =
     buildNebulaAssistantSystemPrompt(latestMP, uiStudioApprovedCode) +
+    `\n\n${IDE_CHAT_EXECUTION_APPENDIX}` +
     (ideAppendix.trim()
       ? `\n\nIDE_EDITOR_SURFACE (active workspace file context — user may be editing here):\n${ideAppendix.trim()}`
       : '');

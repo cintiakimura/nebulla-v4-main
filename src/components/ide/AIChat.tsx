@@ -12,6 +12,10 @@ import { readResponseJson } from '../../lib/apiFetch';
 import { getBrowserProjectName, withProjectQuery } from '../../lib/nebulaProjectApi';
 import { sendIdeAssistantGrokTurn } from '../../lib/ideAssistantGrokChat';
 import {
+  formatAssistantForIdeChatDisplay,
+  persistMasterPlanFromAssistantSource,
+} from '../../lib/grokChatArtifacts';
+import {
   handlePostGrokCodingTurn,
   runGoCodeAndApply,
 } from '../../lib/nebulaGrokCodingPipeline';
@@ -113,6 +117,11 @@ export function AIChat() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [accessoryHint, setAccessoryHint] = useState<string | null>(null);
+  const [grokStatusLines, setGrokStatusLines] = useState<[string, string, string]>([
+    'Ready',
+    'Chat: prose only — no code or Master Plan in messages',
+    'Go: writes files to the workspace',
+  ]);
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
   const [serverHasGrokKey, setServerHasGrokKey] = useState<boolean | null>(null);
@@ -480,6 +489,7 @@ export function AIChat() {
     inputRef.current = '';
     setSending(true);
     setSendError(null);
+    setGrokStatusLines(['Thinking…', 'Calling Grok 4.1 with workspace context', 'Waiting for response']);
 
     const projectName = getBrowserProjectName().trim() || 'Untitled project';
     const ideAppendix = ideContextSnippetForChat(activePath, activeTab?.content ?? '');
@@ -501,7 +511,13 @@ export function AIChat() {
         ideAppendix,
       });
       const raw = assistantContent.trim();
-      const spoken = stripAssistantTagsForVoice(raw);
+      const masterPlanSource = (planningPhase || raw).trim();
+
+      setGrokStatusLines(['Processing…', 'Saving Master Plan to project tabs', 'Stripping code from chat display']);
+      const mpSaved = await persistMasterPlanFromAssistantSource(masterPlanSource);
+
+      const { displayText, hadCodingTag } = formatAssistantForIdeChatDisplay(raw);
+      const spoken = stripAssistantTagsForVoice(displayText);
       const ts = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
       const toAppend: Message[] = [];
       if (claudeFallbackNotice?.trim()) {
@@ -515,7 +531,7 @@ export function AIChat() {
       toAppend.push({
         id: `a-${Date.now()}`,
         role: 'assistant',
-        content: raw || '(Empty response)',
+        content: displayText || '(Empty response)',
         timestamp: ts,
       });
       setMessages((p) => {
@@ -525,8 +541,22 @@ export function AIChat() {
       });
 
       try {
+        if (hadCodingTag || /```(?:file|filepath)\s*:/i.test(raw)) {
+          setGrokStatusLines([
+            'Coding…',
+            mpSaved > 0 ? `Master Plan: ${mpSaved} section(s) saved` : 'Running Grok Code pipeline',
+            'Applying files to workspace',
+          ]);
+        } else {
+          setGrokStatusLines([
+            'Done',
+            mpSaved > 0 ? `Master Plan updated (${mpSaved} sections)` : 'Reply shown in chat',
+            'Ready for next message',
+          ]);
+        }
+
         const coding = await handlePostGrokCodingTurn({
-          assistantContent: raw,
+          assistantContent: masterPlanSource,
           planningPhase,
           userId,
           projectName,
@@ -545,9 +575,13 @@ export function AIChat() {
             messagesRef.current = next;
             return next;
           });
+          setGrokStatusLines(['Done', coding.statusMessage.trim().slice(0, 72), 'Check file explorer']);
+        } else if (!hadCodingTag) {
+          setGrokStatusLines(['Ready', 'Chat: prose only', 'Go: writes files to workspace']);
         }
       } catch (codingErr) {
         console.warn('[AIChat] coding apply:', codingErr);
+        setGrokStatusLines(['Error', 'File apply failed — see message above', 'Ready to retry']);
       }
 
       if (spoken) {
@@ -557,6 +591,7 @@ export function AIChat() {
         stopHandsFree();
       }
     } catch (e) {
+      setGrokStatusLines(['Error', 'Grok request failed', 'Check server key and retry']);
       const msg = e instanceof Error ? e.message : String(e);
       const isKeyHelp =
         msg.includes('Grok API key') ||
@@ -786,6 +821,7 @@ export function AIChat() {
     setSending(true);
     setSendError(null);
     setAccessoryHint('Grok 4 summary → Grok Code → writing files to workspace…');
+    setGrokStatusLines(['Go…', 'Grok 4 summary → Grok Code', 'Writing files to workspace']);
 
     const session = await fetchSessionUser();
     const userId = session?.uid?.trim() || 'anonymous';
@@ -806,9 +842,11 @@ export function AIChat() {
       });
     } catch (e) {
       setSendError(e instanceof Error ? e.message : 'Go failed');
+      setGrokStatusLines(['Error', 'Go / Grok Code failed', 'Ready to retry']);
     } finally {
       setSending(false);
       setAccessoryHint(null);
+      setGrokStatusLines((prev) => (prev[0] === 'Go…' ? ['Ready', 'Chat: prose only', 'Go: writes files to workspace'] : prev));
     }
   }, [micInputBlocked, sending, serverHasGrokKey, stopVoiceRecognition]);
 
@@ -928,6 +966,23 @@ export function AIChat() {
       </div>
 
       <div className="tonal-seam-t shrink-0 p-3">
+        <div
+          className="mb-2 rounded-md border border-border/60 bg-muted/20 px-2.5 py-1.5 font-mono"
+          role="status"
+          aria-live="polite"
+        >
+          {grokStatusLines.map((line, i) => (
+            <p
+              key={i}
+              className={cn(
+                'type-label-sm leading-snug truncate',
+                i === 0 ? 'text-foreground/90' : 'text-muted-foreground',
+              )}
+            >
+              {line}
+            </p>
+          ))}
+        </div>
         <div className="surface-float rounded-lg border border-transparent p-2 ring-1 ring-[color-mix(in_srgb,var(--outline-variant)_12%,transparent)] transition-[box-shadow,background-color] duration-300 ease-out focus-within:ring-[color-mix(in_srgb,var(--outline-variant)_22%,transparent)]">
           <textarea
             value={input}
