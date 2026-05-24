@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { IdeVisualEditor } from '@/components/ide/IdeVisualEditor';
 import { cn } from '@/lib/utils';
 import { AIChat } from '@/components/ide/AIChat';
 import { IdeCenterWorkspace } from '@/components/ide/IdeCenterWorkspace';
@@ -7,13 +6,8 @@ import { TerminalPanel } from '@/components/ide/TerminalPanel';
 import { TopBar } from '@/components/ide/TopBar';
 import { VerticalNav } from '@/components/ide/VerticalNav';
 import { MyServicesOnboarding } from '@/components/MyServicesOnboarding';
-import { MasterPlan } from '@/components/MasterPlan';
-import { SourceControlPanel } from '@/components/SourceControlPanel';
-import { AppPreviewPanel } from '@/components/AppPreviewPanel';
 import { ExplorerPanel } from '@/components/ExplorerPanel';
-import { IdeDashboardEmbed } from '@/components/ide/IdeDashboardEmbed';
 import { IdeWorkspaceProvider, useIdeWorkspace } from '@/components/ide/IdeWorkspaceContext';
-import { MindMapIdeRoute } from '@/components/ide/MindMapIdeRoute';
 import {
   ensureCloudWorkspaceReady,
   fetchSessionUser,
@@ -25,7 +19,13 @@ import {
   WorkspaceSetupGate,
   type WorkspaceContext,
 } from '@/components/ide/WorkspaceSetupGate';
-import { UiStudioMockupPanel } from '@/components/ide/UiStudioMockupPanel';
+import {
+  centerPaneToNavId,
+  navIdToCenterPane,
+  readStoredCenterPane,
+  storeCenterPane,
+  type IdeCenterPane,
+} from '../../lib/ideCenterPanes';
 import {
   registerNebulaUiStudioBridge,
   type UiStudioTab,
@@ -47,27 +47,6 @@ function IdeExplorerSidebar({ projectKey }: { projectKey: string }) {
   const { openFile } = useIdeWorkspace();
   return (
     <ExplorerPanel projectKey={projectKey} onOpenFile={(path) => void openFile(path)} />
-  );
-}
-
-function IdeSearchView({ onBack }: { onBack: () => void }) {
-  return (
-    <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background">
-      <div className="tonal-seam-b flex h-10 shrink-0 items-center border-b border-white/5 px-3">
-        <button type="button" className="type-label-sm text-muted-foreground hover:text-foreground" onClick={onBack}>
-          ← Explorer
-        </button>
-      </div>
-      <div className="flex flex-1 flex-col items-center justify-center gap-4 p-8 text-center">
-        <h2 className="font-headline text-lg text-foreground">Search</h2>
-        <p className="max-w-md text-sm text-muted-foreground">
-          Use the file tree and chat to navigate the workspace. A global search palette can ship with the workspace index API.
-        </p>
-        <button type="button" className="btn-primary-cta rounded-md px-4 py-2 text-sm" onClick={onBack}>
-          Back to Explorer
-        </button>
-      </div>
-    </div>
   );
 }
 
@@ -144,78 +123,8 @@ function ResizeHandle({
   );
 }
 
-function IdeMainByNav({
-  navId,
-  onSelectNav,
-}: {
-  navId: string;
-  onSelectNav: (id: string) => void;
-}) {
-  const projectName = getBrowserProjectName().trim() || 'Untitled project';
-
-  if (navId === 'master-plan') {
-    return (
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-        <MasterPlan projectKey={getBrowserProjectKey()} onClose={() => onSelectNav('explorer')} />
-      </div>
-    );
-  }
-
-  if (navId === 'source-control') {
-    return (
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-        <SourceControlPanel projectName={projectName} />
-      </div>
-    );
-  }
-
-  if (navId === 'mind-map') {
-    return <MindMapIdeRoute />;
-  }
-
-  if (navId === 'projects') {
-    return <IdeDashboardEmbed initialTab="projects" />;
-  }
-
-  if (navId === 'secrets') {
-    return <IdeDashboardEmbed initialTab="secrets" />;
-  }
-
-  if (navId === 'dns') {
-    return <IdeDashboardEmbed initialTab="dns" />;
-  }
-
-  if (navId === 'search') {
-    return <IdeSearchView onBack={() => onSelectNav('explorer')} />;
-  }
-
-  return (
-    <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background">
-      <div className="tonal-seam-b flex h-10 shrink-0 items-center border-b border-white/5 px-3">
-        <button
-          type="button"
-          className="type-label-sm text-muted-foreground hover:text-foreground"
-          onClick={() => onSelectNav('explorer')}
-        >
-          ← Explorer
-        </button>
-      </div>
-      <div className="flex flex-1 flex-col items-center justify-center p-8 text-center">
-        <p className="text-sm text-muted-foreground">Unknown panel.</p>
-        <button
-          type="button"
-          className="btn-secondary-surface mt-4 rounded-md px-3 py-1.5 text-sm"
-          onClick={() => onSelectNav('explorer')}
-        >
-          Explorer
-        </button>
-      </div>
-    </div>
-  );
-}
-
 export function NebullaIDE() {
-  const [navId, setNavId] = useState('explorer');
+  const [navId, setNavId] = useState(() => centerPaneToNavId(readStoredCenterPane()));
   const [uiStudioTab, setUiStudioTab] = useState<UiStudioTab>('design');
   const explorer = useDragResize(EXPLORER_DEFAULT, EXPLORER_MIN, EXPLORER_MAX, 'horizontal-right');
   const chat = useDragResize(CHAT_DEFAULT, CHAT_MIN, CHAT_MAX, 'horizontal-left');
@@ -302,38 +211,34 @@ export function NebullaIDE() {
     };
   }, []);
 
+  const selectCenterPane = useCallback((pane: IdeCenterPane) => {
+    storeCenterPane(pane);
+    setNavId(centerPaneToNavId(pane));
+  }, []);
+
   useEffect(() => {
     return registerNebulaUiStudioBridge({
       openUiStudio: (opts) => {
-        setNavId('visual-ui-editor');
         setUiStudioTab(opts?.tab ?? 'design');
+        selectCenterPane('ui-studio');
       },
       runV0Generate: () => {
         window.dispatchEvent(new Event('nebula-ui-studio-run-v0'));
       },
     });
-  }, []);
+  }, [selectCenterPane]);
 
-  useEffect(() => {
-    if (navId === 'visual-ui-editor' && uiStudioTab !== 'mockups' && uiStudioTab !== 'preview') {
-      setUiStudioTab('design');
-    }
-  }, [navId, uiStudioTab]);
-
-  useEffect(() => {
-    const onOpenMasterPlan = () => setNavId('master-plan');
-    window.addEventListener('nebula-open-master-plan', onOpenMasterPlan);
-    return () => window.removeEventListener('nebula-open-master-plan', onOpenMasterPlan);
-  }, []);
-
-  const selectNavItem = useCallback((id: string) => {
-    if (id === 'project-settings') {
-      setMyServicesOpen(true);
-      setNavId('explorer');
-      return;
-    }
-    setNavId(id);
-  }, []);
+  const selectNavItem = useCallback(
+    (id: string) => {
+      if (id === 'project-settings') {
+        setMyServicesOpen(true);
+        return;
+      }
+      setNavId(id);
+      storeCenterPane(navIdToCenterPane(id));
+    },
+    [],
+  );
 
   return (
     <IdeWorkspaceProvider>
@@ -362,7 +267,7 @@ export function NebullaIDE() {
         }
         onSwitchWorkspace={() => setWorkspaceCtx(null)}
         onOpenAccount={() => setMyServicesOpen(true)}
-        onOpenSourceControl={() => setNavId('source-control')}
+        onOpenSourceControl={() => selectCenterPane('source-control')}
       />
 
       <div className="flex flex-1 overflow-hidden">
@@ -372,98 +277,37 @@ export function NebullaIDE() {
           onSelectItem={selectNavItem}
         />
 
-        {navId === 'visual-ui-editor' ? (
-          <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-            <div className="tonal-seam-b flex shrink-0 gap-1 border-b border-white/5 px-2 py-1.5">
-              <button
-                type="button"
-                onClick={() => setUiStudioTab('design')}
-                className={cn(
-                  'type-label-sm rounded-md px-3 py-1.5 transition-colors',
-                  uiStudioTab === 'design'
-                    ? 'active-tab-sheen text-primary'
-                    : 'text-muted-foreground hover:bg-secondary hover:text-foreground',
-                )}
-              >
-                Visual editor
-              </button>
-              <button
-                type="button"
-                onClick={() => setUiStudioTab('mockups')}
-                className={cn(
-                  'type-label-sm rounded-md px-3 py-1.5 transition-colors',
-                  uiStudioTab === 'mockups'
-                    ? 'active-tab-sheen text-primary'
-                    : 'text-muted-foreground hover:bg-secondary hover:text-foreground',
-                )}
-              >
-                Mockups
-              </button>
-              <button
-                type="button"
-                onClick={() => setUiStudioTab('preview')}
-                className={cn(
-                  'type-label-sm rounded-md px-3 py-1.5 transition-colors',
-                  uiStudioTab === 'preview'
-                    ? 'active-tab-sheen text-primary'
-                    : 'text-muted-foreground hover:bg-secondary hover:text-foreground',
-                )}
-              >
-                Preview
-              </button>
-            </div>
-            <div className="min-h-0 flex-1 overflow-hidden">
-              {uiStudioTab === 'design' ? (
-                <IdeVisualEditor onLock={() => setNavId('explorer')} projectDisplayName={getBrowserProjectName()} />
-              ) : uiStudioTab === 'mockups' ? (
-                <UiStudioMockupPanel />
-              ) : (
-                <AppPreviewPanel
-                  pages={[
-                    {
-                      id: 'preview-root',
-                      type: 'pageNode',
-                      position: { x: 0, y: 0 },
-                      data: { label: getBrowserProjectName().trim() || 'Workspace' },
-                    },
-                  ]}
-                  onOpenSourceControl={() => setNavId('source-control')}
-                />
-              )}
-            </div>
+        <div className="surface-active tonal-seam-r hidden shrink-0 overflow-hidden md:block" style={{ width: explorer.size }}>
+          <IdeExplorerSidebar projectKey={workspaceProjectKey} />
+        </div>
+
+        <ResizeHandle onMouseDown={explorer.onMouseDown} orientation="horizontal" />
+
+        <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+          <div className="flex min-h-0 flex-1 overflow-hidden">
+            <IdeCenterWorkspace
+              activePane={navIdToCenterPane(navId)}
+              onSelectPane={selectCenterPane}
+              uiStudioTab={uiStudioTab}
+              onUiStudioTabChange={setUiStudioTab}
+            />
           </div>
-        ) : navId === 'explorer' ? (
-          <>
-            <div className="surface-active tonal-seam-r hidden shrink-0 overflow-hidden md:block" style={{ width: explorer.size }}>
-              <IdeExplorerSidebar projectKey={workspaceProjectKey} />
-            </div>
 
-            <ResizeHandle onMouseDown={explorer.onMouseDown} orientation="horizontal" />
+          <ResizeHandle onMouseDown={terminal.onMouseDown} orientation="vertical" />
 
-            <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
-              <div className="flex min-h-0 flex-1 overflow-hidden">
-                <IdeCenterWorkspace onOpenSourceControl={() => setNavId('source-control')} />
-              </div>
+          <div className="shrink-0 overflow-hidden" style={{ height: terminal.size }}>
+            <TerminalPanel />
+          </div>
+        </div>
 
-              <ResizeHandle onMouseDown={terminal.onMouseDown} orientation="vertical" />
+        <ResizeHandle onMouseDown={chat.onMouseDown} orientation="horizontal" />
 
-              <div className="shrink-0 overflow-hidden" style={{ height: terminal.size }}>
-                <TerminalPanel />
-              </div>
-            </div>
-
-            <ResizeHandle onMouseDown={chat.onMouseDown} orientation="horizontal" />
-
-            <div
-              className="surface-active tonal-seam-l hidden h-full min-h-0 shrink-0 overflow-hidden md:flex md:flex-col"
-              style={{ width: chat.size, minWidth: 280, maxWidth: 420 }}
-            >
-              <AIChat />
-            </div>
-          </>
-        ) : (
-          <IdeMainByNav navId={navId} onSelectNav={setNavId} />
-        )}
+        <div
+          className="surface-active tonal-seam-l hidden h-full min-h-0 shrink-0 overflow-hidden md:flex md:flex-col"
+          style={{ width: chat.size, minWidth: 280, maxWidth: 420 }}
+        >
+          <AIChat />
+        </div>
       </div>
     </div>
     </IdeWorkspaceProvider>

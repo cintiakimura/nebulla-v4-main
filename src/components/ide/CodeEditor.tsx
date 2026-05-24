@@ -5,6 +5,8 @@ import { css } from '@codemirror/lang-css';
 import { html } from '@codemirror/lang-html';
 import { javascript } from '@codemirror/lang-javascript';
 import { json } from '@codemirror/lang-json';
+import { markdown } from '@codemirror/lang-markdown';
+import { defaultHighlightStyle, syntaxHighlighting } from '@codemirror/language';
 import { ChevronRight, Circle, Loader2, MonitorPlay, Save, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useIdeWorkspace } from '@/components/ide/IdeWorkspaceContext';
@@ -18,7 +20,7 @@ function languageExtension(path: string) {
   if (lower.endsWith('.json')) return json();
   if (lower.endsWith('.css')) return css();
   if (lower.endsWith('.html') || lower.endsWith('.htm')) return html();
-  if (lower.endsWith('.md')) return [];
+  if (lower.endsWith('.md') || lower.endsWith('.mdx')) return markdown();
   return javascript({ typescript: true, jsx: true });
 }
 
@@ -56,7 +58,7 @@ export function CodeEditor({ hidePreviewButton = false }: { hidePreviewButton?: 
   const crumbs = activePath ? activePath.split('/').filter(Boolean) : [];
   const extensions = useMemo(() => {
     const lang = activePath ? languageExtension(activePath) : [];
-    return [oneDark, ...lang];
+    return [oneDark, syntaxHighlighting(defaultHighlightStyle, { fallback: true }), ...lang];
   }, [activePath]);
 
   return (
