@@ -10,6 +10,7 @@
   - **Master Plan:** Written **only** inside `<START_MASTERPLAN>…</END_MASTERPLAN>` (server persists to `master-plan.json` and the **Master Plan** tab). Chat may show a one-line confirmation, never the six sections inline.
   - **Implementation:** **START_CODING** and/or user **Go** → Grok Code outputs **only** `\`\`\`file:relative/path\` … \`\`\`` blocks (or `File: path` + fence). Server applies via `/api/files/apply-generated`. User reviews files in the explorer, not in chat.
   - **Forbidden in chat:** Pasting route handlers, components, SQL, or plan text as markdown code blocks; using `"""file:` instead of `\`\`\`file:`; mixing onboarding prose with file dumps in the same turn.
+  - **Workspace:** Every IDE chat turn includes `projectKey`, `projectName`, and server `workspaceRoot` (`data/cloud-projects/{key}`). File paths in `\`\`\`file:…\`\`\` are always relative to that root.
 - **Nebula Project** (rules in this folder) is strictly separated from **Nebula Product** (the IDE itself).
 
 **Infrastructure Manager (Silent)**

@@ -18,6 +18,7 @@ import {
   setBrowserProjectKey,
   setBrowserProjectName,
 } from './nebulaProjectApi';
+import { clearIdeWorkspaceMetaCache } from './ideWorkspaceChatContext';
 
 const ACTIVE_CLOUD_PROJECT_NAME_KEY = 'nebula_active_cloud_project_name_v1';
 
@@ -155,6 +156,7 @@ export async function syncActiveCloudProjectFromSession(): Promise<{
 
   setBrowserProjectName(name);
   setBrowserProjectKey(diskKey);
+  clearIdeWorkspaceMetaCache();
   const guestActive = readActiveGuestProjectId();
   if (guestActive) clearActiveGuestProjectId();
 
@@ -202,6 +204,7 @@ export async function selectCloudProjectByName(name: string): Promise<boolean> {
   );
   setBrowserProjectName(trimmed);
   setBrowserProjectKey(diskKey);
+  clearIdeWorkspaceMetaCache();
   clearActiveGuestProjectId();
   try {
     localStorage.setItem(ACTIVE_CLOUD_PROJECT_NAME_KEY, trimmed);
@@ -243,6 +246,7 @@ export function bindGuestWorkspace(): { projectName: string; projectKey: string 
 
   setBrowserProjectKey(key);
   setBrowserProjectName(name);
+  clearIdeWorkspaceMetaCache();
   dispatchWorkspaceSynced(name, key);
   return { projectName: name, projectKey: key };
 }

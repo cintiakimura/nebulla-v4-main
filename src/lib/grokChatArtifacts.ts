@@ -1,3 +1,4 @@
+import { extractMasterPlanInner, sourceHasMasterPlanBlock } from '../../lib/masterPlanTags';
 import { fetchJson } from './apiFetch';
 import { withProjectBody, withProjectQuery } from './nebulaProjectApi';
 
@@ -49,9 +50,12 @@ export function splitMasterPlanSectionsFromBlock(block: string): Partial<Record<
 }
 
 export async function persistMasterPlanFromAssistantSource(source: string): Promise<number> {
-  const match = source.match(/<START_MASTERPLAN>([\s\S]*?)<\/END_MASTERPLAN>/i);
-  if (!match) return 0;
-  const parsed = splitMasterPlanSectionsFromBlock(match[1].trim());
+  const inner = extractMasterPlanInner(source);
+  let parsed = inner ? splitMasterPlanSectionsFromBlock(inner) : {};
+  if (Object.keys(parsed).length === 0) {
+    parsed = splitMasterPlanSectionsFromBlock(source);
+  }
+  if (Object.keys(parsed).length === 0) return 0;
   let saved = 0;
   for (let tabIndex = 1; tabIndex <= 6; tabIndex++) {
     const content = (parsed[tabIndex] ?? '').trim();
@@ -90,12 +94,12 @@ export function formatAssistantForIdeChatDisplay(raw: string): IdeChatDisplayRes
   const normalized = normalizeGrokFileBlockSyntax(raw);
   const filePaths: string[] = [];
 
-  const hadMasterPlan = /<START_MASTERPLAN>[\s\S]*?<\/END_MASTERPLAN>/i.test(normalized);
+  const hadMasterPlan = sourceHasMasterPlanBlock(normalized);
   const hadCodingTag = /<\s*START_CODING\s*>|\bSTART_CODING\b/i.test(normalized);
 
   let text = normalized
     .replace(/<REASONING>[\s\S]*?<\/REASONING>/gi, '')
-    .replace(/<START_MASTERPLAN>[\s\S]*?<\/END_MASTERPLAN>/gi, '')
+    .replace(/<START_MASTERPLAN>[\s\S]*?<\/?END_MASTERPLAN>/gi, '')
     .replace(/<START_MASTERPLAN>[\s\S]*$/gi, '')
     .replace(/<\/END_MASTERPLAN>/gi, '')
     .replace(/<START_CODING>/gi, '')
@@ -123,6 +127,7 @@ export function formatAssistantForIdeChatDisplay(raw: string): IdeChatDisplayRes
   });
 
   text = text.replace(/```[\w.-]*\n[\s\S]*?```/g, '');
+  text = text.replace(/```[\w.-]*[\s\S]*?```/g, '');
 
   text = text
     .replace(/\n{3,}/g, '\n\n')
@@ -158,8 +163,17 @@ export function formatAssistantForIdeChatDisplay(raw: string): IdeChatDisplayRes
 /** Extra rules appended for IDE right-panel chat only. */
 export const IDE_CHAT_EXECUTION_APPENDIX = `
 IDE CHAT SURFACE (project-execution-rules.md — strict):
-- **Never** paste Master Plan section bodies, \`<START_MASTERPLAN>\` blocks, or full implementation code in this chat.
-- Master Plan updates belong **only** inside \`<START_MASTERPLAN>…</END_MASTERPLAN>\` tags (server saves to master-plan.json / Master Plan tab). User sees a short confirmation in chat, not the full plan text.
-- Implementation belongs **only** in \`\`\`file:relative/path\` fenced blocks (or after START_CODING / user presses Go). The server applies files to the workspace — **never** show \`\`\`typescript\`, \`\`\`python\`, or multi-hundred-line code fences in chat.
-- For planning questions: short prose only. For build requests: emit START_CODING (or tell user to press Go) — do not dump files in chat prose.
+- **Two modes:** CONVERSATION_MODE (default) vs BUILD_MODE (user asks to build, fix, implement, scaffold, or presses Go).
+- **CONVERSATION_MODE:** Short natural prose only. No \`\`\`typescript\`, \`\`\`python\`, JSX, SQL, or multi-line code in chat. No Master Plan section text in chat.
+- **BUILD_MODE:** Master Plan only inside \`<START_MASTERPLAN>…</END_MASTERPLAN>\` (server persists to master-plan.json). Implementation only as \`\`\`file:relative/path\` … \`\`\` and/or \`START_CODING\` — server writes files under workspaceRoot. Never dump code in conversational prose in the same turn.
+- If unsure which mode: stay in CONVERSATION_MODE and ask one clarifying question, or tell the user to press **Go** for build mode.
 `.trim();
+
+export function buildModeSystemAppendix(): string {
+  return `
+BUILD_MODE is active for this turn. Do not explain code in chat — emit file artifacts. Required when implementing:
+1) Optional \`<START_MASTERPLAN>…</END_MASTERPLAN>\` if the plan changed.
+2) \`START_CODING\` on its own line when ready.
+3) One or more \`\`\`file:relative/path\` … \`\`\` blocks (paths under src/, app/, pages/, components/, public/).
+`.trim();
+}

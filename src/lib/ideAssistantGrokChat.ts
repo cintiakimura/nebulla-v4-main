@@ -1,6 +1,14 @@
 import { fetchJson, readResponseJson } from './apiFetch';
+import {
+  buildModeSystemAppendix,
+  IDE_CHAT_EXECUTION_APPENDIX,
+} from './grokChatArtifacts';
 import { withProjectBody, withProjectQuery } from './nebulaProjectApi';
-import { IDE_CHAT_EXECUTION_APPENDIX } from './grokChatArtifacts';
+import {
+  detectBuildModeIntent,
+  fetchIdeWorkspaceMeta,
+  formatWorkspaceContextBlock,
+} from './ideWorkspaceChatContext';
 import { buildNebulaAssistantSystemPrompt } from './nebulaAssistantSystemPrompt';
 
 export type IdeChatTurnMessage = { role: 'user' | 'assistant' | 'system'; content: string };
@@ -37,29 +45,35 @@ export async function fetchMasterPlanAndUiStudio(): Promise<{
 }
 
 /**
- * One Grok chat turn for the IDE panel — same `/api/grok/chat` payload shape as the main assistant
- * (master plan + UI studio system prompt), without swarm / agent handoff.
+ * One Grok chat turn for the IDE panel — `/api/grok/chat` with workspace path + mode on every request.
  */
 export async function sendIdeAssistantGrokTurn(options: {
   textToSend: string;
-  /** Includes the latest user message as the last entry. */
   history: IdeChatTurnMessage[];
   userId: string;
   projectName: string;
   ideAppendix: string;
+  buildMode?: boolean;
   signal?: AbortSignal;
 }): Promise<{ assistantContent: string; planningPhase: string; claudeFallbackNotice?: string }> {
   const { textToSend, history, userId, projectName, ideAppendix, signal } = options;
+  const buildMode = options.buildMode ?? detectBuildModeIntent(textToSend);
 
-  const { latestMP, uiStudioApprovedCode } = await fetchMasterPlanAndUiStudio();
-  const systemPrompt =
+  const [wsMeta, planCtx] = await Promise.all([
+    fetchIdeWorkspaceMeta(true),
+    fetchMasterPlanAndUiStudio(),
+  ]);
+  const { latestMP, uiStudioApprovedCode } = planCtx;
+
+  const workspaceContext = formatWorkspaceContextBlock(wsMeta, { buildMode });
+
+  let systemPrompt =
     buildNebulaAssistantSystemPrompt(latestMP, uiStudioApprovedCode) +
     `\n\n${IDE_CHAT_EXECUTION_APPENDIX}` +
+    (buildMode ? `\n\n${buildModeSystemAppendix()}` : '') +
     (ideAppendix.trim()
       ? `\n\nIDE_EDITOR_SURFACE (active workspace file context — user may be editing here):\n${ideAppendix.trim()}`
       : '');
-
-  const grokHeaders: Record<string, string> = { 'Content-Type': 'application/json' };
 
   const tail = history.slice(-10);
   const mapped = tail.map((m, idx, arr) => {
@@ -80,25 +94,23 @@ export async function sendIdeAssistantGrokTurn(options: {
   const data = await fetchJson<{
     choices?: { message?: { content?: string; planningPhase?: string } }[];
     claudeFallbackNotice?: string;
-  }>(
-    withProjectQuery('/api/grok/chat'),
-    {
-      method: 'POST',
-      headers: grokHeaders,
-      credentials: 'include',
-      signal,
-      body: JSON.stringify(
-        withProjectBody({
-          userId,
-          projectName,
-          /** IDE panel always uses main `MAIN_API_KEY_GROK` with grok-4 — never Grok 3 / swarm settings. */
-          chatModel: 'grok-4.1',
-          onboardingAutopilot: false,
-          messages: messagesPayload,
-        }),
-      ),
-    },
-  );
+  }>(withProjectQuery('/api/grok/chat'), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    signal,
+    body: JSON.stringify(
+      withProjectBody({
+        userId,
+        projectName: projectName || wsMeta.projectName,
+        chatModel: 'grok-4',
+        buildMode,
+        workspaceContext,
+        onboardingAutopilot: false,
+        messages: messagesPayload,
+      }),
+    ),
+  });
 
   const rawAssistantContent = data.choices?.[0]?.message?.content || '';
   const planningPhase = data.choices?.[0]?.message?.planningPhase || '';

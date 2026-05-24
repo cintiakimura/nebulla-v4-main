@@ -10,6 +10,7 @@ import { MyServicesOnboarding } from '@/components/MyServicesOnboarding';
 import { MasterPlan } from '@/components/MasterPlan';
 import { SourceControlPanel } from '@/components/SourceControlPanel';
 import { AppPreviewPanel } from '@/components/AppPreviewPanel';
+import { IdeAppPreviewDock } from '@/components/ide/IdeAppPreviewDock';
 import { ExplorerPanel } from '@/components/ExplorerPanel';
 import { IdeDashboardEmbed } from '@/components/ide/IdeDashboardEmbed';
 import { IdeWorkspaceProvider, useIdeWorkspace } from '@/components/ide/IdeWorkspaceContext';
@@ -20,7 +21,7 @@ import {
   type NebulaSessionUser,
 } from '../../lib/nebulaCloud';
 import { fetchNebulaPublicConfig, type NebulaPublicConfig } from '../../lib/nebulaPublicConfig';
-import { getBrowserProjectKey, getBrowserProjectName } from '../../lib/nebulaProjectApi';
+import { getBrowserProjectKey, getBrowserProjectName, withProjectBody, withProjectQuery } from '../../lib/nebulaProjectApi';
 import {
   WorkspaceSetupGate,
   type WorkspaceContext,
@@ -278,6 +279,31 @@ export function NebullaIDE() {
   }, [handleWorkspaceReady, refreshMyServicesContext]);
 
   useEffect(() => {
+    const w = window as Window & { syncMindMapFromMasterPlan?: () => Promise<void> };
+    w.syncMindMapFromMasterPlan = async () => {
+      try {
+        await fetch(
+          withProjectQuery('/api/workspace/mind-map/sync-from-master-plan'),
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify(
+              withProjectBody({ projectName: getBrowserProjectName().trim() || 'Untitled Project' }),
+            ),
+          },
+        );
+        window.dispatchEvent(new CustomEvent('nebula-files-applied'));
+      } catch {
+        /* ignore */
+      }
+    };
+    return () => {
+      delete w.syncMindMapFromMasterPlan;
+    };
+  }, []);
+
+  useEffect(() => {
     return registerNebulaUiStudioBridge({
       openUiStudio: (opts) => {
         setNavId('visual-ui-editor');
@@ -294,6 +320,12 @@ export function NebullaIDE() {
       setUiStudioTab('design');
     }
   }, [navId, uiStudioTab]);
+
+  useEffect(() => {
+    const onOpenMasterPlan = () => setNavId('master-plan');
+    window.addEventListener('nebula-open-master-plan', onOpenMasterPlan);
+    return () => window.removeEventListener('nebula-open-master-plan', onOpenMasterPlan);
+  }, []);
 
   const selectNavItem = useCallback((id: string) => {
     if (id === 'project-settings') {
@@ -410,8 +442,11 @@ export function NebullaIDE() {
             <ResizeHandle onMouseDown={explorer.onMouseDown} orientation="horizontal" />
 
             <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
-              <div className="flex-1 overflow-hidden">
-                <CodeEditor />
+              <div className="flex min-h-0 flex-1 overflow-hidden">
+                <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+                  <CodeEditor />
+                </div>
+                <IdeAppPreviewDock onOpenSourceControl={() => setNavId('source-control')} />
               </div>
 
               <ResizeHandle onMouseDown={terminal.onMouseDown} orientation="vertical" />

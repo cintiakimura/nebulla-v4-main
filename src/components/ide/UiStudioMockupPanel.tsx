@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Check, Loader2, RefreshCw, Sparkles } from 'lucide-react';
 import { fetchJson } from '../../lib/apiFetch';
+import { seedBasicUiFallback } from '../../lib/ideArtifactSync';
 import { getBrowserProjectName, withProjectBody, withProjectQuery } from '../../lib/nebulaProjectApi';
 
 type VariationSlot = {
@@ -129,7 +130,24 @@ export function UiStudioMockupPanel() {
       }
       setStatus(`Variation ${index + 1} ready (${data.source ?? 'engine'}).`);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Generate failed');
+      const msg = e instanceof Error ? e.message : 'Generate failed';
+      const creditsLike = /credit|quota|billing|v0 unavailable/i.test(msg);
+      if (creditsLike) {
+        const written = await seedBasicUiFallback(projectName);
+        if (written.length > 0) {
+          window.dispatchEvent(new CustomEvent('nebula-open-app-preview'));
+          setStatus(`V0 credits unavailable — basic preview written (${written.join(', ')}).`);
+          setError('');
+          setSlots((prev) => {
+            const next = [...prev];
+            next[index] = { ...next[index], loading: false };
+            return next;
+          });
+          setBusy(false);
+          return;
+        }
+      }
+      setError(msg);
       setSlots((prev) => {
         const next = [...prev];
         next[index] = { ...next[index], loading: false };

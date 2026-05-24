@@ -92,7 +92,7 @@ async function main() {
       projectKey: "default",
       userId: "smoke-test",
       projectName: "Smoke",
-      chatModel: "grok-4.1",
+      chatModel: "grok-4",
       onboardingAutopilot: false,
       messages: [
         { role: "system", content: "You are a test harness. Reply with exactly: OK" },

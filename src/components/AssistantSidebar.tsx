@@ -510,7 +510,7 @@ export function AssistantSidebar({
       const backendOnlyMasterPlanTurn =
         Boolean(opts?.onboardingAutopilot) ||
         /<\s*START_CODING\s*>|\bSTART_CODING\b/i.test(masterPlanSource);
-      const masterPlanMatch = masterPlanSource.match(/<START_MASTERPLAN>([\s\S]*?)<END_MASTERPLAN>/);
+      const masterPlanMatch = masterPlanSource.match(/<START_MASTERPLAN>([\s\S]*?)<\/?END_MASTERPLAN>/i);
       if (masterPlanMatch && (window as any).updateMasterPlanSection && !backendOnlyMasterPlanTurn) {
         const newPlanContent = masterPlanMatch[1].trim();
         const parsed = splitMasterPlanSectionsFromBlock(newPlanContent);
@@ -745,7 +745,7 @@ export function AssistantSidebar({
       // Strip ALL tags for display and TTS
       const cleanText = masterPlanSource
         .replace(/<REASONING>[\s\S]*?<\/REASONING>/g, '')
-        .replace(/<START_MASTERPLAN>[\s\S]*?<END_MASTERPLAN>/g, '')
+        .replace(/<START_MASTERPLAN>[\s\S]*?<\/?END_MASTERPLAN>/gi, '')
         .replace(/<START_MASTERPLAN>/g, '')
         .replace(/<END_MASTERPLAN>/g, '')
         .replace(/<START_CODING>/g, '')

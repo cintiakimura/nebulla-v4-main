@@ -1,7 +1,26 @@
-import { useCallback, type KeyboardEvent, type MouseEvent } from 'react';
-import { ChevronRight, Circle, Loader2, Save, X } from 'lucide-react';
+import { useCallback, useMemo, type KeyboardEvent, type MouseEvent } from 'react';
+import { oneDark } from '@codemirror/theme-one-dark';
+import CodeMirror from '@uiw/react-codemirror';
+import { css } from '@codemirror/lang-css';
+import { html } from '@codemirror/lang-html';
+import { javascript } from '@codemirror/lang-javascript';
+import { json } from '@codemirror/lang-json';
+import { ChevronRight, Circle, Loader2, MonitorPlay, Save, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useIdeWorkspace } from '@/components/ide/IdeWorkspaceContext';
+
+function languageExtension(path: string) {
+  const lower = path.toLowerCase();
+  if (lower.endsWith('.tsx')) return javascript({ typescript: true, jsx: true });
+  if (lower.endsWith('.ts')) return javascript({ typescript: true });
+  if (lower.endsWith('.jsx')) return javascript({ jsx: true });
+  if (lower.endsWith('.js') || lower.endsWith('.mjs') || lower.endsWith('.cjs')) return javascript();
+  if (lower.endsWith('.json')) return json();
+  if (lower.endsWith('.css')) return css();
+  if (lower.endsWith('.html') || lower.endsWith('.htm')) return html();
+  if (lower.endsWith('.md')) return [];
+  return javascript({ typescript: true, jsx: true });
+}
 
 export function CodeEditor() {
   const {
@@ -17,7 +36,7 @@ export function CodeEditor() {
   } = useIdeWorkspace();
 
   const onKeyDownEditor = useCallback(
-    (e: KeyboardEvent<HTMLTextAreaElement>) => {
+    (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === 's') {
         e.preventDefault();
         if (activePath) void saveTab(activePath);
@@ -35,6 +54,10 @@ export function CodeEditor() {
   );
 
   const crumbs = activePath ? activePath.split('/').filter(Boolean) : [];
+  const extensions = useMemo(() => {
+    const lang = activePath ? languageExtension(activePath) : [];
+    return [oneDark, ...lang];
+  }, [activePath]);
 
   return (
     <div className="flex h-full flex-col bg-background">
@@ -67,16 +90,27 @@ export function CodeEditor() {
             ))
           )}
         </div>
-        <button
-          type="button"
-          title="Save (⌘S / Ctrl+S)"
-          disabled={!activePath || !activeTab?.dirty || activeTab.loading}
-          onClick={() => activePath && void saveTab(activePath)}
-          className="btn-secondary-surface type-label-sm flex shrink-0 items-center gap-1 rounded-md px-2 py-1 text-muted-foreground disabled:opacity-40"
-        >
-          <Save className="h-3.5 w-3.5" />
-          Save
-        </button>
+        <div className="flex shrink-0 items-center gap-1">
+          <button
+            type="button"
+            title="Open app preview"
+            className="btn-secondary-surface type-label-sm flex items-center gap-1 rounded-md px-2 py-1 text-muted-foreground hover:text-foreground"
+            onClick={() => window.dispatchEvent(new CustomEvent('nebula-open-app-preview'))}
+          >
+            <MonitorPlay className="h-3.5 w-3.5" />
+            Preview
+          </button>
+          <button
+            type="button"
+            title="Save (⌘S / Ctrl+S)"
+            disabled={!activePath || !activeTab?.dirty || activeTab.loading}
+            onClick={() => activePath && void saveTab(activePath)}
+            className="btn-secondary-surface type-label-sm flex shrink-0 items-center gap-1 rounded-md px-2 py-1 text-muted-foreground disabled:opacity-40"
+          >
+            <Save className="h-3.5 w-3.5" />
+            Save
+          </button>
+        </div>
       </div>
 
       <div className="surface-active flex h-7 min-h-7 items-center gap-1 overflow-x-auto px-3">
@@ -112,23 +146,28 @@ export function CodeEditor() {
         </div>
       ) : null}
 
-      <div className="relative flex min-h-0 flex-1 flex-col">
+      <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden" onKeyDown={onKeyDownEditor}>
         {!activePath || !activeTab ? (
           <div className="type-body-md flex flex-1 items-center justify-center p-6 text-center text-muted-foreground">
             Open a file from the explorer to edit workspace sources.
           </div>
         ) : (
-          <textarea
+          <CodeMirror
             value={activeTab.content}
-            onChange={(e) => {
-              clearSaveError();
-              updateActiveContent(e.target.value);
+            height="100%"
+            className="nebulla-codemirror min-h-0 flex-1 overflow-hidden text-[13px]"
+            extensions={extensions}
+            editable={!activeTab.loading}
+            basicSetup={{
+              lineNumbers: true,
+              foldGutter: true,
+              highlightActiveLine: true,
+              bracketMatching: true,
             }}
-            onKeyDown={onKeyDownEditor}
-            spellCheck={false}
-            className="type-body-md min-h-0 flex-1 resize-none bg-background p-3 font-mono leading-relaxed text-foreground outline-none"
-            aria-label={`Editor: ${activePath}`}
-            disabled={activeTab.loading}
+            onChange={(value) => {
+              clearSaveError();
+              updateActiveContent(value);
+            }}
           />
         )}
       </div>

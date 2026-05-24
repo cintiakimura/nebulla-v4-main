@@ -617,7 +617,7 @@ export function IdeVisualEditor({
 
   const runApplyToCode = async () => {
     if (!eligible) {
-      setMockNotice('Preview mode: Save would run Grok 4.1 and write files under generated-ui/versions/… — complete the v0 pipeline to enable disk apply.');
+      setMockNotice('Preview mode: Save would run Grok 4 and write files under generated-ui/versions/… — complete the v0 pipeline to enable disk apply.');
       setApplyConfirmOpen(false);
       setBusy(false);
       return;
@@ -714,7 +714,29 @@ export function IdeVisualEditor({
 
   const runV0Generation = async () => {
     if (hasV0ApiKey === false) {
-      setError('Please add your V0_API_KEY in .env');
+      setBusy(true);
+      setError('');
+      try {
+        const fb = await fetch(withProjectQuery('/api/nebula-ui-studio/basic-scaffold'), {
+          method: 'POST',
+          headers: persistHeaders(),
+          body: JSON.stringify(withProjectBody({ projectDisplayName: projectLabel })),
+        });
+        const fbData = (await fb.json()) as { written?: string[]; hint?: string };
+        if (fb.ok && (fbData.written?.length ?? 0) > 0) {
+          window.dispatchEvent(new CustomEvent('nebula-files-applied'));
+          window.dispatchEvent(new CustomEvent('nebula-open-app-preview'));
+          setMockNotice(
+            fbData.hint ||
+              `No V0_API_KEY — Nebula wrote a basic HTML preview (${fbData.written!.join(', ')}).`,
+          );
+          await loadEligibility();
+          return;
+        }
+      } catch {
+        /* fall through */
+      }
+      setError('Add V0_API_KEY for full v0 UI, or use Preview for the basic HTML shell.');
       return;
     }
     setBusy(true);
@@ -735,9 +757,18 @@ export function IdeVisualEditor({
         chatId?: string;
         written?: string[];
         demoUrl?: string;
+        source?: string;
+        ok?: boolean;
       };
       if (!res.ok) {
         throw new Error(data.hint || data.error || 'v0 generation failed');
+      }
+      if (data.source === 'basic-scaffold') {
+        window.dispatchEvent(new CustomEvent('nebula-files-applied'));
+        window.dispatchEvent(new CustomEvent('nebula-open-app-preview'));
+        setMockNotice(data.hint || 'Basic UI preview shell written (V0 credits unavailable).');
+        await loadEligibility();
+        return;
       }
       if (typeof data.chatId === 'string') {
         setV0ChatId(data.chatId);
@@ -761,6 +792,29 @@ export function IdeVisualEditor({
       await loadEligibility();
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'v0 generation failed';
+      const creditsLike = /credit|quota|billing/i.test(msg);
+      if (creditsLike || msg.includes('V0 unavailable')) {
+        try {
+          const fb = await fetch(withProjectQuery('/api/nebula-ui-studio/basic-scaffold'), {
+            method: 'POST',
+            headers: persistHeaders(),
+            body: JSON.stringify(withProjectBody({ projectDisplayName: projectLabel })),
+          });
+          const fbData = (await fb.json()) as { written?: string[] };
+          if (fb.ok && (fbData.written?.length ?? 0) > 0) {
+            window.dispatchEvent(new CustomEvent('nebula-files-applied'));
+            window.dispatchEvent(new CustomEvent('nebula-open-app-preview'));
+            setMockNotice(
+              `V0 unavailable — Nebula applied a basic HTML preview (${fbData.written!.join(', ')}). Open Preview in the explorer.`,
+            );
+            setError('');
+            await loadEligibility();
+            return;
+          }
+        } catch {
+          /* fall through */
+        }
+      }
       setError(msg.includes('V0_API_KEY') ? 'Please add your V0_API_KEY in .env' : msg);
     } finally {
       setBusy(false);
@@ -1435,7 +1489,7 @@ export function IdeVisualEditor({
                   Are you sure you want to apply/code these changes? The server will copy the current contents of every file Grok is
                   about to change into <code className="text-cyan-300/90">generated-ui/versions/&lt;timestamp&gt;/</code>, then write
                   updates under <code className="text-cyan-300/90">src/</code> (and other allowed paths). Your immutable v0 folder is
-                  never modified. Grok 4.1 produces the file contents.
+                  never modified. Grok 4 produces the file contents.
                 </p>
               </div>
             </div>

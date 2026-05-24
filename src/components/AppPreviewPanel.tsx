@@ -77,15 +77,29 @@ export function AppPreviewPanel({
   toolRailWidthPx = 40,
   sourceControlActive = false,
   onToolRailResizeMouseDown,
+  defaultPanelOpen = false,
+  onCloseDock,
+  embeddedInDock = false,
 }: {
   pages: FlowNode[];
   onOpenSourceControl?: () => void;
   toolRailWidthPx?: number;
   sourceControlActive?: boolean;
   onToolRailResizeMouseDown?: (e: React.MouseEvent) => void;
+  /** When true, preview iframe is visible immediately (IDE explorer dock). */
+  defaultPanelOpen?: boolean;
+  onCloseDock?: () => void;
+  /** Fills parent column instead of floating tool rail (explorer dock). */
+  embeddedInDock?: boolean;
 }) {
-  const [panelOpen, setPanelOpen] = useState(false);
+  const [panelOpen, setPanelOpen] = useState(defaultPanelOpen);
   const [panelWidth, setPanelWidth] = useState(readStoredPreviewWidth);
+
+  useEffect(() => {
+    const onOpen = () => setPanelOpen(true);
+    window.addEventListener('nebula-open-app-preview', onOpen);
+    return () => window.removeEventListener('nebula-open-app-preview', onOpen);
+  }, []);
   const [viewport, setViewport] = useState<ViewportMode>('desktop');
   const [fullscreen, setFullscreen] = useState(false);
   const [actAsUser, setActAsUser] = useState(false);
@@ -410,6 +424,29 @@ export function AppPreviewPanel({
               {iframeBlock}
             </div>
           </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (embeddedInDock) {
+    return (
+      <div className="flex h-full min-h-0 w-full flex-col overflow-hidden bg-background">
+        <div className="flex shrink-0 items-center justify-between border-b border-white/10 px-2 py-1">
+          <span className="type-label-sm text-primary">App preview</span>
+          {onCloseDock ? (
+            <button
+              type="button"
+              className="type-label-sm text-muted-foreground hover:text-foreground"
+              onClick={onCloseDock}
+            >
+              Hide
+            </button>
+          ) : null}
+        </div>
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+          {previewChrome}
+          {iframeBlock}
         </div>
       </div>
     );

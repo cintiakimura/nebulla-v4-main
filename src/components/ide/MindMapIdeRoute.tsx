@@ -37,26 +37,33 @@ export function MindMapIdeRoute() {
 
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const data = await fetchJson<{ pages?: Node[]; edges?: Edge[] }>(
-          withProjectQuery('/api/workspace/mind-map'),
-        );
-        if (cancelled) return;
-        const p = Array.isArray(data.pages) && data.pages.length > 0 ? data.pages : DEFAULT_MIND_MAP.pages;
-        const e = Array.isArray(data.edges) ? data.edges : [];
-        setPages(p);
-        setEdges(e);
-      } catch {
-        /* keep defaults */
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
+  const reloadMindMap = useCallback(async () => {
+    try {
+      const data = await fetchJson<{ pages?: Node[]; edges?: Edge[] }>(
+        withProjectQuery('/api/workspace/mind-map'),
+      );
+      const p = Array.isArray(data.pages) && data.pages.length > 0 ? data.pages : DEFAULT_MIND_MAP.pages;
+      const e = Array.isArray(data.edges) ? data.edges : [];
+      setPages(p);
+      setEdges(e);
+    } catch {
+      /* keep defaults */
+    }
   }, []);
+
+  useEffect(() => {
+    void reloadMindMap();
+  }, [reloadMindMap]);
+
+  useEffect(() => {
+    const onRefresh = () => void reloadMindMap();
+    window.addEventListener('nebula-master-plan-updated', onRefresh);
+    window.addEventListener('nebula-files-applied', onRefresh);
+    return () => {
+      window.removeEventListener('nebula-master-plan-updated', onRefresh);
+      window.removeEventListener('nebula-files-applied', onRefresh);
+    };
+  }, [reloadMindMap]);
 
   const flushSave = useCallback(async () => {
     try {

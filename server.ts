@@ -43,6 +43,12 @@ import {
 } from "./lib/nebulaMainGrokResolver";
 import { callClaudeChatCompletion } from "./lib/nebulaClaudeFallback";
 import {
+  bootstrapMasterPlanFromWorkspace,
+  ensurePreviewIndexHtml,
+  syncMindMapFromMasterPlan,
+  writeBasicUiScaffold,
+} from "./lib/nebulaIdeWorkspaceArtifacts";
+import {
   isAllowedV0WriteRel,
   pickPrimaryUiFile,
   v0CreateChat,
@@ -102,7 +108,7 @@ function xaiUsageTotal(usage: unknown): number {
 function stripAssistantTagsForMemory(text: string): string {
   return text
     .replace(/<REASONING>[\s\S]*?<\/REASONING>/g, "")
-    .replace(/<START_MASTERPLAN>[\s\S]*?<\/END_MASTERPLAN>/g, "")
+    .replace(/<START_MASTERPLAN>[\s\S]*?<\/?END_MASTERPLAN>/g, "")
     .replace(/<START_MASTERPLAN>/g, "")
     .replace(/<END_MASTERPLAN>/g, "")
     .replace(/<START_CODING>/g, "")
@@ -390,12 +396,20 @@ async function startServer() {
   /** Cloud workspace metadata (no local folder selection). */
   app.get("/api/workspace/active", (req, res) => {
     const pp = ensureCloudProjectWorkspace(REPO_ROOT, NEBULA_PROJECT_ROOT, projectDiskKey(req));
+    const q = (req.query || {}) as Record<string, unknown>;
+    const projectName =
+      typeof q.projectName === "string" && q.projectName.trim()
+        ? String(q.projectName).trim()
+        : "Untitled Project";
     res.json({
       mode: "cloud",
       projectKey: pp.projectKey,
+      projectName,
+      workspaceRoot: pp.workspaceRoot,
+      workspaceRootLabel: `data/cloud-projects/${pp.projectKey}`,
       activePath: null,
       configuredPath: null,
-      exists: true,
+      exists: fs.existsSync(pp.workspaceRoot),
     });
   });
 
@@ -834,6 +848,77 @@ No approved UI code yet.
       res.json({ ok: true });
     } catch (err: unknown) {
       res.status(500).json({ error: err instanceof Error ? err.message : "mind map write failed" });
+    }
+  });
+
+  app.post("/api/workspace/mind-map/sync-from-master-plan", (req, res) => {
+    try {
+      const pp = projectPathsFor(req);
+      const body = req.body || {};
+      const projectLabel =
+        typeof body.projectName === "string" && body.projectName.trim()
+          ? String(body.projectName).trim()
+          : "Untitled Project";
+      const graph = syncMindMapFromMasterPlan({
+        workspaceRoot: pp.workspaceRoot,
+        masterPlanPath: pp.masterPlanPath,
+        projectLabel,
+      });
+      res.json({ ok: true, pages: graph.pages, edges: graph.edges });
+    } catch (err: unknown) {
+      res.status(500).json({ error: err instanceof Error ? err.message : "mind map sync failed" });
+    }
+  });
+
+  app.post("/api/ide/sync-project-artifacts", (req, res) => {
+    try {
+      const pp = projectPathsFor(req);
+      const body = req.body || {};
+      const projectName =
+        typeof body.projectName === "string" && body.projectName.trim()
+          ? String(body.projectName).trim()
+          : "Untitled Project";
+      const userNote = typeof body.userNote === "string" ? body.userNote.trim() : "";
+      const mp = bootstrapMasterPlanFromWorkspace({
+        workspaceRoot: pp.workspaceRoot,
+        masterPlanPath: pp.masterPlanPath,
+        projectName,
+        userNote,
+      });
+      const mind = syncMindMapFromMasterPlan({
+        workspaceRoot: pp.workspaceRoot,
+        masterPlanPath: pp.masterPlanPath,
+        projectLabel: projectName,
+      });
+      const previewIndexWritten = ensurePreviewIndexHtml(pp.workspaceRoot, projectName);
+      let basicUiWritten: string[] = [];
+      if (Boolean(body.seedBasicUi)) {
+        basicUiWritten = writeBasicUiScaffold(pp.workspaceRoot, projectName);
+      }
+      res.json({
+        masterPlanTabs: mp.updated,
+        mindMapSynced: mind.written,
+        previewIndexWritten,
+        basicUiWritten,
+      });
+    } catch (err: unknown) {
+      res.status(500).json({ error: err instanceof Error ? err.message : "artifact sync failed" });
+    }
+  });
+
+  app.post("/api/nebula-ui-studio/basic-scaffold", (req, res) => {
+    try {
+      const pp = projectPathsFor(req);
+      const body = req.body || {};
+      const projectName =
+        typeof body.projectDisplayName === "string" && body.projectDisplayName.trim()
+          ? String(body.projectDisplayName).trim()
+          : "Untitled Project";
+      const written = writeBasicUiScaffold(pp.workspaceRoot, projectName);
+      ensurePreviewIndexHtml(pp.workspaceRoot, projectName);
+      res.json({ ok: true, written, source: "basic-scaffold" });
+    } catch (err: unknown) {
+      res.status(500).json({ error: err instanceof Error ? err.message : "basic scaffold failed" });
     }
   });
 
@@ -1472,9 +1557,18 @@ No approved UI code yet.
           typeof body.projectDisplayName === "string" ? body.projectDisplayName : undefined,
       });
       if (pass.ok === false) {
-        return res.status(pass.status).json({
-          error: pass.hint ?? pass.error,
-          hint: pass.hint,
+        const { workspaceRoot } = projectPathsFor(req);
+        const displayName =
+          typeof body.projectDisplayName === "string" ? body.projectDisplayName : "Untitled Project";
+        const written = writeBasicUiScaffold(workspaceRoot, displayName);
+        ensurePreviewIndexHtml(workspaceRoot, displayName);
+        return res.json({
+          ok: true,
+          source: "basic-scaffold",
+          written,
+          error: pass.error,
+          hint:
+            "V0 unavailable. Nebula wrote a basic HTML preview shell — open Preview in the explorer or run npm run dev for Next.js.",
         });
       }
       return res.json({
@@ -1633,9 +1727,21 @@ No approved UI code yet.
         });
       }
 
-      return res.status(500).json({
-        error: `No generator available. Add ${V0_ENV_VAR}, ${MAIN_AI_ENV_VAR}, and/or PENCIL_API_KEY on the server, or set NEBULA_UI_STUDIO_DEMO=1 for bundled demo SVGs.`,
-        hint: NEBULA_V0_KEY_SETUP_HINT,
+      const pp = projectPathsFor(req);
+      const displayName =
+        typeof req.body?.projectDisplayName === "string" ? req.body.projectDisplayName : "Untitled Project";
+      writeBasicUiScaffold(pp.workspaceRoot, displayName);
+      ensurePreviewIndexHtml(pp.workspaceRoot, displayName);
+      const svg = loadBundledDemoMockupSvg();
+      const r2 = await r2FieldsForSvg(projectDiskKey(req), svg, `fallback-variation-${variationIndex}.svg`);
+      return res.json({
+        svg,
+        demoMode: true,
+        usedPrompt: storedPrompt || "",
+        source: "basic-scaffold",
+        message:
+          "V0/Grok/Pencil unavailable — using bundled demo mockup and basic HTML preview. Open Preview in the IDE.",
+        ...r2,
       });
     } catch (error) {
       console.error("Error calling Nebula UI Studio engine:", error);
@@ -2459,7 +2565,11 @@ ${workflowContext}`;
   });
 
   app.post("/api/grok/chat", async (req, res) => {
-    const { messages, userId, projectName, onboardingAutopilot } = req.body || {};
+    const body = req.body || {};
+    const { messages, userId, projectName, onboardingAutopilot } = body;
+    const buildMode = Boolean(body.buildMode);
+    const workspaceContextFromClient =
+      typeof body.workspaceContext === "string" ? body.workspaceContext.trim() : "";
     const keyRes = await resolveMainGrokApiKeyDetailed(req);
 
     if (keyRes.ok === false) {
@@ -2481,7 +2591,11 @@ ${workflowContext}`;
     const convScopeChat = { userId: convUserId, projectKey: ppChat.projectKey, projectLabel: convProject };
 
     /** Default chat model for detected provider; override with MAIN_AI_CHAT_MODEL. */
-    const resolvedModel = resolveMainAiChatModel(mainAiProvider);
+    let resolvedModel = resolveMainAiChatModel(mainAiProvider);
+    const clientChatModel = typeof body.chatModel === "string" ? body.chatModel.trim() : "";
+    if (mainAiProvider === "xai" && (clientChatModel === "grok-4" || clientChatModel === "grok-4.1")) {
+      resolvedModel = process.env.GROK_CHAT_MODEL_GROK41?.trim() || "grok-4";
+    }
 
     let messagesForApi: { role: string; content?: string }[] = Array.isArray(messages) ? messages : [];
 
@@ -2533,6 +2647,29 @@ ${answer.slice(0, 8000)}`;
       messagesForApi = injectMemoryIntoMessages(messagesForApi, memory);
     } catch (memErr) {
       console.error("Conversation memory load failed:", memErr);
+    }
+
+    const workspaceBlock =
+      workspaceContextFromClient ||
+      [
+        "ACTIVE_WORKSPACE (authoritative):",
+        `- projectName: ${convProject}`,
+        `- projectKey: ${ppChat.projectKey}`,
+        `- workspaceRoot: ${ppChat.workspaceRoot}`,
+        `- All \`\`\`file:relative/path\`\`\` paths are relative to workspaceRoot.`,
+      ].join("\n");
+    const modeBlock = buildMode
+      ? "BUILD_MODE: ON — user wants implementation. Master Plan only inside <START_MASTERPLAN>…</END_MASTERPLAN>. Code only as ```file:path``` blocks or START_CODING; never paste implementation as ```typescript``` in chat."
+      : "CONVERSATION_MODE: ON — short natural prose only; no markdown code fences or full file bodies unless the user explicitly asks for a one-line snippet.";
+    const workspaceSystem = `${workspaceBlock}\n${modeBlock}`;
+    const sysIdx = messagesForApi.findIndex((m) => m.role === "system");
+    if (sysIdx >= 0 && typeof messagesForApi[sysIdx].content === "string") {
+      messagesForApi[sysIdx] = {
+        role: "system",
+        content: `${workspaceSystem}\n\n${messagesForApi[sysIdx].content}`,
+      };
+    } else {
+      messagesForApi.unshift({ role: "system", content: workspaceSystem });
     }
 
     try {
@@ -2983,7 +3120,7 @@ function extractGrokBSummaries(responseText: string): Partial<Record<number, str
 
 function extractSummariesFromMasterPlanBlock(responseText: string): Partial<Record<number, string>> {
   const out: Partial<Record<number, string>> = {};
-  const blockMatch = responseText.match(/<START_MASTERPLAN>([\s\S]*?)<END_MASTERPLAN>/i);
+  const blockMatch = responseText.match(/<START_MASTERPLAN>([\s\S]*?)<\/?END_MASTERPLAN>/i);
   if (!blockMatch) return out;
   const newPlanContent = blockMatch[1].trim();
   if (!newPlanContent) return out;

@@ -28,8 +28,8 @@ export type EditorTab = {
   loading: boolean;
 };
 
-/** IDE right-sidebar chat uses grok-4 + `MAIN_API_KEY_GROK` only (project execution rules). */
-export const IDE_CHAT_MODELS = ['grok-4.1'] as const;
+/** IDE right-sidebar chat uses Grok 4 + `MAIN_API_KEY_GROK` only (project execution rules). */
+export const IDE_CHAT_MODELS = ['grok-4'] as const;
 export type IdeChatModelId = (typeof IDE_CHAT_MODELS)[number];
 
 type IdeWorkspaceValue = {
@@ -72,7 +72,7 @@ export function IdeWorkspaceProvider({ children }: { children: ReactNode }) {
   const [overviewError, setOverviewError] = useState<string | null>(null);
   const [tabs, setTabs] = useState<EditorTab[]>([]);
   const [activePath, setActivePath] = useState<string | null>(null);
-  const [chatModel, setChatModelState] = useState<IdeChatModelId>('grok-4.1');
+  const [chatModel, setChatModelState] = useState<IdeChatModelId>('grok-4');
   const [saveError, setSaveError] = useState<string | null>(null);
   const tabsRef = useRef(tabs);
   tabsRef.current = tabs;
@@ -252,10 +252,22 @@ export function IdeWorkspaceProvider({ children }: { children: ReactNode }) {
   return <IdeWorkspaceContext.Provider value={value}>{children}</IdeWorkspaceContext.Provider>;
 }
 
-export function ideContextSnippetForChat(path: string | null, content: string, maxLen = IDE_SWARM_FOCUS_SNIPPET_MAX): string {
+export function ideContextSnippetForChat(
+  path: string | null,
+  content: string,
+  maxLen = IDE_SWARM_FOCUS_SNIPPET_MAX,
+  workspaceRootLabel?: string,
+): string {
   const project = getBrowserProjectName().trim() || 'Untitled project';
-  const head = `Active project: ${project}\n${path ? `Open file: ${path}\n` : 'No file open in the editor.\n'}`;
-  if (!path) return head;
+  const key = getBrowserProjectKey();
+  const root = workspaceRootLabel?.trim() || `data/cloud-projects/${key}`;
+  const head = [
+    `Active project: ${project}`,
+    `Project key: ${key}`,
+    `Workspace root: ${root}`,
+    path ? `Open file: ${path}` : 'No file open in the editor.',
+  ].join('\n');
+  if (!path) return `${head}\n`;
   const body = content.length > maxLen ? `${content.slice(0, maxLen)}\n\n… [truncated]` : content;
   return `${head}\n--- file contents ---\n${body}`;
 }

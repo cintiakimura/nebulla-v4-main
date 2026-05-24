@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState } from 'react';
-import { ChevronDown, Copy, GitBranch } from 'lucide-react';
+import { ChevronDown, Copy, GitBranch, MonitorPlay } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useSwarm } from '@/components/swarm/SwarmProvider';
 import { Logo } from '@/components/Logo';
@@ -13,7 +13,7 @@ import { fetchMasterPlanAndUiStudio } from '../../lib/ideAssistantGrokChat';
 import { compactMasterPlanForInspect } from '../../lib/ideMasterPlanSummary';
 
 const models: { id: IdeChatModelId; name: string; badge: string | null }[] = [
-  { id: 'grok-4.1', name: 'Grok 4.1', badge: 'Latest' },
+  { id: 'grok-4', name: 'Grok 4', badge: 'Latest' },
 ];
 
 export function TopBar({
@@ -171,6 +171,15 @@ export function TopBar({
         </div>
 
         <div className="flex shrink-0 items-center gap-2 sm:gap-3">
+          <button
+            type="button"
+            title="Open live app preview"
+            onClick={() => window.dispatchEvent(new CustomEvent('nebula-open-app-preview'))}
+            className="btn-secondary-surface type-label-sm hidden h-9 items-center gap-1.5 rounded-md px-2.5 text-muted-foreground hover:text-foreground sm:inline-flex"
+          >
+            <MonitorPlay className="h-4 w-4" aria-hidden />
+            Preview
+          </button>
           <button
             type="button"
             onClick={handleRunAndTest}

@@ -9,7 +9,7 @@ import {
   serverReportsMainAiKey,
 } from '../../lib/grokKey';
 import { readResponseJson } from '../../lib/apiFetch';
-import { getBrowserProjectName, withProjectQuery } from '../../lib/nebulaProjectApi';
+import { getBrowserProjectName, withProjectBody, withProjectQuery } from '../../lib/nebulaProjectApi';
 import { sendIdeAssistantGrokTurn } from '../../lib/ideAssistantGrokChat';
 import {
   formatAssistantForIdeChatDisplay,
@@ -21,6 +21,12 @@ import {
   runGoCodeAndApply,
 } from '../../lib/nebulaGrokCodingPipeline';
 import { syncActiveCloudProjectFromSession } from '../../lib/nebulaCloud';
+import { syncIdeProjectArtifacts } from '../../lib/ideArtifactSync';
+import {
+  clearIdeWorkspaceMetaCache,
+  detectBuildModeIntent,
+  fetchIdeWorkspaceMeta,
+} from '../../lib/ideWorkspaceChatContext';
 import { ideContextSnippetForChat, useIdeWorkspace } from '@/components/ide/IdeWorkspaceContext';
 import { fetchConversationLogEntries } from '../../lib/conversationLogClient';
 import {
@@ -98,7 +104,7 @@ function ChatRoundButton({
 }
 
 const modelLabel: Record<string, string> = {
-  'grok-4.1': 'Grok 4.1',
+  'grok-4': 'Grok 4',
 };
 
 function formatLogTimestamp(iso: string): string {
@@ -114,7 +120,8 @@ function formatLogTimestamp(iso: string): string {
 }
 
 export function AIChat() {
-  const { chatModel, activePath, activeTab, diskProjectKey } = useIdeWorkspace();
+  const { chatModel, activePath, activeTab, diskProjectKey, refreshTree } = useIdeWorkspace();
+  const [workspaceRootLabel, setWorkspaceRootLabel] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [accessoryHint, setAccessoryHint] = useState<string | null>(null);
@@ -215,6 +222,20 @@ export function AIChat() {
     }
     isHandsFreeRef.current = false;
     setIsHandsFree(false);
+  }, []);
+
+  /** Pause mic only (keep Open talk intent for post-TTS resume). */
+  const pauseHandsFreeListening = useCallback(() => {
+    clearHandsFreeIdleTimer();
+    const r = liveHandsFreeRecognitionRef.current;
+    if (r) {
+      try {
+        r.stop();
+      } catch {
+        /* ignore */
+      }
+      liveHandsFreeRecognitionRef.current = null;
+    }
   }, []);
 
   const interruptVoiceAndTts = useCallback(() => {
@@ -343,6 +364,15 @@ export function AIChat() {
     };
   }, [startHandsFree]);
 
+  const refreshWorkspaceMeta = useCallback(async () => {
+    try {
+      const meta = await fetchIdeWorkspaceMeta(true);
+      setWorkspaceRootLabel(meta.workspaceRoot);
+    } catch {
+      setWorkspaceRootLabel(`data/cloud-projects/${diskProjectKey}`);
+    }
+  }, [diskProjectKey]);
+
   useEffect(() => {
     let cancelled = false;
     void (async () => {
@@ -353,12 +383,30 @@ export function AIChat() {
       } catch {
         if (!cancelled) setServerHasGrokKey(false);
       }
-      if (!cancelled) await syncActiveCloudProjectFromSession();
+      if (!cancelled) {
+        await syncActiveCloudProjectFromSession();
+        await refreshWorkspaceMeta();
+        void refreshTree();
+      }
     })();
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [refreshTree, refreshWorkspaceMeta]);
+
+  useEffect(() => {
+    const onSync = () => {
+      clearIdeWorkspaceMetaCache();
+      void refreshWorkspaceMeta();
+      void refreshTree();
+    };
+    window.addEventListener('nebula-workspace-context-synced', onSync);
+    window.addEventListener('nebula-files-applied', onSync);
+    return () => {
+      window.removeEventListener('nebula-workspace-context-synced', onSync);
+      window.removeEventListener('nebula-files-applied', onSync);
+    };
+  }, [refreshWorkspaceMeta, refreshTree]);
 
   useEffect(() => {
     setSendError(null);
@@ -490,10 +538,20 @@ export function AIChat() {
     inputRef.current = '';
     setSending(true);
     setSendError(null);
-    setGrokStatusLines(['Thinking…', 'Calling Grok 4.1 with workspace context', 'Waiting for response']);
+    const buildMode = detectBuildModeIntent(text);
+    setGrokStatusLines([
+      buildMode ? 'Build mode…' : 'Thinking…',
+      buildMode ? 'Grok 4 will use file blocks / START_CODING' : 'Calling Grok 4 with workspace context',
+      workspaceRootLabel ? `Workspace: ${workspaceRootLabel}` : 'Resolving workspace…',
+    ]);
 
     const projectName = getBrowserProjectName().trim() || 'Untitled project';
-    const ideAppendix = ideContextSnippetForChat(activePath, activeTab?.content ?? '');
+    const ideAppendix = ideContextSnippetForChat(
+      activePath,
+      activeTab?.content ?? '',
+      undefined,
+      workspaceRootLabel ?? undefined,
+    );
 
     const historyForApi = [...prior, userMsg].map((m) => ({
       role: m.role,
@@ -510,6 +568,7 @@ export function AIChat() {
         userId,
         projectName,
         ideAppendix,
+        buildMode,
       });
       const raw = assistantContent.trim();
       const masterPlanSource = (planningPhase || raw).trim();
@@ -570,20 +629,47 @@ export function AIChat() {
           projectName,
           userNote: text,
         });
-        if (coding.ran && coding.statusMessage?.trim()) {
-          const codeTs = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-          const statusMsg: Message = {
-            id: `code-${Date.now()}`,
-            role: 'assistant',
-            content: coding.statusMessage.trim(),
-            timestamp: codeTs,
-          };
-          setMessages((p) => {
-            const next = [...p, statusMsg];
-            messagesRef.current = next;
-            return next;
+        if (coding.ran) {
+          const artifactSync = await syncIdeProjectArtifacts({
+            userNote: text,
+            projectName,
+            seedBasicUi: true,
           });
-          setGrokStatusLines(['Done', coding.statusMessage.trim().slice(0, 72), 'Check file explorer']);
+          if (mpSaved > 0 || (artifactSync.masterPlanTabs ?? 0) > 0) {
+            window.dispatchEvent(new CustomEvent('nebula-master-plan-updated'));
+            window.dispatchEvent(new CustomEvent('nebula-open-master-plan'));
+          }
+          if (artifactSync.mindMapSynced) {
+            try {
+              await fetch(
+                withProjectQuery('/api/workspace/mind-map/sync-from-master-plan'),
+                {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  credentials: 'include',
+                  body: JSON.stringify(withProjectBody({ projectName })),
+                },
+              );
+            } catch {
+              /* mind map sync is best-effort */
+            }
+          }
+          window.dispatchEvent(new CustomEvent('nebula-open-app-preview'));
+          if (coding.statusMessage?.trim()) {
+            const codeTs = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+            const statusMsg: Message = {
+              id: `code-${Date.now()}`,
+              role: 'assistant',
+              content: coding.statusMessage.trim(),
+              timestamp: codeTs,
+            };
+            setMessages((p) => {
+              const next = [...p, statusMsg];
+              messagesRef.current = next;
+              return next;
+            });
+            setGrokStatusLines(['Done', coding.statusMessage.trim().slice(0, 72), 'Check file explorer & Preview']);
+          }
         } else if (!hadCodingTag) {
           setGrokStatusLines(['Ready', 'Chat: prose only', 'Go: writes files to workspace']);
         }
@@ -594,9 +680,8 @@ export function AIChat() {
 
       if (spoken) {
         void playTtsForText(spoken);
-      } else {
-        handsFreeResumeAfterTtsRef.current = false;
-        stopHandsFree();
+      } else if (isHandsFreeRef.current) {
+        void startHandsFree();
       }
     } catch (e) {
       setGrokStatusLines(['Error', 'Grok request failed', 'Check server key and retry']);
@@ -631,7 +716,7 @@ export function AIChat() {
     } finally {
       setSending(false);
     }
-  }, [sending, activePath, activeTab?.content, serverHasGrokKey, micInputBlocked, stopHandsFree]);
+  }, [sending, activePath, activeTab?.content, serverHasGrokKey, micInputBlocked, workspaceRootLabel]);
 
   sendChatRef.current = sendChat;
 
@@ -664,7 +749,7 @@ export function AIChat() {
 
       const resumeHandsFree = isHandsFreeRef.current;
       stopVoiceRecognition();
-      stopHandsFree();
+      pauseHandsFreeListening();
       handsFreeResumeAfterTtsRef.current = resumeHandsFree;
 
       setIsTtsPlaying(true);
@@ -829,13 +914,14 @@ export function AIChat() {
     setSending(true);
     setSendError(null);
     setAccessoryHint('Grok 4 summary → Grok Code → writing files to workspace…');
-    setGrokStatusLines(['Go…', 'Grok 4 summary → Grok Code', 'Writing files to workspace']);
+    setGrokStatusLines(['Build mode (Go)…', 'Grok 4 → Grok Code', 'Writing files to workspace']);
 
     const session = await fetchSessionUser();
     const userId = session?.uid?.trim() || 'anonymous';
     const projectName = getBrowserProjectName().trim() || 'Untitled project';
 
     try {
+      await refreshWorkspaceMeta();
       const go = await runGoCodeAndApply({ userId, projectName, userNote });
       const statusMsg: Message = {
         id: `go-${Date.now()}-status`,
@@ -856,7 +942,7 @@ export function AIChat() {
       setAccessoryHint(null);
       setGrokStatusLines((prev) => (prev[0] === 'Go…' ? ['Ready', 'Chat: prose only', 'Go: writes files to workspace'] : prev));
     }
-  }, [micInputBlocked, sending, serverHasGrokKey, stopVoiceRecognition]);
+  }, [micInputBlocked, sending, serverHasGrokKey, stopVoiceRecognition, refreshWorkspaceMeta]);
 
   return (
     <div className="surface-active tonal-seam-l flex h-full flex-col">
@@ -864,7 +950,9 @@ export function AIChat() {
         <div className="type-label-sm flex items-center gap-1.5 text-muted-foreground">
           <span className="h-1.5 w-1.5 rounded-full bg-primary/80" />
           Model: <span className="text-foreground">{modelLabel[chatModel] ?? chatModel}</span>
-          <span className="text-muted-foreground/80">(IDE uses Grok 4.1 + server MAIN_API_KEY_GROK)</span>
+          <span className="text-muted-foreground/80">
+            (Grok 4 · {workspaceRootLabel ? workspaceRootLabel : `key ${diskProjectKey}`})
+          </span>
         </div>
       </div>
 
@@ -902,15 +990,15 @@ export function AIChat() {
               <>
                 <p className="text-foreground/90 font-headline text-sm">IDE chat</p>
                 <p>
-                  Grok 4.1 is the default model here. Messages use the server <code className="text-foreground/90">MAIN_API_KEY_GROK</code>{' '}
-                  (per <code className="text-foreground/90">project-execution-rules.md</code>). Your open file, master plan, and UI Studio
-                  context are included with each turn.
+                  Grok 4 is the default model here. Messages use the server <code className="text-foreground/90">MAIN_API_KEY_GROK</code>{' '}
+                  (per <code className="text-foreground/90">project-execution-rules.md</code>). Each turn includes your workspace path, open file,
+                  master plan, and UI Studio context. Say &quot;build…&quot; or press <strong className="text-foreground/90">Go</strong> for build mode (files, not chat code).
                 </p>
                 <p>
                   <strong className="text-foreground/90">Voice</strong> (same doc): tap the <strong className="text-foreground/90">wave</strong>{' '}
                   icon for <strong className="text-foreground/90">open talk</strong> (continuous listen + auto-send after a short pause), or
                   the <strong className="text-foreground/90">microphone</strong> for a single push-to-talk phrase. Grok transcribes your speech,
-                  Grok 4.1 replies, then TTS reads the answer aloud. The mic is off while TTS plays; after playback it stays muted for{' '}
+                  Grok 4 replies, then TTS reads the answer aloud. The mic is off while TTS plays; after playback it stays muted for{' '}
                   {MIC_REENABLE_AFTER_TTS_MS / 1000}s, then the mic can turn on again (open talk resumes automatically if it was on before the
                   reply).
                 </p>

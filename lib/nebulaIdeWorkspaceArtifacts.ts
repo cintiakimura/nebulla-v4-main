@@ -1,0 +1,256 @@
+import fs from "fs";
+import path from "path";
+
+export const MASTER_PLAN_TAB_KEYS = [
+  "1. Goal of the app",
+  "2. Tech Research",
+  "3. Features and KPIs",
+  "4. Pages and navigation",
+  "5. UI/UX design",
+  "6. Environment Setup",
+] as const;
+
+const MIND_MAP_REL = "nebulla-ide/mind-map.json";
+
+export function readMasterPlanFile(masterPlanPath: string): Record<string, string> {
+  if (!fs.existsSync(masterPlanPath)) return {};
+  try {
+    const raw = JSON.parse(fs.readFileSync(masterPlanPath, "utf8")) as Record<string, unknown>;
+    const out: Record<string, string> = {};
+    for (const k of MASTER_PLAN_TAB_KEYS) {
+      const v = raw[k];
+      if (typeof v === "string") out[k] = v;
+    }
+    for (const [k, v] of Object.entries(raw)) {
+      if (typeof v === "string" && !(k in out)) out[k] = v;
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}
+
+export function masterPlanLooksEmpty(plan: Record<string, string>): boolean {
+  return MASTER_PLAN_TAB_KEYS.every((k) => !String(plan[k] ?? "").trim());
+}
+
+/** Discover Next.js app router pages under `app/` and `pages/`. */
+export function discoverWorkspaceRoutes(workspaceRoot: string): string[] {
+  const routes = new Set<string>();
+
+  const scanApp = (dir: string, segments: string[]) => {
+    if (!fs.existsSync(dir)) return;
+    for (const ent of fs.readdirSync(dir, { withFileTypes: true })) {
+      if (ent.name.startsWith(".") || ent.name === "node_modules") continue;
+      const full = path.join(dir, ent.name);
+      if (ent.isDirectory()) {
+        const next =
+          ent.name.startsWith("(") && ent.name.endsWith(")")
+            ? segments
+            : [...segments, ent.name];
+        scanApp(full, next);
+        continue;
+      }
+      if (/^page\.(tsx|jsx|js|ts)$/.test(ent.name)) {
+        const route = segments.length ? `/${segments.join("/")}` : "/";
+        routes.add(route.replace(/\/+/g, "/"));
+      }
+    }
+  };
+
+  scanApp(path.join(workspaceRoot, "app"), []);
+  const pagesDir = path.join(workspaceRoot, "pages");
+  if (fs.existsSync(pagesDir)) {
+    const walkPages = (dir: string, segments: string[]) => {
+      for (const ent of fs.readdirSync(dir, { withFileTypes: true })) {
+        if (ent.name.startsWith(".") || ent.name === "api") continue;
+        const full = path.join(dir, ent.name);
+        if (ent.isDirectory()) {
+          walkPages(full, [...segments, ent.name]);
+          continue;
+        }
+        const base = ent.name.replace(/\.(tsx|jsx|js|ts)$/, "");
+        if (base === "index") {
+          routes.add(segments.length ? `/${segments.join("/")}` : "/");
+        } else if (!base.startsWith("_")) {
+          routes.add(`/${[...segments, base].join("/")}`.replace(/\/+/g, "/"));
+        }
+      }
+    };
+    walkPages(pagesDir, []);
+  }
+
+  if (routes.size === 0) routes.add("/");
+  return [...routes].sort((a, b) => a.localeCompare(b));
+}
+
+export function bootstrapMasterPlanFromWorkspace(opts: {
+  workspaceRoot: string;
+  masterPlanPath: string;
+  projectName: string;
+  userNote?: string;
+}): { updated: number } {
+  const { workspaceRoot, masterPlanPath, projectName, userNote } = opts;
+  const plan = readMasterPlanFile(masterPlanPath);
+  if (!masterPlanLooksEmpty(plan)) return { updated: 0 };
+
+  const routes = discoverWorkspaceRoutes(workspaceRoot);
+  const note = (userNote ?? "").trim().slice(0, 2000);
+  const name = projectName.trim() || "Untitled Project";
+
+  const goal =
+    note ||
+    `Build **${name}**: a focused web app scaffolded in the Nebula workspace. Refine goals in chat, then press **Go** for the next coding pass.`;
+  const features = [
+    "- Core user flows inferred from workspace files",
+    "- Image → form data extraction (from discovery)",
+    "- Auth-ready dashboard shell (if `app/dashboard` exists)",
+    "- KPI: working preview + deployable MVP",
+  ].join("\n");
+  const pagesNav = routes.map((r) => `- **${r === "/" ? "Home" : r}** (\`${r}\`)`).join("\n");
+  const uiUx = [
+    "- **V0:** unavailable or out of credits — Nebula applied a **basic UI shell** (`index.html` preview + existing app routes).",
+    "- **Next:** open **Preview** in the explorer or run `npm run dev` for full Next.js rendering.",
+    "- **Polish:** add `V0_API_KEY` in My services when credits are available.",
+  ].join("\n");
+  const env = [
+    "- `MAIN_API_KEY_GROK` — IDE chat & coding",
+    "- `V0_API_KEY` — optional UI generation",
+    "- Render deploy: sync env from `.env.example`",
+  ].join("\n");
+
+  const next: Record<string, string> = {
+    ...plan,
+    "1. Goal of the app": goal,
+    "2. Tech Research": plan["2. Tech Research"]?.trim()
+      ? plan["2. Tech Research"]
+      : "- Stack: Next.js / React, TypeScript, Tailwind (from workspace `package.json`)\n- OCR / vision for image → form fields (user requirement)",
+    "3. Features and KPIs": features,
+    "4. Pages and navigation": pagesNav || "- **Home** (`/`)",
+    "5. UI/UX design": uiUx,
+    "6. Environment Setup": plan["6. Environment Setup"]?.trim() || env,
+  };
+
+  fs.mkdirSync(path.dirname(masterPlanPath), { recursive: true });
+  fs.writeFileSync(masterPlanPath, JSON.stringify(next, null, 2), "utf8");
+
+  let updated = 0;
+  for (const k of MASTER_PLAN_TAB_KEYS) {
+    if (String(next[k] ?? "").trim()) updated++;
+  }
+  return { updated };
+}
+
+export function buildMindMapGraphFromRoutes(
+  routes: string[],
+  projectLabel: string
+): { pages: unknown[]; edges: unknown[] } {
+  const sorted = routes.length ? routes : ["/"];
+  const pages = sorted.map((route, i) => {
+    const label =
+      route === "/"
+        ? projectLabel || "Home"
+        : route
+            .split("/")
+            .filter(Boolean)
+            .pop()
+            ?.replace(/[-_]/g, " ")
+            .replace(/\b\w/g, (c) => c.toUpperCase()) || route;
+    return {
+      id: `mm-${i}-${route.replace(/\W/g, "_") || "home"}`,
+      type: "pageNode",
+      position: { x: 80 + i * 200, y: 200 + (i % 2) * 80 },
+      data: {
+        label,
+        isCreated: true,
+        isCritical: route === "/" || /dashboard/i.test(route),
+        description: `Route: ${route}`,
+      },
+    };
+  });
+  const edges = pages.slice(1).map((p, i) => ({
+    id: `e-${i}`,
+    source: pages[0].id,
+    target: (p as { id: string }).id,
+    type: "smoothstep",
+  }));
+  return { pages, edges };
+}
+
+export function syncMindMapFromMasterPlan(opts: {
+  workspaceRoot: string;
+  masterPlanPath: string;
+  projectLabel: string;
+}): { pages: unknown[]; edges: unknown[]; written: boolean } {
+  const routes = discoverWorkspaceRoutes(opts.workspaceRoot);
+  const graph = buildMindMapGraphFromRoutes(routes, opts.projectLabel);
+
+  const target = path.join(opts.workspaceRoot, MIND_MAP_REL);
+  fs.mkdirSync(path.dirname(target), { recursive: true });
+  fs.writeFileSync(target, JSON.stringify(graph, null, 2), "utf8");
+  return { ...graph, written: true };
+}
+
+export function writeBasicUiScaffold(workspaceRoot: string, projectName: string): string[] {
+  const written: string[] = [];
+  const routes = discoverWorkspaceRoutes(workspaceRoot);
+  const title = projectName.trim() || "Nebula App";
+
+  const routeCards = routes
+    .map((r) => {
+      const label = r === "/" ? "Home" : r;
+      return `<a class="card" href="#"><span class="path">${r}</span><strong>${label}</strong><p>Scaffolded route — run <code>npm run dev</code> for live Next.js UI.</p></a>`;
+    })
+    .join("\n");
+
+  const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>${title} — Preview</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: system-ui, sans-serif; background: #0a1628; color: #e2e8f0; min-height: 100vh; }
+    header { padding: 1.5rem 2rem; border-bottom: 1px solid rgba(255,255,255,.08); }
+    h1 { margin: 0 0 .35rem; font-size: 1.35rem; color: #67e8f9; }
+    .sub { color: #94a3b8; font-size: .9rem; max-width: 42rem; line-height: 1.5; }
+    main { padding: 1.5rem 2rem 2.5rem; display: grid; gap: 1rem; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); }
+    .card { display: block; padding: 1rem 1.1rem; border-radius: 10px; border: 1px solid rgba(103,232,249,.25); background: rgba(15,23,42,.85); text-decoration: none; color: inherit; transition: border-color .15s; }
+    .card:hover { border-color: rgba(103,232,249,.55); }
+    .path { font-family: ui-monospace, monospace; font-size: .75rem; color: #64748b; }
+    .card strong { display: block; margin: .35rem 0; color: #f1f5f9; }
+    .card p { margin: 0; font-size: .8rem; color: #94a3b8; line-height: 1.4; }
+    code { background: rgba(0,0,0,.35); padding: .1rem .35rem; border-radius: 4px; font-size: .85em; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>${title}</h1>
+    <p class="sub">Nebula <strong>basic UI preview</strong> (V0 credits unavailable). Routes detected in your workspace. Use the IDE <strong>Preview</strong> panel or terminal <code>npm run dev</code> for the full app.</p>
+  </header>
+  <main>${routeCards}</main>
+</body>
+</html>`;
+
+  const idx = path.join(workspaceRoot, "index.html");
+  if (!fs.existsSync(idx) || fs.statSync(idx).size < 200) {
+    fs.writeFileSync(idx, html, "utf8");
+    written.push("index.html");
+  }
+
+  const stylesDir = path.join(workspaceRoot, "public");
+  fs.mkdirSync(stylesDir, { recursive: true });
+  const previewCopy = path.join(stylesDir, "nebula-basic-preview.html");
+  fs.writeFileSync(previewCopy, html, "utf8");
+  written.push("public/nebula-basic-preview.html");
+
+  return written;
+}
+
+export function ensurePreviewIndexHtml(workspaceRoot: string, projectName: string): boolean {
+  const idx = path.join(workspaceRoot, "index.html");
+  if (fs.existsSync(idx) && fs.statSync(idx).size > 200) return false;
+  writeBasicUiScaffold(workspaceRoot, projectName);
+  return true;
+}

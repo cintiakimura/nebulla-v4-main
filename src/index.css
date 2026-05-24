@@ -305,4 +305,23 @@
     height: calc(100vh - 3rem - 2.5rem);
     overflow: hidden;
   }
+
+  .nebulla-codemirror {
+    height: 100%;
+  }
+
+  .nebulla-codemirror .cm-editor {
+    height: 100%;
+    background: var(--background);
+  }
+
+  .nebulla-codemirror .cm-scroller {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    line-height: 1.55;
+  }
+
+  .nebulla-codemirror .cm-gutters {
+    background: color-mix(in srgb, var(--surface-container) 90%, transparent);
+    border-right: 1px solid color-mix(in srgb, var(--outline-variant) 20%, transparent);
+  }
 }

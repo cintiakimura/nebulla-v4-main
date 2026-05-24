@@ -1,5 +1,6 @@
 import { fetchJson } from './apiFetch';
 import { normalizeGrokFileBlockSyntax } from './grokChatArtifacts';
+import { syncIdeProjectArtifacts } from './ideArtifactSync';
 import { withProjectBody, withProjectQuery } from './nebulaProjectApi';
 
 const START_CODING_RE = /<\s*START_CODING\s*>|\bSTART_CODING\b/i;
@@ -24,7 +25,7 @@ export type ApplyGeneratedResult = {
 function stripNonFileArtifacts(text: string): string {
   return text
     .replace(/<REASONING>[\s\S]*?<\/REASONING>/gi, '')
-    .replace(/<START_MASTERPLAN>[\s\S]*?<\/START_MASTERPLAN>/gi, '')
+    .replace(/<START_MASTERPLAN>[\s\S]*?<\/?END_MASTERPLAN>/gi, '')
     .replace(/<\s*START_CODING\s*>/gi, '')
     .replace(/\bSTART_CODING\b/gi, '')
     .trim();
@@ -34,12 +35,28 @@ export function notifyWorkspaceFilesChanged(): void {
   try {
     window.dispatchEvent(new CustomEvent('nebula-files-applied'));
     window.dispatchEvent(new CustomEvent('nebula-master-plan-updated'));
+    window.dispatchEvent(new CustomEvent('nebula-open-app-preview'));
   } catch {
     /* ignore */
   }
 }
 
-export async function applyGeneratedFiles(content: string): Promise<ApplyGeneratedResult> {
+async function afterFilesAppliedArtifacts(userNote?: string, projectName?: string): Promise<void> {
+  const sync = await syncIdeProjectArtifacts({ userNote, projectName, seedBasicUi: true });
+  if ((sync.masterPlanTabs ?? 0) > 0) {
+    try {
+      window.dispatchEvent(new CustomEvent('nebula-master-plan-updated'));
+      window.dispatchEvent(new CustomEvent('nebula-open-master-plan'));
+    } catch {
+      /* ignore */
+    }
+  }
+}
+
+export async function applyGeneratedFiles(
+  content: string,
+  artifactContext?: { userNote?: string; projectName?: string },
+): Promise<ApplyGeneratedResult> {
   const clean = stripNonFileArtifacts(normalizeGrokFileBlockSyntax(content));
   if (!clean) {
     return {
@@ -75,7 +92,10 @@ export async function applyGeneratedFiles(content: string): Promise<ApplyGenerat
     }
     const writtenCount = Array.isArray(apply.written) ? apply.written.length : 0;
     const skippedCount = Array.isArray(apply.skipped) ? apply.skipped.length : 0;
-    if (writtenCount > 0) notifyWorkspaceFilesChanged();
+    if (writtenCount > 0) {
+      notifyWorkspaceFilesChanged();
+      void afterFilesAppliedArtifacts(artifactContext?.userNote, artifactContext?.projectName);
+    }
     return {
       ok: writtenCount > 0,
       writtenCount,
@@ -155,7 +175,7 @@ export async function runGoCodeAndApply(options: {
       };
     }
 
-    const apply = await applyGeneratedFiles(codeText);
+    const apply = await applyGeneratedFiles(codeText, { userNote, projectName });
     return {
       ok: apply.ok,
       statusMessage: apply.message,
@@ -179,7 +199,7 @@ export async function handlePostGrokCodingTurn(options: {
   const { assistantContent, planningPhase, userId, projectName, userNote } = options;
 
   if (hasGrokFileBlocks(assistantContent)) {
-    const apply = await applyGeneratedFiles(assistantContent);
+    const apply = await applyGeneratedFiles(assistantContent, { userNote, projectName });
     return { ran: true, statusMessage: apply.message };
   }
 
@@ -205,5 +225,8 @@ export async function handlePostGrokCodingTurn(options: {
       },
     ],
   });
+  if (go.ok) {
+    await afterFilesAppliedArtifacts(userNote, projectName);
+  }
   return { ran: true, statusMessage: go.statusMessage };
 }
