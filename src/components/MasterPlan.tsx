@@ -15,11 +15,10 @@ export function MasterPlan({
   const [loading, setLoading] = useState(true);
   const [titles, setTitles] = useState<string[]>([
     '1. Goal of the app',
-    '2. Tech Research',
+    '2. Text & Search',
     '3. Features and KPIs',
     '4. Pages and navigation',
     '5. UI/UX design',
-    '6. Environment Setup'
   ]);
 
   const fetchPlan = useCallback(async () => {

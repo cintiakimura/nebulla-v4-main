@@ -21,7 +21,7 @@ import {
   runGoCodeAndApply,
 } from '../../lib/nebulaGrokCodingPipeline';
 import { syncActiveCloudProjectFromSession } from '../../lib/nebulaCloud';
-import { syncIdeProjectArtifacts } from '../../lib/ideArtifactSync';
+import { runPostCodingWorkspaceSync } from '../../lib/ideArtifactSync';
 import {
   clearIdeWorkspaceMetaCache,
   detectBuildModeIntent,
@@ -279,15 +279,29 @@ export function AIChat() {
     }, VOICE_SILENCE_BEFORE_SEND_MS);
   }, []);
 
-  const startHandsFree = useCallback(() => {
+  const startHandsFree = useCallback((opts?: { resumeOnly?: boolean }) => {
     if (!('webkitSpeechRecognition' in window)) {
       setAccessoryHint('Speech recognition is not supported in this browser.');
       window.setTimeout(() => setAccessoryHint(null), 4000);
       return;
     }
     if (micInputBlockedRef.current || sendingRef.current) return;
-    stopVoiceRecognition();
-    stopHandsFree();
+    if (opts?.resumeOnly) {
+      if (!isHandsFreeRef.current) return;
+      clearHandsFreeIdleTimer();
+      const existing = liveHandsFreeRecognitionRef.current;
+      if (existing) {
+        try {
+          existing.stop();
+        } catch {
+          /* ignore */
+        }
+        liveHandsFreeRecognitionRef.current = null;
+      }
+    } else {
+      stopVoiceRecognition();
+      stopHandsFree();
+    }
     const SR = (window as unknown as { webkitSpeechRecognition: new () => IdeSpeechRecognition }).webkitSpeechRecognition;
     const recognition = new SR();
     recognition.continuous = true;
@@ -333,8 +347,10 @@ export function AIChat() {
       liveHandsFreeRecognitionRef.current = recognition;
       isHandsFreeRef.current = true;
       setIsHandsFree(true);
-      setAccessoryHint('Open talk is on — I listen continuously and send after a short pause when you finish a phrase.');
-      window.setTimeout(() => setAccessoryHint(null), 4200);
+      if (!opts?.resumeOnly) {
+        setAccessoryHint('Open talk is on — I listen continuously and send after a short pause when you finish a phrase.');
+        window.setTimeout(() => setAccessoryHint(null), 4200);
+      }
     } catch (err) {
       console.warn('[AIChat] hands-free start', err);
       setAccessoryHint('Could not start open talk — check browser permissions.');
@@ -352,13 +368,6 @@ export function AIChat() {
     void startHandsFree();
   }, [startHandsFree, stopHandsFree]);
 
-  const startHandsFreeForResumeRef = useRef<() => void>(() => {});
-
-  useEffect(() => {
-    startHandsFreeForResumeRef.current = () => {
-      void startHandsFree();
-    };
-  }, [startHandsFree]);
 
   const refreshWorkspaceMeta = useCallback(async () => {
     try {
@@ -626,31 +635,15 @@ export function AIChat() {
           userNote: text,
         });
         if (coding.ran) {
-          const artifactSync = await syncIdeProjectArtifacts({
+          const artifactSync = await runPostCodingWorkspaceSync({
             userNote: text,
             projectName,
-            seedBasicUi: true,
+            seedBasicUi: false,
+            openMindMap: true,
           });
           if (mpSaved > 0 || (artifactSync.masterPlanTabs ?? 0) > 0) {
-            window.dispatchEvent(new CustomEvent('nebula-master-plan-updated'));
             window.dispatchEvent(new CustomEvent('nebula-open-master-plan'));
           }
-          if (artifactSync.mindMapSynced) {
-            try {
-              await fetch(
-                withProjectQuery('/api/workspace/mind-map/sync-from-master-plan'),
-                {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  credentials: 'include',
-                  body: JSON.stringify(withProjectBody({ projectName })),
-                },
-              );
-            } catch {
-              /* mind map sync is best-effort */
-            }
-          }
-          window.dispatchEvent(new CustomEvent('nebula-open-app-preview'));
           if (coding.statusMessage?.trim()) {
             const codeTs = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
             const statusMsg: Message = {
@@ -677,7 +670,7 @@ export function AIChat() {
       if (spoken) {
         void playTtsForText(spoken);
       } else if (isHandsFreeRef.current) {
-        void startHandsFree();
+        void startHandsFree({ resumeOnly: true });
       }
     } catch (e) {
       setGrokStatusLines(['Error', 'Grok request failed', 'Check server key and retry']);
@@ -739,7 +732,18 @@ export function AIChat() {
 
       const chunks = splitTextForTts(plain);
       if (chunks.length === 0) {
+        const shouldResume = handsFreeResumeAfterTtsRef.current;
         handsFreeResumeAfterTtsRef.current = false;
+        if (shouldResume) {
+          clearMicCooldownTimer();
+          micCooldownTimerRef.current = window.setTimeout(() => {
+            micCooldownTimerRef.current = null;
+            setMicCooldown(false);
+            if (!micInputBlockedRef.current && !sendingRef.current) {
+              void startHandsFree({ resumeOnly: true });
+            }
+          }, MIC_REENABLE_AFTER_TTS_MS);
+        }
         return;
       }
 
@@ -767,7 +771,7 @@ export function AIChat() {
           if (handsFreeResumeAfterTtsRef.current) {
             handsFreeResumeAfterTtsRef.current = false;
             if (!micInputBlockedRef.current && !sendingRef.current) {
-              startHandsFreeForResumeRef.current();
+              void startHandsFree({ resumeOnly: true });
             }
           }
         }, MIC_REENABLE_AFTER_TTS_MS);

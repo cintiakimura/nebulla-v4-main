@@ -80,6 +80,8 @@ export function AppPreviewPanel({
   defaultPanelOpen = false,
   onCloseDock,
   embeddedInDock = false,
+  /** Hide duplicate title bar when parent provides Cursor-style tabs + Open in Browser. */
+  hideChrome = false,
 }: {
   pages: FlowNode[];
   onOpenSourceControl?: () => void;
@@ -91,6 +93,7 @@ export function AppPreviewPanel({
   onCloseDock?: () => void;
   /** Fills parent column instead of floating tool rail (explorer dock). */
   embeddedInDock?: boolean;
+  hideChrome?: boolean;
 }) {
   const [panelOpen, setPanelOpen] = useState(defaultPanelOpen);
   const [panelWidth, setPanelWidth] = useState(readStoredPreviewWidth);
@@ -432,18 +435,20 @@ export function AppPreviewPanel({
   if (embeddedInDock) {
     return (
       <div className="flex h-full min-h-0 w-full flex-col overflow-hidden bg-background">
-        <div className="flex shrink-0 items-center justify-between border-b border-white/10 px-2 py-1">
-          <span className="type-label-sm text-primary">App preview</span>
-          {onCloseDock ? (
-            <button
-              type="button"
-              className="type-label-sm text-muted-foreground hover:text-foreground"
-              onClick={onCloseDock}
-            >
-              Hide
-            </button>
-          ) : null}
-        </div>
+        {hideChrome ? null : (
+          <div className="flex shrink-0 items-center justify-between border-b border-white/10 px-2 py-1">
+            <span className="type-label-sm text-primary">App preview</span>
+            {onCloseDock ? (
+              <button
+                type="button"
+                className="type-label-sm text-muted-foreground hover:text-foreground"
+                onClick={onCloseDock}
+              >
+                Hide
+              </button>
+            ) : null}
+          </div>
+        )}
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
           {previewChrome}
           {iframeBlock}

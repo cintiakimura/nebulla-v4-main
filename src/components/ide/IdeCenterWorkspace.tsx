@@ -1,16 +1,18 @@
-import { useCallback, useEffect } from 'react';
 import type { Node as FlowNode } from '@xyflow/react';
 import {
   BookMarked,
-  Code2,
+  Circle,
+  ExternalLink,
   GitBranch,
   Globe,
   KeyRound,
   LayoutGrid,
+  Loader2,
   MonitorPlay,
   Network,
   Palette,
   Search,
+  X,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { AppPreviewPanel } from '../AppPreviewPanel';
@@ -20,68 +22,37 @@ import { IdeDashboardEmbed } from './IdeDashboardEmbed';
 import { IdeVisualEditor } from './IdeVisualEditor';
 import { UiStudioMockupPanel } from './UiStudioMockupPanel';
 import { MindMapIdeRoute } from './MindMapIdeRoute';
-import { CodeEditor } from './CodeEditor';
-import {
-  IDE_CENTER_PANE_TABS,
-  type IdeCenterPane,
-  readStoredCenterPane,
-  storeCenterPane,
-} from '../../lib/ideCenterPanes';
+import { IdeFileEditor } from './IdeFileEditor';
+import { useIdeCenterTabs } from './IdeCenterTabsContext';
+import { useIdeWorkspace } from './IdeWorkspaceContext';
+import type { IdeCenterPane } from '../../lib/ideCenterPanes';
+import { getAppPreviewBrowserUrl, panelTabId } from '../../lib/ideCenterTabs';
 import { getBrowserProjectKey, getBrowserProjectName } from '../../lib/nebulaProjectApi';
-import type { UiStudioTab } from '../../lib/nebulaUiStudioEvents';
 
-const PANE_ICONS: Partial<Record<IdeCenterPane, React.ReactNode>> = {
-  code: <Code2 className="h-3.5 w-3.5 shrink-0" aria-hidden />,
-  preview: <MonitorPlay className="h-3.5 w-3.5 shrink-0" aria-hidden />,
-  'master-plan': <BookMarked className="h-3.5 w-3.5 shrink-0" aria-hidden />,
-  'mind-map': <Network className="h-3.5 w-3.5 shrink-0" aria-hidden />,
-  'ui-studio': <Palette className="h-3.5 w-3.5 shrink-0" aria-hidden />,
-  'source-control': <GitBranch className="h-3.5 w-3.5 shrink-0" aria-hidden />,
-  projects: <LayoutGrid className="h-3.5 w-3.5 shrink-0" aria-hidden />,
-  secrets: <KeyRound className="h-3.5 w-3.5 shrink-0" aria-hidden />,
-  dns: <Globe className="h-3.5 w-3.5 shrink-0" aria-hidden />,
-  search: <Search className="h-3.5 w-3.5 shrink-0" aria-hidden />,
+const PANEL_ICONS: Partial<Record<IdeCenterPane, React.ReactNode>> = {
+  preview: <MonitorPlay className="h-3 w-3 shrink-0 opacity-70" aria-hidden />,
+  'master-plan': <BookMarked className="h-3 w-3 shrink-0 opacity-70" aria-hidden />,
+  'mind-map': <Network className="h-3 w-3 shrink-0 opacity-70" aria-hidden />,
+  'ui-studio': <Palette className="h-3 w-3 shrink-0 opacity-70" aria-hidden />,
+  'source-control': <GitBranch className="h-3 w-3 shrink-0 opacity-70" aria-hidden />,
+  projects: <LayoutGrid className="h-3 w-3 shrink-0 opacity-70" aria-hidden />,
+  secrets: <KeyRound className="h-3 w-3 shrink-0 opacity-70" aria-hidden />,
+  dns: <Globe className="h-3 w-3 shrink-0 opacity-70" aria-hidden />,
+  search: <Search className="h-3 w-3 shrink-0 opacity-70" aria-hidden />,
 };
 
-export function IdeCenterWorkspace({
-  activePane,
-  onSelectPane,
-  uiStudioTab,
-  onUiStudioTabChange,
-}: {
-  activePane: IdeCenterPane;
-  onSelectPane: (pane: IdeCenterPane) => void;
-  uiStudioTab: UiStudioTab;
-  onUiStudioTabChange: (tab: UiStudioTab) => void;
-}) {
-  const selectPane = useCallback(
-    (next: IdeCenterPane) => {
-      storeCenterPane(next);
-      onSelectPane(next);
-    },
-    [onSelectPane],
-  );
-
-  useEffect(() => {
-    const onPreview = () => selectPane('preview');
-    const onFilesApplied = () => selectPane('preview');
-    const onMasterPlan = () => selectPane('master-plan');
-    const onUiStudio = (ev: Event) => {
-      const tab = (ev as CustomEvent<{ tab?: UiStudioTab }>).detail?.tab;
-      if (tab) onUiStudioTabChange(tab);
-      selectPane('ui-studio');
-    };
-    window.addEventListener('nebula-open-app-preview', onPreview);
-    window.addEventListener('nebula-files-applied', onFilesApplied);
-    window.addEventListener('nebula-open-master-plan', onMasterPlan);
-    window.addEventListener('nebula-open-ui-studio', onUiStudio);
-    return () => {
-      window.removeEventListener('nebula-open-app-preview', onPreview);
-      window.removeEventListener('nebula-files-applied', onFilesApplied);
-      window.removeEventListener('nebula-open-master-plan', onMasterPlan);
-      window.removeEventListener('nebula-open-ui-studio', onUiStudio);
-    };
-  }, [selectPane, onUiStudioTabChange]);
+export function IdeCenterWorkspace() {
+  const {
+    openTabs,
+    activeTabId,
+    activeTab,
+    uiStudioTab,
+    setUiStudioTab,
+    activateTab,
+    closeTab,
+    openPanel,
+  } = useIdeCenterTabs();
+  const { tabs: fileTabs } = useIdeWorkspace();
 
   const projectName = getBrowserProjectName().trim() || 'Untitled project';
   const projectKey = getBrowserProjectKey();
@@ -95,26 +66,73 @@ export function IdeCenterWorkspace({
     },
   ];
 
+  const activePane = activeTab?.kind === 'panel' ? activeTab.pane : null;
+  const showFileEditor = activeTab?.kind === 'file';
+  const dirtyByPath = new Map(fileTabs.map((t) => [t.path, t.dirty]));
+  const loadingByPath = new Map(fileTabs.map((t) => [t.path, t.loading]));
+
+  const openInBrowser = () => {
+    window.open(getAppPreviewBrowserUrl(), '_blank', 'noopener,noreferrer');
+  };
+
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background">
-      <div className="surface-active tonal-seam-b flex h-9 shrink-0 items-center gap-0.5 overflow-x-auto px-1.5">
-        {IDE_CENTER_PANE_TABS.map((tab) => (
-          <button
-            key={tab.id}
-            type="button"
-            onClick={() => selectPane(tab.id)}
-            className={cn(
-              'type-label-sm flex shrink-0 items-center gap-1.5 rounded-md px-2.5 py-1 transition-colors',
-              activePane === tab.id
-                ? 'active-tab-sheen text-primary'
-                : 'text-muted-foreground hover:bg-secondary hover:text-foreground',
-            )}
-          >
-            {PANE_ICONS[tab.id]}
-            {tab.label}
-          </button>
-        ))}
-      </div>
+      {openTabs.length > 0 ? (
+        <div className="surface-active tonal-seam-b flex h-9 shrink-0 items-center overflow-hidden border-b border-white/5">
+          <div className="flex min-w-0 flex-1 items-stretch overflow-x-auto">
+            {openTabs.map((tab) => {
+              const active = tab.id === activeTabId;
+              const isFile = tab.kind === 'file';
+              const dirty = isFile && tab.path ? dirtyByPath.get(tab.path) : false;
+              const loading = isFile && tab.path ? loadingByPath.get(tab.path) : false;
+              return (
+                <div
+                  key={tab.id}
+                  className={cn(
+                    'group flex h-9 max-w-[220px] shrink-0 items-center gap-1 border-r border-white/5 px-2.5',
+                    active
+                      ? 'bg-background text-foreground shadow-[inset_0_2px_0_0_hsl(var(--primary))]'
+                      : 'text-muted-foreground hover:bg-secondary/60 hover:text-foreground',
+                  )}
+                >
+                  <button
+                    type="button"
+                    onClick={() => activateTab(tab.id)}
+                    className="flex min-w-0 flex-1 items-center gap-1.5 truncate text-left text-xs"
+                    title={isFile ? tab.path : tab.label}
+                  >
+                    {!isFile ? PANEL_ICONS[tab.pane!] : null}
+                    {dirty ? <Circle className="h-1.5 w-1.5 shrink-0 fill-primary text-primary" /> : null}
+                    {loading ? (
+                      <Loader2 className="h-3 w-3 shrink-0 animate-spin opacity-70" />
+                    ) : null}
+                    <span className="truncate">{tab.label}</span>
+                  </button>
+                  <button
+                    type="button"
+                    aria-label={`Close ${tab.label}`}
+                    onClick={() => closeTab(tab.id)}
+                    className="rounded p-0.5 opacity-0 transition-opacity hover:bg-white/10 group-hover:opacity-100"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+          {activePane === 'preview' ? (
+            <button
+              type="button"
+              onClick={openInBrowser}
+              title="Open app preview in your browser"
+              className="btn-secondary-surface type-label-sm mr-2 flex shrink-0 items-center gap-1.5 rounded-md px-2 py-1 text-muted-foreground hover:text-foreground"
+            >
+              <ExternalLink className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">Open in Browser</span>
+            </button>
+          ) : null}
+        </div>
+      ) : null}
 
       {activePane === 'ui-studio' ? (
         <div className="tonal-seam-b flex shrink-0 gap-1 border-b border-white/5 px-2 py-1">
@@ -122,7 +140,7 @@ export function IdeCenterWorkspace({
             <button
               key={sub}
               type="button"
-              onClick={() => onUiStudioTabChange(sub)}
+              onClick={() => setUiStudioTab(sub)}
               className={cn(
                 'type-label-sm rounded-md px-2.5 py-1 capitalize transition-colors',
                 uiStudioTab === sub
@@ -137,58 +155,78 @@ export function IdeCenterWorkspace({
       ) : null}
 
       <div className="relative min-h-0 flex-1 overflow-hidden">
-        <PaneLayer visible={activePane === 'code'}>
-          <CodeEditor hidePreviewButton />
-        </PaneLayer>
-        <PaneLayer visible={activePane === 'preview'}>
-          <AppPreviewPanel
-            pages={previewPages}
-            onOpenSourceControl={() => selectPane('source-control')}
-            defaultPanelOpen
-            embeddedInDock
-          />
-        </PaneLayer>
-        <PaneLayer visible={activePane === 'master-plan'}>
-          <MasterPlan projectKey={projectKey} onClose={() => selectPane('code')} />
-        </PaneLayer>
-        <PaneLayer visible={activePane === 'mind-map'}>
-          <MindMapIdeRoute />
-        </PaneLayer>
-        <PaneLayer visible={activePane === 'ui-studio'}>
-          {uiStudioTab === 'design' ? (
-            <IdeVisualEditor onLock={() => selectPane('code')} projectDisplayName={projectName} />
-          ) : uiStudioTab === 'mockups' ? (
-            <UiStudioMockupPanel />
-          ) : (
-            <AppPreviewPanel
-              pages={previewPages}
-              onOpenSourceControl={() => selectPane('source-control')}
-              defaultPanelOpen
-              embeddedInDock
-            />
-          )}
-        </PaneLayer>
-        <PaneLayer visible={activePane === 'source-control'}>
-          <SourceControlPanel projectName={projectName} />
-        </PaneLayer>
-        <PaneLayer visible={activePane === 'projects'}>
-          <IdeDashboardEmbed initialTab="projects" />
-        </PaneLayer>
-        <PaneLayer visible={activePane === 'secrets'}>
-          <IdeDashboardEmbed initialTab="secrets" />
-        </PaneLayer>
-        <PaneLayer visible={activePane === 'dns'}>
-          <IdeDashboardEmbed initialTab="dns" />
-        </PaneLayer>
-        <PaneLayer visible={activePane === 'search'}>
-          <div className="flex flex-1 flex-col items-center justify-center gap-3 p-8 text-center">
-            <h2 className="font-headline text-lg text-foreground">Search</h2>
-            <p className="max-w-md text-sm text-muted-foreground">
-              Use the file tree and chat to navigate the workspace. Global search will index project files in a future
-              release.
+        {openTabs.length === 0 ? (
+          <div className="flex h-full flex-col items-center justify-center gap-2 p-8 text-center">
+            <p className="font-headline text-sm text-foreground">No editors open</p>
+            <p className="max-w-sm text-xs text-muted-foreground">
+              Open a file from the explorer, or pick Master Plan, Mind map, App preview, or UI Studio from the
+              side bar.
             </p>
           </div>
-        </PaneLayer>
+        ) : (
+          <>
+            <PaneLayer visible={showFileEditor}>
+              <IdeFileEditor />
+            </PaneLayer>
+            <PaneLayer visible={activePane === 'preview'}>
+              <AppPreviewPanel
+                pages={previewPages}
+                onOpenSourceControl={() => openPanel('source-control')}
+                defaultPanelOpen
+                embeddedInDock
+                hideChrome
+              />
+            </PaneLayer>
+            <PaneLayer visible={activePane === 'master-plan'}>
+              <MasterPlan
+                projectKey={projectKey}
+                onClose={() => closeTab(panelTabId('master-plan'))}
+              />
+            </PaneLayer>
+            <PaneLayer visible={activePane === 'mind-map'}>
+              <MindMapIdeRoute />
+            </PaneLayer>
+            <PaneLayer visible={activePane === 'ui-studio'}>
+              {uiStudioTab === 'design' ? (
+                <IdeVisualEditor
+                  onLock={() => activeTabId && closeTab(activeTabId)}
+                  projectDisplayName={projectName}
+                />
+              ) : uiStudioTab === 'mockups' ? (
+                <UiStudioMockupPanel />
+              ) : (
+                <AppPreviewPanel
+                  pages={previewPages}
+                  onOpenSourceControl={() => openPanel('source-control')}
+                  defaultPanelOpen
+                  embeddedInDock
+                  hideChrome
+                />
+              )}
+            </PaneLayer>
+            <PaneLayer visible={activePane === 'source-control'}>
+              <SourceControlPanel projectName={projectName} />
+            </PaneLayer>
+            <PaneLayer visible={activePane === 'projects'}>
+              <IdeDashboardEmbed initialTab="projects" />
+            </PaneLayer>
+            <PaneLayer visible={activePane === 'secrets'}>
+              <IdeDashboardEmbed initialTab="secrets" />
+            </PaneLayer>
+            <PaneLayer visible={activePane === 'dns'}>
+              <IdeDashboardEmbed initialTab="dns" />
+            </PaneLayer>
+            <PaneLayer visible={activePane === 'search'}>
+              <div className="flex flex-1 flex-col items-center justify-center gap-3 p-8 text-center">
+                <h2 className="font-headline text-lg text-foreground">Search</h2>
+                <p className="max-w-md text-sm text-muted-foreground">
+                  Use the file tree and chat to navigate the workspace. Global search will index project files in a
+                  future release.
+                </p>
+              </div>
+            </PaneLayer>
+          </>
+        )}
       </div>
     </div>
   );

@@ -38,6 +38,7 @@ import {
   Trash2,
   Type,
 } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import { getBrowserProjectName, withProjectBody, withProjectQuery } from '../../lib/nebulaProjectApi';
 
 export type VisualStyle = {
@@ -398,6 +399,16 @@ export function IdeVisualEditor({
   }, [loadEligibility]);
 
   useEffect(() => {
+    const onArtifacts = () => void loadEligibility();
+    window.addEventListener('nebula-files-applied', onArtifacts);
+    window.addEventListener('nebula-mind-map-updated', onArtifacts);
+    return () => {
+      window.removeEventListener('nebula-files-applied', onArtifacts);
+      window.removeEventListener('nebula-mind-map-updated', onArtifacts);
+    };
+  }, [loadEligibility]);
+
+  useEffect(() => {
     const onRunV0 = () => void runV0Generation();
     window.addEventListener('nebula-ui-studio-run-v0', onRunV0);
     return () => window.removeEventListener('nebula-ui-studio-run-v0', onRunV0);
@@ -615,15 +626,51 @@ export function IdeVisualEditor({
     });
   };
 
+  const ensureEligibleForApply = async (): Promise<boolean> => {
+    try {
+      const check = await fetch(withProjectQuery('/api/visual-ui-editor/eligibility'));
+      const gate = (await check.json()) as { eligible?: boolean };
+      if (check.ok && gate.eligible) {
+        setEligible(true);
+        setEligibilityReason(undefined);
+        return true;
+      }
+    } catch {
+      /* fall through */
+    }
+    try {
+      const r = await fetch(withProjectQuery('/api/visual-ui-editor/unlock-from-workspace'), {
+        method: 'POST',
+        headers: persistHeaders(),
+        body: JSON.stringify(withProjectBody({ projectName: projectLabel })),
+      });
+      const d = (await r.json()) as { eligible?: boolean };
+      if (r.ok && d.eligible) {
+        setEligible(true);
+        setEligibilityReason(undefined);
+        return true;
+      }
+    } catch {
+      /* fall through */
+    }
+    await loadEligibility();
+    return false;
+  };
+
   const runApplyToCode = async () => {
-    if (!eligible) {
-      setMockNotice('Preview mode: Save would run Grok and write files under generated-ui/versions/… — complete the v0 pipeline to enable disk apply.');
+    setBusy(true);
+    setError('');
+    const canApply = await ensureEligibleForApply();
+    if (!canApply) {
+      setMockNotice(
+        hasV0ApiKey
+          ? 'Run **Generate UI with v0** once to register the first UI generation, then Save Changes & Update Code will write to the workspace.'
+          : 'Add V0_API_KEY and run v0 generation, or complete Grok coding with an app/ folder first.',
+      );
       setApplyConfirmOpen(false);
       setBusy(false);
       return;
     }
-    setBusy(true);
-    setError('');
     try {
       await persistModelRemote();
       const res = await fetch(withProjectQuery('/api/visual-ui-editor/apply-visual-changes'), {
@@ -790,6 +837,7 @@ export function IdeVisualEditor({
           : 'v0 generation finished.',
       );
       await loadEligibility();
+      window.dispatchEvent(new CustomEvent('nebula-open-ui-studio', { detail: { tab: 'design' } }));
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'v0 generation failed';
       const creditsLike = /credit|quota|billing/i.test(msg);
@@ -1040,18 +1088,31 @@ export function IdeVisualEditor({
       className="flex h-full min-h-0 w-full flex-col overflow-hidden bg-[#050a14] text-slate-200 shadow-[inset_0_1px_0_rgba(34,211,238,0.06)]"
     >
       {!eligible ? (
-        <div className="flex shrink-0 flex-col gap-2 border-b border-amber-500/25 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-50/95 sm:flex-row sm:items-center sm:justify-between">
+        <div
+          className={cn(
+            'flex shrink-0 flex-col gap-2 border-b px-3 py-2 text-[11px] sm:flex-row sm:items-center sm:justify-between',
+            hasV0ApiKey
+              ? 'border-cyan-500/25 bg-cyan-500/10 text-cyan-50/95'
+              : 'border-amber-500/25 bg-amber-500/10 text-amber-50/95',
+          )}
+        >
           <div className="flex items-start gap-2">
-            <PanelLeft className="mt-0.5 h-4 w-4 shrink-0 text-amber-300" />
+            <PanelLeft className="mt-0.5 h-4 w-4 shrink-0 opacity-80" />
             <div>
-              <span className="font-headline text-xs text-amber-100">Preview mode</span>
-              <p className="mt-0.5 text-[11px] text-amber-100/80">{eligibilityReason}</p>
+              <span className="font-headline text-xs">
+                {hasV0ApiKey ? 'First v0 generation' : 'UI Studio setup'}
+              </span>
+              <p className="mt-0.5 text-[11px] opacity-80">
+                {hasV0ApiKey
+                  ? 'All editing tools are available. Run v0 once to enable saving code to disk.'
+                  : eligibilityReason}
+              </p>
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
-              disabled={busy || hasV0ApiKey === null}
+              disabled={busy || hasV0ApiKey === false}
               onClick={() => void runV0Generation()}
               className="rounded border border-cyan-400/50 bg-cyan-500/15 px-2 py-1 text-[10px] font-headline text-cyan-50 hover:bg-cyan-500/25 disabled:opacity-40"
             >
@@ -1068,13 +1129,13 @@ export function IdeVisualEditor({
               </button>
             ) : null}
             {hasV0ApiKey === false ? (
-              <span className="text-[10px] text-amber-200/90">Please add your V0_API_KEY in .env</span>
+              <span className="text-[10px] opacity-90">Add V0_API_KEY in My services</span>
             ) : null}
             {import.meta.env.DEV ? (
               <button
                 type="button"
                 onClick={() => void simulateV0CompleteDev()}
-                className="rounded border border-amber-400/40 bg-black/20 px-2 py-1 text-[10px] text-amber-50"
+                className="rounded border border-white/20 bg-black/20 px-2 py-1 text-[10px]"
               >
                 Dev: simulate v0 manifest
               </button>
@@ -1096,7 +1157,9 @@ export function IdeVisualEditor({
         <div className="flex min-w-0 items-center justify-between gap-2">
           <div className="flex min-w-0 items-center gap-2">
             <span className="font-headline text-xs tracking-wide text-cyan-100">Nebula UI Studio</span>
-            <span className="hidden text-[10px] text-slate-500 sm:inline">Cosmic Night · manual mock</span>
+            <span className="hidden text-[10px] text-slate-500 sm:inline">
+              Cosmic Night · {eligible ? 'visual editor' : 'editing tools active'}
+            </span>
           </div>
           <div className="flex shrink-0 items-center gap-1">
             <button
@@ -1165,7 +1228,7 @@ export function IdeVisualEditor({
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
-            {eligible && hasV0ApiKey ? (
+            {hasV0ApiKey ? (
               <>
                 <button
                   type="button"
@@ -1173,7 +1236,7 @@ export function IdeVisualEditor({
                   onClick={() => void runV0Generation()}
                   className="rounded-lg border border-cyan-500/40 bg-cyan-500/10 px-3 py-2 text-xs text-cyan-100 disabled:opacity-40"
                 >
-                  {busy ? 'v0…' : 'Regenerate with v0'}
+                  {busy ? 'v0…' : eligible ? 'Regenerate with v0' : 'Generate UI with v0'}
                 </button>
                 {v0ChatId ? (
                   <button

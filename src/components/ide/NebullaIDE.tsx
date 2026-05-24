@@ -2,6 +2,11 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { cn } from '@/lib/utils';
 import { AIChat } from '@/components/ide/AIChat';
 import { IdeCenterWorkspace } from '@/components/ide/IdeCenterWorkspace';
+import {
+  dispatchOpenCenterPanel,
+  IdeCenterTabsProvider,
+  useIdeCenterTabs,
+} from '@/components/ide/IdeCenterTabsContext';
 import { TerminalPanel } from '@/components/ide/TerminalPanel';
 import { TopBar } from '@/components/ide/TopBar';
 import { VerticalNav } from '@/components/ide/VerticalNav';
@@ -19,17 +24,8 @@ import {
   WorkspaceSetupGate,
   type WorkspaceContext,
 } from '@/components/ide/WorkspaceSetupGate';
-import {
-  centerPaneToNavId,
-  navIdToCenterPane,
-  readStoredCenterPane,
-  storeCenterPane,
-  type IdeCenterPane,
-} from '../../lib/ideCenterPanes';
-import {
-  registerNebulaUiStudioBridge,
-  type UiStudioTab,
-} from '../../lib/nebulaUiStudioEvents';
+import { navIdToCenterPane } from '../../lib/ideCenterPanes';
+import { registerNebulaUiStudioBridge } from '../../lib/nebulaUiStudioEvents';
 
 const EXPLORER_MIN = 160;
 const EXPLORER_MAX = 480;
@@ -44,9 +40,9 @@ const TERMINAL_MAX = 560;
 const TERMINAL_DEFAULT = 192;
 
 function IdeExplorerSidebar({ projectKey }: { projectKey: string }) {
-  const { openFile } = useIdeWorkspace();
+  const { focusFile } = useIdeCenterTabs();
   return (
-    <ExplorerPanel projectKey={projectKey} onOpenFile={(path) => void openFile(path)} />
+    <ExplorerPanel projectKey={projectKey} onOpenFile={(path) => focusFile(path)} />
   );
 }
 
@@ -124,8 +120,17 @@ function ResizeHandle({
 }
 
 export function NebullaIDE() {
-  const [navId, setNavId] = useState(() => centerPaneToNavId(readStoredCenterPane()));
-  const [uiStudioTab, setUiStudioTab] = useState<UiStudioTab>('design');
+  return (
+    <IdeWorkspaceProvider>
+      <IdeCenterTabsProvider>
+        <NebullaIDEShell />
+      </IdeCenterTabsProvider>
+    </IdeWorkspaceProvider>
+  );
+}
+
+function NebullaIDEShell() {
+  const { activeNavId, openPanel } = useIdeCenterTabs();
   const explorer = useDragResize(EXPLORER_DEFAULT, EXPLORER_MIN, EXPLORER_MAX, 'horizontal-right');
   const chat = useDragResize(CHAT_DEFAULT, CHAT_MIN, CHAT_MAX, 'horizontal-left');
   const terminal = useDragResize(TERMINAL_DEFAULT, TERMINAL_MIN, TERMINAL_MAX, 'vertical');
@@ -211,22 +216,16 @@ export function NebullaIDE() {
     };
   }, []);
 
-  const selectCenterPane = useCallback((pane: IdeCenterPane) => {
-    storeCenterPane(pane);
-    setNavId(centerPaneToNavId(pane));
-  }, []);
-
   useEffect(() => {
     return registerNebulaUiStudioBridge({
       openUiStudio: (opts) => {
-        setUiStudioTab(opts?.tab ?? 'design');
-        selectCenterPane('ui-studio');
+        dispatchOpenCenterPanel('ui-studio', { uiStudioTab: opts?.tab ?? 'design' });
       },
       runV0Generate: () => {
         window.dispatchEvent(new Event('nebula-ui-studio-run-v0'));
       },
     });
-  }, [selectCenterPane]);
+  }, []);
 
   const selectNavItem = useCallback(
     (id: string) => {
@@ -234,14 +233,14 @@ export function NebullaIDE() {
         setMyServicesOpen(true);
         return;
       }
-      setNavId(id);
-      storeCenterPane(navIdToCenterPane(id));
+      if (id === 'explorer') return;
+      const pane = navIdToCenterPane(id);
+      if (pane !== 'code') openPanel(pane);
     },
-    [],
+    [openPanel],
   );
 
   return (
-    <IdeWorkspaceProvider>
       <div className="flex h-screen flex-col overflow-hidden bg-background text-foreground">
       {!workspaceCtx ? <WorkspaceSetupGate onReady={handleWorkspaceReady} /> : null}
       {myServicesOpen ? (
@@ -267,13 +266,13 @@ export function NebullaIDE() {
         }
         onSwitchWorkspace={() => setWorkspaceCtx(null)}
         onOpenAccount={() => setMyServicesOpen(true)}
-        onOpenSourceControl={() => selectCenterPane('source-control')}
+        onOpenSourceControl={() => openPanel('source-control')}
       />
 
       <div className="flex flex-1 overflow-hidden">
         <VerticalNav
           onOpenMyServices={() => setMyServicesOpen(true)}
-          activeItem={navId}
+          activeItem={activeNavId}
           onSelectItem={selectNavItem}
         />
 
@@ -285,12 +284,7 @@ export function NebullaIDE() {
 
         <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
           <div className="flex min-h-0 flex-1 overflow-hidden">
-            <IdeCenterWorkspace
-              activePane={navIdToCenterPane(navId)}
-              onSelectPane={selectCenterPane}
-              uiStudioTab={uiStudioTab}
-              onUiStudioTabChange={setUiStudioTab}
-            />
+            <IdeCenterWorkspace />
           </div>
 
           <ResizeHandle onMouseDown={terminal.onMouseDown} orientation="vertical" />
@@ -310,6 +304,5 @@ export function NebullaIDE() {
         </div>
       </div>
     </div>
-    </IdeWorkspaceProvider>
   );
 }

@@ -129,6 +129,11 @@ export function IdeWorkspaceProvider({ children }: { children: ReactNode }) {
     const path = relPath.replace(/\\/g, '/');
     setSaveError(null);
     setActivePath(path);
+    try {
+      window.dispatchEvent(new CustomEvent('nebula-center-focus-file', { detail: { path } }));
+    } catch {
+      /* ignore */
+    }
     const existing = tabsRef.current.find((t) => t.path === path);
     if (existing && !existing.loading) {
       return;

@@ -45,9 +45,16 @@ import { callClaudeChatCompletion } from "./lib/nebulaClaudeFallback";
 import {
   bootstrapMasterPlanFromWorkspace,
   ensurePreviewIndexHtml,
+  readMasterPlanFile,
   syncMindMapFromMasterPlan,
+  unlockVisualEditorFromWorkspaceCoding,
   writeBasicUiScaffold,
 } from "./lib/nebulaIdeWorkspaceArtifacts";
+import {
+  masterPlanKeyForTabIndex,
+  normalizeMasterPlanRecord,
+  parseMasterPlanBlock,
+} from "./lib/masterPlanSections";
 import {
   isAllowedV0WriteRel,
   pickPrimaryUiFile,
@@ -640,7 +647,9 @@ No approved UI code yet.
       if (!fs.existsSync(masterPlanPath)) {
         return res.status(404).json({ error: "Master plan data not found" });
       }
-      const plan = JSON.parse(fs.readFileSync(masterPlanPath, "utf8")) as Record<string, unknown>;
+      const plan = normalizeMasterPlanRecord(
+        JSON.parse(fs.readFileSync(masterPlanPath, "utf8")) as Record<string, unknown>
+      );
       res.json(sanitizeMasterPlanForClientResponse(plan));
     } catch (error) {
       console.error("Error reading master plan:", error);
@@ -673,11 +682,11 @@ No approved UI code yet.
 
     const tabNames: Record<number, string> = {
       1: "1. Goal of the app",
-      2: "2. Tech Research",
+      2: "2. Text & Search",
       3: "3. Features and KPIs",
       4: "4. Pages and navigation",
       5: "5. UI/UX design",
-      6: "6. Environment Setup"
+      6: "6. Environment Setup",
     };
 
     const tabName = tabNames[tabIndex as number];
@@ -864,9 +873,30 @@ No approved UI code yet.
         masterPlanPath: pp.masterPlanPath,
         projectLabel,
       });
-      res.json({ ok: true, pages: graph.pages, edges: graph.edges });
+      res.json({
+        ok: true,
+        pages: graph.pages,
+        edges: graph.edges,
+        routeCount: graph.routeCount,
+      });
     } catch (err: unknown) {
       res.status(500).json({ error: err instanceof Error ? err.message : "mind map sync failed" });
+    }
+  });
+
+  app.post("/api/visual-ui-editor/unlock-from-workspace", (req, res) => {
+    try {
+      const pp = projectPathsFor(req);
+      const body = req.body || {};
+      const projectName =
+        typeof body.projectName === "string" && body.projectName.trim()
+          ? String(body.projectName).trim()
+          : "Untitled Project";
+      const unlocked = unlockVisualEditorFromWorkspaceCoding(pp.workspaceRoot, projectName);
+      const gate = isVisualEditorEligible(pp.workspaceRoot);
+      return res.json({ ok: true, unlocked, eligible: gate.eligible, reason: gate.reason });
+    } catch (e) {
+      return res.status(500).json({ error: e instanceof Error ? e.message : "unlock failed" });
     }
   });
 
@@ -885,6 +915,7 @@ No approved UI code yet.
         projectName,
         userNote,
       });
+      const uiStudioUnlocked = unlockVisualEditorFromWorkspaceCoding(pp.workspaceRoot, projectName);
       const mind = syncMindMapFromMasterPlan({
         workspaceRoot: pp.workspaceRoot,
         masterPlanPath: pp.masterPlanPath,
@@ -895,11 +926,15 @@ No approved UI code yet.
       if (Boolean(body.seedBasicUi)) {
         basicUiWritten = writeBasicUiScaffold(pp.workspaceRoot, projectName);
       }
+      const mindMapPages = Array.isArray(mind.pages) ? mind.pages.length : 0;
       res.json({
         masterPlanTabs: mp.updated,
-        mindMapSynced: mind.written,
+        mindMapSynced: mind.written && mindMapPages > 0,
+        mindMapPageCount: mindMapPages,
+        mindMapRouteCount: mind.routeCount,
         previewIndexWritten,
         basicUiWritten,
+        uiStudioUnlocked,
       });
     } catch (err: unknown) {
       res.status(500).json({ error: err instanceof Error ? err.message : "artifact sync failed" });
@@ -1537,13 +1572,25 @@ No approved UI code yet.
       const uiStudioFile = fs.readFileSync(nebulaUiStudioPath, "utf8");
       const storedPrompt = extractNebulaCommentSection(uiStudioFile, "NEBULA_UI_STUDIO_PROMPT");
       const skillExcerpt = readSkillDesignSystemExcerpt(workspaceRoot);
+      const { masterPlanPath } = projectPathsFor(req);
+      const masterPlan = readMasterPlanFile(masterPlanPath);
+      const uiUxDesign = String(masterPlan["5. UI/UX design"] ?? "").trim();
+      const pagesNav = String(masterPlan["4. Pages and navigation"] ?? "").trim();
       const body = req.body || {};
-      const pagesText = typeof body.pagesText === "string" ? body.pagesText : "";
+      const pagesText =
+        typeof body.pagesText === "string" && body.pagesText.trim()
+          ? body.pagesText.trim()
+          : pagesNav;
       const extra = typeof body.message === "string" ? body.message.trim() : "";
       const promptText = [
-        storedPrompt && storedPrompt !== "No prompt generated yet." ? storedPrompt : "",
-        skillExcerpt ? `Design system:\n${skillExcerpt}` : "",
-        pagesText ? `Pages and navigation:\n${pagesText}` : "",
+        uiUxDesign
+          ? `UI/UX Design (Master Plan section 5 — primary source for v0):\n${uiUxDesign}`
+          : "",
+        storedPrompt && storedPrompt !== "No prompt generated yet."
+          ? `Nebula UI Studio prompt file:\n${storedPrompt}`
+          : "",
+        skillExcerpt ? `Design system (SKILL.md):\n${skillExcerpt}` : "",
+        pagesText ? `Pages and navigation (section 4 — structure reference):\n${pagesText}` : "",
         extra,
         "Generate production-ready UI with React, Tailwind CSS, and shadcn/ui. Output app files under src/ or app/.",
       ]
@@ -1557,18 +1604,31 @@ No approved UI code yet.
           typeof body.projectDisplayName === "string" ? body.projectDisplayName : undefined,
       });
       if (pass.ok === false) {
-        const { workspaceRoot } = projectPathsFor(req);
-        const displayName =
-          typeof body.projectDisplayName === "string" ? body.projectDisplayName : "Untitled Project";
-        const written = writeBasicUiScaffold(workspaceRoot, displayName);
-        ensurePreviewIndexHtml(workspaceRoot, displayName);
-        return res.json({
-          ok: true,
-          source: "basic-scaffold",
-          written,
-          error: pass.error,
-          hint:
-            "V0 unavailable. Nebula wrote a basic HTML preview shell — open Preview in the explorer or run npm run dev for Next.js.",
+        const errLower = String(pass.error ?? "").toLowerCase();
+        const creditsLike =
+          errLower.includes("credit") ||
+          errLower.includes("quota") ||
+          errLower.includes("billing") ||
+          pass.status === 402 ||
+          pass.status === 429;
+        if (creditsLike) {
+          const { workspaceRoot } = projectPathsFor(req);
+          const displayName =
+            typeof body.projectDisplayName === "string" ? body.projectDisplayName : "Untitled Project";
+          const written = writeBasicUiScaffold(workspaceRoot, displayName);
+          ensurePreviewIndexHtml(workspaceRoot, displayName);
+          return res.json({
+            ok: true,
+            source: "basic-scaffold",
+            written,
+            error: pass.error,
+            hint:
+              "V0 credits unavailable — basic HTML preview written. Add credits or retry v0 when ready.",
+          });
+        }
+        return res.status(pass.status).json({
+          error: pass.hint ?? pass.error,
+          hint: pass.hint,
         });
       }
       return res.json({
@@ -3097,15 +3157,6 @@ async function speak(text: string): Promise<Buffer> {
   return Buffer.from(await fallback.arrayBuffer());
 }
 
-const MASTER_PLAN_SECTION_TITLES = [
-  "1. Goal of the app",
-  "2. Tech Research",
-  "3. Features and KPIs",
-  "4. Pages and navigation",
-  "5. UI/UX design",
-  "6. Environment Setup",
-] as const;
-
 function extractGrokBSummaries(responseText: string): Partial<Record<number, string>> {
   const out: Partial<Record<number, string>> = {};
   const re = /<GROK_B_SUMMARY_Q([1-6])>([\s\S]*?)<\/GROK_B_SUMMARY_Q\1>/gi;
@@ -3119,28 +3170,9 @@ function extractGrokBSummaries(responseText: string): Partial<Record<number, str
 }
 
 function extractSummariesFromMasterPlanBlock(responseText: string): Partial<Record<number, string>> {
-  const out: Partial<Record<number, string>> = {};
   const blockMatch = responseText.match(/<START_MASTERPLAN>([\s\S]*?)<\/?END_MASTERPLAN>/i);
-  if (!blockMatch) return out;
-  const newPlanContent = blockMatch[1].trim();
-  if (!newPlanContent) return out;
-
-  for (let i = 0; i < MASTER_PLAN_SECTION_TITLES.length; i++) {
-    const title = MASTER_PLAN_SECTION_TITLES[i];
-    const nextTitle = MASTER_PLAN_SECTION_TITLES[i + 1];
-    const escapedTitle = title.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    const escapedNextTitle = nextTitle ? nextTitle.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") : null;
-    const regex = new RegExp(
-      `(?:###\\s*|\\*\\*|\\b)${escapedTitle}[\\s\\S]*?(?=(?:###\\s*|\\*\\*|\\b)${escapedNextTitle || "$"})`,
-      "i"
-    );
-    const match = newPlanContent.match(regex);
-    if (!match) continue;
-    let content = match[0].replace(new RegExp(`(?:###\\s*|\\*\\*|\\b)${escapedTitle}`, "i"), "").trim();
-    content = content.replace(/^[:\-\s]+/, "");
-    if (content) out[i + 1] = content;
-  }
-  return out;
+  if (!blockMatch) return {};
+  return parseMasterPlanBlock(blockMatch[1]);
 }
 
 /** Grok B — writer. Copies Grok 4 summaries into mapped Master Plan sections. */
@@ -3162,8 +3194,8 @@ async function runGrokB(
     }
 
     for (const entry of entries) {
-      if (entry.tabIndex < 1 || entry.tabIndex > MASTER_PLAN_SECTION_TITLES.length) continue;
-      const title = MASTER_PLAN_SECTION_TITLES[entry.tabIndex - 1];
+      const title = masterPlanKeyForTabIndex(entry.tabIndex);
+      if (!title) continue;
       const summary = entry.summary.trim();
       if (summary) {
         plan[title] = summary;

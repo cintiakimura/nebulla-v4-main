@@ -58,9 +58,11 @@ export function MindMapIdeRoute() {
   useEffect(() => {
     const onRefresh = () => void reloadMindMap();
     window.addEventListener('nebula-master-plan-updated', onRefresh);
+    window.addEventListener('nebula-mind-map-updated', onRefresh);
     window.addEventListener('nebula-files-applied', onRefresh);
     return () => {
       window.removeEventListener('nebula-master-plan-updated', onRefresh);
+      window.removeEventListener('nebula-mind-map-updated', onRefresh);
       window.removeEventListener('nebula-files-applied', onRefresh);
     };
   }, [reloadMindMap]);

@@ -1,14 +1,14 @@
 import fs from "fs";
 import path from "path";
+import {
+  isVisualEditorEligible,
+  markV0FirstGenerationComplete,
+  sanitizeProjectNameForVersions,
+} from "./visualUiEditorWorkspace";
 
-export const MASTER_PLAN_TAB_KEYS = [
-  "1. Goal of the app",
-  "2. Tech Research",
-  "3. Features and KPIs",
-  "4. Pages and navigation",
-  "5. UI/UX design",
-  "6. Environment Setup",
-] as const;
+import { MASTER_PLAN_ALL_KEYS, normalizeMasterPlanRecord } from "./masterPlanSections";
+
+export const MASTER_PLAN_TAB_KEYS = MASTER_PLAN_ALL_KEYS;
 
 const MIND_MAP_REL = "nebulla-ide/mind-map.json";
 
@@ -16,15 +16,7 @@ export function readMasterPlanFile(masterPlanPath: string): Record<string, strin
   if (!fs.existsSync(masterPlanPath)) return {};
   try {
     const raw = JSON.parse(fs.readFileSync(masterPlanPath, "utf8")) as Record<string, unknown>;
-    const out: Record<string, string> = {};
-    for (const k of MASTER_PLAN_TAB_KEYS) {
-      const v = raw[k];
-      if (typeof v === "string") out[k] = v;
-    }
-    for (const [k, v] of Object.entries(raw)) {
-      if (typeof v === "string" && !(k in out)) out[k] = v;
-    }
-    return out;
+    return normalizeMasterPlanRecord(raw);
   } catch {
     return {};
   }
@@ -122,9 +114,10 @@ export function bootstrapMasterPlanFromWorkspace(opts: {
   const next: Record<string, string> = {
     ...plan,
     "1. Goal of the app": goal,
-    "2. Tech Research": plan["2. Tech Research"]?.trim()
-      ? plan["2. Tech Research"]
-      : "- Stack: Next.js / React, TypeScript, Tailwind (from workspace `package.json`)\n- OCR / vision for image → form fields (user requirement)",
+    "2. Text & Search":
+      plan["2. Text & Search"]?.trim() ||
+      plan["2. Tech Research"]?.trim() ||
+      "- Stack: Next.js / React, TypeScript, Tailwind (from workspace `package.json`)\n- OCR / vision for image → form fields (user requirement)",
     "3. Features and KPIs": features,
     "4. Pages and navigation": pagesNav || "- **Home** (`/`)",
     "5. UI/UX design": uiUx,
@@ -177,18 +170,64 @@ export function buildMindMapGraphFromRoutes(
   return { pages, edges };
 }
 
+/** Parse `4. Pages and navigation` bullets for route paths like `/dashboard`. */
+export function routesFromMasterPlanSection(plan: Record<string, string>): string[] {
+  const section = String(plan["4. Pages and navigation"] ?? "").trim();
+  if (!section) return [];
+  const routes = new Set<string>();
+  for (const line of section.split("\n")) {
+    const backtick = line.match(/`(\/[^`]+)`/);
+    if (backtick?.[1]) routes.add(backtick[1].replace(/\/+/g, "/"));
+    const bold = line.match(/\*\*(\/[^*]+)\*\*/);
+    if (bold?.[1]) routes.add(bold[1].replace(/\/+/g, "/"));
+    const plain = line.match(/(?:^|\s)(\/[a-z0-9/_-]+)/i);
+    if (plain?.[1] && !plain[1].includes(" ")) routes.add(plain[1].replace(/\/+/g, "/"));
+  }
+  return [...routes];
+}
+
+export function mergeRoutesForMindMap(workspaceRoot: string, masterPlanPath: string): string[] {
+  const fromDisk = discoverWorkspaceRoutes(workspaceRoot);
+  const fromMp = routesFromMasterPlanSection(readMasterPlanFile(masterPlanPath));
+  const merged = [...new Set([...fromDisk, ...fromMp])].sort((a, b) => a.localeCompare(b));
+  return merged.length ? merged : ["/"];
+}
+
+/** Unlock Nebula UI Studio after Grok coding when `app/` or `src/` exists but v0 manifest is missing. */
+export function unlockVisualEditorFromWorkspaceCoding(
+  workspaceRoot: string,
+  projectName: string
+): boolean {
+  if (isVisualEditorEligible(workspaceRoot).eligible) return true;
+  const hasApp =
+    fs.existsSync(path.join(workspaceRoot, "app")) ||
+    fs.existsSync(path.join(workspaceRoot, "src")) ||
+    fs.existsSync(path.join(workspaceRoot, "pages"));
+  if (!hasApp) return false;
+  const routes = discoverWorkspaceRoutes(workspaceRoot);
+  const safe = sanitizeProjectNameForVersions(projectName);
+  markV0FirstGenerationComplete(workspaceRoot, safe, {
+    files: {
+      "README.txt": `UI Studio unlocked from workspace routes after Grok coding.\nRoutes: ${routes.join(", ")}\n`,
+    },
+    source: "grok-coding",
+    notes: `Auto-unlock (${routes.length} route(s))`,
+  });
+  return true;
+}
+
 export function syncMindMapFromMasterPlan(opts: {
   workspaceRoot: string;
   masterPlanPath: string;
   projectLabel: string;
-}): { pages: unknown[]; edges: unknown[]; written: boolean } {
-  const routes = discoverWorkspaceRoutes(opts.workspaceRoot);
+}): { pages: unknown[]; edges: unknown[]; written: boolean; routeCount: number } {
+  const routes = mergeRoutesForMindMap(opts.workspaceRoot, opts.masterPlanPath);
   const graph = buildMindMapGraphFromRoutes(routes, opts.projectLabel);
 
   const target = path.join(opts.workspaceRoot, MIND_MAP_REL);
   fs.mkdirSync(path.dirname(target), { recursive: true });
   fs.writeFileSync(target, JSON.stringify(graph, null, 2), "utf8");
-  return { ...graph, written: true };
+  return { ...graph, written: true, routeCount: routes.length };
 }
 
 export function writeBasicUiScaffold(workspaceRoot: string, projectName: string): string[] {

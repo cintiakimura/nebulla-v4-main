@@ -1,18 +1,14 @@
 import { extractMasterPlanInner, sourceHasMasterPlanBlock } from '../../lib/masterPlanTags';
+import {
+  MASTER_PLAN_SECTION_KEYS,
+  masterPlanKeyForTabIndex,
+  parseMasterPlanBlock,
+  masterPlanSectionSeparationRules,
+} from './masterPlanSections';
 import { fetchJson } from './apiFetch';
 import { withProjectBody, withProjectQuery } from './nebulaProjectApi';
 
-export const MASTER_PLAN_TAB_NAMES = [
-  '1. Goal of the app',
-  '2. Tech Research',
-  '3. Features and KPIs',
-  '4. Pages and navigation',
-  '5. UI/UX design',
-  '6. Environment Setup',
-] as const;
-
-const ORCHESTRATION_DUMP_RE =
-  /Project Execution Rules|INITIAL ONBOARDING|START_CODING|AUTOMATED WORKFLOW|TAB \d HIDDEN RULES/i;
+export const MASTER_PLAN_TAB_NAMES = [...MASTER_PLAN_SECTION_KEYS] as const;
 
 /** Normalize common model mistakes before `/api/files/apply-generated`. */
 export function normalizeGrokFileBlockSyntax(raw: string): string {
@@ -23,41 +19,18 @@ export function normalizeGrokFileBlockSyntax(raw: string): string {
 }
 
 export function splitMasterPlanSectionsFromBlock(block: string): Partial<Record<number, string>> {
-  const lines = block.split('\n');
-  const out: Partial<Record<number, string>> = {};
-  let current: number | null = null;
-  const headingRe =
-    /^\s{0,3}(?:#{2,4}\s*)?(\d)\.\s*(Goal of the app|Tech Research|Features and KPIs|Pages and navigation|UI\/UX design|Environment Setup)\s*$/i;
-  for (const line of lines) {
-    const m = line.match(headingRe);
-    if (m) {
-      current = Number(m[1]);
-      if (current >= 1 && current <= 6 && !out[current]) out[current] = '';
-      continue;
-    }
-    if (current) out[current] = `${out[current] ?? ''}${line}\n`;
-  }
-  for (let i = 1; i <= 6; i++) {
-    const rawSection = (out[i] ?? '').trim();
-    if (!rawSection) {
-      delete out[i];
-      continue;
-    }
-    if (ORCHESTRATION_DUMP_RE.test(rawSection)) delete out[i];
-    else out[i] = rawSection;
-  }
-  return out;
+  return parseMasterPlanBlock(block);
 }
 
 export async function persistMasterPlanFromAssistantSource(source: string): Promise<number> {
   const inner = extractMasterPlanInner(source);
-  let parsed = inner ? splitMasterPlanSectionsFromBlock(inner) : {};
+  let parsed = inner ? parseMasterPlanBlock(inner) : {};
   if (Object.keys(parsed).length === 0) {
-    parsed = splitMasterPlanSectionsFromBlock(source);
+    parsed = parseMasterPlanBlock(source);
   }
   if (Object.keys(parsed).length === 0) return 0;
   let saved = 0;
-  for (let tabIndex = 1; tabIndex <= 6; tabIndex++) {
+  for (let tabIndex = 1; tabIndex <= MASTER_PLAN_SECTION_KEYS.length; tabIndex++) {
     const content = (parsed[tabIndex] ?? '').trim();
     if (!content) continue;
     try {
@@ -167,13 +140,17 @@ IDE CHAT SURFACE (project-execution-rules.md — strict):
 - **CONVERSATION_MODE:** Short natural prose only. No \`\`\`typescript\`, \`\`\`python\`, JSX, SQL, or multi-line code in chat. No Master Plan section text in chat.
 - **BUILD_MODE:** Master Plan only inside \`<START_MASTERPLAN>…</END_MASTERPLAN>\` (server persists to master-plan.json). Implementation only as \`\`\`file:relative/path\` … \`\`\` and/or \`START_CODING\` — server writes files under workspaceRoot. Never dump code in conversational prose in the same turn.
 - If unsure which mode: stay in CONVERSATION_MODE and ask one clarifying question, or tell the user to press **Go** for build mode.
+${masterPlanSectionSeparationRules()}
 `.trim();
 
 export function buildModeSystemAppendix(): string {
   return `
 BUILD_MODE is active for this turn. Do not explain code in chat — emit file artifacts. Required when implementing:
-1) Optional \`<START_MASTERPLAN>…</END_MASTERPLAN>\` if the plan changed.
+1) Optional \`<START_MASTERPLAN>…</END_MASTERPLAN>\` if the plan changed — use all five section headers (see MASTER PLAN SECTION SEPARATION).
 2) \`START_CODING\` on its own line when ready.
 3) One or more \`\`\`file:relative/path\` … \`\`\` blocks (paths under src/, app/, pages/, components/, public/).
 `.trim();
 }
+
+// Re-export for callers that need tab key by index
+export { masterPlanKeyForTabIndex };

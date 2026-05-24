@@ -36,43 +36,12 @@ import {
   VOICE_SILENCE_BEFORE_SEND_MS,
 } from '../lib/voiceTtsShared';
 
-const MASTER_PLAN_TITLES = [
-  '1. Goal of the app',
-  '2. Tech Research',
-  '3. Features and KPIs',
-  '4. Pages and navigation',
-  '5. UI/UX design',
-  '6. Environment Setup',
-] as const;
+import { MASTER_PLAN_SECTION_KEYS, parseMasterPlanBlock } from '../lib/masterPlanSections';
+
+const MASTER_PLAN_TITLES = [...MASTER_PLAN_SECTION_KEYS] as const;
 
 function splitMasterPlanSectionsFromBlock(block: string): Partial<Record<number, string>> {
-  const lines = block.split('\n');
-  const out: Partial<Record<number, string>> = {};
-  let current: number | null = null;
-  const headingRe = /^\s{0,3}(?:#{2,4}\s*)?(\d)\.\s*(Goal of the app|Tech Research|Features and KPIs|Pages and navigation|UI\/UX design|Environment Setup)\s*$/i;
-  for (const line of lines) {
-    const m = line.match(headingRe);
-    if (m) {
-      current = Number(m[1]);
-      if (current >= 1 && current <= 6 && !out[current]) out[current] = '';
-      continue;
-    }
-    if (current) out[current] = `${out[current] ?? ''}${line}\n`;
-  }
-  for (let i = 1; i <= 6; i++) {
-    const raw = (out[i] ?? '').trim();
-    if (!raw) {
-      delete out[i];
-      continue;
-    }
-    // Hard guard: never persist orchestration/rules dump into a user-facing tab.
-    if (/Project Execution Rules|INITIAL ONBOARDING|START_CODING|AUTOMATED WORKFLOW|TAB \d HIDDEN RULES/i.test(raw)) {
-      delete out[i];
-      continue;
-    }
-    out[i] = raw;
-  }
-  return out;
+  return parseMasterPlanBlock(block);
 }
 
 export function AssistantSidebar({

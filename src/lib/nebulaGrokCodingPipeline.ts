@@ -1,6 +1,6 @@
 import { fetchJson } from './apiFetch';
 import { normalizeGrokFileBlockSyntax } from './grokChatArtifacts';
-import { syncIdeProjectArtifacts } from './ideArtifactSync';
+import { runPostCodingWorkspaceSync } from './ideArtifactSync';
 import { withProjectBody, withProjectQuery } from './nebulaProjectApi';
 
 const START_CODING_RE = /<\s*START_CODING\s*>|\bSTART_CODING\b/i;
@@ -32,25 +32,16 @@ function stripNonFileArtifacts(text: string): string {
 }
 
 export function notifyWorkspaceFilesChanged(): void {
-  try {
-    window.dispatchEvent(new CustomEvent('nebula-files-applied'));
-    window.dispatchEvent(new CustomEvent('nebula-master-plan-updated'));
-    window.dispatchEvent(new CustomEvent('nebula-open-app-preview'));
-  } catch {
-    /* ignore */
-  }
+  /* Events are dispatched after artifact + mind-map sync in runPostCodingWorkspaceSync. */
 }
 
 async function afterFilesAppliedArtifacts(userNote?: string, projectName?: string): Promise<void> {
-  const sync = await syncIdeProjectArtifacts({ userNote, projectName, seedBasicUi: true });
-  if ((sync.masterPlanTabs ?? 0) > 0) {
-    try {
-      window.dispatchEvent(new CustomEvent('nebula-master-plan-updated'));
-      window.dispatchEvent(new CustomEvent('nebula-open-master-plan'));
-    } catch {
-      /* ignore */
-    }
-  }
+  await runPostCodingWorkspaceSync({
+    userNote,
+    projectName,
+    seedBasicUi: false,
+    openMindMap: true,
+  });
 }
 
 export async function applyGeneratedFiles(

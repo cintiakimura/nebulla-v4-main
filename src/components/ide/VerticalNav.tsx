@@ -6,6 +6,7 @@ import {
   Globe,
   KeyRound,
   LayoutGrid,
+  MonitorPlay,
   Network,
   Palette,
   Search,
@@ -22,6 +23,7 @@ type NavItem = {
 
 const items: NavItem[] = [
   { id: 'explorer', icon: <FolderTree className="h-5 w-5" />, label: 'Explorer' },
+  { id: 'preview', icon: <MonitorPlay className="h-5 w-5" />, label: 'App Preview' },
   { id: 'master-plan', icon: <BookMarked className="h-5 w-5" />, label: 'Master Plan' },
   { id: 'mind-map', icon: <Network className="h-5 w-5" />, label: 'Mind Map' },
   { id: 'visual-ui-editor', icon: <Palette className="h-5 w-5" />, label: 'Nebula UI Studio' },
