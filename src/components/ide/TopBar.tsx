@@ -13,7 +13,7 @@ import { fetchMasterPlanAndUiStudio } from '../../lib/ideAssistantGrokChat';
 import { compactMasterPlanForInspect } from '../../lib/ideMasterPlanSummary';
 
 const models: { id: IdeChatModelId; name: string; badge: string | null }[] = [
-  { id: 'grok-4', name: 'Grok 4', badge: 'Latest' },
+  { id: 'grok-4', name: 'Grok', badge: 'Latest' },
 ];
 
 export function TopBar({
@@ -56,7 +56,7 @@ export function TopBar({
     }
     if (!hasServerKey) {
       swarm.addActivity(
-        'Inspect requires GROK_SWARM_API_KEY (20+ characters) in the server .env — normal IDE chat uses MAIN_API_KEY_GROK only.',
+        'Inspect requires a swarm API key in My services — normal IDE chat uses your Grok key only.',
         'error',
       );
       return;

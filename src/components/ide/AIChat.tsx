@@ -103,10 +103,6 @@ function ChatRoundButton({
   );
 }
 
-const modelLabel: Record<string, string> = {
-  'grok-4': 'Grok 4',
-};
-
 function formatLogTimestamp(iso: string): string {
   try {
     const d = new Date(iso);
@@ -120,7 +116,7 @@ function formatLogTimestamp(iso: string): string {
 }
 
 export function AIChat() {
-  const { chatModel, activePath, activeTab, diskProjectKey, refreshTree } = useIdeWorkspace();
+  const { activePath, activeTab, diskProjectKey, refreshTree } = useIdeWorkspace();
   const [workspaceRootLabel, setWorkspaceRootLabel] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
@@ -541,8 +537,8 @@ export function AIChat() {
     const buildMode = detectBuildModeIntent(text);
     setGrokStatusLines([
       buildMode ? 'Build mode…' : 'Thinking…',
-      buildMode ? 'Grok 4 will use file blocks / START_CODING' : 'Calling Grok 4 with workspace context',
-      workspaceRootLabel ? `Workspace: ${workspaceRootLabel}` : 'Resolving workspace…',
+      buildMode ? 'Grok will write files to your project' : 'Grok is preparing a reply',
+      'Ready when the response appears',
     ]);
 
     const projectName = getBrowserProjectName().trim() || 'Untitled project';
@@ -913,8 +909,8 @@ export function AIChat() {
     inputRef.current = '';
     setSending(true);
     setSendError(null);
-    setAccessoryHint('Grok 4 summary → Grok Code → writing files to workspace…');
-    setGrokStatusLines(['Build mode (Go)…', 'Grok 4 → Grok Code', 'Writing files to workspace']);
+    setAccessoryHint('Grok summary → coding agent → writing files…');
+    setGrokStatusLines(['Build mode (Go)…', 'Grok → coding agent', 'Writing files to your project']);
 
     const session = await fetchSessionUser();
     const userId = session?.uid?.trim() || 'anonymous';
@@ -945,17 +941,7 @@ export function AIChat() {
   }, [micInputBlocked, sending, serverHasGrokKey, stopVoiceRecognition, refreshWorkspaceMeta]);
 
   return (
-    <div className="surface-active tonal-seam-l flex h-full flex-col">
-      <div className="tonal-seam-b flex h-9 shrink-0 flex-wrap items-center gap-2 px-3">
-        <div className="type-label-sm flex items-center gap-1.5 text-muted-foreground">
-          <span className="h-1.5 w-1.5 rounded-full bg-primary/80" />
-          Model: <span className="text-foreground">{modelLabel[chatModel] ?? chatModel}</span>
-          <span className="text-muted-foreground/80">
-            (Grok 4 · {workspaceRootLabel ? workspaceRootLabel : `key ${diskProjectKey}`})
-          </span>
-        </div>
-      </div>
-
+    <div className="surface-active tonal-seam-l flex h-full min-h-0 flex-col overflow-hidden">
       {showGrokKeyBanner ? (
         <div
           className="shrink-0 border-b border-amber-500/40 bg-gradient-to-r from-amber-500/20 via-amber-500/12 to-transparent px-3 py-3"
@@ -990,26 +976,24 @@ export function AIChat() {
               <>
                 <p className="text-foreground/90 font-headline text-sm">IDE chat</p>
                 <p>
-                  Grok 4 is the default model here. Messages use the server <code className="text-foreground/90">MAIN_API_KEY_GROK</code>{' '}
-                  (per <code className="text-foreground/90">project-execution-rules.md</code>). Each turn includes your workspace path, open file,
-                  master plan, and UI Studio context. Say &quot;build…&quot; or press <strong className="text-foreground/90">Go</strong> for build mode (files, not chat code).
+                  <strong className="text-foreground/90">Grok</strong> is the default model here. Each turn uses your open file, master plan,
+                  and UI Studio context. Say &quot;build…&quot; or press <strong className="text-foreground/90">Go</strong> for build mode (files
+                  are written to the project, not pasted as chat code).
                 </p>
                 <p>
-                  <strong className="text-foreground/90">Voice</strong> (same doc): tap the <strong className="text-foreground/90">wave</strong>{' '}
-                  icon for <strong className="text-foreground/90">open talk</strong> (continuous listen + auto-send after a short pause), or
-                  the <strong className="text-foreground/90">microphone</strong> for a single push-to-talk phrase. Grok transcribes your speech,
-                  Grok 4 replies, then TTS reads the answer aloud. The mic is off while TTS plays; after playback it stays muted for{' '}
-                  {MIC_REENABLE_AFTER_TTS_MS / 1000}s, then the mic can turn on again (open talk resumes automatically if it was on before the
-                  reply).
+                  <strong className="text-foreground/90">Voice:</strong> tap the <strong className="text-foreground/90">wave</strong> icon for{' '}
+                  <strong className="text-foreground/90">open talk</strong> (continuous listen + auto-send after a short pause), or the{' '}
+                  <strong className="text-foreground/90">microphone</strong> for push-to-talk. Grok transcribes your speech, replies in chat, then
+                  TTS reads the answer aloud. The mic is off while TTS plays; after playback it stays muted for{' '}
+                  {MIC_REENABLE_AFTER_TTS_MS / 1000}s, then listening can resume (open talk continues if it was on).
                 </p>
               </>
             ) : (
               <>
                 <p className="text-amber-200/95 font-headline text-sm">Grok is not available on this server</p>
                 <p>
-                  The API reports no usable <code className="text-foreground/90">MAIN_API_KEY_GROK</code>. Set it in the project
-                  root <code className="text-foreground/90">.env</code> (key must be at least 20 characters after trimming),
-                  restart <code className="text-foreground/90">npm run dev</code>, and reload the page.
+                  Grok is not configured on this server. Add your xAI API key in <strong className="text-foreground/90">My services</strong>,
+                  redeploy or restart the app, then reload this page.
                 </p>
               </>
             )}

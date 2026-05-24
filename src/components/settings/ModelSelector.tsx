@@ -19,12 +19,12 @@ export function ChatModelSelector() {
         className="h-7 max-w-[11rem] rounded border border-white/10 bg-[#060a14] px-2 py-0.5 text-[11px] text-slate-200 disabled:opacity-60"
       >
         <option value="grok-3">Grok 3</option>
-        <option value="grok-4.1">Grok 4.1</option>
+        <option value="grok-4.1">Grok</option>
       </select>
       {capabilities.allowedChatModel === 'grok-3' ? (
         <p className="text-[9px] text-slate-500 leading-snug">Free tier: Grok 3 only.</p>
       ) : (
-        <p className="text-[9px] text-slate-500 leading-snug">Pro / Power: default Grok 4.1.</p>
+        <p className="text-[9px] text-slate-500 leading-snug">Pro / Power: default Grok.</p>
       )}
     </div>
   );

@@ -617,7 +617,7 @@ export function IdeVisualEditor({
 
   const runApplyToCode = async () => {
     if (!eligible) {
-      setMockNotice('Preview mode: Save would run Grok 4 and write files under generated-ui/versions/… — complete the v0 pipeline to enable disk apply.');
+      setMockNotice('Preview mode: Save would run Grok and write files under generated-ui/versions/… — complete the v0 pipeline to enable disk apply.');
       setApplyConfirmOpen(false);
       setBusy(false);
       return;
@@ -1489,7 +1489,7 @@ export function IdeVisualEditor({
                   Are you sure you want to apply/code these changes? The server will copy the current contents of every file Grok is
                   about to change into <code className="text-cyan-300/90">generated-ui/versions/&lt;timestamp&gt;/</code>, then write
                   updates under <code className="text-cyan-300/90">src/</code> (and other allowed paths). Your immutable v0 folder is
-                  never modified. Grok 4 produces the file contents.
+                  never modified. Grok produces the file contents.
                 </p>
               </div>
             </div>

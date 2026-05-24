@@ -12,7 +12,7 @@ export function SwarmStatusBar() {
         <div className="flex items-center gap-2">
           <Loader2 className="h-4 w-4 shrink-0 animate-spin text-primary" aria-hidden />
           <span className="text-foreground" style={{ fontWeight: 500 }}>
-            Inspect — Quality (Grok 4.1)
+            Inspect — Quality (Grok)
           </span>
         </div>
         <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-[11px] text-muted-foreground sm:text-xs">

@@ -21,7 +21,7 @@ const V0_KEYS_URL = 'https://v0.dev/chat/settings/keys';
 function SecretNote() {
   return (
     <p className="text-[11px] text-slate-500 leading-relaxed border-t border-white/5 pt-3 mt-1">
-      Grok 4.1 and related AI use <span className="text-slate-400">MAIN_API_KEY_GROK</span> and companion keys from the{' '}
+      Grok and related AI use your keys from the{' '}
       <span className="text-slate-400">server .env</span> only — they are not collected in this UI. v0 and other
       integrations can still use <span className="text-slate-400">My Projects → Secrets</span> in this browser when
       configured.

@@ -22,7 +22,7 @@ function languageExtension(path: string) {
   return javascript({ typescript: true, jsx: true });
 }
 
-export function CodeEditor() {
+export function CodeEditor({ hidePreviewButton = false }: { hidePreviewButton?: boolean }) {
   const {
     tabs,
     activePath,
@@ -91,15 +91,17 @@ export function CodeEditor() {
           )}
         </div>
         <div className="flex shrink-0 items-center gap-1">
-          <button
-            type="button"
-            title="Open app preview"
-            className="btn-secondary-surface type-label-sm flex items-center gap-1 rounded-md px-2 py-1 text-muted-foreground hover:text-foreground"
-            onClick={() => window.dispatchEvent(new CustomEvent('nebula-open-app-preview'))}
-          >
-            <MonitorPlay className="h-3.5 w-3.5" />
-            Preview
-          </button>
+          {!hidePreviewButton ? (
+            <button
+              type="button"
+              title="Open app preview"
+              className="btn-secondary-surface type-label-sm flex items-center gap-1 rounded-md px-2 py-1 text-muted-foreground hover:text-foreground"
+              onClick={() => window.dispatchEvent(new CustomEvent('nebula-open-app-preview'))}
+            >
+              <MonitorPlay className="h-3.5 w-3.5" />
+              Preview
+            </button>
+          ) : null}
           <button
             type="button"
             title="Save (⌘S / Ctrl+S)"

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { IdeVisualEditor } from '@/components/ide/IdeVisualEditor';
 import { cn } from '@/lib/utils';
 import { AIChat } from '@/components/ide/AIChat';
-import { CodeEditor } from '@/components/ide/CodeEditor';
+import { IdeCenterWorkspace } from '@/components/ide/IdeCenterWorkspace';
 import { TerminalPanel } from '@/components/ide/TerminalPanel';
 import { TopBar } from '@/components/ide/TopBar';
 import { VerticalNav } from '@/components/ide/VerticalNav';
@@ -10,7 +10,6 @@ import { MyServicesOnboarding } from '@/components/MyServicesOnboarding';
 import { MasterPlan } from '@/components/MasterPlan';
 import { SourceControlPanel } from '@/components/SourceControlPanel';
 import { AppPreviewPanel } from '@/components/AppPreviewPanel';
-import { IdeAppPreviewDock } from '@/components/ide/IdeAppPreviewDock';
 import { ExplorerPanel } from '@/components/ExplorerPanel';
 import { IdeDashboardEmbed } from '@/components/ide/IdeDashboardEmbed';
 import { IdeWorkspaceProvider, useIdeWorkspace } from '@/components/ide/IdeWorkspaceContext';
@@ -443,10 +442,7 @@ export function NebullaIDE() {
 
             <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
               <div className="flex min-h-0 flex-1 overflow-hidden">
-                <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
-                  <CodeEditor />
-                </div>
-                <IdeAppPreviewDock onOpenSourceControl={() => setNavId('source-control')} />
+                <IdeCenterWorkspace onOpenSourceControl={() => setNavId('source-control')} />
               </div>
 
               <ResizeHandle onMouseDown={terminal.onMouseDown} orientation="vertical" />
@@ -458,7 +454,10 @@ export function NebullaIDE() {
 
             <ResizeHandle onMouseDown={chat.onMouseDown} orientation="horizontal" />
 
-            <div className="surface-active tonal-seam-l hidden shrink-0 overflow-hidden lg:block" style={{ width: chat.size }}>
+            <div
+              className="surface-active tonal-seam-l hidden h-full min-h-0 shrink-0 overflow-hidden md:flex md:flex-col"
+              style={{ width: chat.size, minWidth: 280, maxWidth: 420 }}
+            >
               <AIChat />
             </div>
           </>

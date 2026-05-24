@@ -1,6 +1,6 @@
 export type SwarmPhase = 'pre_phase_0' | 'phase_0' | 'phase_1' | 'phase_2' | 'phase_3' | 'phase_4' | 'phase_5';
 
-/** Passed through Inspect handoff payloads; Quality uses Grok 4.1 on the server. */
+/** Passed through Inspect handoff payloads; Quality uses Grok on the server. */
 export type SwarmIntensity = 'light' | 'balanced' | 'full_quality';
 
 export interface SwarmAgentOutput {

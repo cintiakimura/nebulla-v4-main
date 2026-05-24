@@ -17,13 +17,13 @@ export type TriggerSwarmParams = {
   focusSnippets?: Record<string, string>;
   /** Drives `buildSwarmAgentRunPlan` on the server (manual Run and Test only in lean mode). */
   swarmHints?: SwarmHandoffHints;
-  /** Manual **Run and Test** — single Quality agent on Grok 4.1. */
+  /** Manual **Run and Test** — single Quality agent on Grok. */
   manualRunAndTest?: boolean;
 };
 
 /**
  * HTTP client for `POST /api/nebula-swarm/handoff`.
- * Pass `manualRunAndTest: true` for the **Run and Test** Quality agent (Grok 4.1).
+ * Pass `manualRunAndTest: true` for the **Run and Test** Quality agent (Grok).
  */
 export async function triggerSwarmOnMessage(
   params: TriggerSwarmParams,

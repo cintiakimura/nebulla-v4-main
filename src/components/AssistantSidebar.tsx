@@ -384,8 +384,8 @@ export function AssistantSidebar({
     setIsLoading(true);
     setChatStatus(
       opts?.onboardingAutopilot
-        ? 'Grok 4 is collecting onboarding context and preparing the Master Plan…'
-        : 'Grok 4 is analyzing your request…',
+        ? 'Grok is collecting onboarding context and preparing the Master Plan…'
+        : 'Grok is analyzing your request…',
     );
     
     // Clear auto-send timer if it was active
@@ -493,7 +493,7 @@ export function AssistantSidebar({
           { role: 'system', text: data.claudeFallbackNotice!.trim() },
         ]);
       }
-      setChatStatus('Grok 4 response received. Syncing Master Plan updates…');
+      setChatStatus('Grok response received. Syncing Master Plan updates…');
       void refreshFreeTokenUsage();
 
       const phaseSync = computePhaseSyncAfterResponse({
@@ -668,7 +668,7 @@ export function AssistantSidebar({
       ) {
         q1ExecutionTriggeredRef.current = true;
         setBuildQueue((prev) => [...prev, 'Auto-trigger: running first generation coding']);
-        setChatStatus('Grok 4 approved Q1. Running rules and preparing first-generation coding…');
+        setChatStatus('Grok approved Q1. Running rules and preparing first-generation coding…');
         try {
           const executeData = await fetchJson<{
             choices?: { message?: { content?: string } }[];
@@ -993,7 +993,7 @@ export function AssistantSidebar({
     ]);
     setInputText('');
     setIsLoading(true);
-    setChatStatus('Grok 4: writing short Master Plan summary only, then Grok Code…');
+    setChatStatus('Grok: writing short Master Plan summary only, then coding agent…');
 
     const grokHeaders: Record<string, string> = { 'Content-Type': 'application/json' };
 
@@ -1773,8 +1773,8 @@ export function AssistantSidebar({
                 type="button"
                 onClick={() => void handleGoCode()}
                 disabled={codeMode || isLoading}
-                title="Go: Grok 4 writes a short summary to Master Plan only, then Grok Code runs"
-                aria-label="Go: Grok 4 summary then Grok Code"
+                title="Go: Grok writes a short summary to Master Plan only, then coding runs"
+                aria-label="Go: Grok summary then coding"
                 className="flex h-9 shrink-0 items-center gap-1 rounded-lg border border-emerald-500/40 bg-emerald-500/15 px-3 text-[11px] font-headline text-emerald-100 transition-colors hover:border-emerald-400/60 hover:bg-emerald-500/25 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/40 disabled:cursor-not-allowed disabled:opacity-35"
               >
                 <Rocket className="h-3.5 w-3.5 shrink-0" strokeWidth={2} aria-hidden />
