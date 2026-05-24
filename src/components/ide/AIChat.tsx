@@ -15,6 +15,7 @@ import {
   formatAssistantForIdeChatDisplay,
   persistMasterPlanFromAssistantSource,
 } from '../../lib/grokChatArtifacts';
+import { dispatchOpenUiStudio, dispatchStartUiUxWorkflow } from '../../lib/nebulaUiStudioEvents';
 import {
   handlePostGrokCodingTurn,
   runGoCodeAndApply,
@@ -515,6 +516,13 @@ export function AIChat() {
 
       setGrokStatusLines(['Processing…', 'Saving Master Plan to project tabs', 'Stripping code from chat display']);
       const mpSaved = await persistMasterPlanFromAssistantSource(masterPlanSource);
+
+      if (/<NEBULA_UI_STUDIO_PROMPT>/i.test(masterPlanSource)) {
+        dispatchOpenUiStudio({ tab: 'mockups' });
+      }
+      if (/<START_UIUX>/i.test(masterPlanSource)) {
+        dispatchStartUiUxWorkflow({ tab: 'design', autoV0: true });
+      }
 
       const { displayText, hadCodingTag } = formatAssistantForIdeChatDisplay(raw);
       const spoken = stripAssistantTagsForVoice(displayText);

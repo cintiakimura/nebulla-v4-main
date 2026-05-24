@@ -25,6 +25,11 @@ import {
   WorkspaceSetupGate,
   type WorkspaceContext,
 } from '@/components/ide/WorkspaceSetupGate';
+import { UiStudioMockupPanel } from '@/components/ide/UiStudioMockupPanel';
+import {
+  registerNebulaUiStudioBridge,
+  type UiStudioTab,
+} from '../../lib/nebulaUiStudioEvents';
 
 const EXPLORER_MIN = 160;
 const EXPLORER_MAX = 480;
@@ -211,7 +216,7 @@ function IdeMainByNav({
 
 export function NebullaIDE() {
   const [navId, setNavId] = useState('explorer');
-  const [uiStudioTab, setUiStudioTab] = useState<'design' | 'preview'>('design');
+  const [uiStudioTab, setUiStudioTab] = useState<UiStudioTab>('design');
   const explorer = useDragResize(EXPLORER_DEFAULT, EXPLORER_MIN, EXPLORER_MAX, 'horizontal-right');
   const chat = useDragResize(CHAT_DEFAULT, CHAT_MIN, CHAT_MAX, 'horizontal-left');
   const terminal = useDragResize(TERMINAL_DEFAULT, TERMINAL_MIN, TERMINAL_MAX, 'vertical');
@@ -273,8 +278,22 @@ export function NebullaIDE() {
   }, [handleWorkspaceReady, refreshMyServicesContext]);
 
   useEffect(() => {
-    if (navId === 'visual-ui-editor') setUiStudioTab('design');
-  }, [navId]);
+    return registerNebulaUiStudioBridge({
+      openUiStudio: (opts) => {
+        setNavId('visual-ui-editor');
+        setUiStudioTab(opts?.tab ?? 'design');
+      },
+      runV0Generate: () => {
+        window.dispatchEvent(new Event('nebula-ui-studio-run-v0'));
+      },
+    });
+  }, []);
+
+  useEffect(() => {
+    if (navId === 'visual-ui-editor' && uiStudioTab !== 'mockups' && uiStudioTab !== 'preview') {
+      setUiStudioTab('design');
+    }
+  }, [navId, uiStudioTab]);
 
   const selectNavItem = useCallback((id: string) => {
     if (id === 'project-settings') {
@@ -335,7 +354,19 @@ export function NebullaIDE() {
                     : 'text-muted-foreground hover:bg-secondary hover:text-foreground',
                 )}
               >
-                Design
+                Visual editor
+              </button>
+              <button
+                type="button"
+                onClick={() => setUiStudioTab('mockups')}
+                className={cn(
+                  'type-label-sm rounded-md px-3 py-1.5 transition-colors',
+                  uiStudioTab === 'mockups'
+                    ? 'active-tab-sheen text-primary'
+                    : 'text-muted-foreground hover:bg-secondary hover:text-foreground',
+                )}
+              >
+                Mockups
               </button>
               <button
                 type="button"
@@ -353,6 +384,8 @@ export function NebullaIDE() {
             <div className="min-h-0 flex-1 overflow-hidden">
               {uiStudioTab === 'design' ? (
                 <IdeVisualEditor onLock={() => setNavId('explorer')} projectDisplayName={getBrowserProjectName()} />
+              ) : uiStudioTab === 'mockups' ? (
+                <UiStudioMockupPanel />
               ) : (
                 <AppPreviewPanel
                   pages={[

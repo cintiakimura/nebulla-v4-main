@@ -360,7 +360,14 @@ export function IdeVisualEditor({
   const [leftTab, setLeftTab] = useState<'pages' | 'layers'>('pages');
   const [mockNotice, setMockNotice] = useState('');
   const [hasV0ApiKey, setHasV0ApiKey] = useState<boolean | null>(null);
-  const [v0ChatId, setV0ChatId] = useState<string | null>(null);
+  const v0StorageKey = `nebulla-v0-chat-${projectLabel.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 48)}`;
+  const [v0ChatId, setV0ChatId] = useState<string | null>(() => {
+    try {
+      return sessionStorage.getItem(v0StorageKey);
+    } catch {
+      return null;
+    }
+  });
 
   const pageIds = useMemo(() => Object.keys(model.pages), [model.pages]);
   const page = model.pages[activePage];
@@ -389,6 +396,13 @@ export function IdeVisualEditor({
   useEffect(() => {
     void loadEligibility();
   }, [loadEligibility]);
+
+  useEffect(() => {
+    const onRunV0 = () => void runV0Generation();
+    window.addEventListener('nebula-ui-studio-run-v0', onRunV0);
+    return () => window.removeEventListener('nebula-ui-studio-run-v0', onRunV0);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- imperative v0 trigger from bridge
+  }, [hasV0ApiKey, projectLabel]);
 
   useEffect(() => {
     let cancelled = false;
@@ -725,7 +739,19 @@ export function IdeVisualEditor({
       if (!res.ok) {
         throw new Error(data.hint || data.error || 'v0 generation failed');
       }
-      if (typeof data.chatId === 'string') setV0ChatId(data.chatId);
+      if (typeof data.chatId === 'string') {
+        setV0ChatId(data.chatId);
+        try {
+          sessionStorage.setItem(v0StorageKey, data.chatId);
+        } catch {
+          /* ignore */
+        }
+      }
+      try {
+        window.dispatchEvent(new CustomEvent('nebula-files-applied'));
+      } catch {
+        /* ignore */
+      }
       const n = data.written?.length ?? 0;
       setMockNotice(
         n > 0
@@ -736,6 +762,57 @@ export function IdeVisualEditor({
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'v0 generation failed';
       setError(msg.includes('V0_API_KEY') ? 'Please add your V0_API_KEY in .env' : msg);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const runV0Refine = async () => {
+    if (!v0ChatId) {
+      setError('Run “Generate UI with v0” first so a v0 chat session exists.');
+      return;
+    }
+    const message = window.prompt('Describe how to refine the v0 UI (e.g. darker theme, add sidebar):');
+    if (!message?.trim()) return;
+    setBusy(true);
+    setError('');
+    try {
+      const res = await fetch(withProjectQuery('/api/nebula-ui-studio/v0-update'), {
+        method: 'POST',
+        headers: persistHeaders(),
+        body: JSON.stringify(
+          withProjectBody({
+            chatId: v0ChatId,
+            message: message.trim(),
+            projectDisplayName: projectLabel,
+          }),
+        ),
+      });
+      const data = (await res.json()) as {
+        error?: string;
+        hint?: string;
+        chatId?: string;
+        written?: string[];
+      };
+      if (!res.ok) throw new Error(data.hint || data.error || 'v0 update failed');
+      if (typeof data.chatId === 'string') {
+        setV0ChatId(data.chatId);
+        try {
+          sessionStorage.setItem(v0StorageKey, data.chatId);
+        } catch {
+          /* ignore */
+        }
+      }
+      const n = data.written?.length ?? 0;
+      setMockNotice(n > 0 ? `v0 refined ${n} file(s) in the workspace.` : 'v0 refine finished.');
+      await loadEligibility();
+      try {
+        window.dispatchEvent(new CustomEvent('nebula-files-applied'));
+      } catch {
+        /* ignore */
+      }
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'v0 refine failed');
     } finally {
       setBusy(false);
     }
@@ -926,6 +1003,16 @@ export function IdeVisualEditor({
             >
               {busy ? 'Running v0…' : 'Generate UI with v0'}
             </button>
+            {v0ChatId ? (
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => void runV0Refine()}
+                className="rounded border border-violet-400/40 bg-violet-500/10 px-2 py-1 text-[10px] text-violet-100 disabled:opacity-40"
+              >
+                Refine with v0
+              </button>
+            ) : null}
             {hasV0ApiKey === false ? (
               <span className="text-[10px] text-amber-200/90">Please add your V0_API_KEY in .env</span>
             ) : null}
@@ -1024,6 +1111,28 @@ export function IdeVisualEditor({
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
+            {eligible && hasV0ApiKey ? (
+              <>
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => void runV0Generation()}
+                  className="rounded-lg border border-cyan-500/40 bg-cyan-500/10 px-3 py-2 text-xs text-cyan-100 disabled:opacity-40"
+                >
+                  {busy ? 'v0…' : 'Regenerate with v0'}
+                </button>
+                {v0ChatId ? (
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => void runV0Refine()}
+                    className="rounded-lg border border-violet-500/35 bg-violet-500/10 px-3 py-2 text-xs text-violet-100 disabled:opacity-40"
+                  >
+                    Refine with v0
+                  </button>
+                ) : null}
+              </>
+            ) : null}
             <button
               type="button"
               disabled={busy}
@@ -1310,8 +1419,8 @@ export function IdeVisualEditor({
 
       <footer className="shrink-0 border-t border-cyan-500/20 bg-[#040d18] px-3 py-2">
         <p className="text-center text-[10px] text-slate-500">
-          Use the main <strong className="text-slate-400">Assistant</strong> for Grok chat. Toolbar tools are a mock surface — disk writes
-          require v0 base + <strong className="text-slate-400">Save Changes &amp; Update Code</strong> (Grok 4.1).
+          Edit layout here, then <strong className="text-slate-400">Save Changes &amp; Update Code</strong> — Grok writes real files under{' '}
+          <code className="text-cyan-300/80">src/</code>. Use <strong className="text-slate-400">Mockups</strong> for SVG directions; v0 generates the first React UI.
         </p>
       </footer>
 

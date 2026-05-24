@@ -24,6 +24,7 @@ import { computePhaseSyncAfterResponse } from '../lib/nebulaSwarmGate';
 import { fetchJson, readResponseJson } from '../lib/apiFetch';
 import { MAIN_AI_CHAT_SETUP_HINT, serverReportsMainAiKey } from '../lib/grokKey';
 import { fetchNebulaPublicConfig } from '../lib/nebulaPublicConfig';
+import { dispatchOpenUiStudio, dispatchStartUiUxWorkflow } from '../lib/nebulaUiStudioEvents';
 import { withProjectBody, withProjectQuery } from '../lib/nebulaProjectApi';
 import { buildNebulaAssistantSystemPrompt } from '../lib/nebulaAssistantSystemPrompt';
 import { fetchConversationLogEntries } from '../lib/conversationLogClient';
@@ -536,7 +537,7 @@ export function AssistantSidebar({
         if ((window as any).openMindMap) (window as any).openMindMap();
       }
       if (masterPlanSource.includes('<APPROVE_MINDMAP>') && hasExplicitApproval) {
-        if ((window as any).openUIUX) (window as any).openUIUX();
+        dispatchOpenUiStudio({ tab: 'mockups' });
       }
       if (masterPlanSource.includes('<APPROVE_UI>') && hasExplicitApproval) {
         if ((window as any).openMasterPlanTab) {
@@ -721,8 +722,8 @@ export function AssistantSidebar({
       }
 
       // Grok 4 behavior: Trigger UI/UX Workflow
-      if (masterPlanSource.includes('<START_UIUX>') && (window as any).startUIUXWorkflow) {
-        (window as any).startUIUXWorkflow();
+      if (masterPlanSource.includes('<START_UIUX>')) {
+        dispatchStartUiUxWorkflow({ tab: 'design', autoV0: true });
       }
 
       const uiStudioPromptMatch = masterPlanSource.match(/<NEBULA_UI_STUDIO_PROMPT>([\s\S]*?)<\/NEBULA_UI_STUDIO_PROMPT>/i);
