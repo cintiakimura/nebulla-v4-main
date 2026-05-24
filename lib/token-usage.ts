@@ -17,13 +17,35 @@ export class TokenLimitExceededError extends Error {
   }
 }
 
-/** Operator override: skip Free-tier monthly cap (testing with real Grok / Claude on signed-in accounts). */
+function parseEnvTruthy(raw: string | undefined): boolean | null {
+  const v = raw?.trim().toLowerCase() ?? "";
+  if (!v) return null;
+  if (v === "1" || v === "true" || v === "yes" || v === "on") return true;
+  if (v === "0" || v === "false" || v === "no" || v === "off") return false;
+  return null;
+}
+
+/**
+ * Skip Nebula Free-tier monthly cap (not xAI/Grok provider quota).
+ * - `DISABLE_FREE_TIER_TOKEN_LIMIT=true` → always off
+ * - `ENFORCE_FREE_TIER_TOKEN_LIMIT=true` → always on (production billing)
+ * - Render hosts (`RENDER` / `RENDER_SERVICE_ID`): off by default for operator testing
+ * - `NODE_ENV !== production`: off for local dev
+ */
 export function isFreeTierTokenLimitDisabled(): boolean {
-  const raw =
-    process.env.DISABLE_FREE_TIER_TOKEN_LIMIT?.trim() ||
-    process.env.DISABLE_MAIN_AI_USAGE_LIMIT?.trim() ||
-    "";
-  return raw === "1" || raw.toLowerCase() === "true" || raw.toLowerCase() === "yes";
+  const explicit =
+    parseEnvTruthy(process.env.DISABLE_FREE_TIER_TOKEN_LIMIT) ??
+    parseEnvTruthy(process.env.DISABLE_MAIN_AI_USAGE_LIMIT);
+  if (explicit === true) return true;
+  if (explicit === false) return false;
+
+  if (parseEnvTruthy(process.env.ENFORCE_FREE_TIER_TOKEN_LIMIT) === true) return false;
+
+  if (process.env.RENDER === "true" || Boolean(process.env.RENDER_SERVICE_ID?.trim())) {
+    return true;
+  }
+  if (process.env.NODE_ENV !== "production") return true;
+  return false;
 }
 
 function utcMonthYear(d = new Date()): string {
@@ -68,7 +90,7 @@ export async function getRemainingTokens(userId: string): Promise<number> {
     return Infinity;
   }
   const caps = getUserCapabilities({ tier });
-  if (caps.monthlyTokenLimit == null) return Infinity;
+  if (caps.monthlyTokenLimit == null || isFreeTierTokenLimitDisabled()) return Infinity;
 
   const monthYear = utcMonthYear();
   try {
@@ -147,7 +169,7 @@ export async function getMonthlyUsageSnapshot(userId: string): Promise<{
     const used = Number(r.rows[0]?.total_tokens ?? 0) || 0;
     const grok3Tokens = Number(r.rows[0]?.grok3_tokens ?? 0) || 0;
     const grok4Tokens = Number(r.rows[0]?.grok4_tokens ?? 0) || 0;
-    const limit = caps.monthlyTokenLimit;
+    const limit = isFreeTierTokenLimitDisabled() ? null : caps.monthlyTokenLimit;
     const remaining =
       limit == null ? Number.POSITIVE_INFINITY : Math.max(0, limit - used);
     return { monthYear, used, grok3Tokens, grok4Tokens, tier, limit, remaining };

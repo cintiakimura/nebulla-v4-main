@@ -169,9 +169,11 @@ if (mainAiEnvProbe.length < 20) {
 }
 
 if (isFreeTierTokenLimitDisabled()) {
-  console.warn(
-    "[nebula] DISABLE_FREE_TIER_TOKEN_LIMIT is set — Free plan monthly AI token cap is OFF (testing only; do not use in production)."
-  );
+  const reason =
+    process.env.RENDER === "true" || process.env.RENDER_SERVICE_ID
+      ? "Render host default (set ENFORCE_FREE_TIER_TOKEN_LIMIT=true to re-enable)"
+      : "DISABLE_FREE_TIER_TOKEN_LIMIT or non-production NODE_ENV";
+  console.warn(`[nebula] Free plan monthly AI token cap is OFF — ${reason}.`);
 }
 
 const r2MissingOnBoot = getMissingR2EnvVars();
@@ -358,6 +360,7 @@ async function startServer() {
       builderPublicKey: process.env.BUILDER_PUBLIC_KEY,
       hasMainAiApiKey: grok.length >= 20,
       hasGrokApiKey: grok.length >= 20,
+      freeTierTokenLimitDisabled: isFreeTierTokenLimitDisabled(),
       mainAiProvider,
       mainAiChatModel,
       hasGrokSwarmApiKey: grokSwarm.length >= 20,

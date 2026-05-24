@@ -8,6 +8,9 @@ export type NebulaPublicConfig = {
   hasV0ApiKey?: boolean;
   v0KeyHint?: string;
   hasR2Storage?: boolean;
+  hasMainAiApiKey?: boolean;
+  /** When true, Nebula Free-tier monthly token cap is not enforced. */
+  freeTierTokenLimitDisabled?: boolean;
   r2MissingEnv?: string[];
   r2StorageHint?: string;
 };

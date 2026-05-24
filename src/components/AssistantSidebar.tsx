@@ -23,6 +23,7 @@ import { ChatModelSelector } from '@/components/settings/ModelSelector';
 import { computePhaseSyncAfterResponse } from '../lib/nebulaSwarmGate';
 import { fetchJson, readResponseJson } from '../lib/apiFetch';
 import { MAIN_AI_CHAT_SETUP_HINT, serverReportsMainAiKey } from '../lib/grokKey';
+import { fetchNebulaPublicConfig } from '../lib/nebulaPublicConfig';
 import { withProjectBody, withProjectQuery } from '../lib/nebulaProjectApi';
 import { buildNebulaAssistantSystemPrompt } from '../lib/nebulaAssistantSystemPrompt';
 import { fetchConversationLogEntries } from '../lib/conversationLogClient';
@@ -354,10 +355,17 @@ export function AssistantSidebar({
 
     if (modelSettings.capabilities.tier === 'free' && userId !== 'anonymous') {
       try {
-        const usage = await fetchJson<{
-          remaining?: number | null;
-        }>(withProjectQuery('/api/billing/token-usage'), { credentials: 'include' });
-        if (usage.remaining != null && usage.remaining <= 0) {
+        const [usage, pubCfg] = await Promise.all([
+          fetchJson<{ remaining?: number | null }>(withProjectQuery('/api/billing/token-usage'), {
+            credentials: 'include',
+          }),
+          fetchNebulaPublicConfig(),
+        ]);
+        if (
+          !pubCfg.freeTierTokenLimitDisabled &&
+          usage.remaining != null &&
+          usage.remaining <= 0
+        ) {
           setMessages((prev) => [...prev, { role: 'system', text: MONTHLY_LIMIT_MESSAGE }]);
           return;
         }
