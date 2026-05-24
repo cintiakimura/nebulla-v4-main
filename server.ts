@@ -72,7 +72,12 @@ import {
 } from "./lib/visualUiEditorWorkspace";
 import { buildSwarmHandoffParallel } from "./lib/nebulaSwarmHandoff";
 import { readNebulaSwarmState } from "./lib/nebulaSwarmState";
-import { addTokens, checkAndEnforceLimit, TokenLimitExceededError } from "./lib/token-usage";
+import {
+  addTokens,
+  checkAndEnforceLimit,
+  isFreeTierTokenLimitDisabled,
+  TokenLimitExceededError,
+} from "./lib/token-usage";
 import multer from "multer";
 import {
   contentTypeFromFilename,
@@ -160,6 +165,12 @@ const mainAiEnvProbe = readMainAiApiKeyFromEnv();
 if (mainAiEnvProbe.length < 20) {
   console.warn(
     `[nebula] ${MAIN_AI_ENV_VAR} is missing or shorter than 20 characters after trim — main AI chat and tools will return 401 until set (Render: set in the service Environment, not only in a local .env file). Legacy alias: GROK_API_KEY_LUMEN.`
+  );
+}
+
+if (isFreeTierTokenLimitDisabled()) {
+  console.warn(
+    "[nebula] DISABLE_FREE_TIER_TOKEN_LIMIT is set — Free plan monthly AI token cap is OFF (testing only; do not use in production)."
   );
 }
 

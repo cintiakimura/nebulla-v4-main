@@ -17,6 +17,15 @@ export class TokenLimitExceededError extends Error {
   }
 }
 
+/** Operator override: skip Free-tier monthly cap (testing with real Grok / Claude on signed-in accounts). */
+export function isFreeTierTokenLimitDisabled(): boolean {
+  const raw =
+    process.env.DISABLE_FREE_TIER_TOKEN_LIMIT?.trim() ||
+    process.env.DISABLE_MAIN_AI_USAGE_LIMIT?.trim() ||
+    "";
+  return raw === "1" || raw.toLowerCase() === "true" || raw.toLowerCase() === "yes";
+}
+
 function utcMonthYear(d = new Date()): string {
   const y = d.getUTCFullYear();
   const m = d.getUTCMonth() + 1;
@@ -92,6 +101,7 @@ export async function addTokens(userId: string, tokens: number, model: GrokUsage
  */
 export async function checkAndEnforceLimit(userId: string): Promise<void> {
   if (!userId || userId === "anonymous") return;
+  if (isFreeTierTokenLimitDisabled()) return;
   const pool = getNebulaPgPool();
   if (!pool) return;
   try {
