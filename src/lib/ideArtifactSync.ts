@@ -3,6 +3,7 @@ import { withProjectBody, withProjectQuery } from './nebulaProjectApi';
 
 export type IdeArtifactSyncResult = {
   masterPlanTabs?: number;
+  v0PromptWritten?: boolean;
   mindMapSynced?: boolean;
   mindMapPageCount?: number;
   mindMapRouteCount?: number;
@@ -10,6 +11,45 @@ export type IdeArtifactSyncResult = {
   basicUiWritten?: string[];
   uiStudioUnlocked?: boolean;
 };
+
+export type MasterPlanUiPipelineResult = {
+  ok?: boolean;
+  v0PromptWritten?: boolean;
+  mindMapSynced?: boolean;
+  mindMapPageCount?: number;
+  mindMapRouteCount?: number;
+  v0Triggered?: boolean;
+  v0Ok?: boolean;
+  v0Error?: string;
+  v0Written?: string[];
+  hasRealV0?: boolean;
+};
+
+/** After Master Plan save: v0-prompt.md, mind map (§4), optional auto v0. */
+export async function runMasterPlanUiPipeline(options?: {
+  projectName?: string;
+  autoV0?: boolean;
+}): Promise<MasterPlanUiPipelineResult> {
+  try {
+    return await fetchJson<MasterPlanUiPipelineResult>(
+      withProjectQuery('/api/ide/master-plan-ui-pipeline'),
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(
+          withProjectBody({
+            projectName: options?.projectName?.trim() || undefined,
+            autoV0: options?.autoV0 !== false,
+          }),
+        ),
+      },
+    );
+  } catch (e) {
+    console.warn('[ideArtifactSync] master-plan-ui-pipeline:', e);
+    return {};
+  }
+}
 
 /** After coding / file apply: fill empty Master Plan, mind map, and preview shell. */
 export async function syncIdeProjectArtifacts(options?: {
@@ -83,7 +123,7 @@ export async function runPostCodingWorkspaceSync(options?: {
   }
 
   try {
-    if ((sync.masterPlanTabs ?? 0) > 0) {
+    if ((sync.masterPlanTabs ?? 0) > 0 || sync.v0PromptWritten) {
       window.dispatchEvent(new CustomEvent('nebula-master-plan-updated'));
     }
     window.dispatchEvent(new CustomEvent('nebula-mind-map-updated'));

@@ -21,7 +21,7 @@ import {
   runGoCodeAndApply,
 } from '../../lib/nebulaGrokCodingPipeline';
 import { syncActiveCloudProjectFromSession } from '../../lib/nebulaCloud';
-import { runPostCodingWorkspaceSync } from '../../lib/ideArtifactSync';
+import { runMasterPlanUiPipeline, runPostCodingWorkspaceSync } from '../../lib/ideArtifactSync';
 import {
   clearIdeWorkspaceMetaCache,
   detectBuildModeIntent,
@@ -584,11 +584,39 @@ export function AIChat() {
       if (/<NEBULA_UI_STUDIO_PROMPT>/i.test(masterPlanSource)) {
         dispatchOpenUiStudio({ tab: 'mockups' });
       }
-      if (/<START_UIUX>/i.test(masterPlanSource)) {
-        dispatchStartUiUxWorkflow({ tab: 'design', autoV0: true });
-      }
 
       const { displayText, hadCodingTag } = formatAssistantForIdeChatDisplay(raw);
+
+      let masterPlanPipeline: Awaited<ReturnType<typeof runMasterPlanUiPipeline>> = {};
+      if (mpSaved > 0) {
+        setGrokStatusLines([
+          'Master Plan saved',
+          'Writing v0-prompt & mind map from §4',
+          'Auto v0 when API key is set',
+        ]);
+        masterPlanPipeline = await runMasterPlanUiPipeline({
+          projectName,
+          autoV0: true,
+        });
+        if ((masterPlanPipeline.mindMapPageCount ?? 0) > 0 || masterPlanPipeline.v0Ok) {
+          try {
+            window.dispatchEvent(new CustomEvent('nebula-master-plan-updated'));
+            if ((masterPlanPipeline.mindMapPageCount ?? 0) > 0) {
+              window.dispatchEvent(new CustomEvent('nebula-mind-map-updated'));
+            }
+            if (masterPlanPipeline.v0Ok) {
+              window.dispatchEvent(new CustomEvent('nebula-files-applied'));
+              dispatchOpenUiStudio({ tab: 'design' });
+            }
+          } catch {
+            /* ignore */
+          }
+        }
+      }
+
+      if (/<START_UIUX>/i.test(masterPlanSource) && !masterPlanPipeline.v0Ok) {
+        dispatchStartUiUxWorkflow({ tab: 'design', autoV0: true });
+      }
       const spoken = stripAssistantTagsForVoice(displayText);
       const ts = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
       const toAppend: Message[] = [];
@@ -662,7 +690,15 @@ export function AIChat() {
             setGrokStatusLines(['Done', coding.statusMessage.trim().slice(0, 72), 'Check file explorer & Preview']);
           }
         } else if (!hadCodingTag) {
-          setGrokStatusLines(['Ready', 'Chat: prose only', 'Go: writes files to workspace']);
+          const mm = masterPlanPipeline.mindMapPageCount ?? 0;
+          const v0Note = masterPlanPipeline.v0Ok
+            ? 'v0 UI generated'
+            : masterPlanPipeline.v0Triggered && masterPlanPipeline.v0Error
+              ? `v0: ${String(masterPlanPipeline.v0Error).slice(0, 48)}`
+              : mm > 0
+                ? 'Mind map ready — use UI Studio → Generate with v0'
+                : 'Chat: prose only — Go writes files';
+          setGrokStatusLines(['Ready', mm > 0 ? `Mind map: ${mm} page(s)` : 'Master Plan updated', v0Note]);
         }
       } catch (codingErr) {
         console.warn('[AIChat] coding apply:', codingErr);

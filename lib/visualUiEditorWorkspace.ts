@@ -29,6 +29,8 @@ export type V0BaseManifest = {
 };
 
 export type VisualEditorState = {
+  /** Grok wrote `app/` / `src/` — studio mock tools available; not a substitute for v0-api. */
+  workspaceCodingDetected?: boolean;
   v0FirstGenerationComplete?: boolean;
   /** Immutable v0 output root, e.g. generated-ui/v0-original-myapp-2026-05-14T12-00-00-000Z */
   originalV0FolderRel?: string;

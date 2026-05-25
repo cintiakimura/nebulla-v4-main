@@ -1,9 +1,10 @@
 import fs from "fs";
 import path from "path";
+import { readV0PromptMarkdown } from "./nebulaUiStudioPipeline";
 import {
   isVisualEditorEligible,
-  markV0FirstGenerationComplete,
-  sanitizeProjectNameForVersions,
+  readEditorState,
+  writeEditorState,
 } from "./visualUiEditorWorkspace";
 
 import { MASTER_PLAN_ALL_KEYS, normalizeMasterPlanRecord } from "./masterPlanSections";
@@ -296,6 +297,8 @@ export function mergeRoutesForMindMap(
 }
 
 function extractNebulaUiStudioPrompt(workspaceRoot: string): string {
+  const fromFile = readV0PromptMarkdown(workspaceRoot);
+  if (fromFile) return fromFile;
   const rels = ["nebula-project/nebula-ui-studio.md", "nebula-ui-studio.md"];
   for (const rel of rels) {
     const full = path.join(workspaceRoot, rel);
@@ -364,10 +367,10 @@ export function hydrateAndPersistMasterPlan(
   return plan;
 }
 
-/** Unlock Nebula UI Studio after Grok coding when `app/` or `src/` exists but v0 manifest is missing. */
+/** Note that Grok wrote app routes — does not fake v0 completion (real v0 still required). */
 export function unlockVisualEditorFromWorkspaceCoding(
   workspaceRoot: string,
-  projectName: string
+  _projectName: string
 ): boolean {
   if (isVisualEditorEligible(workspaceRoot).eligible) return true;
   const hasApp =
@@ -375,14 +378,12 @@ export function unlockVisualEditorFromWorkspaceCoding(
     fs.existsSync(path.join(workspaceRoot, "src")) ||
     fs.existsSync(path.join(workspaceRoot, "pages"));
   if (!hasApp) return false;
-  const routes = discoverWorkspaceRoutes(workspaceRoot);
-  const safe = sanitizeProjectNameForVersions(projectName);
-  markV0FirstGenerationComplete(workspaceRoot, safe, {
-    files: {
-      "README.txt": `UI Studio unlocked from workspace routes after Grok coding.\nRoutes: ${routes.join(", ")}\n`,
-    },
-    source: "grok-coding",
-    notes: `Auto-unlock (${routes.length} route(s))`,
+  const st = readEditorState(workspaceRoot);
+  if (st.workspaceCodingDetected) return true;
+  writeEditorState(workspaceRoot, {
+    ...st,
+    workspaceCodingDetected: true,
+    updatedAt: new Date().toISOString(),
   });
   return true;
 }

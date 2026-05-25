@@ -52,6 +52,12 @@ import {
   writeBasicUiScaffold,
 } from "./lib/nebulaIdeWorkspaceArtifacts";
 import {
+  hasRealV0ApiGeneration,
+  readV0PromptMarkdown,
+  saveCanonicalV0OriginalCopy,
+  writeV0PromptMarkdown,
+} from "./lib/nebulaUiStudioPipeline";
+import {
   masterPlanKeyForTabIndex,
   normalizeMasterPlanRecord,
   parseMasterPlanBlock,
@@ -598,6 +604,7 @@ No approved UI code yet.
       source: "v0-api",
       notes: "Nebula UI Studio v0 generation",
     });
+    saveCanonicalV0OriginalCopy(workspaceRoot, allFilesMap);
 
     const { written, skipped } = writeV0FilesToWorkspace(workspaceRoot, v0Call.result.files);
 
@@ -919,6 +926,15 @@ No approved UI code yet.
         userNote,
       });
       hydrateAndPersistMasterPlan(pp.workspaceRoot, pp.masterPlanPath);
+      const plan = readMasterPlanFile(pp.masterPlanPath);
+      const v0Prompt = writeV0PromptMarkdown(pp.workspaceRoot, plan);
+      ensureNebulaUiStudioFileAt(pp.nebulaUiStudioPath);
+      const studioExisting = fs.readFileSync(pp.nebulaUiStudioPath, "utf8");
+      fs.writeFileSync(
+        pp.nebulaUiStudioPath,
+        upsertNebulaCommentSection(studioExisting, "NEBULA_UI_STUDIO_PROMPT", v0Prompt.content),
+        "utf8"
+      );
       const uiStudioUnlocked = unlockVisualEditorFromWorkspaceCoding(pp.workspaceRoot, projectName);
       const mind = syncMindMapFromMasterPlan({
         workspaceRoot: pp.workspaceRoot,
@@ -933,6 +949,7 @@ No approved UI code yet.
       const mindMapPages = Array.isArray(mind.pages) ? mind.pages.length : 0;
       res.json({
         masterPlanTabs: mp.updated,
+        v0PromptWritten: v0Prompt.written,
         mindMapSynced: mind.written && mindMapPages > 0,
         mindMapPageCount: mindMapPages,
         mindMapRouteCount: mind.routeCount,
@@ -942,6 +959,82 @@ No approved UI code yet.
       });
     } catch (err: unknown) {
       res.status(500).json({ error: err instanceof Error ? err.message : "artifact sync failed" });
+    }
+  });
+
+  app.post("/api/ide/master-plan-ui-pipeline", async (req, res) => {
+    try {
+      const pp = projectPathsFor(req);
+      const body = req.body || {};
+      const projectName =
+        typeof body.projectName === "string" && body.projectName.trim()
+          ? String(body.projectName).trim()
+          : "Untitled Project";
+      const autoV0 = body.autoV0 !== false;
+
+      const plan = hydrateAndPersistMasterPlan(pp.workspaceRoot, pp.masterPlanPath);
+      const v0Prompt = writeV0PromptMarkdown(pp.workspaceRoot, plan);
+      ensureNebulaUiStudioFileAt(pp.nebulaUiStudioPath);
+      const studioExisting = fs.readFileSync(pp.nebulaUiStudioPath, "utf8");
+      fs.writeFileSync(
+        pp.nebulaUiStudioPath,
+        upsertNebulaCommentSection(studioExisting, "NEBULA_UI_STUDIO_PROMPT", v0Prompt.content),
+        "utf8"
+      );
+
+      const mind = syncMindMapFromMasterPlan({
+        workspaceRoot: pp.workspaceRoot,
+        masterPlanPath: pp.masterPlanPath,
+        projectLabel: projectName,
+      });
+      const mindMapPages = Array.isArray(mind.pages) ? mind.pages.length : 0;
+
+      let v0Triggered = false;
+      let v0Ok = false;
+      let v0Error: string | undefined;
+      let v0Written: string[] = [];
+
+      if (autoV0 && !hasRealV0ApiGeneration(pp.workspaceRoot)) {
+        const prompt = readV0PromptMarkdown(pp.workspaceRoot);
+        if (prompt.trim()) {
+          v0Triggered = true;
+          const skillExcerpt = readSkillDesignSystemExcerpt(pp.workspaceRoot);
+          const message = [
+            prompt,
+            skillExcerpt ? `Design system (SKILL.md):\n${skillExcerpt}` : "",
+          ]
+            .filter(Boolean)
+            .join("\n\n");
+          const pass = await runV0UiStudioPass({
+            req,
+            message,
+            projectDisplayName: projectName,
+          });
+          if (pass.ok) {
+            v0Ok = true;
+            v0Written = pass.written;
+          } else {
+            v0Error = pass.error;
+          }
+        }
+      }
+
+      res.json({
+        ok: true,
+        v0PromptWritten: v0Prompt.written,
+        mindMapSynced: mind.written && mindMapPages > 0,
+        mindMapPageCount: mindMapPages,
+        mindMapRouteCount: mind.routeCount,
+        v0Triggered,
+        v0Ok,
+        v0Error,
+        v0Written,
+        hasRealV0: hasRealV0ApiGeneration(pp.workspaceRoot),
+      });
+    } catch (err: unknown) {
+      res.status(500).json({
+        error: err instanceof Error ? err.message : "master plan UI pipeline failed",
+      });
     }
   });
 
@@ -1574,10 +1667,15 @@ No approved UI code yet.
       const { nebulaUiStudioPath, workspaceRoot } = projectPathsFor(req);
       ensureNebulaUiStudioFileAt(nebulaUiStudioPath);
       const uiStudioFile = fs.readFileSync(nebulaUiStudioPath, "utf8");
+      const filePrompt = readV0PromptMarkdown(workspaceRoot);
       const storedPrompt = extractNebulaCommentSection(uiStudioFile, "NEBULA_UI_STUDIO_PROMPT");
       const skillExcerpt = readSkillDesignSystemExcerpt(workspaceRoot);
       const { masterPlanPath } = projectPathsFor(req);
       const masterPlan = readMasterPlanFile(masterPlanPath);
+      if (!filePrompt.trim()) {
+        writeV0PromptMarkdown(workspaceRoot, masterPlan);
+      }
+      const canonicalPrompt = readV0PromptMarkdown(workspaceRoot);
       const uiUxDesign = String(masterPlan["5. UI/UX design"] ?? "").trim();
       const pagesNav = String(masterPlan["4. Pages and navigation"] ?? "").trim();
       const body = req.body || {};
@@ -1586,20 +1684,28 @@ No approved UI code yet.
           ? body.pagesText.trim()
           : pagesNav;
       const extra = typeof body.message === "string" ? body.message.trim() : "";
-      const promptText = [
-        uiUxDesign
-          ? `UI/UX Design (Master Plan section 5 — primary source for v0):\n${uiUxDesign}`
-          : "",
-        storedPrompt && storedPrompt !== "No prompt generated yet."
-          ? `Nebula UI Studio prompt file:\n${storedPrompt}`
-          : "",
-        skillExcerpt ? `Design system (SKILL.md):\n${skillExcerpt}` : "",
-        pagesText ? `Pages and navigation (section 4 — structure reference):\n${pagesText}` : "",
-        extra,
-        "Generate production-ready UI with React, Tailwind CSS, and shadcn/ui. Output app files under src/ or app/.",
-      ]
-        .filter(Boolean)
-        .join("\n\n");
+      const promptText = canonicalPrompt.trim()
+        ? [
+            canonicalPrompt,
+            skillExcerpt ? `Design system (SKILL.md):\n${skillExcerpt}` : "",
+            extra,
+          ]
+            .filter(Boolean)
+            .join("\n\n")
+        : [
+            uiUxDesign
+              ? `UI/UX Design (Master Plan section 5 — primary source for v0):\n${uiUxDesign}`
+              : "",
+            storedPrompt && storedPrompt !== "No prompt generated yet."
+              ? `Nebula UI Studio prompt file:\n${storedPrompt}`
+              : "",
+            skillExcerpt ? `Design system (SKILL.md):\n${skillExcerpt}` : "",
+            pagesText ? `Pages and navigation (section 4 — structure reference):\n${pagesText}` : "",
+            extra,
+            "Generate production-ready UI with React, Tailwind CSS, and shadcn/ui. Output app files under src/ or app/.",
+          ]
+            .filter(Boolean)
+            .join("\n\n");
 
       const pass = await runV0UiStudioPass({
         req,
