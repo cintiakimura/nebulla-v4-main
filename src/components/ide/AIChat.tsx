@@ -600,12 +600,14 @@ export function AIChat() {
           timestamp: ts,
         });
       }
-      toAppend.push({
-        id: `a-${Date.now()}`,
-        role: 'assistant',
-        content: displayText || '(Empty response)',
-        timestamp: ts,
-      });
+      if (displayText.trim() || hadCodingTag) {
+        toAppend.push({
+          id: `a-${Date.now()}`,
+          role: 'assistant',
+          content: displayText.trim() || 'Applied — see file explorer.',
+          timestamp: ts,
+        });
+      }
       setMessages((p) => {
         const next = [...p, ...toAppend];
         messagesRef.current = next;

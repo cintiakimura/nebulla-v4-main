@@ -1,54 +1,110 @@
 
 **Project Workflow**
 
-**High-Level Project Creation Flow**
+End-to-end timeline for a new Nebula project. **Strict MUST / MUST NOT rules:** **`project-execution-rules.md`**. **Paths & studio:** **`nebula-ui-studio.md`**.
 
-1. **Login**
-   - User logs in with GitHub or Email.
+---
 
-2. **Create New Project**
-   - User enters a project name.
+## UI/UX rules summary (Grok)
 
-3. **Connect Your Services (Onboarding)**
-   - Grok API Key (strongly recommended)
-   - v0 API Key (required for automatic UI generation)
-   - Infrastructure Manager runs silently (Render setup, key storage, database creation).
+| # | Rule | Grok / product |
+|---|------|----------------|
+| 1 | **UI/UX Design** (§5) **≤ 15–25 lines**; no long text, no code, no copy from other sections | Grok **MUST** |
+| 2 | **Immediately** after Master Plan → **`nebula-ui-studio/v0-prompt.md`** (§4 + §5) | Grok **MUST** |
+| 3 | **Immediately** after prompt file → **auto V0 API** → **`v0-original/<timestamp>/`** | Grok **MUST** trigger; product **MUST** save |
+| 4 | **UI Studio** loads §5 + `v0-prompt.md`; **Apply Changes to All Pages** with **clear warning** + confirm | Product **MUST** |
+| 5 | **Mind Map** from **Pages and navigation** (§4) **only** — **MUST NOT** wait for UI/UX or v0 | Product **MUST** |
 
-4. **Master Plan Interview**
-   - Grok 4 conducts a structured but natural interview.
-   - Mandatory information is collected (core purpose, users, features, data, security, brand).
+---
 
-5. **Automatic Initial Setup**
-   - Grok 4 generates the full Master Plan.
-   - Automatic v0 UI generation (first high-quality version).
-   - Database schema is created.
+## High-level project creation flow
 
-6. **Foundation Phase (Phase 0)**
-   - Grok reads files in this exact order:
-     - `project-workflow.md`
-     - `master-plan.json`
-     - `environment-setup.md`
-     - `nebula-ui-studio.md`
-     - `project-execution-rules.md`
-   - Base structure and authentication are implemented.
+### 1. Login
+User logs in (GitHub or Email).
 
-7. **Core Development (Phase 1)**
-   - Features are built one by one from the Master Plan.
+### 2. Create new project
+User names the project.
 
-8. **UI Development (Phase 2)**
-   - First version generated automatically with v0.
-   - All future refinements happen in Nebula UI Studio.
+### 3. Connect services (onboarding)
+- **V0_API_KEY** — **required** for automatic UI generation.
+- Infrastructure Manager: Render, database, workspace IDs (silent).
+- Grok: server **`MAIN_API_KEY_GROK`** only.
 
-9. **Polish & Production (Phases 3-4)**
-   - Manual "Run and Test" is recommended before final delivery.
+### 4. Master Plan interview
+- Grok: **one question at a time** (voice/TTS per execution rules).
+- Collects purpose, users, features, data, security, brand (optional).
 
-10. **Normal Iteration (Phase 5)**
-    - Normal chat + manual "Run and Test" after major changes.
-    - Chat transcripts persist per project (`conversationLog.ts` + `GET /api/conversation-log`) so sessions resume with context.
+### 5. Master Plan generation
 
-**Key Principles**
-- Grok 4 is the main agent.
-- Quality Agent is manual only ("Run and Test" button).
-- v0 is used automatically once per project for initial UI.
-- All user API keys are respected and used when provided.
-- `project-execution-rules.md` is the single source of truth.
+**Grok MUST:**
+
+1. Emit `<START_MASTERPLAN>…</END_MASTERPLAN>` with **five separated sections** and exact headers (`### 1.` … `### 5.`).
+2. Keep **UI/UX Design** (`### 5. UI/UX design`) to **15–25 lines maximum** — concise visual summary only.
+3. **MUST NOT** put code, long prose, or **Pages and navigation** copy into UI/UX Design.
+
+**Product MUST:**
+
+4. Persist to **`master-plan.json`** and Master Plan IDE tab.
+5. **Immediately** sync **Mind Map exclusively from §4 Pages and navigation**.
+6. **MUST NOT** wait for UI/UX Design, `v0-prompt.md`, v0, or UI Studio before Mind Map.
+
+### 6. UI/UX generation (7 numbered steps)
+
+| Step | When | Who | Action |
+|------|------|-----|--------|
+| **1** | Master Plan done | Grok | Five sections saved; **UI/UX Design ≤ 15–25 lines** |
+| **2** | §4 saved (same window OK) | Product | **Mind Map** from **Pages and navigation** only |
+| **3** | **Immediately** after step 1 | Grok | Write **`nebula-ui-studio/v0-prompt.md`** = §4 + §5 |
+| **4** | **Immediately** after step 3 | Grok + product | **Auto-trigger V0 API**; save **`v0-original/<timestamp>/`** |
+| **5** | After step 4 | User + product | **UI Studio**: load **UI/UX Design** + **`v0-prompt.md`** + v0 UI; manual edit |
+| **6** | User ready | User + product | **Apply Changes to All Pages** → **clear warning** → **confirm** |
+| **7** | After step 6 confirm | Grok | File apply / `START_CODING` → **Preview** updates |
+
+**Critical timing**
+
+- Step **2** **MUST NOT** depend on steps 3–5.  
+- Steps **3 → 4** **MUST** run **immediately** after Master Plan — no chat-only v0.  
+- Step **5** **MUST** read both **UI/UX Design** and **`v0-prompt.md`**.
+
+Full contracts: **`nebula-ui-studio.md`**.
+
+### 7. Foundation (Phase 0)
+Grok reads: `project-workflow.md` → `master-plan.json` → `environment-setup.md` → `nebula-ui-studio.md` + `nebula-ui-studio/v0-prompt.md` → `project-execution-rules.md`.  
+Database + auth from Master Plan. UI baseline from steps 3–4 if present.
+
+### 8. Core development (Phase 1)
+Features from Master Plan; **Go** / **START_CODING** + `\`\`\`file:…\`\`\`` — **MUST NOT** code dumps in chat.
+
+### 9. UI development (Phase 2)
+First UI: steps 3–7. Later UI: UI Studio → Apply (warning) → Grok; **MUST NOT** full v0 unless redesign.
+
+### 10. Polish & production (Phases 3–4)
+States, responsive, a11y; manual **Run and Test**.
+
+### 11. Normal iteration (Phase 5)
+Chat + **Run and Test**; history via `conversationLog.ts`.
+
+---
+
+## Key principles (final — MUST / MUST NOT)
+
+**Grok MUST**
+- Separate five Master Plan sections.  
+- Limit **UI/UX Design** to **15–25 lines**; no code; no copied long text from §4.  
+- Create **`nebula-ui-studio/v0-prompt.md`** **immediately** after Master Plan (§4 + §5).  
+- **Automatically trigger V0** **immediately** after that file is saved.  
+- Rely on file apply after UI Studio Apply confirm.  
+
+**Grok MUST NOT**
+- Dump sections into Goal of the app.  
+- Put the detailed v0 prompt in §5 or chat instead of `v0-prompt.md`.  
+- Delay Mind Map until UI/UX or v0 completes.  
+- Paste v0 or application code in chat.  
+
+**Product MUST**
+- Mind Map **exclusively** from **Pages and navigation**.  
+- Save v0 originals under **`nebula-ui-studio/v0-original/<timestamp>/`**.  
+- UI Studio: **UI/UX Design** + **`v0-prompt.md`**.  
+- **Apply Changes to All Pages**: **clear warning** + user **confirm**.  
+
+**Authority:** `project-execution-rules.md` · **Studio detail:** `nebula-ui-studio.md`

@@ -170,8 +170,79 @@ export function buildMindMapGraphFromRoutes(
   return { pages, edges };
 }
 
-/** Parse `4. Pages and navigation` bullets for route paths like `/dashboard`. */
+export type MindMapPageSpec = { route: string; label: string };
+
+function labelToRoute(label: string): string {
+  const raw = label.replace(/\*\*/g, "").trim();
+  const lower = raw.toLowerCase().replace(/\s*page\s*$/i, "").trim();
+  if (!lower || /^(home|landing|index)$/.test(lower) || lower.includes("landing")) return "/";
+  const slug = lower.replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+  return slug ? `/${slug}` : "/";
+}
+
+function routeToLabel(route: string, projectLabel: string): string {
+  if (route === "/") return projectLabel || "Home";
+  const seg = route.split("/").filter(Boolean).pop() ?? route;
+  return seg.replace(/[-_]/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+/** Parse section 4 into page nodes (names + routes). Mind map uses this first. */
+export function mindMapPagesFromMasterPlan(
+  plan: Record<string, string>,
+  projectLabel = "Home"
+): MindMapPageSpec[] {
+  const section = String(plan["4. Pages and navigation"] ?? "").trim();
+  if (!section) return [];
+  const specs: MindMapPageSpec[] = [];
+  const seen = new Set<string>();
+
+  const add = (label: string, route?: string) => {
+    let clean = label.replace(/\*\*/g, "").trim();
+    clean = clean.replace(/\s*\([^)]*\)\s*$/g, "").trim();
+    if (!clean || clean.length < 2) return;
+    if (/^(pages and navigation|navigation|overview)$/i.test(clean)) return;
+    const r = (route?.trim() || labelToRoute(clean)).replace(/\/+/g, "/");
+    const key = r.toLowerCase();
+    if (seen.has(key)) return;
+    seen.add(key);
+    specs.push({ route: r, label: clean });
+  };
+
+  for (const line of section.split("\n")) {
+    const boldRoute = line.match(/\*\*([^*]+)\*\*\s*(?:\([^)]*?(`(\/[^`]+)`))?/);
+    if (boldRoute) {
+      add(boldRoute[1], boldRoute[2]);
+      continue;
+    }
+    const heading = line.match(/^\s*#{2,4}\s+(?:\d+[.)]\s*)?(.+?)\s*$/);
+    if (heading) {
+      add(heading[1]);
+      continue;
+    }
+    const bullet = line.match(/^\s*[-*•]\s+(.+?)\s*$/);
+    if (bullet) {
+      const inner = bullet[1];
+      const routeInLine = inner.match(/`(\/[^`]+)`/);
+      const name = inner.replace(/`[^`]+`/g, "").replace(/\*\*/g, "").trim();
+      if (name.length >= 2) add(name, routeInLine?.[1]);
+      continue;
+    }
+    const routeOnly = line.match(/`(\/[^`]+)`/);
+    if (routeOnly?.[1]) add(routeToLabel(routeOnly[1], projectLabel), routeOnly[1]);
+  }
+
+  const proseRe =
+    /\b([A-Z][a-zA-Z]*(?:\s+[A-Z][a-zA-Z]*){0,4})\s+(?:page|screen|view|dashboard|portal)\b/g;
+  let pm: RegExpExecArray | null;
+  while ((pm = proseRe.exec(section)) !== null) add(pm[1]);
+
+  return specs;
+}
+
+/** Parse `4. Pages and navigation` for route paths like `/dashboard`. */
 export function routesFromMasterPlanSection(plan: Record<string, string>): string[] {
+  const specs = mindMapPagesFromMasterPlan(plan);
+  if (specs.length) return specs.map((s) => s.route);
   const section = String(plan["4. Pages and navigation"] ?? "").trim();
   if (!section) return [];
   const routes = new Set<string>();
@@ -186,11 +257,111 @@ export function routesFromMasterPlanSection(plan: Record<string, string>): strin
   return [...routes];
 }
 
-export function mergeRoutesForMindMap(workspaceRoot: string, masterPlanPath: string): string[] {
+export function buildMindMapGraphFromPageSpecs(
+  specs: MindMapPageSpec[],
+  projectLabel: string
+): { pages: unknown[]; edges: unknown[] } {
+  const list = specs.length ? specs : [{ route: "/", label: projectLabel || "Home" }];
+  const pages = list.map((spec, i) => ({
+    id: `mm-${i}-${spec.route.replace(/\W/g, "_") || "home"}`,
+    type: "pageNode",
+    position: { x: 80 + i * 200, y: 200 + (i % 2) * 80 },
+    data: {
+      label: spec.label,
+      isCreated: true,
+      isCritical: spec.route === "/" || /dashboard|login/i.test(spec.route),
+      description: `Route: ${spec.route}`,
+    },
+  }));
+  const hub = pages[0] as { id: string };
+  const edges = pages.slice(1).map((p, i) => ({
+    id: `e-${i}`,
+    source: hub.id,
+    target: (p as { id: string }).id,
+    type: "smoothstep",
+  }));
+  return { pages, edges };
+}
+
+export function mergeRoutesForMindMap(
+  workspaceRoot: string,
+  masterPlanPath: string,
+  projectLabel = "Home"
+): string[] {
+  const plan = readMasterPlanFile(masterPlanPath);
+  const specs = mindMapPagesFromMasterPlan(plan, projectLabel);
+  if (specs.length > 0) return specs.map((s) => s.route).sort((a, b) => a.localeCompare(b));
   const fromDisk = discoverWorkspaceRoutes(workspaceRoot);
-  const fromMp = routesFromMasterPlanSection(readMasterPlanFile(masterPlanPath));
-  const merged = [...new Set([...fromDisk, ...fromMp])].sort((a, b) => a.localeCompare(b));
-  return merged.length ? merged : ["/"];
+  return fromDisk.length ? fromDisk.sort((a, b) => a.localeCompare(b)) : ["/"];
+}
+
+function extractNebulaUiStudioPrompt(workspaceRoot: string): string {
+  const rels = ["nebula-project/nebula-ui-studio.md", "nebula-ui-studio.md"];
+  for (const rel of rels) {
+    const full = path.join(workspaceRoot, rel);
+    if (!fs.existsSync(full)) continue;
+    try {
+      const raw = fs.readFileSync(full, "utf8");
+      const m = raw.match(/<!--\s*NEBULA_UI_STUDIO_PROMPT\s*([\s\S]*?)-->/i);
+      const inner = m?.[1]?.trim() ?? "";
+      if (inner && !/^no prompt generated yet\.?$/i.test(inner)) return inner;
+    } catch {
+      /* ignore */
+    }
+  }
+  return "";
+}
+
+/** Fill empty Master Plan sections from studio file / section 4 / disk routes. */
+export function hydrateMasterPlanDerivedSections(
+  workspaceRoot: string,
+  plan: Record<string, string>
+): { plan: Record<string, string>; changed: boolean } {
+  const out = { ...plan };
+  let changed = false;
+
+  const pagesSection = String(out["4. Pages and navigation"] ?? "").trim();
+  if (!pagesSection) {
+    const routes = discoverWorkspaceRoutes(workspaceRoot);
+    if (routes.length) {
+      out["4. Pages and navigation"] = routes
+        .map((r) => `- **${r === "/" ? "Home" : routeToLabel(r, "App")}** (\`${r}\`)`)
+        .join("\n");
+      changed = true;
+    }
+  }
+
+  const uiSection = String(out["5. UI/UX design"] ?? "").trim();
+  if (!uiSection) {
+    const prompt = extractNebulaUiStudioPrompt(workspaceRoot);
+    if (prompt) {
+      out["5. UI/UX design"] = prompt;
+      changed = true;
+    } else if (String(out["4. Pages and navigation"] ?? "").trim()) {
+      out["5. UI/UX design"] = [
+        "UI/UX direction (auto-filled from Pages & navigation until Grok writes section 5):",
+        "",
+        String(out["4. Pages and navigation"]).slice(0, 12000),
+      ].join("\n");
+      changed = true;
+    }
+  }
+
+  return { plan: out, changed };
+}
+
+export function hydrateAndPersistMasterPlan(
+  workspaceRoot: string,
+  masterPlanPath: string
+): Record<string, string> {
+  let plan = readMasterPlanFile(masterPlanPath);
+  const { plan: hydrated, changed } = hydrateMasterPlanDerivedSections(workspaceRoot, plan);
+  plan = hydrated;
+  if (changed) {
+    fs.mkdirSync(path.dirname(masterPlanPath), { recursive: true });
+    fs.writeFileSync(masterPlanPath, JSON.stringify(plan, null, 2), "utf8");
+  }
+  return plan;
 }
 
 /** Unlock Nebula UI Studio after Grok coding when `app/` or `src/` exists but v0 manifest is missing. */
@@ -221,13 +392,21 @@ export function syncMindMapFromMasterPlan(opts: {
   masterPlanPath: string;
   projectLabel: string;
 }): { pages: unknown[]; edges: unknown[]; written: boolean; routeCount: number } {
-  const routes = mergeRoutesForMindMap(opts.workspaceRoot, opts.masterPlanPath);
-  const graph = buildMindMapGraphFromRoutes(routes, opts.projectLabel);
+  const plan = hydrateAndPersistMasterPlan(opts.workspaceRoot, opts.masterPlanPath);
+  const specs = mindMapPagesFromMasterPlan(plan, opts.projectLabel);
+  const graph =
+    specs.length > 0
+      ? buildMindMapGraphFromPageSpecs(specs, opts.projectLabel)
+      : buildMindMapGraphFromRoutes(
+          mergeRoutesForMindMap(opts.workspaceRoot, opts.masterPlanPath, opts.projectLabel),
+          opts.projectLabel
+        );
 
   const target = path.join(opts.workspaceRoot, MIND_MAP_REL);
   fs.mkdirSync(path.dirname(target), { recursive: true });
   fs.writeFileSync(target, JSON.stringify(graph, null, 2), "utf8");
-  return { ...graph, written: true, routeCount: routes.length };
+  const routeCount = specs.length || (Array.isArray(graph.pages) ? graph.pages.length : 0);
+  return { ...graph, written: true, routeCount };
 }
 
 export function writeBasicUiScaffold(workspaceRoot: string, projectName: string): string[] {

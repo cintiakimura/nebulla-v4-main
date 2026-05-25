@@ -235,9 +235,8 @@ export function MindMap({ pages, setPages, edges, setEdges, onSaveToMasterPlan }
           </button>
           <button 
             onClick={() => {
-              if ((window as any).syncMindMapFromMasterPlan) {
-                (window as any).syncMindMapFromMasterPlan();
-              }
+              void (window as Window & { syncMindMapFromMasterPlan?: () => Promise<void> })
+                .syncMindMapFromMasterPlan?.();
             }}
             className="flex items-center gap-2 px-3 py-1.5 bg-purple-500/10 text-purple-300 border border-purple-500/20 rounded-md text-13 font-headline hover:bg-purple-500/20 transition-all shadow-[0_0_10px_rgba(168,85,247,0.1)]"
           >

@@ -106,28 +106,22 @@ export function formatAssistantForIdeChatDisplay(raw: string): IdeChatDisplayRes
     .replace(/\n{3,}/g, '\n\n')
     .trim();
 
-  const notes: string[] = [];
-  if (hadMasterPlan) {
-    notes.push('Master Plan saved to the Master Plan tab — open it in the left nav to review (not shown here in chat).');
-  }
-  if (filePaths.length > 0) {
+  if (filePaths.length > 0 && !text) {
     const preview = filePaths.slice(0, 5).join(', ');
     const more = filePaths.length > 5 ? ` (+${filePaths.length - 5} more)` : '';
-    notes.push(`Code artifacts applied to workspace: ${preview}${more}. Check the file explorer.`);
-  } else if (hadCodingTag) {
-    notes.push('Coding phase started — files are written to the workspace by Grok Code (not pasted in chat).');
-  }
-
-  if (!text && notes.length > 0) {
-    text = notes.join('\n\n');
-  } else if (notes.length > 0) {
-    text = `${text}\n\n${notes.join('\n\n')}`;
+    text = `Applied ${filePaths.length} file(s): ${preview}${more}.`;
+  } else if (filePaths.length > 0) {
+    text = `${text}\n\nApplied ${filePaths.length} file(s) to the workspace.`;
   }
 
   if (!text) {
-    text = hadCodingTag || hadMasterPlan || filePaths.length > 0
-      ? 'Done — see Master Plan tab and workspace files.'
-      : '(No conversational reply — check Master Plan and file explorer.)';
+    if (hadCodingTag || filePaths.length > 0) {
+      text = filePaths.length > 0 ? `Applied ${filePaths.length} file(s).` : 'Done — check the file explorer.';
+    } else if (hadMasterPlan) {
+      text = '';
+    } else {
+      text = '(No conversational reply — check Master Plan and file explorer.)';
+    }
   }
 
   return { displayText: text, filePaths, hadMasterPlan, hadCodingTag };

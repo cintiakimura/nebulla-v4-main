@@ -45,6 +45,7 @@ import { callClaudeChatCompletion } from "./lib/nebulaClaudeFallback";
 import {
   bootstrapMasterPlanFromWorkspace,
   ensurePreviewIndexHtml,
+  hydrateAndPersistMasterPlan,
   readMasterPlanFile,
   syncMindMapFromMasterPlan,
   unlockVisualEditorFromWorkspaceCoding,
@@ -647,8 +648,10 @@ No approved UI code yet.
       if (!fs.existsSync(masterPlanPath)) {
         return res.status(404).json({ error: "Master plan data not found" });
       }
-      const plan = normalizeMasterPlanRecord(
-        JSON.parse(fs.readFileSync(masterPlanPath, "utf8")) as Record<string, unknown>
+      const { workspaceRoot } = projectPathsFor(req);
+      const plan = hydrateAndPersistMasterPlan(
+        workspaceRoot,
+        masterPlanPath
       );
       res.json(sanitizeMasterPlanForClientResponse(plan));
     } catch (error) {
@@ -915,6 +918,7 @@ No approved UI code yet.
         projectName,
         userNote,
       });
+      hydrateAndPersistMasterPlan(pp.workspaceRoot, pp.masterPlanPath);
       const uiStudioUnlocked = unlockVisualEditorFromWorkspaceCoding(pp.workspaceRoot, projectName);
       const mind = syncMindMapFromMasterPlan({
         workspaceRoot: pp.workspaceRoot,

@@ -1,82 +1,203 @@
 **Project Execution Rules**
 
-**Core Philosophy**
-- Grok 4 is the primary agent for planning, reasoning, and coding.
-- Only one support agent exists: **Quality Agent** (merged Tester + Reviewer) — triggered **manually** by the user with the **"Run and Test"** button.
-- v0 by Vercel is used **automatically once per project** for the initial high-quality UI generation.
-- The main Grok brain reads **`MAIN_API_KEY_GROK` from the server environment** (Nebula Product `.env` / host secrets) for **both** normal chat and the coding phase — never a separate user-facing coding key. **User-facing Grok API key input is disabled** in the product (My services, Secrets, Account); operators set Grok-related keys only in server env per **`environment-setup.md`** (defaults for chat, swarm, TTS, and writers).
-- **Chat vs build (IDE + Assistant):**
-  - **Conversation:** Short natural prose only — no Master Plan section dumps, no `\`\`\`typescript\` / \`\`\`python\` fences, no full file bodies in chat bubbles.
-  - **Master Plan:** Written **only** inside `<START_MASTERPLAN>…</END_MASTERPLAN>` (server persists to `master-plan.json` and the **Master Plan** tab). Chat may show a one-line confirmation, never the six sections inline.
-  - **Implementation:** **START_CODING** and/or user **Go** → Grok Code outputs **only** `\`\`\`file:relative/path\` … \`\`\`` blocks (or `File: path` + fence). Server applies via `/api/files/apply-generated`. User reviews files in the explorer, not in chat.
-  - **Forbidden in chat:** Pasting route handlers, components, SQL, or plan text as markdown code blocks; using `"""file:` instead of `\`\`\`file:`; mixing onboarding prose with file dumps in the same turn.
-  - **Workspace:** Every IDE chat turn includes `projectKey`, `projectName`, and server `workspaceRoot` (`data/cloud-projects/{key}`). File paths in `\`\`\`file:…\`\`\` are always relative to that root.
-- **Nebula Project** (rules in this folder) is strictly separated from **Nebula Product** (the IDE itself).
+**Single source of truth** for Grok and the Nebula Product. Studio paths and step detail: **`nebula-ui-studio.md`**. Timeline: **`project-workflow.md`**.
 
-**Infrastructure Manager (Silent)**
-Runs automatically on onboarding and new project creation:
-- Creates Render project + database
-- Stores Render workspace/project IDs
-- Handles and validates user **v0** API keys; main Grok uses server `MAIN_API_KEY_GROK` only (no user Grok key collection in UI).
+---
 
-**Voice & TTS Behavior**
-- TTS starts speaking as soon as Grok 4 outputs text (streaming).
-- Microphone is automatically muted while TTS is speaking.
-- Microphone re-enables automatically after 5 seconds of inactivity.
+## UI/UX workflow at a glance (Grok — read first)
 
-**Initial Master Plan Interview**
-Grok acts as a chill, experienced senior full-stack developer.
+| Order | What | Who | MUST |
+|-------|------|-----|------|
+| A | Five-section Master Plan saved | Grok | Separate sections; §5 **≤ 15–25 lines** |
+| B | Mind Map synced | Product | **Only** from **§4 Pages and navigation** — **not** after §5 or v0 |
+| C | `nebula-ui-studio/v0-prompt.md` written | Grok | **Immediately** after Master Plan — §4 + §5 combined |
+| D | First v0 generated | Grok → product | **Automatically** after (C); input = `v0-prompt.md` only |
+| E | `v0-original/<timestamp>/` saved | Product | Immutable restore copy |
+| F | UI Studio open | User | Loads **§5** + **`v0-prompt.md`** + v0 UI |
+| G | Apply Changes to All Pages | User | **Warning** → confirm → Grok writes code |
 
-Rules (must be followed):
-- Ask **one question at a time**.
-- Wait ~2.5 seconds after the user stops speaking.
-- Briefly explain why each question matters.
-- Always confirm understanding after each answer.
-- Politely push back on vague answers.
-- Only proceed when the user confirms.
+**Grok MUST NOT** skip (C) or (D). **Grok MUST NOT** delay Mind Map (B) until UI/UX or v0 finish.
 
-**Mandatory Information to Collect:**
-1. Core purpose of the app
-2. Target users and roles/permissions
-3. Key features and priorities
-4. Data model and external integrations
-5. Security / compliance requirements
-6. Brand & visuals (logo, colors, typography) — optional
+---
 
-Once all mandatory information is gathered and confirmed, Grok provides a clean summary and asks for final confirmation before generating the Master Plan and triggering automatic v0 UI generation.
+## Core philosophy
 
-**Phase 0 – Foundation**
-- Read order: `project-workflow.md` → `master-plan.json` → `environment-setup.md` → `nebula-ui-studio.md` → this file
-- Create database schema from Master Plan
-- Set up authentication
-- Automatic v0 UI generation (first version)
+- **Grok** — planning, reasoning, coding orchestration.
+- **Quality Agent** — manual **Run and Test** only.
+- **v0** — one automatic **full** UI pass per baseline from **`nebula-ui-studio/v0-prompt.md`**; per-page regen in UI Studio only.
+- **`MAIN_API_KEY_GROK`** — server env only for Grok chat/coding (no user Grok key in UI).
+- **Nebula Project** (this folder) ≠ **Nebula Product** (IDE codebase).
 
-**Phase 1 – Core Features**
-- Build features one by one from Master Plan
-- Each feature must be functional before moving to the next
+---
 
-**Phase 2 – User Interface**
-- First version generated automatically with v0
-- Subsequent changes done in Nebula UI Studio using Grok 4
+## Chat vs build — Grok MUST / MUST NOT
 
-**Phase 3 – Polish & UX**
-- Loading, error, empty states
-- Responsive design and basic accessibility
+| Mode | Grok MUST | Grok MUST NOT |
+|------|-----------|----------------|
+| Chat | Short prose; one-line status (e.g. file count) | Master Plan bodies, § dumps, UI code, `\`\`\`typescript\` / JSX / SQL fences |
+| Master Plan | `<START_MASTERPLAN>…</END_MASTERPLAN>` only | Repeat five sections in chat |
+| Implementation | `\`\`\`file:path\` … \`\`\`` → `/api/files/apply-generated` | Paste app code in chat |
+| v0 / studio | Write `v0-prompt.md`; trigger product v0 | Paste v0 output or full prompt in chat |
 
-**Phase 4 – Production Readiness**
-- Full manual "Run and Test"
-- Performance optimization and cleanup
+Paths in `\`\`\`file:…\`\`\` are relative to `workspaceRoot` (`data/cloud-projects/{projectKey}`).
 
-**Phase 5 – Normal Iteration**
-- Normal chat + manual "Run and Test" after significant changes
+---
 
-**"Run and Test" Button**
-- Manually triggered by the user after major changes
-- Analyzes only recently changed files
-- Performs code review + test suggestions
+## Master Plan — five sections (Grok MUST separate)
 
-**Chat history persistence**
-- All chat history must be stored via **`conversationLog.ts`** (server) **per `projectKey`** for continuity and reference. Partner (`AssistantSidebar`) and IDE (`AIChat`) load history through **`GET /api/conversation-log`**; successful Grok turns are appended after **`POST /api/grok/chat`**.
+Grok **MUST** use these headers exactly:
 
-**Single Source of Truth**
-`project-execution-rules.md` is the highest authority. Grok must always follow the rules defined here.
+```
+### 1. Goal of the app
+### 2. Text & Search
+### 3. Features and KPIs
+### 4. Pages and navigation
+### 5. UI/UX design
+```
+
+| § | Title | Grok MUST put here | Grok MUST NOT put here |
+|---|--------|-------------------|------------------------|
+| 1 | Goal of the app | Purpose, users, scope | §2–§5 content |
+| 2 | Text & Search | Research, competitors | Pages, UI, code |
+| 3 | Features and KPIs | Features + KPIs | Routes, UI, code |
+| 4 | **Pages and navigation** | All pages, **`/routes`**, nav, buttons, flows | Visual design essay, code |
+| 5 | **UI/UX design** | **Short visual summary only** (15–25 lines max) | Long text, §4 copy, **any code** |
+
+**Grok MUST NOT** merge §2–§5 into §1. **Grok MUST NOT** omit headers.
+
+---
+
+## Rule 1 — UI/UX Design section (CRITICAL)
+
+**Grok MUST** keep **"5. UI/UX design"** (UI/UX Design) **short and concise**.
+
+| Requirement | Detail |
+|-------------|--------|
+| **Maximum length** | **15–25 lines** (bullets or tight paragraphs) |
+| **Purpose** | Visual direction for humans and as input to `v0-prompt.md` |
+| **MUST include** | Mood, colors, typography, density, radius, motion, component style (e.g. shadcn + Tailwind) |
+| **MUST NOT include** | Long prose; code; JSX/HTML/CSS; full page specs; copy-paste from **Pages and navigation**; the detailed v0 brief |
+
+The **detailed** v0 brief **MUST NOT** live in §5. It **MUST** live in **`nebula-ui-studio/v0-prompt.md`** (Rule 2).
+
+---
+
+## Rule 2 — Backend prompt (Grok MUST — immediately after Master Plan)
+
+**Immediately after** the Master Plan is filled and saved (all five sections, with §5 within line limit):
+
+1. Grok **MUST** create a **detailed v0 prompt** that **combines**:
+   - **Full content** of **"4. Pages and navigation"** (Pages & Navigation)
+   - **Full content** of **"5. UI/UX design"** (UI/UX Design — the short summary)
+2. Grok **MUST** save it to:
+
+   **`nebula-ui-studio/v0-prompt.md`**
+
+3. Grok **MUST** use `\`\`\`file:nebula-ui-studio/v0-prompt.md\` … \`\`\`` or server automation.
+4. Grok **MUST NOT** skip this file, put the full prompt only in chat, or put it only in §5.
+
+Optional mirror: `NEBULA_UI_STUDIO_PROMPT` in `nebula-project/nebula-ui-studio.md`.
+
+---
+
+## Rule 3 — v0 trigger (Grok MUST — immediately after `v0-prompt.md`)
+
+**Immediately after** `nebula-ui-studio/v0-prompt.md` is saved:
+
+1. Grok **MUST** **automatically trigger** the **V0 API** (via product/server — not a manual user step for the first pass).
+2. The V0 call **MUST** use **`v0-prompt.md`** as the **only** prompt source for the first full generation.
+3. Product **MUST** write generated UI into the workspace (`app/`, `src/`, etc.).
+4. Product **MUST** save the **original** v0 output to an immutable, **timestamped** folder:
+
+   **`nebula-ui-studio/v0-original/<timestamp>/`**
+
+   Example: `nebula-ui-studio/v0-original/2026-05-25T14-30-00Z/`
+
+5. **MUST NOT** modify `v0-original/<timestamp>/` during studio apply or edits (restore-only).
+6. Grok **MUST NOT** paste v0 files in chat.
+
+**V0_API_KEY** **MUST** be configured (onboarding / My services).
+
+---
+
+## Rule 4 — Nebula UI Studio (product MUST)
+
+When the user opens **IDE → UI Studio**, the product **MUST** load:
+
+| # | Source | Required |
+|---|--------|----------|
+| 1 | Master Plan **"5. UI/UX design"** | **YES** |
+| 2 | **`nebula-ui-studio/v0-prompt.md`** | **YES** |
+| 3 | First v0 UI + visual editor model | **YES** |
+
+**Product MUST support:**
+- Manual editing (drag, resize, text, colors, spacing)
+- Per-page v0 regen (optional; saves credits vs full regen)
+
+**Apply Changes to All Pages** (or **Save Changes & Update Code**):
+
+1. User clicks apply.
+2. Product **MUST** show a **clear warning** (workspace files will change; may snapshot to `generated-ui/versions/<timestamp>/`).
+3. User **MUST** confirm — Cancel **MUST** mean no writes.
+4. Then Grok/server apply (Rule 5 / step 6).
+
+**Grok MUST NOT** bypass the warning. **Grok MUST NOT** tell users to paste UI code in chat for studio fixes.
+
+---
+
+## Rule 5 — Mind Map (product MUST — exclusive §4)
+
+| | |
+|-|-|
+| **MUST** | Generate Mind Map **exclusively** from **"4. Pages and navigation"** |
+| **MUST** | Sync as soon as §4 is saved (same turn as Master Plan persist is acceptable) |
+| **MUST NOT** | Wait for **UI/UX Design** (§5), `v0-prompt.md`, v0, or UI Studio |
+| **MUST NOT** | Use §5 or v0 output as the primary Mind Map source |
+| **MUST** | Use `` `/route` `` in §4 for reliable route parsing |
+
+Re-sync only when §4 changes and user/product runs sync again.
+
+---
+
+## UI/UX workflow — numbered steps (strict order)
+
+**1.** Grok completes five-section Master Plan; **§5 ≤ 15–25 lines**, no code, no §4 dump.  
+**2.** Product syncs **Mind Map from §4 only** (parallel — **not** after v0).  
+**3.** Grok **immediately** writes **`nebula-ui-studio/v0-prompt.md`** (§4 + §5).  
+**4.** Grok/product **immediately** triggers **V0 API** from that file; saves **`v0-original/<timestamp>/`**.  
+**5.** User refines in **UI Studio** (§5 + `v0-prompt.md` + v0 UI).  
+**6.** User **Apply Changes to All Pages** → **warning** → confirm.  
+**7.** Grok implements approved UI via **file apply** / `START_CODING`; **Preview** updates.
+
+---
+
+## Grok — final checklist (non-negotiable)
+
+**MUST**
+- [ ] Five separated Master Plan sections with exact `###` headers  
+- [ ] **UI/UX Design** ≤ **15–25 lines**; no code; no long text; no §4 copy  
+- [ ] **`nebula-ui-studio/v0-prompt.md`** immediately after Master Plan (§4 + §5)  
+- [ ] **Automatic V0** immediately after prompt file saved  
+- [ ] Mind Map from **Pages and navigation** only — do not wait for UI/UX or v0  
+- [ ] File apply after user confirms Apply in UI Studio  
+
+**MUST NOT**
+- [ ] Dump §2–§5 into Goal of the app  
+- [ ] Put detailed v0 brief in §5 or chat instead of `v0-prompt.md`  
+- [ ] Block Mind Map on §5, v0, or UI Studio  
+- [ ] Paste v0 or app code in chat  
+- [ ] Full v0 re-run for small studio tweaks (per-page regen only)  
+
+---
+
+## Other rules (abbreviated)
+
+**Infrastructure Manager** — Render + DB; validates **V0_API_KEY**.
+
+**Voice / Open Talk** — TTS on Grok text; mic off during TTS; mic on after **5s** silence; Open Talk resumes after same cooldown.
+
+**Interview** — one question at a time; then Master Plan + workflow above.
+
+**Phases** — 0: read workflow → `master-plan.json` → env → studio docs; 1: features; 2: UI (steps 4–7); 3–4: polish + Run and Test; 5: iteration.
+
+**Chat history** — `conversationLog.ts` per `projectKey`.

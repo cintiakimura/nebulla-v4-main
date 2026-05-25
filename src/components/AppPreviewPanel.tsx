@@ -4,7 +4,6 @@ import {
   ChevronDown,
   Eye,
   EyeOff,
-  FileStack,
   GitBranch,
   GripVertical,
   Maximize2,
@@ -29,30 +28,6 @@ function pageSlug(label: string): string {
       .replace(/[^a-z0-9]+/g, '-')
       .replace(/^-|-$/g, '') || 'page'
   );
-}
-
-function extractReferencedPaths(html: string): string[] {
-  const paths = new Set<string>();
-  const re = /(?:src|href)\s*=\s*(["'])([^"']+?)\1/gi;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(html)) !== null) {
-    let p = m[2].trim();
-    if (
-      !p ||
-      p.startsWith('http:') ||
-      p.startsWith('https:') ||
-      p.startsWith('data:') ||
-      p.startsWith('#') ||
-      p.startsWith('mailto:')
-    ) {
-      continue;
-    }
-    if (p.startsWith('//')) continue;
-    if (p.startsWith('/')) p = p.slice(1);
-    const cut = p.split(/[?#]/)[0];
-    if (cut) paths.add(cut);
-  }
-  return [...paths].sort((a, b) => a.localeCompare(b));
 }
 
 function buildPreviewUrl(rev: number): string {
@@ -108,7 +83,9 @@ export function AppPreviewPanel({
   const [actAsUser, setActAsUser] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [selectedPageLabel, setSelectedPageLabel] = useState<string | null>(null);
-  const [filePaths, setFilePaths] = useState<string[]>([]);
+  const [workspaceFiles, setWorkspaceFiles] = useState<
+    { path: string; status?: string; size?: number }[]
+  >([]);
   const [filesError, setFilesError] = useState<string | null>(null);
   const [previewRev, setPreviewRev] = useState(0);
   const iframeRef = useRef<HTMLIFrameElement>(null);
@@ -129,25 +106,51 @@ export function AppPreviewPanel({
     return `/${pageSlug(selectedPageLabel)}`;
   }, [selectedPageLabel]);
 
-  const loadFileRefs = useCallback(async () => {
+  const loadWorkspaceSourceFiles = useCallback(async () => {
     setFilesError(null);
     try {
-      const res = await fetch(withProjectQuery('/api/files/content?path=index.html'));
-      const data = await readResponseJson<{ content?: string; error?: string }>(res);
+      const res = await fetch(withProjectQuery('/api/source-control/overview'), {
+        credentials: 'include',
+      });
+      const data = await readResponseJson<{
+        nebulaFiles?: { relativePath: string; size: number }[];
+        git?: { entries: { status: string; path: string }[] } | null;
+        error?: string;
+      }>(res);
       if (!res.ok) {
-        throw new Error(typeof data.error === 'string' ? data.error : 'Could not read index.html');
+        throw new Error(typeof data.error === 'string' ? data.error : 'Could not load workspace files');
       }
-      const html = typeof data.content === 'string' ? data.content : '';
-      setFilePaths(extractReferencedPaths(html));
+      const gitStatus = new Map((data.git?.entries ?? []).map((e) => [e.path, e.status]));
+      const productPrefixes = ['app/', 'src/', 'pages/', 'components/', 'lib/', 'public/', 'prisma/'];
+      const files = (data.nebulaFiles ?? [])
+        .filter((f) => {
+          const p = f.relativePath.replace(/\\/g, '/');
+          if (p.startsWith('nebulla-ide/') || p.startsWith('generated-ui/')) return false;
+          return (
+            productPrefixes.some((pre) => p.startsWith(pre)) ||
+            p === 'index.html' ||
+            p.endsWith('.tsx') ||
+            p.endsWith('.ts') ||
+            p.endsWith('.jsx') ||
+            p.endsWith('.js')
+          );
+        })
+        .map((f) => ({
+          path: f.relativePath.replace(/\\/g, '/'),
+          status: gitStatus.get(f.relativePath.replace(/\\/g, '/')),
+          size: f.size,
+        }))
+        .sort((a, b) => a.path.localeCompare(b.path));
+      setWorkspaceFiles(files);
     } catch (e) {
-      setFilePaths([]);
-      setFilesError(e instanceof Error ? e.message : 'Failed to load file list');
+      setWorkspaceFiles([]);
+      setFilesError(e instanceof Error ? e.message : 'Failed to load workspace files');
     }
   }, []);
 
   useEffect(() => {
-    if (panelOpen) void loadFileRefs();
-  }, [panelOpen, loadFileRefs, previewRev]);
+    if (embeddedInDock || panelOpen) void loadWorkspaceSourceFiles();
+  }, [embeddedInDock, panelOpen, loadWorkspaceSourceFiles, previewRev]);
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -238,7 +241,7 @@ export function AppPreviewPanel({
             title="Reload preview"
             aria-label="Reload preview"
             onClick={() => {
-              void loadFileRefs();
+              void loadWorkspaceSourceFiles();
               setPreviewRev((n) => n + 1);
             }}
             className="flex shrink-0 items-center border-r border-white/10 px-2 text-slate-400 hover:bg-white/5 hover:text-cyan-300"
@@ -344,17 +347,42 @@ export function AppPreviewPanel({
               ))}
               <div className="my-1 border-t border-white/10" />
               <p className="flex items-center gap-1 px-3 py-1 text-[9px] font-headline uppercase tracking-wider text-slate-500">
-                <FileStack className="h-3 w-3" /> Files ({filePaths.length})
+                <GitBranch className="h-3 w-3" /> Source control ({workspaceFiles.length})
               </p>
+              {onOpenSourceControl ? (
+                <button
+                  type="button"
+                  className="mx-2 mb-1 w-[calc(100%-1rem)] rounded border border-white/10 px-2 py-1 text-left text-[10px] text-cyan-200/90 hover:bg-white/5"
+                  onClick={() => {
+                    setMenuOpen(false);
+                    onOpenSourceControl();
+                  }}
+                >
+                  Open full Git panel
+                </button>
+              ) : null}
               {filesError ? (
                 <p className="px-3 py-1 text-amber-300/90">{filesError}</p>
-              ) : filePaths.length === 0 ? (
-                <p className="px-3 py-1 text-slate-500">No references in index.html</p>
+              ) : workspaceFiles.length === 0 ? (
+                <p className="px-3 py-1 text-slate-500">No Grok-generated app files yet</p>
               ) : (
-                filePaths.map((fp) => (
-                  <div key={fp} className="break-all px-3 py-0.5 font-mono text-[10px] text-cyan-200/80">
-                    {fp}
-                  </div>
+                workspaceFiles.map((f) => (
+                  <button
+                    key={f.path}
+                    type="button"
+                    className="flex w-full flex-col gap-0.5 break-all px-3 py-1 text-left font-mono text-[10px] text-cyan-200/80 hover:bg-white/5"
+                    onClick={() => {
+                      setMenuOpen(false);
+                      window.dispatchEvent(
+                        new CustomEvent('nebula-center-focus-file', { detail: { path: f.path } }),
+                      );
+                    }}
+                  >
+                    <span>{f.path}</span>
+                    {f.status ? (
+                      <span className="text-[9px] text-slate-500">git {f.status.trim()}</span>
+                    ) : null}
+                  </button>
                 ))
               )}
             </div>

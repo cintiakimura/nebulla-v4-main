@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Edge, Node } from '@xyflow/react';
 import { MindMap } from '../MindMap';
 import { fetchJson } from '../../lib/apiFetch';
-import { withProjectBody, withProjectQuery } from '../../lib/nebulaProjectApi';
+import { getBrowserProjectName, withProjectBody, withProjectQuery } from '../../lib/nebulaProjectApi';
 
 function defaultFlow(): { pages: Node[]; edges: Edge[] } {
   const pages: Node[] = [
@@ -55,17 +55,35 @@ export function MindMapIdeRoute() {
     void reloadMindMap();
   }, [reloadMindMap]);
 
+  const syncFromMasterPlan = useCallback(async () => {
+    try {
+      await fetchJson(withProjectQuery('/api/workspace/mind-map/sync-from-master-plan'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(
+          withProjectBody({ projectName: getBrowserProjectName().trim() || 'Untitled Project' }),
+        ),
+      });
+      window.dispatchEvent(new CustomEvent('nebula-mind-map-updated'));
+      await reloadMindMap();
+    } catch (e) {
+      console.warn('[mind-map] sync from master plan:', e);
+    }
+  }, [reloadMindMap]);
+
   useEffect(() => {
     const onRefresh = () => void reloadMindMap();
-    window.addEventListener('nebula-master-plan-updated', onRefresh);
+    const onMasterPlan = () => void syncFromMasterPlan();
+    window.addEventListener('nebula-master-plan-updated', onMasterPlan);
     window.addEventListener('nebula-mind-map-updated', onRefresh);
     window.addEventListener('nebula-files-applied', onRefresh);
     return () => {
-      window.removeEventListener('nebula-master-plan-updated', onRefresh);
+      window.removeEventListener('nebula-master-plan-updated', onMasterPlan);
       window.removeEventListener('nebula-mind-map-updated', onRefresh);
       window.removeEventListener('nebula-files-applied', onRefresh);
     };
-  }, [reloadMindMap]);
+  }, [reloadMindMap, syncFromMasterPlan]);
 
   const flushSave = useCallback(async () => {
     try {

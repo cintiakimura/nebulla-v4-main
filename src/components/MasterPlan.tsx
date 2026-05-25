@@ -75,9 +75,18 @@ export function MasterPlan({
     };
   }, [titles, projectKey]);
 
+  const sectionContent = (title: string): string => {
+    const direct = planData[title]?.trim();
+    if (direct) return planData[title];
+    if (title === '2. Text & Search' && planData['2. Tech Research']?.trim()) {
+      return planData['2. Tech Research'];
+    }
+    return '';
+  };
+
   const PLAN_SECTIONS = titles.map((title) => {
     const id = title.toLowerCase().replace(/[^a-z0-9]/g, '-');
-    const content = planData[title] || '';
+    const content = sectionContent(title);
     return { id, title, content };
   });
   const visibleSections = PLAN_SECTIONS.slice(0, 5);

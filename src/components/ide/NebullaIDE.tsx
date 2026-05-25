@@ -206,6 +206,7 @@ function NebullaIDEShell() {
             ),
           },
         );
+        window.dispatchEvent(new CustomEvent('nebula-mind-map-updated'));
         window.dispatchEvent(new CustomEvent('nebula-files-applied'));
       } catch {
         /* ignore */
