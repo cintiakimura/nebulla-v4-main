@@ -136,22 +136,27 @@ export function IdeCenterWorkspace() {
       ) : null}
 
       {activePane === 'ui-studio' ? (
-        <div className="tonal-seam-b flex shrink-0 gap-1 border-b border-white/5 px-2 py-1">
-          {(['design', 'mockups', 'preview'] as const).map((sub) => (
-            <button
-              key={sub}
-              type="button"
-              onClick={() => setUiStudioTab(sub)}
-              className={cn(
-                'type-label-sm rounded-md px-2.5 py-1 capitalize transition-colors',
-                uiStudioTab === sub
-                  ? 'bg-secondary text-primary'
-                  : 'text-muted-foreground hover:text-foreground',
-              )}
-            >
-              {sub === 'design' ? 'Visual editor' : sub}
-            </button>
-          ))}
+        <div className="surface-active tonal-seam-b flex shrink-0 items-center justify-between gap-2 border-b border-white/5 px-3 py-1.5">
+          <div className="flex min-w-0 items-center gap-1">
+            {(['design', 'mockups', 'preview'] as const).map((sub) => (
+              <button
+                key={sub}
+                type="button"
+                onClick={() => setUiStudioTab(sub)}
+                className={cn(
+                  'rounded-md px-2.5 py-1 text-[11px] font-medium transition-colors',
+                  uiStudioTab === sub
+                    ? 'active-tab-sheen bg-secondary/80 text-primary'
+                    : 'text-muted-foreground hover:bg-secondary/40 hover:text-foreground',
+                )}
+              >
+                {sub === 'design' ? 'Visual editor' : sub === 'mockups' ? 'Mockups' : 'Live preview'}
+              </button>
+            ))}
+          </div>
+          <span className="hidden truncate text-[10px] text-muted-foreground sm:inline">
+            v0 generates React UI · Mockups for SVG · Save writes to workspace
+          </span>
         </div>
       ) : null}
 

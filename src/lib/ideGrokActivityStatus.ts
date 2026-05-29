@@ -17,7 +17,7 @@ export type GrokActivityStep = {
 export type GrokActivityStatus = {
   headline: string;
   subhead?: string;
-  /** One-line “right now” label (Cursor-style). */
+  /** One-line “right now” label — updates in place for wait/elapsed ticks. */
   currentAction?: string;
   /** When the current work session started (ms). */
   startedAt?: number;
@@ -29,13 +29,28 @@ export type GrokActivityStatus = {
   tone: GrokActivityTone;
 };
 
-export type GrokActivityProgressFn = (message: string, kind?: GrokActivityLogKind) => void;
+export type GrokActivityProgressOptions = { /** Update current line only — no new log row. */ currentOnly?: boolean };
+
+export type GrokActivityProgressFn = (
+  message: string,
+  kind?: GrokActivityLogKind,
+  options?: GrokActivityProgressOptions,
+) => void;
 
 let logSeq = 0;
 
 function nextLogId(): string {
   logSeq += 1;
   return `log-${Date.now()}-${logSeq}`;
+}
+
+/** Normalize for dedupe — strip elapsed suffixes and ellipsis. */
+export function normalizeActivityMessage(message: string): string {
+  return message
+    .replace(/\s*\(\d+s\)\s*$/i, '')
+    .replace(/\s*\(\d+m \d+s\)\s*$/i, '')
+    .replace(/…+$/u, '')
+    .trim();
 }
 
 export function formatGrokActivityElapsed(startedAt?: number, now = Date.now()): string | null {
@@ -58,16 +73,13 @@ export function createGrokActivity(
   },
 ): GrokActivityStatus {
   const startedAt = Date.now();
-  const liveLog: GrokActivityLogEntry[] = [];
-  if (options?.initialLog) {
-    liveLog.push({ id: nextLogId(), at: startedAt, message: options.initialLog, kind: 'info' });
-  }
+  const initial = options?.initialLog?.trim();
   return {
     headline,
     subhead: options?.subhead,
-    currentAction: options?.initialLog ?? headline,
+    currentAction: initial || headline,
     startedAt,
-    liveLog,
+    liveLog: initial ? [{ id: nextLogId(), at: startedAt, message: initial, kind: 'info' }] : [],
     steps,
     activeStepIndex: 0,
     footer: options?.footer,
@@ -83,24 +95,47 @@ export function appendGrokActivityLog(
   const at = Date.now();
   return {
     ...prev,
-    liveLog: [
-      ...prev.liveLog,
-      { id: nextLogId(), at, message, kind },
-    ].slice(-80),
+    liveLog: [...prev.liveLog, { id: nextLogId(), at, message, kind }].slice(-24),
   };
 }
 
-/** Update the pulsing “now” line and append to the live log. */
+/** Update the live status line only (same phase, e.g. elapsed timer). */
+export function updateGrokActivityCurrent(
+  prev: GrokActivityStatus,
+  action: string,
+): GrokActivityStatus {
+  if (prev.currentAction === action) return prev;
+  return { ...prev, currentAction: action };
+}
+
+/** New phase — append to history once, then show as current. */
+export function commitGrokActivityStatus(
+  prev: GrokActivityStatus,
+  message: string,
+  kind: GrokActivityLogKind = 'info',
+): GrokActivityStatus {
+  const trimmed = message.trim();
+  if (!trimmed) return prev;
+
+  const norm = normalizeActivityMessage(trimmed);
+  const last = prev.liveLog[prev.liveLog.length - 1];
+  const lastNorm = last ? normalizeActivityMessage(last.message) : '';
+  const currentNorm = prev.currentAction ? normalizeActivityMessage(prev.currentAction) : '';
+
+  let next: GrokActivityStatus = { ...prev, currentAction: trimmed };
+  if (norm && norm !== lastNorm && norm !== currentNorm) {
+    next = appendGrokActivityLog(next, trimmed, kind);
+  }
+  return next;
+}
+
+/** @deprecated Use commitGrokActivityStatus */
 export function setGrokActivityAction(
   prev: GrokActivityStatus,
   action: string,
   kind: GrokActivityLogKind = 'info',
 ): GrokActivityStatus {
-  const last = prev.liveLog[prev.liveLog.length - 1];
-  if (last?.message === action && last.kind === kind) {
-    return { ...prev, currentAction: action };
-  }
-  return appendGrokActivityLog({ ...prev, currentAction: action }, action, kind);
+  return commitGrokActivityStatus(prev, action, kind);
 }
 
 export function advanceGrokActivity(
@@ -125,9 +160,9 @@ export function advanceGrokActivity(
     }
   }
   if (patch?.log) {
-    next = setGrokActivityAction(next, patch.log.message, patch.log.kind ?? 'info');
+    next = commitGrokActivityStatus(next, patch.log.message, patch.log.kind ?? 'info');
   } else if (patch?.currentAction) {
-    next = { ...next, currentAction: patch.currentAction };
+    next = updateGrokActivityCurrent(next, patch.currentAction);
   }
   return next;
 }
@@ -150,7 +185,7 @@ export function finishGrokActivity(
     currentAction: undefined,
   };
   if (finalLog) {
-    return appendGrokActivityLog(base, finalLog, 'success');
+    return commitGrokActivityStatus(base, finalLog, 'success');
   }
   return base;
 }
@@ -177,10 +212,10 @@ export function errorGrokActivity(
     startedAt: prev?.startedAt,
     currentAction: detail,
   };
-  return appendGrokActivityLog(base, detail, 'error');
+  return commitGrokActivityStatus(base, detail, 'error');
 }
 
-/** Call `onTick` every `intervalMs` while `active`; returns stop function. */
+/** Elapsed ticks update current line only; first call commits the phase. */
 export function startGrokActivityWaitTicker(
   label: string,
   onTick: GrokActivityProgressFn,
@@ -190,7 +225,7 @@ export function startGrokActivityWaitTicker(
   onTick(`${label}…`, 'wait');
   const id = window.setInterval(() => {
     const elapsed = formatGrokActivityElapsed(started);
-    onTick(elapsed ? `${label} (${elapsed})` : label, 'wait');
+    onTick(elapsed ? `${label} (${elapsed})` : label, 'wait', { currentOnly: true });
   }, intervalMs);
   return () => window.clearInterval(id);
 }

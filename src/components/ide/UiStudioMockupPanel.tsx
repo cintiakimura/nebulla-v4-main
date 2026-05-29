@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Check, Loader2, RefreshCw, Sparkles } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import { fetchJson } from '../../lib/apiFetch';
 import { seedBasicUiFallback } from '../../lib/ideArtifactSync';
 import { getBrowserProjectName, withProjectBody, withProjectQuery } from '../../lib/nebulaProjectApi';
@@ -243,12 +244,12 @@ export function UiStudioMockupPanel() {
   };
 
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-[#050a14] text-slate-200">
-      <header className="shrink-0 border-b border-cyan-500/25 bg-[#040d18] px-3 py-2">
-        <h2 className="font-headline text-sm text-cyan-100">UI mockups (SVG)</h2>
-        <p className="mt-1 text-[11px] leading-relaxed text-slate-400">
-          Generate up to three directions, edit manually, then Analyze → Adapt (Grok) → Approve. Approved UI is stored in{' '}
-          <code className="text-cyan-300/90">nebula-ui-studio.md</code> for Master Plan Tab 6 and implementation.
+    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-background text-foreground">
+      <header className="surface-active shrink-0 border-b border-white/5 px-3 py-2.5">
+        <h2 className="text-xs font-medium text-foreground">SVG mockups</h2>
+        <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
+          Generate directions, edit SVG, then Analyze → Adapt → Approve. Saved to{' '}
+          <code className="text-primary/90">nebula-ui-studio.md</code>.
         </p>
       </header>
 
@@ -267,11 +268,12 @@ export function UiStudioMockupPanel() {
               type="button"
               disabled={busy}
               onClick={() => setSelected(i)}
-              className={`rounded-lg border px-3 py-2 text-xs ${
+              className={cn(
+                'rounded-md px-3 py-1.5 text-xs transition-colors',
                 selected === i
-                  ? 'border-cyan-500/50 bg-cyan-500/15 text-cyan-50'
-                  : 'border-white/10 bg-black/20 text-slate-300 hover:border-white/20'
-              }`}
+                  ? 'active-tab-sheen bg-secondary text-primary'
+                  : 'btn-secondary-surface text-muted-foreground hover:text-foreground',
+              )}
             >
               Variation {i + 1}
               {slots[i]?.source ? ` · ${slots[i].source}` : ''}

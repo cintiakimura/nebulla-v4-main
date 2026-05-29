@@ -7,6 +7,10 @@ export function getStoredV0ApiKey(): string | undefined {
   return v || undefined;
 }
 
+export function hasLocalV0ApiKey(): boolean {
+  return Boolean(getStoredV0ApiKey());
+}
+
 export function setStoredV0ApiKey(value: string): void {
   if (typeof localStorage === 'undefined') return;
   const t = value.trim();

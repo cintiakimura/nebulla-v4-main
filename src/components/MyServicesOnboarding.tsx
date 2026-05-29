@@ -95,6 +95,7 @@ export function MyServicesOnboarding({
       setStoredV0ApiKey(v);
       setV0Input('');
       setV0Msg('Saved. V0_API_KEY is in Secrets for UI generation.');
+      window.dispatchEvent(new CustomEvent('nebula-v0-key-updated'));
     } catch {
       setV0Msg('Could not save. Check browser storage permissions.');
     } finally {
@@ -275,7 +276,13 @@ export function MyServicesOnboarding({
               <ExternalLink className="w-4 h-4 opacity-90 shrink-0" aria-hidden />
             </a>
 
-            <div className="space-y-2">
+            <form
+              className="space-y-2"
+              onSubmit={(e) => {
+                e.preventDefault();
+                void saveV0();
+              }}
+            >
               <label className="block text-[10px] uppercase tracking-wider text-slate-500 font-headline" htmlFor="v0-key">
                 Paste v0 API key (stored as {V0_ENV_NAME})
               </label>
@@ -283,6 +290,7 @@ export function MyServicesOnboarding({
                 id="v0-key"
                 type="password"
                 autoComplete="off"
+                name="v0-api-key"
                 value={v0Input}
                 onChange={(e) => {
                   setV0Input(e.target.value);
@@ -296,12 +304,10 @@ export function MyServicesOnboarding({
                   <CheckCircle2 className="w-3.5 h-3.5 shrink-0" aria-hidden /> A v0 key is already saved.
                 </p>
               ) : null}
-            </div>
 
             <div className="flex flex-wrap items-center gap-3">
               <button
-                type="button"
-                onClick={() => void saveV0()}
+                type="submit"
                 disabled={v0Busy}
                 className="inline-flex items-center justify-center gap-2 rounded-xl bg-violet-500/15 text-violet-100 border border-violet-400/35 px-5 py-2.5 text-sm font-headline hover:bg-violet-500/25 transition-colors disabled:opacity-50"
               >
@@ -310,6 +316,7 @@ export function MyServicesOnboarding({
               </button>
               {v0Msg ? <p className="text-sm text-slate-400">{v0Msg}</p> : null}
             </div>
+            </form>
             <SecretNote />
           </section>
 

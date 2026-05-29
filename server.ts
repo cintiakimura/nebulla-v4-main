@@ -376,7 +376,7 @@ async function startServer() {
     const render = getRenderPublicConfig();
     const publicSiteUrl = process.env.PUBLIC_SITE_URL?.trim() || "";
     const pencilKey = resolvePencilApiKey();
-    const v0Key = process.env[V0_ENV_VAR]?.trim() ?? "";
+    const v0KeyRes = resolveV0ApiKeyFromRequest(req);
     const pp = ensureCloudProjectWorkspace(REPO_ROOT, NEBULA_PROJECT_ROOT, projectDiskKey(req));
     res.json({
       ...render,
@@ -394,7 +394,7 @@ async function startServer() {
       grokKeyHint: MAIN_AI_KEY_SETUP_HINT,
       hasGrokTtsKey: tts.length >= 20,
       hasGrokWriterKey: writer.length >= 20,
-      hasV0ApiKey: v0Key.length >= 8,
+      hasV0ApiKey: v0KeyRes.ok === true,
       v0KeyHint: NEBULA_V0_KEY_SETUP_HINT,
       hasR2Storage: isR2Configured(),
       r2MissingEnv: r2MissingOnBoot,

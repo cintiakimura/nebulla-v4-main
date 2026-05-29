@@ -43,8 +43,8 @@ export async function runMasterPlanUiPipeline(options?: {
   const onProgress = options?.onProgress;
   try {
     onProgress?.('POST /api/ide/master-plan-ui-pipeline (v0 prompt, mind map, optional v0)', 'info');
-    const stopWait = startGrokActivityWaitTicker('UI Studio pipeline on server', (msg, kind) =>
-      onProgress?.(msg, kind),
+    const stopWait = startGrokActivityWaitTicker('UI Studio pipeline on server', (msg, kind, options) =>
+      onProgress?.(msg, kind, options),
     );
     let result: MasterPlanUiPipelineResult;
     try {

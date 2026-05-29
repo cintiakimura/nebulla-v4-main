@@ -52,12 +52,11 @@ export async function persistMasterPlanFromAssistantSource(
     parsed = parseMasterPlanBlock(source);
   }
   if (Object.keys(parsed).length === 0) return 0;
+  onProgress?.('Saving Master Plan tabs…');
   let saved = 0;
   for (let tabIndex = 1; tabIndex <= MASTER_PLAN_SECTION_KEYS.length; tabIndex++) {
     const content = (parsed[tabIndex] ?? '').trim();
     if (!content) continue;
-    const tabName = MASTER_PLAN_TAB_NAMES[tabIndex - 1] ?? `Tab ${tabIndex}`;
-    onProgress?.(`Saving Master Plan — ${tabName}`);
     try {
       await fetchJson(withProjectQuery('/api/master-plan/update'), {
         method: 'POST',
@@ -66,12 +65,12 @@ export async function persistMasterPlanFromAssistantSource(
         body: JSON.stringify(withProjectBody({ tabIndex, content })),
       });
       saved++;
-      onProgress?.(`Saved Master Plan tab ${tabIndex}: ${tabName}`);
     } catch (e) {
       console.warn('[grokChatArtifacts] master plan tab save failed:', tabIndex, e);
     }
   }
   if (saved > 0) {
+    onProgress?.(`Saved ${saved} Master Plan tab(s)`);
     try {
       window.dispatchEvent(new CustomEvent('nebula-master-plan-updated'));
     } catch {

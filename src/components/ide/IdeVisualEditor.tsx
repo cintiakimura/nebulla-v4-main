@@ -31,16 +31,18 @@ import {
   MousePointer2,
   Move,
   PanelLeft,
+  PanelRight,
   Pipette,
   RotateCcw,
   Save,
   Scaling,
+  Sparkles,
   Trash2,
   Type,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { getBrowserProjectName, withProjectBody, withProjectQuery } from '../../lib/nebulaProjectApi';
-import { getStoredV0ApiKey, getV0RequestHeaders } from '../../lib/v0Key';
+import { getStoredV0ApiKey, getV0RequestHeaders, hasLocalV0ApiKey, NEBULLA_V0_KEY_STORAGE } from '../../lib/v0Key';
 
 const V0_FETCH_TIMEOUT_MS = 180_000;
 
@@ -381,8 +383,11 @@ export function IdeVisualEditor({
   const baselineRef = useRef<EditorModel | null>(null);
   const [studioTool, setStudioTool] = useState<StudioTool>('select');
   const [leftTab, setLeftTab] = useState<'pages' | 'layers'>('pages');
+  const [leftPanelOpen, setLeftPanelOpen] = useState(true);
+  const [rightPanelOpen, setRightPanelOpen] = useState(true);
   const [mockNotice, setMockNotice] = useState('');
   const [hasV0ApiKey, setHasV0ApiKey] = useState<boolean | null>(null);
+  const [v0ServerReady, setV0ServerReady] = useState<boolean | null>(null);
   const [studioStatus, setStudioStatus] = useState<StudioStatus | null>(null);
   const v0RunningRef = useRef(false);
   const autoV0StartedRef = useRef(false);
@@ -417,7 +422,10 @@ export function IdeVisualEditor({
       const d = (await r.json()) as StudioStatus & { error?: string };
       if (r.ok) {
         setStudioStatus(d);
-        if (d.hasV0ApiKey) setHasV0ApiKey(true);
+        if (d.hasV0ApiKey) {
+          setHasV0ApiKey(true);
+          setV0ServerReady(true);
+        }
       }
     } catch {
       /* ignore */
@@ -460,22 +468,34 @@ export function IdeVisualEditor({
     return () => window.removeEventListener('nebula-ui-studio-run-v0', onRunV0);
   }, []);
 
+  const refreshV0KeyState = useCallback(async () => {
+    try {
+      const r = await fetch('/api/config', { headers: getV0RequestHeaders() });
+      const cfg = (await r.json()) as { hasV0ApiKey?: boolean };
+      const localKey = hasLocalV0ApiKey();
+      const serverOk = Boolean(cfg.hasV0ApiKey);
+      setV0ServerReady(serverOk);
+      setHasV0ApiKey(serverOk || localKey);
+      await loadStudioStatus();
+    } catch {
+      setHasV0ApiKey(hasLocalV0ApiKey());
+      setV0ServerReady(false);
+    }
+  }, [loadStudioStatus]);
+
   useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      try {
-        const r = await fetch('/api/config');
-        const cfg = (await r.json()) as { hasV0ApiKey?: boolean };
-        const localKey = Boolean(getStoredV0ApiKey());
-        if (!cancelled) setHasV0ApiKey(Boolean(cfg.hasV0ApiKey) || localKey);
-      } catch {
-        if (!cancelled) setHasV0ApiKey(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
+    void refreshV0KeyState();
+    const onStorage = (ev: StorageEvent) => {
+      if (ev.key === NEBULLA_V0_KEY_STORAGE) void refreshV0KeyState();
     };
-  }, []);
+    const onKeyUpdated = () => void refreshV0KeyState();
+    window.addEventListener('storage', onStorage);
+    window.addEventListener('nebula-v0-key-updated', onKeyUpdated);
+    return () => {
+      window.removeEventListener('storage', onStorage);
+      window.removeEventListener('nebula-v0-key-updated', onKeyUpdated);
+    };
+  }, [refreshV0KeyState]);
 
   useEffect(() => {
     if (eligible === null) return;
@@ -811,6 +831,13 @@ export function IdeVisualEditor({
     setBusy(true);
     setError('');
     try {
+      const localKey = hasLocalV0ApiKey();
+      if (localKey && v0ServerReady === false) {
+        setError(
+          'Your v0 key is saved in this browser, but the server did not accept it. Open My services → save the key again, or set V0_API_KEY in Render Environment and redeploy.',
+        );
+        return;
+      }
       if (hasV0ApiKey === false) {
         try {
           const fb = await fetch(withProjectQuery('/api/nebula-ui-studio/basic-scaffold'), {
@@ -916,7 +943,13 @@ export function IdeVisualEditor({
           /* fall through */
         }
       }
-      setError(msg.includes('V0_API_KEY') ? 'Add your v0 API key in My services (or V0_API_KEY on Render).' : msg);
+      setError(
+        msg.includes('V0_API_KEY')
+          ? hasLocalV0ApiKey()
+            ? 'v0 rejected the request. Re-save your key in My services, or set V0_API_KEY on Render and redeploy.'
+            : 'Add your v0 API key in My services (or V0_API_KEY on Render).'
+          : msg,
+      );
     } finally {
       v0RunningRef.current = false;
       setBusy(false);
@@ -1125,12 +1158,15 @@ export function IdeVisualEditor({
             setSelectedId(nodeId);
             setMenuPos({ top: 12, left: 12 });
           }}
-          className={`mb-0.5 w-full rounded-md py-1.5 text-left text-[11px] ${
-            selectedId === nodeId ? 'bg-cyan-500/20 text-cyan-50 ring-1 ring-cyan-500/40' : 'text-slate-400 hover:bg-white/5'
-          }`}
+          className={cn(
+            'mb-0.5 w-full rounded-md py-1 text-left text-[11px] transition-colors',
+            selectedId === nodeId
+              ? 'active-tab-sheen bg-secondary/80 text-primary'
+              : 'text-muted-foreground hover:bg-secondary/40 hover:text-foreground',
+          )}
           style={{ paddingLeft: 8 + depth * 10 }}
         >
-          <span className="text-slate-500">{node.type}</span> · {node.role}
+          <span className="opacity-60">{node.type}</span> · {node.role}
         </button>
         {node.children?.map((cid) => renderLayerRows(cid, depth + 1))}
       </React.Fragment>
@@ -1145,31 +1181,40 @@ export function IdeVisualEditor({
     );
   }
 
+  const layerCount = page ? Object.keys(page.nodes).length : 0;
+
   return (
     <div
       ref={shellRef}
-      className="flex h-full min-h-0 w-full flex-col overflow-hidden bg-[#050a14] text-slate-200 shadow-[inset_0_1px_0_rgba(34,211,238,0.06)]"
+      className="flex h-full min-h-0 w-full flex-col overflow-hidden bg-background text-foreground"
     >
       {!eligible ? (
         <div
           className={cn(
-            'flex shrink-0 flex-col gap-2 border-b px-3 py-2 text-[11px] sm:flex-row sm:items-center sm:justify-between',
+            'flex shrink-0 flex-wrap items-center justify-between gap-3 border-b px-3 py-2.5',
             hasV0ApiKey
-              ? 'border-cyan-500/25 bg-cyan-500/10 text-cyan-50/95'
-              : 'border-amber-500/25 bg-amber-500/10 text-amber-50/95',
+              ? 'border-primary/20 bg-primary/5'
+              : 'border-amber-500/25 bg-amber-500/10',
           )}
         >
-          <div className="flex items-start gap-2">
-            <PanelLeft className="mt-0.5 h-4 w-4 shrink-0 opacity-80" />
-            <div>
-              <span className="font-headline text-xs">
-                {hasV0ApiKey ? 'First v0 generation' : 'UI Studio setup'}
-              </span>
-              <p className="mt-0.5 text-[11px] opacity-80">
+          <div className="flex min-w-0 items-start gap-2.5">
+            <div
+              className={cn(
+                'mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-md',
+                hasV0ApiKey ? 'bg-primary/15 text-primary' : 'bg-amber-500/20 text-amber-200',
+              )}
+            >
+              <Sparkles className="h-3.5 w-3.5" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-xs font-medium text-foreground">
+                {hasV0ApiKey ? 'Run your first v0 generation' : 'Connect v0 to unlock UI generation'}
+              </p>
+              <p className="mt-0.5 text-[11px] leading-relaxed text-muted-foreground">
                 {hasV0ApiKey
                   ? studioStatus?.v0PromptExists
-                    ? `v0 is the primary UI generator. Prompt: ${studioStatus.v0PromptPath ?? 'nebula-ui-studio/v0-prompt.md'} (${studioStatus.v0PromptLength ?? 0} chars). Run v0 once to unlock Save to disk.`
-                    : 'Waiting for v0-prompt.md from Master Plan §4+§5 — save or update the Master Plan first.'
+                    ? `Prompt ready (${studioStatus.v0PromptLength ?? 0} chars). Generate once to unlock Save to disk.`
+                    : 'Save Master Plan §4+§5 first — v0-prompt.md is built from those sections.'
                   : eligibilityReason}
               </p>
             </div>
@@ -1179,30 +1224,20 @@ export function IdeVisualEditor({
               type="button"
               disabled={busy || hasV0ApiKey === false}
               onClick={() => void runV0Generation()}
-              className="rounded border border-cyan-400/50 bg-cyan-500/15 px-2 py-1 text-[10px] font-headline text-cyan-50 hover:bg-cyan-500/25 disabled:opacity-40"
+              className="rounded-md bg-primary px-3 py-1.5 text-[11px] font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-40"
             >
               {busy ? 'Running v0…' : 'Generate UI with v0'}
             </button>
-            {v0ChatId ? (
-              <button
-                type="button"
-                disabled={busy}
-                onClick={() => void runV0Refine()}
-                className="rounded border border-violet-400/40 bg-violet-500/10 px-2 py-1 text-[10px] text-violet-100 disabled:opacity-40"
-              >
-                Refine with v0
-              </button>
-            ) : null}
             {hasV0ApiKey === false ? (
-              <span className="text-[10px] opacity-90">Add v0 key in My services → v0 API key</span>
+              <span className="text-[10px] text-amber-100/90">My services → v0 API key</span>
             ) : null}
             {import.meta.env.DEV ? (
               <button
                 type="button"
                 onClick={() => void simulateV0CompleteDev()}
-                className="rounded border border-white/20 bg-black/20 px-2 py-1 text-[10px]"
+                className="btn-secondary-surface rounded-md px-2 py-1 text-[10px] text-muted-foreground"
               >
-                Dev: simulate v0 manifest
+                Dev unlock
               </button>
             ) : null}
           </div>
@@ -1210,136 +1245,147 @@ export function IdeVisualEditor({
       ) : null}
 
       {mockNotice ? (
-        <div className="border-b border-cyan-500/30 bg-cyan-500/10 px-3 py-2 text-[11px] text-cyan-50">
+        <div className="border-b border-primary/25 bg-primary/10 px-3 py-2 text-[11px] text-foreground">
           {mockNotice}{' '}
-          <button type="button" className="underline" onClick={() => setMockNotice('')}>
+          <button type="button" className="underline opacity-80 hover:opacity-100" onClick={() => setMockNotice('')}>
             Dismiss
           </button>
         </div>
       ) : null}
 
-      <header className="flex shrink-0 flex-col gap-2 border-b border-cyan-500/25 bg-[#040d18] px-2 py-2 sm:px-3">
-        <div className="flex min-w-0 items-center justify-between gap-2">
+      <header className="surface-active shrink-0 border-b border-white/5">
+        <div className="flex h-9 items-center justify-between gap-2 px-2 sm:px-3">
           <div className="flex min-w-0 items-center gap-2">
-            <span className="font-headline text-xs tracking-wide text-cyan-100">Nebula UI Studio</span>
-            <span className="hidden text-[10px] text-slate-500 sm:inline">
-              Cosmic Night · {eligible ? 'visual editor' : 'editing tools active'}
+            <button
+              type="button"
+              title={leftPanelOpen ? 'Hide pages panel' : 'Show pages panel'}
+              onClick={() => setLeftPanelOpen((v) => !v)}
+              className="btn-secondary-surface rounded p-1 text-muted-foreground hover:text-foreground"
+            >
+              <PanelLeft className="h-3.5 w-3.5" />
+            </button>
+            <span className="truncate text-xs font-medium tracking-wide text-foreground">UI Studio</span>
+            <span
+              className={cn(
+                'hidden rounded-full px-2 py-0.5 text-[10px] font-medium sm:inline',
+                eligible
+                  ? 'bg-emerald-500/15 text-emerald-300'
+                  : 'bg-secondary text-muted-foreground',
+              )}
+            >
+              {eligible ? 'v0 unlocked' : 'preview mode'}
             </span>
           </div>
+
           <div className="flex shrink-0 items-center gap-1">
-            <button
-              type="button"
-              onClick={() => void toggleFullscreen()}
-              className="rounded border border-white/15 p-1.5 text-slate-300"
-              title="Fullscreen"
-            >
-              {isFullscreen ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
-            </button>
-            <button
-              type="button"
-              onClick={() => void sessionUndo()}
-              className="rounded border border-white/15 px-2 py-1 text-[10px] text-slate-300"
-              title="Undo last visual edit batch"
-            >
-              <RotateCcw className="mr-1 inline h-3 w-3" />
-              Undo
-            </button>
-            <button
-              type="button"
-              onClick={() => setRevertConfirmOpen(true)}
-              className="hidden rounded border border-rose-500/30 px-2 py-1 text-[10px] text-rose-200 sm:inline"
-              title="Undo last code apply (from backups)"
-            >
-              Undo last apply
-            </button>
-          </div>
-        </div>
-
-        <div className="flex min-w-0 flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
-          <div className="flex flex-wrap items-center gap-1">
-            {(
-              [
-                { id: 'select' as const, Icon: MousePointer2, label: 'Select' },
-                { id: 'move' as const, Icon: Move, label: 'Drag / Move' },
-                { id: 'resize' as const, Icon: Scaling, label: 'Resize' },
-                { id: 'text' as const, Icon: Type, label: 'Text Edit' },
-                { id: 'color' as const, Icon: Pipette, label: 'Color Picker' },
-              ] as const
-            ).map(({ id, Icon, label }) => (
-              <button
-                key={id}
-                type="button"
-                title={label}
-                onClick={() => setStudioTool(id)}
-                className={`flex items-center gap-1 rounded-md border px-2 py-1.5 text-[10px] ${
-                  studioTool === id
-                    ? 'border-cyan-500/50 bg-cyan-500/15 text-cyan-50'
-                    : 'border-white/10 bg-black/20 text-slate-400 hover:border-white/20 hover:text-slate-200'
-                }`}
-              >
-                <Icon className="h-3.5 w-3.5 shrink-0" />
-                <span className="hidden sm:inline">{label}</span>
-              </button>
-            ))}
-            <button
-              type="button"
-              disabled={!selected}
-              onClick={() => applySimilarAllPages()}
-              className="rounded-md border border-violet-500/35 bg-violet-500/10 px-2 py-1.5 text-[10px] text-violet-100 disabled:opacity-40"
-              title="Apply selected element style to matching roles on every page"
-            >
-              Apply to All Pages
-            </button>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2">
-            {hasV0ApiKey ? (
+            {hasV0ApiKey && eligible ? (
               <>
                 <button
                   type="button"
                   disabled={busy}
                   onClick={() => void runV0Generation()}
-                  className="rounded-lg border border-cyan-500/40 bg-cyan-500/10 px-3 py-2 text-xs text-cyan-100 disabled:opacity-40"
+                  className="btn-secondary-surface hidden rounded-md px-2 py-1 text-[10px] text-muted-foreground hover:text-foreground disabled:opacity-40 sm:inline"
                 >
-                  {busy ? 'v0…' : eligible ? 'Regenerate with v0' : 'Generate UI with v0'}
+                  {busy ? 'v0…' : 'Regenerate v0'}
                 </button>
                 {v0ChatId ? (
                   <button
                     type="button"
                     disabled={busy}
                     onClick={() => void runV0Refine()}
-                    className="rounded-lg border border-violet-500/35 bg-violet-500/10 px-3 py-2 text-xs text-violet-100 disabled:opacity-40"
+                    className="btn-secondary-surface hidden rounded-md px-2 py-1 text-[10px] text-muted-foreground hover:text-foreground disabled:opacity-40 md:inline"
                   >
-                    Refine with v0
+                    Refine
                   </button>
                 ) : null}
               </>
             ) : null}
             <button
               type="button"
-              disabled={busy}
-              onClick={() => setApplyConfirmOpen(true)}
-              className="rounded-lg bg-cyan-500 px-4 py-2 text-xs font-headline text-black shadow-[0_0_18px_rgba(34,211,238,0.35)] hover:bg-cyan-400 disabled:opacity-40 sm:px-5 sm:py-2.5 sm:text-sm"
+              onClick={() => void sessionUndo()}
+              className="btn-secondary-surface rounded-md px-2 py-1 text-[10px] text-muted-foreground"
+              title="Undo last visual edit"
             >
-              <Save className="mr-1.5 inline h-3.5 w-3.5 sm:h-4 sm:w-4" />
-              Save Changes &amp; Update Code
+              <RotateCcw className="mr-1 inline h-3 w-3" />
+              Undo
+            </button>
+            <button
+              type="button"
+              onClick={() => void toggleFullscreen()}
+              className="btn-secondary-surface rounded p-1 text-muted-foreground"
+              title="Fullscreen"
+            >
+              {isFullscreen ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
             </button>
             <button
               type="button"
               disabled={busy}
-              onClick={() => {
-                if (!eligible) {
-                  revertVisualToBaseline();
-                  return;
-                }
-                setRestoreOriginalConfirmOpen(true);
-              }}
-              className="rounded-lg border border-white/15 px-3 py-2 text-[11px] text-slate-300 hover:bg-white/5 sm:text-xs"
-              title={eligible ? 'Restore immutable v0 copy into workspace' : 'Reset preview to the snapshot from when this session loaded'}
+              onClick={() => setApplyConfirmOpen(true)}
+              className="rounded-md bg-primary px-2.5 py-1 text-[11px] font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-40 sm:px-3"
             >
-              Revert to Original
+              <Save className="mr-1 inline h-3 w-3" />
+              Save
+            </button>
+            <button
+              type="button"
+              title={rightPanelOpen ? 'Hide properties' : 'Show properties'}
+              onClick={() => setRightPanelOpen((v) => !v)}
+              className="btn-secondary-surface rounded p-1 text-muted-foreground hover:text-foreground"
+            >
+              <PanelRight className="h-3.5 w-3.5" />
             </button>
           </div>
+        </div>
+
+        <div className="tonal-seam-t flex flex-wrap items-center gap-1 border-t border-white/5 px-2 py-1.5 sm:px-3">
+          {(
+            [
+              { id: 'select' as const, Icon: MousePointer2, label: 'Select' },
+              { id: 'move' as const, Icon: Move, label: 'Move' },
+              { id: 'resize' as const, Icon: Scaling, label: 'Resize' },
+              { id: 'text' as const, Icon: Type, label: 'Text' },
+              { id: 'color' as const, Icon: Pipette, label: 'Color' },
+            ] as const
+          ).map(({ id, Icon, label }) => (
+            <button
+              key={id}
+              type="button"
+              title={label}
+              onClick={() => setStudioTool(id)}
+              className={cn(
+                'flex items-center gap-1 rounded-md px-2 py-1 text-[10px] transition-colors',
+                studioTool === id
+                  ? 'active-tab-sheen bg-secondary text-primary'
+                  : 'text-muted-foreground hover:bg-secondary/50 hover:text-foreground',
+              )}
+            >
+              <Icon className="h-3 w-3 shrink-0" />
+              <span className="hidden md:inline">{label}</span>
+            </button>
+          ))}
+          <span className="mx-1 hidden h-4 w-px bg-white/10 sm:inline" aria-hidden />
+          <button
+            type="button"
+            disabled={!selected}
+            onClick={() => applySimilarAllPages()}
+            className="rounded-md px-2 py-1 text-[10px] text-muted-foreground hover:bg-secondary/50 hover:text-foreground disabled:opacity-40"
+          >
+            Apply to all pages
+          </button>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => {
+              if (!eligible) {
+                revertVisualToBaseline();
+                return;
+              }
+              setRestoreOriginalConfirmOpen(true);
+            }}
+            className="ml-auto rounded-md px-2 py-1 text-[10px] text-muted-foreground hover:bg-secondary/50 hover:text-foreground"
+          >
+            Revert original
+          </button>
         </div>
       </header>
 
@@ -1348,64 +1394,92 @@ export function IdeVisualEditor({
       ) : null}
 
       <div className="flex min-h-0 flex-1">
-        <aside className="flex w-52 shrink-0 flex-col border-r border-cyan-500/20 bg-[#040d18]">
-          <div className="flex border-b border-white/10">
-            <button
-              type="button"
-              onClick={() => setLeftTab('pages')}
-              className={`flex-1 py-2 text-center text-[10px] font-headline uppercase tracking-wider ${
-                leftTab === 'pages' ? 'bg-cyan-500/15 text-cyan-100' : 'text-slate-500 hover:bg-white/5'
-              }`}
-            >
-              Pages
-            </button>
-            <button
-              type="button"
-              onClick={() => setLeftTab('layers')}
-              className={`flex flex-1 items-center justify-center gap-1 py-2 text-center text-[10px] font-headline uppercase tracking-wider ${
-                leftTab === 'layers' ? 'bg-cyan-500/15 text-cyan-100' : 'text-slate-500 hover:bg-white/5'
-              }`}
-            >
-              <Layers className="h-3 w-3" />
-              Layers
-            </button>
-          </div>
-          {leftTab === 'pages' ? (
-            <nav className="flex-1 overflow-y-auto p-1">
-              {pageIds.map((pid) => (
-                <button
-                  key={pid}
-                  type="button"
-                  onClick={() => {
-                    setActivePage(pid);
-                    clearSelection();
-                  }}
-                  className={`mb-0.5 w-full rounded-md px-2 py-2 text-left text-xs ${
-                    activePage === pid ? 'bg-cyan-500/20 text-cyan-50 ring-1 ring-cyan-500/40' : 'text-slate-400 hover:bg-white/5'
-                  }`}
-                >
-                  {pid}
-                </button>
-              ))}
-            </nav>
-          ) : (
-            <div className="flex-1 overflow-y-auto p-1">
-              {page ? renderLayerRows(page.rootId, 0) : null}
+        {leftPanelOpen ? (
+          <aside className="surface-active flex w-44 shrink-0 flex-col border-r border-white/5 sm:w-48">
+            <div className="flex border-b border-white/5">
+              <button
+                type="button"
+                onClick={() => setLeftTab('pages')}
+                className={cn(
+                  'flex-1 py-2 text-center text-[10px] font-medium uppercase tracking-wider',
+                  leftTab === 'pages' ? 'border-b-2 border-primary text-primary' : 'text-muted-foreground hover:text-foreground',
+                )}
+              >
+                Pages
+              </button>
+              <button
+                type="button"
+                onClick={() => setLeftTab('layers')}
+                className={cn(
+                  'flex flex-1 items-center justify-center gap-1 py-2 text-[10px] font-medium uppercase tracking-wider',
+                  leftTab === 'layers' ? 'border-b-2 border-primary text-primary' : 'text-muted-foreground hover:text-foreground',
+                )}
+              >
+                <Layers className="h-3 w-3" />
+                Layers
+              </button>
             </div>
-          )}
-        </aside>
+            {leftTab === 'pages' ? (
+              <nav className="flex-1 overflow-y-auto p-1.5">
+                {pageIds.map((pid) => (
+                  <button
+                    key={pid}
+                    type="button"
+                    onClick={() => {
+                      setActivePage(pid);
+                      clearSelection();
+                    }}
+                    className={cn(
+                      'mb-0.5 w-full rounded-md px-2 py-1.5 text-left text-xs transition-colors',
+                      activePage === pid
+                        ? 'active-tab-sheen bg-secondary/80 text-primary'
+                        : 'text-muted-foreground hover:bg-secondary/40 hover:text-foreground',
+                    )}
+                  >
+                    {pid}
+                  </button>
+                ))}
+              </nav>
+            ) : (
+              <div className="flex-1 overflow-y-auto p-1.5">{page ? renderLayerRows(page.rootId, 0) : null}</div>
+            )}
+          </aside>
+        ) : null}
 
         <main
           ref={previewRef}
-          className="relative min-w-0 flex-1 overflow-auto bg-[#020617] p-4"
+          className="relative min-w-0 flex-1 overflow-auto bg-[#030712] p-3 sm:p-5"
+          style={{
+            backgroundImage:
+              'radial-gradient(circle at 1px 1px, rgba(255,255,255,0.06) 1px, transparent 0)',
+            backgroundSize: '20px 20px',
+          }}
           onClick={() => clearSelection()}
         >
-          <div className="mx-auto max-w-5xl rounded-xl border border-cyan-500/20 bg-[#0a1628] p-4 shadow-[0_0_48px_rgba(34,211,238,0.12)]">
-            <div className="mb-2 flex flex-wrap items-center justify-between gap-2 text-[10px] uppercase tracking-wider text-cyan-500/80">
-              <span>Live preview · {activePage}</span>
-              <span className="text-slate-500 normal-case">0vgenerated-v2–style shell (mock)</span>
+          <div className="mx-auto flex max-w-4xl flex-col gap-2">
+            <div className="flex items-center justify-between gap-2 px-1">
+              <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                Preview · {activePage}
+              </span>
+              {selected ? (
+                <span className="truncate text-[10px] text-primary">
+                  {selected.role} · {selected.type}
+                </span>
+              ) : (
+                <span className="text-[10px] text-muted-foreground/70">Click an element to edit</span>
+              )}
             </div>
-            {page ? renderNode(page.rootId) : null}
+            <div className="overflow-hidden rounded-xl border border-white/10 bg-[#0a1628] shadow-[0_8px_32px_rgba(0,0,0,0.45)] ring-1 ring-white/5">
+              <div className="border-b border-white/5 bg-black/20 px-3 py-1.5">
+                <div className="flex items-center gap-1.5">
+                  <span className="h-2 w-2 rounded-full bg-red-500/80" />
+                  <span className="h-2 w-2 rounded-full bg-amber-500/80" />
+                  <span className="h-2 w-2 rounded-full bg-emerald-500/80" />
+                  <span className="ml-2 truncate text-[10px] text-muted-foreground">{activePage} — visual model</span>
+                </div>
+              </div>
+              <div className="p-4 sm:p-6">{page ? renderNode(page.rootId) : null}</div>
+            </div>
           </div>
           {selectedId && menuPos ? (
             <div
@@ -1468,142 +1542,151 @@ export function IdeVisualEditor({
           ) : null}
         </main>
 
-        <aside className="flex w-80 shrink-0 flex-col border-l border-cyan-500/20 bg-[#040d18]">
-          <div className="border-b border-white/10 px-2 py-2 text-[10px] font-headline uppercase tracking-wider text-cyan-400/90">
-            Properties
-          </div>
-          {!selected ? (
-            <p className="p-3 text-xs text-slate-500">Select an element in the preview. Selected elements show a blue outline.</p>
-          ) : (
-            <div className="flex-1 space-y-3 overflow-y-auto p-3 text-[11px]">
-              <div className="text-slate-400">
-                <span className="text-cyan-300">role</span> {selected.role} · <span className="text-cyan-300">type</span> {selected.type}
-              </div>
-              <label className="block text-slate-500">
-                Background
-                <input
-                  type="color"
-                  className="mt-1 h-8 w-full cursor-pointer rounded border border-white/10 bg-transparent"
-                  value={selected.style.backgroundColor}
-                  onChange={(e) => updateSelectedStyle({ backgroundColor: e.target.value })}
-                />
-              </label>
-              <label className="block text-slate-500">
-                Text color
-                <input
-                  type="color"
-                  className="mt-1 h-8 w-full cursor-pointer rounded border border-white/10 bg-transparent"
-                  value={selected.style.color}
-                  onChange={(e) => updateSelectedStyle({ color: e.target.value })}
-                />
-              </label>
-              <div className="grid grid-cols-2 gap-2">
-                {(['paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft'] as const).map((k) => (
-                  <label key={k} className="text-slate-500">
-                    {k}
-                    <input
-                      type="number"
-                      className="mt-0.5 w-full rounded border border-white/10 bg-[#0a1628] px-1 py-1 text-slate-200"
-                      value={selected.style[k]}
-                      onChange={(e) => updateSelectedStyle({ [k]: Number(e.target.value) || 0 } as Partial<VisualStyle>)}
-                    />
-                  </label>
-                ))}
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                {(['marginTop', 'marginRight', 'marginBottom', 'marginLeft'] as const).map((k) => (
-                  <label key={k} className="text-slate-500">
-                    {k}
-                    <input
-                      type="number"
-                      className="mt-0.5 w-full rounded border border-white/10 bg-[#0a1628] px-1 py-1 text-slate-200"
-                      value={selected.style[k]}
-                      onChange={(e) => updateSelectedStyle({ [k]: Number(e.target.value) || 0 } as Partial<VisualStyle>)}
-                    />
-                  </label>
-                ))}
-              </div>
-              <label className="block text-slate-500">
-                Width
-                <input
-                  className="mt-1 w-full rounded border border-white/10 bg-[#0a1628] px-2 py-1 text-slate-200"
-                  value={selected.style.width}
-                  onChange={(e) => updateSelectedStyle({ width: e.target.value })}
-                />
-              </label>
-              <label className="block text-slate-500">
-                Height
-                <input
-                  className="mt-1 w-full rounded border border-white/10 bg-[#0a1628] px-2 py-1 text-slate-200"
-                  value={selected.style.height}
-                  onChange={(e) => updateSelectedStyle({ height: e.target.value })}
-                />
-              </label>
-              <label className="block text-slate-500">
-                Border radius
-                <input
-                  type="number"
-                  className="mt-1 w-full rounded border border-white/10 bg-[#0a1628] px-2 py-1"
-                  value={selected.style.borderRadius}
-                  onChange={(e) => updateSelectedStyle({ borderRadius: Number(e.target.value) || 0 })}
-                />
-              </label>
-              <label className="block text-slate-500">
-                Box shadow (CSS)
-                <input
-                  className="mt-1 w-full rounded border border-white/10 bg-[#0a1628] px-2 py-1"
-                  value={selected.style.boxShadow}
-                  onChange={(e) => updateSelectedStyle({ boxShadow: e.target.value })}
-                />
-              </label>
-              <label className="block text-slate-500">
-                Opacity (0–1)
-                <input
-                  type="number"
-                  step={0.05}
-                  min={0}
-                  max={1}
-                  className="mt-1 w-full rounded border border-white/10 bg-[#0a1628] px-2 py-1"
-                  value={selected.style.opacity}
-                  onChange={(e) => updateSelectedStyle({ opacity: Math.min(1, Math.max(0, Number(e.target.value))) })}
-                />
-              </label>
-              {(selected.type === 'text' || selected.type === 'button') && (
-                <label className="block text-slate-500">
-                  <Type className="mb-1 inline h-3 w-3" /> Label / text
-                  <input
-                    className="mt-1 w-full rounded border border-white/10 bg-[#0a1628] px-2 py-1"
-                    value={selected.text || ''}
-                    onChange={(e) => updateSelectedText(e.target.value)}
-                  />
-                </label>
-              )}
-              <div className="flex flex-col gap-2 border-t border-white/10 pt-3">
-                <button
-                  type="button"
-                  className="rounded border border-cyan-500/30 bg-cyan-500/10 py-2 text-xs text-cyan-100"
-                  onClick={() => applySimilarOnPage()}
-                >
-                  Apply style to all similar on this page
-                </button>
-                <button
-                  type="button"
-                  className="rounded border border-violet-500/30 bg-violet-500/10 py-2 text-xs text-violet-100"
-                  onClick={() => applySimilarAllPages()}
-                >
-                  Apply style to all pages
-                </button>
-              </div>
+        {rightPanelOpen ? (
+          <aside className="surface-active flex w-64 shrink-0 flex-col border-l border-white/5 sm:w-72">
+            <div className="flex items-center justify-between border-b border-white/5 px-3 py-2">
+              <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                Properties
+              </span>
+              {selected ? (
+                <span className="truncate text-[10px] text-primary">{selected.role}</span>
+              ) : null}
             </div>
-          )}
-        </aside>
+            {!selected ? (
+              <div className="flex flex-1 flex-col items-center justify-center gap-2 p-6 text-center">
+                <MousePointer2 className="h-8 w-8 text-muted-foreground/30" />
+                <p className="text-xs text-muted-foreground">
+                  Select an element in the preview. Selection shows a blue outline.
+                </p>
+              </div>
+            ) : (
+              <div className="flex-1 space-y-4 overflow-y-auto p-3 text-[11px]">
+                <section>
+                  <p className="mb-2 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Element</p>
+                  <div className="rounded-md border border-white/5 bg-black/20 px-2 py-1.5 text-muted-foreground">
+                    <span className="text-foreground">{selected.type}</span>
+                    <span className="mx-1 opacity-40">·</span>
+                    {selected.role}
+                  </div>
+                </section>
+                <section>
+                  <p className="mb-2 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Colors</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    <label className="text-muted-foreground">
+                      Background
+                      <input
+                        type="color"
+                        className="mt-1 h-8 w-full cursor-pointer rounded border border-white/10 bg-transparent"
+                        value={selected.style.backgroundColor}
+                        onChange={(e) => updateSelectedStyle({ backgroundColor: e.target.value })}
+                      />
+                    </label>
+                    <label className="text-muted-foreground">
+                      Text
+                      <input
+                        type="color"
+                        className="mt-1 h-8 w-full cursor-pointer rounded border border-white/10 bg-transparent"
+                        value={selected.style.color}
+                        onChange={(e) => updateSelectedStyle({ color: e.target.value })}
+                      />
+                    </label>
+                  </div>
+                </section>
+                <section>
+                  <p className="mb-2 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Spacing</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    {(['paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft'] as const).map((k) => (
+                      <label key={k} className="text-muted-foreground">
+                        {k.replace('padding', 'pad ')}
+                        <input
+                          type="number"
+                          className="mt-0.5 w-full rounded border border-white/10 bg-secondary/30 px-1.5 py-1 text-foreground"
+                          value={selected.style[k]}
+                          onChange={(e) => updateSelectedStyle({ [k]: Number(e.target.value) || 0 } as Partial<VisualStyle>)}
+                        />
+                      </label>
+                    ))}
+                  </div>
+                </section>
+                <section>
+                  <p className="mb-2 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Layout</p>
+                  <div className="space-y-2">
+                    <label className="block text-muted-foreground">
+                      Width
+                      <input
+                        className="mt-0.5 w-full rounded border border-white/10 bg-secondary/30 px-2 py-1 text-foreground"
+                        value={selected.style.width}
+                        onChange={(e) => updateSelectedStyle({ width: e.target.value })}
+                      />
+                    </label>
+                    <label className="block text-muted-foreground">
+                      Height
+                      <input
+                        className="mt-0.5 w-full rounded border border-white/10 bg-secondary/30 px-2 py-1 text-foreground"
+                        value={selected.style.height}
+                        onChange={(e) => updateSelectedStyle({ height: e.target.value })}
+                      />
+                    </label>
+                    <label className="block text-muted-foreground">
+                      Radius
+                      <input
+                        type="number"
+                        className="mt-0.5 w-full rounded border border-white/10 bg-secondary/30 px-2 py-1"
+                        value={selected.style.borderRadius}
+                        onChange={(e) => updateSelectedStyle({ borderRadius: Number(e.target.value) || 0 })}
+                      />
+                    </label>
+                  </div>
+                </section>
+                {(selected.type === 'text' || selected.type === 'button') && (
+                  <section>
+                    <p className="mb-2 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Content</p>
+                    <input
+                      className="w-full rounded border border-white/10 bg-secondary/30 px-2 py-1.5 text-foreground"
+                      value={selected.text || ''}
+                      onChange={(e) => updateSelectedText(e.target.value)}
+                      placeholder="Label / text"
+                    />
+                  </section>
+                )}
+                <section className="flex flex-col gap-2 border-t border-white/5 pt-3">
+                  <button
+                    type="button"
+                    className="btn-secondary-surface rounded-md py-1.5 text-xs text-foreground"
+                    onClick={() => applySimilarOnPage()}
+                  >
+                    Match style on this page
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-secondary-surface rounded-md py-1.5 text-xs text-foreground"
+                    onClick={() => applySimilarAllPages()}
+                  >
+                    Match style on all pages
+                  </button>
+                </section>
+              </div>
+            )}
+          </aside>
+        ) : null}
       </div>
 
-      <footer className="shrink-0 border-t border-cyan-500/20 bg-[#040d18] px-3 py-2">
-        <p className="text-center text-[10px] text-slate-500">
-          Edit layout here, then <strong className="text-slate-400">Save Changes &amp; Update Code</strong> — Grok writes real files under{' '}
-          <code className="text-cyan-300/80">src/</code>. Use <strong className="text-slate-400">Mockups</strong> for SVG directions; v0 generates the first React UI.
-        </p>
+      <footer className="surface-active flex shrink-0 items-center justify-between gap-2 border-t border-white/5 px-3 py-1.5 text-[10px] text-muted-foreground">
+        <span>
+          {activePage} · {layerCount} layer{layerCount === 1 ? '' : 's'} · {studioTool} tool
+        </span>
+        <div className="flex items-center gap-3">
+          {eligible ? (
+            <button
+              type="button"
+              onClick={() => setRevertConfirmOpen(true)}
+              className="hover:text-foreground"
+            >
+              Undo last code apply
+            </button>
+          ) : null}
+          <span className="hidden sm:inline">Save writes to <code className="text-primary/90">src/</code></span>
+        </div>
       </footer>
 
       {applyConfirmOpen ? (

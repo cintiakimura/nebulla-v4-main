@@ -32,12 +32,12 @@ import { ideContextSnippetForChat, useIdeWorkspace } from '@/components/ide/IdeW
 import {
   advanceGrokActivity,
   createGrokActivity,
-  errorGrokActivity,
-  finishGrokActivity,
-  setGrokActivityAction,
+  commitGrokActivityStatus,
+  updateGrokActivityCurrent,
   startGrokActivityWaitTicker,
   type GrokActivityProgressFn,
   type GrokActivityStatus,
+  type GrokActivityStep,
 } from '../../lib/ideGrokActivityStatus';
 import { IdeGrokActivityPanel } from '@/components/ide/IdeGrokActivityPanel';
 import {
@@ -150,9 +150,31 @@ export function AIChat() {
   const [input, setInput] = useState('');
   const [accessoryHint, setAccessoryHint] = useState<string | null>(null);
   const [grokActivity, setGrokActivity] = useState<GrokActivityStatus>(IDLE_GROK_ACTIVITY);
-  const pushActivity = useCallback<GrokActivityProgressFn>((message, kind = 'info') => {
-    setGrokActivity((prev) => setGrokActivityAction(prev, message, kind));
+  const codingActivityRef = useRef(false);
+
+  const resetCodingActivity = useCallback(() => {
+    codingActivityRef.current = false;
+    setGrokActivity(IDLE_GROK_ACTIVITY);
   }, []);
+
+  const beginCodingActivity = useCallback(
+    (headline: string, steps: GrokActivityStep[], options?: Parameters<typeof createGrokActivity>[2]) => {
+      codingActivityRef.current = true;
+      setGrokActivity(createGrokActivity(headline, steps, options));
+    },
+    [],
+  );
+
+  const pushActivity = useCallback<GrokActivityProgressFn>((message, kind = 'info', options) => {
+    if (!codingActivityRef.current) return;
+    setGrokActivity((prev) =>
+      options?.currentOnly
+        ? updateGrokActivityCurrent(prev, message)
+        : commitGrokActivityStatus(prev, message, kind),
+    );
+  }, []);
+
+  const showActivityPanel = grokActivity.tone === 'work';
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
   const [serverHasGrokKey, setServerHasGrokKey] = useState<boolean | null>(null);
@@ -590,28 +612,24 @@ export function AIChat() {
     setSending(true);
     setSendError(null);
     const buildMode = detectBuildModeIntent(text);
-    setGrokActivity(
-      createGrokActivity(
-        buildMode ? 'Build mode — Grok is implementing your request' : 'Grok is thinking…',
+    if (buildMode) {
+      beginCodingActivity(
+        'Build mode — Grok is implementing your request',
         CHAT_WORK_STEPS,
         {
-          subhead: buildMode
-            ? 'Master Plan → Grok Code → files on disk. Activity stream updates below.'
-            : 'Reading your project context and preparing a reply.',
+          subhead: 'Master Plan → Grok Code → files on disk.',
           footer: 'Large coding passes can take 1–3 minutes on the server.',
-          initialLog: buildMode
-            ? `Build mode detected — "${text.slice(0, 80)}${text.length > 80 ? '…' : ''}"`
-            : `Message sent — "${text.slice(0, 80)}${text.length > 80 ? '…' : ''}"`,
+          initialLog: `Build mode — "${text.slice(0, 80)}${text.length > 80 ? '…' : ''}"`,
         },
-      ),
-    );
+      );
+      pushActivity(`Project: ${getBrowserProjectName().trim() || 'Untitled project'}`, 'info');
+    }
 
     const projectName = getBrowserProjectName().trim() || 'Untitled project';
-    pushActivity(`Project: ${projectName}`, 'info');
-    if (activePath) {
+    if (buildMode && activePath) {
       pushActivity(`Open in editor: ${activePath}`, 'info');
     }
-    if (workspacePaths.length > 0) {
+    if (buildMode && workspacePaths.length > 0) {
       pushActivity(`Workspace index: ${workspacePaths.length} file(s)`, 'info');
     }
     const ideAppendix = ideContextSnippetForChat(
@@ -635,14 +653,20 @@ export function AIChat() {
     let scheduledTts = false;
 
     try {
-      setGrokActivity((prev) =>
-        advanceGrokActivity(prev, 1, {
-          currentAction: 'Calling Grok API with Master Plan and workspace context…',
-          log: { message: 'POST /api/grok/chat — waiting for Grok response', kind: 'info' },
-        }),
-      );
+      if (buildMode) {
+        setGrokActivity((prev) =>
+          advanceGrokActivity(prev, 1, {
+            currentAction: 'Calling Grok API with Master Plan and workspace context…',
+            log: { message: 'POST /api/grok/chat — waiting for Grok response', kind: 'info' },
+          }),
+        );
+      }
 
-      const stopGrokWait = startGrokActivityWaitTicker('Waiting for Grok', pushActivity);
+      const stopGrokWait = buildMode
+        ? startGrokActivityWaitTicker('Waiting for Grok', (msg, kind, options) =>
+            pushActivity(msg, kind, options),
+          )
+        : () => {};
       let assistantContent: string;
       let planningPhase: string;
       try {
@@ -659,15 +683,20 @@ export function AIChat() {
       }
       const raw = assistantContent.trim();
       const masterPlanSource = (planningPhase || raw).trim();
-      pushActivity(`Grok replied (${raw.length.toLocaleString()} chars)`, 'success');
+      if (buildMode) {
+        pushActivity(`Grok replied (${raw.length.toLocaleString()} chars)`, 'success');
+        setGrokActivity((prev) =>
+          advanceGrokActivity(prev, 2, {
+            currentAction: 'Parsing Master Plan tags and saving sections…',
+            log: { message: 'Scanning response for <START_MASTERPLAN> and file blocks', kind: 'info' },
+          }),
+        );
+      }
 
-      setGrokActivity((prev) =>
-        advanceGrokActivity(prev, 2, {
-          currentAction: 'Parsing Master Plan tags and saving sections…',
-          log: { message: 'Scanning response for <START_MASTERPLAN> and file blocks', kind: 'info' },
-        }),
+      const mpSaved = await persistMasterPlanFromAssistantSource(
+        masterPlanSource,
+        buildMode ? pushActivity : undefined,
       );
-      const mpSaved = await persistMasterPlanFromAssistantSource(masterPlanSource, pushActivity);
 
       if (/<NEBULA_UI_STUDIO_PROMPT>/i.test(masterPlanSource)) {
         dispatchOpenUiStudio({ tab: 'mockups' });
@@ -677,23 +706,25 @@ export function AIChat() {
 
       let masterPlanPipeline: Awaited<ReturnType<typeof runMasterPlanUiPipeline>> = {};
       if (mpSaved > 0) {
-        setGrokActivity((prev) =>
-          advanceGrokActivity(prev, 3, {
-            currentAction: 'UI Studio pipeline — v0 prompt, mind map, optional v0…',
-            stepDetail: {
-              index: 2,
-              detail: `Saved ${mpSaved} Master Plan section(s). Building v0 prompt & mind map from §4…`,
-            },
-            log: {
-              message: `Master Plan updated — ${mpSaved} tab(s); starting UI pipeline`,
-              kind: 'success',
-            },
-          }),
-        );
+        if (buildMode) {
+          setGrokActivity((prev) =>
+            advanceGrokActivity(prev, 3, {
+              currentAction: 'UI Studio pipeline — v0 prompt, mind map, optional v0…',
+              stepDetail: {
+                index: 2,
+                detail: `Saved ${mpSaved} Master Plan section(s). Building v0 prompt & mind map from §4…`,
+              },
+              log: {
+                message: `Master Plan updated — ${mpSaved} tab(s); starting UI pipeline`,
+                kind: 'success',
+              },
+            }),
+          );
+        }
         masterPlanPipeline = await runMasterPlanUiPipeline({
           projectName,
           autoV0: true,
-          onProgress: pushActivity,
+          onProgress: buildMode ? pushActivity : undefined,
         });
         if ((masterPlanPipeline.mindMapPageCount ?? 0) > 0 || masterPlanPipeline.v0Ok) {
           try {
@@ -736,18 +767,24 @@ export function AIChat() {
       try {
         const willCode =
           hadCodingTag || /```(?:file|filepath)\s*:/i.test(raw) || isCodingIntent(masterPlanSource);
+
+        if (willCode && !codingActivityRef.current) {
+          beginCodingActivity('Grok Code — writing files to workspace', GO_WORK_STEPS, {
+            subhead: 'Applying generated files and syncing your project.',
+            initialLog: 'Coding intent detected — starting file apply',
+          });
+        }
+
         if (willCode) {
           setGrokActivity((prev) => {
             const mm =
               masterPlanPipeline.mindMapPageCount != null && masterPlanPipeline.mindMapPageCount > 0
                 ? `Mind map: ${masterPlanPipeline.mindMapPageCount} page(s).`
                 : undefined;
-            return advanceGrokActivity(prev, 4, {
-              currentAction: 'Grok Code generating files — applying to workspace next…',
-              log: { message: 'Coding intent detected — running Grok Code / file apply', kind: 'info' },
-              ...(mm
-                ? { stepDetail: { index: 3, detail: mm } }
-                : {}),
+            return advanceGrokActivity(prev, buildMode ? 4 : 2, {
+              currentAction: 'Grok Code generating files — applying to workspace…',
+              log: { message: 'Running Grok Code / file apply', kind: 'info' },
+              ...(mm ? { stepDetail: { index: buildMode ? 3 : 1, detail: mm } } : {}),
             });
           });
         }
@@ -758,15 +795,15 @@ export function AIChat() {
           userId,
           projectName,
           userNote: text,
-          onProgress: pushActivity,
+          onProgress: codingActivityRef.current ? pushActivity : undefined,
         });
         if (coding.ran) {
           setGrokActivity((prev) =>
-            advanceGrokActivity(prev, 5, {
+            advanceGrokActivity(prev, buildMode ? 5 : 3, {
               currentAction: coding.statusMessage || 'Syncing mind map, explorer, and preview…',
               ...(coding.statusMessage
                 ? {
-                    stepDetail: { index: 4, detail: coding.statusMessage },
+                    stepDetail: { index: buildMode ? 4 : 2, detail: coding.statusMessage },
                     log: { message: coding.statusMessage, kind: 'success' },
                   }
                 : {}),
@@ -800,60 +837,17 @@ export function AIChat() {
           } else if (masterPlanPipeline.v0PromptWritten) {
             dispatchOpenUiStudio({ tab: 'design' });
           }
-          setGrokActivity((prev) =>
-            finishGrokActivity(
-              prev,
-              'Coding complete',
-              CHAT_WORK_STEPS.map((s) => ({
-                ...s,
-                detail:
-                  s.label.includes('Grok Code') && coding.statusMessage
-                    ? coding.statusMessage
-                    : s.label.includes('Sync') && masterPlanPipeline.v0Ok
-                      ? 'v0 UI generated in UI Studio.'
-                      : undefined,
-              })),
-              masterPlanPipeline.v0Ok
-                ? 'Files are in your workspace · UI Studio has a v0 preview.'
-                : coding.statusMessage || 'Files updated — check Explorer and Master Plan.',
-              'All coding steps finished',
-            ),
-          );
-        } else if (!willCode) {
-          const mm = masterPlanPipeline.mindMapPageCount ?? 0;
-          const footer =
-            masterPlanPipeline.v0Ok
-              ? 'v0 UI generated — open UI Studio to preview.'
-              : masterPlanPipeline.v0Triggered && masterPlanPipeline.v0Error
-                ? `v0 note: ${String(masterPlanPipeline.v0Error).slice(0, 120)}`
-                : mm > 0
-                  ? 'Mind map updated — open Mind map or UI Studio next.'
-                  : mpSaved > 0
-                    ? 'Master Plan updated — press Go when you want files written.'
-                    : 'Reply shown in chat — press Go to implement.';
-          setGrokActivity((prev) =>
-            finishGrokActivity(
-              prev,
-              'Reply ready',
-              CHAT_WORK_STEPS.slice(0, 3).map((s, i) => ({
-                ...s,
-                detail:
-                  i === 2 && mpSaved > 0 ? `${mpSaved} section(s) saved.` : i === 1 ? 'No coding this turn.' : undefined,
-              })),
-              footer,
-              mpSaved > 0 ? 'Master Plan saved — no file apply this turn' : 'Grok reply ready in chat',
-            ),
-          );
+          pushActivity('Coding pass finished', 'success');
+          resetCodingActivity();
         }
       } catch (codingErr) {
         console.warn('[AIChat] coding apply:', codingErr);
-        setGrokActivity((prev) =>
-          errorGrokActivity(
-            prev,
-            'File apply failed',
+        if (codingActivityRef.current) {
+          setSendError(
             codingErr instanceof Error ? codingErr.message : 'Could not write files to workspace',
-          ),
-        );
+          );
+          resetCodingActivity();
+        }
       }
 
       if (spoken.trim()) {
@@ -862,13 +856,9 @@ export function AIChat() {
         void playTtsForText(spoken);
       }
     } catch (e) {
-      setGrokActivity((prev) =>
-        errorGrokActivity(
-          prev,
-          'Grok request failed',
-          e instanceof Error ? e.message : 'Check server API key and retry',
-        ),
-      );
+      if (codingActivityRef.current) {
+        resetCodingActivity();
+      }
       const msg = e instanceof Error ? e.message : String(e);
       const isKeyHelp =
         msg.includes('Grok API key') ||
@@ -895,7 +885,7 @@ export function AIChat() {
         resumeOpenTalkIfWanted();
       }
     }
-  }, [sending, activePath, activeTab?.content, serverHasGrokKey, micInputBlocked, workspaceRootLabel, gitBranch, tabs, pauseHandsFreeListening, resumeOpenTalkIfWanted]);
+  }, [sending, activePath, activeTab?.content, serverHasGrokKey, micInputBlocked, workspaceRootLabel, gitBranch, tabs, pauseHandsFreeListening, resumeOpenTalkIfWanted, beginCodingActivity, pushActivity, resetCodingActivity, workspacePaths.length]);
 
   sendChatRef.current = sendChat;
 
@@ -1099,13 +1089,11 @@ export function AIChat() {
     inputRef.current = '';
     setSending(true);
     setSendError(null);
-    setGrokActivity(
-      createGrokActivity('Go — full coding pass', GO_WORK_STEPS, {
-        subhead: 'Pre-coding summary → Grok Code → file apply → mind map & v0.',
-        footer: 'Server-side coding often takes 1–3 minutes — watch the activity stream below.',
-        initialLog: userNote ? `Go started — focus: ${userNote.slice(0, 120)}` : 'Go started — full implementation pass',
-      }),
-    );
+    beginCodingActivity('Go — full coding pass', GO_WORK_STEPS, {
+      subhead: 'Pre-coding summary → Grok Code → file apply → mind map & v0.',
+      footer: 'Server-side coding often takes 1–3 minutes — watch the activity stream below.',
+      initialLog: userNote ? `Go started — focus: ${userNote.slice(0, 120)}` : 'Go started — full implementation pass',
+    });
 
     const session = await fetchSessionUser();
     const userId = session?.uid?.trim() || 'anonymous';
@@ -1139,8 +1127,8 @@ export function AIChat() {
         }),
       );
       if (!go.ok) {
-        setGrokActivity((prev) => errorGrokActivity(prev, 'Go did not complete', go.statusMessage));
         setSendError(go.statusMessage);
+        resetCodingActivity();
         return;
       }
       await runPostCodingWorkspaceSync({
@@ -1167,38 +1155,19 @@ export function AIChat() {
         window.dispatchEvent(new CustomEvent('nebula-files-applied'));
         dispatchOpenUiStudio({ tab: 'design' });
       }
-      setGrokActivity((prev) =>
-        finishGrokActivity(
-          prev,
-          'Go complete — workspace updated',
-          GO_WORK_STEPS.map((s) => ({
-            ...s,
-            detail:
-              s.label.includes('Write files') && go.statusMessage
-                ? go.statusMessage
-                : s.label.includes('v0') && pipeline.v0Ok
-                  ? 'v0 UI ready in UI Studio.'
-                  : undefined,
-          })),
-          pipeline.v0Ok
-            ? `${go.statusMessage} · v0 UI generated.`
-            : go.statusMessage || 'Check Explorer for new files.',
-          'Go pipeline finished',
-        ),
-      );
+      pushActivity('Go pipeline finished', 'success');
     } catch (e) {
       setSendError(e instanceof Error ? e.message : 'Go failed');
-      setGrokActivity((prev) =>
-        errorGrokActivity(prev, 'Go failed', e instanceof Error ? e.message : 'Unexpected error'),
-      );
+      resetCodingActivity();
     } finally {
       setSending(false);
       setAccessoryHint(null);
+      resetCodingActivity();
       if (openTalkDesiredRef.current) {
         resumeOpenTalkIfWanted();
       }
     }
-  }, [micInputBlocked, sending, serverHasGrokKey, stopVoiceRecognition, refreshWorkspaceMeta, resumeOpenTalkIfWanted, pushActivity, workspacePaths.length]);
+  }, [micInputBlocked, sending, serverHasGrokKey, stopVoiceRecognition, refreshWorkspaceMeta, resumeOpenTalkIfWanted, pushActivity, beginCodingActivity, resetCodingActivity, workspacePaths.length]);
 
   return (
     <div className="surface-active tonal-seam-l flex h-full min-h-0 flex-col overflow-hidden">
@@ -1266,7 +1235,9 @@ export function AIChat() {
             </div>
             <div className="surface-active max-w-[85%] rounded-lg px-3 py-2">
               <p className="type-label-sm text-muted-foreground">
-                Working… live activity updates in the panel below.
+                {showActivityPanel
+                  ? 'Coding… live activity updates in the panel below.'
+                  : 'Grok is thinking…'}
               </p>
             </div>
           </div>
@@ -1274,7 +1245,7 @@ export function AIChat() {
         <div ref={messagesEndRef} className="h-px shrink-0" aria-hidden />
       </div>
 
-      <IdeGrokActivityPanel activity={grokActivity} />
+      {showActivityPanel ? <IdeGrokActivityPanel activity={grokActivity} /> : null}
 
       <div className="tonal-seam-t shrink-0 p-3">
         <div className="surface-float rounded-lg border border-transparent p-2 ring-1 ring-[color-mix(in_srgb,var(--outline-variant)_12%,transparent)] transition-[box-shadow,background-color] duration-300 ease-out focus-within:ring-[color-mix(in_srgb,var(--outline-variant)_22%,transparent)]">

@@ -69,16 +69,10 @@ export async function applyGeneratedFiles(
   }
   const paths = extractGrokFilePaths(clean);
   if (paths.length > 0) {
-    onProgress?.(`Parsed ${paths.length} file block(s) from Grok output`, 'info');
-    for (const p of paths.slice(0, 12)) {
-      onProgress?.(`Will write ${p}`, 'file');
-    }
-    if (paths.length > 12) {
-      onProgress?.(`… and ${paths.length - 12} more file(s)`, 'file');
-    }
+    onProgress?.(`Applying ${paths.length} file(s) to workspace`, 'info');
   }
   try {
-    onProgress?.('POST /api/files/apply-generated — writing to cloud workspace', 'info');
+    onProgress?.('Writing files to cloud workspace', 'info');
     const apply = await fetchJson<{
       success?: boolean;
       written?: string[];
@@ -104,17 +98,12 @@ export async function applyGeneratedFiles(
     }
     const writtenCount = Array.isArray(apply.written) ? apply.written.length : 0;
     const skippedCount = Array.isArray(apply.skipped) ? apply.skipped.length : 0;
-    if (writtenCount > 0 && Array.isArray(apply.written)) {
-      for (const p of apply.written.slice(0, 16)) {
-        onProgress?.(`Wrote ${p}`, 'success');
-      }
-      if (apply.written.length > 16) {
-        onProgress?.(`… ${apply.written.length - 16} more file(s) written`, 'success');
-      }
+    if (writtenCount > 0) {
+      onProgress?.(`Wrote ${writtenCount} file(s) to workspace`, 'success');
     }
     if (writtenCount > 0) {
       notifyWorkspaceFilesChanged();
-      onProgress?.('Running post-apply artifact sync (Master Plan, mind map, preview)', 'info');
+      onProgress?.('Syncing Master Plan, mind map, and preview', 'info');
       await afterFilesAppliedArtifacts(artifactContext?.userNote, artifactContext?.projectName, onProgress);
     }
     return {
@@ -157,10 +146,10 @@ export async function runGoCodeAndApply(options: {
         ];
 
   try {
-    onProgress?.('POST /api/grok/go-code — pre-coding summary + Grok Code (server)', 'info');
+    onProgress?.('Grok Code on server — summary then implementation', 'info');
     const stopWait = startGrokActivityWaitTicker(
       'Grok Code running on server',
-      (msg, kind) => onProgress?.(msg, kind),
+      (msg, kind, options) => onProgress?.(msg, kind, options),
     );
     let data: {
       preCodingSummary?: string;
