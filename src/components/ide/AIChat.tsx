@@ -12,6 +12,12 @@ import { readResponseJson } from '../../lib/apiFetch';
 import { getBrowserProjectName, withProjectBody, withProjectQuery } from '../../lib/nebulaProjectApi';
 import { sendIdeAssistantGrokTurn } from '../../lib/ideAssistantGrokChat';
 import {
+  conversationEntriesToIdeMessages,
+  IDE_CHAT_DISCOVERY_BOOTSTRAP,
+  isHiddenBootstrapUserMessage,
+} from '../../lib/ideChatBootstrap';
+import { fetchConversationLogEntries } from '../../lib/conversationLogClient';
+import {
   formatAssistantForIdeChatDisplay,
   persistMasterPlanFromAssistantSource,
 } from '../../lib/grokChatArtifacts';
@@ -213,6 +219,9 @@ export function AIChat() {
   const handsFreeResumeAfterTtsRef = useRef(false);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  const bootstrapStartedRef = useRef(false);
+  const chatHistoryLoadedRef = useRef(false);
 
   const scrollChatToBottom = useCallback((instant = true) => {
     const run = () => {
@@ -493,6 +502,42 @@ export function AIChat() {
   }, [refreshTree, refreshWorkspaceMeta]);
 
   useEffect(() => {
+    let cancelled = false;
+    chatHistoryLoadedRef.current = false;
+    bootstrapStartedRef.current = false;
+    void (async () => {
+      try {
+        const entries = await fetchConversationLogEntries();
+        if (cancelled) return;
+        if (entries.length > 0) {
+          const restored = conversationEntriesToIdeMessages(entries);
+          setMessages(restored);
+          messagesRef.current = restored;
+        } else {
+          setMessages([]);
+          messagesRef.current = [];
+        }
+      } catch (e) {
+        console.warn('[AIChat] conversation log load skipped:', e);
+      } finally {
+        if (!cancelled) chatHistoryLoadedRef.current = true;
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [diskProjectKey]);
+
+  useEffect(() => {
+    if (serverHasGrokKey !== true) return;
+    if (!chatHistoryLoadedRef.current) return;
+    if (messagesRef.current.length > 0) return;
+    if (bootstrapStartedRef.current || sendingRef.current) return;
+    bootstrapStartedRef.current = true;
+    void sendChatRef.current(IDE_CHAT_DISCOVERY_BOOTSTRAP);
+  }, [serverHasGrokKey, messages.length, diskProjectKey]);
+
+  useEffect(() => {
     const onSync = () => {
       clearIdeWorkspaceMetaCache();
       void refreshWorkspaceMeta();
@@ -597,22 +642,27 @@ export function AIChat() {
     }
 
     const prior = messagesRef.current;
+    const isBootstrapTrigger = isHiddenBootstrapUserMessage(text);
     const userMsg: Message = {
       id: `u-${Date.now()}`,
       role: 'user',
       content: text,
       timestamp: new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }),
     };
-    setMessages((p) => {
-      const next = [...p, userMsg];
-      messagesRef.current = next;
-      return next;
-    });
+    if (!isBootstrapTrigger) {
+      setMessages((p) => {
+        const next = [...p, userMsg];
+        messagesRef.current = next;
+        return next;
+      });
+    }
     setInput('');
     inputRef.current = '';
     setSending(true);
     setSendError(null);
     const buildMode = detectBuildModeIntent(text);
+    const onboardingBuildStart = detectOnboardingBuildStart(text, prior);
+    const showWorkActivity = buildMode || onboardingBuildStart;
     if (buildMode) {
       beginCodingActivity(
         'Build mode — Grok is implementing your request',
@@ -623,6 +673,17 @@ export function AIChat() {
         },
       );
       pushActivity(`Project: ${getBrowserProjectName().trim() || 'Untitled project'}`, 'info');
+    } else if (onboardingBuildStart) {
+      beginCodingActivity(
+        'Discovery complete — saving Master Plan and starting code',
+        CHAT_WORK_STEPS,
+        {
+          subhead:
+            'Your reply means nothing else to add. Grok will write the Master Plan, then Grok Code builds files.',
+          initialLog: `Discovery complete — "${text.trim()}"`,
+        },
+      );
+      pushActivity('Final discovery question answered — waiting for Grok Master Plan', 'info');
     }
 
     const projectName = getBrowserProjectName().trim() || 'Untitled project';
@@ -1198,6 +1259,12 @@ export function AIChat() {
       ) : null}
 
       <div ref={scrollContainerRef} className="flex-1 space-y-3 overflow-auto p-3">
+        {messages.length === 0 && !sending ? (
+          <p className="type-body-md px-1 text-center text-muted-foreground">
+            Grok will ask your first discovery question here — follow{' '}
+            <span className="text-foreground/80">project-execution-rules.md</span> (one question per turn).
+          </p>
+        ) : null}
         {messages.map((message) => (
           <div
             key={message.id}

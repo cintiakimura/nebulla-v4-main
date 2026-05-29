@@ -315,7 +315,7 @@ function NebullaIDEShell() {
         <ResizeHandle onMouseDown={chat.onMouseDown} orientation="horizontal" />
 
         <div
-          className="surface-active tonal-seam-l hidden h-full min-h-0 shrink-0 overflow-hidden md:flex md:flex-col"
+          className="surface-active tonal-seam-l flex h-full min-h-0 shrink-0 flex-col overflow-hidden"
           style={{ width: chat.size, minWidth: 280, maxWidth: 420 }}
         >
           <AIChat />

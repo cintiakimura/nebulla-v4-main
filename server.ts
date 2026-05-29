@@ -3263,12 +3263,22 @@ ${answer.slice(0, 8000)}`;
         `- workspaceRoot: ${ppChat.workspaceRoot}`,
         `- All \`\`\`file:relative/path\`\`\` paths are relative to workspaceRoot.`,
       ].join("\n");
+    const rulesExcerpt = readWorkflowFileSafe(ppChat.workspaceRoot, "project-execution-rules.md").slice(
+      0,
+      4500,
+    );
+    const rulesBlock = rulesExcerpt
+      ? [
+          "PROJECT_EXECUTION_RULES (workspace copy — authoritative for chat vs build, onboarding one question at a time, TTS brevity):",
+          rulesExcerpt,
+        ].join("\n")
+      : "";
     const modeBlock = buildMode
       ? "BUILD_MODE: ON — user wants implementation. Master Plan only inside <START_MASTERPLAN>…</END_MASTERPLAN>. Code only as ```file:path``` blocks or START_CODING; never paste implementation as ```typescript``` in chat."
       : "CONVERSATION_MODE: ON — short natural prose only; no markdown code fences or full file bodies unless the user explicitly asks for a one-line snippet.";
     const includeServerFileIndex =
       serverFileIndexBlock && !workspaceContextFromClient.includes("WORKSPACE_FILE_INDEX");
-    const workspaceSystem = [workspaceBlock, modeBlock, includeServerFileIndex ? serverFileIndexBlock : ""]
+    const workspaceSystem = [workspaceBlock, rulesBlock, modeBlock, includeServerFileIndex ? serverFileIndexBlock : ""]
       .filter(Boolean)
       .join("\n");
     const sysIdx = messagesForApi.findIndex((m) => m.role === "system");
