@@ -13,6 +13,32 @@ export type IdeWorkspaceMeta = {
 
 let cached: IdeWorkspaceMeta | null = null;
 
+const FINAL_DISCOVERY_QUESTION_RE = /anything else you'd like to add/i;
+/** Short replies to the onboarding final question ("anything else to add?"). */
+const ONBOARDING_READY_REPLY_RE =
+  /^(?:no(?:pe|thing(?:\s+else)?)?|nah|nothing(?:\s+else)?|that's\s+all|that\s+is\s+all|all\s+good|go\s+ahead|start(?:\s+building)?|yes(?:\s+please)?|yep|yeah|ok(?:ay)?|looks?\s+good|good\s+to\s+go|proceed|let'?s\s+go|build\s+it|ready|continue|sounds?\s+good)[.!?\s]*$/i;
+
+export function assistantAskedFinalDiscovery(content: string): boolean {
+  return FINAL_DISCOVERY_QUESTION_RE.test(content);
+}
+
+export function isOnboardingCompletionReply(text: string): boolean {
+  const t = text.trim();
+  if (!t || t.length > 80) return false;
+  return ONBOARDING_READY_REPLY_RE.test(t);
+}
+
+/** User answered the final discovery question — next step is Master Plan + coding. */
+export function detectOnboardingBuildStart(
+  userText: string,
+  priorMessages: readonly { role: string; content: string }[],
+): boolean {
+  const lastAssistant = [...priorMessages].reverse().find((m) => m.role === 'assistant');
+  if (!lastAssistant?.content?.trim()) return false;
+  if (!assistantAskedFinalDiscovery(lastAssistant.content)) return false;
+  return isOnboardingCompletionReply(userText);
+}
+
 /** Heuristic: user wants implementation / files, not casual Q&A. */
 export function detectBuildModeIntent(text: string): boolean {
   const t = text.trim();

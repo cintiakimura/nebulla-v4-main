@@ -3,6 +3,13 @@ export function formatV0UiError(message: string, hasLocalKey: boolean): string {
   const msg = message.trim();
   if (!msg) return 'v0 generation failed.';
 
+  if (/fetch failed|failed to fetch|networkerror|load failed/i.test(msg)) {
+    return (
+      'Connection to Nebula timed out while v0 was still running. Your v0 credits may already have been used. ' +
+      'Open UI Studio and click Generate v0 again — it will resume the existing chat without starting a new charge.'
+    );
+  }
+
   const missingKey =
     /not set on the server and no client key/i.test(msg) ||
     /no client key was sent/i.test(msg) ||

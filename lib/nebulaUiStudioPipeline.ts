@@ -17,28 +17,102 @@ const META_SKIP = new Set([
   "version-manifest.json",
 ]);
 
-/** Build the canonical v0 brief from Master Plan §4 + §5. */
+/** Hard cap sent to v0-pro (long prompts timeout on Render and cost more). */
+export const V0_PROMPT_MAX_CHARS = 1500;
+const V0_PAGES_MAX_CHARS = 650;
+const V0_UIUX_MAX_CHARS = 450;
+
+function truncateForV0(text: string, max: number): string {
+  const t = text.trim();
+  if (t.length <= max) return t;
+  return `${t.slice(0, Math.max(0, max - 48)).trim()}… (see Master Plan for full detail)`;
+}
+
+/** Prefer route lines from §4; cap at 8 entries for first v0 pass. */
+function summarizePagesForV0(pagesNav: string): string {
+  const raw = pagesNav.trim();
+  if (!raw) return "(Home `/` + Dashboard `/dashboard` — infer from project name.)";
+
+  const routeLines: string[] = [];
+  for (const line of raw.split(/\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    if (/`\/[^`]+`/.test(trimmed) || /(?:^|\s)\/[a-z0-9][\w-]*/i.test(trimmed)) {
+      routeLines.push(trimmed.replace(/^[-*•]\s*/, "").slice(0, 140));
+    }
+  }
+
+  if (routeLines.length === 0) {
+    return truncateForV0(raw, V0_PAGES_MAX_CHARS);
+  }
+
+  const limited = routeLines.slice(0, 8);
+  if (routeLines.length > 8) {
+    limited.push(`(+ ${routeLines.length - 8} more routes in Master Plan §4)`);
+  }
+  return limited.map((l) => `- ${l}`).join("\n");
+}
+
+/** Keep palette, typography, layout bullets — not full §5 essays. */
+function summarizeUiUxForV0(uiUx: string): string {
+  const raw = uiUx.trim();
+  if (!raw) {
+    return "- shadcn/ui + Tailwind; accessible contrast; clear hierarchy; responsive nav";
+  }
+
+  const bullets: string[] = [];
+  for (const line of raw.split(/\n/)) {
+    const trimmed = line.trim().replace(/^[-*•#]+\s*/, "");
+    if (!trimmed || trimmed.length > 200) continue;
+    bullets.push(trimmed.slice(0, 120));
+    if (bullets.join("\n").length >= V0_UIUX_MAX_CHARS - 40) break;
+  }
+
+  const body =
+    bullets.length > 0
+      ? bullets.slice(0, 12).map((b) => `- ${b}`).join("\n")
+      : truncateForV0(raw, V0_UIUX_MAX_CHARS);
+  return truncateForV0(body, V0_UIUX_MAX_CHARS);
+}
+
+/** Build a concise v0 brief from Master Plan §4 + §5 (never paste full sections). */
 export function buildV0PromptMarkdown(plan: Record<string, string>): string {
   const pagesNav = String(plan["4. Pages and navigation"] ?? "").trim();
   const uiUx = String(plan["5. UI/UX design"] ?? "").trim();
-  return [
-    "# Nebula v0 generation prompt",
+  const goal = String(plan["1. Goal of the app"] ?? "").trim();
+  const oneLiner = goal
+    ? truncateForV0(goal.split(/\n/).find((l) => l.trim()) ?? goal, 160)
+    : "App from Master Plan discovery.";
+
+  let text = [
+    "# v0 UI pass (concise)",
     "",
-    "Generated from Master Plan §4 (Pages and navigation) + §5 (UI/UX design).",
+    `App: ${oneLiner}`,
     "",
-    "## Pages and navigation",
-    pagesNav || "(Infer a minimal home + dashboard from the project name and routes.)",
+    "## Pages (first pass — max 8 routes)",
+    summarizePagesForV0(pagesNav),
     "",
-    "## UI/UX design",
-    uiUx ||
-      "(Use a calm, professional default: shadcn/ui, Tailwind CSS, accessible contrast, clear hierarchy.)",
+    "## Visual system",
+    summarizeUiUxForV0(uiUx),
     "",
-    "## Output requirements",
-    "- React + Tailwind CSS + shadcn/ui",
-    "- Cover every page listed above",
-    "- Output under `app/` or `src/` with working navigation between routes",
-    "- Production-ready layout, spacing, and typography — no placeholder lorem-only shells",
+    "## Output",
+    "- React + Tailwind + shadcn/ui under `app/` or `src/`",
+    "- Working nav between routes above; production spacing/typography",
+    "- No lorem-only shells",
   ].join("\n");
+
+  if (text.length > V0_PROMPT_MAX_CHARS) {
+    text = truncateForV0(text, V0_PROMPT_MAX_CHARS);
+  }
+  return text;
+}
+
+/** Clamp any on-disk v0 prompt before sending to the v0 API. */
+export function clampV0PromptForApi(text: string): string {
+  const t = text.trim();
+  if (!t) return t;
+  if (t.length <= V0_PROMPT_MAX_CHARS) return t;
+  return truncateForV0(t, V0_PROMPT_MAX_CHARS);
 }
 
 export function readV0PromptMarkdown(workspaceRoot: string): string {

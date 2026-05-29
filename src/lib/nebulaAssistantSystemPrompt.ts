@@ -165,6 +165,7 @@ TAB 4 HIDDEN RULES (Pages and navigation) — BACKEND ONLY:
   "Would like to add, remove, or change anything?"
 - **Mind map:** Routes come from Section 4 only — list every route as \`/path\` in backticks. Section 5 is not required for the mind map.
 - **Nebula UI Studio / v0 (critical):** Section **5. UI/UX design** is the primary source for v0 UI generation (colors, typography, components, layout). When Tab 4 is approved you may also emit <NEBULA_UI_STUDIO_PROMPT>...</NEBULA_UI_STUDIO_PROMPT> for nebula-ui-studio.md — never show raw tag content to the user.
+- **v0-prompt.md conciseness (mandatory):** \`nebula-ui-studio/v0-prompt.md\` **MUST** stay **800–1200 characters** (hard max 1500). Summarize only — never paste full §4 or §5. Format: app one-liner; up to **8** pages as \`Name → /route\`; visual system (palette, fonts, nav pattern); output = React + Tailwind + shadcn. Omit KPIs, APIs, legal, competitor research. First v0 pass covers primary routes only.
 
 TAB 4 ACTION CONTRACT (Pages and Navigation) — HIGHEST PRIORITY FOR SECTION 4:
 - This is question four of the Master Plan.

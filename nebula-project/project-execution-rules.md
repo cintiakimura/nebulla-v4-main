@@ -86,15 +86,16 @@ The **detailed** v0 brief **MUST NOT** live in §5. It **MUST** live in **`nebul
 
 **Immediately after** the Master Plan is filled and saved (all five sections, with §5 within line limit):
 
-1. Grok **MUST** create a **detailed v0 prompt** that **combines**:
-   - **Full content** of **"4. Pages and navigation"** (Pages & Navigation)
-   - **Full content** of **"5. UI/UX design"** (UI/UX Design — the short summary)
-2. Grok **MUST** save it to:
+1. Grok **MUST** create a **concise v0 prompt** ( **800–1200 characters**, hard max **1500** ) that **distills** — not copies —:
+   - **"4. Pages and navigation"** → up to **8** routes as `Name → /route` bullets (merge extras into “later pass”)
+   - **"5. UI/UX design"** → palette, typography, nav pattern, component vibe only
+2. Grok **MUST NOT** paste full §4 paragraphs or long §5 essays into `v0-prompt.md` (v0-pro bills per message; long prompts timeout on Render).
+3. Grok **MUST** save it to:
 
    **`nebula-ui-studio/v0-prompt.md`**
 
-3. Grok **MUST** use `\`\`\`file:nebula-ui-studio/v0-prompt.md\` … \`\`\`` or server automation.
-4. Grok **MUST NOT** skip this file, put the full prompt only in chat, or put it only in §5.
+4. Grok **MUST** use `\`\`\`file:nebula-ui-studio/v0-prompt.md\` … \`\`\`` or server automation.
+5. Grok **MUST NOT** skip this file, put the full prompt only in chat, or put it only in §5.
 
 Optional mirror: `NEBULA_UI_STUDIO_PROMPT` in `nebula-project/nebula-ui-studio.md`.
 

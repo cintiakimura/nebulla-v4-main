@@ -53,6 +53,8 @@ import {
   writeBasicUiScaffold,
 } from "./lib/nebulaIdeWorkspaceArtifacts";
 import {
+  buildV0PromptMarkdown,
+  clampV0PromptForApi,
   hasRealV0ApiGeneration,
   readV0PromptMarkdown,
   saveCanonicalV0OriginalCopy,
@@ -72,7 +74,6 @@ import {
   v0FindChatVersionFiles,
   v0GetChat,
   v0SendChatMessage,
-  v0WaitForChatGeneration,
   type V0FileEntry,
 } from "./lib/nebulaV0Client";
 import { clearV0Pending, readV0Pending, writeV0Pending } from "./lib/nebulaV0Pending";
@@ -562,45 +563,27 @@ No approved UI code yet.
   ): { promptText: string; projectDisplayName?: string } => {
     const { nebulaUiStudioPath, workspaceRoot, masterPlanPath } = projectPathsFor(req);
     ensureNebulaUiStudioFileAt(nebulaUiStudioPath);
-    const uiStudioFile = fs.readFileSync(nebulaUiStudioPath, "utf8");
     const filePrompt = readV0PromptMarkdown(workspaceRoot);
-    const storedPrompt = extractNebulaCommentSection(uiStudioFile, "NEBULA_UI_STUDIO_PROMPT");
     const skillExcerpt = readSkillDesignSystemExcerpt(workspaceRoot);
     const masterPlan = readMasterPlanFile(masterPlanPath);
     if (!filePrompt.trim()) {
       writeV0PromptMarkdown(workspaceRoot, masterPlan);
     }
     const canonicalPrompt = readV0PromptMarkdown(workspaceRoot);
-    const uiUxDesign = String(masterPlan["5. UI/UX design"] ?? "").trim();
-    const pagesNav = String(masterPlan["4. Pages and navigation"] ?? "").trim();
-    const pagesText =
-      typeof body.pagesText === "string" && body.pagesText.trim()
-        ? String(body.pagesText).trim()
-        : pagesNav;
     const extra = typeof body.message === "string" ? body.message.trim() : "";
     const projectDisplayName =
       typeof body.projectDisplayName === "string" && body.projectDisplayName.trim()
         ? String(body.projectDisplayName).trim()
         : undefined;
-    const promptText = canonicalPrompt.trim()
-      ? [canonicalPrompt, skillExcerpt ? `Design system (SKILL.md):\n${skillExcerpt}` : "", extra]
-          .filter(Boolean)
-          .join("\n\n")
-      : [
-          uiUxDesign
-            ? `UI/UX Design (Master Plan section 5 — primary source for v0):\n${uiUxDesign}`
-            : "",
-          storedPrompt && storedPrompt !== "No prompt generated yet."
-            ? `Nebula UI Studio prompt file:\n${storedPrompt}`
-            : "",
-          skillExcerpt ? `Design system (SKILL.md):\n${skillExcerpt}` : "",
-          pagesText ? `Pages and navigation (section 4 — structure reference):\n${pagesText}` : "",
-          extra,
-          "Generate production-ready UI with React, Tailwind CSS, and shadcn/ui. Output app files under src/ or app/.",
-        ]
+    const skillBlock = skillExcerpt
+      ? `Design system (SKILL.md):\n${skillExcerpt.slice(0, 280)}`
+      : "";
+    const promptTextRaw = canonicalPrompt.trim()
+      ? [canonicalPrompt, skillBlock, extra].filter(Boolean).join("\n\n")
+      : [buildV0PromptMarkdown(masterPlan as Record<string, string>), skillBlock, extra]
           .filter(Boolean)
           .join("\n\n");
-    return { promptText, projectDisplayName };
+    return { promptText: clampV0PromptForApi(promptTextRaw), projectDisplayName };
   };
 
   const applyV0FilesToWorkspace = (
@@ -751,21 +734,38 @@ No approved UI code yet.
     return { ok: true, pending: false, ...applied, source: "v0" };
   };
 
-  const runV0UiStudioPass = async (opts: {
-    req: express.Request;
-    message: string;
-    chatId?: string;
-    projectDisplayName?: string;
-  }): Promise<
+  const V0_HTTP_POLL_ROUNDS = 8;
+  const V0_HTTP_POLL_MS = 2500;
+  const v0PollSleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+  type V0PassResult =
     | {
         ok: true;
         chatId: string;
         written: string[];
         skipped: string[];
         demoUrl?: string;
+        pending?: false;
+        source?: "v0";
       }
-    | { ok: false; status: number; error: string; hint?: string }
-  > => {
+    | {
+        ok: false;
+        status: number;
+        error: string;
+        hint?: string;
+        pending?: boolean;
+        chatId?: string;
+      };
+
+  /** Start or resume v0, poll briefly (Render-safe), return files or pending chatId. */
+  const runV0UiStudioPass = async (opts: {
+    req: express.Request;
+    message: string;
+    chatId?: string;
+    projectDisplayName?: string;
+    /** When true, never call v0CreateChat — only poll an existing pending chat. */
+    resumeOnly?: boolean;
+  }): Promise<V0PassResult> => {
     const keyRes = resolveV0ApiKeyFromRequest(opts.req);
     if (keyRes.ok === false) {
       return {
@@ -776,33 +776,99 @@ No approved UI code yet.
       };
     }
 
-    const v0Call = opts.chatId
-      ? await v0SendChatMessage(keyRes.apiKey, opts.chatId, opts.message)
-      : await v0CreateChat(keyRes.apiKey, opts.message);
+    const { workspaceRoot } = projectPathsFor(opts.req);
+    let chatId = opts.chatId?.trim() || "";
+    let promptPreview = opts.message.slice(0, 500);
 
-    if (v0Call.ok === false) {
-      return { ok: false, status: v0Call.status, error: v0Call.error };
+    if (!chatId && opts.resumeOnly) {
+      const pending = readV0Pending(workspaceRoot);
+      chatId = pending?.chatId ?? "";
+      if (pending?.promptPreview) promptPreview = pending.promptPreview;
     }
 
-    let v0Files = v0Call.result.files;
-    let demoUrl = v0Call.result.demoUrl;
-    if (v0Files.length === 0 || v0Call.result.versionStatus === "pending") {
-      const wait = await v0WaitForChatGeneration(keyRes.apiKey, v0Call.result.chatId);
-      if (wait.ok === false) {
-        return { ok: false, status: 422, error: wait.error };
+    if (!chatId && !opts.resumeOnly) {
+      const existing = readV0Pending(workspaceRoot);
+      if (existing?.chatId && !hasRealV0ApiGeneration(workspaceRoot)) {
+        chatId = existing.chatId;
+        if (existing.promptPreview) promptPreview = existing.promptPreview;
       }
-      v0Files = wait.files;
-      demoUrl = wait.demoUrl ?? demoUrl;
     }
 
-    const applied = applyV0FilesToWorkspace(req, v0Files, {
-      chatId: v0Call.result.chatId,
-      message: opts.message,
-      demoUrl,
-      projectDisplayName: opts.projectDisplayName,
-    });
-    if (applied.ok === false) return applied;
-    return applied;
+    if (!chatId && !opts.resumeOnly) {
+      const v0Call = await v0CreateChat(keyRes.apiKey, opts.message);
+      if (v0Call.ok === false) {
+        return { ok: false, status: v0Call.status, error: v0Call.error };
+      }
+      chatId = v0Call.result.chatId;
+      writeV0Pending(workspaceRoot, {
+        chatId,
+        startedAt: Date.now(),
+        projectDisplayName: opts.projectDisplayName,
+        promptPreview,
+      });
+      if (v0Call.result.files.length > 0) {
+        const applied = applyV0FilesToWorkspace(req, v0Call.result.files, {
+          chatId,
+          message: opts.message,
+          demoUrl: v0Call.result.demoUrl,
+          projectDisplayName: opts.projectDisplayName,
+        });
+        if (applied.ok === true) return { ...applied, source: "v0" };
+      }
+    } else if (chatId && opts.message.trim() && opts.chatId) {
+      const sent = await v0SendChatMessage(keyRes.apiKey, chatId, opts.message);
+      if (sent.ok === false) {
+        return { ok: false, status: sent.status, error: sent.error };
+      }
+      writeV0Pending(workspaceRoot, {
+        chatId,
+        startedAt: Date.now(),
+        projectDisplayName: opts.projectDisplayName,
+        promptPreview: opts.message.slice(0, 500),
+      });
+      if (sent.result.files.length > 0) {
+        const applied = applyV0FilesToWorkspace(req, sent.result.files, {
+          chatId,
+          message: opts.message,
+          demoUrl: sent.result.demoUrl,
+          projectDisplayName: opts.projectDisplayName,
+        });
+        if (applied.ok === true) return { ...applied, source: "v0" };
+      }
+    } else if (!chatId) {
+      return {
+        ok: false,
+        status: 400,
+        error: "No v0 chat in progress. Start generation first.",
+        hint: "Call /api/nebula-ui-studio/v0-start or Generate UI with v0.",
+      };
+    }
+
+    for (let i = 0; i < V0_HTTP_POLL_ROUNDS; i++) {
+      const pass = await runV0PollPass(
+        opts.req,
+        chatId,
+        opts.projectDisplayName,
+        promptPreview,
+      );
+      if (pass.ok === true && pass.pending === false) {
+        return { ...pass, source: "v0" };
+      }
+      if (pass.ok === false) {
+        return pass;
+      }
+      if (i < V0_HTTP_POLL_ROUNDS - 1) await v0PollSleep(V0_HTTP_POLL_MS);
+    }
+
+    return {
+      ok: false,
+      status: 200,
+      pending: true,
+      chatId,
+      error: "v0 is still generating.",
+      hint:
+        "Credits may already have been used. Click Generate again to resume polling — no new v0 chat is created until files land.",
+    };
   };
 
   /** Hide legacy bundled Grok/orchestration copy in API responses so the Master Plan UI stays blank until real sections are written. */
@@ -2035,12 +2101,26 @@ No approved UI code yet.
     try {
       const body = req.body || {};
       const { promptText, projectDisplayName } = buildV0PromptTextForRequest(req, body);
+      if (!promptText.trim()) {
+        return res.status(400).json({
+          error: "v0-prompt.md is empty — save Master Plan §4+§5 first.",
+        });
+      }
       const pass = await runV0UiStudioPass({
         req,
         message: promptText,
         projectDisplayName,
       });
       if (pass.ok === false) {
+        if (pass.pending && pass.chatId) {
+          return res.json({
+            ok: true,
+            pending: true,
+            chatId: pass.chatId,
+            written: [],
+            hint: pass.hint ?? pass.error,
+          });
+        }
         const errLower = String(pass.error ?? "").toLowerCase();
         const creditsLike =
           errLower.includes("credit") ||
@@ -2071,6 +2151,7 @@ No approved UI code yet.
       return res.json({
         ok: true,
         source: "v0",
+        pending: false,
         chatId: pass.chatId,
         written: pass.written,
         skipped: pass.skipped,
@@ -2097,6 +2178,15 @@ No approved UI code yet.
           typeof body.projectDisplayName === "string" ? body.projectDisplayName : undefined,
       });
       if (pass.ok === false) {
+        if (pass.pending && pass.chatId) {
+          return res.json({
+            ok: true,
+            pending: true,
+            chatId: pass.chatId,
+            written: [],
+            hint: pass.hint ?? pass.error,
+          });
+        }
         return res.status(pass.status).json({
           error: pass.hint ?? pass.error,
           hint: pass.hint,
@@ -2105,6 +2195,7 @@ No approved UI code yet.
       return res.json({
         ok: true,
         source: "v0",
+        pending: false,
         chatId: pass.chatId,
         written: pass.written,
         skipped: pass.skipped,
@@ -3293,61 +3384,12 @@ ${answer.slice(0, 8000)}`;
       }
 
       const data = await response.json();
-      let codeExtraTokens = 0;
       let responseText = data.choices?.[0]?.message?.content || "";
-      /** Grok 4 text before optional Grok Code swap — used for Master Plan + Grok B summaries. */
-      let grok4PlanningCapture = responseText;
+      /** Grok 4 planning text — used for Master Plan + Grok B summaries. */
+      const grok4PlanningCapture = responseText;
 
-      if (/\bSTART_CODING\b/i.test(responseText)) {
-        const workflowContext = buildProjectWorkflowExecutionContext(req);
-        const codeModel = process.env.GROK_CODE_MODEL?.trim() || "grok-code-fast-1";
-        const codeSystemPrompt = `You are now in strict coding mode (same ${MAIN_AI_ENV_VAR} as the main brain).
-Follow project-execution-rules.md exactly (single orchestration file).
-Use this context:
-${workflowContext}
-
-CRITICAL OUTPUT CONTRACT (no deviation):
-- Do NOT paste implementation as casual markdown code fences in chat — use file blocks the server can apply.
-- Output real code artifacts only: \`\`\`file:relative/path\` … \`\`\` or \`File: path\` + fenced body (see /api/files/apply-generated).
-- Do NOT output plain-language planning, recap, policy restatement, or narrative explanation.
-- If a file must be created/updated, include explicit path + full content or patch for that file.
-- Prefer one or more clear file blocks over prose.
-- If information is missing, make minimal safe assumptions and proceed with best-effort code.`;
-        try {
-          const codeRes = await fetch("https://api.x.ai/v1/chat/completions", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${apiKey}`,
-            },
-            body: JSON.stringify({
-              model: codeModel,
-              messages: [{ role: "system", content: codeSystemPrompt }, ...messagesForApi.slice(-12)],
-              stream: false,
-            }),
-          });
-          if (codeRes.ok) {
-            const codeData = await codeRes.json();
-            codeExtraTokens = xaiUsageTotal(codeData.usage);
-            const codeText = codeData.choices?.[0]?.message?.content || "";
-            if (codeText.trim()) {
-              responseText = codeText;
-              data.choices = [
-                {
-                  message: {
-                    content: codeText,
-                    planningPhase: grok4PlanningCapture,
-                  },
-                },
-              ];
-            }
-          } else {
-            console.error("[GROK CODE] handoff failed:", await codeRes.text());
-          }
-        } catch (e) {
-          console.error("[GROK CODE] handoff error:", e);
-        }
-      }
+      // START_CODING: return Grok-4 planning immediately; IDE runs Grok Code via /api/grok/go-code
+      // with live activity (avoids blocking this request for minutes with no client feedback).
 
   // Grok B (writer): run as soon as meaningful summary content appears.
   // ANSWER_Qn still works, but summaries alone are enough to start writing immediately.
@@ -3422,9 +3464,6 @@ CRITICAL OUTPUT CONTRACT (no deviation):
         const mainTok = xaiUsageTotal(data.usage);
         if (convUserId !== "anonymous" && mainTok > 0) {
           await addTokens(convUserId, mainTok, "grok-4");
-        }
-        if (convUserId !== "anonymous" && codeExtraTokens > 0) {
-          await addTokens(convUserId, codeExtraTokens, "grok-4");
         }
       } catch (btErr) {
         console.warn("[billing] addTokens:", btErr);

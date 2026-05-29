@@ -164,6 +164,7 @@ BUILD_MODE is active for this turn. Do not explain code in chat — emit file ar
 1) Optional \`<START_MASTERPLAN>…</END_MASTERPLAN>\` if the plan changed — use all five section headers (see MASTER PLAN SECTION SEPARATION).
 2) \`START_CODING\` on its own line when ready.
 3) One or more \`\`\`file:relative/path\` … \`\`\` blocks (paths under src/, app/, pages/, components/, public/).
+4) Optional \`\`\`file:nebula-ui-studio/v0-prompt.md\` … \`\`\` — **concise v0 brief only (800–1200 chars max)**. Bullet summary: app one-liner, up to 8 \`/routes\`, palette/fonts/layout, shadcn+Tailwind output. **Never paste full Master Plan §4 or §5** (server also caps length; long prompts fail and waste v0 credits).
 `.trim();
 }
 

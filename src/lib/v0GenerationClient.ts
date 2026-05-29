@@ -53,9 +53,17 @@ export async function runV0GenerationWithPolling(options?: {
         onProgress?.(`v0 wrote ${start.written.length} file(s)`, 'success');
         return start;
       }
+      if (start.pending && start.chatId) {
+        onProgress?.('v0 chat started — waiting for files (this can take 1–3 min)', 'info');
+      }
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'v0 start failed';
-      return { ok: false, error: formatV0UiError(msg, hasLocalV0ApiKey()) };
+      onProgress?.(
+        /fetch failed|failed to fetch/i.test(msg)
+          ? 'Request timed out — resuming in-progress v0 chat if one exists…'
+          : `v0 start failed (${msg}) — trying resume…`,
+        'warn',
+      );
     }
   } else {
     onProgress?.('Resuming v0 generation…', 'info');

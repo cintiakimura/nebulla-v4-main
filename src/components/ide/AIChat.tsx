@@ -26,6 +26,7 @@ import { runMasterPlanUiPipelineWithV0, runPostCodingWorkspaceSync } from '../..
 import {
   clearIdeWorkspaceMetaCache,
   detectBuildModeIntent,
+  detectOnboardingBuildStart,
   fetchIdeWorkspaceMeta,
 } from '../../lib/ideWorkspaceChatContext';
 import { ideContextSnippetForChat, useIdeWorkspace } from '@/components/ide/IdeWorkspaceContext';
@@ -652,16 +653,18 @@ export function AIChat() {
     let scheduledTts = false;
 
     try {
-      if (buildMode) {
+      if (showWorkActivity) {
         setGrokActivity((prev) =>
           advanceGrokActivity(prev, 1, {
-            currentAction: 'Calling Grok API with Master Plan and workspace context…',
+            currentAction: onboardingBuildStart
+              ? 'Grok is writing your Master Plan from discovery…'
+              : 'Calling Grok API with Master Plan and workspace context…',
             log: { message: 'POST /api/grok/chat — waiting for Grok response', kind: 'info' },
           }),
         );
       }
 
-      const stopGrokWait = buildMode
+      const stopGrokWait = showWorkActivity
         ? startGrokActivityWaitTicker('Waiting for Grok', (msg, kind, options) =>
             pushActivity(msg, kind, options),
           )
@@ -682,7 +685,7 @@ export function AIChat() {
       }
       const raw = assistantContent.trim();
       const masterPlanSource = (planningPhase || raw).trim();
-      if (buildMode) {
+      if (showWorkActivity) {
         pushActivity(`Grok replied (${raw.length.toLocaleString()} chars)`, 'success');
         setGrokActivity((prev) =>
           advanceGrokActivity(prev, 2, {
@@ -694,7 +697,7 @@ export function AIChat() {
 
       const mpSaved = await persistMasterPlanFromAssistantSource(
         masterPlanSource,
-        buildMode ? pushActivity : undefined,
+        showWorkActivity ? pushActivity : undefined,
       );
 
       if (/<NEBULA_UI_STUDIO_PROMPT>/i.test(masterPlanSource)) {
@@ -705,7 +708,7 @@ export function AIChat() {
 
       let masterPlanPipeline: Awaited<ReturnType<typeof runMasterPlanUiPipelineWithV0>> = {};
       if (mpSaved > 0) {
-        if (buildMode) {
+        if (showWorkActivity) {
           setGrokActivity((prev) =>
             advanceGrokActivity(prev, 3, {
               currentAction: 'UI Studio pipeline — v0 prompt, mind map, optional v0…',
@@ -723,7 +726,7 @@ export function AIChat() {
         masterPlanPipeline = await runMasterPlanUiPipelineWithV0({
           projectName,
           autoV0: true,
-          onProgress: buildMode ? pushActivity : undefined,
+          onProgress: showWorkActivity ? pushActivity : undefined,
         });
         if ((masterPlanPipeline.mindMapPageCount ?? 0) > 0 || masterPlanPipeline.v0Ok) {
           try {
@@ -780,10 +783,10 @@ export function AIChat() {
               masterPlanPipeline.mindMapPageCount != null && masterPlanPipeline.mindMapPageCount > 0
                 ? `Mind map: ${masterPlanPipeline.mindMapPageCount} page(s).`
                 : undefined;
-            return advanceGrokActivity(prev, buildMode ? 4 : 2, {
+            return advanceGrokActivity(prev, showWorkActivity ? 4 : 2, {
               currentAction: 'Grok Code generating files — applying to workspace…',
               log: { message: 'Running Grok Code / file apply', kind: 'info' },
-              ...(mm ? { stepDetail: { index: buildMode ? 3 : 1, detail: mm } } : {}),
+              ...(mm ? { stepDetail: { index: showWorkActivity ? 3 : 1, detail: mm } } : {}),
             });
           });
         }
@@ -798,11 +801,11 @@ export function AIChat() {
         });
         if (coding.ran) {
           setGrokActivity((prev) =>
-            advanceGrokActivity(prev, buildMode ? 5 : 3, {
+            advanceGrokActivity(prev, showWorkActivity ? 5 : 3, {
               currentAction: coding.statusMessage || 'Syncing mind map, explorer, and preview…',
               ...(coding.statusMessage
                 ? {
-                    stepDetail: { index: buildMode ? 4 : 2, detail: coding.statusMessage },
+                    stepDetail: { index: showWorkActivity ? 4 : 2, detail: coding.statusMessage },
                     log: { message: coding.statusMessage, kind: 'success' },
                   }
                 : {}),

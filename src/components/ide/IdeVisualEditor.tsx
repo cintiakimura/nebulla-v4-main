@@ -60,6 +60,8 @@ type StudioStatus = {
   v0PromptLength?: number;
   hasRealV0?: boolean;
   hasV0ApiKey?: boolean;
+  v0Pending?: boolean;
+  v0PendingChatId?: string;
   eligibilityReason?: string;
 };
 
@@ -386,6 +388,7 @@ export function IdeVisualEditor({
   const [studioStatus, setStudioStatus] = useState<StudioStatus | null>(null);
   const v0RunningRef = useRef(false);
   const autoV0StartedRef = useRef(false);
+  const resumeV0StartedRef = useRef(false);
   const runV0GenerationRef = useRef<() => Promise<void>>(async () => {});
   const v0StorageKey = `nebulla-v0-chat-${projectLabel.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 48)}`;
   const [v0ChatId, setV0ChatId] = useState<string | null>(() => {
@@ -856,7 +859,10 @@ export function IdeVisualEditor({
         return;
       }
 
-      const data = await runV0GenerationWithPolling({ projectDisplayName: projectLabel });
+      const data = await runV0GenerationWithPolling({
+        projectDisplayName: projectLabel,
+        resumeOnly: Boolean(studioStatus?.v0Pending && !studioStatus?.hasRealV0),
+      });
       if (data.error && !data.written?.length) {
         throw new Error(data.hint || data.error);
       }
@@ -927,6 +933,14 @@ export function IdeVisualEditor({
   };
 
   runV0GenerationRef.current = runV0Generation;
+
+  useEffect(() => {
+    if (!studioStatus?.v0Pending || studioStatus.hasRealV0) return;
+    if (hasV0ApiKey !== true || resumeV0StartedRef.current || busy || v0RunningRef.current) return;
+    resumeV0StartedRef.current = true;
+    setMockNotice('Resuming in-progress v0 generation (no new charge)…');
+    void runV0GenerationRef.current();
+  }, [studioStatus?.v0Pending, studioStatus?.hasRealV0, hasV0ApiKey, busy]);
 
   useEffect(() => {
     if (eligible !== false || hasV0ApiKey !== true || !studioStatus?.v0PromptExists) return;
@@ -1135,6 +1149,18 @@ export function IdeVisualEditor({
           {mockNotice}{' '}
           <button type="button" className="underline opacity-80 hover:opacity-100" onClick={() => setMockNotice('')}>
             Dismiss
+          </button>
+        </div>
+      ) : studioStatus?.v0Pending && !studioStatus.hasRealV0 ? (
+        <div className="flex flex-wrap items-center gap-2 border-b border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-100">
+          <span>v0 is still generating from a previous run. Credits may already have been used.</span>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => void runV0Generation()}
+            className="rounded-md bg-amber-500/20 px-2 py-0.5 font-medium text-amber-50 hover:bg-amber-500/30 disabled:opacity-40"
+          >
+            {busy ? 'Resuming…' : 'Resume v0 (no new charge)'}
           </button>
         </div>
       ) : null}
