@@ -22,7 +22,7 @@ import {
   runGoCodeAndApply,
 } from '../../lib/nebulaGrokCodingPipeline';
 import { syncActiveCloudProjectFromSession } from '../../lib/nebulaCloud';
-import { runMasterPlanUiPipeline, runPostCodingWorkspaceSync } from '../../lib/ideArtifactSync';
+import { runMasterPlanUiPipelineWithV0, runPostCodingWorkspaceSync } from '../../lib/ideArtifactSync';
 import {
   clearIdeWorkspaceMetaCache,
   detectBuildModeIntent,
@@ -618,7 +618,6 @@ export function AIChat() {
         CHAT_WORK_STEPS,
         {
           subhead: 'Master Plan → Grok Code → files on disk.',
-          footer: 'Large coding passes can take 1–3 minutes on the server.',
           initialLog: `Build mode — "${text.slice(0, 80)}${text.length > 80 ? '…' : ''}"`,
         },
       );
@@ -704,7 +703,7 @@ export function AIChat() {
 
       const { displayText, hadCodingTag } = formatAssistantForIdeChatDisplay(raw);
 
-      let masterPlanPipeline: Awaited<ReturnType<typeof runMasterPlanUiPipeline>> = {};
+      let masterPlanPipeline: Awaited<ReturnType<typeof runMasterPlanUiPipelineWithV0>> = {};
       if (mpSaved > 0) {
         if (buildMode) {
           setGrokActivity((prev) =>
@@ -721,7 +720,7 @@ export function AIChat() {
             }),
           );
         }
-        masterPlanPipeline = await runMasterPlanUiPipeline({
+        masterPlanPipeline = await runMasterPlanUiPipelineWithV0({
           projectName,
           autoV0: true,
           onProgress: buildMode ? pushActivity : undefined,
@@ -820,7 +819,7 @@ export function AIChat() {
             window.dispatchEvent(new CustomEvent('nebula-open-master-plan'));
           }
           if (!masterPlanPipeline.v0Ok) {
-            masterPlanPipeline = await runMasterPlanUiPipeline({
+            masterPlanPipeline = await runMasterPlanUiPipelineWithV0({
               projectName,
               autoV0: true,
               onProgress: pushActivity,
@@ -1091,7 +1090,6 @@ export function AIChat() {
     setSendError(null);
     beginCodingActivity('Go — full coding pass', GO_WORK_STEPS, {
       subhead: 'Pre-coding summary → Grok Code → file apply → mind map & v0.',
-      footer: 'Server-side coding often takes 1–3 minutes — watch the activity stream below.',
       initialLog: userNote ? `Go started — focus: ${userNote.slice(0, 120)}` : 'Go started — full implementation pass',
     });
 
@@ -1145,7 +1143,7 @@ export function AIChat() {
           log: { message: 'POST /api/ide/master-plan-ui-pipeline', kind: 'info' },
         }),
       );
-      const pipeline = await runMasterPlanUiPipeline({
+      const pipeline = await runMasterPlanUiPipelineWithV0({
         projectName,
         autoV0: true,
         onProgress: pushActivity,

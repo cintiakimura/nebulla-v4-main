@@ -154,30 +154,9 @@ export function IdeGrokActivityPanel({ activity }: { activity: GrokActivityStatu
                 );
               })}
             </ol>
-          ) : isWork && activity.steps.length > 0 ? (
-            <div className="flex flex-wrap items-center gap-1.5">
-              {activity.steps.map((step, i) => {
-                const done = i < activity.activeStepIndex;
-                const active = i === activity.activeStepIndex;
-                return (
-                  <span
-                    key={`${step.label}-${i}`}
-                    title={step.detail ?? step.label}
-                    className={cn(
-                      'h-1.5 w-6 rounded-full transition-colors',
-                      done ? 'bg-emerald-500/70' : active ? 'animate-pulse bg-primary' : 'bg-white/10',
-                    )}
-                    aria-hidden
-                  />
-                );
-              })}
-              <span className="ml-1 text-[10px] text-muted-foreground/70">
-                Step {Math.min(activity.activeStepIndex + 1, activity.steps.length)} / {activity.steps.length}
-              </span>
-            </div>
           ) : null}
 
-          {activity.footer ? (
+          {activity.footer && !isWork ? (
             <p className="type-body-md leading-relaxed text-muted-foreground/90">{activity.footer}</p>
           ) : null}
         </div>

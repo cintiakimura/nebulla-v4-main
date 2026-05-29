@@ -69,10 +69,13 @@ import {
   normalizeV0WriteRel,
   pickPrimaryUiFile,
   v0CreateChat,
+  v0FindChatVersionFiles,
+  v0GetChat,
   v0SendChatMessage,
   v0WaitForChatGeneration,
   type V0FileEntry,
 } from "./lib/nebulaV0Client";
+import { clearV0Pending, readV0Pending, writeV0Pending } from "./lib/nebulaV0Pending";
 import { NEBULA_V0_KEY_SETUP_HINT, resolveV0ApiKey, resolveV0ApiKeyFromRequest, V0_ENV_VAR } from "./lib/nebulaV0Resolver";
 import { PRE_CODING_SUMMARY_KEY } from "./lib/masterPlanSections";
 import {
@@ -553,6 +556,201 @@ No approved UI code yet.
     return { written, skipped, filesMap };
   };
 
+  const buildV0PromptTextForRequest = (
+    req: express.Request,
+    body: Record<string, unknown>,
+  ): { promptText: string; projectDisplayName?: string } => {
+    const { nebulaUiStudioPath, workspaceRoot, masterPlanPath } = projectPathsFor(req);
+    ensureNebulaUiStudioFileAt(nebulaUiStudioPath);
+    const uiStudioFile = fs.readFileSync(nebulaUiStudioPath, "utf8");
+    const filePrompt = readV0PromptMarkdown(workspaceRoot);
+    const storedPrompt = extractNebulaCommentSection(uiStudioFile, "NEBULA_UI_STUDIO_PROMPT");
+    const skillExcerpt = readSkillDesignSystemExcerpt(workspaceRoot);
+    const masterPlan = readMasterPlanFile(masterPlanPath);
+    if (!filePrompt.trim()) {
+      writeV0PromptMarkdown(workspaceRoot, masterPlan);
+    }
+    const canonicalPrompt = readV0PromptMarkdown(workspaceRoot);
+    const uiUxDesign = String(masterPlan["5. UI/UX design"] ?? "").trim();
+    const pagesNav = String(masterPlan["4. Pages and navigation"] ?? "").trim();
+    const pagesText =
+      typeof body.pagesText === "string" && body.pagesText.trim()
+        ? String(body.pagesText).trim()
+        : pagesNav;
+    const extra = typeof body.message === "string" ? body.message.trim() : "";
+    const projectDisplayName =
+      typeof body.projectDisplayName === "string" && body.projectDisplayName.trim()
+        ? String(body.projectDisplayName).trim()
+        : undefined;
+    const promptText = canonicalPrompt.trim()
+      ? [canonicalPrompt, skillExcerpt ? `Design system (SKILL.md):\n${skillExcerpt}` : "", extra]
+          .filter(Boolean)
+          .join("\n\n")
+      : [
+          uiUxDesign
+            ? `UI/UX Design (Master Plan section 5 — primary source for v0):\n${uiUxDesign}`
+            : "",
+          storedPrompt && storedPrompt !== "No prompt generated yet."
+            ? `Nebula UI Studio prompt file:\n${storedPrompt}`
+            : "",
+          skillExcerpt ? `Design system (SKILL.md):\n${skillExcerpt}` : "",
+          pagesText ? `Pages and navigation (section 4 — structure reference):\n${pagesText}` : "",
+          extra,
+          "Generate production-ready UI with React, Tailwind CSS, and shadcn/ui. Output app files under src/ or app/.",
+        ]
+          .filter(Boolean)
+          .join("\n\n");
+    return { promptText, projectDisplayName };
+  };
+
+  const applyV0FilesToWorkspace = (
+    req: express.Request,
+    v0Files: V0FileEntry[],
+    opts: { chatId: string; message: string; demoUrl?: string; projectDisplayName?: string },
+  ):
+    | {
+        ok: true;
+        chatId: string;
+        written: string[];
+        skipped: string[];
+        demoUrl?: string;
+      }
+    | { ok: false; status: number; error: string } => {
+    const { workspaceRoot, nebulaUiStudioPath, masterPlanPath } = projectPathsFor(req);
+    const allFilesMap: Record<string, string> = {};
+    for (const f of v0Files) {
+      const rel = normalizeV0WriteRel(f.name);
+      if (rel) allFilesMap[rel] = f.content;
+    }
+    if (Object.keys(allFilesMap).length === 0) {
+      return {
+        ok: false,
+        status: 422,
+        error:
+          "v0 returned no usable files. Ensure nebula-ui-studio/v0-prompt.md has Master Plan §4+§5 content, then try again.",
+      };
+    }
+
+    const projectNameSafe = sanitizeProjectNameForVersions(
+      opts.projectDisplayName?.trim() || getProjectKeyFromRequest(req),
+    );
+    markV0FirstGenerationComplete(workspaceRoot, projectNameSafe, {
+      files: allFilesMap,
+      source: "v0-api",
+      notes: "Nebula UI Studio v0 generation",
+    });
+    saveCanonicalV0OriginalCopy(workspaceRoot, allFilesMap);
+    seedPreviewModelFromMasterPlan(
+      workspaceRoot,
+      masterPlanPath,
+      opts.projectDisplayName?.trim() || "Untitled Project",
+    );
+
+    const { written, skipped } = writeV0FilesToWorkspace(
+      workspaceRoot,
+      v0Files.map((f) => ({ name: normalizeV0WriteRel(f.name), content: f.content })),
+    );
+
+    if (written.length === 0 && skipped.length > 0) {
+      return {
+        ok: false,
+        status: 422,
+        error: `v0 returned ${v0Files.length} file(s) but none matched allowed paths (src/, app/, components/, etc.). Skipped: ${skipped.slice(0, 6).join(", ")}`,
+      };
+    }
+
+    ensureNebulaUiStudioFileAt(nebulaUiStudioPath);
+    const existing = fs.readFileSync(nebulaUiStudioPath, "utf8");
+    const promptFromDisk = readV0PromptMarkdown(workspaceRoot) || opts.message.slice(0, 120000);
+    const withPrompt = upsertNebulaCommentSection(existing, "NEBULA_UI_STUDIO_PROMPT", promptFromDisk);
+    const primaryCode = pickPrimaryUiFile(v0Files);
+    const withCode = upsertNebulaCommentSection(withPrompt, "NEBULA_UI_STUDIO_CODE", primaryCode);
+    fs.writeFileSync(nebulaUiStudioPath, withCode, "utf8");
+    clearV0Pending(workspaceRoot);
+
+    return {
+      ok: true,
+      chatId: opts.chatId,
+      written,
+      skipped,
+      demoUrl: opts.demoUrl,
+    };
+  };
+
+  const runV0PollPass = async (
+    req: express.Request,
+    chatId: string,
+    projectDisplayName?: string,
+    promptText?: string,
+  ): Promise<
+    | { ok: true; pending: true; chatId: string; versionStatus?: string }
+    | {
+        ok: true;
+        pending: false;
+        chatId: string;
+        written: string[];
+        skipped: string[];
+        demoUrl?: string;
+        source: "v0";
+      }
+    | { ok: false; status: number; error: string; hint?: string }
+  > => {
+    const keyRes = resolveV0ApiKeyFromRequest(req);
+    if (keyRes.ok === false) {
+      return {
+        ok: false,
+        status: keyRes.code === "INVALID_LENGTH" ? 400 : 401,
+        error: keyRes.message,
+        hint: keyRes.hint,
+      };
+    }
+
+    const got = await v0GetChat(keyRes.apiKey, chatId);
+    if (got.ok === false) {
+      return { ok: false, status: got.status, error: got.error };
+    }
+
+    let v0Files = got.result.files;
+    let demoUrl = got.result.demoUrl;
+    const status = got.result.versionStatus;
+
+    if (v0Files.length === 0 && status === "completed") {
+      v0Files = await v0FindChatVersionFiles(keyRes.apiKey, chatId);
+    }
+
+    if (v0Files.length === 0) {
+      if (status === "failed") {
+        const { workspaceRoot } = projectPathsFor(req);
+        clearV0Pending(workspaceRoot);
+        return {
+          ok: false,
+          status: 422,
+          error: "v0 generation failed on the v0 side. Try again with a shorter prompt.",
+        };
+      }
+      if (status === "pending" || status === undefined) {
+        return { ok: true, pending: true, chatId, versionStatus: status ?? "pending" };
+      }
+      return {
+        ok: false,
+        status: 422,
+        error:
+          "v0 finished but returned no files. Check nebula-ui-studio/v0-prompt.md or regenerate on v0.dev.",
+      };
+    }
+
+    const pending = readV0Pending(projectPathsFor(req).workspaceRoot);
+    const message = promptText ?? pending?.promptPreview ?? "v0 UI generation";
+    const applied = applyV0FilesToWorkspace(req, v0Files, {
+      chatId,
+      message,
+      demoUrl,
+      projectDisplayName,
+    });
+    if (applied.ok === false) return applied;
+    return { ok: true, pending: false, ...applied, source: "v0" };
+  };
+
   const runV0UiStudioPass = async (opts: {
     req: express.Request;
     message: string;
@@ -565,7 +763,6 @@ No approved UI code yet.
         written: string[];
         skipped: string[];
         demoUrl?: string;
-        primaryCode: string;
       }
     | { ok: false; status: number; error: string; hint?: string }
   > => {
@@ -598,65 +795,14 @@ No approved UI code yet.
       demoUrl = wait.demoUrl ?? demoUrl;
     }
 
-    const { workspaceRoot, nebulaUiStudioPath, masterPlanPath } = projectPathsFor(opts.req);
-    const allFilesMap: Record<string, string> = {};
-    for (const f of v0Files) {
-      const rel = normalizeV0WriteRel(f.name);
-      if (rel) allFilesMap[rel] = f.content;
-    }
-    if (Object.keys(allFilesMap).length === 0) {
-      return {
-        ok: false,
-        status: 422,
-        error:
-          "v0 returned no usable files. Ensure nebula-ui-studio/v0-prompt.md has Master Plan §4+§5 content, then try again.",
-      };
-    }
-
-    const projectNameSafe = sanitizeProjectNameForVersions(
-      opts.projectDisplayName?.trim() || getProjectKeyFromRequest(opts.req)
-    );
-    markV0FirstGenerationComplete(workspaceRoot, projectNameSafe, {
-      files: allFilesMap,
-      source: "v0-api",
-      notes: "Nebula UI Studio v0 generation",
-    });
-    saveCanonicalV0OriginalCopy(workspaceRoot, allFilesMap);
-    seedPreviewModelFromMasterPlan(
-      workspaceRoot,
-      masterPlanPath,
-      opts.projectDisplayName?.trim() || "Untitled Project"
-    );
-
-    const { written, skipped } = writeV0FilesToWorkspace(
-      workspaceRoot,
-      v0Files.map((f) => ({ name: normalizeV0WriteRel(f.name), content: f.content }))
-    );
-
-    if (written.length === 0 && skipped.length > 0) {
-      return {
-        ok: false,
-        status: 422,
-        error: `v0 returned ${v0Files.length} file(s) but none matched allowed paths (src/, app/, components/, etc.). Skipped: ${skipped.slice(0, 6).join(", ")}`,
-      };
-    }
-
-    ensureNebulaUiStudioFileAt(nebulaUiStudioPath);
-    const existing = fs.readFileSync(nebulaUiStudioPath, "utf8");
-    const promptFromDisk = readV0PromptMarkdown(workspaceRoot) || opts.message.slice(0, 120000);
-    const withPrompt = upsertNebulaCommentSection(existing, "NEBULA_UI_STUDIO_PROMPT", promptFromDisk);
-    const primaryCode = pickPrimaryUiFile(v0Files);
-    const withCode = upsertNebulaCommentSection(withPrompt, "NEBULA_UI_STUDIO_CODE", primaryCode);
-    fs.writeFileSync(nebulaUiStudioPath, withCode, "utf8");
-
-    return {
-      ok: true,
+    const applied = applyV0FilesToWorkspace(req, v0Files, {
       chatId: v0Call.result.chatId,
-      written,
-      skipped,
-      demoUrl: v0Call.result.demoUrl ?? demoUrl,
-      primaryCode,
-    };
+      message: opts.message,
+      demoUrl,
+      projectDisplayName: opts.projectDisplayName,
+    });
+    if (applied.ok === false) return applied;
+    return applied;
   };
 
   /** Hide legacy bundled Grok/orchestration copy in API responses so the Master Plan UI stays blank until real sections are written. */
@@ -1021,28 +1167,12 @@ No approved UI code yet.
       let v0Error: string | undefined;
       let v0Written: string[] = [];
 
-      if (autoV0 && !hasRealV0ApiGeneration(pp.workspaceRoot)) {
-        const prompt = readV0PromptMarkdown(pp.workspaceRoot);
-        if (prompt.trim()) {
-          v0Triggered = true;
-          const skillExcerpt = readSkillDesignSystemExcerpt(pp.workspaceRoot);
-          const message = [
-            prompt,
-            skillExcerpt ? `Design system (SKILL.md):\n${skillExcerpt}` : "",
-          ]
-            .filter(Boolean)
-            .join("\n\n");
-          const pass = await runV0UiStudioPass({
-            req,
-            message,
-            projectDisplayName: projectName,
-          });
-          if (pass.ok === true) {
-            v0Ok = true;
-            v0Written = pass.written;
-          } else {
-            v0Error = pass.error;
-          }
+      // v0 runs via /v0-start + /v0-poll from the client (Render HTTP timeout ~30s).
+      if (autoV0) {
+        v0Triggered = Boolean(readV0PromptMarkdown(pp.workspaceRoot).trim());
+        if (v0Triggered) {
+          v0Error =
+            "autoV0 on this route is deprecated — client calls /api/nebula-ui-studio/v0-start then v0-poll.";
         }
       }
 
@@ -1072,6 +1202,7 @@ No approved UI code yet.
       const prompt = readV0PromptMarkdown(pp.workspaceRoot);
       const gate = isVisualEditorEligible(pp.workspaceRoot);
       const keyRes = resolveV0ApiKeyFromRequest(req);
+      const pending = readV0Pending(pp.workspaceRoot);
       return res.json({
         ok: true,
         v0PromptPath: "nebula-ui-studio/v0-prompt.md",
@@ -1079,6 +1210,8 @@ No approved UI code yet.
         v0PromptLength: prompt.length,
         v0PromptPreview: prompt.slice(0, 500),
         hasRealV0: hasRealV0ApiGeneration(pp.workspaceRoot),
+        v0Pending: Boolean(pending?.chatId),
+        v0PendingChatId: pending?.chatId,
         eligible: gate.eligible,
         eligibilityReason: gate.reason,
         hasV0ApiKey: keyRes.ok === true,
@@ -1778,56 +1911,134 @@ No approved UI code yet.
     }
   });
 
+  app.post("/api/nebula-ui-studio/v0-start", async (req, res) => {
+    try {
+      const body = req.body || {};
+      const { promptText, projectDisplayName } = buildV0PromptTextForRequest(req, body);
+      if (!promptText.trim()) {
+        return res.status(400).json({ error: "v0-prompt.md is empty — save Master Plan §4+§5 first." });
+      }
+
+      const keyRes = resolveV0ApiKeyFromRequest(req);
+      if (keyRes.ok === false) {
+        return res.status(keyRes.code === "INVALID_LENGTH" ? 400 : 401).json({
+          error: keyRes.message,
+          hint: keyRes.hint,
+        });
+      }
+
+      const { workspaceRoot } = projectPathsFor(req);
+      const existing = readV0Pending(workspaceRoot);
+      if (existing && !hasRealV0ApiGeneration(workspaceRoot)) {
+        return res.json({
+          ok: true,
+          chatId: existing.chatId,
+          pending: true,
+          resumed: true,
+          hint: "Resuming an in-progress v0 chat (no new charge). Poll /v0-poll next.",
+        });
+      }
+
+      const v0Call = await v0CreateChat(keyRes.apiKey, promptText);
+      if (v0Call.ok === false) {
+        return res.status(v0Call.status).json({ error: v0Call.error });
+      }
+
+      writeV0Pending(workspaceRoot, {
+        chatId: v0Call.result.chatId,
+        startedAt: Date.now(),
+        projectDisplayName,
+        promptPreview: promptText.slice(0, 500),
+      });
+
+      if (v0Call.result.files.length > 0) {
+        const applied = applyV0FilesToWorkspace(req, v0Call.result.files, {
+          chatId: v0Call.result.chatId,
+          message: promptText,
+          demoUrl: v0Call.result.demoUrl,
+          projectDisplayName,
+        });
+        if (applied.ok === true) {
+          return res.json({ ok: true, source: "v0", pending: false, ...applied });
+        }
+      }
+
+      return res.json({
+        ok: true,
+        chatId: v0Call.result.chatId,
+        pending: true,
+        hint: "v0 chat started — poll /api/nebula-ui-studio/v0-poll until files land.",
+      });
+    } catch (e) {
+      console.error("[nebula-ui-studio/v0-start]", e);
+      return res.status(500).json({ error: e instanceof Error ? e.message : "v0 start failed" });
+    }
+  });
+
+  app.post("/api/nebula-ui-studio/v0-poll", async (req, res) => {
+    try {
+      const body = req.body || {};
+      const { workspaceRoot } = projectPathsFor(req);
+      const projectDisplayName =
+        typeof body.projectDisplayName === "string" && body.projectDisplayName.trim()
+          ? String(body.projectDisplayName).trim()
+          : undefined;
+      const pending = readV0Pending(workspaceRoot);
+      const chatId =
+        typeof body.chatId === "string" && body.chatId.trim()
+          ? body.chatId.trim()
+          : pending?.chatId;
+      if (!chatId) {
+        return res.status(400).json({ error: "No v0 chat in progress. Call /v0-start first." });
+      }
+
+      const pass = await runV0PollPass(req, chatId, projectDisplayName, pending?.promptPreview);
+      if (pass.ok === false) {
+        const errLower = String(pass.error ?? "").toLowerCase();
+        const creditsLike =
+          errLower.includes("credit") ||
+          errLower.includes("quota") ||
+          errLower.includes("billing") ||
+          pass.status === 402 ||
+          pass.status === 429;
+        if (creditsLike) {
+          const displayName = projectDisplayName || "Untitled Project";
+          const written = writeBasicUiScaffold(workspaceRoot, displayName);
+          ensurePreviewIndexHtml(workspaceRoot, displayName);
+          clearV0Pending(workspaceRoot);
+          return res.json({
+            ok: true,
+            source: "basic-scaffold",
+            written,
+            error: pass.error,
+            hint: "V0 credits unavailable — basic HTML preview written.",
+          });
+        }
+        return res.status(pass.status).json({ error: pass.error, hint: pass.hint });
+      }
+      if (pass.pending) {
+        return res.json({
+          ok: true,
+          pending: true,
+          chatId: pass.chatId,
+          versionStatus: pass.versionStatus,
+        });
+      }
+      return res.json({ ok: true, pending: false, source: pass.source, ...pass });
+    } catch (e) {
+      console.error("[nebula-ui-studio/v0-poll]", e);
+      return res.status(500).json({ error: e instanceof Error ? e.message : "v0 poll failed" });
+    }
+  });
+
   app.post("/api/nebula-ui-studio/v0-generate", async (req, res) => {
     try {
-      const { nebulaUiStudioPath, workspaceRoot } = projectPathsFor(req);
-      ensureNebulaUiStudioFileAt(nebulaUiStudioPath);
-      const uiStudioFile = fs.readFileSync(nebulaUiStudioPath, "utf8");
-      const filePrompt = readV0PromptMarkdown(workspaceRoot);
-      const storedPrompt = extractNebulaCommentSection(uiStudioFile, "NEBULA_UI_STUDIO_PROMPT");
-      const skillExcerpt = readSkillDesignSystemExcerpt(workspaceRoot);
-      const { masterPlanPath } = projectPathsFor(req);
-      const masterPlan = readMasterPlanFile(masterPlanPath);
-      if (!filePrompt.trim()) {
-        writeV0PromptMarkdown(workspaceRoot, masterPlan);
-      }
-      const canonicalPrompt = readV0PromptMarkdown(workspaceRoot);
-      const uiUxDesign = String(masterPlan["5. UI/UX design"] ?? "").trim();
-      const pagesNav = String(masterPlan["4. Pages and navigation"] ?? "").trim();
       const body = req.body || {};
-      const pagesText =
-        typeof body.pagesText === "string" && body.pagesText.trim()
-          ? body.pagesText.trim()
-          : pagesNav;
-      const extra = typeof body.message === "string" ? body.message.trim() : "";
-      const promptText = canonicalPrompt.trim()
-        ? [
-            canonicalPrompt,
-            skillExcerpt ? `Design system (SKILL.md):\n${skillExcerpt}` : "",
-            extra,
-          ]
-            .filter(Boolean)
-            .join("\n\n")
-        : [
-            uiUxDesign
-              ? `UI/UX Design (Master Plan section 5 — primary source for v0):\n${uiUxDesign}`
-              : "",
-            storedPrompt && storedPrompt !== "No prompt generated yet."
-              ? `Nebula UI Studio prompt file:\n${storedPrompt}`
-              : "",
-            skillExcerpt ? `Design system (SKILL.md):\n${skillExcerpt}` : "",
-            pagesText ? `Pages and navigation (section 4 — structure reference):\n${pagesText}` : "",
-            extra,
-            "Generate production-ready UI with React, Tailwind CSS, and shadcn/ui. Output app files under src/ or app/.",
-          ]
-            .filter(Boolean)
-            .join("\n\n");
-
+      const { promptText, projectDisplayName } = buildV0PromptTextForRequest(req, body);
       const pass = await runV0UiStudioPass({
         req,
         message: promptText,
-        projectDisplayName:
-          typeof body.projectDisplayName === "string" ? body.projectDisplayName : undefined,
+        projectDisplayName,
       });
       if (pass.ok === false) {
         const errLower = String(pass.error ?? "").toLowerCase();

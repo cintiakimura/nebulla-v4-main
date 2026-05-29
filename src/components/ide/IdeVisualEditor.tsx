@@ -5,7 +5,7 @@
  * - Unlocks after first v0: immutable folder `generated-ui/v0-original-<project>-<timestamp>/` with manifest
  *   (or legacy `generated-ui/v0-base/manifest.json`), or `NEBULA_VISUAL_EDITOR_DEV_UNLOCK=true`.
  * - When ineligible, the studio still renders as a **high-fidelity mock** (local preview model + tools); disk apply is gated.
- * - Layout: LEFT pages + layers | CENTER interactive preview | RIGHT properties; top toolbar always visible.
+ * - Layout: CENTER interactive preview + top toolbar; edit via toolbar, context menu, and inline selection.
  * - Grok chat stays in the main Assistant sidebar — no chat column here.
  * - Safe files: original v0 copy is never modified. On "Save Changes & Update Code", server backs up only paths
  *   Grok will touch under `generated-ui/versions/<timestamp>/`, then writes `src/` (etc.). Preview model lives in
@@ -24,19 +24,15 @@ import {
   Check,
   Copy,
   History,
-  Layers,
   Loader2,
   Maximize2,
   Minimize2,
   MousePointer2,
   Move,
-  PanelLeft,
-  PanelRight,
   Pipette,
   RotateCcw,
   Save,
   Scaling,
-  Sparkles,
   Trash2,
   Type,
 } from 'lucide-react';
@@ -44,6 +40,7 @@ import { cn } from '@/lib/utils';
 import { getBrowserProjectName, withProjectBody, withProjectQuery } from '../../lib/nebulaProjectApi';
 import { getStoredV0ApiKey, getV0RequestHeaders, hasLocalV0ApiKey, NEBULLA_V0_KEY_STORAGE } from '../../lib/v0Key';
 import { formatV0UiError } from '../../lib/v0ErrorMessage';
+import { runV0GenerationWithPolling } from '../../lib/v0GenerationClient';
 
 const V0_FETCH_TIMEOUT_MS = 360_000;
 
@@ -383,9 +380,6 @@ export function IdeVisualEditor({
   const previewRef = useRef<HTMLDivElement>(null);
   const baselineRef = useRef<EditorModel | null>(null);
   const [studioTool, setStudioTool] = useState<StudioTool>('select');
-  const [leftTab, setLeftTab] = useState<'pages' | 'layers'>('pages');
-  const [leftPanelOpen, setLeftPanelOpen] = useState(true);
-  const [rightPanelOpen, setRightPanelOpen] = useState(true);
   const [mockNotice, setMockNotice] = useState('');
   const [hasV0ApiKey, setHasV0ApiKey] = useState<boolean | null>(null);
   const [v0ServerReady, setV0ServerReady] = useState<boolean | null>(null);
@@ -862,26 +856,9 @@ export function IdeVisualEditor({
         return;
       }
 
-      const res = await fetchWithTimeout(withProjectQuery('/api/nebula-ui-studio/v0-generate'), {
-        method: 'POST',
-        headers: persistHeaders(),
-        body: JSON.stringify(
-          withProjectBody({
-            projectDisplayName: projectLabel,
-          }),
-        ),
-      });
-      const data = (await res.json()) as {
-        error?: string;
-        hint?: string;
-        chatId?: string;
-        written?: string[];
-        demoUrl?: string;
-        source?: string;
-        ok?: boolean;
-      };
-      if (!res.ok) {
-        throw new Error(data.hint || data.error || 'v0 generation failed');
+      const data = await runV0GenerationWithPolling({ projectDisplayName: projectLabel });
+      if (data.error && !data.written?.length) {
+        throw new Error(data.hint || data.error);
       }
       if (data.source === 'basic-scaffold') {
         window.dispatchEvent(new CustomEvent('nebula-files-applied'));
@@ -1138,34 +1115,6 @@ export function IdeVisualEditor({
     );
   };
 
-  const renderLayerRows = (nodeId: string, depth: number): React.ReactNode => {
-    if (!page) return null;
-    const node = page.nodes[nodeId];
-    if (!node) return null;
-    return (
-      <React.Fragment key={nodeId}>
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            setSelectedId(nodeId);
-            setMenuPos({ top: 12, left: 12 });
-          }}
-          className={cn(
-            'mb-0.5 w-full rounded-md py-1 text-left text-[11px] transition-colors',
-            selectedId === nodeId
-              ? 'active-tab-sheen bg-secondary/80 text-primary'
-              : 'text-muted-foreground hover:bg-secondary/40 hover:text-foreground',
-          )}
-          style={{ paddingLeft: 8 + depth * 10 }}
-        >
-          <span className="opacity-60">{node.type}</span> · {node.role}
-        </button>
-        {node.children?.map((cid) => renderLayerRows(cid, depth + 1))}
-      </React.Fragment>
-    );
-  };
-
   if (eligible === null) {
     return (
       <div className="flex h-full items-center justify-center bg-[#050a14] text-slate-400">
@@ -1181,62 +1130,6 @@ export function IdeVisualEditor({
       ref={shellRef}
       className="flex h-full min-h-0 w-full flex-col overflow-hidden bg-background text-foreground"
     >
-      {!eligible ? (
-        <div
-          className={cn(
-            'flex shrink-0 flex-wrap items-center justify-between gap-3 border-b px-3 py-2.5',
-            hasV0ApiKey
-              ? 'border-primary/20 bg-primary/5'
-              : 'border-amber-500/25 bg-amber-500/10',
-          )}
-        >
-          <div className="flex min-w-0 items-start gap-2.5">
-            <div
-              className={cn(
-                'mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-md',
-                hasV0ApiKey ? 'bg-primary/15 text-primary' : 'bg-amber-500/20 text-amber-200',
-              )}
-            >
-              <Sparkles className="h-3.5 w-3.5" />
-            </div>
-            <div className="min-w-0">
-              <p className="text-xs font-medium text-foreground">
-                {hasV0ApiKey ? 'Run your first v0 generation' : 'Connect v0 to unlock UI generation'}
-              </p>
-              <p className="mt-0.5 text-[11px] leading-relaxed text-muted-foreground">
-                {hasV0ApiKey
-                  ? studioStatus?.v0PromptExists
-                    ? `Prompt ready (${studioStatus.v0PromptLength ?? 0} chars). Generate once to unlock Save to disk.`
-                    : 'Save Master Plan §4+§5 first — v0-prompt.md is built from those sections.'
-                  : eligibilityReason}
-              </p>
-            </div>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              disabled={busy || hasV0ApiKey === false}
-              onClick={() => void runV0Generation()}
-              className="rounded-md bg-primary px-3 py-1.5 text-[11px] font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-40"
-            >
-              {busy ? 'Running v0…' : 'Generate UI with v0'}
-            </button>
-            {hasV0ApiKey === false ? (
-              <span className="text-[10px] text-amber-100/90">My services → v0 API key</span>
-            ) : null}
-            {import.meta.env.DEV ? (
-              <button
-                type="button"
-                onClick={() => void simulateV0CompleteDev()}
-                className="btn-secondary-surface rounded-md px-2 py-1 text-[10px] text-muted-foreground"
-              >
-                Dev unlock
-              </button>
-            ) : null}
-          </div>
-        </div>
-      ) : null}
-
       {mockNotice ? (
         <div className="border-b border-primary/25 bg-primary/10 px-3 py-2 text-[11px] text-foreground">
           {mockNotice}{' '}
@@ -1249,14 +1142,6 @@ export function IdeVisualEditor({
       <header className="surface-active shrink-0 border-b border-white/5">
         <div className="flex h-9 items-center justify-between gap-2 px-2 sm:px-3">
           <div className="flex min-w-0 items-center gap-2">
-            <button
-              type="button"
-              title={leftPanelOpen ? 'Hide pages panel' : 'Show pages panel'}
-              onClick={() => setLeftPanelOpen((v) => !v)}
-              className="btn-secondary-surface rounded p-1 text-muted-foreground hover:text-foreground"
-            >
-              <PanelLeft className="h-3.5 w-3.5" />
-            </button>
             <span className="truncate text-xs font-medium tracking-wide text-foreground">UI Studio</span>
             <span
               className={cn(
@@ -1271,6 +1156,16 @@ export function IdeVisualEditor({
           </div>
 
           <div className="flex shrink-0 items-center gap-1">
+            {!eligible && hasV0ApiKey ? (
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => void runV0Generation()}
+                className="btn-secondary-surface rounded-md px-2 py-1 text-[10px] text-muted-foreground hover:text-foreground disabled:opacity-40"
+              >
+                {busy ? 'v0…' : 'Generate v0'}
+              </button>
+            ) : null}
             {hasV0ApiKey && eligible ? (
               <>
                 <button
@@ -1318,14 +1213,6 @@ export function IdeVisualEditor({
             >
               <Save className="mr-1 inline h-3 w-3" />
               Save
-            </button>
-            <button
-              type="button"
-              title={rightPanelOpen ? 'Hide properties' : 'Show properties'}
-              onClick={() => setRightPanelOpen((v) => !v)}
-              className="btn-secondary-surface rounded p-1 text-muted-foreground hover:text-foreground"
-            >
-              <PanelRight className="h-3.5 w-3.5" />
             </button>
           </div>
         </div>
@@ -1387,58 +1274,6 @@ export function IdeVisualEditor({
       ) : null}
 
       <div className="flex min-h-0 flex-1">
-        {leftPanelOpen ? (
-          <aside className="surface-active flex w-44 shrink-0 flex-col border-r border-white/5 sm:w-48">
-            <div className="flex border-b border-white/5">
-              <button
-                type="button"
-                onClick={() => setLeftTab('pages')}
-                className={cn(
-                  'flex-1 py-2 text-center text-[10px] font-medium uppercase tracking-wider',
-                  leftTab === 'pages' ? 'border-b-2 border-primary text-primary' : 'text-muted-foreground hover:text-foreground',
-                )}
-              >
-                Pages
-              </button>
-              <button
-                type="button"
-                onClick={() => setLeftTab('layers')}
-                className={cn(
-                  'flex flex-1 items-center justify-center gap-1 py-2 text-[10px] font-medium uppercase tracking-wider',
-                  leftTab === 'layers' ? 'border-b-2 border-primary text-primary' : 'text-muted-foreground hover:text-foreground',
-                )}
-              >
-                <Layers className="h-3 w-3" />
-                Layers
-              </button>
-            </div>
-            {leftTab === 'pages' ? (
-              <nav className="flex-1 overflow-y-auto p-1.5">
-                {pageIds.map((pid) => (
-                  <button
-                    key={pid}
-                    type="button"
-                    onClick={() => {
-                      setActivePage(pid);
-                      clearSelection();
-                    }}
-                    className={cn(
-                      'mb-0.5 w-full rounded-md px-2 py-1.5 text-left text-xs transition-colors',
-                      activePage === pid
-                        ? 'active-tab-sheen bg-secondary/80 text-primary'
-                        : 'text-muted-foreground hover:bg-secondary/40 hover:text-foreground',
-                    )}
-                  >
-                    {pid}
-                  </button>
-                ))}
-              </nav>
-            ) : (
-              <div className="flex-1 overflow-y-auto p-1.5">{page ? renderLayerRows(page.rootId, 0) : null}</div>
-            )}
-          </aside>
-        ) : null}
-
         <main
           ref={previewRef}
           className="relative min-w-0 flex-1 overflow-auto bg-[#030712] p-3 sm:p-5"
@@ -1451,9 +1286,29 @@ export function IdeVisualEditor({
         >
           <div className="mx-auto flex max-w-4xl flex-col gap-2">
             <div className="flex items-center justify-between gap-2 px-1">
-              <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-                Preview · {activePage}
-              </span>
+              <div className="flex min-w-0 items-center gap-2">
+                <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                  Preview
+                </span>
+                {pageIds.length > 1 ? (
+                  <select
+                    value={activePage}
+                    onChange={(e) => {
+                      setActivePage(e.target.value);
+                      clearSelection();
+                    }}
+                    className="max-w-[140px] truncate rounded border border-white/10 bg-secondary/40 px-2 py-0.5 text-[10px] text-foreground"
+                  >
+                    {pageIds.map((pid) => (
+                      <option key={pid} value={pid}>
+                        {pid}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <span className="text-[10px] text-muted-foreground">{activePage}</span>
+                )}
+              </div>
               {selected ? (
                 <span className="truncate text-[10px] text-primary">
                   {selected.role} · {selected.type}
@@ -1534,134 +1389,6 @@ export function IdeVisualEditor({
             </div>
           ) : null}
         </main>
-
-        {rightPanelOpen ? (
-          <aside className="surface-active flex w-64 shrink-0 flex-col border-l border-white/5 sm:w-72">
-            <div className="flex items-center justify-between border-b border-white/5 px-3 py-2">
-              <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-                Properties
-              </span>
-              {selected ? (
-                <span className="truncate text-[10px] text-primary">{selected.role}</span>
-              ) : null}
-            </div>
-            {!selected ? (
-              <div className="flex flex-1 flex-col items-center justify-center gap-2 p-6 text-center">
-                <MousePointer2 className="h-8 w-8 text-muted-foreground/30" />
-                <p className="text-xs text-muted-foreground">
-                  Select an element in the preview. Selection shows a blue outline.
-                </p>
-              </div>
-            ) : (
-              <div className="flex-1 space-y-4 overflow-y-auto p-3 text-[11px]">
-                <section>
-                  <p className="mb-2 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Element</p>
-                  <div className="rounded-md border border-white/5 bg-black/20 px-2 py-1.5 text-muted-foreground">
-                    <span className="text-foreground">{selected.type}</span>
-                    <span className="mx-1 opacity-40">·</span>
-                    {selected.role}
-                  </div>
-                </section>
-                <section>
-                  <p className="mb-2 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Colors</p>
-                  <div className="grid grid-cols-2 gap-2">
-                    <label className="text-muted-foreground">
-                      Background
-                      <input
-                        type="color"
-                        className="mt-1 h-8 w-full cursor-pointer rounded border border-white/10 bg-transparent"
-                        value={selected.style.backgroundColor}
-                        onChange={(e) => updateSelectedStyle({ backgroundColor: e.target.value })}
-                      />
-                    </label>
-                    <label className="text-muted-foreground">
-                      Text
-                      <input
-                        type="color"
-                        className="mt-1 h-8 w-full cursor-pointer rounded border border-white/10 bg-transparent"
-                        value={selected.style.color}
-                        onChange={(e) => updateSelectedStyle({ color: e.target.value })}
-                      />
-                    </label>
-                  </div>
-                </section>
-                <section>
-                  <p className="mb-2 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Spacing</p>
-                  <div className="grid grid-cols-2 gap-2">
-                    {(['paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft'] as const).map((k) => (
-                      <label key={k} className="text-muted-foreground">
-                        {k.replace('padding', 'pad ')}
-                        <input
-                          type="number"
-                          className="mt-0.5 w-full rounded border border-white/10 bg-secondary/30 px-1.5 py-1 text-foreground"
-                          value={selected.style[k]}
-                          onChange={(e) => updateSelectedStyle({ [k]: Number(e.target.value) || 0 } as Partial<VisualStyle>)}
-                        />
-                      </label>
-                    ))}
-                  </div>
-                </section>
-                <section>
-                  <p className="mb-2 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Layout</p>
-                  <div className="space-y-2">
-                    <label className="block text-muted-foreground">
-                      Width
-                      <input
-                        className="mt-0.5 w-full rounded border border-white/10 bg-secondary/30 px-2 py-1 text-foreground"
-                        value={selected.style.width}
-                        onChange={(e) => updateSelectedStyle({ width: e.target.value })}
-                      />
-                    </label>
-                    <label className="block text-muted-foreground">
-                      Height
-                      <input
-                        className="mt-0.5 w-full rounded border border-white/10 bg-secondary/30 px-2 py-1 text-foreground"
-                        value={selected.style.height}
-                        onChange={(e) => updateSelectedStyle({ height: e.target.value })}
-                      />
-                    </label>
-                    <label className="block text-muted-foreground">
-                      Radius
-                      <input
-                        type="number"
-                        className="mt-0.5 w-full rounded border border-white/10 bg-secondary/30 px-2 py-1"
-                        value={selected.style.borderRadius}
-                        onChange={(e) => updateSelectedStyle({ borderRadius: Number(e.target.value) || 0 })}
-                      />
-                    </label>
-                  </div>
-                </section>
-                {(selected.type === 'text' || selected.type === 'button') && (
-                  <section>
-                    <p className="mb-2 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Content</p>
-                    <input
-                      className="w-full rounded border border-white/10 bg-secondary/30 px-2 py-1.5 text-foreground"
-                      value={selected.text || ''}
-                      onChange={(e) => updateSelectedText(e.target.value)}
-                      placeholder="Label / text"
-                    />
-                  </section>
-                )}
-                <section className="flex flex-col gap-2 border-t border-white/5 pt-3">
-                  <button
-                    type="button"
-                    className="btn-secondary-surface rounded-md py-1.5 text-xs text-foreground"
-                    onClick={() => applySimilarOnPage()}
-                  >
-                    Match style on this page
-                  </button>
-                  <button
-                    type="button"
-                    className="btn-secondary-surface rounded-md py-1.5 text-xs text-foreground"
-                    onClick={() => applySimilarAllPages()}
-                  >
-                    Match style on all pages
-                  </button>
-                </section>
-              </div>
-            )}
-          </aside>
-        ) : null}
       </div>
 
       <footer className="surface-active flex shrink-0 items-center justify-between gap-2 border-t border-white/5 px-3 py-1.5 text-[10px] text-muted-foreground">

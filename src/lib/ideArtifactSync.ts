@@ -2,6 +2,7 @@ import { fetchJson } from './apiFetch';
 import type { GrokActivityProgressFn } from './ideGrokActivityStatus';
 import { startGrokActivityWaitTicker } from './ideGrokActivityStatus';
 import { withProjectBody, withProjectQuery } from './nebulaProjectApi';
+import { runV0GenerationWithPolling } from './v0GenerationClient';
 import { getV0RequestHeaders } from './v0Key';
 
 const ideArtifactHeaders = (): Record<string, string> => ({
@@ -81,9 +82,50 @@ export async function runMasterPlanUiPipeline(options?: {
     return result;
   } catch (e) {
     console.warn('[ideArtifactSync] master-plan-ui-pipeline:', e);
-    onProgress?.('UI Studio pipeline request failed', 'error');
+    const msg = e instanceof Error ? e.message : 'UI Studio pipeline failed';
+    onProgress?.(
+      msg.includes('fetch failed') || msg.includes('Failed to fetch')
+        ? 'UI Studio pipeline timed out on Render — retry Generate UI with v0'
+        : 'UI Studio pipeline request failed',
+      'error',
+    );
     return {};
   }
+}
+
+/** v0 via short poll requests (Render-safe). Call after master-plan-ui-pipeline. */
+export async function runV0UiGeneration(options?: {
+  projectName?: string;
+  onProgress?: GrokActivityProgressFn;
+  resumeOnly?: boolean;
+}): Promise<MasterPlanUiPipelineResult> {
+  const v0 = await runV0GenerationWithPolling({
+    projectDisplayName: options?.projectName,
+    onProgress: options?.onProgress,
+    resumeOnly: options?.resumeOnly,
+  });
+  return {
+    v0Triggered: true,
+    v0Ok: Boolean(v0.ok && (v0.written?.length ?? 0) > 0),
+    v0Written: v0.written,
+    v0Error: v0.error,
+    hasRealV0: Boolean(v0.written?.length),
+  };
+}
+
+/** Master Plan save + mind map, then optional v0 (polled). */
+export async function runMasterPlanUiPipelineWithV0(options?: {
+  projectName?: string;
+  autoV0?: boolean;
+  onProgress?: GrokActivityProgressFn;
+}): Promise<MasterPlanUiPipelineResult> {
+  const base = await runMasterPlanUiPipeline({ ...options, autoV0: false });
+  if (options?.autoV0 === false || base.hasRealV0) return base;
+  const v0 = await runV0UiGeneration({
+    projectName: options?.projectName,
+    onProgress: options?.onProgress,
+  });
+  return { ...base, ...v0 };
 }
 
 /** After coding / file apply: fill empty Master Plan, mind map, and preview shell. */

@@ -37,7 +37,7 @@ const CHAT_DEFAULT = 320;
 
 const TERMINAL_MIN = 80;
 const TERMINAL_MAX = 560;
-const TERMINAL_DEFAULT = 192;
+const TERMINAL_DEFAULT = 220;
 
 function IdeExplorerSidebar() {
   return <FileExplorer />;
@@ -132,6 +132,7 @@ function NebullaIDEShell() {
   const [explorerOpen, setExplorerOpen] = useState(true);
   const chat = useDragResize(CHAT_DEFAULT, CHAT_MIN, CHAT_MAX, 'horizontal-left');
   const terminal = useDragResize(TERMINAL_DEFAULT, TERMINAL_MIN, TERMINAL_MAX, 'vertical');
+  const [terminalCollapsed, setTerminalCollapsed] = useState(false);
 
   const [myServicesOpen, setMyServicesOpen] = useState(false);
   const [myServicesUser, setMyServicesUser] = useState<NebulaSessionUser | null>(null);
@@ -296,10 +297,18 @@ function NebullaIDEShell() {
             <IdeCenterWorkspace />
           </div>
 
-          <ResizeHandle onMouseDown={terminal.onMouseDown} orientation="vertical" />
+          {!terminalCollapsed ? (
+            <ResizeHandle onMouseDown={terminal.onMouseDown} orientation="vertical" />
+          ) : null}
 
-          <div className="shrink-0 overflow-hidden" style={{ height: terminal.size }}>
-            <TerminalPanel />
+          <div
+            className="shrink-0 overflow-hidden"
+            style={{ height: terminalCollapsed ? 32 : terminal.size }}
+          >
+            <TerminalPanel
+              collapsed={terminalCollapsed}
+              onToggleCollapse={() => setTerminalCollapsed((c) => !c)}
+            />
           </div>
         </div>
 
