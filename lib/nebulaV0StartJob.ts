@@ -1,5 +1,5 @@
 import { v0CreateChat, type V0FileEntry } from "./nebulaV0Client";
-import { clearV0Pending, readV0Pending, writeV0Pending } from "./nebulaV0Pending";
+import { clearV0Pending, readV0Pending, writeV0Pending, type V0PendingState } from "./nebulaV0Pending";
 
 export type V0ApplyFilesResult =
   | { ok: true; written: string[]; skipped?: string[]; demoUrl?: string }
@@ -17,10 +17,25 @@ export type V0StartJobOptions = {
   ) => V0ApplyFilesResult | Promise<V0ApplyFilesResult>;
 };
 
+/** If a start marker outlives the in-memory job (Render restart), recover on poll. */
+export const V0_START_STALE_MS = 90_000;
+/** Hard cap on v0 POST /chats — v0-pro can be slow but must not hang forever. */
+export const V0_CREATE_TIMEOUT_MS = 240_000;
+
 const activeJobs = new Set<string>();
 
 export function isV0StartJobActive(workspaceRoot: string): boolean {
   return activeJobs.has(workspaceRoot);
+}
+
+export function isV0StartStale(pending: V0PendingState | null | undefined): boolean {
+  if (!pending?.starting || pending.chatId.trim()) return false;
+  return Date.now() - pending.startedAt > V0_START_STALE_MS;
+}
+
+export function v0StartElapsedMs(pending: V0PendingState | null | undefined): number {
+  if (!pending) return 0;
+  return Math.max(0, Date.now() - pending.startedAt);
 }
 
 /**
@@ -33,8 +48,10 @@ export function scheduleV0CreateChatJob(opts: V0StartJobOptions): boolean {
 
   activeJobs.add(workspaceRoot);
   void (async () => {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), V0_CREATE_TIMEOUT_MS);
     try {
-      const v0Call = await v0CreateChat(opts.apiKey, opts.promptText);
+      const v0Call = await v0CreateChat(opts.apiKey, opts.promptText, controller.signal);
       if (v0Call.ok === false) {
         writeV0Pending(workspaceRoot, {
           chatId: "",
@@ -74,15 +91,21 @@ export function scheduleV0CreateChatJob(opts: V0StartJobOptions): boolean {
         }
       }
     } catch (e) {
+      const aborted = (e as { name?: string })?.name === "AbortError";
       writeV0Pending(workspaceRoot, {
         chatId: "",
         startedAt: Date.now(),
         projectDisplayName: opts.projectDisplayName,
         promptPreview: opts.promptText.slice(0, 500),
         starting: false,
-        startError: e instanceof Error ? e.message : "v0 start failed",
+        startError: aborted
+          ? "v0 API timed out after 4 minutes. Click Resume v0 to poll again (no new charge if a chat was created)."
+          : e instanceof Error
+            ? e.message
+            : "v0 start failed",
       });
     } finally {
+      clearTimeout(timer);
       activeJobs.delete(workspaceRoot);
     }
   })();

@@ -77,7 +77,7 @@ import {
   type V0FileEntry,
 } from "./lib/nebulaV0Client";
 import { clearV0Pending, readV0Pending, writeV0Pending } from "./lib/nebulaV0Pending";
-import { isV0StartJobActive, scheduleV0CreateChatJob } from "./lib/nebulaV0StartJob";
+import { isV0StartJobActive, isV0StartStale, scheduleV0CreateChatJob, v0StartElapsedMs } from "./lib/nebulaV0StartJob";
 import { NEBULA_V0_KEY_SETUP_HINT, resolveV0ApiKey, resolveV0ApiKeyFromRequest, V0_ENV_VAR } from "./lib/nebulaV0Resolver";
 import { PRE_CODING_SUMMARY_KEY } from "./lib/masterPlanSections";
 import {
@@ -733,6 +733,43 @@ No approved UI code yet.
     });
     if (applied.ok === false) return applied;
     return { ok: true, pending: false, ...applied, source: "v0" };
+  };
+
+  const kickV0BackgroundStart = (
+    req: express.Request,
+    workspaceRoot: string,
+    apiKey: string,
+    promptText: string,
+    projectDisplayName?: string,
+  ): void => {
+    writeV0Pending(workspaceRoot, {
+      chatId: "",
+      startedAt: Date.now(),
+      projectDisplayName,
+      promptPreview: promptText.slice(0, 500),
+      starting: true,
+    });
+    scheduleV0CreateChatJob({
+      workspaceRoot,
+      apiKey,
+      promptText,
+      projectDisplayName,
+      applyFiles: (files, chatId, demoUrl) => {
+        const applied = applyV0FilesToWorkspace(req, files, {
+          chatId,
+          message: promptText,
+          demoUrl,
+          projectDisplayName,
+        });
+        if (applied.ok === false) return { ok: false as const, error: applied.error };
+        return {
+          ok: true as const,
+          written: applied.written,
+          skipped: applied.skipped,
+          demoUrl: applied.demoUrl,
+        };
+      },
+    });
   };
 
   const V0_HTTP_POLL_ROUNDS = 8;
@@ -2019,51 +2056,28 @@ No approved UI code yet.
         });
       }
 
-      if (existing?.starting || isV0StartJobActive(workspaceRoot)) {
+      const startStale =
+        isV0StartStale(existing) && !isV0StartJobActive(workspaceRoot);
+      if ((existing?.starting || isV0StartJobActive(workspaceRoot)) && !startStale) {
         return res.json({
           ok: true,
           chatId: existing?.chatId || undefined,
           pending: true,
           starting: true,
+          elapsedMs: v0StartElapsedMs(existing),
           hint: "v0 chat is starting — poll /api/nebula-ui-studio/v0-poll every few seconds (no new charge).",
         });
       }
 
-      writeV0Pending(workspaceRoot, {
-        chatId: "",
-        startedAt: Date.now(),
-        projectDisplayName,
-        promptPreview: promptText.slice(0, 500),
-        starting: true,
-      });
-
-      scheduleV0CreateChatJob({
-        workspaceRoot,
-        apiKey: keyRes.apiKey,
-        promptText,
-        projectDisplayName,
-        applyFiles: (files, chatId, demoUrl) => {
-          const applied = applyV0FilesToWorkspace(req, files, {
-            chatId,
-            message: promptText,
-            demoUrl,
-            projectDisplayName,
-          });
-          if (applied.ok === false) return { ok: false as const, error: applied.error };
-          return {
-            ok: true as const,
-            written: applied.written,
-            skipped: applied.skipped,
-            demoUrl: applied.demoUrl,
-          };
-        },
-      });
+      kickV0BackgroundStart(req, workspaceRoot, keyRes.apiKey, promptText, projectDisplayName);
 
       return res.json({
         ok: true,
         pending: true,
         starting: true,
-        hint: "v0 chat starting in background — poll /api/nebula-ui-studio/v0-poll until files land.",
+        hint: startStale
+          ? "Recovered a stalled v0 start — polling will continue (no new charge)."
+          : "v0 chat starting in background — poll /api/nebula-ui-studio/v0-poll until files land.",
       });
     } catch (e) {
       console.error("[nebula-ui-studio/v0-start]", e);
@@ -2092,11 +2106,42 @@ No approved UI code yet.
         });
       }
       if ((pending?.starting && !pending.chatId) || isV0StartJobActive(workspaceRoot)) {
+        const elapsedMs = v0StartElapsedMs(pending);
+        const stale =
+          isV0StartStale(pending) && !isV0StartJobActive(workspaceRoot);
+        if (stale) {
+          const keyRes = resolveV0ApiKeyFromRequest(req);
+          const promptText =
+            readV0PromptMarkdown(workspaceRoot).trim() ||
+            pending?.promptPreview?.trim() ||
+            "";
+          if (keyRes.ok && promptText) {
+            kickV0BackgroundStart(
+              req,
+              workspaceRoot,
+              keyRes.apiKey,
+              promptText,
+              projectDisplayName || pending?.projectDisplayName,
+            );
+          } else if (!promptText) {
+            clearV0Pending(workspaceRoot);
+            return res.status(422).json({
+              error: "v0 start stalled and v0-prompt.md is missing. Save Master Plan §4+§5 first.",
+            });
+          }
+        }
         return res.json({
           ok: true,
           pending: true,
           starting: true,
-          hint: "v0 is still starting on the server — keep polling (no new charge).",
+          chatId: pending?.chatId || undefined,
+          elapsedMs,
+          recovered: stale,
+          hint: stale
+            ? "Recovered stalled v0 start — keep polling (no new charge)."
+            : elapsedMs > 120_000
+              ? "v0-pro is still working — keep polling (typically 1–4 min, no new charge)."
+              : "v0 is still starting on the server — keep polling (no new charge).",
         });
       }
       const chatId =

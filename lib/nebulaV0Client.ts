@@ -105,7 +105,8 @@ async function parseV0Error(res: Response, text: string): Promise<string> {
 
 export async function v0CreateChat(
   apiKey: string,
-  message: string
+  message: string,
+  signal?: AbortSignal,
 ): Promise<{ ok: true; result: V0ChatResult } | { ok: false; status: number; error: string }> {
   const res = await fetch(`${V0_API_BASE}/chats`, {
     method: "POST",
@@ -114,6 +115,7 @@ export async function v0CreateChat(
       Authorization: `Bearer ${apiKey}`,
     },
     body: JSON.stringify({ message }),
+    signal,
   });
   const text = await res.text();
   if (!res.ok) {

@@ -62,6 +62,8 @@ type StudioStatus = {
   hasV0ApiKey?: boolean;
   v0Pending?: boolean;
   v0PendingChatId?: string;
+  v0Starting?: boolean;
+  v0StartError?: string;
   eligibilityReason?: string;
 };
 
@@ -861,7 +863,9 @@ export function IdeVisualEditor({
 
       const data = await runV0GenerationWithPolling({
         projectDisplayName: projectLabel,
-        resumeOnly: Boolean(studioStatus?.v0Pending && !studioStatus?.hasRealV0),
+        resumeOnly: Boolean(
+          (studioStatus?.v0Pending || studioStatus?.v0Starting) && !studioStatus?.hasRealV0,
+        ),
       });
       if (data.error && !data.written?.length) {
         throw new Error(data.hint || data.error);
@@ -935,19 +939,36 @@ export function IdeVisualEditor({
   runV0GenerationRef.current = runV0Generation;
 
   useEffect(() => {
-    if (!studioStatus?.v0Pending || studioStatus.hasRealV0) return;
-    if (hasV0ApiKey !== true || resumeV0StartedRef.current || busy || v0RunningRef.current) return;
-    resumeV0StartedRef.current = true;
-    setMockNotice('Resuming in-progress v0 generation (no new charge)…');
-    void runV0GenerationRef.current();
-  }, [studioStatus?.v0Pending, studioStatus?.hasRealV0, hasV0ApiKey, busy]);
+    if (hasV0ApiKey !== true || busy || v0RunningRef.current) return;
+    if (studioStatus?.hasRealV0) return;
 
-  useEffect(() => {
-    if (eligible !== false || hasV0ApiKey !== true || !studioStatus?.v0PromptExists) return;
-    if (studioStatus.hasRealV0 || autoV0StartedRef.current || busy) return;
-    autoV0StartedRef.current = true;
+    const shouldResume = Boolean(studioStatus?.v0Pending || studioStatus?.v0Starting);
+    const shouldAutoStart =
+      !shouldResume &&
+      eligible !== false &&
+      Boolean(studioStatus?.v0PromptExists) &&
+      !autoV0StartedRef.current;
+
+    if (shouldResume) {
+      if (resumeV0StartedRef.current) return;
+      resumeV0StartedRef.current = true;
+      setMockNotice('Resuming in-progress v0 generation (no new charge)…');
+    } else if (shouldAutoStart) {
+      autoV0StartedRef.current = true;
+    } else {
+      return;
+    }
+
     void runV0GenerationRef.current();
-  }, [eligible, hasV0ApiKey, studioStatus, busy]);
+  }, [
+    studioStatus?.v0Pending,
+    studioStatus?.v0Starting,
+    studioStatus?.hasRealV0,
+    studioStatus?.v0PromptExists,
+    hasV0ApiKey,
+    busy,
+    eligible,
+  ]);
 
   const runV0Refine = async () => {
     if (!v0ChatId) {
@@ -1151,7 +1172,7 @@ export function IdeVisualEditor({
             Dismiss
           </button>
         </div>
-      ) : studioStatus?.v0Pending && !studioStatus.hasRealV0 ? (
+      ) : (studioStatus?.v0Pending || studioStatus?.v0Starting) && !studioStatus.hasRealV0 ? (
         <div className="flex flex-wrap items-center gap-2 border-b border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-100">
           <span>v0 is still generating from a previous run. Credits may already have been used.</span>
           <button
