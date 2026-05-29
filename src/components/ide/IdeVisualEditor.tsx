@@ -43,8 +43,9 @@ import {
 import { cn } from '@/lib/utils';
 import { getBrowserProjectName, withProjectBody, withProjectQuery } from '../../lib/nebulaProjectApi';
 import { getStoredV0ApiKey, getV0RequestHeaders, hasLocalV0ApiKey, NEBULLA_V0_KEY_STORAGE } from '../../lib/v0Key';
+import { formatV0UiError } from '../../lib/v0ErrorMessage';
 
-const V0_FETCH_TIMEOUT_MS = 180_000;
+const V0_FETCH_TIMEOUT_MS = 360_000;
 
 async function fetchWithTimeout(url: string, init: RequestInit, ms = V0_FETCH_TIMEOUT_MS): Promise<Response> {
   const ctrl = new AbortController();
@@ -833,9 +834,7 @@ export function IdeVisualEditor({
     try {
       const localKey = hasLocalV0ApiKey();
       if (localKey && v0ServerReady === false) {
-        setError(
-          'Your v0 key is saved in this browser, but the server did not accept it. Open My services → save the key again, or set V0_API_KEY in Render Environment and redeploy.',
-        );
+        setError(formatV0UiError('not set on the server and no client key was sent', true));
         return;
       }
       if (hasV0ApiKey === false) {
@@ -859,7 +858,7 @@ export function IdeVisualEditor({
         } catch {
           /* fall through */
         }
-        setError('Add V0_API_KEY for full v0 UI, or use Preview for the basic HTML shell.');
+        setError(formatV0UiError('not set on the server and no client key was sent', hasLocalV0ApiKey()));
         return;
       }
 
@@ -916,7 +915,7 @@ export function IdeVisualEditor({
     } catch (e: unknown) {
       const msg =
         e instanceof Error && e.name === 'AbortError'
-          ? 'v0 request timed out (3 min). Check V0_API_KEY and try again.'
+          ? 'v0 request timed out (6 min). v0-pro can be slow — try again or use a shorter prompt.'
           : e instanceof Error
             ? e.message
             : 'v0 generation failed';
@@ -943,13 +942,7 @@ export function IdeVisualEditor({
           /* fall through */
         }
       }
-      setError(
-        msg.includes('V0_API_KEY')
-          ? hasLocalV0ApiKey()
-            ? 'v0 rejected the request. Re-save your key in My services, or set V0_API_KEY on Render and redeploy.'
-            : 'Add your v0 API key in My services (or V0_API_KEY on Render).'
-          : msg,
-      );
+      setError(formatV0UiError(msg, hasLocalV0ApiKey()));
     } finally {
       v0RunningRef.current = false;
       setBusy(false);

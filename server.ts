@@ -66,10 +66,11 @@ import {
 } from "./lib/masterPlanSections";
 import {
   isAllowedV0WriteRel,
+  normalizeV0WriteRel,
   pickPrimaryUiFile,
   v0CreateChat,
   v0SendChatMessage,
-  v0WaitForChatFiles,
+  v0WaitForChatGeneration,
   type V0FileEntry,
 } from "./lib/nebulaV0Client";
 import { NEBULA_V0_KEY_SETUP_HINT, resolveV0ApiKey, resolveV0ApiKeyFromRequest, V0_ENV_VAR } from "./lib/nebulaV0Resolver";
@@ -532,7 +533,7 @@ No approved UI code yet.
     const filesMap: Record<string, string> = {};
     const seen = new Set<string>();
     for (const f of files) {
-      const rel = f.name.replace(/\\/g, "/").replace(/^\/+/, "");
+      const rel = normalizeV0WriteRel(f.name);
       if (seen.has(rel)) continue;
       seen.add(rel);
       if (!isAllowedV0WriteRel(rel)) {
@@ -587,21 +588,28 @@ No approved UI code yet.
     }
 
     let v0Files = v0Call.result.files;
-    if (v0Files.length === 0) {
-      v0Files = await v0WaitForChatFiles(keyRes.apiKey, v0Call.result.chatId);
+    let demoUrl = v0Call.result.demoUrl;
+    if (v0Files.length === 0 || v0Call.result.versionStatus === "pending") {
+      const wait = await v0WaitForChatGeneration(keyRes.apiKey, v0Call.result.chatId);
+      if (wait.ok === false) {
+        return { ok: false, status: 422, error: wait.error };
+      }
+      v0Files = wait.files;
+      demoUrl = wait.demoUrl ?? demoUrl;
     }
 
     const { workspaceRoot, nebulaUiStudioPath, masterPlanPath } = projectPathsFor(opts.req);
     const allFilesMap: Record<string, string> = {};
     for (const f of v0Files) {
-      const rel = f.name.replace(/\\/g, "/").replace(/^\/+/, "");
+      const rel = normalizeV0WriteRel(f.name);
       if (rel) allFilesMap[rel] = f.content;
     }
     if (Object.keys(allFilesMap).length === 0) {
       return {
         ok: false,
         status: 422,
-        error: "v0 returned no files after waiting. Check V0_API_KEY credits and nebula-ui-studio/v0-prompt.md.",
+        error:
+          "v0 returned no usable files. Ensure nebula-ui-studio/v0-prompt.md has Master Plan §4+§5 content, then try again.",
       };
     }
 
@@ -622,8 +630,16 @@ No approved UI code yet.
 
     const { written, skipped } = writeV0FilesToWorkspace(
       workspaceRoot,
-      v0Files.map((f) => ({ name: f.name, content: f.content }))
+      v0Files.map((f) => ({ name: normalizeV0WriteRel(f.name), content: f.content }))
     );
+
+    if (written.length === 0 && skipped.length > 0) {
+      return {
+        ok: false,
+        status: 422,
+        error: `v0 returned ${v0Files.length} file(s) but none matched allowed paths (src/, app/, components/, etc.). Skipped: ${skipped.slice(0, 6).join(", ")}`,
+      };
+    }
 
     ensureNebulaUiStudioFileAt(nebulaUiStudioPath);
     const existing = fs.readFileSync(nebulaUiStudioPath, "utf8");
@@ -638,7 +654,7 @@ No approved UI code yet.
       chatId: v0Call.result.chatId,
       written,
       skipped,
-      demoUrl: v0Call.result.demoUrl,
+      demoUrl: v0Call.result.demoUrl ?? demoUrl,
       primaryCode,
     };
   };
@@ -1021,7 +1037,7 @@ No approved UI code yet.
             message,
             projectDisplayName: projectName,
           });
-          if (pass.ok) {
+          if (pass.ok === true) {
             v0Ok = true;
             v0Written = pass.written;
           } else {
