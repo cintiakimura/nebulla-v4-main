@@ -136,36 +136,37 @@ export function IdeWorkspaceProvider({ children }: { children: ReactNode }) {
   }, [activePath, activeTab]);
 
   const openFile = useCallback(async (relPath: string) => {
-    const path = relPath.replace(/\\/g, '/');
+    const normalized = relPath.replace(/\\/g, '/');
     setSaveError(null);
-    setActivePath(path);
-    try {
-      window.dispatchEvent(new CustomEvent('nebula-center-focus-file', { detail: { path } }));
-    } catch {
-      /* ignore */
-    }
-    const existing = tabsRef.current.find((t) => t.path === path);
+    setActivePath(normalized);
+
+    const existing = tabsRef.current.find((t) => t.path === normalized);
     if (existing && !existing.loading) {
       return;
     }
     if (!existing) {
-      setTabs((prev) => [...prev, { path, content: '', dirty: false, loading: true }]);
+      setTabs((prev) => {
+        if (prev.some((t) => t.path === normalized)) return prev;
+        return [...prev, { path: normalized, content: '', dirty: false, loading: true }];
+      });
     } else if (existing.loading) {
       return;
     }
 
     try {
       const { content } = await fetchJson<{ content: string }>(
-        withProjectQuery(`/api/files/content?path=${encodeURIComponent(path)}`),
+        withProjectQuery(`/api/files/content?path=${encodeURIComponent(normalized)}`),
       );
       setTabs((prev) =>
-        prev.map((t) => (t.path === path ? { ...t, content, dirty: false, loading: false } : t)),
+        prev.map((t) =>
+          t.path === normalized ? { ...t, content, dirty: false, loading: false } : t,
+        ),
       );
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       setTabs((prev) =>
         prev.map((t) =>
-          t.path === path
+          t.path === normalized
             ? { ...t, content: `// Load failed: ${msg}\n`, dirty: false, loading: false }
             : t,
         ),
@@ -272,16 +273,22 @@ export function ideContextSnippetForChat(
   content: string,
   maxLen = IDE_SWARM_FOCUS_SNIPPET_MAX,
   workspaceRootLabel?: string,
+  extras?: { gitBranch?: string | null; openTabPaths?: string[] },
 ): string {
   const project = getBrowserProjectName().trim() || 'Untitled project';
   const key = getBrowserProjectKey();
   const root = workspaceRootLabel?.trim() || `data/cloud-projects/${key}`;
-  const head = [
+  const headLines = [
     `Active project: ${project}`,
     `Project key: ${key}`,
     `Workspace root: ${root}`,
-    path ? `Open file: ${path}` : 'No file open in the editor.',
-  ].join('\n');
+    extras?.gitBranch ? `Git branch: ${extras.gitBranch}` : null,
+    extras?.openTabPaths?.length
+      ? `Open editor tabs: ${extras.openTabPaths.join(', ')}`
+      : null,
+    path ? `Active file: ${path}` : 'No file open in the editor.',
+  ].filter(Boolean);
+  const head = headLines.join('\n');
   if (!path) return `${head}\n`;
   const body = content.length > maxLen ? `${content.slice(0, maxLen)}\n\n… [truncated]` : content;
   return `${head}\n--- file contents ---\n${body}`;

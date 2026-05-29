@@ -1,4 +1,5 @@
 import { fetchJson } from './apiFetch';
+import { formatWorkspaceFileIndexBlock } from '../../lib/ideAiContextBlocks';
 import { getBrowserProjectKey, getBrowserProjectName, withProjectQuery } from './nebulaProjectApi';
 
 export type IdeWorkspaceMeta = {
@@ -58,14 +59,49 @@ export function clearIdeWorkspaceMetaCache(): void {
   cached = null;
 }
 
+export type WorkspaceOverviewForChat = {
+  paths: string[];
+  gitBranch: string | null;
+};
+
+export async function fetchWorkspaceOverviewForChat(): Promise<WorkspaceOverviewForChat> {
+  try {
+    const data = await fetchJson<{
+      nebulaFiles?: { relativePath: string }[];
+      git?: { branch?: string } | null;
+    }>(withProjectQuery('/api/source-control/overview'), { credentials: 'include' });
+    const paths = (data.nebulaFiles ?? [])
+      .map((f) => f.relativePath.replace(/\\/g, '/'))
+      .filter(Boolean)
+      .sort((a, b) => a.localeCompare(b));
+    const branchRaw = data.git?.branch?.trim();
+    const gitBranch =
+      branchRaw && branchRaw !== 'unknown' && branchRaw !== '?' ? branchRaw : null;
+    return { paths, gitBranch };
+  } catch {
+    return { paths: [], gitBranch: null };
+  }
+}
+
+export function formatWorkspaceEnrichmentBlock(overview: WorkspaceOverviewForChat): string {
+  if (overview.paths.length === 0 && !overview.gitBranch) {
+    return 'WORKSPACE_FILE_INDEX: (empty — no user app files on disk yet; scaffold on BUILD_MODE or Go.)';
+  }
+  return formatWorkspaceFileIndexBlock(overview.paths, { gitBranch: overview.gitBranch });
+}
+
 /** Block injected into every IDE Grok request so the model knows where files live. */
-export function formatWorkspaceContextBlock(meta: IdeWorkspaceMeta, options?: { buildMode?: boolean }): string {
+export function formatWorkspaceContextBlock(
+  meta: IdeWorkspaceMeta,
+  options?: { buildMode?: boolean; enrichment?: string },
+): string {
   const lines = [
     'ACTIVE_WORKSPACE (authoritative for this turn):',
     `- projectName: ${meta.projectName}`,
     `- projectKey: ${meta.projectKey}`,
     `- workspaceRoot: ${meta.workspaceRoot}`,
     `- mode: ${meta.mode}`,
+    `- persistence: ${meta.mode === 'cloud' ? 'cloud project (saved while signed in)' : meta.mode === 'guest' ? 'local guest only — sign in with email to persist' : 'unknown'}`,
     `- All file paths in \`\`\`file:…\`\`\` blocks must be relative to workspaceRoot.`,
   ];
   if (options?.buildMode) {
@@ -77,5 +113,10 @@ export function formatWorkspaceContextBlock(meta: IdeWorkspaceMeta, options?: { 
       '- CONVERSATION_MODE: ON — reply in short prose only; no markdown code fences or file bodies unless the user explicitly asks to see a snippet.',
     );
   }
-  return lines.join('\n');
+  lines.push(
+    '- Ground answers in WORKSPACE_FILE_INDEX and Master Plan; do not invent files or features that contradict them.',
+  );
+  const base = lines.join('\n');
+  const enrichment = options?.enrichment?.trim();
+  return enrichment ? `${base}\n\n${enrichment}` : base;
 }

@@ -42,6 +42,7 @@ import {
   FREE_TIER_MONTHLY_LIMIT_MESSAGE,
 } from "./lib/nebulaMainGrokResolver";
 import { callClaudeChatCompletion } from "./lib/nebulaClaudeFallback";
+import { formatWorkspaceFileIndexBlock } from "./lib/ideAiContextBlocks";
 import {
   bootstrapMasterPlanFromWorkspace,
   ensurePreviewIndexHtml,
@@ -2897,6 +2898,17 @@ ${answer.slice(0, 8000)}`;
       console.error("Conversation memory load failed:", memErr);
     }
 
+    let serverFileIndexBlock = "";
+    try {
+      const allFiles = collectWorkspaceFiles(ppChat.workspaceRoot);
+      const productPaths = allFiles
+        .filter((f) => isUserAppProductPath(f.relativePath))
+        .map((f) => f.relativePath);
+      serverFileIndexBlock = formatWorkspaceFileIndexBlock(productPaths);
+    } catch (fileIdxErr) {
+      console.warn("[grok/chat] workspace file index:", fileIdxErr);
+    }
+
     const workspaceBlock =
       workspaceContextFromClient ||
       [
@@ -2909,7 +2921,11 @@ ${answer.slice(0, 8000)}`;
     const modeBlock = buildMode
       ? "BUILD_MODE: ON — user wants implementation. Master Plan only inside <START_MASTERPLAN>…</END_MASTERPLAN>. Code only as ```file:path``` blocks or START_CODING; never paste implementation as ```typescript``` in chat."
       : "CONVERSATION_MODE: ON — short natural prose only; no markdown code fences or full file bodies unless the user explicitly asks for a one-line snippet.";
-    const workspaceSystem = `${workspaceBlock}\n${modeBlock}`;
+    const includeServerFileIndex =
+      serverFileIndexBlock && !workspaceContextFromClient.includes("WORKSPACE_FILE_INDEX");
+    const workspaceSystem = [workspaceBlock, modeBlock, includeServerFileIndex ? serverFileIndexBlock : ""]
+      .filter(Boolean)
+      .join("\n");
     const sysIdx = messagesForApi.findIndex((m) => m.role === "system");
     if (sysIdx >= 0 && typeof messagesForApi[sysIdx].content === "string") {
       messagesForApi[sysIdx] = {

@@ -48,16 +48,22 @@ export function IdeCenterTabsProvider({ children }: { children: ReactNode }) {
   const [activeTabId, setActiveTabId] = useState<string | null>(null);
   const [uiStudioTab, setUiStudioTab] = useState<UiStudioTab>('design');
 
-  const fileCenterTabs = useMemo<CenterTab[]>(
-    () =>
-      tabs.map((t) => ({
-        id: fileTabId(t.path),
+  const fileCenterTabs = useMemo<CenterTab[]>(() => {
+    const seen = new Set<string>();
+    const out: CenterTab[] = [];
+    for (const t of tabs) {
+      const id = fileTabId(t.path);
+      if (seen.has(id)) continue;
+      seen.add(id);
+      out.push({
+        id,
         kind: 'file' as const,
         label: fileTabLabel(t.path),
         path: t.path,
-      })),
-    [tabs],
-  );
+      });
+    }
+    return out;
+  }, [tabs]);
 
   const openTabs = useMemo(() => [...panelTabs, ...fileCenterTabs], [panelTabs, fileCenterTabs]);
 

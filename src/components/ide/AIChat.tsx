@@ -18,6 +18,7 @@ import {
 import { dispatchOpenUiStudio, dispatchStartUiUxWorkflow } from '../../lib/nebulaUiStudioEvents';
 import {
   handlePostGrokCodingTurn,
+  isCodingIntent,
   runGoCodeAndApply,
 } from '../../lib/nebulaGrokCodingPipeline';
 import { syncActiveCloudProjectFromSession } from '../../lib/nebulaCloud';
@@ -29,12 +30,46 @@ import {
 } from '../../lib/ideWorkspaceChatContext';
 import { ideContextSnippetForChat, useIdeWorkspace } from '@/components/ide/IdeWorkspaceContext';
 import {
+  advanceGrokActivity,
+  createGrokActivity,
+  errorGrokActivity,
+  finishGrokActivity,
+  type GrokActivityStatus,
+} from '../../lib/ideGrokActivityStatus';
+import { IdeGrokActivityPanel } from '@/components/ide/IdeGrokActivityPanel';
+import {
   MIC_REENABLE_AFTER_TTS_MS,
   splitTextForTts,
   stripAssistantTagsForVoice,
   TTS_START_DEBOUNCE_MS,
   VOICE_SILENCE_BEFORE_SEND_MS,
 } from '../../lib/voiceTtsShared';
+
+const IDLE_GROK_ACTIVITY: GrokActivityStatus = {
+  headline: 'Ready',
+  subhead: 'Chat for discovery and planning · Go runs Grok Code and writes files to your workspace.',
+  steps: [],
+  activeStepIndex: 0,
+  footer: 'Detailed progress appears here while Grok is thinking or coding — this can take 1–3 minutes.',
+  tone: 'ready',
+};
+
+const CHAT_WORK_STEPS = [
+  { label: 'Send your message to Grok' },
+  { label: 'Grok reads Master Plan, file index, and workspace context' },
+  { label: 'Save Master Plan sections to project tabs' },
+  { label: 'Update mind map & UI Studio pipeline (when plan changes)' },
+  { label: 'Run Grok Code and apply files (when building)' },
+  { label: 'Sync explorer, mind map, and preview' },
+];
+
+const GO_WORK_STEPS = [
+  { label: 'Load workspace & Master Plan context' },
+  { label: 'Grok writes pre-coding summary to Master Plan' },
+  { label: 'Grok Code generates implementation files' },
+  { label: 'Write files to your cloud project folder' },
+  { label: 'Refresh mind map & run v0 UI when configured' },
+];
 
 /** WebKit speech types (not always present in TS `lib` for this project). */
 type IdeSpeechRecognitionResult = { isFinal: boolean; 0: { transcript: string } };
@@ -104,16 +139,12 @@ function ChatRoundButton({
 
 
 export function AIChat() {
-  const { activePath, activeTab, diskProjectKey, refreshTree } = useIdeWorkspace();
+  const { activePath, activeTab, diskProjectKey, refreshTree, gitBranch, tabs } = useIdeWorkspace();
   const [workspaceRootLabel, setWorkspaceRootLabel] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [accessoryHint, setAccessoryHint] = useState<string | null>(null);
-  const [grokStatusLines, setGrokStatusLines] = useState<[string, string, string]>([
-    'Ready',
-    'Chat: prose only — no code or Master Plan in messages',
-    'Go: writes files to the workspace',
-  ]);
+  const [grokActivity, setGrokActivity] = useState<GrokActivityStatus>(IDLE_GROK_ACTIVITY);
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
   const [serverHasGrokKey, setServerHasGrokKey] = useState<boolean | null>(null);
@@ -551,11 +582,18 @@ export function AIChat() {
     setSending(true);
     setSendError(null);
     const buildMode = detectBuildModeIntent(text);
-    setGrokStatusLines([
-      buildMode ? 'Build mode…' : 'Thinking…',
-      buildMode ? 'Grok will write files to your project' : 'Grok is preparing a reply',
-      'Ready when the response appears',
-    ]);
+    setGrokActivity(
+      createGrokActivity(
+        buildMode ? 'Build mode — Grok is implementing your request' : 'Grok is thinking…',
+        CHAT_WORK_STEPS,
+        {
+          subhead: buildMode
+            ? 'Master Plan → Grok Code → files on disk. Stay on this tab — progress updates below.'
+            : 'Reading your project context and preparing a reply.',
+          footer: 'Large coding passes can take 1–3 minutes on the server.',
+        },
+      ),
+    );
 
     const projectName = getBrowserProjectName().trim() || 'Untitled project';
     const ideAppendix = ideContextSnippetForChat(
@@ -563,6 +601,10 @@ export function AIChat() {
       activeTab?.content ?? '',
       undefined,
       workspaceRootLabel ?? undefined,
+      {
+        gitBranch,
+        openTabPaths: tabs.map((t) => t.path),
+      },
     );
 
     const historyForApi = [...prior, userMsg].map((m) => ({
@@ -575,6 +617,12 @@ export function AIChat() {
     let scheduledTts = false;
 
     try {
+      setGrokActivity((prev) =>
+        advanceGrokActivity(prev, 1, {
+          subhead: 'Calling Grok with Master Plan, workspace file index, and open editor context…',
+        }),
+      );
+
       const { assistantContent, planningPhase } = await sendIdeAssistantGrokTurn({
         textToSend: text,
         history: historyForApi,
@@ -586,7 +634,11 @@ export function AIChat() {
       const raw = assistantContent.trim();
       const masterPlanSource = (planningPhase || raw).trim();
 
-      setGrokStatusLines(['Processing…', 'Saving Master Plan to project tabs', 'Stripping code from chat display']);
+      setGrokActivity((prev) =>
+        advanceGrokActivity(prev, 2, {
+          subhead: 'Parsing Master Plan tags and saving to master-plan.json…',
+        }),
+      );
       const mpSaved = await persistMasterPlanFromAssistantSource(masterPlanSource);
 
       if (/<NEBULA_UI_STUDIO_PROMPT>/i.test(masterPlanSource)) {
@@ -597,11 +649,15 @@ export function AIChat() {
 
       let masterPlanPipeline: Awaited<ReturnType<typeof runMasterPlanUiPipeline>> = {};
       if (mpSaved > 0) {
-        setGrokStatusLines([
-          'Master Plan saved',
-          'Writing v0-prompt & mind map from §4',
-          'Auto v0 when API key is set',
-        ]);
+        setGrokActivity((prev) =>
+          advanceGrokActivity(prev, 3, {
+            stepDetail: {
+              index: 2,
+              detail: `Saved ${mpSaved} Master Plan section(s). Building v0 prompt & mind map from §4…`,
+            },
+            subhead: 'UI Studio pipeline — v0 prompt, mind map sync, optional v0 generation.',
+          }),
+        );
         masterPlanPipeline = await runMasterPlanUiPipeline({
           projectName,
           autoV0: true,
@@ -645,18 +701,21 @@ export function AIChat() {
       }
 
       try {
-        if (hadCodingTag || /```(?:file|filepath)\s*:/i.test(raw)) {
-          setGrokStatusLines([
-            'Coding…',
-            mpSaved > 0 ? `Master Plan: ${mpSaved} section(s) saved` : 'Running Grok Code pipeline',
-            'Applying files to workspace',
-          ]);
-        } else {
-          setGrokStatusLines([
-            'Done',
-            mpSaved > 0 ? `Master Plan updated (${mpSaved} sections)` : 'Reply shown in chat',
-            'Ready for next message',
-          ]);
+        const willCode =
+          hadCodingTag || /```(?:file|filepath)\s*:/i.test(raw) || isCodingIntent(masterPlanSource);
+        if (willCode) {
+          setGrokActivity((prev) => {
+            const mm =
+              masterPlanPipeline.mindMapPageCount != null && masterPlanPipeline.mindMapPageCount > 0
+                ? `Mind map: ${masterPlanPipeline.mindMapPageCount} page(s).`
+                : undefined;
+            return advanceGrokActivity(prev, 4, {
+              subhead: 'Grok Code is generating file blocks — applying to your workspace next.',
+              ...(mm
+                ? { stepDetail: { index: 3, detail: mm } }
+                : {}),
+            });
+          });
         }
 
         const coding = await handlePostGrokCodingTurn({
@@ -667,6 +726,14 @@ export function AIChat() {
           userNote: text,
         });
         if (coding.ran) {
+          setGrokActivity((prev) =>
+            advanceGrokActivity(prev, 5, {
+              subhead: coding.statusMessage || 'Syncing mind map, explorer, and preview…',
+              ...(coding.statusMessage
+                ? { stepDetail: { index: 4, detail: coding.statusMessage } }
+                : {}),
+            }),
+          );
           const artifactSync = await runPostCodingWorkspaceSync({
             userNote: text,
             projectName,
@@ -693,20 +760,58 @@ export function AIChat() {
           } else if (masterPlanPipeline.v0PromptWritten) {
             dispatchOpenUiStudio({ tab: 'design' });
           }
-        } else if (!hadCodingTag) {
+          setGrokActivity((prev) =>
+            finishGrokActivity(
+              prev,
+              'Coding complete',
+              CHAT_WORK_STEPS.map((s) => ({
+                ...s,
+                detail:
+                  s.label.includes('Grok Code') && coding.statusMessage
+                    ? coding.statusMessage
+                    : s.label.includes('Sync') && masterPlanPipeline.v0Ok
+                      ? 'v0 UI generated in UI Studio.'
+                      : undefined,
+              })),
+              masterPlanPipeline.v0Ok
+                ? 'Files are in your workspace · UI Studio has a v0 preview.'
+                : coding.statusMessage || 'Files updated — check Explorer and Master Plan.',
+            ),
+          );
+        } else if (!willCode) {
           const mm = masterPlanPipeline.mindMapPageCount ?? 0;
-          const v0Note = masterPlanPipeline.v0Ok
-            ? 'v0 UI generated'
-            : masterPlanPipeline.v0Triggered && masterPlanPipeline.v0Error
-              ? `v0: ${String(masterPlanPipeline.v0Error).slice(0, 48)}`
-              : mm > 0
-                ? 'Mind map ready — use UI Studio → Generate with v0'
-                : 'Chat: prose only — Go writes files';
-          setGrokStatusLines(['Ready', mm > 0 ? `Mind map: ${mm} page(s)` : 'Master Plan updated', v0Note]);
+          const footer =
+            masterPlanPipeline.v0Ok
+              ? 'v0 UI generated — open UI Studio to preview.'
+              : masterPlanPipeline.v0Triggered && masterPlanPipeline.v0Error
+                ? `v0 note: ${String(masterPlanPipeline.v0Error).slice(0, 120)}`
+                : mm > 0
+                  ? 'Mind map updated — open Mind map or UI Studio next.'
+                  : mpSaved > 0
+                    ? 'Master Plan updated — press Go when you want files written.'
+                    : 'Reply shown in chat — press Go to implement.';
+          setGrokActivity((prev) =>
+            finishGrokActivity(
+              prev,
+              'Reply ready',
+              CHAT_WORK_STEPS.slice(0, 3).map((s, i) => ({
+                ...s,
+                detail:
+                  i === 2 && mpSaved > 0 ? `${mpSaved} section(s) saved.` : i === 1 ? 'No coding this turn.' : undefined,
+              })),
+              footer,
+            ),
+          );
         }
       } catch (codingErr) {
         console.warn('[AIChat] coding apply:', codingErr);
-        setGrokStatusLines(['Error', 'File apply failed', 'Ready to retry']);
+        setGrokActivity((prev) =>
+          errorGrokActivity(
+            prev,
+            'File apply failed',
+            codingErr instanceof Error ? codingErr.message : 'Could not write files to workspace',
+          ),
+        );
       }
 
       if (spoken.trim()) {
@@ -715,7 +820,13 @@ export function AIChat() {
         void playTtsForText(spoken);
       }
     } catch (e) {
-      setGrokStatusLines(['Error', 'Grok request failed', 'Check server key and retry']);
+      setGrokActivity((prev) =>
+        errorGrokActivity(
+          prev,
+          'Grok request failed',
+          e instanceof Error ? e.message : 'Check server API key and retry',
+        ),
+      );
       const msg = e instanceof Error ? e.message : String(e);
       const isKeyHelp =
         msg.includes('Grok API key') ||
@@ -742,7 +853,7 @@ export function AIChat() {
         resumeOpenTalkIfWanted();
       }
     }
-  }, [sending, activePath, activeTab?.content, serverHasGrokKey, micInputBlocked, workspaceRootLabel, pauseHandsFreeListening, resumeOpenTalkIfWanted]);
+  }, [sending, activePath, activeTab?.content, serverHasGrokKey, micInputBlocked, workspaceRootLabel, gitBranch, tabs, pauseHandsFreeListening, resumeOpenTalkIfWanted]);
 
   sendChatRef.current = sendChat;
 
@@ -946,26 +1057,69 @@ export function AIChat() {
     inputRef.current = '';
     setSending(true);
     setSendError(null);
-    setAccessoryHint('Grok summary → coding agent → writing files…');
-    setGrokStatusLines(['Build mode (Go)…', 'Grok → coding agent', 'Writing files to your project']);
+    setGrokActivity(
+      createGrokActivity('Go — full coding pass', GO_WORK_STEPS, {
+        subhead: 'Running pre-coding summary, Grok Code, file apply, then UI pipeline.',
+        footer: 'Server-side coding often takes 1–3 minutes — steps update as each phase completes.',
+      }),
+    );
 
     const session = await fetchSessionUser();
     const userId = session?.uid?.trim() || 'anonymous';
     const projectName = getBrowserProjectName().trim() || 'Untitled project';
 
     try {
+      setGrokActivity((prev) => advanceGrokActivity(prev, 1, { subhead: 'Refreshing workspace metadata…' }));
       await refreshWorkspaceMeta();
-      await runGoCodeAndApply({ userId, projectName, userNote });
+      setGrokActivity((prev) =>
+        advanceGrokActivity(prev, 2, {
+          subhead: 'Grok Code agent running on server (summary + implementation)…',
+        }),
+      );
+      const go = await runGoCodeAndApply({ userId, projectName, userNote });
+      setGrokActivity((prev) =>
+        advanceGrokActivity(prev, 3, {
+          ...(go.statusMessage ? { stepDetail: { index: 2, detail: go.statusMessage } } : {}),
+          subhead: go.ok ? 'Applying generated files and syncing artifacts…' : go.statusMessage,
+        }),
+      );
+      if (!go.ok) {
+        setGrokActivity((prev) => errorGrokActivity(prev, 'Go did not complete', go.statusMessage));
+        setSendError(go.statusMessage);
+        return;
+      }
+      setGrokActivity((prev) =>
+        advanceGrokActivity(prev, 4, { subhead: 'Mind map & v0 UI pipeline (when V0_API_KEY is set)…' }),
+      );
       const pipeline = await runMasterPlanUiPipeline({ projectName, autoV0: true });
       if (pipeline.v0Ok) {
         window.dispatchEvent(new CustomEvent('nebula-ui-studio-v0-complete'));
         window.dispatchEvent(new CustomEvent('nebula-files-applied'));
         dispatchOpenUiStudio({ tab: 'design' });
       }
-      setGrokStatusLines(['Ready', 'Files updated in workspace', 'Continue in chat or open talk']);
+      setGrokActivity((prev) =>
+        finishGrokActivity(
+          prev,
+          'Go complete — workspace updated',
+          GO_WORK_STEPS.map((s) => ({
+            ...s,
+            detail:
+              s.label.includes('Write files') && go.statusMessage
+                ? go.statusMessage
+                : s.label.includes('v0') && pipeline.v0Ok
+                  ? 'v0 UI ready in UI Studio.'
+                  : undefined,
+          })),
+          pipeline.v0Ok
+            ? `${go.statusMessage} · v0 UI generated.`
+            : go.statusMessage || 'Check Explorer for new files.',
+        ),
+      );
     } catch (e) {
       setSendError(e instanceof Error ? e.message : 'Go failed');
-      setGrokStatusLines(['Error', 'Go / Grok Code failed', 'Ready to retry']);
+      setGrokActivity((prev) =>
+        errorGrokActivity(prev, 'Go failed', e instanceof Error ? e.message : 'Unexpected error'),
+      );
     } finally {
       setSending(false);
       setAccessoryHint(null);
@@ -1039,20 +1193,19 @@ export function AIChat() {
             <div className="active-tab-sheen flex h-6 w-6 shrink-0 items-center justify-center rounded-full">
               <Bot className="h-3.5 w-3.5 text-primary" />
             </div>
-            <div className="surface-active flex items-center gap-1 rounded-lg px-3 py-2">
-              <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-muted-foreground [animation-delay:-0.3s]" />
-              <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-muted-foreground [animation-delay:-0.15s]" />
-              <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-muted-foreground" />
+            <div className="surface-active max-w-[85%] rounded-lg px-3 py-2">
+              <p className="type-label-sm text-muted-foreground">
+                Working… see the step-by-step status panel below the chat.
+              </p>
             </div>
           </div>
         ) : null}
         <div ref={messagesEndRef} className="h-px shrink-0" aria-hidden />
       </div>
 
+      <IdeGrokActivityPanel activity={grokActivity} />
+
       <div className="tonal-seam-t shrink-0 p-3">
-        <div className="sr-only" role="status" aria-live="polite">
-          {grokStatusLines.join(' · ')}
-        </div>
         <div className="surface-float rounded-lg border border-transparent p-2 ring-1 ring-[color-mix(in_srgb,var(--outline-variant)_12%,transparent)] transition-[box-shadow,background-color] duration-300 ease-out focus-within:ring-[color-mix(in_srgb,var(--outline-variant)_22%,transparent)]">
           <textarea
             value={input}

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
-import { CheckCircle2, FolderOpen, Github, Loader2, Plus } from 'lucide-react';
+import { CheckCircle2, FolderOpen, Github, Loader2, Mail, Plus } from 'lucide-react';
 import { Logo } from '@/components/Logo';
+import { readResponseJson } from '../../lib/apiFetch';
 import {
   bindGuestWorkspace,
   createAndSelectCloudProject,
@@ -31,6 +32,10 @@ export function WorkspaceSetupGate({ onReady }: { onReady: (ctx: WorkspaceContex
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [stayLoggedIn, setStayLoggedIn] = useState(true);
+  const [emailMode, setEmailMode] = useState<'signin' | 'signup'>('signin');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [signupProjectName, setSignupProjectName] = useState('');
 
   const finishReady = useCallback(
     (ctx: WorkspaceContext) => {
@@ -95,6 +100,54 @@ export function WorkspaceSetupGate({ onReady }: { onReady: (ctx: WorkspaceContex
   const openGitHubOAuth = () => {
     const q = stayLoggedIn ? 'remember=1' : 'remember=0';
     window.open(`/api/auth/github?${q}`, 'nebulla_github_oauth', 'width=520,height=720,scrollbars=yes');
+  };
+
+  const runAuthJson = async (path: string, body: object) => {
+    const res = await fetch(path, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ ...body, remember: stayLoggedIn }),
+    });
+    const data = await readResponseJson<{ error?: string }>(res);
+    return { res, data };
+  };
+
+  const submitEmailAuth = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!config.cloudStorageReady) {
+      setError('Sign-in requires DATABASE_URL on the server.');
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      if (emailMode === 'signup') {
+        const { res, data } = await runAuthJson('/api/auth/register', {
+          email: email.trim(),
+          password,
+          projectName: signupProjectName.trim() || 'Untitled Project',
+        });
+        if (!res.ok) {
+          setError(typeof data.error === 'string' ? data.error : 'Could not create account.');
+          return;
+        }
+      } else {
+        const { res, data } = await runAuthJson('/api/auth/login', {
+          email: email.trim(),
+          password,
+        });
+        if (!res.ok) {
+          setError(typeof data.error === 'string' ? data.error : 'Sign in failed.');
+          return;
+        }
+      }
+      await runEnsure();
+    } catch {
+      setError('Network error.');
+    } finally {
+      setBusy(false);
+    }
   };
 
   const handleSelectProject = async (name: string) => {
@@ -215,23 +268,113 @@ export function WorkspaceSetupGate({ onReady }: { onReady: (ctx: WorkspaceContex
         {phase.status === 'needs_login' ? (
           <div className="space-y-4">
             <p className="text-sm text-slate-400 leading-relaxed">
-              Sign in with GitHub to get a cloud project folder. Grok sends{' '}
-              <code className="text-slate-300">projectName</code> and{' '}
-              <code className="text-slate-300">projectKey</code> on every coding request.
+              Sign in with <strong className="font-normal text-slate-200">email</strong> or GitHub to save projects to
+              the cloud. Grok receives your project name, workspace path, file index, and Master Plan on every message.
             </p>
+
+            <form onSubmit={(e) => void submitEmailAuth(e)} className="space-y-3 rounded-xl border border-white/10 bg-black/25 p-4">
+              <div className="flex rounded-lg border border-white/10 p-0.5 bg-black/25">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEmailMode('signin');
+                    setError(null);
+                  }}
+                  className={`flex-1 py-2 text-xs rounded-md transition-colors ${
+                    emailMode === 'signin' ? 'bg-cyan-500/20 text-cyan-300' : 'text-slate-500 hover:text-slate-300'
+                  }`}
+                >
+                  Sign in
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEmailMode('signup');
+                    setError(null);
+                  }}
+                  className={`flex-1 py-2 text-xs rounded-md transition-colors ${
+                    emailMode === 'signup' ? 'bg-cyan-500/20 text-cyan-300' : 'text-slate-500 hover:text-slate-300'
+                  }`}
+                >
+                  Create account
+                </button>
+              </div>
+              <div>
+                <label className="mb-1 block text-[10px] uppercase tracking-wider text-slate-500">Email</label>
+                <input
+                  type="email"
+                  autoComplete="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  disabled={!cloudOk || busy}
+                  className="w-full rounded-lg border border-white/10 bg-black/40 px-3 py-2 text-sm text-slate-100 disabled:opacity-50"
+                  placeholder="you@example.com"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-[10px] uppercase tracking-wider text-slate-500">Password</label>
+                <input
+                  type="password"
+                  autoComplete={emailMode === 'signup' ? 'new-password' : 'current-password'}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  disabled={!cloudOk || busy}
+                  className="w-full rounded-lg border border-white/10 bg-black/40 px-3 py-2 text-sm text-slate-100 disabled:opacity-50"
+                  placeholder={emailMode === 'signup' ? '10+ chars, letters and numbers' : 'Your password'}
+                />
+              </div>
+              {emailMode === 'signup' ? (
+                <div>
+                  <label className="mb-1 block text-[10px] uppercase tracking-wider text-slate-500">
+                    First project name
+                  </label>
+                  <input
+                    type="text"
+                    value={signupProjectName}
+                    onChange={(e) => setSignupProjectName(e.target.value)}
+                    disabled={!cloudOk || busy}
+                    className="w-full rounded-lg border border-white/10 bg-black/40 px-3 py-2 text-sm text-slate-100 disabled:opacity-50"
+                    placeholder="Untitled Project"
+                  />
+                </div>
+              ) : null}
+              <button
+                type="submit"
+                disabled={!cloudOk || busy}
+                className="flex w-full items-center justify-center gap-2 rounded-xl border border-cyan-500/40 bg-cyan-500/15 py-2.5 text-sm text-cyan-100 disabled:opacity-45"
+              >
+                <Mail className="h-4 w-4 shrink-0" aria-hidden />
+                {busy ? 'Please wait…' : emailMode === 'signin' ? 'Sign in with email' : 'Create account & save project'}
+              </button>
+            </form>
+
+            <div className="relative py-1">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t border-white/10" />
+              </div>
+              <div className="relative flex justify-center">
+                <span className="bg-[#0a0e14] px-3 text-[10px] uppercase tracking-wider text-slate-500">Or</span>
+              </div>
+            </div>
+
             <button
               type="button"
               onClick={openGitHubOAuth}
-              disabled={!cloudOk || !githubOk}
+              disabled={!cloudOk || !githubOk || busy}
               className="flex w-full items-center justify-center gap-2 rounded-xl bg-white py-3 text-[15px] font-medium text-[#0d1117] disabled:opacity-45"
             >
               <Github className="h-5 w-5" aria-hidden />
-              Login with GitHub
+              Continue with GitHub
             </button>
             {!githubOk && cloudOk ? (
               <p className="text-xs text-amber-400/90">
-                Set <code className="text-slate-400">GITHUB_CLIENT_ID</code> and{' '}
-                <code className="text-slate-400">GITHUB_CLIENT_SECRET</code> on the server.
+                GitHub is optional — email sign-in above saves your project without GitHub.
+              </p>
+            ) : null}
+            {!cloudOk ? (
+              <p className="text-xs text-red-400/90">
+                Cloud storage is unavailable until <code className="text-slate-400">DATABASE_URL</code> is configured on
+                the server.
               </p>
             ) : null}
             <label className="flex items-center gap-2 text-xs text-slate-500">
@@ -248,7 +391,7 @@ export function WorkspaceSetupGate({ onReady }: { onReady: (ctx: WorkspaceContex
               onClick={handleGuestContinue}
               className="w-full text-xs text-slate-500 underline-offset-2 hover:text-slate-300 hover:underline"
             >
-              Continue without account (local only)
+              Continue without account (local only — not saved to cloud)
             </button>
           </div>
         ) : null}

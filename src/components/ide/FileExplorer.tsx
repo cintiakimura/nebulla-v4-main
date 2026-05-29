@@ -16,6 +16,7 @@ import { cn } from '@/lib/utils';
 import { buildWorkspaceFileTree, type WorkspaceTreeNode } from '../../lib/workspaceFileTree';
 import { getBrowserProjectName } from '../../lib/nebulaProjectApi';
 import { useIdeWorkspace } from '@/components/ide/IdeWorkspaceContext';
+import { useIdeCenterTabs } from '@/components/ide/IdeCenterTabsContext';
 import { IdeCollapsibleSection } from '@/components/ide/IdeCollapsibleSection';
 import { fileTabLabel } from '../../lib/ideCenterTabs';
 
@@ -116,8 +117,9 @@ function FileTreeNode({
 }
 
 export function FileExplorer() {
-  const { workspacePaths, overviewLoading, overviewError, refreshTree, openFile, activePath, tabs } =
+  const { workspacePaths, overviewLoading, overviewError, refreshTree, activePath, tabs } =
     useIdeWorkspace();
+  const { focusFile } = useIdeCenterTabs();
   const [explorerHint, setExplorerHint] = useState<string | null>(null);
   const [editorsOpen, setEditorsOpen] = useState(true);
   const [projectOpen, setProjectOpen] = useState(true);
@@ -187,7 +189,7 @@ export function FileExplorer() {
                 <li key={t.path}>
                   <button
                     type="button"
-                    onClick={() => void openFile(t.path)}
+                    onClick={() => void focusFile(t.path)}
                     className={cn(
                       'flex w-full items-center gap-1.5 rounded px-2 py-1 text-left text-xs hover:bg-secondary/50',
                       activePath === t.path && 'active-tab-sheen text-primary',
@@ -221,7 +223,7 @@ export function FileExplorer() {
                 key={node.path || node.name}
                 node={node}
                 selectedPath={activePath}
-                onOpenFile={openFile}
+                onOpenFile={(path) => focusFile(path)}
               />
             ))
           )}

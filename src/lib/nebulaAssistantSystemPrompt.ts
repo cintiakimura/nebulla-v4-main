@@ -1,4 +1,5 @@
 import { masterPlanSectionSeparationRules } from './masterPlanSections';
+import { compactMasterPlanForChat } from '../../lib/ideAiContextBlocks';
 
 /**
  * Shared assistant system prompt (Master Plan + UI Studio context).
@@ -347,7 +348,7 @@ RULES:
 - Never modify Nebula IDE internal files.
 - Use <REASONING> for thought process.
 
-CURRENT MASTER PLAN: ${JSON.stringify(latestMP, null, 2)}
+CURRENT MASTER PLAN: ${compactMasterPlanForChat(latestMP)}
 
 APPROVED_UI_UX_CODE_FROM_NEBULA_UI_STUDIO_FILE (also mirrored at nebulla-sysh-ui-sysh-studio/approved/approved-ui.svg after approval):
 ${uiStudioApprovedCode || 'No approved UI code yet.'}`;

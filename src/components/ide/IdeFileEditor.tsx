@@ -10,6 +10,7 @@ import { defaultHighlightStyle, syntaxHighlighting } from '@codemirror/language'
 import { ChevronRight, Circle, Loader2, Save } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useIdeWorkspace } from '@/components/ide/IdeWorkspaceContext';
+import { fileTabLabel } from '../../lib/ideCenterTabs';
 
 function languageExtension(path: string) {
   const lower = path.toLowerCase();
@@ -103,8 +104,14 @@ export function IdeFileEditor() {
           <div className="type-body-md flex flex-1 items-center justify-center p-6 text-center text-muted-foreground">
             Open a file from the explorer to edit workspace sources.
           </div>
+        ) : activeTab.loading ? (
+          <div className="flex flex-1 items-center justify-center gap-2 text-muted-foreground">
+            <Loader2 className="h-5 w-5 animate-spin" />
+            <span className="type-label-sm">Loading {fileTabLabel(activePath)}…</span>
+          </div>
         ) : (
           <CodeMirror
+            key={activePath}
             value={activeTab.content}
             height="100%"
             className="nebulla-codemirror min-h-0 flex-1 overflow-hidden text-[13px]"

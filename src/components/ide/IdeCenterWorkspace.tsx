@@ -53,7 +53,7 @@ export function IdeCenterWorkspace() {
     closeTab,
     openPanel,
   } = useIdeCenterTabs();
-  const { tabs: fileTabs } = useIdeWorkspace();
+  const { tabs: fileTabs, activePath } = useIdeWorkspace();
 
   const projectName = getBrowserProjectName().trim() || 'Untitled project';
   const projectKey = getBrowserProjectKey();
@@ -68,7 +68,9 @@ export function IdeCenterWorkspace() {
   ];
 
   const activePane = activeTab?.kind === 'panel' ? activeTab.pane : null;
-  const showFileEditor = activeTab?.kind === 'file';
+  const showFileEditor =
+    activeTab?.kind === 'file' ||
+    Boolean(activePath && fileTabs.some((t) => t.path === activePath));
   const dirtyByPath = new Map(fileTabs.map((t) => [t.path, t.dirty]));
   const loadingByPath = new Map(fileTabs.map((t) => [t.path, t.loading]));
 
@@ -156,7 +158,7 @@ export function IdeCenterWorkspace() {
       ) : null}
 
       <div className="relative min-h-0 flex-1 overflow-hidden">
-        {openTabs.length === 0 ? (
+        {openTabs.length === 0 && !activePath ? (
           <div className="flex h-full flex-col items-center justify-center gap-2 p-8 text-center">
             <p className="font-headline text-sm text-foreground">No editors open</p>
             <p className="max-w-sm text-xs text-muted-foreground">

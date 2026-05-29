@@ -7,7 +7,9 @@ import { withProjectBody, withProjectQuery } from './nebulaProjectApi';
 import {
   detectBuildModeIntent,
   fetchIdeWorkspaceMeta,
+  fetchWorkspaceOverviewForChat,
   formatWorkspaceContextBlock,
+  formatWorkspaceEnrichmentBlock,
 } from './ideWorkspaceChatContext';
 import { buildNebulaAssistantSystemPrompt } from './nebulaAssistantSystemPrompt';
 
@@ -59,13 +61,17 @@ export async function sendIdeAssistantGrokTurn(options: {
   const { textToSend, history, userId, projectName, ideAppendix, signal } = options;
   const buildMode = options.buildMode ?? detectBuildModeIntent(textToSend);
 
-  const [wsMeta, planCtx] = await Promise.all([
+  const [wsMeta, planCtx, overview] = await Promise.all([
     fetchIdeWorkspaceMeta(true),
     fetchMasterPlanAndUiStudio(),
+    fetchWorkspaceOverviewForChat(),
   ]);
   const { latestMP, uiStudioApprovedCode } = planCtx;
 
-  const workspaceContext = formatWorkspaceContextBlock(wsMeta, { buildMode });
+  const workspaceContext = formatWorkspaceContextBlock(wsMeta, {
+    buildMode,
+    enrichment: formatWorkspaceEnrichmentBlock(overview),
+  });
 
   let systemPrompt =
     buildNebulaAssistantSystemPrompt(latestMP, uiStudioApprovedCode) +
