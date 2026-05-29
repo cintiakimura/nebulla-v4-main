@@ -22,7 +22,30 @@ export function splitMasterPlanSectionsFromBlock(block: string): Partial<Record<
   return parseMasterPlanBlock(block);
 }
 
-export async function persistMasterPlanFromAssistantSource(source: string): Promise<number> {
+/** Pull relative paths from Grok file blocks (before apply). */
+export function extractGrokFilePaths(raw: string): string[] {
+  const normalized = normalizeGrokFileBlockSyntax(raw);
+  const paths: string[] = [];
+  normalized.replace(/```(?:file|filepath)\s*:\s*([^\n`]+)\n[\s\S]*?```/gi, (_m, p: string) => {
+    const path = p.trim().replace(/^["'`]+|["'`]+$/g, '');
+    if (path) paths.push(path);
+    return '';
+  });
+  normalized.replace(
+    /(?:^|\n)\s*(?:File|FILE)\s*:\s*([^\n]+)\n```[^\n]*\n[\s\S]*?```/gi,
+    (_m, p: string) => {
+      const path = p.trim();
+      if (path) paths.push(path);
+      return '';
+    },
+  );
+  return [...new Set(paths)];
+}
+
+export async function persistMasterPlanFromAssistantSource(
+  source: string,
+  onProgress?: (message: string) => void,
+): Promise<number> {
   const inner = extractMasterPlanInner(source);
   let parsed = inner ? parseMasterPlanBlock(inner) : {};
   if (Object.keys(parsed).length === 0) {
@@ -33,6 +56,8 @@ export async function persistMasterPlanFromAssistantSource(source: string): Prom
   for (let tabIndex = 1; tabIndex <= MASTER_PLAN_SECTION_KEYS.length; tabIndex++) {
     const content = (parsed[tabIndex] ?? '').trim();
     if (!content) continue;
+    const tabName = MASTER_PLAN_TAB_NAMES[tabIndex - 1] ?? `Tab ${tabIndex}`;
+    onProgress?.(`Saving Master Plan — ${tabName}`);
     try {
       await fetchJson(withProjectQuery('/api/master-plan/update'), {
         method: 'POST',
@@ -41,6 +66,7 @@ export async function persistMasterPlanFromAssistantSource(source: string): Prom
         body: JSON.stringify(withProjectBody({ tabIndex, content })),
       });
       saved++;
+      onProgress?.(`Saved Master Plan tab ${tabIndex}: ${tabName}`);
     } catch (e) {
       console.warn('[grokChatArtifacts] master plan tab save failed:', tabIndex, e);
     }

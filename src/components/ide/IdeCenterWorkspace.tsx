@@ -68,9 +68,7 @@ export function IdeCenterWorkspace() {
   ];
 
   const activePane = activeTab?.kind === 'panel' ? activeTab.pane : null;
-  const showFileEditor =
-    activeTab?.kind === 'file' ||
-    Boolean(activePath && fileTabs.some((t) => t.path === activePath));
+  const showFileEditor = activeTab?.kind === 'file';
   const dirtyByPath = new Map(fileTabs.map((t) => [t.path, t.dirty]));
   const loadingByPath = new Map(fileTabs.map((t) => [t.path, t.loading]));
 

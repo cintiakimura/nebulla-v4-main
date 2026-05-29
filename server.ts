@@ -72,7 +72,8 @@ import {
   v0WaitForChatFiles,
   type V0FileEntry,
 } from "./lib/nebulaV0Client";
-import { NEBULA_V0_KEY_SETUP_HINT, resolveV0ApiKey, V0_ENV_VAR } from "./lib/nebulaV0Resolver";
+import { NEBULA_V0_KEY_SETUP_HINT, resolveV0ApiKey, resolveV0ApiKeyFromRequest, V0_ENV_VAR } from "./lib/nebulaV0Resolver";
+import { PRE_CODING_SUMMARY_KEY } from "./lib/masterPlanSections";
 import {
   callGrokGenerateUiSvg,
   heuristicSvgEditRisks,
@@ -567,7 +568,7 @@ No approved UI code yet.
       }
     | { ok: false; status: number; error: string; hint?: string }
   > => {
-    const keyRes = resolveV0ApiKey();
+    const keyRes = resolveV0ApiKeyFromRequest(opts.req);
     if (keyRes.ok === false) {
       return {
         ok: false,
@@ -845,9 +846,6 @@ No approved UI code yet.
   app.get("/api/workspace/mind-map", (req, res) => {
     try {
       const { workspaceRoot } = projectPathsFor(req);
-      if (!isUserAppProductPath(MIND_MAP_WORKSPACE_REL)) {
-        return res.status(403).json({ error: "Mind map path not allowed" });
-      }
       const target = resolveWorkspaceRelative(workspaceRoot, MIND_MAP_WORKSPACE_REL);
       if (!fs.existsSync(target)) {
         return res.json({ pages: [], edges: [] });
@@ -865,9 +863,6 @@ No approved UI code yet.
   app.put("/api/workspace/mind-map", (req, res) => {
     try {
       const { workspaceRoot } = projectPathsFor(req);
-      if (!isUserAppProductPath(MIND_MAP_WORKSPACE_REL)) {
-        return res.status(403).json({ error: "Mind map path not allowed" });
-      }
       const pages = req.body?.pages;
       const edges = req.body?.edges;
       if (!Array.isArray(pages) || !Array.isArray(edges)) {
@@ -1060,7 +1055,7 @@ No approved UI code yet.
       const pp = projectPathsFor(req);
       const prompt = readV0PromptMarkdown(pp.workspaceRoot);
       const gate = isVisualEditorEligible(pp.workspaceRoot);
-      const keyRes = resolveV0ApiKey();
+      const keyRes = resolveV0ApiKeyFromRequest(req);
       return res.json({
         ok: true,
         v0PromptPath: "nebula-ui-studio/v0-prompt.md",
@@ -1373,6 +1368,32 @@ No approved UI code yet.
         parsedBlocks: blocks.length,
         usedFallbackPath: fallbackPath || undefined,
       });
+
+      if (written.length > 0) {
+        try {
+          const pp = projectPathsFor(req);
+          const body = req.body || {};
+          const projectName =
+            typeof body.projectName === "string" && body.projectName.trim()
+              ? String(body.projectName).trim()
+              : "Untitled Project";
+          const userNote = typeof body.userNote === "string" ? body.userNote.trim() : "";
+          bootstrapMasterPlanFromWorkspace({
+            workspaceRoot: pp.workspaceRoot,
+            masterPlanPath: pp.masterPlanPath,
+            projectName,
+            userNote,
+          });
+          hydrateAndPersistMasterPlan(pp.workspaceRoot, pp.masterPlanPath);
+          syncMindMapFromMasterPlan({
+            workspaceRoot: pp.workspaceRoot,
+            masterPlanPath: pp.masterPlanPath,
+            projectLabel: projectName,
+          });
+        } catch (syncErr) {
+          console.warn("[apply-generated] post-apply artifact sync:", syncErr);
+        }
+      }
     } catch (err: any) {
       res.status(500).json({ error: err?.message || "Failed to apply generated files" });
     }
@@ -1889,7 +1910,7 @@ No approved UI code yet.
       });
       const promptText = String((body as { prompt?: string }).prompt ?? "");
 
-      const v0KeyRes = resolveV0ApiKey();
+      const v0KeyRes = resolveV0ApiKeyFromRequest(req);
       if (v0KeyRes.ok) {
         const v0Pass = await runV0UiStudioPass({
           req,
@@ -2465,8 +2486,6 @@ Rules:
     }
   });
 
-  const PRE_CODING_SUMMARY_KEY = "Pre-coding summary (Grok)";
-
   /** Go: Grok 4 writes a short summary into master-plan.json only, then Grok Code runs (no full execution doc in MP). */
   app.post("/api/grok/go-code", async (req, res) => {
     const { messages, userId, projectName, userNote } = req.body || {};
@@ -2578,7 +2597,15 @@ Strict rules:
         }
       }
       plan[PRE_CODING_SUMMARY_KEY] = summary;
+      const goalKey = "1. Goal of the app";
+      const existingGoal = String(plan[goalKey] ?? "").trim();
+      if (!existingGoal) {
+        plan[goalKey] = summary;
+      } else if (!existingGoal.includes(summary.slice(0, 80))) {
+        plan[goalKey] = `${existingGoal}\n\n**Latest coding session (Go):**\n${summary}`;
+      }
       fs.writeFileSync(masterPlanPath, JSON.stringify(plan, null, 2), "utf8");
+      hydrateAndPersistMasterPlan(ppGo.workspaceRoot, masterPlanPath);
       console.log(`[go-code] Wrote ${PRE_CODING_SUMMARY_KEY} (${summary.length} chars)`);
 
       const workflowContext = buildProjectWorkflowExecutionContext(req);

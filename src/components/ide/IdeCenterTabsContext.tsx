@@ -95,9 +95,10 @@ export function IdeCenterTabsProvider({ children }: { children: ReactNode }) {
 
   const focusFile = useCallback(
     (path: string) => {
-      const id = fileTabId(path);
+      const normalized = path.replace(/\\/g, '/');
+      const id = fileTabId(normalized);
       setActiveTabId(id);
-      void openFile(path);
+      void openFile(normalized);
     },
     [openFile],
   );

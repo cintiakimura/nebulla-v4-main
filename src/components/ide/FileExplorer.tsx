@@ -25,15 +25,15 @@ function getFileIcon(name: string) {
   switch (ext) {
     case 'tsx':
     case 'ts':
-      return <FileCode className="h-4 w-4 shrink-0 text-[#3FB950]" />;
+      return <FileCode className="h-3 w-3 shrink-0 text-[#3FB950]" />;
     case 'json':
-      return <FileJson className="h-4 w-4 shrink-0 text-[#D29922]" />;
+      return <FileJson className="h-3 w-3 shrink-0 text-[#D29922]" />;
     case 'css':
-      return <FileCode className="h-4 w-4 shrink-0 text-[#58A6FF]" />;
+      return <FileCode className="h-3 w-3 shrink-0 text-[#58A6FF]" />;
     case 'md':
-      return <FileText className="h-4 w-4 shrink-0 text-muted-foreground" />;
+      return <FileText className="h-3 w-3 shrink-0 text-muted-foreground" />;
     default:
-      return <File className="h-4 w-4 shrink-0 text-muted-foreground" />;
+      return <File className="h-3 w-3 shrink-0 text-muted-foreground" />;
   }
 }
 
@@ -64,22 +64,22 @@ function FileTreeNode({
           }
         }}
         className={cn(
-          'btn-secondary-surface flex w-full items-center gap-1.5 rounded px-2 py-1 text-left transition-colors duration-300 ease-out',
+          'flex w-full items-center gap-1 rounded px-1.5 py-0.5 text-left text-xs transition-colors duration-200 ease-out hover:bg-secondary/50',
           isSelected && !isFolder && 'active-tab-sheen',
         )}
-        style={{ paddingLeft: `${depth * 12 + 8}px` }}
+        style={{ paddingLeft: `${depth * 10 + 6}px` }}
       >
         {isFolder ? (
           <>
             {isOpen ? (
-              <ChevronDown className="h-3 w-3 shrink-0 text-muted-foreground" />
+              <ChevronDown className="h-3 w-3 shrink-0 text-muted-foreground/80" />
             ) : (
-              <ChevronRight className="h-3 w-3 shrink-0 text-muted-foreground" />
+              <ChevronRight className="h-3 w-3 shrink-0 text-muted-foreground/80" />
             )}
             {isOpen ? (
-              <FolderOpen className="h-4 w-4 shrink-0 text-primary/90" />
+              <FolderOpen className="h-3 w-3 shrink-0 text-primary/85" />
             ) : (
-              <Folder className="h-4 w-4 shrink-0 text-muted-foreground" />
+              <Folder className="h-3 w-3 shrink-0 text-muted-foreground/80" />
             )}
           </>
         ) : (
@@ -90,10 +90,10 @@ function FileTreeNode({
         )}
         <span
           className={cn(
-            'truncate',
+            'truncate text-xs leading-tight',
             isFolder
-              ? 'type-label-sm text-muted-foreground'
-              : cn('type-title-sm', isSelected ? 'text-primary' : 'text-foreground'),
+              ? 'font-medium text-muted-foreground/90'
+              : cn('font-normal', isSelected ? 'text-primary' : 'text-foreground/90'),
           )}
         >
           {node.name}
@@ -129,7 +129,9 @@ export function FileExplorer() {
   return (
     <div className="surface-active flex h-full flex-col">
       <div className="tonal-seam-b flex h-8 items-center justify-between px-3">
-        <span className="type-label-sm tracking-[0.12em] uppercase">Explorer</span>
+        <span className="text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground/80">
+          Explorer
+        </span>
         <div className="flex items-center gap-0.5">
           <button
             type="button"
@@ -191,7 +193,7 @@ export function FileExplorer() {
                     type="button"
                     onClick={() => void focusFile(t.path)}
                     className={cn(
-                      'flex w-full items-center gap-1.5 rounded px-2 py-1 text-left text-xs hover:bg-secondary/50',
+                      'flex w-full items-center gap-1 rounded px-1.5 py-0.5 text-left text-[11px] leading-tight hover:bg-secondary/50',
                       activePath === t.path && 'active-tab-sheen text-primary',
                     )}
                   >

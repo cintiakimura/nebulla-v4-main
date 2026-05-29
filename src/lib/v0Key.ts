@@ -16,3 +16,9 @@ export function setStoredV0ApiKey(value: string): void {
   }
   localStorage.setItem(NEBULLA_V0_KEY_STORAGE, t);
 }
+
+/** Headers for v0 API routes — sends browser-stored key when Render env has none. */
+export function getV0RequestHeaders(): Record<string, string> {
+  const key = getStoredV0ApiKey();
+  return key ? { 'X-Nebula-V0-Api-Key': key } : {};
+}

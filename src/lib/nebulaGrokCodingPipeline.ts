@@ -1,6 +1,8 @@
 import { fetchJson } from './apiFetch';
-import { normalizeGrokFileBlockSyntax } from './grokChatArtifacts';
+import { extractGrokFilePaths, normalizeGrokFileBlockSyntax } from './grokChatArtifacts';
 import { runPostCodingWorkspaceSync } from './ideArtifactSync';
+import type { GrokActivityProgressFn } from './ideGrokActivityStatus';
+import { startGrokActivityWaitTicker } from './ideGrokActivityStatus';
 import { withProjectBody, withProjectQuery } from './nebulaProjectApi';
 
 const START_CODING_RE = /<\s*START_CODING\s*>|\bSTART_CODING\b/i;
@@ -35,21 +37,28 @@ export function notifyWorkspaceFilesChanged(): void {
   /* Events are dispatched after artifact + mind-map sync in runPostCodingWorkspaceSync. */
 }
 
-async function afterFilesAppliedArtifacts(userNote?: string, projectName?: string): Promise<void> {
+async function afterFilesAppliedArtifacts(
+  userNote?: string,
+  projectName?: string,
+  onProgress?: GrokActivityProgressFn,
+): Promise<void> {
   await runPostCodingWorkspaceSync({
     userNote,
     projectName,
     seedBasicUi: false,
     openMindMap: true,
+    onProgress,
   });
 }
 
 export async function applyGeneratedFiles(
   content: string,
-  artifactContext?: { userNote?: string; projectName?: string },
+  artifactContext?: { userNote?: string; projectName?: string; onProgress?: GrokActivityProgressFn },
 ): Promise<ApplyGeneratedResult> {
+  const onProgress = artifactContext?.onProgress;
   const clean = stripNonFileArtifacts(normalizeGrokFileBlockSyntax(content));
   if (!clean) {
+    onProgress?.('No file blocks found in Grok output', 'warn');
     return {
       ok: false,
       writtenCount: 0,
@@ -58,7 +67,18 @@ export async function applyGeneratedFiles(
       error: 'empty',
     };
   }
+  const paths = extractGrokFilePaths(clean);
+  if (paths.length > 0) {
+    onProgress?.(`Parsed ${paths.length} file block(s) from Grok output`, 'info');
+    for (const p of paths.slice(0, 12)) {
+      onProgress?.(`Will write ${p}`, 'file');
+    }
+    if (paths.length > 12) {
+      onProgress?.(`… and ${paths.length - 12} more file(s)`, 'file');
+    }
+  }
   try {
+    onProgress?.('POST /api/files/apply-generated — writing to cloud workspace', 'info');
     const apply = await fetchJson<{
       success?: boolean;
       written?: string[];
@@ -73,6 +93,7 @@ export async function applyGeneratedFiles(
       body: JSON.stringify(withProjectBody({ content: clean })),
     });
     if (apply.error) {
+      onProgress?.(`Apply failed: ${apply.error}`, 'error');
       return {
         ok: false,
         writtenCount: 0,
@@ -83,9 +104,18 @@ export async function applyGeneratedFiles(
     }
     const writtenCount = Array.isArray(apply.written) ? apply.written.length : 0;
     const skippedCount = Array.isArray(apply.skipped) ? apply.skipped.length : 0;
+    if (writtenCount > 0 && Array.isArray(apply.written)) {
+      for (const p of apply.written.slice(0, 16)) {
+        onProgress?.(`Wrote ${p}`, 'success');
+      }
+      if (apply.written.length > 16) {
+        onProgress?.(`… ${apply.written.length - 16} more file(s) written`, 'success');
+      }
+    }
     if (writtenCount > 0) {
       notifyWorkspaceFilesChanged();
-      void afterFilesAppliedArtifacts(artifactContext?.userNote, artifactContext?.projectName);
+      onProgress?.('Running post-apply artifact sync (Master Plan, mind map, preview)', 'info');
+      await afterFilesAppliedArtifacts(artifactContext?.userNote, artifactContext?.projectName, onProgress);
     }
     return {
       ok: writtenCount > 0,
@@ -100,6 +130,7 @@ export async function applyGeneratedFiles(
     };
   } catch (e) {
     const msg = e instanceof Error ? e.message : 'Failed to apply files';
+    onProgress?.(msg, 'error');
     return { ok: false, writtenCount: 0, skippedCount: 0, message: msg, error: msg };
   }
 }
@@ -109,8 +140,9 @@ export async function runGoCodeAndApply(options: {
   projectName: string;
   userNote?: string;
   messages?: { role: 'user' | 'assistant'; content: string }[];
+  onProgress?: GrokActivityProgressFn;
 }): Promise<{ ok: boolean; statusMessage: string; codeText?: string }> {
-  const { userId, projectName, userNote, messages } = options;
+  const { userId, projectName, userNote, messages, onProgress } = options;
   const payloadMessages =
     messages && messages.length > 0
       ? messages
@@ -125,32 +157,63 @@ export async function runGoCodeAndApply(options: {
         ];
 
   try {
-    const data = await fetchJson<{
+    onProgress?.('POST /api/grok/go-code — pre-coding summary + Grok Code (server)', 'info');
+    const stopWait = startGrokActivityWaitTicker(
+      'Grok Code running on server',
+      (msg, kind) => onProgress?.(msg, kind),
+    );
+    let data: {
       preCodingSummary?: string;
       summarySaved?: boolean;
       codeError?: string;
       choices?: { message?: { content?: string } }[];
       error?: string;
-    }>(withProjectQuery('/api/grok/go-code'), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
-      body: JSON.stringify(
-        withProjectBody({
-          userId,
-          projectName,
-          userNote: userNote?.trim() || undefined,
-          messages: payloadMessages,
-        }),
-      ),
-    });
+      codeModel?: string;
+    };
+    try {
+      data = await fetchJson(withProjectQuery('/api/grok/go-code'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(
+          withProjectBody({
+            userId,
+            projectName,
+            userNote: userNote?.trim() || undefined,
+            messages: payloadMessages,
+          }),
+        ),
+      });
+    } finally {
+      stopWait();
+    }
 
     if (data.error && !data.summarySaved) {
+      onProgress?.(data.error || 'Go Code failed', 'error');
       return { ok: false, statusMessage: data.error || 'Go Code failed.' };
     }
 
+    if (data.summarySaved) {
+      const preview = data.preCodingSummary?.trim().slice(0, 80);
+      onProgress?.(
+        preview
+          ? `Pre-coding summary saved to Master Plan (${preview}${(data.preCodingSummary?.length ?? 0) > 80 ? '…' : ''})`
+          : 'Pre-coding summary saved to Master Plan',
+        'success',
+      );
+      try {
+        window.dispatchEvent(new CustomEvent('nebula-master-plan-updated'));
+      } catch {
+        /* ignore */
+      }
+    }
+
     const codeText = data.choices?.[0]?.message?.content?.trim() || '';
+    if (data.codeModel) {
+      onProgress?.(`Grok Code model: ${data.codeModel}`, 'info');
+    }
     if (data.codeError && !codeText) {
+      onProgress?.(`Grok Code error: ${data.codeError.slice(0, 200)}`, 'error');
       return {
         ok: false,
         statusMessage: `Grok Code error: ${data.codeError.slice(0, 400)}`,
@@ -158,6 +221,7 @@ export async function runGoCodeAndApply(options: {
     }
 
     if (!codeText) {
+      onProgress?.('Grok Code returned no file output', 'warn');
       return {
         ok: Boolean(data.summarySaved),
         statusMessage: data.summarySaved
@@ -166,14 +230,17 @@ export async function runGoCodeAndApply(options: {
       };
     }
 
-    const apply = await applyGeneratedFiles(codeText, { userNote, projectName });
+    onProgress?.(`Received Grok Code response (${codeText.length.toLocaleString()} chars)`, 'info');
+    const apply = await applyGeneratedFiles(codeText, { userNote, projectName, onProgress });
     return {
       ok: apply.ok,
       statusMessage: apply.message,
       codeText,
     };
   } catch (e) {
-    return { ok: false, statusMessage: e instanceof Error ? e.message : 'Go Code request failed' };
+    const msg = e instanceof Error ? e.message : 'Go Code request failed';
+    onProgress?.(msg, 'error');
+    return { ok: false, statusMessage: msg };
   }
 }
 
@@ -186,11 +253,13 @@ export async function handlePostGrokCodingTurn(options: {
   userId: string;
   projectName: string;
   userNote?: string;
+  onProgress?: GrokActivityProgressFn;
 }): Promise<{ ran: boolean; statusMessage?: string }> {
-  const { assistantContent, planningPhase, userId, projectName, userNote } = options;
+  const { assistantContent, planningPhase, userId, projectName, userNote, onProgress } = options;
 
   if (hasGrokFileBlocks(assistantContent)) {
-    const apply = await applyGeneratedFiles(assistantContent, { userNote, projectName });
+    onProgress?.('Applying file blocks from Grok chat response', 'info');
+    const apply = await applyGeneratedFiles(assistantContent, { userNote, projectName, onProgress });
     return { ran: true, statusMessage: apply.message };
   }
 
@@ -203,10 +272,12 @@ export async function handlePostGrokCodingTurn(options: {
   }
 
   const codingSource = planning || assistantContent;
+  onProgress?.('START_CODING detected — launching Go Code pipeline', 'info');
   const go = await runGoCodeAndApply({
     userId,
     projectName,
     userNote,
+    onProgress,
     messages: [
       { role: 'assistant', content: codingSource.slice(0, 12000) },
       {
@@ -217,7 +288,7 @@ export async function handlePostGrokCodingTurn(options: {
     ],
   });
   if (go.ok) {
-    await afterFilesAppliedArtifacts(userNote, projectName);
+    await afterFilesAppliedArtifacts(userNote, projectName, onProgress);
   }
   return { ran: true, statusMessage: go.statusMessage };
 }

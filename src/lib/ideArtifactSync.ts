@@ -1,5 +1,13 @@
 import { fetchJson } from './apiFetch';
+import type { GrokActivityProgressFn } from './ideGrokActivityStatus';
+import { startGrokActivityWaitTicker } from './ideGrokActivityStatus';
 import { withProjectBody, withProjectQuery } from './nebulaProjectApi';
+import { getV0RequestHeaders } from './v0Key';
+
+const ideArtifactHeaders = (): Record<string, string> => ({
+  'Content-Type': 'application/json',
+  ...getV0RequestHeaders(),
+});
 
 export type IdeArtifactSyncResult = {
   masterPlanTabs?: number;
@@ -30,24 +38,50 @@ export type MasterPlanUiPipelineResult = {
 export async function runMasterPlanUiPipeline(options?: {
   projectName?: string;
   autoV0?: boolean;
+  onProgress?: GrokActivityProgressFn;
 }): Promise<MasterPlanUiPipelineResult> {
+  const onProgress = options?.onProgress;
   try {
-    return await fetchJson<MasterPlanUiPipelineResult>(
-      withProjectQuery('/api/ide/master-plan-ui-pipeline'),
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify(
-          withProjectBody({
-            projectName: options?.projectName?.trim() || undefined,
-            autoV0: options?.autoV0 !== false,
-          }),
-        ),
-      },
+    onProgress?.('POST /api/ide/master-plan-ui-pipeline (v0 prompt, mind map, optional v0)', 'info');
+    const stopWait = startGrokActivityWaitTicker('UI Studio pipeline on server', (msg, kind) =>
+      onProgress?.(msg, kind),
     );
+    let result: MasterPlanUiPipelineResult;
+    try {
+      result = await fetchJson<MasterPlanUiPipelineResult>(
+        withProjectQuery('/api/ide/master-plan-ui-pipeline'),
+        {
+          method: 'POST',
+          headers: ideArtifactHeaders(),
+          credentials: 'include',
+          body: JSON.stringify(
+            withProjectBody({
+              projectName: options?.projectName?.trim() || undefined,
+              autoV0: options?.autoV0 !== false,
+            }),
+          ),
+        },
+      );
+    } finally {
+      stopWait();
+    }
+    if (result.v0PromptWritten) {
+      onProgress?.('Wrote nebula-ui-studio/v0-prompt.md from Master Plan §4+§5', 'success');
+    }
+    if ((result.mindMapPageCount ?? 0) > 0) {
+      onProgress?.(`Mind map synced — ${result.mindMapPageCount} page node(s)`, 'success');
+    }
+    if (result.v0Triggered && result.v0Ok) {
+      onProgress?.(`v0 UI generated — ${result.v0Written?.length ?? 0} file(s)`, 'success');
+    } else if (result.v0Triggered && result.v0Error) {
+      onProgress?.(`v0 skipped: ${String(result.v0Error).slice(0, 140)}`, 'warn');
+    } else if (result.v0Triggered) {
+      onProgress?.('v0 generation attempted', 'info');
+    }
+    return result;
   } catch (e) {
     console.warn('[ideArtifactSync] master-plan-ui-pipeline:', e);
+    onProgress?.('UI Studio pipeline request failed', 'error');
     return {};
   }
 }
@@ -57,13 +91,16 @@ export async function syncIdeProjectArtifacts(options?: {
   userNote?: string;
   projectName?: string;
   seedBasicUi?: boolean;
+  onProgress?: GrokActivityProgressFn;
 }): Promise<IdeArtifactSyncResult> {
+  const onProgress = options?.onProgress;
   try {
-    return await fetchJson<IdeArtifactSyncResult>(
+    onProgress?.('POST /api/ide/sync-project-artifacts', 'info');
+    const sync = await fetchJson<IdeArtifactSyncResult>(
       withProjectQuery('/api/ide/sync-project-artifacts'),
       {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: ideArtifactHeaders(),
         credentials: 'include',
         body: JSON.stringify(
           withProjectBody({
@@ -74,27 +111,48 @@ export async function syncIdeProjectArtifacts(options?: {
         ),
       },
     );
+    if ((sync.masterPlanTabs ?? 0) > 0) {
+      onProgress?.(`Bootstrapped ${sync.masterPlanTabs} empty Master Plan tab(s) from workspace`, 'success');
+    }
+    if (sync.v0PromptWritten) {
+      onProgress?.('Updated v0 prompt from Master Plan', 'success');
+    }
+    if ((sync.mindMapPageCount ?? 0) > 0) {
+      onProgress?.(`Mind map: ${sync.mindMapPageCount} page(s)`, 'success');
+    }
+    if (sync.uiStudioUnlocked) {
+      onProgress?.('UI Studio unlocked for visual editing', 'success');
+    }
+    return sync;
   } catch (e) {
     console.warn('[ideArtifactSync]', e);
+    onProgress?.('Artifact sync failed', 'error');
     return {};
   }
 }
 
-export async function syncMindMapForProject(projectName?: string): Promise<{
+export async function syncMindMapForProject(
+  projectName?: string,
+  onProgress?: GrokActivityProgressFn,
+): Promise<{
   ok: boolean;
   pageCount: number;
 }> {
   try {
+    onProgress?.('POST /api/workspace/mind-map/sync-from-master-plan', 'info');
     const data = await fetchJson<{ pages?: unknown[]; routeCount?: number }>(
       withProjectQuery('/api/workspace/mind-map/sync-from-master-plan'),
       {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: ideArtifactHeaders(),
         credentials: 'include',
         body: JSON.stringify(withProjectBody({ projectName: projectName?.trim() || undefined })),
       },
     );
     const pageCount = Array.isArray(data.pages) ? data.pages.length : 0;
+    if (pageCount > 0) {
+      onProgress?.(`Mind map rebuilt from Master Plan §4 — ${pageCount} page(s)`, 'success');
+    }
     return { ok: pageCount > 0, pageCount };
   } catch (e) {
     console.warn('[ideArtifactSync] mind map sync:', e);
@@ -108,22 +166,26 @@ export async function runPostCodingWorkspaceSync(options?: {
   projectName?: string;
   seedBasicUi?: boolean;
   openMindMap?: boolean;
+  onProgress?: GrokActivityProgressFn;
 }): Promise<IdeArtifactSyncResult> {
+  const onProgress = options?.onProgress;
   const sync = await syncIdeProjectArtifacts({
     userNote: options?.userNote,
     projectName: options?.projectName,
     seedBasicUi: options?.seedBasicUi,
+    onProgress,
   });
 
   let pageCount = sync.mindMapPageCount ?? 0;
   if (pageCount === 0) {
-    const mm = await syncMindMapForProject(options?.projectName);
+    const mm = await syncMindMapForProject(options?.projectName, onProgress);
     pageCount = mm.pageCount;
     sync.mindMapSynced = mm.ok;
     sync.mindMapPageCount = pageCount;
   }
 
   try {
+    onProgress?.('Refreshing explorer, preview, and mind map views', 'info');
     if ((sync.masterPlanTabs ?? 0) > 0 || sync.v0PromptWritten) {
       window.dispatchEvent(new CustomEvent('nebula-master-plan-updated'));
     }
@@ -138,6 +200,7 @@ export async function runPostCodingWorkspaceSync(options?: {
         new CustomEvent('nebula-open-ui-studio', { detail: { tab: 'design' as const } }),
       );
     }
+    onProgress?.('Workspace sync complete', 'success');
   } catch {
     /* ignore */
   }
@@ -151,7 +214,7 @@ export async function seedBasicUiFallback(projectName?: string): Promise<string[
       withProjectQuery('/api/nebula-ui-studio/basic-scaffold'),
       {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: ideArtifactHeaders(),
         credentials: 'include',
         body: JSON.stringify(withProjectBody({ projectDisplayName: projectName })),
       },

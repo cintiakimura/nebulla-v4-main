@@ -57,8 +57,9 @@ export function CodeEditor({ hidePreviewButton = false }: { hidePreviewButton?: 
 
   const crumbs = activePath ? activePath.split('/').filter(Boolean) : [];
   const extensions = useMemo(() => {
-    const lang = activePath ? languageExtension(activePath) : [];
-    return [oneDark, syntaxHighlighting(defaultHighlightStyle, { fallback: true }), ...lang];
+    const base = [oneDark, syntaxHighlighting(defaultHighlightStyle, { fallback: true })];
+    if (activePath) base.push(languageExtension(activePath));
+    return base;
   }, [activePath]);
 
   return (

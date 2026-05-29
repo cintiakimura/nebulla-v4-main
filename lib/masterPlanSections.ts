@@ -13,6 +13,12 @@ export const MASTER_PLAN_SECTION_KEYS = [
 
 export const MASTER_PLAN_INTERNAL_KEY = "6. Environment Setup";
 
+/** Written by Go / go-code before Grok Code runs — shown in Master Plan UI. */
+export const PRE_CODING_SUMMARY_KEY = "Pre-coding summary (Grok)";
+
+/** User-facing tabs (Master Plan UI) — section 6 is internal/env. */
+export const MASTER_PLAN_USER_SECTION_KEYS = [...MASTER_PLAN_SECTION_KEYS] as const;
+
 /** Legacy JSON keys → canonical keys when reading master-plan.json */
 export const MASTER_PLAN_LEGACY_KEY_ALIASES: Record<string, string> = {
   "2. Tech Research": "2. Text & Search",

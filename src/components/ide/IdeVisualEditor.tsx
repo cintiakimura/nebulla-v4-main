@@ -40,6 +40,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { getBrowserProjectName, withProjectBody, withProjectQuery } from '../../lib/nebulaProjectApi';
+import { getStoredV0ApiKey, getV0RequestHeaders } from '../../lib/v0Key';
 
 const V0_FETCH_TIMEOUT_MS = 180_000;
 
@@ -400,7 +401,7 @@ export function IdeVisualEditor({
   const selected = selectedId && page ? page.nodes[selectedId] : null;
 
   const persistHeaders = (): Record<string, string> => {
-    return { 'Content-Type': 'application/json' };
+    return { 'Content-Type': 'application/json', ...getV0RequestHeaders() };
   };
 
   const pushUndo = useCallback(() => {
@@ -409,9 +410,15 @@ export function IdeVisualEditor({
 
   const loadStudioStatus = useCallback(async () => {
     try {
-      const r = await fetch(withProjectQuery('/api/nebula-ui-studio/status'));
+      const r = await fetch(withProjectQuery('/api/nebula-ui-studio/status'), {
+        credentials: 'include',
+        headers: getV0RequestHeaders(),
+      });
       const d = (await r.json()) as StudioStatus & { error?: string };
-      if (r.ok) setStudioStatus(d);
+      if (r.ok) {
+        setStudioStatus(d);
+        if (d.hasV0ApiKey) setHasV0ApiKey(true);
+      }
     } catch {
       /* ignore */
     }
@@ -459,7 +466,8 @@ export function IdeVisualEditor({
       try {
         const r = await fetch('/api/config');
         const cfg = (await r.json()) as { hasV0ApiKey?: boolean };
-        if (!cancelled) setHasV0ApiKey(Boolean(cfg.hasV0ApiKey));
+        const localKey = Boolean(getStoredV0ApiKey());
+        if (!cancelled) setHasV0ApiKey(Boolean(cfg.hasV0ApiKey) || localKey);
       } catch {
         if (!cancelled) setHasV0ApiKey(false);
       }
@@ -908,7 +916,7 @@ export function IdeVisualEditor({
           /* fall through */
         }
       }
-      setError(msg.includes('V0_API_KEY') ? 'Please add your V0_API_KEY in .env' : msg);
+      setError(msg.includes('V0_API_KEY') ? 'Add your v0 API key in My services (or V0_API_KEY on Render).' : msg);
     } finally {
       v0RunningRef.current = false;
       setBusy(false);
@@ -1186,7 +1194,7 @@ export function IdeVisualEditor({
               </button>
             ) : null}
             {hasV0ApiKey === false ? (
-              <span className="text-[10px] opacity-90">Add V0_API_KEY in My services</span>
+              <span className="text-[10px] opacity-90">Add v0 key in My services → v0 API key</span>
             ) : null}
             {import.meta.env.DEV ? (
               <button

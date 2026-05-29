@@ -34,6 +34,9 @@ import {
   createGrokActivity,
   errorGrokActivity,
   finishGrokActivity,
+  setGrokActivityAction,
+  startGrokActivityWaitTicker,
+  type GrokActivityProgressFn,
   type GrokActivityStatus,
 } from '../../lib/ideGrokActivityStatus';
 import { IdeGrokActivityPanel } from '@/components/ide/IdeGrokActivityPanel';
@@ -48,9 +51,10 @@ import {
 const IDLE_GROK_ACTIVITY: GrokActivityStatus = {
   headline: 'Ready',
   subhead: 'Chat for discovery and planning · Go runs Grok Code and writes files to your workspace.',
+  liveLog: [],
   steps: [],
   activeStepIndex: 0,
-  footer: 'Detailed progress appears here while Grok is thinking or coding — this can take 1–3 minutes.',
+  footer: 'Live activity appears here while Grok is thinking or coding — like Cursor’s agent status.',
   tone: 'ready',
 };
 
@@ -139,12 +143,16 @@ function ChatRoundButton({
 
 
 export function AIChat() {
-  const { activePath, activeTab, diskProjectKey, refreshTree, gitBranch, tabs } = useIdeWorkspace();
+  const { activePath, activeTab, diskProjectKey, refreshTree, gitBranch, tabs, workspacePaths } =
+    useIdeWorkspace();
   const [workspaceRootLabel, setWorkspaceRootLabel] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [accessoryHint, setAccessoryHint] = useState<string | null>(null);
   const [grokActivity, setGrokActivity] = useState<GrokActivityStatus>(IDLE_GROK_ACTIVITY);
+  const pushActivity = useCallback<GrokActivityProgressFn>((message, kind = 'info') => {
+    setGrokActivity((prev) => setGrokActivityAction(prev, message, kind));
+  }, []);
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
   const [serverHasGrokKey, setServerHasGrokKey] = useState<boolean | null>(null);
@@ -588,14 +596,24 @@ export function AIChat() {
         CHAT_WORK_STEPS,
         {
           subhead: buildMode
-            ? 'Master Plan → Grok Code → files on disk. Stay on this tab — progress updates below.'
+            ? 'Master Plan → Grok Code → files on disk. Activity stream updates below.'
             : 'Reading your project context and preparing a reply.',
           footer: 'Large coding passes can take 1–3 minutes on the server.',
+          initialLog: buildMode
+            ? `Build mode detected — "${text.slice(0, 80)}${text.length > 80 ? '…' : ''}"`
+            : `Message sent — "${text.slice(0, 80)}${text.length > 80 ? '…' : ''}"`,
         },
       ),
     );
 
     const projectName = getBrowserProjectName().trim() || 'Untitled project';
+    pushActivity(`Project: ${projectName}`, 'info');
+    if (activePath) {
+      pushActivity(`Open in editor: ${activePath}`, 'info');
+    }
+    if (workspacePaths.length > 0) {
+      pushActivity(`Workspace index: ${workspacePaths.length} file(s)`, 'info');
+    }
     const ideAppendix = ideContextSnippetForChat(
       activePath,
       activeTab?.content ?? '',
@@ -619,27 +637,37 @@ export function AIChat() {
     try {
       setGrokActivity((prev) =>
         advanceGrokActivity(prev, 1, {
-          subhead: 'Calling Grok with Master Plan, workspace file index, and open editor context…',
+          currentAction: 'Calling Grok API with Master Plan and workspace context…',
+          log: { message: 'POST /api/grok/chat — waiting for Grok response', kind: 'info' },
         }),
       );
 
-      const { assistantContent, planningPhase } = await sendIdeAssistantGrokTurn({
-        textToSend: text,
-        history: historyForApi,
-        userId,
-        projectName,
-        ideAppendix,
-        buildMode,
-      });
+      const stopGrokWait = startGrokActivityWaitTicker('Waiting for Grok', pushActivity);
+      let assistantContent: string;
+      let planningPhase: string;
+      try {
+        ({ assistantContent, planningPhase } = await sendIdeAssistantGrokTurn({
+          textToSend: text,
+          history: historyForApi,
+          userId,
+          projectName,
+          ideAppendix,
+          buildMode,
+        }));
+      } finally {
+        stopGrokWait();
+      }
       const raw = assistantContent.trim();
       const masterPlanSource = (planningPhase || raw).trim();
+      pushActivity(`Grok replied (${raw.length.toLocaleString()} chars)`, 'success');
 
       setGrokActivity((prev) =>
         advanceGrokActivity(prev, 2, {
-          subhead: 'Parsing Master Plan tags and saving to master-plan.json…',
+          currentAction: 'Parsing Master Plan tags and saving sections…',
+          log: { message: 'Scanning response for <START_MASTERPLAN> and file blocks', kind: 'info' },
         }),
       );
-      const mpSaved = await persistMasterPlanFromAssistantSource(masterPlanSource);
+      const mpSaved = await persistMasterPlanFromAssistantSource(masterPlanSource, pushActivity);
 
       if (/<NEBULA_UI_STUDIO_PROMPT>/i.test(masterPlanSource)) {
         dispatchOpenUiStudio({ tab: 'mockups' });
@@ -651,16 +679,21 @@ export function AIChat() {
       if (mpSaved > 0) {
         setGrokActivity((prev) =>
           advanceGrokActivity(prev, 3, {
+            currentAction: 'UI Studio pipeline — v0 prompt, mind map, optional v0…',
             stepDetail: {
               index: 2,
               detail: `Saved ${mpSaved} Master Plan section(s). Building v0 prompt & mind map from §4…`,
             },
-            subhead: 'UI Studio pipeline — v0 prompt, mind map sync, optional v0 generation.',
+            log: {
+              message: `Master Plan updated — ${mpSaved} tab(s); starting UI pipeline`,
+              kind: 'success',
+            },
           }),
         );
         masterPlanPipeline = await runMasterPlanUiPipeline({
           projectName,
           autoV0: true,
+          onProgress: pushActivity,
         });
         if ((masterPlanPipeline.mindMapPageCount ?? 0) > 0 || masterPlanPipeline.v0Ok) {
           try {
@@ -710,7 +743,8 @@ export function AIChat() {
                 ? `Mind map: ${masterPlanPipeline.mindMapPageCount} page(s).`
                 : undefined;
             return advanceGrokActivity(prev, 4, {
-              subhead: 'Grok Code is generating file blocks — applying to your workspace next.',
+              currentAction: 'Grok Code generating files — applying to workspace next…',
+              log: { message: 'Coding intent detected — running Grok Code / file apply', kind: 'info' },
               ...(mm
                 ? { stepDetail: { index: 3, detail: mm } }
                 : {}),
@@ -724,13 +758,17 @@ export function AIChat() {
           userId,
           projectName,
           userNote: text,
+          onProgress: pushActivity,
         });
         if (coding.ran) {
           setGrokActivity((prev) =>
             advanceGrokActivity(prev, 5, {
-              subhead: coding.statusMessage || 'Syncing mind map, explorer, and preview…',
+              currentAction: coding.statusMessage || 'Syncing mind map, explorer, and preview…',
               ...(coding.statusMessage
-                ? { stepDetail: { index: 4, detail: coding.statusMessage } }
+                ? {
+                    stepDetail: { index: 4, detail: coding.statusMessage },
+                    log: { message: coding.statusMessage, kind: 'success' },
+                  }
                 : {}),
             }),
           );
@@ -739,6 +777,7 @@ export function AIChat() {
             projectName,
             seedBasicUi: false,
             openMindMap: true,
+            onProgress: pushActivity,
           });
           if (mpSaved > 0 || (artifactSync.masterPlanTabs ?? 0) > 0) {
             window.dispatchEvent(new CustomEvent('nebula-open-master-plan'));
@@ -747,6 +786,7 @@ export function AIChat() {
             masterPlanPipeline = await runMasterPlanUiPipeline({
               projectName,
               autoV0: true,
+              onProgress: pushActivity,
             });
           }
           if (masterPlanPipeline.v0Ok) {
@@ -776,6 +816,7 @@ export function AIChat() {
               masterPlanPipeline.v0Ok
                 ? 'Files are in your workspace · UI Studio has a v0 preview.'
                 : coding.statusMessage || 'Files updated — check Explorer and Master Plan.',
+              'All coding steps finished',
             ),
           );
         } else if (!willCode) {
@@ -800,6 +841,7 @@ export function AIChat() {
                   i === 2 && mpSaved > 0 ? `${mpSaved} section(s) saved.` : i === 1 ? 'No coding this turn.' : undefined,
               })),
               footer,
+              mpSaved > 0 ? 'Master Plan saved — no file apply this turn' : 'Grok reply ready in chat',
             ),
           );
         }
@@ -1059,8 +1101,9 @@ export function AIChat() {
     setSendError(null);
     setGrokActivity(
       createGrokActivity('Go — full coding pass', GO_WORK_STEPS, {
-        subhead: 'Running pre-coding summary, Grok Code, file apply, then UI pipeline.',
-        footer: 'Server-side coding often takes 1–3 minutes — steps update as each phase completes.',
+        subhead: 'Pre-coding summary → Grok Code → file apply → mind map & v0.',
+        footer: 'Server-side coding often takes 1–3 minutes — watch the activity stream below.',
+        initialLog: userNote ? `Go started — focus: ${userNote.slice(0, 120)}` : 'Go started — full implementation pass',
       }),
     );
 
@@ -1069,18 +1112,30 @@ export function AIChat() {
     const projectName = getBrowserProjectName().trim() || 'Untitled project';
 
     try {
-      setGrokActivity((prev) => advanceGrokActivity(prev, 1, { subhead: 'Refreshing workspace metadata…' }));
-      await refreshWorkspaceMeta();
       setGrokActivity((prev) =>
-        advanceGrokActivity(prev, 2, {
-          subhead: 'Grok Code agent running on server (summary + implementation)…',
+        advanceGrokActivity(prev, 1, {
+          currentAction: 'Refreshing workspace metadata…',
+          log: { message: 'Loading workspace file index and git branch', kind: 'info' },
         }),
       );
-      const go = await runGoCodeAndApply({ userId, projectName, userNote });
+      await refreshWorkspaceMeta();
+      pushActivity(`Workspace ready — ${workspacePaths.length} indexed file(s)`, 'info');
+      setGrokActivity((prev) =>
+        advanceGrokActivity(prev, 2, {
+          currentAction: 'Grok Code on server — summary then implementation…',
+          log: { message: 'Starting /api/grok/go-code (this may take 1–3 min)', kind: 'info' },
+        }),
+      );
+      const go = await runGoCodeAndApply({ userId, projectName, userNote, onProgress: pushActivity });
+      if (go.ok) {
+        window.dispatchEvent(new CustomEvent('nebula-master-plan-updated'));
+      }
       setGrokActivity((prev) =>
         advanceGrokActivity(prev, 3, {
-          ...(go.statusMessage ? { stepDetail: { index: 2, detail: go.statusMessage } } : {}),
-          subhead: go.ok ? 'Applying generated files and syncing artifacts…' : go.statusMessage,
+          currentAction: go.ok ? 'Syncing Master Plan, mind map, explorer…' : go.statusMessage,
+          ...(go.statusMessage
+            ? { stepDetail: { index: 2, detail: go.statusMessage }, log: { message: go.statusMessage, kind: go.ok ? 'success' : 'error' } }
+            : {}),
         }),
       );
       if (!go.ok) {
@@ -1088,10 +1143,25 @@ export function AIChat() {
         setSendError(go.statusMessage);
         return;
       }
+      await runPostCodingWorkspaceSync({
+        userNote,
+        projectName,
+        seedBasicUi: false,
+        openMindMap: true,
+        onProgress: pushActivity,
+      });
+      window.dispatchEvent(new CustomEvent('nebula-master-plan-updated'));
       setGrokActivity((prev) =>
-        advanceGrokActivity(prev, 4, { subhead: 'Mind map & v0 UI pipeline (when V0_API_KEY is set)…' }),
+        advanceGrokActivity(prev, 4, {
+          currentAction: 'Mind map & v0 UI pipeline…',
+          log: { message: 'POST /api/ide/master-plan-ui-pipeline', kind: 'info' },
+        }),
       );
-      const pipeline = await runMasterPlanUiPipeline({ projectName, autoV0: true });
+      const pipeline = await runMasterPlanUiPipeline({
+        projectName,
+        autoV0: true,
+        onProgress: pushActivity,
+      });
       if (pipeline.v0Ok) {
         window.dispatchEvent(new CustomEvent('nebula-ui-studio-v0-complete'));
         window.dispatchEvent(new CustomEvent('nebula-files-applied'));
@@ -1113,6 +1183,7 @@ export function AIChat() {
           pipeline.v0Ok
             ? `${go.statusMessage} · v0 UI generated.`
             : go.statusMessage || 'Check Explorer for new files.',
+          'Go pipeline finished',
         ),
       );
     } catch (e) {
@@ -1127,7 +1198,7 @@ export function AIChat() {
         resumeOpenTalkIfWanted();
       }
     }
-  }, [micInputBlocked, sending, serverHasGrokKey, stopVoiceRecognition, refreshWorkspaceMeta, resumeOpenTalkIfWanted]);
+  }, [micInputBlocked, sending, serverHasGrokKey, stopVoiceRecognition, refreshWorkspaceMeta, resumeOpenTalkIfWanted, pushActivity, workspacePaths.length]);
 
   return (
     <div className="surface-active tonal-seam-l flex h-full min-h-0 flex-col overflow-hidden">
@@ -1195,7 +1266,7 @@ export function AIChat() {
             </div>
             <div className="surface-active max-w-[85%] rounded-lg px-3 py-2">
               <p className="type-label-sm text-muted-foreground">
-                Working… see the step-by-step status panel below the chat.
+                Working… live activity updates in the panel below.
               </p>
             </div>
           </div>

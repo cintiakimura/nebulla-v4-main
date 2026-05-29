@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { BookOpen, Lock, Save, X } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { readResponseJson } from '../lib/apiFetch';
+import { PRE_CODING_SUMMARY_KEY } from '../lib/masterPlanSections';
 import { withProjectBody, withProjectQuery } from '../lib/nebulaProjectApi';
 
 export function MasterPlan({
@@ -84,12 +85,19 @@ export function MasterPlan({
     return '';
   };
 
+  const sessionBrief = planData[PRE_CODING_SUMMARY_KEY]?.trim() ?? '';
+
   const PLAN_SECTIONS = titles.map((title) => {
     const id = title.toLowerCase().replace(/[^a-z0-9]/g, '-');
     const content = sectionContent(title);
     return { id, title, content };
   });
-  const visibleSections = PLAN_SECTIONS.slice(0, 5);
+  const visibleSections = [
+    ...PLAN_SECTIONS.slice(0, 5),
+    ...(sessionBrief
+      ? [{ id: 'session-brief', title: 'Go session brief', content: sessionBrief }]
+      : []),
+  ];
 
   const [activeTab, setActiveTab] = useState(visibleSections[0].id);
   const [isSaved, setIsSaved] = useState(true);

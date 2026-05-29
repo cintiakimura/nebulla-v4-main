@@ -7,7 +7,7 @@ import {
   writeEditorState,
 } from "./visualUiEditorWorkspace";
 
-import { MASTER_PLAN_ALL_KEYS, normalizeMasterPlanRecord } from "./masterPlanSections";
+import { MASTER_PLAN_ALL_KEYS, MASTER_PLAN_USER_SECTION_KEYS, normalizeMasterPlanRecord } from "./masterPlanSections";
 
 export const MASTER_PLAN_TAB_KEYS = MASTER_PLAN_ALL_KEYS;
 
@@ -24,7 +24,7 @@ export function readMasterPlanFile(masterPlanPath: string): Record<string, strin
 }
 
 export function masterPlanLooksEmpty(plan: Record<string, string>): boolean {
-  return MASTER_PLAN_TAB_KEYS.every((k) => !String(plan[k] ?? "").trim());
+  return MASTER_PLAN_USER_SECTION_KEYS.every((k) => !String(plan[k] ?? "").trim());
 }
 
 /** Discover Next.js app router pages under `app/` and `pages/`. */
