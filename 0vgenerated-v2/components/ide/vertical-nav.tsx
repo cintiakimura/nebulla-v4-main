@@ -32,7 +32,7 @@ export function VerticalNav() {
       {/* Logo */}
       <div className="mb-4 flex items-center justify-center bg-transparent">
         <Image
-          src="https://hebbkx1anhila5yf.public.blob.vercel-storage.com/remove_the_white_background_and_make_it_completely_transparent._keep_only_the-1pg6kruCIHQfV8QOCTqPuyHhugp3iJ.png"
+          src="/nebulla-logo.png"
           alt="Nebulla"
           width={28}
           height={28}

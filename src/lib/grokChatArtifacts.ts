@@ -107,20 +107,16 @@ export function formatAssistantForIdeChatDisplay(raw: string): IdeChatDisplayRes
     .trim();
 
   if (filePaths.length > 0 && !text) {
-    const preview = filePaths.slice(0, 5).join(', ');
-    const more = filePaths.length > 5 ? ` (+${filePaths.length - 5} more)` : '';
-    text = `Applied ${filePaths.length} file(s): ${preview}${more}.`;
+    text = '';
   } else if (filePaths.length > 0) {
-    text = `${text}\n\nApplied ${filePaths.length} file(s) to the workspace.`;
+    // File-apply note stays off chat — workspace explorer updates instead.
   }
 
   if (!text) {
-    if (hadCodingTag || filePaths.length > 0) {
-      text = filePaths.length > 0 ? `Applied ${filePaths.length} file(s).` : 'Done — check the file explorer.';
-    } else if (hadMasterPlan) {
+    if (hadMasterPlan) {
       text = '';
     } else {
-      text = '(No conversational reply — check Master Plan and file explorer.)';
+      text = '';
     }
   }
 

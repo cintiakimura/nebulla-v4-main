@@ -41,6 +41,27 @@ import {
 import { cn } from '@/lib/utils';
 import { getBrowserProjectName, withProjectBody, withProjectQuery } from '../../lib/nebulaProjectApi';
 
+const V0_FETCH_TIMEOUT_MS = 180_000;
+
+async function fetchWithTimeout(url: string, init: RequestInit, ms = V0_FETCH_TIMEOUT_MS): Promise<Response> {
+  const ctrl = new AbortController();
+  const timer = window.setTimeout(() => ctrl.abort(), ms);
+  try {
+    return await fetch(url, { ...init, signal: ctrl.signal });
+  } finally {
+    window.clearTimeout(timer);
+  }
+}
+
+type StudioStatus = {
+  v0PromptExists?: boolean;
+  v0PromptPath?: string;
+  v0PromptLength?: number;
+  hasRealV0?: boolean;
+  hasV0ApiKey?: boolean;
+  eligibilityReason?: string;
+};
+
 export type VisualStyle = {
   backgroundColor: string;
   color: string;
@@ -361,6 +382,10 @@ export function IdeVisualEditor({
   const [leftTab, setLeftTab] = useState<'pages' | 'layers'>('pages');
   const [mockNotice, setMockNotice] = useState('');
   const [hasV0ApiKey, setHasV0ApiKey] = useState<boolean | null>(null);
+  const [studioStatus, setStudioStatus] = useState<StudioStatus | null>(null);
+  const v0RunningRef = useRef(false);
+  const autoV0StartedRef = useRef(false);
+  const runV0GenerationRef = useRef<() => Promise<void>>(async () => {});
   const v0StorageKey = `nebulla-v0-chat-${projectLabel.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 48)}`;
   const [v0ChatId, setV0ChatId] = useState<string | null>(() => {
     try {
@@ -382,6 +407,16 @@ export function IdeVisualEditor({
     setUndoStack((s) => [...s.slice(-49), cloneModel(model)]);
   }, [model]);
 
+  const loadStudioStatus = useCallback(async () => {
+    try {
+      const r = await fetch(withProjectQuery('/api/nebula-ui-studio/status'));
+      const d = (await r.json()) as StudioStatus & { error?: string };
+      if (r.ok) setStudioStatus(d);
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
   const loadEligibility = useCallback(async () => {
     try {
       const r = await fetch(withProjectQuery('/api/visual-ui-editor/eligibility'));
@@ -392,7 +427,8 @@ export function IdeVisualEditor({
       setEligible(false);
       setEligibilityReason('Failed to read eligibility.');
     }
-  }, []);
+    await loadStudioStatus();
+  }, [loadStudioStatus]);
 
   useEffect(() => {
     void loadEligibility();
@@ -400,20 +436,22 @@ export function IdeVisualEditor({
 
   useEffect(() => {
     const onArtifacts = () => void loadEligibility();
+    const onV0Complete = () => void loadEligibility();
     window.addEventListener('nebula-files-applied', onArtifacts);
     window.addEventListener('nebula-mind-map-updated', onArtifacts);
+    window.addEventListener('nebula-ui-studio-v0-complete', onV0Complete);
     return () => {
       window.removeEventListener('nebula-files-applied', onArtifacts);
       window.removeEventListener('nebula-mind-map-updated', onArtifacts);
+      window.removeEventListener('nebula-ui-studio-v0-complete', onV0Complete);
     };
   }, [loadEligibility]);
 
   useEffect(() => {
-    const onRunV0 = () => void runV0Generation();
+    const onRunV0 = () => void runV0GenerationRef.current();
     window.addEventListener('nebula-ui-studio-run-v0', onRunV0);
     return () => window.removeEventListener('nebula-ui-studio-run-v0', onRunV0);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- imperative v0 trigger from bridge
-  }, [hasV0ApiKey, projectLabel]);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -760,36 +798,37 @@ export function IdeVisualEditor({
   };
 
   const runV0Generation = async () => {
-    if (hasV0ApiKey === false) {
-      setBusy(true);
-      setError('');
-      try {
-        const fb = await fetch(withProjectQuery('/api/nebula-ui-studio/basic-scaffold'), {
-          method: 'POST',
-          headers: persistHeaders(),
-          body: JSON.stringify(withProjectBody({ projectDisplayName: projectLabel })),
-        });
-        const fbData = (await fb.json()) as { written?: string[]; hint?: string };
-        if (fb.ok && (fbData.written?.length ?? 0) > 0) {
-          window.dispatchEvent(new CustomEvent('nebula-files-applied'));
-          window.dispatchEvent(new CustomEvent('nebula-open-app-preview'));
-          setMockNotice(
-            fbData.hint ||
-              `No V0_API_KEY — Nebula wrote a basic HTML preview (${fbData.written!.join(', ')}).`,
-          );
-          await loadEligibility();
-          return;
-        }
-      } catch {
-        /* fall through */
-      }
-      setError('Add V0_API_KEY for full v0 UI, or use Preview for the basic HTML shell.');
-      return;
-    }
+    if (v0RunningRef.current) return;
+    v0RunningRef.current = true;
     setBusy(true);
     setError('');
     try {
-      const res = await fetch(withProjectQuery('/api/nebula-ui-studio/v0-generate'), {
+      if (hasV0ApiKey === false) {
+        try {
+          const fb = await fetch(withProjectQuery('/api/nebula-ui-studio/basic-scaffold'), {
+            method: 'POST',
+            headers: persistHeaders(),
+            body: JSON.stringify(withProjectBody({ projectDisplayName: projectLabel })),
+          });
+          const fbData = (await fb.json()) as { written?: string[]; hint?: string };
+          if (fb.ok && (fbData.written?.length ?? 0) > 0) {
+            window.dispatchEvent(new CustomEvent('nebula-files-applied'));
+            window.dispatchEvent(new CustomEvent('nebula-open-app-preview'));
+            setMockNotice(
+              fbData.hint ||
+                `No V0_API_KEY — Nebula wrote a basic HTML preview (${fbData.written!.join(', ')}).`,
+            );
+            await loadEligibility();
+            return;
+          }
+        } catch {
+          /* fall through */
+        }
+        setError('Add V0_API_KEY for full v0 UI, or use Preview for the basic HTML shell.');
+        return;
+      }
+
+      const res = await fetchWithTimeout(withProjectQuery('/api/nebula-ui-studio/v0-generate'), {
         method: 'POST',
         headers: persistHeaders(),
         body: JSON.stringify(
@@ -837,9 +876,15 @@ export function IdeVisualEditor({
           : 'v0 generation finished.',
       );
       await loadEligibility();
+      window.dispatchEvent(new CustomEvent('nebula-ui-studio-v0-complete'));
       window.dispatchEvent(new CustomEvent('nebula-open-ui-studio', { detail: { tab: 'design' } }));
     } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : 'v0 generation failed';
+      const msg =
+        e instanceof Error && e.name === 'AbortError'
+          ? 'v0 request timed out (3 min). Check V0_API_KEY and try again.'
+          : e instanceof Error
+            ? e.message
+            : 'v0 generation failed';
       const creditsLike = /credit|quota|billing/i.test(msg);
       if (creditsLike || msg.includes('V0 unavailable')) {
         try {
@@ -865,9 +910,19 @@ export function IdeVisualEditor({
       }
       setError(msg.includes('V0_API_KEY') ? 'Please add your V0_API_KEY in .env' : msg);
     } finally {
+      v0RunningRef.current = false;
       setBusy(false);
     }
   };
+
+  runV0GenerationRef.current = runV0Generation;
+
+  useEffect(() => {
+    if (eligible !== false || hasV0ApiKey !== true || !studioStatus?.v0PromptExists) return;
+    if (studioStatus.hasRealV0 || autoV0StartedRef.current || busy) return;
+    autoV0StartedRef.current = true;
+    void runV0GenerationRef.current();
+  }, [eligible, hasV0ApiKey, studioStatus, busy]);
 
   const runV0Refine = async () => {
     if (!v0ChatId) {
@@ -1104,7 +1159,9 @@ export function IdeVisualEditor({
               </span>
               <p className="mt-0.5 text-[11px] opacity-80">
                 {hasV0ApiKey
-                  ? 'All editing tools are available. Run v0 once to enable saving code to disk.'
+                  ? studioStatus?.v0PromptExists
+                    ? `v0 is the primary UI generator. Prompt: ${studioStatus.v0PromptPath ?? 'nebula-ui-studio/v0-prompt.md'} (${studioStatus.v0PromptLength ?? 0} chars). Run v0 once to unlock Save to disk.`
+                    : 'Waiting for v0-prompt.md from Master Plan §4+§5 — save or update the Master Plan first.'
                   : eligibilityReason}
               </p>
             </div>

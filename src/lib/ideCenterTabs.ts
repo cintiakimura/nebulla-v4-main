@@ -16,7 +16,7 @@ export const PANEL_LABELS: Record<IdeCenterPane, string> = {
   'master-plan': 'Master Plan',
   'mind-map': 'Mind map',
   'ui-studio': 'UI Studio',
-  'source-control': 'Git',
+  'source-control': 'Source Control',
   projects: 'Projects',
   secrets: 'Secrets',
   dns: 'DNS',

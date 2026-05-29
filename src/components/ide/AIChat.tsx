@@ -28,7 +28,6 @@ import {
   fetchIdeWorkspaceMeta,
 } from '../../lib/ideWorkspaceChatContext';
 import { ideContextSnippetForChat, useIdeWorkspace } from '@/components/ide/IdeWorkspaceContext';
-import { fetchConversationLogEntries } from '../../lib/conversationLogClient';
 import {
   MIC_REENABLE_AFTER_TTS_MS,
   splitTextForTts,
@@ -103,17 +102,6 @@ function ChatRoundButton({
   );
 }
 
-function formatLogTimestamp(iso: string): string {
-  try {
-    const d = new Date(iso);
-    if (!Number.isNaN(d.getTime())) {
-      return d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-    }
-  } catch {
-    /* ignore */
-  }
-  return new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-}
 
 export function AIChat() {
   const { activePath, activeTab, diskProjectKey, refreshTree } = useIdeWorkspace();
@@ -159,7 +147,29 @@ export function AIChat() {
   const micInputBlockedRef = useRef(false);
   const sendingRef = useRef(false);
   const isHandsFreeRef = useRef(false);
+  const openTalkDesiredRef = useRef(false);
   const handsFreeResumeAfterTtsRef = useRef(false);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  const scrollChatToBottom = useCallback((instant = true) => {
+    const run = () => {
+      const el = scrollContainerRef.current;
+      if (el) {
+        el.scrollTop = el.scrollHeight;
+        return;
+      }
+      messagesEndRef.current?.scrollIntoView({ behavior: instant ? 'auto' : 'smooth', block: 'end' });
+    };
+    requestAnimationFrame(() => {
+      run();
+      requestAnimationFrame(run);
+    });
+  }, []);
+
+  useEffect(() => {
+    scrollChatToBottom(true);
+  }, [messages, sending, scrollChatToBottom]);
 
   const micInputBlocked = isTtsPlaying || micCooldown;
 
@@ -217,6 +227,7 @@ export function AIChat() {
       liveHandsFreeRecognitionRef.current = null;
     }
     isHandsFreeRef.current = false;
+    openTalkDesiredRef.current = false;
     setIsHandsFree(false);
   }, []);
 
@@ -287,7 +298,11 @@ export function AIChat() {
     }
     if (micInputBlockedRef.current || sendingRef.current) return;
     if (opts?.resumeOnly) {
-      if (!isHandsFreeRef.current) return;
+      if (!openTalkDesiredRef.current) return;
+      if (!isHandsFreeRef.current) {
+        isHandsFreeRef.current = true;
+        setIsHandsFree(true);
+      }
       clearHandsFreeIdleTimer();
       const existing = liveHandsFreeRecognitionRef.current;
       if (existing) {
@@ -346,6 +361,7 @@ export function AIChat() {
       recognition.start();
       liveHandsFreeRecognitionRef.current = recognition;
       isHandsFreeRef.current = true;
+      openTalkDesiredRef.current = true;
       setIsHandsFree(true);
       if (!opts?.resumeOnly) {
         setAccessoryHint('Open talk is on — I listen continuously and send after a short pause when you finish a phrase.');
@@ -357,6 +373,21 @@ export function AIChat() {
       window.setTimeout(() => setAccessoryHint(null), 4500);
     }
   }, [stopHandsFree, scheduleHandsFreeAutoSend]);
+
+  const resumeOpenTalkIfWanted = useCallback(() => {
+    if (!openTalkDesiredRef.current) return;
+    if (sendingRef.current) {
+      window.setTimeout(() => resumeOpenTalkIfWanted(), 80);
+      return;
+    }
+    if (micInputBlockedRef.current) {
+      window.setTimeout(() => resumeOpenTalkIfWanted(), 120);
+      return;
+    }
+    isHandsFreeRef.current = true;
+    setIsHandsFree(true);
+    void startHandsFree({ resumeOnly: true });
+  }, [startHandsFree]);
 
   const toggleHandsFree = useCallback(() => {
     if (isHandsFreeRef.current) {
@@ -416,33 +447,6 @@ export function AIChat() {
   useEffect(() => {
     setSendError(null);
   }, [activePath]);
-
-  useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      try {
-        const entries = await fetchConversationLogEntries();
-        if (cancelled) return;
-        if (entries.length === 0) {
-          setMessages([]);
-          return;
-        }
-        setMessages(
-          entries.map((e, i) => ({
-            id: `log-${i}-${e.iso}`,
-            role: e.role === 'user' ? 'user' : 'assistant',
-            content: e.role === 'system' ? `[Context]\n${e.body}` : e.body,
-            timestamp: formatLogTimestamp(e.iso),
-          })),
-        );
-      } catch (e) {
-        console.warn('[AIChat] conversation log load skipped:', e);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [diskProjectKey]);
 
   const scheduleVoiceAutoSend = useCallback((transcript: string) => {
     clearVoiceIdleTimer();
@@ -526,6 +530,9 @@ export function AIChat() {
 
     clearVoiceIdleTimer();
     stopVoiceRecognition();
+    if (openTalkDesiredRef.current) {
+      pauseHandsFreeListening();
+    }
 
     const prior = messagesRef.current;
     const userMsg: Message = {
@@ -565,9 +572,10 @@ export function AIChat() {
 
     const session = await fetchSessionUser();
     const userId = session?.uid?.trim() || 'anonymous';
+    let scheduledTts = false;
 
     try {
-      const { assistantContent, planningPhase, claudeFallbackNotice } = await sendIdeAssistantGrokTurn({
+      const { assistantContent, planningPhase } = await sendIdeAssistantGrokTurn({
         textToSend: text,
         history: historyForApi,
         userId,
@@ -614,33 +622,27 @@ export function AIChat() {
         }
       }
 
-      if (/<START_UIUX>/i.test(masterPlanSource) && !masterPlanPipeline.v0Ok) {
+      if (/<START_UIUX>/i.test(masterPlanSource) && !masterPlanPipeline.v0Ok && !masterPlanPipeline.v0Triggered) {
         dispatchStartUiUxWorkflow({ tab: 'design', autoV0: true });
       }
       const spoken = stripAssistantTagsForVoice(displayText);
       const ts = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
       const toAppend: Message[] = [];
-      if (claudeFallbackNotice?.trim()) {
-        toAppend.push({
-          id: `fb-${Date.now()}`,
-          role: 'assistant',
-          content: claudeFallbackNotice.trim(),
-          timestamp: ts,
-        });
-      }
-      if (displayText.trim() || hadCodingTag) {
+      if (displayText.trim()) {
         toAppend.push({
           id: `a-${Date.now()}`,
           role: 'assistant',
-          content: displayText.trim() || 'Applied — see file explorer.',
+          content: displayText.trim(),
           timestamp: ts,
         });
       }
-      setMessages((p) => {
-        const next = [...p, ...toAppend];
-        messagesRef.current = next;
-        return next;
-      });
+      if (toAppend.length > 0) {
+        setMessages((p) => {
+          const next = [...p, ...toAppend];
+          messagesRef.current = next;
+          return next;
+        });
+      }
 
       try {
         if (hadCodingTag || /```(?:file|filepath)\s*:/i.test(raw)) {
@@ -674,20 +676,22 @@ export function AIChat() {
           if (mpSaved > 0 || (artifactSync.masterPlanTabs ?? 0) > 0) {
             window.dispatchEvent(new CustomEvent('nebula-open-master-plan'));
           }
-          if (coding.statusMessage?.trim()) {
-            const codeTs = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-            const statusMsg: Message = {
-              id: `code-${Date.now()}`,
-              role: 'assistant',
-              content: coding.statusMessage.trim(),
-              timestamp: codeTs,
-            };
-            setMessages((p) => {
-              const next = [...p, statusMsg];
-              messagesRef.current = next;
-              return next;
+          if (!masterPlanPipeline.v0Ok) {
+            masterPlanPipeline = await runMasterPlanUiPipeline({
+              projectName,
+              autoV0: true,
             });
-            setGrokStatusLines(['Done', coding.statusMessage.trim().slice(0, 72), 'Check file explorer & Preview']);
+          }
+          if (masterPlanPipeline.v0Ok) {
+            try {
+              window.dispatchEvent(new CustomEvent('nebula-ui-studio-v0-complete'));
+              window.dispatchEvent(new CustomEvent('nebula-files-applied'));
+              dispatchOpenUiStudio({ tab: 'design' });
+            } catch {
+              /* ignore */
+            }
+          } else if (masterPlanPipeline.v0PromptWritten) {
+            dispatchOpenUiStudio({ tab: 'design' });
           }
         } else if (!hadCodingTag) {
           const mm = masterPlanPipeline.mindMapPageCount ?? 0;
@@ -702,13 +706,13 @@ export function AIChat() {
         }
       } catch (codingErr) {
         console.warn('[AIChat] coding apply:', codingErr);
-        setGrokStatusLines(['Error', 'File apply failed — see message above', 'Ready to retry']);
+        setGrokStatusLines(['Error', 'File apply failed', 'Ready to retry']);
       }
 
-      if (spoken) {
+      if (spoken.trim()) {
+        scheduledTts = true;
+        handsFreeResumeAfterTtsRef.current = openTalkDesiredRef.current;
         void playTtsForText(spoken);
-      } else if (isHandsFreeRef.current) {
-        void startHandsFree({ resumeOnly: true });
       }
     } catch (e) {
       setGrokStatusLines(['Error', 'Grok request failed', 'Check server key and retry']);
@@ -725,25 +729,20 @@ export function AIChat() {
         msg.includes('401') ||
         msg.includes('rejected this API key');
       const isUsageLimit = isMonthlyUsageLimitError(msg);
-      setSendError(isKeyHelp || isUsageLimit ? null : msg);
-      setMessages((p) => {
-        const displayMsg = isUsageLimit ? FREE_TIER_MONTHLY_LIMIT_MESSAGE : msg;
-        const next = [
-          ...p,
-          {
-            id: `e-${Date.now()}`,
-            role: 'assistant' as const,
-            content: isKeyHelp ? displayMsg.replace(/\n\n+/g, '\n\n') : `Something went wrong: ${displayMsg}`,
-            timestamp: new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }),
-          },
-        ];
-        messagesRef.current = next;
-        return next;
-      });
+      if (isUsageLimit) {
+        setSendError(FREE_TIER_MONTHLY_LIMIT_MESSAGE);
+      } else if (isKeyHelp) {
+        setSendError(MAIN_AI_CHAT_SETUP_HINT);
+      } else {
+        setSendError(msg);
+      }
     } finally {
       setSending(false);
+      if (openTalkDesiredRef.current && !scheduledTts) {
+        resumeOpenTalkIfWanted();
+      }
     }
-  }, [sending, activePath, activeTab?.content, serverHasGrokKey, micInputBlocked, workspaceRootLabel]);
+  }, [sending, activePath, activeTab?.content, serverHasGrokKey, micInputBlocked, workspaceRootLabel, pauseHandsFreeListening, resumeOpenTalkIfWanted]);
 
   sendChatRef.current = sendChat;
 
@@ -777,15 +776,13 @@ export function AIChat() {
           micCooldownTimerRef.current = window.setTimeout(() => {
             micCooldownTimerRef.current = null;
             setMicCooldown(false);
-            if (!micInputBlockedRef.current && !sendingRef.current) {
-              void startHandsFree({ resumeOnly: true });
-            }
+            resumeOpenTalkIfWanted();
           }, MIC_REENABLE_AFTER_TTS_MS);
         }
         return;
       }
 
-      const resumeHandsFree = isHandsFreeRef.current;
+      const resumeHandsFree = openTalkDesiredRef.current;
       stopVoiceRecognition();
       pauseHandsFreeListening();
       handsFreeResumeAfterTtsRef.current = resumeHandsFree;
@@ -808,9 +805,7 @@ export function AIChat() {
           setMicCooldown(false);
           if (handsFreeResumeAfterTtsRef.current) {
             handsFreeResumeAfterTtsRef.current = false;
-            if (!micInputBlockedRef.current && !sendingRef.current) {
-              void startHandsFree({ resumeOnly: true });
-            }
+            resumeOpenTalkIfWanted();
           }
         }, MIC_REENABLE_AFTER_TTS_MS);
       };
@@ -960,27 +955,25 @@ export function AIChat() {
 
     try {
       await refreshWorkspaceMeta();
-      const go = await runGoCodeAndApply({ userId, projectName, userNote });
-      const statusMsg: Message = {
-        id: `go-${Date.now()}-status`,
-        role: 'assistant',
-        content: go.statusMessage,
-        timestamp: new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }),
-      };
-      setMessages((p) => {
-        const next = [...p, statusMsg];
-        messagesRef.current = next;
-        return next;
-      });
+      await runGoCodeAndApply({ userId, projectName, userNote });
+      const pipeline = await runMasterPlanUiPipeline({ projectName, autoV0: true });
+      if (pipeline.v0Ok) {
+        window.dispatchEvent(new CustomEvent('nebula-ui-studio-v0-complete'));
+        window.dispatchEvent(new CustomEvent('nebula-files-applied'));
+        dispatchOpenUiStudio({ tab: 'design' });
+      }
+      setGrokStatusLines(['Ready', 'Files updated in workspace', 'Continue in chat or open talk']);
     } catch (e) {
       setSendError(e instanceof Error ? e.message : 'Go failed');
       setGrokStatusLines(['Error', 'Go / Grok Code failed', 'Ready to retry']);
     } finally {
       setSending(false);
       setAccessoryHint(null);
-      setGrokStatusLines((prev) => (prev[0] === 'Go…' ? ['Ready', 'Chat: prose only', 'Go: writes files to workspace'] : prev));
+      if (openTalkDesiredRef.current) {
+        resumeOpenTalkIfWanted();
+      }
     }
-  }, [micInputBlocked, sending, serverHasGrokKey, stopVoiceRecognition, refreshWorkspaceMeta]);
+  }, [micInputBlocked, sending, serverHasGrokKey, stopVoiceRecognition, refreshWorkspaceMeta, resumeOpenTalkIfWanted]);
 
   return (
     <div className="surface-active tonal-seam-l flex h-full min-h-0 flex-col overflow-hidden">
@@ -1009,39 +1002,7 @@ export function AIChat() {
         </p>
       ) : null}
 
-      <div className="flex-1 space-y-3 overflow-auto p-3">
-        {messages.length === 0 && !sending ? (
-          <div className="type-body-md text-muted-foreground leading-relaxed space-y-2">
-            {serverHasGrokKey === null ? (
-              <p>Checking connection to the server…</p>
-            ) : serverHasGrokKey ? (
-              <>
-                <p className="text-foreground/90 font-headline text-sm">IDE chat</p>
-                <p>
-                  <strong className="text-foreground/90">Grok</strong> is the default model here. Each turn uses your open file, master plan,
-                  and UI Studio context. Say &quot;build…&quot; or press <strong className="text-foreground/90">Go</strong> for build mode (files
-                  are written to the project, not pasted as chat code).
-                </p>
-                <p>
-                  <strong className="text-foreground/90">Voice:</strong> tap the <strong className="text-foreground/90">wave</strong> icon for{' '}
-                  <strong className="text-foreground/90">open talk</strong> (continuous listen + auto-send after a short pause), or the{' '}
-                  <strong className="text-foreground/90">microphone</strong> for push-to-talk. Grok transcribes your speech, replies in chat, then
-                  TTS reads the answer aloud. The mic is off while TTS plays; after playback it stays muted for{' '}
-                  {MIC_REENABLE_AFTER_TTS_MS / 1000}s, then listening can resume (open talk continues if it was on).
-                </p>
-              </>
-            ) : (
-              <>
-                <p className="text-amber-200/95 font-headline text-sm">Grok is not available on this server</p>
-                <p>
-                  Grok is not configured on this server. Add your xAI API key in <strong className="text-foreground/90">My services</strong>,
-                  redeploy or restart the app, then reload this page.
-                </p>
-              </>
-            )}
-          </div>
-        ) : null}
-
+      <div ref={scrollContainerRef} className="flex-1 space-y-3 overflow-auto p-3">
         {messages.map((message) => (
           <div
             key={message.id}
@@ -1085,25 +1046,12 @@ export function AIChat() {
             </div>
           </div>
         ) : null}
+        <div ref={messagesEndRef} className="h-px shrink-0" aria-hidden />
       </div>
 
       <div className="tonal-seam-t shrink-0 p-3">
-        <div
-          className="mb-2 rounded-md border border-border/60 bg-muted/20 px-2.5 py-1.5 font-mono"
-          role="status"
-          aria-live="polite"
-        >
-          {grokStatusLines.map((line, i) => (
-            <p
-              key={i}
-              className={cn(
-                'type-label-sm leading-snug truncate',
-                i === 0 ? 'text-foreground/90' : 'text-muted-foreground',
-              )}
-            >
-              {line}
-            </p>
-          ))}
+        <div className="sr-only" role="status" aria-live="polite">
+          {grokStatusLines.join(' · ')}
         </div>
         <div className="surface-float rounded-lg border border-transparent p-2 ring-1 ring-[color-mix(in_srgb,var(--outline-variant)_12%,transparent)] transition-[box-shadow,background-color] duration-300 ease-out focus-within:ring-[color-mix(in_srgb,var(--outline-variant)_22%,transparent)]">
           <textarea
@@ -1129,7 +1077,7 @@ export function AIChat() {
               <ChatRoundButton
                 label={isHandsFree ? 'Stop open talk (hands-free)' : 'Start open talk (hands-free)'}
                 onClick={() => toggleHandsFree()}
-                disabled={sending || micInputBlocked}
+                disabled={sending}
               >
                 <SoundWaveIcon
                   className={cn(isHandsFree ? 'text-primary' : '', micInputBlocked ? 'opacity-50' : '')}

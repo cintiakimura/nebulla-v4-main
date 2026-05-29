@@ -18,7 +18,7 @@ export const IDE_CENTER_PRIMARY_TABS: { id: IdeCenterPane; label: string }[] = [
   { id: 'master-plan', label: 'Master Plan' },
   { id: 'mind-map', label: 'Mind map' },
   { id: 'ui-studio', label: 'UI Studio' },
-  { id: 'source-control', label: 'Git' },
+  { id: 'source-control', label: 'Source Control' },
 ];
 
 /** Open from the left nav only — not duplicated in the six-tab bar. */

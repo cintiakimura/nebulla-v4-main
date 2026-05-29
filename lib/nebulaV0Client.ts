@@ -90,6 +90,49 @@ export async function v0CreateChat(
   return { ok: true, result: { chatId, files, demoUrl, raw: data } };
 }
 
+export async function v0GetChat(
+  apiKey: string,
+  chatId: string
+): Promise<{ ok: true; result: V0ChatResult } | { ok: false; status: number; error: string }> {
+  const res = await fetch(`${V0_API_BASE}/chats/${encodeURIComponent(chatId)}`, {
+    method: "GET",
+    headers: { Authorization: `Bearer ${apiKey}` },
+  });
+  const text = await res.text();
+  if (!res.ok) {
+    return { ok: false, status: res.status, error: await parseV0Error(res, text) };
+  }
+  let data: Record<string, unknown>;
+  try {
+    data = JSON.parse(text) as Record<string, unknown>;
+  } catch {
+    return { ok: false, status: 502, error: "v0 returned invalid JSON" };
+  }
+  const id = typeof data.id === "string" ? data.id : chatId;
+  const latest = data.latestVersion as Record<string, unknown> | undefined;
+  const demoUrl = typeof latest?.demoUrl === "string" ? latest.demoUrl : undefined;
+  const files = extractFilesFromChatPayload(data);
+  return { ok: true, result: { chatId: id, files, demoUrl, raw: data } };
+}
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/** v0 sometimes returns chat id before files are ready — poll until files appear. */
+export async function v0WaitForChatFiles(
+  apiKey: string,
+  chatId: string,
+  opts?: { maxAttempts?: number; intervalMs?: number }
+): Promise<V0FileEntry[]> {
+  const maxAttempts = opts?.maxAttempts ?? 45;
+  const intervalMs = opts?.intervalMs ?? 2000;
+  for (let i = 0; i < maxAttempts; i++) {
+    const got = await v0GetChat(apiKey, chatId);
+    if (got.ok && got.result.files.length > 0) return got.result.files;
+    if (i < maxAttempts - 1) await sleep(intervalMs);
+  }
+  return [];
+}
+
 export async function v0SendChatMessage(
   apiKey: string,
   chatId: string,

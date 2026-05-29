@@ -15,6 +15,7 @@ export type IdeArtifactSyncResult = {
 export type MasterPlanUiPipelineResult = {
   ok?: boolean;
   v0PromptWritten?: boolean;
+  v0PromptPath?: string;
   mindMapSynced?: boolean;
   mindMapPageCount?: number;
   mindMapRouteCount?: number;

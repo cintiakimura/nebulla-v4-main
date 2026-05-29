@@ -3,7 +3,7 @@ import { cn } from '@/lib/utils';
 const LOGO_SRC = '/nebulla-logo.png';
 
 /**
- * Nebulla.beta mark — `public/nebulla-logo.png` uses alpha (no matte) so it sits cleanly on Cosmic Night surfaces.
+ * Nebulla.beta mark — served from `public/nebulla-logo.png` (transparent PNG).
  */
 export function Logo({
   className = 'w-6 h-6',

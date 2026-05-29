@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import {
   ChevronDown,
   ChevronRight,
+  Circle,
   File,
   FileCode,
   FileJson,
@@ -13,7 +14,10 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { buildWorkspaceFileTree, type WorkspaceTreeNode } from '../../lib/workspaceFileTree';
+import { getBrowserProjectName } from '../../lib/nebulaProjectApi';
 import { useIdeWorkspace } from '@/components/ide/IdeWorkspaceContext';
+import { IdeCollapsibleSection } from '@/components/ide/IdeCollapsibleSection';
+import { fileTabLabel } from '../../lib/ideCenterTabs';
 
 function getFileIcon(name: string) {
   const ext = name.split('.').pop()?.toLowerCase();
@@ -86,13 +90,15 @@ function FileTreeNode({
         <span
           className={cn(
             'truncate',
-            isFolder ? 'type-label-sm text-muted-foreground' : cn('type-title-sm', isSelected ? 'text-primary' : 'text-foreground'),
+            isFolder
+              ? 'type-label-sm text-muted-foreground'
+              : cn('type-title-sm', isSelected ? 'text-primary' : 'text-foreground'),
           )}
         >
           {node.name}
         </span>
       </button>
-      {isFolder && isOpen && node.children.length > 0 && (
+      {isFolder && isOpen && node.children.length > 0 ? (
         <div>
           {node.children.map((child) => (
             <FileTreeNode
@@ -104,15 +110,19 @@ function FileTreeNode({
             />
           ))}
         </div>
-      )}
+      ) : null}
     </div>
   );
 }
 
 export function FileExplorer() {
-  const { workspacePaths, overviewLoading, overviewError, refreshTree, openFile, activePath } = useIdeWorkspace();
+  const { workspacePaths, overviewLoading, overviewError, refreshTree, openFile, activePath, tabs } =
+    useIdeWorkspace();
   const [explorerHint, setExplorerHint] = useState<string | null>(null);
+  const [editorsOpen, setEditorsOpen] = useState(true);
+  const [projectOpen, setProjectOpen] = useState(true);
   const tree = useMemo(() => buildWorkspaceFileTree(workspacePaths), [workspacePaths]);
+  const projectLabel = getBrowserProjectName().trim() || 'Project';
 
   return (
     <div className="surface-active flex h-full flex-col">
@@ -139,7 +149,7 @@ export function FileExplorer() {
             aria-label="Explorer actions"
             className="btn-secondary-surface rounded p-0.5 text-muted-foreground"
             onClick={() => {
-              setExplorerHint('Files load from the active cloud workspace (source control overview).');
+              setExplorerHint('Project files from your workspace (src/, app/, public/, etc.).');
               window.setTimeout(() => setExplorerHint(null), 3200);
             }}
           >
@@ -148,30 +158,74 @@ export function FileExplorer() {
         </div>
       </div>
       {explorerHint ? (
-        <p className="type-label-sm border-b border-cyan-500/20 bg-cyan-500/10 px-3 py-1.5 text-cyan-100/90" role="status">
+        <p
+          className="type-label-sm border-b border-cyan-500/20 bg-cyan-500/10 px-3 py-1.5 text-cyan-100/90"
+          role="status"
+        >
           {explorerHint}
         </p>
       ) : null}
       {overviewError ? (
-        <p className="type-label-sm border-b border-red-500/25 bg-red-500/10 px-3 py-2 text-red-100/90" role="alert">
+        <p
+          className="type-label-sm border-b border-red-500/25 bg-red-500/10 px-3 py-2 text-red-100/90"
+          role="alert"
+        >
           {overviewError}
         </p>
       ) : null}
-      <div className="flex-1 overflow-auto py-1">
-        {overviewLoading && tree.length === 0 ? (
-          <p className="type-label-sm px-3 py-2 text-muted-foreground">Loading workspace…</p>
-        ) : tree.length === 0 ? (
-          <p className="type-label-sm px-3 py-2 text-muted-foreground">No files in this workspace yet.</p>
-        ) : (
-          tree.map((node) => (
-            <FileTreeNode
-              key={node.path || node.name}
-              node={node}
-              selectedPath={activePath}
-              onOpenFile={openFile}
-            />
-          ))
-        )}
+      <div className="flex-1 overflow-auto px-1 py-1">
+        {tabs.length > 0 ? (
+          <IdeCollapsibleSection
+            title="Open Editors"
+            open={editorsOpen}
+            onToggle={() => setEditorsOpen((v) => !v)}
+            count={tabs.length}
+            className="mb-1"
+          >
+            <ul className="space-y-0.5 pb-1">
+              {tabs.map((t) => (
+                <li key={t.path}>
+                  <button
+                    type="button"
+                    onClick={() => void openFile(t.path)}
+                    className={cn(
+                      'flex w-full items-center gap-1.5 rounded px-2 py-1 text-left text-xs hover:bg-secondary/50',
+                      activePath === t.path && 'active-tab-sheen text-primary',
+                    )}
+                  >
+                    {getFileIcon(t.path.split('/').pop() ?? t.path)}
+                    <span className="min-w-0 flex-1 truncate">{fileTabLabel(t.path)}</span>
+                    {t.dirty ? (
+                      <Circle className="h-1.5 w-1.5 shrink-0 fill-primary text-primary" aria-label="Unsaved" />
+                    ) : null}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </IdeCollapsibleSection>
+        ) : null}
+
+        <IdeCollapsibleSection
+          title={projectLabel}
+          open={projectOpen}
+          onToggle={() => setProjectOpen((v) => !v)}
+          count={workspacePaths.length}
+        >
+          {overviewLoading && tree.length === 0 ? (
+            <p className="type-label-sm px-2 py-2 text-muted-foreground">Loading workspace…</p>
+          ) : tree.length === 0 ? (
+            <p className="type-label-sm px-2 py-2 text-muted-foreground">No project files yet.</p>
+          ) : (
+            tree.map((node) => (
+              <FileTreeNode
+                key={node.path || node.name}
+                node={node}
+                selectedPath={activePath}
+                onOpenFile={openFile}
+              />
+            ))
+          )}
+        </IdeCollapsibleSection>
       </div>
     </div>
   );

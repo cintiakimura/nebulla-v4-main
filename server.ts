@@ -57,6 +57,7 @@ import {
   saveCanonicalV0OriginalCopy,
   writeV0PromptMarkdown,
 } from "./lib/nebulaUiStudioPipeline";
+import { seedPreviewModelFromMasterPlan } from "./lib/visualUiEditorPreview";
 import {
   masterPlanKeyForTabIndex,
   normalizeMasterPlanRecord,
@@ -67,6 +68,7 @@ import {
   pickPrimaryUiFile,
   v0CreateChat,
   v0SendChatMessage,
+  v0WaitForChatFiles,
   type V0FileEntry,
 } from "./lib/nebulaV0Client";
 import { NEBULA_V0_KEY_SETUP_HINT, resolveV0ApiKey, V0_ENV_VAR } from "./lib/nebulaV0Resolver";
@@ -582,9 +584,14 @@ No approved UI code yet.
       return { ok: false, status: v0Call.status, error: v0Call.error };
     }
 
-    const { workspaceRoot, nebulaUiStudioPath } = projectPathsFor(opts.req);
+    let v0Files = v0Call.result.files;
+    if (v0Files.length === 0) {
+      v0Files = await v0WaitForChatFiles(keyRes.apiKey, v0Call.result.chatId);
+    }
+
+    const { workspaceRoot, nebulaUiStudioPath, masterPlanPath } = projectPathsFor(opts.req);
     const allFilesMap: Record<string, string> = {};
-    for (const f of v0Call.result.files) {
+    for (const f of v0Files) {
       const rel = f.name.replace(/\\/g, "/").replace(/^\/+/, "");
       if (rel) allFilesMap[rel] = f.content;
     }
@@ -592,7 +599,7 @@ No approved UI code yet.
       return {
         ok: false,
         status: 422,
-        error: "v0 returned no files. Try a more specific UI prompt in nebula-ui-studio.md.",
+        error: "v0 returned no files after waiting. Check V0_API_KEY credits and nebula-ui-studio/v0-prompt.md.",
       };
     }
 
@@ -605,14 +612,22 @@ No approved UI code yet.
       notes: "Nebula UI Studio v0 generation",
     });
     saveCanonicalV0OriginalCopy(workspaceRoot, allFilesMap);
+    seedPreviewModelFromMasterPlan(
+      workspaceRoot,
+      masterPlanPath,
+      opts.projectDisplayName?.trim() || "Untitled Project"
+    );
 
-    const { written, skipped } = writeV0FilesToWorkspace(workspaceRoot, v0Call.result.files);
+    const { written, skipped } = writeV0FilesToWorkspace(
+      workspaceRoot,
+      v0Files.map((f) => ({ name: f.name, content: f.content }))
+    );
 
     ensureNebulaUiStudioFileAt(nebulaUiStudioPath);
     const existing = fs.readFileSync(nebulaUiStudioPath, "utf8");
-    const promptText = extractNebulaCommentSection(existing, "NEBULA_UI_STUDIO_PROMPT") || "No prompt generated yet.";
-    const withPrompt = upsertNebulaCommentSection(existing, "NEBULA_UI_STUDIO_PROMPT", promptText);
-    const primaryCode = pickPrimaryUiFile(v0Call.result.files);
+    const promptFromDisk = readV0PromptMarkdown(workspaceRoot) || opts.message.slice(0, 120000);
+    const withPrompt = upsertNebulaCommentSection(existing, "NEBULA_UI_STUDIO_PROMPT", promptFromDisk);
+    const primaryCode = pickPrimaryUiFile(v0Files);
     const withCode = upsertNebulaCommentSection(withPrompt, "NEBULA_UI_STUDIO_CODE", primaryCode);
     fs.writeFileSync(nebulaUiStudioPath, withCode, "utf8");
 
@@ -1022,6 +1037,7 @@ No approved UI code yet.
       res.json({
         ok: true,
         v0PromptWritten: v0Prompt.written,
+        v0PromptPath: "nebula-ui-studio/v0-prompt.md",
         mindMapSynced: mind.written && mindMapPages > 0,
         mindMapPageCount: mindMapPages,
         mindMapRouteCount: mind.routeCount,
@@ -1035,6 +1051,28 @@ No approved UI code yet.
       res.status(500).json({
         error: err instanceof Error ? err.message : "master plan UI pipeline failed",
       });
+    }
+  });
+
+  app.get("/api/nebula-ui-studio/status", (req, res) => {
+    try {
+      const pp = projectPathsFor(req);
+      const prompt = readV0PromptMarkdown(pp.workspaceRoot);
+      const gate = isVisualEditorEligible(pp.workspaceRoot);
+      const keyRes = resolveV0ApiKey();
+      return res.json({
+        ok: true,
+        v0PromptPath: "nebula-ui-studio/v0-prompt.md",
+        v0PromptExists: Boolean(prompt.trim()),
+        v0PromptLength: prompt.length,
+        v0PromptPreview: prompt.slice(0, 500),
+        hasRealV0: hasRealV0ApiGeneration(pp.workspaceRoot),
+        eligible: gate.eligible,
+        eligibilityReason: gate.reason,
+        hasV0ApiKey: keyRes.ok === true,
+      });
+    } catch (err: unknown) {
+      return res.status(500).json({ error: err instanceof Error ? err.message : "status failed" });
     }
   });
 
@@ -1408,6 +1446,9 @@ No approved UI code yet.
     const prefixes = [
       "generated-ui/",
       "nebulla-version-history/",
+      "nebulla-ide/",
+      "nebula-project/",
+      "nebula-ui-studio/",
       ".cursor/",
       "conversation-logs/",
       "dist/",
@@ -1441,6 +1482,13 @@ No approved UI code yet.
         branch: string;
         entries: { status: string; path: string }[];
         error?: string;
+        latestCommit?: {
+          hash: string;
+          shortHash: string;
+          subject: string;
+          author: string;
+          date: string;
+        } | null;
       } | null = null;
 
       if (fs.existsSync(path.join(workspaceRoot, ".git"))) {
@@ -1455,9 +1503,39 @@ No approved UI code yet.
             ["-C", workspaceRoot, "status", "--porcelain", "-u"],
             { maxBuffer: 10 * 1024 * 1024, encoding: "utf8" }
           );
+          let latestCommit: {
+            hash: string;
+            shortHash: string;
+            subject: string;
+            author: string;
+            date: string;
+          } | null = null;
+          try {
+            const { stdout: logOut } = await execFileAsync(
+              "git",
+              ["-C", workspaceRoot, "log", "-1", "--format=%H|%h|%s|%an|%aI"],
+              { maxBuffer: 1024 * 1024, encoding: "utf8" }
+            );
+            const line = (logOut || "").trim().split("\n")[0];
+            if (line) {
+              const [hash, shortHash, subject, author, date] = line.split("|");
+              if (hash && shortHash) {
+                latestCommit = {
+                  hash,
+                  shortHash,
+                  subject: subject || "(no message)",
+                  author: author || "Unknown",
+                  date: date || new Date().toISOString(),
+                };
+              }
+            }
+          } catch {
+            /* no commits yet */
+          }
           git = {
             branch: (branchOut || "unknown").trim() || "unknown",
             entries: parseGitPorcelain(porcOut || "").filter((e) => isUserAppProductPath(e.path)),
+            latestCommit,
           };
         } catch (e) {
           git = {

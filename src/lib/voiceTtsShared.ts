@@ -5,8 +5,8 @@
  * - ~2.5s silence after speech before auto-send (hands-free / voice turn).
  */
 
-export const MIC_REENABLE_AFTER_TTS_MS = 5000;
-export const VOICE_SILENCE_BEFORE_SEND_MS = 2500;
+export const MIC_REENABLE_AFTER_TTS_MS = 1000;
+export const VOICE_SILENCE_BEFORE_SEND_MS = 1800;
 /** First audio chunk: start immediately once Grok body is ready. */
 export const TTS_START_DEBOUNCE_MS = 0;
 export const MAX_TTS_CHUNK_CHARS = 560;

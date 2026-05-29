@@ -18,6 +18,7 @@ import { cn } from '@/lib/utils';
 import { AppPreviewPanel } from '../AppPreviewPanel';
 import { MasterPlan } from '../MasterPlan';
 import { SourceControlPanel } from '../SourceControlPanel';
+import { WorkspaceSearchPanel } from '../WorkspaceSearchPanel';
 import { IdeDashboardEmbed } from './IdeDashboardEmbed';
 import { IdeVisualEditor } from './IdeVisualEditor';
 import { UiStudioMockupPanel } from './UiStudioMockupPanel';
@@ -217,13 +218,7 @@ export function IdeCenterWorkspace() {
               <IdeDashboardEmbed initialTab="dns" />
             </PaneLayer>
             <PaneLayer visible={activePane === 'search'}>
-              <div className="flex flex-1 flex-col items-center justify-center gap-3 p-8 text-center">
-                <h2 className="font-headline text-lg text-foreground">Search</h2>
-                <p className="max-w-md text-sm text-muted-foreground">
-                  Use the file tree and chat to navigate the workspace. Global search will index project files in a
-                  future release.
-                </p>
-              </div>
+              <WorkspaceSearchPanel projectKey={projectKey} />
             </PaneLayer>
           </>
         )}

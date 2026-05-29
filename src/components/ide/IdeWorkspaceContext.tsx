@@ -117,6 +117,16 @@ export function IdeWorkspaceProvider({ children }: { children: ReactNode }) {
   }, [refreshTree]);
 
   useEffect(() => {
+    const onRefresh = () => void refreshTree();
+    window.addEventListener('nebula-files-applied', onRefresh);
+    window.addEventListener('nebula-workspace-context-synced', onRefresh);
+    return () => {
+      window.removeEventListener('nebula-files-applied', onRefresh);
+      window.removeEventListener('nebula-workspace-context-synced', onRefresh);
+    };
+  }, [refreshTree]);
+
+  useEffect(() => {
     const payload = buildIdeSwarmFocusFromEditor(
       activePath,
       activeTab?.content ?? '',

@@ -11,7 +11,7 @@ import { TerminalPanel } from '@/components/ide/TerminalPanel';
 import { TopBar } from '@/components/ide/TopBar';
 import { VerticalNav } from '@/components/ide/VerticalNav';
 import { MyServicesOnboarding } from '@/components/MyServicesOnboarding';
-import { ExplorerPanel } from '@/components/ExplorerPanel';
+import { FileExplorer } from '@/components/ide/FileExplorer';
 import { IdeWorkspaceProvider, useIdeWorkspace } from '@/components/ide/IdeWorkspaceContext';
 import {
   ensureCloudWorkspaceReady,
@@ -39,11 +39,8 @@ const TERMINAL_MIN = 80;
 const TERMINAL_MAX = 560;
 const TERMINAL_DEFAULT = 192;
 
-function IdeExplorerSidebar({ projectKey }: { projectKey: string }) {
-  const { focusFile } = useIdeCenterTabs();
-  return (
-    <ExplorerPanel projectKey={projectKey} onOpenFile={(path) => focusFile(path)} />
-  );
+function IdeExplorerSidebar() {
+  return <FileExplorer />;
 }
 
 function useDragResize(
@@ -132,6 +129,7 @@ export function NebullaIDE() {
 function NebullaIDEShell() {
   const { activeNavId, openPanel } = useIdeCenterTabs();
   const explorer = useDragResize(EXPLORER_DEFAULT, EXPLORER_MIN, EXPLORER_MAX, 'horizontal-right');
+  const [explorerOpen, setExplorerOpen] = useState(true);
   const chat = useDragResize(CHAT_DEFAULT, CHAT_MIN, CHAT_MAX, 'horizontal-left');
   const terminal = useDragResize(TERMINAL_DEFAULT, TERMINAL_MIN, TERMINAL_MAX, 'vertical');
 
@@ -234,7 +232,10 @@ function NebullaIDEShell() {
         setMyServicesOpen(true);
         return;
       }
-      if (id === 'explorer') return;
+      if (id === 'explorer') {
+        setExplorerOpen((v) => !v);
+        return;
+      }
       const pane = navIdToCenterPane(id);
       if (pane !== 'code') openPanel(pane);
     },
@@ -277,11 +278,18 @@ function NebullaIDEShell() {
           onSelectItem={selectNavItem}
         />
 
-        <div className="surface-active tonal-seam-r hidden shrink-0 overflow-hidden md:block" style={{ width: explorer.size }}>
-          <IdeExplorerSidebar projectKey={workspaceProjectKey} />
-        </div>
+        {explorerOpen ? (
+          <>
+            <div
+              className="surface-active tonal-seam-r hidden shrink-0 overflow-hidden md:block"
+              style={{ width: explorer.size }}
+            >
+              <IdeExplorerSidebar />
+            </div>
 
-        <ResizeHandle onMouseDown={explorer.onMouseDown} orientation="horizontal" />
+            <ResizeHandle onMouseDown={explorer.onMouseDown} orientation="horizontal" />
+          </>
+        ) : null}
 
         <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
           <div className="flex min-h-0 flex-1 overflow-hidden">
