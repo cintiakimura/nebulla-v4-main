@@ -77,6 +77,7 @@ import {
   type V0FileEntry,
 } from "./lib/nebulaV0Client";
 import { clearV0Pending, readV0Pending, writeV0Pending } from "./lib/nebulaV0Pending";
+import { isV0StartJobActive, scheduleV0CreateChatJob } from "./lib/nebulaV0StartJob";
 import { NEBULA_V0_KEY_SETUP_HINT, resolveV0ApiKey, resolveV0ApiKeyFromRequest, V0_ENV_VAR } from "./lib/nebulaV0Resolver";
 import { PRE_CODING_SUMMARY_KEY } from "./lib/masterPlanSections";
 import {
@@ -807,7 +808,7 @@ No approved UI code yet.
         promptPreview,
       });
       if (v0Call.result.files.length > 0) {
-        const applied = applyV0FilesToWorkspace(req, v0Call.result.files, {
+        const applied = applyV0FilesToWorkspace(opts.req, v0Call.result.files, {
           chatId,
           message: opts.message,
           demoUrl: v0Call.result.demoUrl,
@@ -827,7 +828,7 @@ No approved UI code yet.
         promptPreview: opts.message.slice(0, 500),
       });
       if (sent.result.files.length > 0) {
-        const applied = applyV0FilesToWorkspace(req, sent.result.files, {
+        const applied = applyV0FilesToWorkspace(opts.req, sent.result.files, {
           chatId,
           message: opts.message,
           demoUrl: sent.result.demoUrl,
@@ -1276,8 +1277,10 @@ No approved UI code yet.
         v0PromptLength: prompt.length,
         v0PromptPreview: prompt.slice(0, 500),
         hasRealV0: hasRealV0ApiGeneration(pp.workspaceRoot),
-        v0Pending: Boolean(pending?.chatId),
-        v0PendingChatId: pending?.chatId,
+        v0Pending: Boolean(pending?.chatId || pending?.starting),
+        v0PendingChatId: pending?.chatId || undefined,
+        v0Starting: Boolean(pending?.starting || isV0StartJobActive(pp.workspaceRoot)),
+        v0StartError: pending?.startError,
         eligible: gate.eligible,
         eligibilityReason: gate.reason,
         hasV0ApiKey: keyRes.ok === true,
@@ -1995,7 +1998,18 @@ No approved UI code yet.
 
       const { workspaceRoot } = projectPathsFor(req);
       const existing = readV0Pending(workspaceRoot);
-      if (existing && !hasRealV0ApiGeneration(workspaceRoot)) {
+
+      if (existing?.startError && !existing.chatId) {
+        clearV0Pending(workspaceRoot);
+      } else if (existing?.startError && existing.chatId) {
+        return res.status(422).json({
+          error: existing.startError,
+          chatId: existing.chatId,
+          hint: "Poll /v0-poll to retry fetching files, or clear and Generate again.",
+        });
+      }
+
+      if (existing?.chatId && !hasRealV0ApiGeneration(workspaceRoot)) {
         return res.json({
           ok: true,
           chatId: existing.chatId,
@@ -2005,35 +2019,51 @@ No approved UI code yet.
         });
       }
 
-      const v0Call = await v0CreateChat(keyRes.apiKey, promptText);
-      if (v0Call.ok === false) {
-        return res.status(v0Call.status).json({ error: v0Call.error });
+      if (existing?.starting || isV0StartJobActive(workspaceRoot)) {
+        return res.json({
+          ok: true,
+          chatId: existing?.chatId || undefined,
+          pending: true,
+          starting: true,
+          hint: "v0 chat is starting — poll /api/nebula-ui-studio/v0-poll every few seconds (no new charge).",
+        });
       }
 
       writeV0Pending(workspaceRoot, {
-        chatId: v0Call.result.chatId,
+        chatId: "",
         startedAt: Date.now(),
         projectDisplayName,
         promptPreview: promptText.slice(0, 500),
+        starting: true,
       });
 
-      if (v0Call.result.files.length > 0) {
-        const applied = applyV0FilesToWorkspace(req, v0Call.result.files, {
-          chatId: v0Call.result.chatId,
-          message: promptText,
-          demoUrl: v0Call.result.demoUrl,
-          projectDisplayName,
-        });
-        if (applied.ok === true) {
-          return res.json({ ok: true, source: "v0", pending: false, ...applied });
-        }
-      }
+      scheduleV0CreateChatJob({
+        workspaceRoot,
+        apiKey: keyRes.apiKey,
+        promptText,
+        projectDisplayName,
+        applyFiles: (files, chatId, demoUrl) => {
+          const applied = applyV0FilesToWorkspace(req, files, {
+            chatId,
+            message: promptText,
+            demoUrl,
+            projectDisplayName,
+          });
+          if (applied.ok === false) return { ok: false as const, error: applied.error };
+          return {
+            ok: true as const,
+            written: applied.written,
+            skipped: applied.skipped,
+            demoUrl: applied.demoUrl,
+          };
+        },
+      });
 
       return res.json({
         ok: true,
-        chatId: v0Call.result.chatId,
         pending: true,
-        hint: "v0 chat started — poll /api/nebula-ui-studio/v0-poll until files land.",
+        starting: true,
+        hint: "v0 chat starting in background — poll /api/nebula-ui-studio/v0-poll until files land.",
       });
     } catch (e) {
       console.error("[nebula-ui-studio/v0-start]", e);
@@ -2050,12 +2080,34 @@ No approved UI code yet.
           ? String(body.projectDisplayName).trim()
           : undefined;
       const pending = readV0Pending(workspaceRoot);
+      if (pending?.startError && !pending.chatId) {
+        clearV0Pending(workspaceRoot);
+        return res.status(422).json({ error: pending.startError });
+      }
+      if (pending?.startError && pending.chatId) {
+        return res.status(422).json({
+          error: pending.startError,
+          chatId: pending.chatId,
+          hint: "v0 returned files but apply failed — try Generate again or fix workspace paths.",
+        });
+      }
+      if ((pending?.starting && !pending.chatId) || isV0StartJobActive(workspaceRoot)) {
+        return res.json({
+          ok: true,
+          pending: true,
+          starting: true,
+          hint: "v0 is still starting on the server — keep polling (no new charge).",
+        });
+      }
       const chatId =
         typeof body.chatId === "string" && body.chatId.trim()
           ? body.chatId.trim()
           : pending?.chatId;
       if (!chatId) {
-        return res.status(400).json({ error: "No v0 chat in progress. Call /v0-start first." });
+        return res.status(400).json({
+          error: "No v0 chat in progress. Call /v0-start first.",
+          hint: "Open UI Studio and click Generate UI with v0 once.",
+        });
       }
 
       const pass = await runV0PollPass(req, chatId, projectDisplayName, pending?.promptPreview);

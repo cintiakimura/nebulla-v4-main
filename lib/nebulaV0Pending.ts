@@ -6,6 +6,9 @@ export type V0PendingState = {
   startedAt: number;
   projectDisplayName?: string;
   promptPreview?: string;
+  /** v0 API create in flight — chatId may be empty until the job finishes. */
+  starting?: boolean;
+  startError?: string;
 };
 
 const REL = path.join("nebulla-ide", "v0-pending.json");
@@ -19,13 +22,18 @@ export function readV0Pending(workspaceRoot: string): V0PendingState | null {
   if (!fs.existsSync(abs)) return null;
   try {
     const raw = JSON.parse(fs.readFileSync(abs, "utf8")) as V0PendingState;
-    if (typeof raw.chatId !== "string" || !raw.chatId.trim()) return null;
+    if (typeof raw.chatId !== "string") return null;
+    const chatId = raw.chatId.trim();
+    const starting = raw.starting === true;
+    if (!chatId && !starting) return null;
     return {
-      chatId: raw.chatId.trim(),
+      chatId,
       startedAt: typeof raw.startedAt === "number" ? raw.startedAt : Date.now(),
       projectDisplayName:
         typeof raw.projectDisplayName === "string" ? raw.projectDisplayName : undefined,
       promptPreview: typeof raw.promptPreview === "string" ? raw.promptPreview : undefined,
+      starting,
+      startError: typeof raw.startError === "string" ? raw.startError : undefined,
     };
   } catch {
     return null;

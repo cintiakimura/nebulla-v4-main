@@ -49,6 +49,9 @@ import {
 import { IdeGrokActivityPanel } from '@/components/ide/IdeGrokActivityPanel';
 import {
   MIC_REENABLE_AFTER_TTS_MS,
+  OPEN_TALK_MIN_SPEAKING_MS,
+  OPEN_TALK_PAUSE_GRACE_MS,
+  OPEN_TALK_SILENCE_SEND_MS,
   splitTextForTts,
   stripAssistantTagsForVoice,
   TTS_START_DEBOUNCE_MS,
@@ -211,7 +214,9 @@ export function AIChat() {
   const ttsChunkResolveRef = useRef<(() => void) | null>(null);
   const micCooldownTimerRef = useRef<number | null>(null);
   const liveHandsFreeRecognitionRef = useRef<IdeSpeechRecognition | null>(null);
-  const handsFreeIdleTimerRef = useRef<number | null>(null);
+  const handsFreeGraceTimerRef = useRef<number | null>(null);
+  const handsFreeSendTimerRef = useRef<number | null>(null);
+  const handsFreeFirstSpeechAtRef = useRef<number | null>(null);
   const micInputBlockedRef = useRef(false);
   const sendingRef = useRef(false);
   const isHandsFreeRef = useRef(false);
@@ -279,15 +284,24 @@ export function AIChat() {
     setIsRecordingVoice(false);
   };
 
-  const clearHandsFreeIdleTimer = () => {
-    if (handsFreeIdleTimerRef.current != null) {
-      window.clearTimeout(handsFreeIdleTimerRef.current);
-      handsFreeIdleTimerRef.current = null;
+  const clearHandsFreeAutoSendTimers = () => {
+    if (handsFreeGraceTimerRef.current != null) {
+      window.clearTimeout(handsFreeGraceTimerRef.current);
+      handsFreeGraceTimerRef.current = null;
+    }
+    if (handsFreeSendTimerRef.current != null) {
+      window.clearTimeout(handsFreeSendTimerRef.current);
+      handsFreeSendTimerRef.current = null;
     }
   };
 
+  const resetHandsFreeSpeechTurn = () => {
+    clearHandsFreeAutoSendTimers();
+    handsFreeFirstSpeechAtRef.current = null;
+  };
+
   const stopHandsFree = useCallback(() => {
-    clearHandsFreeIdleTimer();
+    resetHandsFreeSpeechTurn();
     const r = liveHandsFreeRecognitionRef.current;
     if (r) {
       try {
@@ -304,7 +318,7 @@ export function AIChat() {
 
   /** Pause mic only (keep Open talk intent for post-TTS resume). */
   const pauseHandsFreeListening = useCallback(() => {
-    clearHandsFreeIdleTimer();
+    clearHandsFreeAutoSendTimers();
     const r = liveHandsFreeRecognitionRef.current;
     if (r) {
       try {
@@ -318,6 +332,7 @@ export function AIChat() {
 
   const interruptVoiceAndTts = useCallback(() => {
     stopVoiceRecognition();
+    resetHandsFreeSpeechTurn();
     stopHandsFree();
     handsFreeResumeAfterTtsRef.current = false;
     ttsRunIdRef.current += 1;
@@ -351,14 +366,50 @@ export function AIChat() {
     setMicCooldown(false);
   }, [stopHandsFree]);
 
+  const attemptHandsFreeAutoSend = useCallback(() => {
+    handsFreeSendTimerRef.current = null;
+    if (!openTalkDesiredRef.current || !isHandsFreeRef.current) return;
+    if (micInputBlockedRef.current || sendingRef.current) return;
+
+    const firstSpeechAt = handsFreeFirstSpeechAtRef.current;
+    if (firstSpeechAt != null) {
+      const elapsed = Date.now() - firstSpeechAt;
+      if (elapsed < OPEN_TALK_MIN_SPEAKING_MS) {
+        handsFreeSendTimerRef.current = window.setTimeout(
+          () => attemptHandsFreeAutoSend(),
+          OPEN_TALK_MIN_SPEAKING_MS - elapsed,
+        );
+        return;
+      }
+    }
+
+    const t = inputRef.current.trim();
+    if (!t) return;
+
+    resetHandsFreeSpeechTurn();
+    void sendChatRef.current(t);
+  }, []);
+
   const scheduleHandsFreeAutoSend = useCallback(() => {
-    clearHandsFreeIdleTimer();
-    handsFreeIdleTimerRef.current = window.setTimeout(() => {
-      handsFreeIdleTimerRef.current = null;
-      const t = inputRef.current.trim();
-      if (!t || micInputBlockedRef.current || sendingRef.current) return;
-      void sendChatRef.current(t);
-    }, VOICE_SILENCE_BEFORE_SEND_MS);
+    if (!openTalkDesiredRef.current || !isHandsFreeRef.current) return;
+    if (micInputBlockedRef.current || sendingRef.current) return;
+
+    clearHandsFreeAutoSendTimers();
+    handsFreeGraceTimerRef.current = window.setTimeout(() => {
+      handsFreeGraceTimerRef.current = null;
+      if (!openTalkDesiredRef.current || !isHandsFreeRef.current) return;
+      if (micInputBlockedRef.current || sendingRef.current) return;
+
+      handsFreeSendTimerRef.current = window.setTimeout(() => {
+        attemptHandsFreeAutoSend();
+      }, OPEN_TALK_SILENCE_SEND_MS);
+    }, OPEN_TALK_PAUSE_GRACE_MS);
+  }, [attemptHandsFreeAutoSend]);
+
+  const noteHandsFreeSpeechActivity = useCallback(() => {
+    if (handsFreeFirstSpeechAtRef.current == null) {
+      handsFreeFirstSpeechAtRef.current = Date.now();
+    }
   }, []);
 
   const startHandsFree = useCallback((opts?: { resumeOnly?: boolean }) => {
@@ -374,7 +425,7 @@ export function AIChat() {
         isHandsFreeRef.current = true;
         setIsHandsFree(true);
       }
-      clearHandsFreeIdleTimer();
+      clearHandsFreeAutoSendTimers();
       const existing = liveHandsFreeRecognitionRef.current;
       if (existing) {
         try {
@@ -397,16 +448,23 @@ export function AIChat() {
     recognition.onresult = (event: IdeSpeechRecognitionEvent) => {
       if (!isHandsFreeRef.current || micInputBlockedRef.current || sendingRef.current) return;
       let finalText = '';
+      let hasInterim = false;
       for (let i = event.resultIndex; i < event.results.length; i++) {
         if (event.results[i].isFinal) {
           finalText += event.results[i][0].transcript;
+        } else {
+          hasInterim = true;
         }
       }
-      if (!finalText) return;
-      const next = `${inputRef.current}${inputRef.current ? ' ' : ''}${finalText}`.trim();
-      setInput(next);
-      inputRef.current = next;
-      scheduleHandsFreeAutoSend();
+      if (finalText) {
+        const next = `${inputRef.current}${inputRef.current ? ' ' : ''}${finalText}`.trim();
+        setInput(next);
+        inputRef.current = next;
+      }
+      if (finalText || hasInterim) {
+        noteHandsFreeSpeechActivity();
+        scheduleHandsFreeAutoSend();
+      }
     };
 
     recognition.onerror = (ev: IdeSpeechRecognitionErrorEvent) => {
@@ -435,15 +493,18 @@ export function AIChat() {
       openTalkDesiredRef.current = true;
       setIsHandsFree(true);
       if (!opts?.resumeOnly) {
-        setAccessoryHint('Open talk is on — I listen continuously and send after a short pause when you finish a phrase.');
-        window.setTimeout(() => setAccessoryHint(null), 4200);
+        resetHandsFreeSpeechTurn();
+        setAccessoryHint(
+          'Open talk is on — speak naturally. I wait at least 10s while you talk, then 3s after you pause, then send.',
+        );
+        window.setTimeout(() => setAccessoryHint(null), 5200);
       }
     } catch (err) {
       console.warn('[AIChat] hands-free start', err);
       setAccessoryHint('Could not start open talk — check browser permissions.');
       window.setTimeout(() => setAccessoryHint(null), 4500);
     }
-  }, [stopHandsFree, scheduleHandsFreeAutoSend]);
+  }, [stopHandsFree, scheduleHandsFreeAutoSend, noteHandsFreeSpeechActivity]);
 
   const resumeOpenTalkIfWanted = useCallback(() => {
     if (!openTalkDesiredRef.current) return;
@@ -636,6 +697,7 @@ export function AIChat() {
     }
 
     clearVoiceIdleTimer();
+    resetHandsFreeSpeechTurn();
     stopVoiceRecognition();
     if (openTalkDesiredRef.current) {
       pauseHandsFreeListening();
@@ -953,6 +1015,9 @@ export function AIChat() {
   sendChatRef.current = sendChat;
 
   const playTtsForText = async (plain: string) => {
+    resetHandsFreeSpeechTurn();
+    pauseHandsFreeListening();
+
     if (ttsDebounceTimerRef.current != null) {
       window.clearTimeout(ttsDebounceTimerRef.current);
       ttsDebounceTimerRef.current = null;
@@ -968,6 +1033,7 @@ export function AIChat() {
 
     clearMicCooldownTimer();
     setMicCooldown(false);
+    setIsTtsPlaying(true);
 
     ttsDebounceTimerRef.current = window.setTimeout(async () => {
       ttsDebounceTimerRef.current = null;
@@ -975,6 +1041,7 @@ export function AIChat() {
 
       const chunks = splitTextForTts(plain);
       if (chunks.length === 0) {
+        setIsTtsPlaying(false);
         const shouldResume = handsFreeResumeAfterTtsRef.current;
         handsFreeResumeAfterTtsRef.current = false;
         if (shouldResume) {
@@ -992,8 +1059,6 @@ export function AIChat() {
       stopVoiceRecognition();
       pauseHandsFreeListening();
       handsFreeResumeAfterTtsRef.current = resumeHandsFree;
-
-      setIsTtsPlaying(true);
 
       const finishPlayback = () => {
         if (runId !== ttsRunIdRef.current) return;

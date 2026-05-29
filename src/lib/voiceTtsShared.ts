@@ -2,10 +2,19 @@
  * Voice + TTS helpers aligned with `nebula-project/project-execution-rules.md`:
  * - TTS starts as soon as Grok text is available (chunked playback for latency).
  * - Mic stays off while TTS runs; re-enable only after `MIC_REENABLE_AFTER_TTS_MS` quiet period.
- * - ~2.5s silence after speech before auto-send (hands-free / voice turn).
+ * - IDE Open Talk: min speaking window, pause grace, then silence before auto-send.
  */
 
 export const MIC_REENABLE_AFTER_TTS_MS = 1000;
+
+/** IDE Open Talk — keep listening at least this long once the user starts speaking. */
+export const OPEN_TALK_MIN_SPEAKING_MS = 10_000;
+/** After the user pauses, wait this long for them to continue before counting silence. */
+export const OPEN_TALK_PAUSE_GRACE_MS = 3_000;
+/** After pause grace with no new speech, wait this long then auto-send to chat. */
+export const OPEN_TALK_SILENCE_SEND_MS = 2_800;
+
+/** Push-to-talk / Assistant sidebar single-shot silence before send. */
 export const VOICE_SILENCE_BEFORE_SEND_MS = 1800;
 /** First audio chunk: start immediately once Grok body is ready. */
 export const TTS_START_DEBOUNCE_MS = 0;

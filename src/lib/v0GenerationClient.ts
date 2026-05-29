@@ -14,6 +14,8 @@ export type V0GenerationResult = {
   hint?: string;
   error?: string;
   pending?: boolean;
+  starting?: boolean;
+  resumed?: boolean;
 };
 
 const V0_HEADERS = (): Record<string, string> => ({
@@ -22,7 +24,8 @@ const V0_HEADERS = (): Record<string, string> => ({
 });
 
 const POLL_MS = 3500;
-const MAX_POLLS = 100;
+const MAX_POLLS = 120;
+const V0_START_TIMEOUT_MS = 20_000;
 
 function sleep(ms: number): Promise<void> {
   return new Promise((r) => window.setTimeout(r, ms));
@@ -38,36 +41,54 @@ export async function runV0GenerationWithPolling(options?: {
   const body = withProjectBody({
     projectDisplayName: options?.projectDisplayName?.trim() || undefined,
   });
+  let pollChatId: string | undefined;
 
   if (!options?.resumeOnly) {
     onProgress?.('Starting v0 generation on server…', 'info');
     try {
       const start = await fetchJson<V0GenerationResult>(
         withProjectQuery('/api/nebula-ui-studio/v0-start'),
-        { method: 'POST', headers: V0_HEADERS(), credentials: 'include', body: JSON.stringify(body) },
+        {
+          method: 'POST',
+          headers: V0_HEADERS(),
+          credentials: 'include',
+          body: JSON.stringify(body),
+          signal: AbortSignal.timeout(V0_START_TIMEOUT_MS),
+        },
       );
-      if (start.error && !start.chatId) {
+      if (start.error && !start.chatId && !start.pending) {
         return { ok: false, error: formatV0UiError(start.error, hasLocalV0ApiKey()) };
       }
       if (start.written?.length) {
         onProgress?.(`v0 wrote ${start.written.length} file(s)`, 'success');
         return start;
       }
-      if (start.pending && start.chatId) {
+      pollChatId = start.chatId?.trim() || undefined;
+      if (start.resumed) {
+        onProgress?.('Resuming in-progress v0 chat (no new charge)…', 'info');
+      } else if (start.starting) {
+        onProgress?.('v0 chat starting on server — polling for files (1–3 min, no extra charge on retry)', 'info');
+      } else if (start.pending && pollChatId) {
         onProgress?.('v0 chat started — waiting for files (this can take 1–3 min)', 'info');
       }
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'v0 start failed';
       onProgress?.(
-        /fetch failed|failed to fetch/i.test(msg)
-          ? 'Request timed out — resuming in-progress v0 chat if one exists…'
-          : `v0 start failed (${msg}) — trying resume…`,
+        /timed out|fetch failed|failed to fetch/i.test(msg)
+          ? 'v0 start slow — polling server for in-progress chat (no new charge)…'
+          : `v0 start issue (${msg}) — polling for in-progress chat…`,
         'warn',
       );
     }
   } else {
     onProgress?.('Resuming v0 generation…', 'info');
   }
+
+  const pollBody = () =>
+    JSON.stringify({
+      ...body,
+      ...(pollChatId ? { chatId: pollChatId } : {}),
+    });
 
   const stopWait = startGrokActivityWaitTicker('v0 generating UI', (msg, kind, opts) =>
     onProgress?.(msg, kind, opts),
@@ -82,10 +103,14 @@ export async function runV0GenerationWithPolling(options?: {
             method: 'POST',
             headers: V0_HEADERS(),
             credentials: 'include',
-            body: JSON.stringify(body),
+            body: pollBody(),
             signal: AbortSignal.timeout(28_000),
           },
         );
+        if (poll.chatId) pollChatId = poll.chatId;
+        if (poll.starting) {
+          onProgress?.('v0 still starting on server…', 'info');
+        }
         if (poll.ok && poll.written?.length) {
           onProgress?.(`v0 wrote ${poll.written.length} file(s) to workspace`, 'success');
           return poll;
