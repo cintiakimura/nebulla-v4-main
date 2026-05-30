@@ -26,6 +26,8 @@ import { MAIN_AI_CHAT_SETUP_HINT, serverReportsMainAiKey } from '../lib/grokKey'
 import { fetchNebulaPublicConfig } from '../lib/nebulaPublicConfig';
 import { dispatchOpenUiStudio, dispatchStartUiUxWorkflow } from '../lib/nebulaUiStudioEvents';
 import { withProjectBody, withProjectQuery } from '../lib/nebulaProjectApi';
+import { cancelProjectBackgroundJobs } from '../lib/ideProjectReset';
+import { runGoCodeAndApply } from '../lib/nebulaGrokCodingPipeline';
 import { buildNebulaAssistantSystemPrompt } from '../lib/nebulaAssistantSystemPrompt';
 import { fetchConversationLogEntries } from '../lib/conversationLogClient';
 import { uploadFileToR2 } from '../lib/nebulaStorageClient';

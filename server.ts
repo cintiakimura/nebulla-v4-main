@@ -86,7 +86,7 @@ import {
   v0SendChatMessage,
   type V0FileEntry,
 } from "./lib/nebulaV0Client";
-import { clearV0Pending, readV0Pending, writeV0Pending } from "./lib/nebulaV0Pending";
+import { clearV0Pending, readV0Pending, writeV0Pending, expireStaleV0Pending, bumpV0PendingRecovery } from "./lib/nebulaV0Pending";
 import { isV0StartJobActive, isV0StartStale, scheduleV0CreateChatJob, v0StartElapsedMs } from "./lib/nebulaV0StartJob";
 import { NEBULA_V0_KEY_SETUP_HINT, resolveV0ApiKey, resolveV0ApiKeyFromRequest, V0_ENV_VAR } from "./lib/nebulaV0Resolver";
 import { PRE_CODING_SUMMARY_KEY } from "./lib/masterPlanSections";
@@ -1405,6 +1405,9 @@ No approved UI code yet.
   app.get("/api/nebula-ui-studio/status", (req, res) => {
     try {
       const pp = projectPathsFor(req);
+      expireStaleV0Pending(pp.workspaceRoot, {
+        jobActive: isV0StartJobActive(pp.workspaceRoot),
+      });
       const prompt = readV0PromptMarkdown(pp.workspaceRoot);
       const gate = isVisualEditorEligible(pp.workspaceRoot);
       const keyRes = resolveV0ApiKeyFromRequest(req);
@@ -2216,6 +2219,8 @@ No approved UI code yet.
     try {
       const body = req.body || {};
       const { workspaceRoot } = projectPathsFor(req);
+      const jobActive = isV0StartJobActive(workspaceRoot);
+      expireStaleV0Pending(workspaceRoot, { jobActive });
       const projectDisplayName =
         typeof body.projectDisplayName === "string" && body.projectDisplayName.trim()
           ? String(body.projectDisplayName).trim()
@@ -2242,7 +2247,9 @@ No approved UI code yet.
             readV0PromptMarkdown(workspaceRoot).trim() ||
             pending?.promptPreview?.trim() ||
             "";
-          if (keyRes.ok && promptText) {
+          const recoveries = pending?.recoveryCount ?? 0;
+          if (keyRes.ok && promptText && recoveries < 3) {
+            bumpV0PendingRecovery(workspaceRoot);
             kickV0BackgroundStart(
               req,
               workspaceRoot,
@@ -2254,6 +2261,12 @@ No approved UI code yet.
             clearV0Pending(workspaceRoot);
             return res.status(422).json({
               error: "v0 start stalled and v0-prompt.md is missing. Save Master Plan §4+§5 first.",
+            });
+          } else {
+            clearV0Pending(workspaceRoot);
+            return res.status(422).json({
+              error: "v0 session expired after repeated stale recoveries. Click Generate v0 once to start fresh.",
+              hint: "Use Cancel stale v0 in UI Studio or Reset project in Settings if this repeats.",
             });
           }
         }
@@ -2277,45 +2290,21 @@ No approved UI code yet.
           : pending?.chatId?.trim() || "";
       if (!chatId) {
         const keyRes = resolveV0ApiKeyFromRequest(req);
-        const promptText =
-          readV0PromptMarkdown(workspaceRoot).trim() ||
-          pending?.promptPreview?.trim() ||
-          "";
-        const canKick =
-          keyRes.ok === true &&
-          Boolean(promptText) &&
-          !isV0StartJobActive(workspaceRoot) &&
-          (!pending || isV0StartStale(pending));
-        if (canKick) {
-          kickV0BackgroundStart(
-            req,
-            workspaceRoot,
-            keyRes.apiKey,
-            promptText,
-            projectDisplayName || pending?.projectDisplayName,
-          );
-          return res.json({
-            ok: true,
-            pending: true,
-            starting: true,
-            recovered: true,
-            hint: "No v0 chat was tracked — started one in the background. Keep polling (one Generate only).",
-          });
-        }
         if (keyRes.ok === false) {
           return res.status(keyRes.code === "INVALID_LENGTH" ? 400 : 401).json({
             error: keyRes.message,
             hint: keyRes.hint,
           });
         }
+        const promptText = readV0PromptMarkdown(workspaceRoot).trim();
         if (!promptText.trim()) {
           return res.status(400).json({
             error: "v0-prompt.md is empty — save Master Plan §4+§5 first.",
           });
         }
         return res.status(400).json({
-          error: "No v0 chat in progress. Call /v0-start first.",
-          hint: "Open UI Studio and click Generate UI with v0 once.",
+          error: "No v0 chat in progress. Click Generate v0 in UI Studio once.",
+          hint: "Open UI Studio and click Generate v0 — do not poll without a session.",
         });
       }
 

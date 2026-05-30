@@ -9,9 +9,14 @@ export type V0PendingState = {
   /** v0 API create in flight — chatId may be empty until the job finishes. */
   starting?: boolean;
   startError?: string;
+  /** Poll-time stale recoveries — cap to avoid infinite re-kick loops. */
+  recoveryCount?: number;
 };
 
 const REL = path.join("nebulla-ide", "v0-pending.json");
+
+/** After this, pending with no files is treated as abandoned (Render restarts, stale poll loops). */
+export const V0_PENDING_MAX_AGE_MS = 20 * 60 * 1000;
 
 export function v0PendingAbs(workspaceRoot: string): string {
   return path.join(workspaceRoot, REL);
@@ -34,6 +39,7 @@ export function readV0Pending(workspaceRoot: string): V0PendingState | null {
       promptPreview: typeof raw.promptPreview === "string" ? raw.promptPreview : undefined,
       starting,
       startError: typeof raw.startError === "string" ? raw.startError : undefined,
+      recoveryCount: typeof raw.recoveryCount === "number" ? raw.recoveryCount : undefined,
     };
   } catch {
     return null;
@@ -53,4 +59,53 @@ export function clearV0Pending(workspaceRoot: string): void {
   } catch {
     /* ignore */
   }
+}
+
+function workspaceHasGrokAppScaffold(workspaceRoot: string): boolean {
+  const candidates = [
+    path.join(workspaceRoot, "app", "layout.tsx"),
+    path.join(workspaceRoot, "app", "page.tsx"),
+    path.join(workspaceRoot, "src", "App.tsx"),
+  ];
+  return candidates.some((p) => fs.existsSync(p));
+}
+
+/**
+ * Drop abandoned v0-pending.json so UI stops resume-only polling.
+ * Returns true if pending was cleared.
+ */
+export function expireStaleV0Pending(
+  workspaceRoot: string,
+  opts?: { jobActive?: boolean },
+): boolean {
+  const pending = readV0Pending(workspaceRoot);
+  if (!pending) return false;
+  if (opts?.jobActive) return false;
+
+  const age = Date.now() - pending.startedAt;
+  const grokAppReady = workspaceHasGrokAppScaffold(workspaceRoot);
+  const tooOld = age > V0_PENDING_MAX_AGE_MS;
+  const stuckStarting = pending.starting && !pending.chatId.trim();
+  const tooManyRecoveries = (pending.recoveryCount ?? 0) >= 3;
+
+  if (tooOld || tooManyRecoveries || (grokAppReady && stuckStarting)) {
+    clearV0Pending(workspaceRoot);
+    return true;
+  }
+
+  if (grokAppReady && pending.starting && age > 5 * 60 * 1000) {
+    clearV0Pending(workspaceRoot);
+    return true;
+  }
+
+  return false;
+}
+
+export function bumpV0PendingRecovery(workspaceRoot: string): void {
+  const pending = readV0Pending(workspaceRoot);
+  if (!pending) return;
+  writeV0Pending(workspaceRoot, {
+    ...pending,
+    recoveryCount: (pending.recoveryCount ?? 0) + 1,
+  });
 }

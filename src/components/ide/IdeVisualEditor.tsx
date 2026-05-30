@@ -45,6 +45,7 @@ import { formatV0UiError } from '../../lib/v0ErrorMessage';
 import { computeV0Readiness } from '../../lib/v0Readiness';
 import { subscribeGrokCodingActive } from '../../lib/nebulaGrokCodingGate';
 import { runV0GenerationWithPolling } from '../../lib/v0GenerationClient';
+import { cancelProjectBackgroundJobs } from '../../lib/ideProjectReset';
 
 const V0_FETCH_TIMEOUT_MS = 360_000;
 
@@ -416,8 +417,8 @@ export function IdeVisualEditor({
   const [studioStatus, setStudioStatus] = useState<StudioStatus | null>(null);
   const [grokCodingActive, setGrokCodingActive] = useState(false);
   const v0RunningRef = useRef(false);
-  const autoV0StartedRef = useRef(false);
   const resumeV0StartedRef = useRef(false);
+  const [cancelV0Busy, setCancelV0Busy] = useState(false);
   const runV0GenerationRef = useRef<() => Promise<void>>(async () => {});
   const v0StorageKey = `nebulla-v0-chat-${projectLabel.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 48)}`;
   const [v0ChatId, setV0ChatId] = useState<string | null>(() => {
@@ -498,7 +499,6 @@ export function IdeVisualEditor({
 
   useEffect(() => {
     const onReset = () => {
-      autoV0StartedRef.current = false;
       resumeV0StartedRef.current = false;
       v0RunningRef.current = false;
       void loadEligibility();
@@ -1052,42 +1052,22 @@ export function IdeVisualEditor({
 
   runV0GenerationRef.current = runV0Generation;
 
-  useEffect(() => {
-    if (hasV0ApiKey !== true || busy || v0RunningRef.current || grokCodingActive) return;
-    if (studioStatus?.hasRealV0) return;
-    if (!v0Readiness.ready && !v0Readiness.resumeOnly) return;
-
-    const shouldResume = v0Readiness.resumeOnly;
-    const shouldAutoStart =
-      !shouldResume &&
-      v0Readiness.ready &&
-      eligible !== false &&
-      Boolean(studioStatus?.v0PromptExists) &&
-      !autoV0StartedRef.current;
-
-    if (shouldResume) {
-      if (resumeV0StartedRef.current) return;
-      resumeV0StartedRef.current = true;
-      setMockNotice('Resuming in-progress v0 generation (no new charge)…');
-    } else if (shouldAutoStart) {
-      autoV0StartedRef.current = true;
-    } else {
-      return;
+  const cancelStaleV0Session = async () => {
+    setCancelV0Busy(true);
+    setError('');
+    try {
+      await cancelProjectBackgroundJobs();
+      resumeV0StartedRef.current = false;
+      v0RunningRef.current = false;
+      setMockNotice('');
+      await loadStudioStatus();
+      await loadEligibility();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to cancel v0 session');
+    } finally {
+      setCancelV0Busy(false);
     }
-
-    void runV0GenerationRef.current();
-  }, [
-    studioStatus?.v0PendingChatId,
-    studioStatus?.v0Starting,
-    studioStatus?.hasRealV0,
-    studioStatus?.v0PromptExists,
-    hasV0ApiKey,
-    busy,
-    eligible,
-    v0Readiness.ready,
-    v0Readiness.resumeOnly,
-    grokCodingActive,
-  ]);
+  };
 
   const runV0Refine = async () => {
     if (!v0ChatId) {
