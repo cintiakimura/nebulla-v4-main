@@ -72,6 +72,37 @@ export function AppPreviewPanel({
 }) {
   const [panelOpen, setPanelOpen] = useState(defaultPanelOpen);
   const [panelWidth, setPanelWidth] = useState(readStoredPreviewWidth);
+  const [viewport, setViewport] = useState<ViewportMode>('desktop');
+  const [fullscreen, setFullscreen] = useState(false);
+  const [actAsUser, setActAsUser] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [selectedPageLabel, setSelectedPageLabel] = useState<string | null>(null);
+  const [workspaceFiles, setWorkspaceFiles] = useState<
+    { path: string; status?: string; size?: number }[]
+  >([]);
+  const [filesError, setFilesError] = useState<string | null>(null);
+  const [previewRev, setPreviewRev] = useState(0);
+  const [v0DemoUrl, setV0DemoUrl] = useState<string | null>(null);
+  const [preferV0Preview, setPreferV0Preview] = useState(false);
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  const loadPreviewMeta = useCallback(async () => {
+    try {
+      const res = await fetch(withProjectQuery('/api/app-preview/meta'), { credentials: 'include' });
+      const data = await readResponseJson<{ v0DemoUrl?: string; preferV0?: boolean }>(res);
+      if (res.ok) {
+        const url = typeof data.v0DemoUrl === 'string' ? data.v0DemoUrl.trim() : '';
+        setV0DemoUrl(url || null);
+        setPreferV0Preview(Boolean(data.preferV0 && url));
+      }
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  const workspacePreviewUrl = useMemo(() => buildPreviewUrl(previewRev), [previewRev]);
+  const previewUrl = preferV0Preview && v0DemoUrl ? v0DemoUrl : workspacePreviewUrl;
 
   useEffect(() => {
     const onOpen = () => setPanelOpen(true);
@@ -104,36 +135,6 @@ export function AppPreviewPanel({
       window.removeEventListener('nebula-ui-studio-v0-complete', onRefresh);
     };
   }, [loadPreviewMeta]);
-  const [viewport, setViewport] = useState<ViewportMode>('desktop');
-  const [fullscreen, setFullscreen] = useState(false);
-  const [actAsUser, setActAsUser] = useState(false);
-  const [menuOpen, setMenuOpen] = useState(false);
-  const [selectedPageLabel, setSelectedPageLabel] = useState<string | null>(null);
-  const [workspaceFiles, setWorkspaceFiles] = useState<
-    { path: string; status?: string; size?: number }[]
-  >([]);
-  const [filesError, setFilesError] = useState<string | null>(null);
-  const [previewRev, setPreviewRev] = useState(0);
-  const [v0DemoUrl, setV0DemoUrl] = useState<string | null>(null);
-  const [preferV0Preview, setPreferV0Preview] = useState(false);
-  const iframeRef = useRef<HTMLIFrameElement>(null);
-  const menuRef = useRef<HTMLDivElement>(null);
-  const workspacePreviewUrl = useMemo(() => buildPreviewUrl(previewRev), [previewRev]);
-  const previewUrl = preferV0Preview && v0DemoUrl ? v0DemoUrl : workspacePreviewUrl;
-
-  const loadPreviewMeta = useCallback(async () => {
-    try {
-      const res = await fetch(withProjectQuery('/api/app-preview/meta'), { credentials: 'include' });
-      const data = await readResponseJson<{ v0DemoUrl?: string; preferV0?: boolean }>(res);
-      if (res.ok) {
-        const url = typeof data.v0DemoUrl === 'string' ? data.v0DemoUrl.trim() : '';
-        setV0DemoUrl(url || null);
-        setPreferV0Preview(Boolean(data.preferV0 && url));
-      }
-    } catch {
-      /* ignore */
-    }
-  }, []);
 
   const pageOptions = useMemo(() => {
     const sorted = [...pages].sort((a, b) => (a.position?.x ?? 0) - (b.position?.x ?? 0));
