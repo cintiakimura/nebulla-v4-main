@@ -18,6 +18,8 @@ const REL = path.join("nebulla-ide", "v0-pending.json");
 
 /** After this, pending with no files is treated as abandoned (Render restarts, stale poll loops). */
 export const V0_PENDING_MAX_AGE_MS = 20 * 60 * 1000;
+/** Fresh v0 create marker — do not expire while younger (multi-instance poll relies on disk). */
+export const V0_START_STALE_MS = 90_000;
 /** Grok-coded app exists — drop stale v0 resume state so UI shows Generate v0. */
 export const V0_PENDING_GROK_APP_CLEAR_MS = 2 * 60 * 1000;
 /** chatId tracked but v0 files never landed. */
@@ -35,7 +37,8 @@ export function readV0Pending(workspaceRoot: string): V0PendingState | null {
     if (typeof raw.chatId !== "string") return null;
     const chatId = raw.chatId.trim();
     const starting = raw.starting === true;
-    if (!chatId && !starting) return null;
+    const startError = typeof raw.startError === "string" ? raw.startError : undefined;
+    if (!chatId && !starting && !startError) return null;
     return {
       chatId,
       startedAt: typeof raw.startedAt === "number" ? raw.startedAt : Date.now(),
@@ -43,7 +46,7 @@ export function readV0Pending(workspaceRoot: string): V0PendingState | null {
         typeof raw.projectDisplayName === "string" ? raw.projectDisplayName : undefined,
       promptPreview: typeof raw.promptPreview === "string" ? raw.promptPreview : undefined,
       starting,
-      startError: typeof raw.startError === "string" ? raw.startError : undefined,
+      startError,
       recoveryCount: typeof raw.recoveryCount === "number" ? raw.recoveryCount : undefined,
     };
   } catch {
@@ -87,30 +90,29 @@ export function expireStaleV0Pending(
   if (!pending) return false;
   if (opts?.jobActive) return false;
 
+  const age = Date.now() - pending.startedAt;
+  const stuckStarting = pending.starting && !pending.chatId.trim();
+
+  // Cross-instance polls: keep fresh `starting` markers until stale recovery kicks in.
+  if (stuckStarting && age < V0_START_STALE_MS) return false;
+
   if (hasRealV0ApiGeneration(workspaceRoot)) {
     clearV0Pending(workspaceRoot);
     return true;
   }
 
-  const age = Date.now() - pending.startedAt;
   const grokAppReady = workspaceHasGrokAppScaffold(workspaceRoot);
   const tooOld = age > V0_PENDING_MAX_AGE_MS;
-  const stuckStarting = pending.starting && !pending.chatId.trim();
   const tooManyRecoveries = (pending.recoveryCount ?? 0) >= 3;
   const chatId = pending.chatId.trim();
 
-  if (tooOld || tooManyRecoveries || (grokAppReady && stuckStarting)) {
+  if (tooOld || tooManyRecoveries || (stuckStarting && age >= V0_START_STALE_MS)) {
     clearV0Pending(workspaceRoot);
     return true;
   }
 
-  if (grokAppReady && stuckStarting && age > 5 * 60 * 1000) {
-    clearV0Pending(workspaceRoot);
-    return true;
-  }
-
-  // Grok Code finished first — stale v0 resume blocks manual Generate v0.
-  if (grokAppReady && age > V0_PENDING_GROK_APP_CLEAR_MS) {
+  // Grok Code finished first — drop stale resume chatIds, not active v0 starts.
+  if (grokAppReady && chatId && !stuckStarting && age > V0_PENDING_GROK_APP_CLEAR_MS) {
     clearV0Pending(workspaceRoot);
     return true;
   }

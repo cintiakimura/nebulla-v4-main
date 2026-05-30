@@ -19,17 +19,24 @@ export type ChatV0StatusSnapshot = {
   studio: ChatV0StudioStatus;
   line: string;
   detail: string;
+  /** True while v0-pro is starting or polling on the server. */
+  live: boolean;
 };
 
-function formatV0StatusLine(studio: ChatV0StudioStatus, readiness: V0ReadinessResult): string {
+function formatV0StatusLine(
+  studio: ChatV0StudioStatus,
+  readiness: V0ReadinessResult,
+  liveHint?: string,
+): string {
+  if (liveHint?.trim()) return liveHint.trim();
   if (studio.hasRealV0) {
     return 'v0 UI generated — open UI Studio for live preview';
   }
   if (studio.v0Starting) {
-    return 'v0 running on server (poll in progress)';
+    return 'v0 generating UI on server — polling for files (1–4 min)…';
   }
   if (readiness.resumeOnly) {
-    return 'v0 session in progress — Resume or Cancel stale v0 in UI Studio';
+    return 'v0 session active — Resume in UI Studio (or Cancel stale v0)';
   }
   if (studio.v0StartError && !studio.v0PendingChatId) {
     return `v0 error: ${studio.v0StartError.slice(0, 100)}`;
@@ -88,5 +95,27 @@ export async function fetchChatV0StatusSnapshot(): Promise<ChatV0StatusSnapshot>
     studio,
     line: formatV0StatusLine(studio, readiness),
     detail: formatV0StatusDetail(studio, readiness),
+    live: Boolean(studio.v0Starting || readiness.resumeOnly),
   };
+}
+
+/** Push live v0 status into the IDE chat strip (UI Studio + chat share this). */
+export function emitChatV0Progress(line: string, detail?: string): void {
+  try {
+    window.dispatchEvent(
+      new CustomEvent('nebula-chat-v0-progress', {
+        detail: { line: line.trim(), detail: detail?.trim() || undefined },
+      }),
+    );
+  } catch {
+    /* ignore */
+  }
+}
+
+export function emitChatV0Watch(active: boolean): void {
+  try {
+    window.dispatchEvent(new CustomEvent('nebula-chat-v0-watch', { detail: { active } }));
+  } catch {
+    /* ignore */
+  }
 }

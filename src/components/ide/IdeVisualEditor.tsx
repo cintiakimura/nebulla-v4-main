@@ -923,9 +923,6 @@ export function IdeVisualEditor({
     setError('');
     const explicitResume = opts?.resumeOnly === true;
     try {
-      if (!explicitResume) {
-        await cancelProjectBackgroundJobs();
-      }
       try {
         await runMasterPlanUiPipeline({ projectName: projectLabel, autoV0: false });
       } catch {
@@ -981,6 +978,13 @@ export function IdeVisualEditor({
       const data = await runV0GenerationWithPolling({
         projectDisplayName: projectLabel,
         resumeOnly: explicitResume && preflight.resumeOnly,
+        onProgress: (msg, kind) => {
+          if (kind === 'error') {
+            setError(msg);
+          } else {
+            setMockNotice(msg);
+          }
+        },
       });
       if (data.error && !data.written?.length) {
         throw new Error(data.hint || data.error);

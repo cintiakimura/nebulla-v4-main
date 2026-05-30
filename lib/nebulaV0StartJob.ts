@@ -1,5 +1,11 @@
 import { v0CreateChat, type V0FileEntry } from "./nebulaV0Client";
-import { clearV0Pending, readV0Pending, writeV0Pending, type V0PendingState } from "./nebulaV0Pending";
+import {
+  V0_START_STALE_MS,
+  clearV0Pending,
+  readV0Pending,
+  writeV0Pending,
+  type V0PendingState,
+} from "./nebulaV0Pending";
 
 export type V0ApplyFilesResult =
   | { ok: true; written: string[]; skipped?: string[]; demoUrl?: string }
@@ -17,8 +23,8 @@ export type V0StartJobOptions = {
   ) => V0ApplyFilesResult | Promise<V0ApplyFilesResult>;
 };
 
-/** If a start marker outlives the in-memory job (Render restart), recover on poll. */
-export const V0_START_STALE_MS = 90_000;
+export { V0_START_STALE_MS } from "./nebulaV0Pending";
+
 /** Hard cap on v0 POST /chats — v0-pro can be slow; background job is not HTTP-bound. */
 export const V0_CREATE_TIMEOUT_MS = 600_000;
 

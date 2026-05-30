@@ -4,6 +4,7 @@ import { startGrokActivityWaitTicker } from './ideGrokActivityStatus';
 import { withProjectBody, withProjectQuery } from './nebulaProjectApi';
 import { formatV0UiError } from './v0ErrorMessage';
 import { getV0RequestHeaders, hasLocalV0ApiKey } from './v0Key';
+import { emitChatV0Progress, emitChatV0Watch } from './chatV0Status';
 
 export type V0GenerationResult = {
   ok?: boolean;
@@ -169,11 +170,15 @@ export async function runV0GenerationWithPolling(options?: {
 }): Promise<V0GenerationResult> {
   if (v0GenerationInFlight) {
     options?.onProgress?.('v0 already running — joining existing poll…', 'info');
+    emitChatV0Watch(true);
     return v0GenerationInFlight;
   }
 
+  emitChatV0Watch(true);
+  emitChatV0Progress('v0 starting — preparing generation on server…');
   v0GenerationInFlight = runV0GenerationWithPollingInner(options).finally(() => {
     v0GenerationInFlight = null;
+    emitChatV0Watch(false);
   });
   return v0GenerationInFlight;
 }
@@ -240,7 +245,13 @@ async function runV0GenerationWithPollingInner(options?: {
 
         const poll = pollResult;
         if ('idle' in poll && poll.idle) {
-          if (i < 2) {
+          if (i < 24) {
+            if (i === 3 || i === 8 || i === 15) {
+              onProgress?.('No v0 session yet — re-starting on server…', 'warn');
+              const started = await postV0Start(body, onProgress);
+              if (started.done) return started.done;
+              pollChatId = started.pollChatId || pollChatId;
+            }
             await sleep(POLL_MS);
             continue;
           }
@@ -253,22 +264,23 @@ async function runV0GenerationWithPollingInner(options?: {
         if (poll.chatId) pollChatId = poll.chatId;
         if (poll.starting && (i === 0 || i % STARTING_LOG_EVERY_N_POLLS === 0)) {
           const mins = poll.elapsedMs ? Math.round(poll.elapsedMs / 60_000) : undefined;
-          onProgress?.(
-            poll.recovered
-              ? 'Recovered stalled v0 start — still polling…'
-              : mins && mins >= 2
-                ? `v0-pro still working (~${mins} min) — polling…`
-                : 'v0 starting on server — polling…',
-            'info',
-          );
+          const msg = poll.recovered
+            ? 'v0 recovered stalled start — still generating…'
+            : mins && mins >= 2
+              ? `v0-pro still working (~${mins} min) — polling for UI files…`
+              : 'v0 generating UI on server — polling…';
+          onProgress?.(msg, 'info');
+          emitChatV0Progress(msg);
         }
         if (poll.ok && poll.written?.length) {
           onProgress?.(`v0 wrote ${poll.written.length} file(s) to workspace`, 'success');
+          emitChatV0Progress(`v0 complete — wrote ${poll.written.length} file(s) to workspace`);
           emitV0DemoReady(poll.demoUrl);
           return poll;
         }
         if (poll.ok && poll.source === 'basic-scaffold') return poll;
         if (poll.error && !poll.pending) {
+          emitChatV0Progress(formatV0UiError(poll.error, hasLocalV0ApiKey()).slice(0, 140));
           return { ok: false, error: formatV0UiError(poll.error, hasLocalV0ApiKey()), hint: poll.hint };
         }
       } catch (e) {

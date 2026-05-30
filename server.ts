@@ -2270,8 +2270,12 @@ No approved UI code yet.
         });
       }
       if (pending?.startError && !pending.chatId) {
+        const err = pending.startError;
         clearV0Pending(workspaceRoot);
-        pending = null;
+        return res.status(422).json({
+          error: err,
+          hint: "Fix the issue above, then click Generate v0 once to retry.",
+        });
       }
       if ((pending?.starting && !pending.chatId) || isV0StartJobActive(workspaceRoot)) {
         const elapsedMs = v0StartElapsedMs(pending);

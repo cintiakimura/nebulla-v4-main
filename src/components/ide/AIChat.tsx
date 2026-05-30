@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Bot, Hand, Mic, Paperclip, Rocket, Send, User } from 'lucide-react';
+import { Bot, Hand, Loader2, Mic, Paperclip, Rocket, Send, User } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { fetchSessionUser, syncActiveCloudProjectFromSession, upsertCloudProject } from '../../lib/nebulaCloud';
 import {
@@ -169,6 +169,64 @@ function ChatRoundButton({
 }
 
 
+function ChatPipelineStatusBar({
+  headline,
+  summary,
+  v0Status,
+  v0Detail,
+  v0Live,
+  onDismiss,
+}: {
+  headline: string;
+  summary?: string;
+  v0Status?: string;
+  v0Detail?: string;
+  v0Live?: boolean;
+  onDismiss: () => void;
+}) {
+  return (
+    <div
+      className="shrink-0 border-b border-emerald-500/20 bg-emerald-500/5 px-3 py-2"
+      role="status"
+      aria-live="polite"
+    >
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0 flex-1">
+          <p className="type-label-sm font-headline text-emerald-200">{headline}</p>
+          {summary ? (
+            <p className="type-body-md mt-0.5 line-clamp-2 text-muted-foreground">{summary}</p>
+          ) : null}
+        </div>
+        <button
+          type="button"
+          onClick={onDismiss}
+          className="shrink-0 rounded px-1.5 py-0.5 text-[10px] text-muted-foreground hover:bg-white/10 hover:text-foreground"
+          aria-label="Dismiss status bar"
+        >
+          Dismiss
+        </button>
+      </div>
+      {v0Status ? (
+        <div
+          className={cn(
+            'mt-2 rounded-md border px-2 py-1.5 text-[11px] leading-snug',
+            v0Live
+              ? 'border-violet-500/30 bg-violet-500/10 text-violet-100'
+              : 'border-white/10 bg-black/20 text-muted-foreground',
+          )}
+        >
+          <p className="font-medium">
+            <span className="text-[10px] uppercase tracking-wide text-muted-foreground/80">v0 · </span>
+            {v0Live ? <Loader2 className="mr-1 inline h-3 w-3 animate-spin" aria-hidden /> : null}
+            {v0Status}
+          </p>
+          {v0Detail ? <p className="mt-0.5 text-[10px] opacity-85">{v0Detail}</p> : null}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 export function AIChat() {
   const { activePath, activeTab, diskProjectKey, refreshTree, gitBranch, tabs, workspacePaths } =
     useIdeWorkspace();
@@ -177,6 +235,9 @@ export function AIChat() {
   const [input, setInput] = useState('');
   const [accessoryHint, setAccessoryHint] = useState<string | null>(null);
   const [grokActivity, setGrokActivity] = useState<GrokActivityStatus>(IDLE_GROK_ACTIVITY);
+  const [pipelineBannerDismissed, setPipelineBannerDismissed] = useState(false);
+  const [v0WatchActive, setV0WatchActive] = useState(false);
+  const [v0Live, setV0Live] = useState(false);
   const codingActivityRef = useRef(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploadBusy, setUploadBusy] = useState(false);
@@ -184,11 +245,22 @@ export function AIChat() {
   const resetCodingActivity = useCallback(() => {
     codingActivityRef.current = false;
     setGrokCodingActive(false);
+    setV0WatchActive(false);
+    setV0Live(false);
+    setGrokActivity(IDLE_GROK_ACTIVITY);
+  }, []);
+
+  const dismissPipelineBanner = useCallback(() => {
+    setPipelineBannerDismissed(true);
+    codingActivityRef.current = false;
+    setGrokCodingActive(false);
+    setV0Live(false);
     setGrokActivity(IDLE_GROK_ACTIVITY);
   }, []);
 
   const beginCodingActivity = useCallback(
     (headline: string, steps: GrokActivityStep[], options?: Parameters<typeof createGrokActivity>[2]) => {
+      setPipelineBannerDismissed(false);
       codingActivityRef.current = true;
       setGrokCodingActive(true);
       setGrokActivity(createGrokActivity(headline, steps, options));
@@ -209,14 +281,61 @@ export function AIChat() {
     try {
       const snap = await fetchChatV0StatusSnapshot();
       setGrokActivity((prev) => patchGrokActivityV0Status(prev, snap.line, snap.detail));
+      setV0Live(Boolean(snap.live));
+      if (snap.live) setV0WatchActive(true);
       return snap;
     } catch {
       return null;
     }
   }, []);
 
-  const showActivityPanel =
-    grokActivity.tone === 'work' || grokActivity.tone === 'ready' || Boolean(grokActivity.v0Status);
+  useEffect(() => {
+    const onProgress = (ev: Event) => {
+      const d = (ev as CustomEvent<{ line?: string; detail?: string }>).detail;
+      if (!d?.line) return;
+      setV0Live(true);
+      setV0WatchActive(true);
+      setPipelineBannerDismissed(false);
+      setGrokActivity((prev) => patchGrokActivityV0Status(prev, d.line!, d.detail));
+    };
+    const onWatch = (ev: Event) => {
+      const active = Boolean((ev as CustomEvent<{ active?: boolean }>).detail?.active);
+      setV0WatchActive(active);
+      setV0Live(active);
+      if (active) {
+        setPipelineBannerDismissed(false);
+        void refreshChatV0Status();
+      }
+    };
+    const onV0Done = () => {
+      setV0WatchActive(false);
+      setV0Live(false);
+      void refreshChatV0Status();
+    };
+    window.addEventListener('nebula-chat-v0-progress', onProgress);
+    window.addEventListener('nebula-chat-v0-watch', onWatch);
+    window.addEventListener('nebula-ui-studio-v0-complete', onV0Done);
+    window.addEventListener('nebula-v0-demo-ready', onV0Done);
+    return () => {
+      window.removeEventListener('nebula-chat-v0-progress', onProgress);
+      window.removeEventListener('nebula-chat-v0-watch', onWatch);
+      window.removeEventListener('nebula-ui-studio-v0-complete', onV0Done);
+      window.removeEventListener('nebula-v0-demo-ready', onV0Done);
+    };
+  }, [refreshChatV0Status]);
+
+  useEffect(() => {
+    if (!v0WatchActive && grokActivity.tone !== 'work') return;
+    void refreshChatV0Status();
+    const id = window.setInterval(() => void refreshChatV0Status(), 4000);
+    return () => window.clearInterval(id);
+  }, [v0WatchActive, grokActivity.tone, refreshChatV0Status]);
+
+  const showFullActivityPanel = grokActivity.tone === 'work';
+  const showCompactPipelineBar =
+    !pipelineBannerDismissed &&
+    !showFullActivityPanel &&
+    (grokActivity.tone === 'ready' || v0WatchActive || Boolean(grokActivity.v0Status));
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
   const [serverHasGrokKey, setServerHasGrokKey] = useState<boolean | null>(null);
@@ -1424,13 +1543,13 @@ export function AIChat() {
       setGrokActivity((prev) => {
         const finished = finishGrokActivity(
           prev,
-          'Go finished — implementation complete',
+          'Go finished',
           GO_WORK_STEPS,
           go.statusMessage,
-          'All coding steps done. Generate v0 in UI Studio when you want visual UI.',
         );
         return v0Snap ? patchGrokActivityV0Status(finished, v0Snap.line, v0Snap.detail) : finished;
       });
+      setV0Live(Boolean(v0Snap?.live));
     } catch (e) {
       setSendError(e instanceof Error ? e.message : 'Go failed');
       resetCodingActivity();
@@ -1470,7 +1589,24 @@ export function AIChat() {
         </p>
       ) : null}
 
-      <div ref={scrollContainerRef} className="flex-1 space-y-3 overflow-auto p-3">
+      {showFullActivityPanel ? (
+        <div className="max-h-[min(240px,36vh)] shrink-0 overflow-y-auto border-b border-primary/15">
+          <IdeGrokActivityPanel activity={grokActivity} />
+        </div>
+      ) : null}
+
+      {showCompactPipelineBar ? (
+        <ChatPipelineStatusBar
+          headline={grokActivity.headline || 'Pipeline status'}
+          summary={grokActivity.footer || grokActivity.currentAction}
+          v0Status={grokActivity.v0Status}
+          v0Detail={grokActivity.v0StatusDetail}
+          v0Live={v0Live}
+          onDismiss={dismissPipelineBanner}
+        />
+      ) : null}
+
+      <div ref={scrollContainerRef} className="min-h-0 flex-1 space-y-3 overflow-auto p-3">
         {messages.length === 0 && !sending ? (
           <p className="type-body-md px-1 text-center text-muted-foreground">
             Grok will ask your first discovery question here — follow{' '}
@@ -1515,8 +1651,8 @@ export function AIChat() {
             </div>
             <div className="surface-active max-w-[85%] rounded-lg px-3 py-2">
               <p className="type-label-sm text-muted-foreground">
-                {showActivityPanel
-                  ? 'Coding… live activity updates in the panel below.'
+                {showFullActivityPanel
+                  ? 'Working… see live steps in the panel above.'
                   : 'Grok is thinking…'}
               </p>
             </div>
@@ -1524,8 +1660,6 @@ export function AIChat() {
         ) : null}
         <div ref={messagesEndRef} className="h-px shrink-0" aria-hidden />
       </div>
-
-      {showActivityPanel ? <IdeGrokActivityPanel activity={grokActivity} /> : null}
 
       <div className="tonal-seam-t shrink-0 p-3">
         <div className="surface-float rounded-lg border border-transparent p-2 ring-1 ring-[color-mix(in_srgb,var(--outline-variant)_12%,transparent)] transition-[box-shadow,background-color] duration-300 ease-out focus-within:ring-[color-mix(in_srgb,var(--outline-variant)_22%,transparent)]">
