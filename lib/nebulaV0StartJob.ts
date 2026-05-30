@@ -83,6 +83,9 @@ export function scheduleV0CreateChatJob(opts: V0StartJobOptions): boolean {
       let files = v0Call.result.files;
       let demoUrl = v0Call.result.demoUrl;
 
+      // Release poll path — client /v0-poll can fetch files while we wait below.
+      activeJobs.delete(workspaceRoot);
+
       if (files.length === 0) {
         const wait = await v0WaitForChatGeneration(opts.apiKey, chatId, {
           maxAttempts: Math.ceil(V0_GENERATION_WAIT_MS / V0_GENERATION_POLL_MS),

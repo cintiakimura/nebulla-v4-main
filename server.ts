@@ -2265,13 +2265,8 @@ No approved UI code yet.
           : undefined;
       let pending = readV0Pending(workspaceRoot);
       if (pending?.startError && pending.chatId) {
-        return res.json({
-          ok: true,
-          pending: true,
-          chatId: pending.chatId,
-          versionStatus: "pending",
-          hint: pending.startError,
-        });
+        // Prior apply may have failed — still try fetching files from v0 (no new charge).
+        console.warn("[v0-poll] prior startError, retrying fetch:", pending.startError.slice(0, 120));
       }
       if (pending?.startError && !pending.chatId) {
         const err = pending.startError;
@@ -2281,7 +2276,13 @@ No approved UI code yet.
           hint: "Fix the issue above, then click Generate v0 once to retry.",
         });
       }
-      if ((pending?.starting && !pending.chatId) || isV0StartJobActive(workspaceRoot)) {
+      const chatIdFromBody =
+        typeof body.chatId === "string" && body.chatId.trim() ? body.chatId.trim() : "";
+      const chatIdFromPending = pending?.chatId?.trim() || "";
+      const resolvedChatId = chatIdFromBody || chatIdFromPending;
+      const awaitingChatId =
+        (pending?.starting && !chatIdFromPending) || (jobActive && !resolvedChatId);
+      if (awaitingChatId) {
         const elapsedMs = v0StartElapsedMs(pending);
         const stale =
           isV0StartStale(pending) && !isV0StartJobActive(workspaceRoot);
@@ -2317,21 +2318,20 @@ No approved UI code yet.
         return res.json({
           ok: true,
           pending: true,
-          starting: true,
-          chatId: pending?.chatId || undefined,
+          starting: !resolvedChatId,
+          chatId: resolvedChatId || pending?.chatId || undefined,
           elapsedMs,
           recovered: stale,
           hint: stale
             ? "Recovered stalled v0 start — keep polling (no new charge)."
-            : elapsedMs > 120_000
-              ? "v0-pro is still working — keep polling (typically 1–4 min, no new charge)."
-              : "v0 is still starting on the server — keep polling (no new charge).",
+            : resolvedChatId
+              ? "v0 chat created — fetching files from v0 API…"
+              : elapsedMs > 120_000
+                ? "v0-pro is still working — keep polling (typically 1–4 min, no new charge)."
+                : "v0 is still starting on the server — keep polling (no new charge).",
         });
       }
-      const chatId =
-        typeof body.chatId === "string" && body.chatId.trim()
-          ? body.chatId.trim()
-          : pending?.chatId?.trim() || "";
+      const chatId = resolvedChatId;
       if (!chatId) {
         const keyRes = resolveV0ApiKeyFromRequest(req);
         if (keyRes.ok === false) {
@@ -2357,6 +2357,9 @@ No approved UI code yet.
       }
 
       const pass = await runV0PollPass(req, chatId, projectDisplayName, pending?.promptPreview);
+      if (pass.ok === true && pass.pending === false && "written" in pass && pass.written.length > 0) {
+        console.log(`[v0-poll] Applied ${pass.written.length} file(s) for chat ${chatId.slice(0, 12)}…`);
+      }
       if (pass.ok === false) {
         const errLower = String(pass.error ?? "").toLowerCase();
         const creditsLike =

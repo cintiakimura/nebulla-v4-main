@@ -40,13 +40,28 @@ function parseFileRow(row: Record<string, unknown>): V0FileEntry | null {
 
   const nameRaw =
     row.name ?? row.path ?? row.fileName ?? metaPath;
-  const contentRaw = row.content ?? row.source ?? row.text ?? row.code;
+  const contentRaw = row.content ?? row.text ?? row.code;
+  let content = typeof contentRaw === "string" ? contentRaw : "";
+  if (!content.trim() && typeof row.source === "string") {
+    const src = row.source.trim();
+    if (src.length > 0 && !/^[\w./-]+\.(tsx|jsx|ts|js|css|html|json|md)$/i.test(src)) {
+      content = src;
+    }
+  }
 
-  if (typeof nameRaw !== "string" || typeof contentRaw !== "string") return null;
+  if (typeof nameRaw !== "string" || !content.trim()) return null;
   const name = normalizeFileName(nameRaw.trim());
-  const content = contentRaw;
-  if (!name || !content.trim()) return null;
+  if (!name) return null;
   return { name, content };
+}
+
+function readDemoUrl(data: Record<string, unknown>): string | undefined {
+  const latest = data.latestVersion as Record<string, unknown> | undefined;
+  for (const key of ["demoUrl", "demo", "url", "webUrl"]) {
+    const v = latest?.[key] ?? data[key];
+    if (typeof v === "string" && /^https?:\/\//i.test(v.trim())) return v.trim();
+  }
+  return undefined;
 }
 
 function collectFilesFromArray(files: unknown, out: V0FileEntry[], seen: Set<string>): void {
@@ -108,13 +123,17 @@ export async function v0CreateChat(
   message: string,
   signal?: AbortSignal,
 ): Promise<{ ok: true; result: V0ChatResult } | { ok: false; status: number; error: string }> {
+  const modelId = process.env.V0_MODEL_ID?.trim() || "v0-1.5-md";
   const res = await fetch(`${V0_API_BASE}/chats`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${apiKey}`,
     },
-    body: JSON.stringify({ message }),
+    body: JSON.stringify({
+      message,
+      modelConfiguration: { modelId, imageGenerations: false },
+    }),
     signal,
   });
   const text = await res.text();
@@ -132,7 +151,7 @@ export async function v0CreateChat(
     return { ok: false, status: 502, error: "v0 response missing chat id" };
   }
   const latest = data.latestVersion as Record<string, unknown> | undefined;
-  const demoUrl = typeof latest?.demoUrl === "string" ? latest.demoUrl : undefined;
+  const demoUrl = readDemoUrl(data);
   const files = extractFilesFromChatPayload(data);
   return {
     ok: true,
@@ -159,8 +178,7 @@ export async function v0GetChat(
     return { ok: false, status: 502, error: "v0 returned invalid JSON" };
   }
   const id = typeof data.id === "string" ? data.id : chatId;
-  const latest = data.latestVersion as Record<string, unknown> | undefined;
-  const demoUrl = typeof latest?.demoUrl === "string" ? latest.demoUrl : undefined;
+  const demoUrl = readDemoUrl(data);
   const files = extractFilesFromChatPayload(data);
   return {
     ok: true,

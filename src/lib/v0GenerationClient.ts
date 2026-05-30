@@ -263,6 +263,14 @@ async function runV0GenerationWithPollingInner(options?: {
           };
         }
         if (poll.chatId) pollChatId = poll.chatId;
+        if (poll.pending && pollChatId && (i === 0 || i % STARTING_LOG_EVERY_N_POLLS === 0)) {
+          const statusHint =
+            poll.versionStatus === 'failed'
+              ? 'v0 reported failure — checking for partial files…'
+              : `v0 generating (${pollChatId.slice(0, 8)}…) — waiting for UI files…`;
+          onProgress?.(statusHint, 'info');
+          emitChatV0Progress(statusHint);
+        }
         if (poll.starting && (i === 0 || i % STARTING_LOG_EVERY_N_POLLS === 0)) {
           const mins = poll.elapsedMs ? Math.round(poll.elapsedMs / 60_000) : undefined;
           const msg = poll.recovered
