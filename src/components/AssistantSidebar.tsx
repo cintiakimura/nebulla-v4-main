@@ -1,19 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { ArrowUp, ChevronDown, Hand, Mic, Paperclip, Rocket } from 'lucide-react';
-
-const ONBOARDING_DONE_KEY = 'nebulla_onboarding_autopilot_done';
-
-const MONTHLY_LIMIT_MESSAGE =
-  "You've reached your monthly AI usage limit on the Free plan. Upgrade to Pro for unlimited access.";
-
-function readOnboardingAutopilotDone(): boolean {
-  try {
-    return localStorage.getItem(ONBOARDING_DONE_KEY) === '1';
-  } catch {
-    return false;
-  }
-}
 import { VoiceLinesIcon } from './VoiceLinesIcon';
 import { Logo } from './Logo';
 import { SwarmStatusBar } from '@/components/swarm/SwarmStatusBar';
@@ -26,7 +13,11 @@ import { MAIN_AI_CHAT_SETUP_HINT, serverReportsMainAiKey } from '../lib/grokKey'
 import { fetchNebulaPublicConfig } from '../lib/nebulaPublicConfig';
 import { dispatchOpenUiStudio, dispatchStartUiUxWorkflow } from '../lib/nebulaUiStudioEvents';
 import { withProjectBody, withProjectQuery } from '../lib/nebulaProjectApi';
-import { cancelProjectBackgroundJobs } from '../lib/ideProjectReset';
+import {
+  cancelProjectBackgroundJobs,
+  ONBOARDING_DONE_KEY,
+  readOnboardingAutopilotDone,
+} from '../lib/ideProjectReset';
 import { runGoCodeAndApply } from '../lib/nebulaGrokCodingPipeline';
 import { runMasterPlanUiPipeline } from '../lib/ideArtifactSync';
 import { buildNebulaAssistantSystemPrompt } from '../lib/nebulaAssistantSystemPrompt';
@@ -40,6 +31,9 @@ import {
 } from '../lib/voiceTtsShared';
 
 import { MASTER_PLAN_SECTION_KEYS, parseMasterPlanBlock } from '../lib/masterPlanSections';
+
+const MONTHLY_LIMIT_MESSAGE =
+  "You've reached your monthly AI usage limit on the Free plan. Upgrade to Pro for unlimited access.";
 
 const MASTER_PLAN_TITLES = [...MASTER_PLAN_SECTION_KEYS] as const;
 
@@ -172,6 +166,15 @@ export function AssistantSidebar({
       cancelled = true;
     };
   }, [userId, activeProjectKey, projectName, codeMode]);
+
+  useEffect(() => {
+    const onReset = () => {
+      setMessages([]);
+      setChatStatus(null);
+    };
+    window.addEventListener('nebula-project-reset', onReset);
+    return () => window.removeEventListener('nebula-project-reset', onReset);
+  }, []);
 
   const [inputText, setInputText] = useState('');
   const [buildQueue, setBuildQueue] = useState<string[]>([]);

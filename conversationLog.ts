@@ -124,6 +124,30 @@ function readAndPruneFile(filePath: string, scope: ConversationLogScope): LogEnt
   return pruned;
 }
 
+/** Remove persisted chat for this user + project key (fresh discovery start). */
+export function clearConversationLog(scope: ConversationLogScope): boolean {
+  let cleared = false;
+  const primary = getConversationLogPath(scope);
+  if (fs.existsSync(primary)) {
+    try {
+      fs.unlinkSync(primary);
+      cleared = true;
+    } catch {
+      /* ignore */
+    }
+  }
+  const leg = getLegacyConversationLogPath(scope.userId, scope.projectLabel);
+  if (fs.existsSync(leg)) {
+    try {
+      fs.unlinkSync(leg);
+      cleared = true;
+    } catch {
+      /* ignore */
+    }
+  }
+  return cleared;
+}
+
 export function loadPrunedEntries(scope: ConversationLogScope): LogEntry[] {
   const primary = getConversationLogPath(scope);
   if (fs.existsSync(primary)) {

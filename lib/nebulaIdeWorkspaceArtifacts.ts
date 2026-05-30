@@ -28,6 +28,91 @@ export function masterPlanLooksEmpty(plan: Record<string, string>): boolean {
   return MASTER_PLAN_USER_SECTION_KEYS.every((k) => !String(plan[k] ?? "").trim());
 }
 
+const MIN_MASTER_PLAN_SECTION_CHARS = 48;
+
+export function listMissingMasterPlanSections(plan: Record<string, string>): string[] {
+  return MASTER_PLAN_USER_SECTION_KEYS.filter(
+    (k) => !String(plan[k] ?? "").trim() || String(plan[k] ?? "").trim().length < MIN_MASTER_PLAN_SECTION_CHARS,
+  );
+}
+
+/** Fill empty §1–§5 from workspace routes, user note, and design refs (no LLM). */
+export function fillMissingMasterPlanSectionsLocal(opts: {
+  workspaceRoot: string;
+  masterPlanPath: string;
+  projectName: string;
+  userNote?: string;
+}): { updated: string[] } {
+  const plan = readMasterPlanFile(opts.masterPlanPath);
+  const missing = listMissingMasterPlanSections(plan);
+  if (missing.length === 0) return { updated: [] };
+
+  const routes = discoverWorkspaceRoutes(opts.workspaceRoot);
+  const note = (opts.userNote ?? "").trim().slice(0, 2000);
+  const name = opts.projectName.trim() || "Untitled Project";
+  const goal = String(plan["1. Goal of the app"] ?? "").trim();
+  const refHint = summarizeDesignReferencesForPrompt(opts.workspaceRoot, 280);
+  const next = { ...plan };
+  const updated: string[] = [];
+
+  if (!String(next["1. Goal of the app"] ?? "").trim()) {
+    next["1. Goal of the app"] =
+      note ||
+      `Build **${name}** — product goal from discovery (refine in chat). Users, problem, and scope for this workspace.`;
+    updated.push("1. Goal of the app");
+  }
+
+  if (missing.includes("2. Text & Search")) {
+    next["2. Text & Search"] = [
+      `- **Category:** apps similar to **${name}** (from discovery).`,
+      "- **Stack:** Next.js App Router, TypeScript, Tailwind, shadcn/ui (Nebulla default).",
+      "- **Integrations:** auth, dashboards, uploads as described in discovery.",
+      ...(note ? [`- **Session focus:** ${note.slice(0, 400)}`] : []),
+    ].join("\n");
+    updated.push("2. Text & Search");
+  }
+
+  if (missing.includes("3. Features and KPIs")) {
+    next["3. Features and KPIs"] = [
+      "- Core flows from discovery (see Goal §1)",
+      "- Role-based access where applicable",
+      "- Structured data / uploads where required",
+      "- **KPI:** working preview, navigable routes, deployable MVP on Render",
+    ].join("\n");
+    updated.push("3. Features and KPIs");
+  }
+
+  if (missing.includes("4. Pages and navigation")) {
+    next["4. Pages and navigation"] =
+      routes.length > 0
+        ? routes
+            .slice(0, 12)
+            .map((r) => `- **${r === "/" ? "Home" : r.replace(/^\//, "").replace(/[-_]/g, " ")}** (\`${r}\`)`)
+            .join("\n")
+        : "- **Home** (`/`)\n- **Dashboard** (`/dashboard`)";
+    updated.push("4. Pages and navigation");
+  }
+
+  if (missing.includes("5. UI/UX design")) {
+    const oneLiner = goal.split("\n").find((l) => l.trim())?.slice(0, 120) || name;
+    next["5. UI/UX design"] = [
+      "- **Theme:** Cosmic Night — bg `#080A14`, accent `#00D4D4`, muted slate text",
+      "- **Typography:** Inter or system sans; clear hierarchy; generous spacing",
+      "- **Components:** shadcn/ui + Tailwind; responsive sidebar or top nav",
+      `- **Mood:** Polished workspace for **${oneLiner.replace(/\*\*/g, "")}**`,
+      ...(refHint ? ["", "**Brand references:**", refHint] : []),
+    ].join("\n");
+    updated.push("5. UI/UX design");
+  }
+
+  const uniq = [...new Set(updated)];
+  if (uniq.length === 0) return { updated: [] };
+
+  fs.mkdirSync(path.dirname(opts.masterPlanPath), { recursive: true });
+  fs.writeFileSync(opts.masterPlanPath, JSON.stringify(next, null, 2), "utf8");
+  return { updated: uniq };
+}
+
 /** Discover Next.js app router pages under `app/` and `pages/`. */
 export function discoverWorkspaceRoutes(workspaceRoot: string): string[] {
   const routes = new Set<string>();
@@ -84,56 +169,8 @@ export function bootstrapMasterPlanFromWorkspace(opts: {
   projectName: string;
   userNote?: string;
 }): { updated: number } {
-  const { workspaceRoot, masterPlanPath, projectName, userNote } = opts;
-  const plan = readMasterPlanFile(masterPlanPath);
-  if (!masterPlanLooksEmpty(plan)) return { updated: 0 };
-
-  const routes = discoverWorkspaceRoutes(workspaceRoot);
-  const note = (userNote ?? "").trim().slice(0, 2000);
-  const name = projectName.trim() || "Untitled Project";
-
-  const goal =
-    note ||
-    `Build **${name}**: a focused web app scaffolded in the Nebula workspace. Refine goals in chat, then press **Go** for the next coding pass.`;
-  const features = [
-    "- Core user flows inferred from workspace files",
-    "- Image → form data extraction (from discovery)",
-    "- Auth-ready dashboard shell (if `app/dashboard` exists)",
-    "- KPI: working preview + deployable MVP",
-  ].join("\n");
-  const pagesNav = routes.map((r) => `- **${r === "/" ? "Home" : r}** (\`${r}\`)`).join("\n");
-  const uiUx = [
-    "- **V0:** unavailable or out of credits — Nebula applied a **basic UI shell** (`index.html` preview + existing app routes).",
-    "- **Next:** open **Preview** in the explorer or run `npm run dev` for full Next.js rendering.",
-    "- **Polish:** add `V0_API_KEY` in My services when credits are available.",
-  ].join("\n");
-  const env = [
-    "- `MAIN_API_KEY_GROK` — IDE chat & coding",
-    "- `V0_API_KEY` — optional UI generation",
-    "- Render deploy: sync env from `.env.example`",
-  ].join("\n");
-
-  const next: Record<string, string> = {
-    ...plan,
-    "1. Goal of the app": goal,
-    "2. Text & Search":
-      plan["2. Text & Search"]?.trim() ||
-      plan["2. Tech Research"]?.trim() ||
-      "- Stack: Next.js / React, TypeScript, Tailwind (from workspace `package.json`)\n- OCR / vision for image → form fields (user requirement)",
-    "3. Features and KPIs": features,
-    "4. Pages and navigation": pagesNav || "- **Home** (`/`)",
-    "5. UI/UX design": uiUx,
-    "6. Environment Setup": plan["6. Environment Setup"]?.trim() || env,
-  };
-
-  fs.mkdirSync(path.dirname(masterPlanPath), { recursive: true });
-  fs.writeFileSync(masterPlanPath, JSON.stringify(next, null, 2), "utf8");
-
-  let updated = 0;
-  for (const k of MASTER_PLAN_TAB_KEYS) {
-    if (String(next[k] ?? "").trim()) updated++;
-  }
-  return { updated };
+  const filled = fillMissingMasterPlanSectionsLocal(opts);
+  return { updated: filled.updated.length };
 }
 
 export function buildMindMapGraphFromRoutes(

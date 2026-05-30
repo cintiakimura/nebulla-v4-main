@@ -10,6 +10,7 @@ import {
   appendConversationTurn,
   appendWriterAuditEvent,
   buildMemorySystemContent,
+  clearConversationLog,
   injectMemoryIntoMessages,
   loadPrunedEntries,
 } from "./conversationLog";
@@ -46,6 +47,7 @@ import { formatWorkspaceFileIndexBlock } from "./lib/ideAiContextBlocks";
 import {
   bootstrapMasterPlanFromWorkspace,
   ensurePreviewIndexHtml,
+  fillMissingMasterPlanSectionsLocal,
   hydrateAndPersistMasterPlan,
   readMasterPlanFile,
   syncMindMapFromMasterPlan,
@@ -53,6 +55,7 @@ import {
   unlockVisualEditorFromWorkspaceCoding,
   writeBasicUiScaffold,
 } from "./lib/nebulaIdeWorkspaceArtifacts";
+import { ensureMasterPlanBeforeGo } from "./lib/nebulaMasterPlanSynthesis";
 import {
   addDesignReference,
   readDesignReferences,
@@ -1308,14 +1311,29 @@ No approved UI code yet.
         typeof body.projectName === "string" && body.projectName.trim()
           ? String(body.projectName).trim()
           : undefined;
+      const uid = readNebulaSessionUserId(req) || "anonymous";
+      const convLabel =
+        projectName ||
+        (typeof body.projectName === "string" && body.projectName.trim()
+          ? String(body.projectName).trim()
+          : "Untitled Project");
+      const chatScope = { userId: uid, projectKey: pp.projectKey, projectLabel: convLabel };
+      let chatCleared = clearConversationLog(chatScope);
+      chatCleared =
+        clearConversationLog({ ...chatScope, projectLabel: "Untitled Project" }) || chatCleared;
+      chatCleared =
+        clearConversationLog({ ...chatScope, projectLabel: "Untitled project" }) || chatCleared;
       const cleared = cancelProjectBackgroundAttempts(pp.workspaceRoot);
+      if (chatCleared) {
+        cleared.push("conversation-log (chat history cleared)");
+      }
       const { removed } = resetProjectWorkspaceScratch({
         workspaceRoot: pp.workspaceRoot,
         templateRoot: NEBULA_PROJECT_ROOT,
         projectDisplayName: projectName,
       });
       ensurePreviewIndexHtml(pp.workspaceRoot, projectName || "Untitled Project");
-      return res.json({ ok: true, cleared, removed });
+      return res.json({ ok: true, cleared, removed, chatCleared });
     } catch (err: unknown) {
       return res.status(500).json({
         error: err instanceof Error ? err.message : "reset project failed",
@@ -3066,6 +3084,30 @@ Rules:
       }
 
       const memory = buildMemorySystemContent(convScopeGo);
+
+      const mpFill = await ensureMasterPlanBeforeGo({
+        apiKey,
+        workspaceRoot: ppGo.workspaceRoot,
+        masterPlanPath,
+        planSnapshot,
+        memoryContent: memory,
+        projectName: convProject,
+        userNote: note,
+      });
+      if (mpFill.written.length > 0) {
+        console.log(
+          `[go-code] Master Plan filled (${mpFill.source}): ${mpFill.written.join(", ")}`,
+        );
+        try {
+          const refreshed = readMasterPlanFile(masterPlanPath);
+          for (const [k, v] of Object.entries(refreshed)) {
+            if (typeof v === "string") planSnapshot[k] = v;
+          }
+        } catch {
+          /* ignore */
+        }
+      }
+
       const phaseASystem = `You are Grok 4 (planning only). The user pressed **Go** to run a coding pass with Grok Code.
 
 Your ONLY output for this turn: a **short** pre-coding summary for the Master Plan file.
@@ -3150,9 +3192,19 @@ A short pre-coding summary was just saved to master-plan.json under the key "${P
 
 Follow project-execution-rules.md strictly. Use the workflow context in order.
 
-Master Plan UI / v0 (do this FIRST when §4 or §5 are empty or placeholder):
-- If **"4. Pages and navigation"** or **"5. UI/UX design"** in master-plan.json are empty, emit \`\`\`file:master-plan.json\`\`\` updating ONLY those keys (preserve all other keys). §4: up to 8 routes as \`- **Name** (\`/route\`)\`. §5: 15–25 lines max — palette, typography, nav pattern only (no §4 copy, no code). Use **nebulla-ide/design-references.json** (if present) for logo, brand colors, and typography in §5.
-- The server already wrote \`nebula-ui-studio/v0-prompt.md\` from §4+§5; after you fill §4+§5 you MAY also emit \`\`\`file:nebula-ui-studio/v0-prompt.md\`\`\` (800–1200 chars, concise v0 brief).
+Master Plan (project-execution-rules § A — MUST be complete before code):
+- master-plan.json below MUST have all five sections populated before you output app files.
+- If ANY of §2–§5 are still thin, emit \`\`\`file:master-plan.json\`\`\` FIRST with the full JSON object (preserve existing keys, fill empty sections from discovery).
+- §4: routes as \`- **Name** (\`/route\`)\`; §5: 15–25 lines max (palette, typography, nav — no §4 copy).
+
+Implementation (single pass — do NOT stop after 1–2 files):
+- Emit ALL required app files in ONE response: layout, globals, every route page under \`app/\`, shared components, lib/, package.json if missing.
+- Match every route in §4. Prefer 8–20 file blocks in one pass rather than incremental partial output.
+- Then sync \`nebula-ui-studio/v0-prompt.md\` if §4/§5 changed (800–1200 chars).
+
+Master Plan UI / v0:
+- If **"4. Pages and navigation"** or **"5. UI/UX design"** need updates, include them in master-plan.json first.
+- The server already wrote \`nebula-ui-studio/v0-prompt.md\`; refresh it if routes/design changed.
 
 CRITICAL OUTPUT CONTRACT (no deviation):
 - Do NOT paste implementation as casual markdown code fences in chat — use file blocks the server can apply.
@@ -3216,9 +3268,11 @@ ${workflowContext}`;
         pending: true,
         coding: true,
         codeModel,
+        masterPlanFilled: mpFill.written,
+        masterPlanFillSource: mpFill.source,
         v0PromptWritten: v0Sync.written,
         v0PromptLength: v0Sync.content.length,
-        hint: "Pre-coding summary saved. v0 prompt written from Master Plan §4+§5. Grok Code is running in the background — poll /api/grok/go-code/poll every few seconds.",
+        hint: "Master Plan synced from discovery. Grok Code is running — wait for Go complete (1–3 min); do not press Go again.",
       });
     } catch (error) {
       console.error("Error in /api/grok/go-code:", error);
@@ -3242,6 +3296,16 @@ ${workflowContext}`;
       );
       if (pending && !payload.pending && (pending.status === "done" || pending.status === "error")) {
         try {
+          const body = req.body || {};
+          const convProject =
+            typeof body.projectName === "string" && body.projectName.trim()
+              ? String(body.projectName).trim()
+              : "Untitled Project";
+          fillMissingMasterPlanSectionsLocal({
+            workspaceRoot: pp.workspaceRoot,
+            masterPlanPath: pp.masterPlanPath,
+            projectName: convProject,
+          });
           const v0Sync = syncV0PromptFromMasterPlan(pp.workspaceRoot, pp.masterPlanPath);
           mirrorV0PromptToStudioFile(pp, v0Sync.content);
           Object.assign(payload, {

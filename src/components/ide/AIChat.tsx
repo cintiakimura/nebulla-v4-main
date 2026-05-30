@@ -608,6 +608,22 @@ export function AIChat() {
   }, [diskProjectKey]);
 
   useEffect(() => {
+    const onReset = () => {
+      setMessages([]);
+      messagesRef.current = [];
+      chatHistoryLoadedRef.current = true;
+      bootstrapStartedRef.current = false;
+      setSendError(null);
+      if (serverHasGrokKey === true) {
+        bootstrapStartedRef.current = true;
+        void sendChatRef.current(IDE_CHAT_DISCOVERY_BOOTSTRAP);
+      }
+    };
+    window.addEventListener('nebula-project-reset', onReset);
+    return () => window.removeEventListener('nebula-project-reset', onReset);
+  }, [serverHasGrokKey]);
+
+  useEffect(() => {
     if (serverHasGrokKey !== true) return;
     if (!chatHistoryLoadedRef.current) return;
     if (messagesRef.current.length > 0) return;
@@ -1285,7 +1301,7 @@ export function AIChat() {
     setSending(true);
     setSendError(null);
     beginCodingActivity('Go — full coding pass', GO_WORK_STEPS, {
-      subhead: 'Pre-coding summary → Grok Code → file apply (v0 is manual in UI Studio after code).',
+      subhead: 'Master Plan from discovery → one Grok Code pass → file apply. Wait for complete — do not press Go again.',
       initialLog: userNote ? `Go started — focus: ${userNote.slice(0, 120)}` : 'Go started — full implementation pass',
     });
 

@@ -336,7 +336,7 @@ function ProjectSettingsTab({
   const handleStartFromScratch = async () => {
     if (
       !window.confirm(
-        'Start this project from scratch? This cancels all v0/Go jobs on the server, clears generated code, and resets Master Plan. Chat history in this panel is not deleted.',
+        'Start this project from scratch? This cancels all v0/Go jobs, clears generated code, resets Master Plan, and clears chat history for this project.',
       )
     ) {
       return;

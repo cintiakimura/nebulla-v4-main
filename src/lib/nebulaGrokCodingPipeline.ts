@@ -225,28 +225,49 @@ export async function runGoCodeAndApply(options: {
 
   try {
     onProgress?.('Grok Code on server — summary then implementation', 'info');
+
+    let prePoll: GoCodePayload | null = null;
+    try {
+      const preRes = await fetch(withProjectQuery('/api/grok/go-code/poll'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(withProjectBody({ projectName })),
+      });
+      prePoll = await readResponseJson<GoCodePayload>(preRes);
+      if (prePoll.pending && prePoll.coding) {
+        onProgress?.('Grok Code already running — waiting for it to finish (do not press Go again)', 'warn');
+      }
+    } catch {
+      prePoll = null;
+    }
+
     const stopWait = startGrokActivityWaitTicker(
       'Grok Code running on server',
       (msg, kind, options) => onProgress?.(msg, kind, options),
     );
     let data: GoCodePayload;
     try {
-      data = await fetchJson<GoCodePayload>(withProjectQuery('/api/grok/go-code'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify(
-          withProjectBody({
-            userId,
-            projectName,
-            userNote: userNote?.trim() || undefined,
-            messages: payloadMessages,
-          }),
-        ),
-      });
-      if (data.pending && data.coding) {
-        onProgress?.('Pre-coding summary saved — waiting for Grok Code (background job)', 'info');
+      if (prePoll?.pending && prePoll.coding) {
         data = await pollGoCodeUntilDone(projectName, onProgress);
+      } else {
+        data = await fetchJson<GoCodePayload>(withProjectQuery('/api/grok/go-code'), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify(
+            withProjectBody({
+              userId,
+              projectName,
+              userNote: userNote?.trim() || undefined,
+              messages: payloadMessages,
+            }),
+          ),
+        });
+        if (data.pending && data.coding) {
+          onProgress?.('Pre-coding summary saved — waiting for Grok Code (background job)', 'info');
+          data = await pollGoCodeUntilDone(projectName, onProgress);
+        }
       }
     } finally {
       stopWait();
@@ -307,6 +328,11 @@ export async function runGoCodeAndApply(options: {
     const apply = await applyGeneratedFiles(codeText, { userNote, projectName, onProgress });
     if (apply.ok) {
       void cancelProjectBackgroundJobs();
+      try {
+        window.dispatchEvent(new CustomEvent('nebula-master-plan-updated'));
+      } catch {
+        /* ignore */
+      }
     }
     return {
       ok: apply.ok,
