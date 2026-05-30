@@ -1,4 +1,5 @@
 import {
+  expireStaleGoCodePending,
   readGoCodePending,
   writeGoCodePending,
   type GoCodePendingState,
@@ -108,7 +109,12 @@ export function scheduleGoCodeJob(opts: GoCodeJobOptions): boolean {
 export function goCodePendingToPollResponse(
   pending: GoCodePendingState | null,
   jobActive: boolean,
+  workspaceRoot?: string,
 ): Record<string, unknown> {
+  if (workspaceRoot) {
+    expireStaleGoCodePending(workspaceRoot, { jobActive });
+    pending = readGoCodePending(workspaceRoot);
+  }
   if (!pending) {
     return {
       ok: true,

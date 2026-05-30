@@ -56,10 +56,13 @@ import {
   commitGrokActivityStatus,
   updateGrokActivityCurrent,
   startGrokActivityWaitTicker,
+  finishGrokActivity,
+  patchGrokActivityV0Status,
   type GrokActivityProgressFn,
   type GrokActivityStatus,
   type GrokActivityStep,
 } from '../../lib/ideGrokActivityStatus';
+import { fetchChatV0StatusSnapshot } from '../../lib/chatV0Status';
 import { IdeGrokActivityPanel } from '@/components/ide/IdeGrokActivityPanel';
 import {
   MIC_REENABLE_AFTER_TTS_MS,
@@ -202,7 +205,18 @@ export function AIChat() {
     );
   }, []);
 
-  const showActivityPanel = grokActivity.tone === 'work';
+  const refreshChatV0Status = useCallback(async () => {
+    try {
+      const snap = await fetchChatV0StatusSnapshot();
+      setGrokActivity((prev) => patchGrokActivityV0Status(prev, snap.line, snap.detail));
+      return snap;
+    } catch {
+      return null;
+    }
+  }, []);
+
+  const showActivityPanel =
+    grokActivity.tone === 'work' || grokActivity.tone === 'ready' || Boolean(grokActivity.v0Status);
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
   const [serverHasGrokKey, setServerHasGrokKey] = useState<boolean | null>(null);
@@ -986,7 +1000,7 @@ export function AIChat() {
             setGrokActivity((prev) =>
               advanceGrokActivity(prev, showWorkActivity ? 6 : 4, {
                 currentAction: 'Grok Code finished — starting v0 UI generation…',
-                log: { message: 'POST /api/ide/master-plan-ui-pipeline (v0 after code)', kind: 'info' },
+                log: { message: 'UI Studio pipeline after Grok Code', kind: 'info' },
               }),
             );
           }
@@ -1301,9 +1315,10 @@ export function AIChat() {
     setSending(true);
     setSendError(null);
     beginCodingActivity('Go — full coding pass', GO_WORK_STEPS, {
-      subhead: 'Master Plan from discovery → one Grok Code pass → file apply. Wait for complete — do not press Go again.',
+      subhead: 'One Go — Grok Code writes the full app (auto-continues if needed). Wait for the finished message.',
       initialLog: userNote ? `Go started — focus: ${userNote.slice(0, 120)}` : 'Go started — full implementation pass',
     });
+    void refreshChatV0Status();
 
     void cancelProjectBackgroundJobs();
 
@@ -1341,19 +1356,21 @@ export function AIChat() {
         messages: history,
         onProgress: pushActivity,
       });
+      await refreshChatV0Status();
       if (go.ok) {
         window.dispatchEvent(new CustomEvent('nebula-master-plan-updated'));
       }
       const goTs = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+      const chatCompleteLine = go.ok
+        ? `**Finished.** ${go.statusMessage}`
+        : `**Go could not finish.** ${go.statusMessage}`;
       setMessages((p) => {
         const next = [
           ...p,
           {
             id: `go-a-${Date.now()}`,
             role: 'assistant' as const,
-            content: go.ok
-              ? `**Go complete.** ${go.statusMessage}`
-              : `**Go could not finish.** ${go.statusMessage}`,
+            content: chatCompleteLine,
             timestamp: goTs,
           },
         ];
@@ -1384,7 +1401,7 @@ export function AIChat() {
       setGrokActivity((prev) =>
         advanceGrokActivity(prev, 4, {
           currentAction: 'Grok Code done — syncing mind map & v0 prompt (Generate v0 in UI Studio when ready)…',
-          log: { message: 'POST /api/ide/master-plan-ui-pipeline', kind: 'info' },
+          log: { message: 'UI Studio pipeline (v0 prompt & mind map)', kind: 'info' },
         }),
       );
       const pipeline = await runMasterPlanUiPipelineWithV0({
@@ -1392,24 +1409,39 @@ export function AIChat() {
         autoV0: false,
         onProgress: pushActivity,
       });
+      const v0Snap = await refreshChatV0Status();
       if (pipeline.v0Ok) {
         window.dispatchEvent(new CustomEvent('nebula-ui-studio-v0-complete'));
         window.dispatchEvent(new CustomEvent('nebula-files-applied'));
         dispatchOpenUiStudio({ tab: 'design' });
       }
+      if (pipeline.v0PromptWritten) {
+        pushActivity('v0 prompt synced from Master Plan §4+§5', 'success');
+      }
       pushActivity('Go pipeline finished', 'success');
+      codingActivityRef.current = false;
+      setGrokCodingActive(false);
+      setGrokActivity((prev) => {
+        const finished = finishGrokActivity(
+          prev,
+          'Go finished — implementation complete',
+          GO_WORK_STEPS,
+          go.statusMessage,
+          'All coding steps done. Generate v0 in UI Studio when you want visual UI.',
+        );
+        return v0Snap ? patchGrokActivityV0Status(finished, v0Snap.line, v0Snap.detail) : finished;
+      });
     } catch (e) {
       setSendError(e instanceof Error ? e.message : 'Go failed');
       resetCodingActivity();
     } finally {
       setSending(false);
       setAccessoryHint(null);
-      resetCodingActivity();
       if (openTalkDesiredRef.current) {
         resumeOpenTalkIfWanted();
       }
     }
-  }, [micInputBlocked, sending, serverHasGrokKey, stopVoiceRecognition, refreshWorkspaceMeta, resumeOpenTalkIfWanted, pushActivity, beginCodingActivity, resetCodingActivity, workspacePaths.length]);
+  }, [micInputBlocked, sending, serverHasGrokKey, stopVoiceRecognition, refreshWorkspaceMeta, resumeOpenTalkIfWanted, pushActivity, beginCodingActivity, resetCodingActivity, refreshChatV0Status, workspacePaths.length]);
 
   return (
     <div className="surface-active tonal-seam-l flex h-full min-h-0 flex-col overflow-hidden">

@@ -44,7 +44,7 @@ export async function runMasterPlanUiPipeline(options?: {
 }): Promise<MasterPlanUiPipelineResult> {
   const onProgress = options?.onProgress;
   try {
-    onProgress?.('POST /api/ide/master-plan-ui-pipeline (v0 prompt, mind map, optional v0)', 'info');
+    onProgress?.('Syncing Master Plan, v0 prompt, and mind map…', 'info');
     const stopWait = startGrokActivityWaitTicker('UI Studio pipeline on server', (msg, kind, options) =>
       onProgress?.(msg, kind, options),
     );
@@ -189,7 +189,7 @@ export async function syncIdeProjectArtifacts(options?: {
 }): Promise<IdeArtifactSyncResult> {
   const onProgress = options?.onProgress;
   try {
-    onProgress?.('POST /api/ide/sync-project-artifacts', 'info');
+    onProgress?.('Syncing project artifacts (Master Plan, preview)…', 'info');
     const sync = await fetchJson<IdeArtifactSyncResult>(
       withProjectQuery('/api/ide/sync-project-artifacts'),
       {
@@ -233,7 +233,7 @@ export async function syncMindMapForProject(
   pageCount: number;
 }> {
   try {
-    onProgress?.('POST /api/workspace/mind-map/sync-from-master-plan', 'info');
+    onProgress?.('Syncing mind map from Master Plan §4…', 'info');
     const data = await fetchJson<{ pages?: unknown[]; routeCount?: number }>(
       withProjectQuery('/api/workspace/mind-map/sync-from-master-plan'),
       {

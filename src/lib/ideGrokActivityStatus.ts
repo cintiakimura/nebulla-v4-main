@@ -27,6 +27,9 @@ export type GrokActivityStatus = {
   activeStepIndex: number;
   footer?: string;
   tone: GrokActivityTone;
+  /** v0 UI pipeline status — shown in chat activity strip. */
+  v0Status?: string;
+  v0StatusDetail?: string;
 };
 
 export type GrokActivityProgressOptions = { /** Update current line only — no new log row. */ currentOnly?: boolean };
@@ -165,6 +168,15 @@ export function advanceGrokActivity(
     next = updateGrokActivityCurrent(next, patch.currentAction);
   }
   return next;
+}
+
+export function patchGrokActivityV0Status(
+  prev: GrokActivityStatus,
+  v0Status: string,
+  v0StatusDetail?: string,
+): GrokActivityStatus {
+  if (prev.v0Status === v0Status && prev.v0StatusDetail === v0StatusDetail) return prev;
+  return { ...prev, v0Status, v0StatusDetail };
 }
 
 export function finishGrokActivity(

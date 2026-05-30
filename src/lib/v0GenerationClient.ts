@@ -14,6 +14,7 @@ export type V0GenerationResult = {
   hint?: string;
   error?: string;
   pending?: boolean;
+  idle?: boolean;
   starting?: boolean;
   resumed?: boolean;
   elapsedMs?: number;
@@ -25,7 +26,7 @@ const V0_HEADERS = (): Record<string, string> => ({
   ...getV0RequestHeaders(),
 });
 
-const POLL_MS = 3500;
+const POLL_MS = 5000;
 const MAX_POLLS = 120;
 const V0_START_TIMEOUT_MS = 20_000;
 const STARTING_LOG_EVERY_N_POLLS = 8;
@@ -66,12 +67,11 @@ async function fetchV0StudioStatus(): Promise<V0StudioStatus> {
 }
 
 function canResumePollOnly(status: V0StudioStatus, resumeOnly?: boolean): boolean {
+  if (resumeOnly !== true) return false;
   if (status.hasRealV0) return false;
   const chatId = status.v0PendingChatId?.trim();
   const starting = Boolean(status.v0Starting);
-  if (resumeOnly === true) return Boolean(chatId || starting);
-  if (!chatId && !starting) return false;
-  return Boolean(status.v0Pending || starting);
+  return Boolean(chatId || starting || status.v0Pending);
 }
 
 async function postV0Start(
@@ -144,6 +144,9 @@ async function postV0Poll(
     const msg = typeof data.error === 'string' ? data.error : `Request failed: ${response.status}`;
     if (response.status === 400 && /no v0 chat in progress/i.test(msg)) {
       return { kind: 'no-chat', message: msg };
+    }
+    if (data.idle) {
+      return { ok: true, pending: false, idle: true, hint: data.hint };
     }
     if (response.status === 400 && /v0-prompt\.md is empty|save Master Plan/i.test(msg)) {
       return {
@@ -236,6 +239,17 @@ async function runV0GenerationWithPollingInner(options?: {
         }
 
         const poll = pollResult;
+        if ('idle' in poll && poll.idle) {
+          if (i < 2) {
+            await sleep(POLL_MS);
+            continue;
+          }
+          return {
+            ok: false,
+            error: 'No v0 session on server.',
+            hint: 'Click Generate v0 in UI Studio once.',
+          };
+        }
         if (poll.chatId) pollChatId = poll.chatId;
         if (poll.starting && (i === 0 || i % STARTING_LOG_EVERY_N_POLLS === 0)) {
           const mins = poll.elapsedMs ? Math.round(poll.elapsedMs / 60_000) : undefined;

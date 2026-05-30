@@ -111,6 +111,27 @@ export function IdeGrokActivityPanel({ activity }: { activity: GrokActivityStatu
             <p className="type-body-md leading-relaxed text-muted-foreground">{activity.subhead}</p>
           ) : null}
 
+          {activity.v0Status ? (
+            <div
+              className={cn(
+                'rounded-md border px-2.5 py-1.5 text-[11px] leading-snug',
+                isWork
+                  ? 'border-violet-500/25 bg-violet-500/10 text-violet-100'
+                  : isError
+                    ? 'border-white/10 bg-black/20 text-muted-foreground'
+                    : 'border-emerald-500/20 bg-emerald-500/10 text-emerald-100',
+              )}
+            >
+              <p className="font-medium tracking-wide">
+                <span className="text-[10px] uppercase text-muted-foreground/80">v0 · </span>
+                {activity.v0Status}
+              </p>
+              {activity.v0StatusDetail ? (
+                <p className="mt-0.5 text-[10px] text-muted-foreground/85">{activity.v0StatusDetail}</p>
+              ) : null}
+            </div>
+          ) : null}
+
           {history.length > 0 ? (
             <div className="rounded-lg border border-white/5 bg-black/20 px-2.5 py-1.5">
               <p className="mb-1 text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground/70">

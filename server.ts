@@ -98,7 +98,7 @@ import {
   isGoCodeJobActive,
   scheduleGoCodeJob,
 } from "./lib/nebulaGoCodeJob";
-import { readGoCodePending } from "./lib/nebulaGoCodePending";
+import { clearGoCodePending, readGoCodePending } from "./lib/nebulaGoCodePending";
 import {
   callGrokGenerateUiSvg,
   heuristicSvgEditRisks,
@@ -2340,9 +2340,11 @@ No approved UI code yet.
             hint: "Open Master Plan tabs 4+5, save, or press Go so routes from app/ hydrate the prompt.",
           });
         }
-        return res.status(400).json({
-          error: "No v0 chat in progress. Click Generate v0 in UI Studio once.",
-          hint: "Open UI Studio and click Generate v0 — do not poll without a session.",
+        return res.json({
+          ok: true,
+          pending: false,
+          idle: true,
+          hint: "No v0 chat in progress — click Generate v0 in UI Studio once.",
         });
       }
 
@@ -3038,7 +3040,8 @@ Rules:
 
   /** Go: Grok 4 writes a short summary into master-plan.json only, then Grok Code runs (no full execution doc in MP). */
   app.post("/api/grok/go-code", async (req, res) => {
-    const { messages, userId, projectName, userNote } = req.body || {};
+    const { messages, userId, projectName, userNote, continuation: continuationRaw } = req.body || {};
+    const continuation = Boolean(continuationRaw);
     const apiKey = await resolveMainGrokApiKey(req);
 
     if (!apiKey) {
@@ -3085,29 +3088,36 @@ Rules:
 
       const memory = buildMemorySystemContent(convScopeGo);
 
-      const mpFill = await ensureMasterPlanBeforeGo({
-        apiKey,
-        workspaceRoot: ppGo.workspaceRoot,
-        masterPlanPath,
-        planSnapshot,
-        memoryContent: memory,
-        projectName: convProject,
-        userNote: note,
-      });
-      if (mpFill.written.length > 0) {
-        console.log(
-          `[go-code] Master Plan filled (${mpFill.source}): ${mpFill.written.join(", ")}`,
-        );
-        try {
-          const refreshed = readMasterPlanFile(masterPlanPath);
-          for (const [k, v] of Object.entries(refreshed)) {
-            if (typeof v === "string") planSnapshot[k] = v;
+      let mpFill: { written: string[]; source: string } = { written: [], source: "skipped" };
+      if (!continuation) {
+        mpFill = await ensureMasterPlanBeforeGo({
+          apiKey,
+          workspaceRoot: ppGo.workspaceRoot,
+          masterPlanPath,
+          planSnapshot,
+          memoryContent: memory,
+          projectName: convProject,
+          userNote: note,
+        });
+        if (mpFill.written.length > 0) {
+          console.log(
+            `[go-code] Master Plan filled (${mpFill.source}): ${mpFill.written.join(", ")}`,
+          );
+          try {
+            const refreshed = readMasterPlanFile(masterPlanPath);
+            for (const [k, v] of Object.entries(refreshed)) {
+              if (typeof v === "string") planSnapshot[k] = v;
+            }
+          } catch {
+            /* ignore */
           }
-        } catch {
-          /* ignore */
         }
       }
 
+      let summary = "";
+      let v0Sync = syncV0PromptFromMasterPlan(ppGo.workspaceRoot, masterPlanPath);
+
+      if (!continuation) {
       const phaseASystem = `You are Grok 4 (planning only). The user pressed **Go** to run a coding pass with Grok Code.
 
 Your ONLY output for this turn: a **short** pre-coding summary for the Master Plan file.
@@ -3148,7 +3158,7 @@ Strict rules:
       const g4Data = await g4Res.json();
       const g4Text = g4Data.choices?.[0]?.message?.content || "";
       const sumMatch = g4Text.match(/<PRE_CODING_SUMMARY>([\s\S]*?)<\/PRE_CODING_SUMMARY>/i);
-      let summary = sumMatch ? sumMatch[1].trim() : "";
+      summary = sumMatch ? sumMatch[1].trim() : "";
       if (!summary) {
         summary = g4Text
           .replace(/<REASONING>[\s\S]*?<\/REASONING>/gi, "")
@@ -3179,14 +3189,43 @@ Strict rules:
         plan[goalKey] = `${existingGoal}\n\n**Latest coding session (Go):**\n${summary}`;
       }
       fs.writeFileSync(masterPlanPath, JSON.stringify(plan, null, 2), "utf8");
-      const v0Sync = syncV0PromptFromMasterPlan(ppGo.workspaceRoot, masterPlanPath);
+      v0Sync = syncV0PromptFromMasterPlan(ppGo.workspaceRoot, masterPlanPath);
       mirrorV0PromptToStudioFile(ppGo, v0Sync.content);
       console.log(`[go-code] Wrote ${PRE_CODING_SUMMARY_KEY} (${summary.length} chars)`);
       console.log(`[go-code] Wrote v0-prompt.md (${v0Sync.content.length} chars) from Master Plan §4+§5`);
+      } else {
+        let plan: Record<string, unknown> = {};
+        if (fs.existsSync(masterPlanPath)) {
+          try {
+            plan = JSON.parse(fs.readFileSync(masterPlanPath, "utf8"));
+          } catch {
+            plan = {};
+          }
+        }
+        summary = String(plan[PRE_CODING_SUMMARY_KEY] ?? "").trim();
+        if (!summary) {
+          summary = "Continue implementation from master-plan.json and project-execution-rules.md.";
+        }
+        v0Sync = syncV0PromptFromMasterPlan(ppGo.workspaceRoot, masterPlanPath);
+        mirrorV0PromptToStudioFile(ppGo, v0Sync.content);
+        console.log(`[go-code] Continuation pass — skipping Grok 4 summary (${summary.length} chars from plan)`);
+      }
 
       const workflowContext = buildProjectWorkflowExecutionContext(req);
       const codeModel = process.env.GROK_CODE_MODEL?.trim() || "grok-code-fast-1";
-      const codeSystemPrompt = `You are Grok Code (coding phase; same ${MAIN_AI_ENV_VAR} as the main brain). The user pressed **Go** in the Nebulla assistant.
+      const codeSystemPrompt = continuation
+        ? `You are Grok Code (CONTINUATION pass). master-plan.json is ready but app files are missing.
+
+Output the COMPLETE application in THIS single response:
+- Every route page under \`app/\` from Master Plan §4
+- \`app/layout.tsx\`, \`app/globals.css\`, root \`app/page.tsx\`
+- Shared \`components/\` and \`lib/\` as needed
+- Minimum 8 file blocks; do NOT return only master-plan.json
+
+File blocks only: \`\`\`file:relative/path\` … \`\`\` — no chat prose.
+
+${workflowContext}`
+        : `You are Grok Code (coding phase; same ${MAIN_AI_ENV_VAR} as the main brain). The user pressed **Go** in the Nebulla assistant.
 
 A short pre-coding summary was just saved to master-plan.json under the key "${PRE_CODING_SUMMARY_KEY}" (it appears again inside the master-plan snapshot below).
 
@@ -3200,6 +3239,7 @@ Master Plan (project-execution-rules § A — MUST be complete before code):
 Implementation (single pass — do NOT stop after 1–2 files):
 - Emit ALL required app files in ONE response: layout, globals, every route page under \`app/\`, shared components, lib/, package.json if missing.
 - Match every route in §4. Prefer 8–20 file blocks in one pass rather than incremental partial output.
+- Include master-plan.json updates IN THE SAME response if needed — never as the only file.
 - Then sync \`nebula-ui-studio/v0-prompt.md\` if §4/§5 changed (800–1200 chars).
 
 Master Plan UI / v0:
@@ -3222,12 +3262,15 @@ ${workflowContext}`;
         content: typeof m.content === "string" ? m.content : "",
       }));
       const withMem = injectMemoryIntoMessages(normalized, memory);
+      const codeUserContent = continuation
+        ? `CONTINUATION — output the full app now (all app/ routes + layout + components). Master plan is ready. Focus: ${note || "(implement every §4 route)"}`
+        : `Run the coding pass now. Output the FULL app in one response — all app/ files, not master-plan.json only. Respect "${PRE_CODING_SUMMARY_KEY}" and Master Plan §4 routes. Session focus: ${note || "(none)"}`;
       const codeMessages = [
         { role: "system", content: codeSystemPrompt },
         ...withMem.slice(-16),
         {
           role: "user",
-          content: `Run the coding pass now. Respect "${PRE_CODING_SUMMARY_KEY}" and the six canonical Master Plan tabs. Session focus from user: ${note || "(none)"}`,
+          content: codeUserContent,
         },
       ];
 
@@ -3257,22 +3300,29 @@ ${workflowContext}`;
       }
 
       try {
-        appendConversationTurn(convScopeGo, "user", `[Go] ${note || "start coding"}`);
+        if (!continuation) {
+          appendConversationTurn(convScopeGo, "user", `[Go] ${note || "start coding"}`);
+        } else {
+          appendConversationTurn(convScopeGo, "user", `[Go continuation] full app implementation`);
+        }
       } catch (logErr) {
         console.error("go-code memory append failed:", logErr);
       }
 
       return res.json({
         preCodingSummary: summary,
-        summarySaved: true,
+        summarySaved: !continuation || Boolean(summary),
         pending: true,
         coding: true,
         codeModel,
+        continuation,
         masterPlanFilled: mpFill.written,
         masterPlanFillSource: mpFill.source,
         v0PromptWritten: v0Sync.written,
         v0PromptLength: v0Sync.content.length,
-        hint: "Master Plan synced from discovery. Grok Code is running — wait for Go complete (1–3 min); do not press Go again.",
+        hint: continuation
+          ? "Grok Code continuation running — wait for Go complete (do not press Go again)."
+          : "Master Plan synced from discovery. Grok Code is running — wait for Go complete (1–3 min); do not press Go again.",
       });
     } catch (error) {
       console.error("Error in /api/grok/go-code:", error);
@@ -3289,11 +3339,10 @@ ${workflowContext}`;
   app.post("/api/grok/go-code/poll", (req, res) => {
     try {
       const pp = projectPathsFor(req);
-      const pending = readGoCodePending(pp.workspaceRoot);
-      const payload = goCodePendingToPollResponse(
-        pending,
-        isGoCodeJobActive(pp.workspaceRoot),
-      );
+      const jobActive = isGoCodeJobActive(pp.workspaceRoot);
+      let pending = readGoCodePending(pp.workspaceRoot);
+      const payload = goCodePendingToPollResponse(pending, jobActive, pp.workspaceRoot);
+      pending = readGoCodePending(pp.workspaceRoot);
       if (pending && !payload.pending && (pending.status === "done" || pending.status === "error")) {
         try {
           const body = req.body || {};
@@ -3335,6 +3384,13 @@ ${workflowContext}`;
       }
       if (payload.error && !payload.pending && pending?.status === "error") {
         return res.status(422).json(payload);
+      }
+      if (pending?.status === "done" && !payload.pending && payload.choices) {
+        try {
+          clearGoCodePending(pp.workspaceRoot);
+        } catch {
+          /* ignore */
+        }
       }
       return res.json(payload);
     } catch (err: unknown) {

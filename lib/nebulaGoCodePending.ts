@@ -37,7 +37,43 @@ export function writeGoCodePending(workspaceRoot: string, state: GoCodePendingSt
 
 export function clearGoCodePending(workspaceRoot: string): void {
   const p = goCodePendingPath(workspaceRoot);
-  if (fs.existsSync(p)) fs.unlinkSync(p);
+  try {
+    if (fs.existsSync(p)) fs.unlinkSync(p);
+  } catch {
+    /* ignore */
+  }
+}
+
+/** After this, any go-code-pending row is dropped (stale poll loops). */
+export const GO_CODE_PENDING_MAX_AGE_MS = 20 * 60 * 1000;
+
+/**
+ * Drop or fail abandoned go-code-pending.json so clients stop polling.
+ * Returns true if the file was removed.
+ */
+export function expireStaleGoCodePending(
+  workspaceRoot: string,
+  opts?: { jobActive?: boolean },
+): boolean {
+  const pending = readGoCodePending(workspaceRoot);
+  if (!pending) return false;
+
+  const age = Date.now() - pending.startedAt;
+  if (age > GO_CODE_PENDING_MAX_AGE_MS) {
+    clearGoCodePending(workspaceRoot);
+    return true;
+  }
+
+  if (pending.status === "running" && !opts?.jobActive && age > 11 * 60 * 1000) {
+    writeGoCodePending(workspaceRoot, {
+      ...pending,
+      status: "error",
+      codeError: "Grok Code session expired on the server. Press Go once to retry.",
+    });
+    return false;
+  }
+
+  return false;
 }
 
 export function goCodeElapsedMs(pending: GoCodePendingState | null | undefined): number {
