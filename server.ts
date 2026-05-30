@@ -54,6 +54,15 @@ import {
   writeBasicUiScaffold,
 } from "./lib/nebulaIdeWorkspaceArtifacts";
 import {
+  addDesignReference,
+  readDesignReferences,
+  summarizeDesignReferencesForPrompt,
+} from "./lib/nebulaDesignReferences";
+import {
+  cancelProjectBackgroundAttempts,
+  resetProjectWorkspaceScratch,
+} from "./lib/nebulaProjectReset";
+import {
   buildV0PromptMarkdown,
   clampV0PromptForApi,
   hasRealV0ApiGeneration,
@@ -600,7 +609,7 @@ No approved UI code yet.
       : "";
     const promptTextRaw = canonicalPrompt.trim()
       ? [canonicalPrompt, skillBlock, extra].filter(Boolean).join("\n\n")
-      : [buildV0PromptMarkdown(masterPlan as Record<string, string>), skillBlock, extra]
+      : [buildV0PromptMarkdown(masterPlan as Record<string, string>, workspaceRoot), skillBlock, extra]
           .filter(Boolean)
           .join("\n\n");
     return { promptText: clampV0PromptForApi(promptTextRaw), projectDisplayName };
@@ -1256,6 +1265,79 @@ No approved UI code yet.
       });
     } catch (err: unknown) {
       res.status(500).json({ error: err instanceof Error ? err.message : "artifact sync failed" });
+    }
+  });
+
+  /** Cancel stale v0 / Go jobs without wiping workspace files. */
+  app.post("/api/ide/cancel-background-jobs", (req, res) => {
+    try {
+      const pp = projectPathsFor(req);
+      const cleared = cancelProjectBackgroundAttempts(pp.workspaceRoot);
+      return res.json({ ok: true, cleared });
+    } catch (err: unknown) {
+      return res.status(500).json({
+        error: err instanceof Error ? err.message : "cancel background jobs failed",
+      });
+    }
+  });
+
+  /** Reset cloud workspace to template + cancel all pending v0/Go attempts. */
+  app.post("/api/ide/reset-project-scratch", (req, res) => {
+    try {
+      const pp = projectPathsFor(req);
+      const body = req.body || {};
+      const projectName =
+        typeof body.projectName === "string" && body.projectName.trim()
+          ? String(body.projectName).trim()
+          : undefined;
+      const cleared = cancelProjectBackgroundAttempts(pp.workspaceRoot);
+      const { removed } = resetProjectWorkspaceScratch({
+        workspaceRoot: pp.workspaceRoot,
+        templateRoot: NEBULA_PROJECT_ROOT,
+        projectDisplayName: projectName,
+      });
+      ensurePreviewIndexHtml(pp.workspaceRoot, projectName || "Untitled Project");
+      return res.json({ ok: true, cleared, removed });
+    } catch (err: unknown) {
+      return res.status(500).json({
+        error: err instanceof Error ? err.message : "reset project failed",
+      });
+    }
+  });
+
+  app.get("/api/ide/design-references", (req, res) => {
+    try {
+      const pp = projectPathsFor(req);
+      const items = readDesignReferences(pp.workspaceRoot);
+      return res.json({ ok: true, items });
+    } catch (err: unknown) {
+      return res.status(500).json({
+        error: err instanceof Error ? err.message : "read design references failed",
+      });
+    }
+  });
+
+  app.post("/api/ide/design-references", (req, res) => {
+    try {
+      const pp = projectPathsFor(req);
+      const body = req.body || {};
+      const filename = typeof body.filename === "string" ? body.filename.trim() : "";
+      if (!filename) {
+        return res.status(400).json({ error: "filename is required" });
+      }
+      const items = addDesignReference(pp.workspaceRoot, {
+        filename,
+        url: typeof body.url === "string" ? body.url : undefined,
+        storageKey: typeof body.storageKey === "string" ? body.storageKey : undefined,
+        note: typeof body.note === "string" ? body.note : undefined,
+      });
+      const plan = hydrateAndPersistMasterPlan(pp.workspaceRoot, pp.masterPlanPath);
+      writeV0PromptMarkdown(pp.workspaceRoot, plan);
+      return res.json({ ok: true, items, summary: summarizeDesignReferencesForPrompt(pp.workspaceRoot) });
+    } catch (err: unknown) {
+      return res.status(500).json({
+        error: err instanceof Error ? err.message : "save design reference failed",
+      });
     }
   });
 
@@ -2854,7 +2936,11 @@ ${modelJson}`;
       "nebula-ui-studio.md",
       "project-execution-rules.md",
     ];
-    return order.map((p) => `\n=== ${p} ===\n${readWorkflowFileSafe(workspaceRoot, p)}`).join("\n");
+    const refs = summarizeDesignReferencesForPrompt(workspaceRoot);
+    const refBlock = refs
+      ? `\n=== nebulla-ide/design-references.json (summary) ===\n${refs}`
+      : "";
+    return order.map((p) => `\n=== ${p} ===\n${readWorkflowFileSafe(workspaceRoot, p)}`).join("\n") + refBlock;
   };
 
   app.post("/api/grok/execute-project-rules", async (req, res) => {
@@ -3056,7 +3142,7 @@ A short pre-coding summary was just saved to master-plan.json under the key "${P
 Follow project-execution-rules.md strictly. Use the workflow context in order.
 
 Master Plan UI / v0 (do this FIRST when §4 or §5 are empty or placeholder):
-- If **"4. Pages and navigation"** or **"5. UI/UX design"** in master-plan.json are empty, emit \`\`\`file:master-plan.json\`\`\` updating ONLY those keys (preserve all other keys). §4: up to 8 routes as \`- **Name** (\`/route\`)\`. §5: 15–25 lines max — palette, typography, nav pattern only (no §4 copy, no code).
+- If **"4. Pages and navigation"** or **"5. UI/UX design"** in master-plan.json are empty, emit \`\`\`file:master-plan.json\`\`\` updating ONLY those keys (preserve all other keys). §4: up to 8 routes as \`- **Name** (\`/route\`)\`. §5: 15–25 lines max — palette, typography, nav pattern only (no §4 copy, no code). Use **nebulla-ide/design-references.json** (if present) for logo, brand colors, and typography in §5.
 - The server already wrote \`nebula-ui-studio/v0-prompt.md\` from §4+§5; after you fill §4+§5 you MAY also emit \`\`\`file:nebula-ui-studio/v0-prompt.md\`\`\` (800–1200 chars, concise v0 brief).
 
 CRITICAL OUTPUT CONTRACT (no deviation):

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Bot, Hand, Mic, Paperclip, Rocket, Send, User } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { fetchSessionUser } from '../../lib/nebulaCloud';
+import { fetchSessionUser, syncActiveCloudProjectFromSession, upsertCloudProject } from '../../lib/nebulaCloud';
 import {
   FREE_TIER_MONTHLY_LIMIT_MESSAGE,
   isMonthlyUsageLimitError,
@@ -9,7 +9,19 @@ import {
   serverReportsMainAiKey,
 } from '../../lib/grokKey';
 import { readResponseJson } from '../../lib/apiFetch';
-import { getBrowserProjectName, withProjectBody, withProjectQuery } from '../../lib/nebulaProjectApi';
+import {
+  getBrowserProjectKey,
+  getBrowserProjectName,
+  setBrowserProjectName,
+  withProjectBody,
+  withProjectQuery,
+} from '../../lib/nebulaProjectApi';
+import { uploadFileToR2 } from '../../lib/nebulaStorageClient';
+import {
+  cancelProjectBackgroundJobs,
+  registerDesignReference,
+  resetProjectFromScratch,
+} from '../../lib/ideProjectReset';
 import { sendIdeAssistantGrokTurn } from '../../lib/ideAssistantGrokChat';
 import {
   conversationEntriesToIdeMessages,
@@ -29,12 +41,12 @@ import {
   runGoCodeAndApply,
 } from '../../lib/nebulaGrokCodingPipeline';
 import { setGrokCodingActive } from '../../lib/nebulaGrokCodingGate';
-import { syncActiveCloudProjectFromSession } from '../../lib/nebulaCloud';
 import { runMasterPlanUiPipelineWithV0, runPostCodingWorkspaceSync } from '../../lib/ideArtifactSync';
 import {
   clearIdeWorkspaceMetaCache,
   detectBuildModeIntent,
   detectOnboardingBuildStart,
+  detectProjectNameAnswer,
   fetchIdeWorkspaceMeta,
 } from '../../lib/ideWorkspaceChatContext';
 import { ideContextSnippetForChat, useIdeWorkspace } from '@/components/ide/IdeWorkspaceContext';
@@ -163,6 +175,8 @@ export function AIChat() {
   const [accessoryHint, setAccessoryHint] = useState<string | null>(null);
   const [grokActivity, setGrokActivity] = useState<GrokActivityStatus>(IDLE_GROK_ACTIVITY);
   const codingActivityRef = useRef(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [uploadBusy, setUploadBusy] = useState(false);
 
   const resetCodingActivity = useCallback(() => {
     codingActivityRef.current = false;
@@ -709,6 +723,12 @@ export function AIChat() {
 
     const prior = messagesRef.current;
     const isBootstrapTrigger = isHiddenBootstrapUserMessage(text);
+    const projectNameAnswer = detectProjectNameAnswer(text, prior);
+    if (projectNameAnswer) {
+      setBrowserProjectName(projectNameAnswer);
+      clearIdeWorkspaceMetaCache();
+      void upsertCloudProject({ name: projectNameAnswer, pages: [], edges: [] }).catch(() => {});
+    }
     const userMsg: Message = {
       id: `u-${Date.now()}`,
       role: 'user',
@@ -856,7 +876,7 @@ export function AIChat() {
         }
         masterPlanPipeline = await runMasterPlanUiPipelineWithV0({
           projectName,
-          autoV0: !willCode,
+          autoV0: false,
           onProgress: showWorkActivity ? pushActivity : undefined,
         });
         if ((masterPlanPipeline.mindMapPageCount ?? 0) > 0 || masterPlanPipeline.v0Ok) {
@@ -956,7 +976,7 @@ export function AIChat() {
           }
           masterPlanPipeline = await runMasterPlanUiPipelineWithV0({
             projectName,
-            autoV0: true,
+            autoV0: false,
             onProgress: pushActivity,
           });
           if (masterPlanPipeline.v0Ok) {
@@ -989,7 +1009,7 @@ export function AIChat() {
         !masterPlanPipeline.v0Ok &&
         !masterPlanPipeline.v0Triggered
       ) {
-        dispatchStartUiUxWorkflow({ tab: 'design', autoV0: true });
+        dispatchStartUiUxWorkflow({ tab: 'design', autoV0: false });
       }
 
       if (spoken.trim()) {
@@ -1164,6 +1184,36 @@ export function AIChat() {
     }, TTS_START_DEBOUNCE_MS);
   };
 
+  const handleDesignFileUpload = useCallback(async (file: File) => {
+    if (uploadBusy || sending) return;
+    setUploadBusy(true);
+    setAccessoryHint(`Uploading ${file.name}…`);
+    try {
+      const uploaded = await uploadFileToR2(file, {
+        projectKey: getBrowserProjectKey(),
+        category: file.type.startsWith('image/') ? 'images' : 'assets',
+      });
+      if (!uploaded.ok) {
+        setAccessoryHint('error' in uploaded ? uploaded.error : 'Upload failed');
+        window.setTimeout(() => setAccessoryHint(null), 5000);
+        return;
+      }
+      await registerDesignReference({
+        filename: file.name,
+        url: uploaded.url,
+        storageKey: uploaded.key,
+        note: 'Brand / design reference from discovery upload',
+      });
+      setAccessoryHint(`Saved design reference: ${file.name}`);
+      window.setTimeout(() => setAccessoryHint(null), 4500);
+    } catch (e) {
+      setAccessoryHint(e instanceof Error ? e.message : 'Upload failed');
+      window.setTimeout(() => setAccessoryHint(null), 5000);
+    } finally {
+      setUploadBusy(false);
+    }
+  }, [uploadBusy, sending]);
+
   const toggleVoiceMic = () => {
     if (sending || micInputBlocked) return;
     const r = voiceRecognitionRef.current;
@@ -1235,9 +1285,11 @@ export function AIChat() {
     setSending(true);
     setSendError(null);
     beginCodingActivity('Go — full coding pass', GO_WORK_STEPS, {
-      subhead: 'Pre-coding summary → Grok Code → file apply → mind map & v0.',
+      subhead: 'Pre-coding summary → Grok Code → file apply (v0 is manual in UI Studio after code).',
       initialLog: userNote ? `Go started — focus: ${userNote.slice(0, 120)}` : 'Go started — full implementation pass',
     });
+
+    void cancelProjectBackgroundJobs();
 
     const session = await fetchSessionUser();
     const userId = session?.uid?.trim() || 'anonymous';
@@ -1315,13 +1367,13 @@ export function AIChat() {
       window.dispatchEvent(new CustomEvent('nebula-master-plan-updated'));
       setGrokActivity((prev) =>
         advanceGrokActivity(prev, 4, {
-          currentAction: 'Grok Code done — v0 UI generation (after code files)…',
+          currentAction: 'Grok Code done — syncing mind map & v0 prompt (Generate v0 in UI Studio when ready)…',
           log: { message: 'POST /api/ide/master-plan-ui-pipeline', kind: 'info' },
         }),
       );
       const pipeline = await runMasterPlanUiPipelineWithV0({
         projectName,
-        autoV0: true,
+        autoV0: false,
         onProgress: pushActivity,
       });
       if (pipeline.v0Ok) {
@@ -1484,14 +1536,23 @@ export function AIChat() {
             </div>
 
             <div className="flex items-center gap-1.5">
-              <ChatRoundButton
-                label="Attach file"
-                onClick={() => {
-                  setAccessoryHint('Attach files in the main Assistant sidebar (stored in Cloudflare R2).');
-                  window.setTimeout(() => setAccessoryHint(null), 4200);
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*,.pdf,.svg,.png,.jpg,.jpeg,.webp,.gif"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  e.target.value = '';
+                  if (file) void handleDesignFileUpload(file);
                 }}
+              />
+              <ChatRoundButton
+                label="Attach design reference (logo, brand guide)"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={uploadBusy || sending}
               >
-                <Paperclip className="h-[18px] w-[18px]" />
+                <Paperclip className={cn('h-[18px] w-[18px]', uploadBusy ? 'opacity-50' : '')} />
               </ChatRoundButton>
               <button
                 type="button"

@@ -30,6 +30,7 @@ import {
   type SecretCategory,
   type ProjectSettingsStored,
 } from '../lib/nebulaDashboardStorage';
+import { resetProjectFromScratch } from '../lib/ideProjectReset';
 import { ChatModelSelector } from '@/components/settings/ModelSelector';
 
 export type DashboardTab = 'projects' | 'project-settings' | 'secrets' | 'dns';
@@ -315,6 +316,8 @@ function ProjectSettingsTab({
 }) {
   const [fields, setFields] = useState<ProjectSettingsStored>(() => loadProjectSettings(activeProjectKey));
   const [savedFlash, setSavedFlash] = useState(false);
+  const [resetBusy, setResetBusy] = useState(false);
+  const [resetMessage, setResetMessage] = useState<string | null>(null);
 
   useEffect(() => {
     setFields(loadProjectSettings(activeProjectKey));
@@ -328,6 +331,26 @@ function ProjectSettingsTab({
     saveProjectSettings(activeProjectKey, fields);
     setSavedFlash(true);
     window.setTimeout(() => setSavedFlash(false), 2000);
+  };
+
+  const handleStartFromScratch = async () => {
+    if (
+      !window.confirm(
+        'Start this project from scratch? This cancels all v0/Go jobs on the server, clears generated code, and resets Master Plan. Chat history in this panel is not deleted.',
+      )
+    ) {
+      return;
+    }
+    setResetBusy(true);
+    setResetMessage(null);
+    const result = await resetProjectFromScratch(projectName);
+    setResetBusy(false);
+    if (result.error) {
+      setResetMessage(result.error);
+      return;
+    }
+    setResetMessage('Project reset — discovery can start fresh. Reloading…');
+    window.setTimeout(() => window.location.reload(), 800);
   };
 
   return (
@@ -404,6 +427,27 @@ function ProjectSettingsTab({
             placeholder="Nebulla project id or Render service id"
             className="w-full bg-black/30 border border-white/10 rounded-lg px-3 py-2 text-sm text-slate-200 font-mono focus:border-cyan-500/40 outline-none"
           />
+        </div>
+
+        <div className="rounded-lg border border-amber-500/25 bg-amber-950/15 p-4 space-y-3">
+          <h4 className="text-sm font-headline text-amber-100">Start from scratch</h4>
+          <p className="text-xs text-slate-400 leading-relaxed">
+            Cancels all open v0 and Grok Code jobs on the server, clears generated app files, and resets Master Plan
+            to empty. Use this when discovery or Go left stale polling / partial output.
+          </p>
+          {resetMessage ? (
+            <p className="text-xs text-amber-200/90" role="status">
+              {resetMessage}
+            </p>
+          ) : null}
+          <button
+            type="button"
+            onClick={() => void handleStartFromScratch()}
+            disabled={resetBusy}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-headline border border-amber-500/40 bg-amber-500/10 text-amber-100 hover:bg-amber-500/20 disabled:opacity-50"
+          >
+            {resetBusy ? 'Resetting…' : 'Reset project & cancel server jobs'}
+          </button>
         </div>
 
         <div className="pt-2 flex justify-end">

@@ -1,6 +1,7 @@
 import fs from "fs";
 import path from "path";
 import { readV0PromptMarkdown, writeV0PromptMarkdown } from "./nebulaUiStudioPipeline";
+import { summarizeDesignReferencesForPrompt } from "./nebulaDesignReferences";
 import {
   isVisualEditorEligible,
   readEditorState,
@@ -345,11 +346,13 @@ export function hydrateMasterPlanDerivedSections(
       const oneLiner =
         goal.split(/\n/).find((l) => l.trim())?.replace(/\*\*/g, "").trim().slice(0, 120) ||
         "App workspace";
+      const refHint = summarizeDesignReferencesForPrompt(workspaceRoot, 200);
       out["5. UI/UX design"] = [
         "- **Theme:** Cosmic Night — bg `#080A14`, accent `#00D4D4`, muted slate text",
         "- **Typography:** Inter or system sans; clear hierarchy; generous spacing",
         "- **Components:** shadcn/ui + Tailwind; responsive sidebar or top nav",
         `- **Mood:** Polished workspace feel for **${oneLiner}**`,
+        ...(refHint ? ["", "**Brand references (uploaded):**", refHint] : []),
       ].join("\n");
       changed = true;
     }

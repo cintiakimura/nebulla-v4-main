@@ -15,6 +15,7 @@ import {
   clearActiveGuestProjectId,
   type ProjectPayload,
 } from '../../lib/nebulaProjectStore';
+import { resetProjectFromScratch } from '../../lib/ideProjectReset';
 
 export function IdeDashboardEmbed({
   initialTab,
@@ -88,13 +89,16 @@ export function IdeDashboardEmbed({
           : kind === 'prompt'
             ? 'Prompt project'
             : 'New project';
-    const payload: ProjectPayload = {
-      pages: [],
-      edges: [],
-      projectName: label,
-    };
-    createGuestProject(payload);
-    window.location.reload();
+    void (async () => {
+      await resetProjectFromScratch(label);
+      const payload: ProjectPayload = {
+        pages: [],
+        edges: [],
+        projectName: label,
+      };
+      createGuestProject(payload);
+      window.location.reload();
+    })();
   }, []);
 
   return (

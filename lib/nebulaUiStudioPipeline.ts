@@ -6,6 +6,7 @@ import {
   versionTimestampFolder,
   type V0BaseManifest,
 } from "./visualUiEditorWorkspace";
+import { summarizeDesignReferencesForPrompt } from "./nebulaDesignReferences";
 
 export const V0_PROMPT_REL = "nebula-ui-studio/v0-prompt.md";
 export const V0_ORIGINAL_CANONICAL_ROOT = "nebula-ui-studio/v0-original";
@@ -76,13 +77,19 @@ function summarizeUiUxForV0(uiUx: string): string {
 }
 
 /** Build a concise v0 brief from Master Plan §4 + §5 (never paste full sections). */
-export function buildV0PromptMarkdown(plan: Record<string, string>): string {
+export function buildV0PromptMarkdown(
+  plan: Record<string, string>,
+  workspaceRoot?: string,
+): string {
   const pagesNav = String(plan["4. Pages and navigation"] ?? "").trim();
   const uiUx = String(plan["5. UI/UX design"] ?? "").trim();
   const goal = String(plan["1. Goal of the app"] ?? "").trim();
   const oneLiner = goal
     ? truncateForV0(goal.split(/\n/).find((l) => l.trim()) ?? goal, 160)
     : "App from Master Plan discovery.";
+
+  const brandRefs =
+    workspaceRoot?.trim() ? summarizeDesignReferencesForPrompt(workspaceRoot, 380) : "";
 
   let text = [
     "# v0 UI pass (concise)",
@@ -94,6 +101,9 @@ export function buildV0PromptMarkdown(plan: Record<string, string>): string {
     "",
     "## Visual system",
     summarizeUiUxForV0(uiUx),
+    ...(brandRefs
+      ? ["", "## Brand / design references (match logo & palette when provided)", brandRefs]
+      : []),
     "",
     "## Output",
     "- React + Tailwind + shadcn/ui under `app/` or `src/`",
@@ -129,7 +139,7 @@ export function writeV0PromptMarkdown(
   workspaceRoot: string,
   plan: Record<string, string>
 ): { written: boolean; content: string } {
-  const content = buildV0PromptMarkdown(plan);
+  const content = buildV0PromptMarkdown(plan, workspaceRoot);
   const abs = path.join(workspaceRoot, V0_PROMPT_REL);
   fs.mkdirSync(path.dirname(abs), { recursive: true });
   fs.writeFileSync(abs, content, "utf8");

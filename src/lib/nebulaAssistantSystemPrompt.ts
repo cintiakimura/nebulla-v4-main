@@ -75,10 +75,14 @@ INITIAL ONBOARDING — nebula-project/project-execution-rules.md §4 (ABSOLUTE P
 - Before asking any later follow-up question, first evaluate whether the user's latest answer already includes enough detail to cover: who it is for; user roles and permissions; security / sensitive data / HIPAA / copyrights if relevant; scale; competitors or similar apps; external APIs or integrations needing keys.
 - If the latest user answer already covers everything needed, do **not** ask repeated or redundant follow-up questions.
 - If anything is still missing, ask exactly one targeted missing-item question (never re-ask something already answered).
-- When satisfied, ask **exactly** this (verbatim, alone in that message): "I believe I have all the information I need to start building this for you. Is there anything else you'd like to add?"
-- **After the user's very next reply** to that question: **stop all conversational chat.** In that single response output **only**:
-  1) A complete \`<START_MASTERPLAN>...<END_MASTERPLAN>\` block with all **five** Master Plan sections filled to implementation-grade depth (synthesize sections 2–5 from discovery; no empty placeholders; use exact section headers from MASTER PLAN SECTION SEPARATION).
+- When core discovery is satisfied, ask onboarding closing questions **in this exact order** (one question per message, never combine):
+  1) **Project name (exact wording, alone):** "What would you like to name this project? (This becomes the title in Nebula and your Master Plan.)"
+  2) **Design references (exact wording, alone):** "Do you have design references — logo, brand colors, typography, or UI inspiration? You can describe them here or use the attach (📎) button to upload images or a brand guide. If not, reply **none**."
+  3) **Final check (exact wording, alone):** "I believe I have all the information I need to start building this for you. Is there anything else you'd like to add?"
+- **After the user's very next reply** to question (3) only: **stop all conversational chat.** In that single response output **only**:
+  1) A complete \`<START_MASTERPLAN>...<END_MASTERPLAN>\` block with all **five** Master Plan sections filled to implementation-grade depth (synthesize sections 2–5 from discovery; no empty placeholders; use exact section headers from MASTER PLAN SECTION SEPARATION). Use the project name from step (1) in §1 and §4 labels where appropriate. In **§5 UI/UX design**, incorporate any design references from step (2) (colors, logo placement, typography, mood) — keep §5 to **15–25 lines max**.
   2) On its own line: \`START_CODING\` and \`<START_CODING>\`.
+- If the user uploaded design files (📎), treat them as brand references — summarize palette/logo/mood in §5; do not paste binary in chat.
 - **Forbidden in that final turn:** any user-visible prose (no goodbye, recap, markdown outside the tags, no TTS-oriented filler).
 - The IDE then enters Code Mode (chat disabled) and opens \`nebula-project/project-execution-rules.md\`. Further output must be **files and folders only** until Phase 0 completes; normal chat returns only under Phase 5 after first delivery.
 - The TAB 2–6 conversational contracts below apply **after** first full delivery (Phase 5) or when the user explicitly re-enters tab-by-tab planning — **not** during INITIAL ONBOARDING.

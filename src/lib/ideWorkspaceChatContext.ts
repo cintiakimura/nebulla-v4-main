@@ -13,19 +13,53 @@ export type IdeWorkspaceMeta = {
 
 let cached: IdeWorkspaceMeta | null = null;
 
-const FINAL_DISCOVERY_QUESTION_RE = /anything else you'd like to add/i;
+const FINAL_DISCOVERY_QUESTION_RE =
+  /I believe I have all the information I need to start building this for you\. Is there anything else you'd like to add\?/i;
+export const PROJECT_NAME_QUESTION_RE =
+  /What would you like to name this project\?/i;
+export const DESIGN_REF_QUESTION_RE =
+  /Do you have design references — logo, brand colors, typography, or UI inspiration\?/i;
+
 /** Short replies to the onboarding final question ("anything else to add?"). */
 const ONBOARDING_READY_REPLY_RE =
   /^(?:no(?:pe|thing(?:\s+else)?)?|nah|nothing(?:\s+else)?|that's\s+all|that\s+is\s+all|all\s+good|go\s+ahead|start(?:\s+building)?|yes(?:\s+please)?|yep|yeah|ok(?:ay)?|looks?\s+good|good\s+to\s+go|proceed|let'?s\s+go|build\s+it|ready|continue|sounds?\s+good)[.!?\s]*$/i;
 
+const NONE_REPLY_RE = /^(?:no(?:ne)?|nah|nothing|n\/a|skip)[.!?\s]*$/i;
+
 export function assistantAskedFinalDiscovery(content: string): boolean {
   return FINAL_DISCOVERY_QUESTION_RE.test(content);
+}
+
+export function assistantAskedProjectName(content: string): boolean {
+  return PROJECT_NAME_QUESTION_RE.test(content);
+}
+
+export function assistantAskedDesignReferences(content: string): boolean {
+  return DESIGN_REF_QUESTION_RE.test(content);
 }
 
 export function isOnboardingCompletionReply(text: string): boolean {
   const t = text.trim();
   if (!t || t.length > 80) return false;
   return ONBOARDING_READY_REPLY_RE.test(t);
+}
+
+export function isDesignReferenceSkipReply(text: string): boolean {
+  return NONE_REPLY_RE.test(text.trim());
+}
+
+/** Extract project name when Grok asked the naming question on the prior turn. */
+export function detectProjectNameAnswer(
+  userText: string,
+  priorMessages: readonly { role: string; content: string }[],
+): string | null {
+  const lastAssistant = [...priorMessages].reverse().find((m) => m.role === 'assistant');
+  if (!lastAssistant?.content?.trim()) return null;
+  if (!assistantAskedProjectName(lastAssistant.content)) return null;
+  const name = userText.trim().replace(/^["']|["']$/g, '');
+  if (name.length < 2 || name.length > 80) return null;
+  if (isOnboardingCompletionReply(name) || isDesignReferenceSkipReply(name)) return null;
+  return name;
 }
 
 /** User answered the final discovery question — next step is Master Plan + coding. */
@@ -129,6 +163,7 @@ export function formatWorkspaceContextBlock(
     `- mode: ${meta.mode}`,
     `- persistence: ${meta.mode === 'cloud' ? 'cloud project (saved while signed in)' : meta.mode === 'guest' ? 'local guest only — sign in with email to persist' : 'unknown'}`,
     `- All file paths in \`\`\`file:…\`\`\` blocks must be relative to workspaceRoot.`,
+    `- Design references (logo, brand): user may upload via 📎 during discovery — stored in nebulla-ide/design-references.json and mirrored into §5 + v0-prompt.`,
   ];
   if (options?.buildMode) {
     lines.push(

@@ -497,6 +497,17 @@ export function IdeVisualEditor({
   useEffect(() => subscribeGrokCodingActive(setGrokCodingActive), []);
 
   useEffect(() => {
+    const onReset = () => {
+      autoV0StartedRef.current = false;
+      resumeV0StartedRef.current = false;
+      v0RunningRef.current = false;
+      void loadEligibility();
+    };
+    window.addEventListener('nebula-project-reset', onReset);
+    return () => window.removeEventListener('nebula-project-reset', onReset);
+  }, [loadEligibility]);
+
+  useEffect(() => {
     const onArtifacts = () => void loadEligibility();
     const onV0Complete = () => void loadEligibility();
     window.addEventListener('nebula-files-applied', onArtifacts);
