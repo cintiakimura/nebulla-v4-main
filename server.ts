@@ -2332,6 +2332,20 @@ No approved UI code yet.
         });
       }
       const chatId = resolvedChatId;
+      if (hasRealV0ApiGeneration(workspaceRoot)) {
+        clearV0Pending(workspaceRoot);
+        const editorSt = readEditorState(workspaceRoot);
+        const demoUrl = editorSt.v0DemoUrl || readV0DemoUrl(workspaceRoot);
+        return res.json({
+          ok: true,
+          pending: false,
+          source: "v0",
+          chatId: chatId || editorSt.v0ChatId || "",
+          written: ["app/layout.tsx"],
+          demoUrl: demoUrl || undefined,
+          hint: "v0 files already in workspace — refresh preview if needed.",
+        });
+      }
       if (!chatId) {
         const keyRes = resolveV0ApiKeyFromRequest(req);
         if (keyRes.ok === false) {
@@ -2469,32 +2483,7 @@ No approved UI code yet.
       });
       const promptText = String((body as { prompt?: string }).prompt ?? "");
 
-      const v0KeyRes = resolveV0ApiKeyFromRequest(req);
-      if (v0KeyRes.ok) {
-        const v0Pass = await runV0UiStudioPass({
-          req,
-          message: `${promptText}\n\nVariation index: ${variationIndex}. Deliver shadcn/Tailwind UI files under src/ or app/.`,
-          projectDisplayName:
-            typeof req.body?.projectDisplayName === "string" ? req.body.projectDisplayName : undefined,
-        });
-        if (v0Pass.ok === true) {
-          const svg = loadBundledDemoMockupSvg();
-          const r2 = await r2FieldsForSvg(projectDiskKey(req), svg, `v0-variation-${variationIndex}.svg`);
-          return res.json({
-            svg,
-            usedPrompt: storedPrompt || "",
-            source: "v0",
-            chatId: v0Pass.chatId,
-            written: v0Pass.written,
-            demoUrl: v0Pass.demoUrl,
-            ...r2,
-          });
-        }
-        console.warn("[nebula-ui-studio/generate] v0 failed, falling back:", v0Pass.error);
-      } else if (Boolean(req.body?.requireV0)) {
-        return res.status(401).json({ error: NEBULA_V0_KEY_SETUP_HINT, hint: NEBULA_V0_KEY_SETUP_HINT });
-      }
-
+      // SVG mockups only — full v0 file generation uses /v0-start + /v0-poll (Render-safe background job).
       const grokKey = await resolveMainGrokApiKey(req);
 
       if (grokKey) {
@@ -2511,29 +2500,22 @@ No approved UI code yet.
           );
           return res.json({ svg, usedPrompt: storedPrompt || "", source: "grok-4", ...r2 });
         } catch (grokErr) {
-          console.warn("[nebula-ui-studio/generate] Grok failed, fallback if Pencil key:", grokErr);
-          if (!pencilKey) {
-            return res.status(502).json({
-              error:
-                grokErr instanceof Error ? grokErr.message : "Grok UI generation failed and no Pencil fallback is configured.",
-            });
-          }
+          console.warn("[nebula-ui-studio/generate] Grok SVG failed, trying fallbacks:", grokErr);
         }
       }
 
       if (pencilKey) {
         const result = await callPencilMockupsGenerate({ apiKey: pencilKey, apiUrl: pencilUrl, body });
-        if (result.ok === false) {
-          console.error("Nebula UI Studio Engine Error:", result.error);
-          return res.status(result.status).json({ error: result.error });
+        if (result.ok === true) {
+          const raw = result.raw as Record<string, unknown>;
+          const r2 = await r2FieldsForSvg(
+            projectDiskKey(req),
+            result.svg,
+            `pencil-variation-${variationIndex}.svg`
+          );
+          return res.json({ ...raw, svg: result.svg, usedPrompt: storedPrompt || "", source: "pencil", ...r2 });
         }
-        const raw = result.raw as Record<string, unknown>;
-        const r2 = await r2FieldsForSvg(
-          projectDiskKey(req),
-          result.svg,
-          `pencil-variation-${variationIndex}.svg`
-        );
-        return res.json({ ...raw, svg: result.svg, usedPrompt: storedPrompt || "", source: "pencil", ...r2 });
+        console.warn("[nebula-ui-studio/generate] Pencil failed, using bundled SVG:", result.error);
       }
 
       if (useBundledDemoMockupWithoutKey()) {
