@@ -1,6 +1,6 @@
 import fs from "fs";
 import path from "path";
-import { readV0PromptMarkdown } from "./nebulaUiStudioPipeline";
+import { readV0PromptMarkdown, writeV0PromptMarkdown } from "./nebulaUiStudioPipeline";
 import {
   isVisualEditorEligible,
   readEditorState,
@@ -340,17 +340,32 @@ export function hydrateMasterPlanDerivedSections(
     if (prompt) {
       out["5. UI/UX design"] = prompt;
       changed = true;
-    } else if (String(out["4. Pages and navigation"] ?? "").trim()) {
+    } else {
+      const goal = String(out["1. Goal of the app"] ?? "").trim();
+      const oneLiner =
+        goal.split(/\n/).find((l) => l.trim())?.replace(/\*\*/g, "").trim().slice(0, 120) ||
+        "App workspace";
       out["5. UI/UX design"] = [
-        "UI/UX direction (auto-filled from Pages & navigation until Grok writes section 5):",
-        "",
-        String(out["4. Pages and navigation"]).slice(0, 12000),
+        "- **Theme:** Cosmic Night — bg `#080A14`, accent `#00D4D4`, muted slate text",
+        "- **Typography:** Inter or system sans; clear hierarchy; generous spacing",
+        "- **Components:** shadcn/ui + Tailwind; responsive sidebar or top nav",
+        `- **Mood:** Polished workspace feel for **${oneLiner}**`,
       ].join("\n");
       changed = true;
     }
   }
 
   return { plan: out, changed };
+}
+
+/** Hydrate Master Plan §4/§5 if needed, then write nebula-ui-studio/v0-prompt.md. */
+export function syncV0PromptFromMasterPlan(
+  workspaceRoot: string,
+  masterPlanPath: string,
+): { plan: Record<string, string>; content: string; written: boolean } {
+  const plan = hydrateAndPersistMasterPlan(workspaceRoot, masterPlanPath);
+  const { content, written } = writeV0PromptMarkdown(workspaceRoot, plan);
+  return { plan, content, written };
 }
 
 export function hydrateAndPersistMasterPlan(

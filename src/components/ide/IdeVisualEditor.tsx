@@ -497,10 +497,12 @@ export function IdeVisualEditor({
     const onV0Complete = () => void loadEligibility();
     window.addEventListener('nebula-files-applied', onArtifacts);
     window.addEventListener('nebula-mind-map-updated', onArtifacts);
+    window.addEventListener('nebula-master-plan-updated', onArtifacts);
     window.addEventListener('nebula-ui-studio-v0-complete', onV0Complete);
     return () => {
       window.removeEventListener('nebula-files-applied', onArtifacts);
       window.removeEventListener('nebula-mind-map-updated', onArtifacts);
+      window.removeEventListener('nebula-master-plan-updated', onArtifacts);
       window.removeEventListener('nebula-ui-studio-v0-complete', onV0Complete);
     };
   }, [loadEligibility]);

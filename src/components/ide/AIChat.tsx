@@ -1242,10 +1242,40 @@ export function AIChat() {
           log: { message: 'Starting /api/grok/go-code (this may take 1–3 min)', kind: 'info' },
         }),
       );
-      const go = await runGoCodeAndApply({ userId, projectName, userNote, onProgress: pushActivity });
+      const history = messagesRef.current
+        .filter((m) => m.role === 'user' || m.role === 'assistant')
+        .slice(-24)
+        .map((m) => ({
+          role: m.role as 'user' | 'assistant',
+          content: m.content,
+        }));
+
+      const go = await runGoCodeAndApply({
+        userId,
+        projectName,
+        userNote,
+        messages: history,
+        onProgress: pushActivity,
+      });
       if (go.ok) {
         window.dispatchEvent(new CustomEvent('nebula-master-plan-updated'));
       }
+      const goTs = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+      setMessages((p) => {
+        const next = [
+          ...p,
+          {
+            id: `go-a-${Date.now()}`,
+            role: 'assistant' as const,
+            content: go.ok
+              ? `**Go complete.** ${go.statusMessage}`
+              : `**Go could not finish.** ${go.statusMessage}`,
+            timestamp: goTs,
+          },
+        ];
+        messagesRef.current = next;
+        return next;
+      });
       setGrokActivity((prev) =>
         advanceGrokActivity(prev, 3, {
           currentAction: go.ok ? 'Syncing Master Plan, mind map, explorer…' : go.statusMessage,

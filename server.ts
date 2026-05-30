@@ -49,6 +49,7 @@ import {
   hydrateAndPersistMasterPlan,
   readMasterPlanFile,
   syncMindMapFromMasterPlan,
+  syncV0PromptFromMasterPlan,
   unlockVisualEditorFromWorkspaceCoding,
   writeBasicUiScaffold,
 } from "./lib/nebulaIdeWorkspaceArtifacts";
@@ -80,6 +81,12 @@ import { clearV0Pending, readV0Pending, writeV0Pending } from "./lib/nebulaV0Pen
 import { isV0StartJobActive, isV0StartStale, scheduleV0CreateChatJob, v0StartElapsedMs } from "./lib/nebulaV0StartJob";
 import { NEBULA_V0_KEY_SETUP_HINT, resolveV0ApiKey, resolveV0ApiKeyFromRequest, V0_ENV_VAR } from "./lib/nebulaV0Resolver";
 import { PRE_CODING_SUMMARY_KEY } from "./lib/masterPlanSections";
+import {
+  goCodePendingToPollResponse,
+  isGoCodeJobActive,
+  scheduleGoCodeJob,
+} from "./lib/nebulaGoCodeJob";
+import { readGoCodePending } from "./lib/nebulaGoCodePending";
 import {
   callGrokGenerateUiSvg,
   heuristicSvgEditRisks,
@@ -529,6 +536,16 @@ No approved UI code yet.
     const re = new RegExp(`<!--\\s*${key}[\\s\\S]*?-->`, "m");
     if (re.test(content)) return content.replace(re, section);
     return `${section}\n\n${content}`;
+  };
+
+  const mirrorV0PromptToStudioFile = (pp: ReturnType<typeof projectPathsFor>, promptContent: string) => {
+    ensureNebulaUiStudioFileAt(pp.nebulaUiStudioPath);
+    const studioExisting = fs.readFileSync(pp.nebulaUiStudioPath, "utf8");
+    fs.writeFileSync(
+      pp.nebulaUiStudioPath,
+      upsertNebulaCommentSection(studioExisting, "NEBULA_UI_STUDIO_PROMPT", promptContent),
+      "utf8",
+    );
   };
 
   const writeV0FilesToWorkspace = (
@@ -3025,8 +3042,10 @@ Strict rules:
         plan[goalKey] = `${existingGoal}\n\n**Latest coding session (Go):**\n${summary}`;
       }
       fs.writeFileSync(masterPlanPath, JSON.stringify(plan, null, 2), "utf8");
-      hydrateAndPersistMasterPlan(ppGo.workspaceRoot, masterPlanPath);
+      const v0Sync = syncV0PromptFromMasterPlan(ppGo.workspaceRoot, masterPlanPath);
+      mirrorV0PromptToStudioFile(ppGo, v0Sync.content);
       console.log(`[go-code] Wrote ${PRE_CODING_SUMMARY_KEY} (${summary.length} chars)`);
+      console.log(`[go-code] Wrote v0-prompt.md (${v0Sync.content.length} chars) from Master Plan §4+§5`);
 
       const workflowContext = buildProjectWorkflowExecutionContext(req);
       const codeModel = process.env.GROK_CODE_MODEL?.trim() || "grok-code-fast-1";
@@ -3035,6 +3054,10 @@ Strict rules:
 A short pre-coding summary was just saved to master-plan.json under the key "${PRE_CODING_SUMMARY_KEY}" (it appears again inside the master-plan snapshot below).
 
 Follow project-execution-rules.md strictly. Use the workflow context in order.
+
+Master Plan UI / v0 (do this FIRST when §4 or §5 are empty or placeholder):
+- If **"4. Pages and navigation"** or **"5. UI/UX design"** in master-plan.json are empty, emit \`\`\`file:master-plan.json\`\`\` updating ONLY those keys (preserve all other keys). §4: up to 8 routes as \`- **Name** (\`/route\`)\`. §5: 15–25 lines max — palette, typography, nav pattern only (no §4 copy, no code).
+- The server already wrote \`nebula-ui-studio/v0-prompt.md\` from §4+§5; after you fill §4+§5 you MAY also emit \`\`\`file:nebula-ui-studio/v0-prompt.md\`\`\` (800–1200 chars, concise v0 brief).
 
 CRITICAL OUTPUT CONTRACT (no deviation):
 - Do NOT paste implementation as casual markdown code fences in chat — use file blocks the server can apply.
@@ -3054,44 +3077,40 @@ ${workflowContext}`;
       const withMem = injectMemoryIntoMessages(normalized, memory);
       const codeMessages = [
         { role: "system", content: codeSystemPrompt },
-        ...withMem.slice(-10),
+        ...withMem.slice(-16),
         {
           role: "user",
           content: `Run the coding pass now. Respect "${PRE_CODING_SUMMARY_KEY}" and the six canonical Master Plan tabs. Session focus from user: ${note || "(none)"}`,
         },
       ];
 
-      const codeRes = await fetch("https://api.x.ai/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${apiKey}`,
-        },
-        body: JSON.stringify({
-          model: codeModel,
-          messages: codeMessages,
-          stream: false,
-        }),
+      const kicked = scheduleGoCodeJob({
+        workspaceRoot: ppGo.workspaceRoot,
+        apiKey,
+        codeModel,
+        codeMessages,
+        preCodingSummary: summary,
+        projectDisplayName: convProject,
       });
 
-      if (!codeRes.ok) {
-        const errText = await codeRes.text();
-        return res.status(200).json({
-          preCodingSummary: summary,
-          summarySaved: true,
-          codeError: errText.slice(0, 800),
-          choices: [],
-        });
+      if (!kicked) {
+        const existing = readGoCodePending(ppGo.workspaceRoot);
+        if (existing?.status === "running" || isGoCodeJobActive(ppGo.workspaceRoot)) {
+          return res.json({
+            preCodingSummary: summary,
+            summarySaved: true,
+            pending: true,
+            coding: true,
+            resumed: true,
+            v0PromptWritten: v0Sync.written,
+            v0PromptLength: v0Sync.content.length,
+            hint: "Grok Code already running — poll /api/grok/go-code/poll",
+          });
+        }
       }
-
-      const codeData = await codeRes.json();
-      const codeText = codeData.choices?.[0]?.message?.content || "";
 
       try {
         appendConversationTurn(convScopeGo, "user", `[Go] ${note || "start coding"}`);
-        if (codeText.trim()) {
-          appendConversationTurn(convScopeGo, "assistant", codeText.trim().slice(0, 8000));
-        }
       } catch (logErr) {
         console.error("go-code memory append failed:", logErr);
       }
@@ -3099,8 +3118,12 @@ ${workflowContext}`;
       return res.json({
         preCodingSummary: summary,
         summarySaved: true,
-        choices: codeData.choices,
+        pending: true,
+        coding: true,
         codeModel,
+        v0PromptWritten: v0Sync.written,
+        v0PromptLength: v0Sync.content.length,
+        hint: "Pre-coding summary saved. v0 prompt written from Master Plan §4+§5. Grok Code is running in the background — poll /api/grok/go-code/poll every few seconds.",
       });
     } catch (error) {
       console.error("Error in /api/grok/go-code:", error);
@@ -3110,6 +3133,54 @@ ${workflowContext}`;
       });
       return res.status(500).json({
         error: error instanceof Error ? error.message : "Failed to run Go (code) pipeline",
+      });
+    }
+  });
+
+  app.post("/api/grok/go-code/poll", (req, res) => {
+    try {
+      const pp = projectPathsFor(req);
+      const pending = readGoCodePending(pp.workspaceRoot);
+      const payload = goCodePendingToPollResponse(
+        pending,
+        isGoCodeJobActive(pp.workspaceRoot),
+      );
+      if (pending && !payload.pending && (pending.status === "done" || pending.status === "error")) {
+        try {
+          const v0Sync = syncV0PromptFromMasterPlan(pp.workspaceRoot, pp.masterPlanPath);
+          mirrorV0PromptToStudioFile(pp, v0Sync.content);
+          Object.assign(payload, {
+            v0PromptWritten: v0Sync.written,
+            v0PromptLength: v0Sync.content.length,
+          });
+        } catch (syncErr) {
+          console.warn("[go-code poll] v0 prompt sync failed:", syncErr);
+        }
+      }
+      if (pending && !payload.pending && pending.status === "done" && pending.codeText) {
+        try {
+          const uid = readNebulaSessionUserId(req) || "anonymous";
+          const body = req.body || {};
+          const convProject =
+            typeof body.projectName === "string" && body.projectName.trim()
+              ? String(body.projectName).trim()
+              : "Untitled Project";
+          appendConversationTurn(
+            { userId: uid, projectKey: pp.projectKey, projectLabel: convProject },
+            "assistant",
+            pending.codeText.trim().slice(0, 8000),
+          );
+        } catch {
+          /* ignore */
+        }
+      }
+      if (payload.error && !payload.pending) {
+        return res.status(pending?.status === "error" ? 422 : 400).json(payload);
+      }
+      return res.json(payload);
+    } catch (err: unknown) {
+      return res.status(500).json({
+        error: err instanceof Error ? err.message : "go-code poll failed",
       });
     }
   });

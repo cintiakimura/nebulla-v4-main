@@ -1,4 +1,4 @@
-import { fetchJson } from './apiFetch';
+import { fetchJson, readResponseJson } from './apiFetch';
 import { extractGrokFilePaths, normalizeGrokFileBlockSyntax } from './grokChatArtifacts';
 import { runPostCodingWorkspaceSync } from './ideArtifactSync';
 import type { GrokActivityProgressFn } from './ideGrokActivityStatus';
@@ -6,6 +6,12 @@ import { startGrokActivityWaitTicker } from './ideGrokActivityStatus';
 import { withProjectBody, withProjectQuery } from './nebulaProjectApi';
 
 const START_CODING_RE = /<\s*START_CODING\s*>|\bSTART_CODING\b/i;
+const GO_POLL_MS = 3500;
+const GO_MAX_POLLS = 120;
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((r) => window.setTimeout(r, ms));
+}
 
 export function hasGrokFileBlocks(text: string): boolean {
   const normalized = normalizeGrokFileBlockSyntax(text);
@@ -128,6 +134,70 @@ export async function applyGeneratedFiles(
   }
 }
 
+type GoCodePayload = {
+  preCodingSummary?: string;
+  summarySaved?: boolean;
+  codeError?: string;
+  choices?: { message?: { content?: string } }[];
+  error?: string;
+  codeModel?: string;
+  pending?: boolean;
+  coding?: boolean;
+  v0PromptWritten?: boolean;
+  v0PromptLength?: number;
+};
+
+async function pollGoCodeUntilDone(
+  projectName: string,
+  onProgress?: GrokActivityProgressFn,
+): Promise<GoCodePayload> {
+  for (let i = 0; i < GO_MAX_POLLS; i++) {
+    await sleep(GO_POLL_MS);
+    try {
+      const response = await fetch(withProjectQuery('/api/grok/go-code/poll'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(withProjectBody({ projectName })),
+      });
+      const poll = await readResponseJson<
+        GoCodePayload & { hint?: string; elapsedMs?: number; error?: string }
+      >(response);
+      if (!response.ok && !poll.pending) {
+        return poll;
+      }
+      if (poll.pending && poll.coding) {
+        if (i === 0 || i % 8 === 0) {
+          const mins = poll.elapsedMs ? Math.round(poll.elapsedMs / 60_000) : undefined;
+          onProgress?.(
+            mins && mins >= 1
+              ? `Grok Code still running (~${mins} min) — polling…`
+              : 'Grok Code running on server — polling…',
+            'info',
+          );
+        }
+        continue;
+      }
+      if (poll.v0PromptWritten) {
+        try {
+          window.dispatchEvent(new CustomEvent('nebula-master-plan-updated'));
+        } catch {
+          /* ignore */
+        }
+      }
+      return poll;
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Go poll failed';
+      if (i >= GO_MAX_POLLS - 1) {
+        return { error: msg };
+      }
+    }
+  }
+  return {
+    error: 'Grok Code is still running after several minutes. Try Go again with a narrower focus.',
+  };
+}
+
 export async function runGoCodeAndApply(options: {
   userId: string;
   projectName: string;
@@ -138,7 +208,10 @@ export async function runGoCodeAndApply(options: {
   const { userId, projectName, userNote, messages, onProgress } = options;
   const payloadMessages =
     messages && messages.length > 0
-      ? messages
+      ? messages.map((m) => ({
+          role: m.role,
+          content: m.content.slice(0, 12000),
+        }))
       : [
           {
             role: 'user' as const,
@@ -155,16 +228,9 @@ export async function runGoCodeAndApply(options: {
       'Grok Code running on server',
       (msg, kind, options) => onProgress?.(msg, kind, options),
     );
-    let data: {
-      preCodingSummary?: string;
-      summarySaved?: boolean;
-      codeError?: string;
-      choices?: { message?: { content?: string } }[];
-      error?: string;
-      codeModel?: string;
-    };
+    let data: GoCodePayload;
     try {
-      data = await fetchJson(withProjectQuery('/api/grok/go-code'), {
+      data = await fetchJson<GoCodePayload>(withProjectQuery('/api/grok/go-code'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
@@ -177,6 +243,10 @@ export async function runGoCodeAndApply(options: {
           }),
         ),
       });
+      if (data.pending && data.coding) {
+        onProgress?.('Pre-coding summary saved — waiting for Grok Code (background job)', 'info');
+        data = await pollGoCodeUntilDone(projectName, onProgress);
+      }
     } finally {
       stopWait();
     }
@@ -194,8 +264,15 @@ export async function runGoCodeAndApply(options: {
           : 'Pre-coding summary saved to Master Plan',
         'success',
       );
+      if (data.v0PromptWritten) {
+        onProgress?.(
+          `v0 prompt ready (${data.v0PromptLength ?? 0} chars in nebula-ui-studio/v0-prompt.md)`,
+          'success',
+        );
+      }
       try {
         window.dispatchEvent(new CustomEvent('nebula-master-plan-updated'));
+        window.dispatchEvent(new CustomEvent('nebula-open-master-plan-tab', { detail: { tabNumber: 6 } }));
       } catch {
         /* ignore */
       }
@@ -208,8 +285,10 @@ export async function runGoCodeAndApply(options: {
     if (data.codeError && !codeText) {
       onProgress?.(`Grok Code error: ${data.codeError.slice(0, 200)}`, 'error');
       return {
-        ok: false,
-        statusMessage: `Grok Code error: ${data.codeError.slice(0, 400)}`,
+        ok: Boolean(data.summarySaved),
+        statusMessage: data.summarySaved
+          ? `Grok Code error (v0 prompt may still be ready): ${data.codeError.slice(0, 400)}`
+          : `Grok Code error: ${data.codeError.slice(0, 400)}`,
       };
     }
 
@@ -218,7 +297,7 @@ export async function runGoCodeAndApply(options: {
       return {
         ok: Boolean(data.summarySaved),
         statusMessage: data.summarySaved
-          ? 'Master Plan summary saved; Grok Code returned no file output yet.'
+          ? 'Master Plan session brief saved. Grok Code returned no file output — try Go again or add Master Plan §4+§5 first.'
           : 'Grok Code returned empty output.',
       };
     }

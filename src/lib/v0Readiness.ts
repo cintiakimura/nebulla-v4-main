@@ -55,7 +55,7 @@ export function computeV0Readiness(input: V0ReadinessInput): V0ReadinessResult {
       ok: promptOk,
       hint: promptOk
         ? `${input.v0PromptLength ?? 0} chars in nebula-ui-studio/v0-prompt.md`
-        : 'Save Master Plan tabs §4 Pages and §5 UI/UX first',
+        : 'Save Master Plan §4+§5 or press Go — server builds v0-prompt from those sections',
     },
   ];
 
