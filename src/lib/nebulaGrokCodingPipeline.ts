@@ -1,6 +1,7 @@
 import { fetchJson, readResponseJson } from './apiFetch';
 import { extractGrokFilePaths, normalizeGrokFileBlockSyntax } from './grokChatArtifacts';
 import { runPostCodingWorkspaceSync } from './ideArtifactSync';
+import { cancelProjectBackgroundJobs } from './ideProjectReset';
 import type { GrokActivityProgressFn } from './ideGrokActivityStatus';
 import { startGrokActivityWaitTicker } from './ideGrokActivityStatus';
 import { withProjectBody, withProjectQuery } from './nebulaProjectApi';
@@ -304,6 +305,9 @@ export async function runGoCodeAndApply(options: {
 
     onProgress?.(`Received Grok Code response (${codeText.length.toLocaleString()} chars)`, 'info');
     const apply = await applyGeneratedFiles(codeText, { userNote, projectName, onProgress });
+    if (apply.ok) {
+      void cancelProjectBackgroundJobs();
+    }
     return {
       ok: apply.ok,
       statusMessage: apply.message,

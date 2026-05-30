@@ -124,9 +124,6 @@ function readAndPruneFile(filePath: string, scope: ConversationLogScope): LogEnt
   return pruned;
 }
 
-/**
- * Load log for scope, prune expired entries, migrate legacy name-based file once if present.
- */
 export function loadPrunedEntries(scope: ConversationLogScope): LogEntry[] {
   const primary = getConversationLogPath(scope);
   if (fs.existsSync(primary)) {

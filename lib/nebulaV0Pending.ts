@@ -1,5 +1,6 @@
 import fs from "fs";
 import path from "path";
+import { hasRealV0ApiGeneration } from "./nebulaUiStudioPipeline";
 
 export type V0PendingState = {
   chatId: string;
@@ -17,6 +18,10 @@ const REL = path.join("nebulla-ide", "v0-pending.json");
 
 /** After this, pending with no files is treated as abandoned (Render restarts, stale poll loops). */
 export const V0_PENDING_MAX_AGE_MS = 20 * 60 * 1000;
+/** Grok-coded app exists — drop stale v0 resume state so UI shows Generate v0. */
+export const V0_PENDING_GROK_APP_CLEAR_MS = 2 * 60 * 1000;
+/** chatId tracked but v0 files never landed. */
+export const V0_PENDING_CHAT_ABANDON_MS = 12 * 60 * 1000;
 
 export function v0PendingAbs(workspaceRoot: string): string {
   return path.join(workspaceRoot, REL);
@@ -82,18 +87,35 @@ export function expireStaleV0Pending(
   if (!pending) return false;
   if (opts?.jobActive) return false;
 
+  if (hasRealV0ApiGeneration(workspaceRoot)) {
+    clearV0Pending(workspaceRoot);
+    return true;
+  }
+
   const age = Date.now() - pending.startedAt;
   const grokAppReady = workspaceHasGrokAppScaffold(workspaceRoot);
   const tooOld = age > V0_PENDING_MAX_AGE_MS;
   const stuckStarting = pending.starting && !pending.chatId.trim();
   const tooManyRecoveries = (pending.recoveryCount ?? 0) >= 3;
+  const chatId = pending.chatId.trim();
 
   if (tooOld || tooManyRecoveries || (grokAppReady && stuckStarting)) {
     clearV0Pending(workspaceRoot);
     return true;
   }
 
-  if (grokAppReady && pending.starting && age > 5 * 60 * 1000) {
+  if (grokAppReady && stuckStarting && age > 5 * 60 * 1000) {
+    clearV0Pending(workspaceRoot);
+    return true;
+  }
+
+  // Grok Code finished first — stale v0 resume blocks manual Generate v0.
+  if (grokAppReady && age > V0_PENDING_GROK_APP_CLEAR_MS) {
+    clearV0Pending(workspaceRoot);
+    return true;
+  }
+
+  if (chatId && age > V0_PENDING_CHAT_ABANDON_MS) {
     clearV0Pending(workspaceRoot);
     return true;
   }

@@ -916,12 +916,16 @@ export function IdeVisualEditor({
     }
   };
 
-  const runV0Generation = async () => {
+  const runV0Generation = async (opts?: { resumeOnly?: boolean }) => {
     if (v0RunningRef.current) return;
     v0RunningRef.current = true;
     setBusy(true);
     setError('');
+    const explicitResume = opts?.resumeOnly === true;
     try {
+      if (!explicitResume) {
+        await cancelProjectBackgroundJobs();
+      }
       try {
         await runMasterPlanUiPipeline({ projectName: projectLabel, autoV0: false });
       } catch {
@@ -976,7 +980,7 @@ export function IdeVisualEditor({
 
       const data = await runV0GenerationWithPolling({
         projectDisplayName: projectLabel,
-        resumeOnly: preflight.resumeOnly,
+        resumeOnly: explicitResume && preflight.resumeOnly,
       });
       if (data.error && !data.written?.length) {
         throw new Error(data.hint || data.error);
@@ -1279,11 +1283,22 @@ export function IdeVisualEditor({
         </div>
       ) : v0Readiness.resumeOnly && !studioStatus?.hasRealV0 ? (
         <div className="flex flex-wrap items-center gap-2 border-b border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-100">
-          <span>v0 is still generating from a previous run. Credits may already have been used.</span>
+          <span>
+            Stale v0 session from an earlier run. Grok Code already built your app — use Generate v0 for a fresh
+            pass, or Resume only if v0-pro is still working.
+          </span>
           <button
             type="button"
             disabled={busy || cancelV0Busy || !v0Readiness.ready}
             onClick={() => void runV0Generation()}
+            className="rounded-md bg-cyan-500/25 px-2 py-0.5 font-medium text-cyan-50 hover:bg-cyan-500/35 disabled:opacity-40"
+          >
+            {busy ? 'Starting…' : 'Generate v0 (fresh)'}
+          </button>
+          <button
+            type="button"
+            disabled={busy || cancelV0Busy || !v0Readiness.ready}
+            onClick={() => void runV0Generation({ resumeOnly: true })}
             className="rounded-md bg-amber-500/20 px-2 py-0.5 font-medium text-amber-50 hover:bg-amber-500/30 disabled:opacity-40"
           >
             {busy ? 'Resuming…' : 'Resume v0 (no new charge)'}
