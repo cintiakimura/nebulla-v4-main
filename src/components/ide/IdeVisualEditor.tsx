@@ -43,6 +43,7 @@ import { getBrowserProjectName, withProjectBody, withProjectQuery } from '../../
 import { getStoredV0ApiKey, getV0RequestHeaders, hasLocalV0ApiKey, NEBULLA_V0_KEY_STORAGE } from '../../lib/v0Key';
 import { formatV0UiError } from '../../lib/v0ErrorMessage';
 import { computeV0Readiness } from '../../lib/v0Readiness';
+import { subscribeGrokCodingActive } from '../../lib/nebulaGrokCodingGate';
 import { runV0GenerationWithPolling } from '../../lib/v0GenerationClient';
 
 const V0_FETCH_TIMEOUT_MS = 360_000;
@@ -413,6 +414,7 @@ export function IdeVisualEditor({
   const [hasV0ApiKey, setHasV0ApiKey] = useState<boolean | null>(null);
   const [v0ServerReady, setV0ServerReady] = useState<boolean | null>(null);
   const [studioStatus, setStudioStatus] = useState<StudioStatus | null>(null);
+  const [grokCodingActive, setGrokCodingActive] = useState(false);
   const v0RunningRef = useRef(false);
   const autoV0StartedRef = useRef(false);
   const resumeV0StartedRef = useRef(false);
@@ -491,6 +493,8 @@ export function IdeVisualEditor({
   useEffect(() => {
     void loadEligibility();
   }, [loadEligibility]);
+
+  useEffect(() => subscribeGrokCodingActive(setGrokCodingActive), []);
 
   useEffect(() => {
     const onArtifacts = () => void loadEligibility();
@@ -1038,7 +1042,7 @@ export function IdeVisualEditor({
   runV0GenerationRef.current = runV0Generation;
 
   useEffect(() => {
-    if (hasV0ApiKey !== true || busy || v0RunningRef.current) return;
+    if (hasV0ApiKey !== true || busy || v0RunningRef.current || grokCodingActive) return;
     if (studioStatus?.hasRealV0) return;
     if (!v0Readiness.ready && !v0Readiness.resumeOnly) return;
 
@@ -1071,6 +1075,7 @@ export function IdeVisualEditor({
     eligible,
     v0Readiness.ready,
     v0Readiness.resumeOnly,
+    grokCodingActive,
   ]);
 
   const runV0Refine = async () => {

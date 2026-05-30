@@ -165,7 +165,7 @@ async function fetchV0StudioStatus(): Promise<{
   });
 }
 
-/** Master Plan save + mind map, then optional v0 (polled). */
+/** Master Plan save + mind map; v0 only when autoV0 and Grok Code is not running. */
 export async function runMasterPlanUiPipelineWithV0(options?: {
   projectName?: string;
   autoV0?: boolean;

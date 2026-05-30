@@ -28,6 +28,7 @@ import {
   isCodingIntent,
   runGoCodeAndApply,
 } from '../../lib/nebulaGrokCodingPipeline';
+import { setGrokCodingActive } from '../../lib/nebulaGrokCodingGate';
 import { syncActiveCloudProjectFromSession } from '../../lib/nebulaCloud';
 import { runMasterPlanUiPipelineWithV0, runPostCodingWorkspaceSync } from '../../lib/ideArtifactSync';
 import {
@@ -165,12 +166,14 @@ export function AIChat() {
 
   const resetCodingActivity = useCallback(() => {
     codingActivityRef.current = false;
+    setGrokCodingActive(false);
     setGrokActivity(IDLE_GROK_ACTIVITY);
   }, []);
 
   const beginCodingActivity = useCallback(
     (headline: string, steps: GrokActivityStep[], options?: Parameters<typeof createGrokActivity>[2]) => {
       codingActivityRef.current = true;
+      setGrokCodingActive(true);
       setGrokActivity(createGrokActivity(headline, steps, options));
     },
     [],
@@ -829,13 +832,17 @@ export function AIChat() {
       }
 
       const { displayText, hadCodingTag } = formatAssistantForIdeChatDisplay(raw);
+      const willCode =
+        hadCodingTag || hasGrokFileBlocks(raw) || isCodingIntent(masterPlanSource);
 
       let masterPlanPipeline: Awaited<ReturnType<typeof runMasterPlanUiPipelineWithV0>> = {};
       if (mpSaved > 0) {
         if (showWorkActivity) {
           setGrokActivity((prev) =>
             advanceGrokActivity(prev, 3, {
-              currentAction: 'UI Studio pipeline — v0 prompt, mind map, optional v0…',
+              currentAction: willCode
+                ? 'UI Studio pipeline — v0 prompt & mind map (v0 runs after Grok Code)…'
+                : 'UI Studio pipeline — v0 prompt, mind map, optional v0…',
               stepDetail: {
                 index: 2,
                 detail: `Saved ${mpSaved} Master Plan section(s). Building v0 prompt & mind map from §4…`,
@@ -849,7 +856,7 @@ export function AIChat() {
         }
         masterPlanPipeline = await runMasterPlanUiPipelineWithV0({
           projectName,
-          autoV0: true,
+          autoV0: !willCode,
           onProgress: showWorkActivity ? pushActivity : undefined,
         });
         if ((masterPlanPipeline.mindMapPageCount ?? 0) > 0 || masterPlanPipeline.v0Ok) {
@@ -858,7 +865,7 @@ export function AIChat() {
             if ((masterPlanPipeline.mindMapPageCount ?? 0) > 0) {
               window.dispatchEvent(new CustomEvent('nebula-mind-map-updated'));
             }
-            if (masterPlanPipeline.v0Ok) {
+            if (masterPlanPipeline.v0Ok && !willCode) {
               window.dispatchEvent(new CustomEvent('nebula-files-applied'));
               dispatchOpenUiStudio({ tab: 'design' });
             }
@@ -868,9 +875,6 @@ export function AIChat() {
         }
       }
 
-      if (/<START_UIUX>/i.test(masterPlanSource) && !masterPlanPipeline.v0Ok && !masterPlanPipeline.v0Triggered) {
-        dispatchStartUiUxWorkflow({ tab: 'design', autoV0: true });
-      }
       const spoken = stripAssistantTagsForVoice(displayText);
       const ts = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
       const toAppend: Message[] = [];
@@ -891,12 +895,9 @@ export function AIChat() {
       }
 
       try {
-        const willCode =
-          hadCodingTag || hasGrokFileBlocks(raw) || isCodingIntent(masterPlanSource);
-
         if (willCode && !codingActivityRef.current) {
           beginCodingActivity('Grok Code — writing files to workspace', GO_WORK_STEPS, {
-            subhead: 'Applying generated files and syncing your project.',
+            subhead: 'Grok Code first, then v0 UI generation so files integrate.',
             initialLog: 'Coding intent detected — starting file apply',
           });
         }
@@ -945,13 +946,19 @@ export function AIChat() {
           if (mpSaved > 0 || (artifactSync.masterPlanTabs ?? 0) > 0) {
             window.dispatchEvent(new CustomEvent('nebula-open-master-plan'));
           }
-          if (!masterPlanPipeline.v0Ok) {
-            masterPlanPipeline = await runMasterPlanUiPipelineWithV0({
-              projectName,
-              autoV0: true,
-              onProgress: pushActivity,
-            });
+          if (showWorkActivity) {
+            setGrokActivity((prev) =>
+              advanceGrokActivity(prev, showWorkActivity ? 6 : 4, {
+                currentAction: 'Grok Code finished — starting v0 UI generation…',
+                log: { message: 'POST /api/ide/master-plan-ui-pipeline (v0 after code)', kind: 'info' },
+              }),
+            );
           }
+          masterPlanPipeline = await runMasterPlanUiPipelineWithV0({
+            projectName,
+            autoV0: true,
+            onProgress: pushActivity,
+          });
           if (masterPlanPipeline.v0Ok) {
             try {
               window.dispatchEvent(new CustomEvent('nebula-ui-studio-v0-complete'));
@@ -974,6 +981,15 @@ export function AIChat() {
           );
           resetCodingActivity();
         }
+      }
+
+      if (
+        /<START_UIUX>/i.test(masterPlanSource) &&
+        !willCode &&
+        !masterPlanPipeline.v0Ok &&
+        !masterPlanPipeline.v0Triggered
+      ) {
+        dispatchStartUiUxWorkflow({ tab: 'design', autoV0: true });
       }
 
       if (spoken.trim()) {
@@ -1299,7 +1315,7 @@ export function AIChat() {
       window.dispatchEvent(new CustomEvent('nebula-master-plan-updated'));
       setGrokActivity((prev) =>
         advanceGrokActivity(prev, 4, {
-          currentAction: 'Mind map & v0 UI pipeline…',
+          currentAction: 'Grok Code done — v0 UI generation (after code files)…',
           log: { message: 'POST /api/ide/master-plan-ui-pipeline', kind: 'info' },
         }),
       );
