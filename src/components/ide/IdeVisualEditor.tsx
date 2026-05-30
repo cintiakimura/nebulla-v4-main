@@ -44,9 +44,10 @@ import { getStoredV0ApiKey, getV0RequestHeaders, hasLocalV0ApiKey, NEBULLA_V0_KE
 import { formatV0UiError } from '../../lib/v0ErrorMessage';
 import { computeV0Readiness } from '../../lib/v0Readiness';
 import { subscribeGrokCodingActive } from '../../lib/nebulaGrokCodingGate';
-import { runV0GenerationWithPolling } from '../../lib/v0GenerationClient';
+import { runV0GenerationWithPolling, requestCancelV0ClientPoll } from '../../lib/v0GenerationClient';
 import { cancelProjectBackgroundJobs } from '../../lib/ideProjectReset';
 import { runMasterPlanUiPipeline } from '../../lib/ideArtifactSync';
+import { UiStudioV0Panel } from './UiStudioV0Panel';
 
 const V0_FETCH_TIMEOUT_MS = 360_000;
 
@@ -496,7 +497,20 @@ export function IdeVisualEditor({
     void loadEligibility();
   }, [loadEligibility]);
 
-  useEffect(() => subscribeGrokCodingActive(setGrokCodingActive), []);
+  useEffect(() => {
+    const onProgress = (ev: Event) => {
+      const line = (ev as CustomEvent<{ line?: string }>).detail?.line?.trim();
+      if (line) setMockNotice(line);
+    };
+    window.addEventListener('nebula-chat-v0-progress', onProgress);
+    return () => window.removeEventListener('nebula-chat-v0-progress', onProgress);
+  }, []);
+
+  useEffect(() => {
+    if (!busy && !studioStatus?.v0Starting) return;
+    const id = window.setInterval(() => void loadStudioStatus(), 8000);
+    return () => window.clearInterval(id);
+  }, [busy, studioStatus?.v0Starting, loadStudioStatus]);
 
   useEffect(() => {
     const onReset = () => {
@@ -917,11 +931,14 @@ export function IdeVisualEditor({
   };
 
   const runV0Generation = async (opts?: { resumeOnly?: boolean }) => {
-    if (v0RunningRef.current) return;
+    const explicitResume = opts?.resumeOnly === true;
+    if (busy && !explicitResume) {
+      setMockNotice('v0 already running — use Cancel to stop, or Resume to poll the same chat.');
+      return;
+    }
     v0RunningRef.current = true;
     setBusy(true);
     setError('');
-    const explicitResume = opts?.resumeOnly === true;
     try {
       try {
         await runMasterPlanUiPipeline({ projectName: projectLabel, autoV0: false });
@@ -940,8 +957,12 @@ export function IdeVisualEditor({
         v0StartError: freshStatus?.v0StartError,
         hasRealV0: freshStatus?.hasRealV0,
       });
-      if (!preflight.ready) {
+      if (!explicitResume && !preflight.ready) {
         setError(preflight.blockReason ?? 'v0 is not ready yet.');
+        return;
+      }
+      if (explicitResume && !preflight.ready && !preflight.resumeOnly && !freshStatus?.v0PendingChatId?.trim()) {
+        setError('No v0 session to resume — click Generate v0 or Clear first.');
         return;
       }
 
@@ -987,6 +1008,10 @@ export function IdeVisualEditor({
         },
       });
       if (data.error && !data.written?.length) {
+        if (/cancelled/i.test(data.error)) {
+          setMockNotice(data.hint || data.error);
+          return;
+        }
         throw new Error(data.hint || data.error);
       }
       if (data.source === 'basic-scaffold') {
@@ -1069,15 +1094,35 @@ export function IdeVisualEditor({
   const cancelStaleV0Session = async () => {
     setCancelV0Busy(true);
     setError('');
+    requestCancelV0ClientPoll();
+    v0RunningRef.current = false;
+    setBusy(false);
     try {
       await cancelProjectBackgroundJobs();
-      resumeV0StartedRef.current = false;
-      v0RunningRef.current = false;
       setMockNotice('');
       await loadStudioStatus();
       await loadEligibility();
+      setMockNotice('v0 session cleared — click Generate v0 for a fresh run.');
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to cancel v0 session');
+      setError(e instanceof Error ? e.message : 'Failed to clear v0 session');
+    } finally {
+      setCancelV0Busy(false);
+    }
+  };
+
+  const cancelActiveV0Run = async () => {
+    setCancelV0Busy(true);
+    setError('');
+    requestCancelV0ClientPoll();
+    v0RunningRef.current = false;
+    setBusy(false);
+    try {
+      await cancelProjectBackgroundJobs();
+      await loadStudioStatus();
+      await loadEligibility();
+      setMockNotice('v0 cancelled — polling stopped. Use Resume if v0-pro is still working on v0.dev.');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to cancel v0');
     } finally {
       setCancelV0Busy(false);
     }
@@ -1278,62 +1323,22 @@ export function IdeVisualEditor({
       ref={shellRef}
       className="flex h-full min-h-0 w-full flex-col overflow-hidden bg-background text-foreground"
     >
-      {mockNotice ? (
-        <div className="border-b border-primary/25 bg-primary/10 px-3 py-2 text-[11px] text-foreground">
-          {mockNotice}{' '}
-          <button type="button" className="underline opacity-80 hover:opacity-100" onClick={() => setMockNotice('')}>
-            Dismiss
-          </button>
-        </div>
-      ) : v0Readiness.resumeOnly && !studioStatus?.hasRealV0 ? (
-        <div className="flex flex-wrap items-center gap-2 border-b border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-100">
-          <span>
-            Stale v0 session from an earlier run. Grok Code already built your app — use Generate v0 for a fresh
-            pass, or Resume only if v0-pro is still working.
-          </span>
-          <button
-            type="button"
-            disabled={busy || cancelV0Busy || !v0Readiness.ready}
-            onClick={() => void runV0Generation()}
-            className="rounded-md bg-cyan-500/25 px-2 py-0.5 font-medium text-cyan-50 hover:bg-cyan-500/35 disabled:opacity-40"
-          >
-            {busy ? 'Starting…' : 'Generate v0 (fresh)'}
-          </button>
-          <button
-            type="button"
-            disabled={busy || cancelV0Busy || !v0Readiness.ready}
-            onClick={() => void runV0Generation({ resumeOnly: true })}
-            className="rounded-md bg-amber-500/20 px-2 py-0.5 font-medium text-amber-50 hover:bg-amber-500/30 disabled:opacity-40"
-          >
-            {busy ? 'Resuming…' : 'Resume v0 (no new charge)'}
-          </button>
-          <button
-            type="button"
-            disabled={busy || cancelV0Busy}
-            onClick={() => void cancelStaleV0Session()}
-            className="rounded-md border border-amber-500/40 px-2 py-0.5 font-medium text-amber-50 hover:bg-amber-500/15 disabled:opacity-40"
-          >
-            {cancelV0Busy ? 'Cancelling…' : 'Cancel stale v0'}
-          </button>
-        </div>
-      ) : !v0Readiness.ready && hasV0ApiKey !== false && !studioStatus?.hasRealV0 ? (
-        <div className="border-b border-rose-500/25 bg-rose-500/10 px-3 py-2 text-[11px] text-rose-50">
-          <p className="font-medium">v0 not ready — fix these before Generate:</p>
-          <ul className="mt-1.5 space-y-1">
-            {v0Readiness.checks.map((c) => (
-              <li key={c.id} className="flex items-start gap-2">
-                <span className={cn('mt-0.5 shrink-0', c.ok ? 'text-emerald-400' : 'text-rose-300')}>
-                  {c.ok ? '✓' : '○'}
-                </span>
-                <span>
-                  <span className={c.ok ? 'text-emerald-100/90' : 'text-rose-100'}>{c.label}</span>
-                  {c.hint ? <span className="block text-[10px] text-rose-200/80">{c.hint}</span> : null}
-                </span>
-              </li>
-            ))}
-          </ul>
-        </div>
-      ) : null}
+      <UiStudioV0Panel
+        busy={busy}
+        cancelBusy={cancelV0Busy}
+        readiness={v0Readiness}
+        studioStatus={studioStatus}
+        progressLine={mockNotice}
+        errorLine={error}
+        chatId={v0ChatId}
+        hasV0ApiKey={hasV0ApiKey}
+        onGenerate={() => void runV0Generation()}
+        onResume={() => void runV0Generation({ resumeOnly: true })}
+        onCancel={() => void cancelActiveV0Run()}
+        onClearSession={() => void cancelStaleV0Session()}
+        onRefreshStatus={() => void loadStudioStatus()}
+        onDismissProgress={() => setMockNotice('')}
+      />
 
       <header className="surface-active shrink-0 border-b border-white/5">
         <div className="flex h-9 items-center justify-between gap-2 px-2 sm:px-3">
@@ -1352,39 +1357,15 @@ export function IdeVisualEditor({
           </div>
 
           <div className="flex shrink-0 items-center gap-1">
-            {!eligible && hasV0ApiKey ? (
+            {hasV0ApiKey && eligible && v0ChatId ? (
               <button
                 type="button"
-                disabled={busy || !v0Readiness.ready}
-                title={v0Readiness.blockReason ?? 'Generate UI with v0'}
-                onClick={() => void runV0Generation()}
-                className="btn-secondary-surface rounded-md px-2 py-1 text-[10px] text-muted-foreground hover:text-foreground disabled:opacity-40"
+                disabled={busy}
+                onClick={() => void runV0Refine()}
+                className="btn-secondary-surface hidden rounded-md px-2 py-1 text-[10px] text-muted-foreground hover:text-foreground disabled:opacity-40 md:inline"
               >
-                {busy ? 'v0…' : v0Readiness.resumeOnly ? 'Resume v0' : 'Generate v0'}
+                Refine
               </button>
-            ) : null}
-            {hasV0ApiKey && eligible ? (
-              <>
-                <button
-                  type="button"
-                  disabled={busy || !v0Readiness.ready}
-                  title={v0Readiness.blockReason ?? 'Regenerate v0 UI'}
-                  onClick={() => void runV0Generation()}
-                  className="btn-secondary-surface hidden rounded-md px-2 py-1 text-[10px] text-muted-foreground hover:text-foreground disabled:opacity-40 sm:inline"
-                >
-                  {busy ? 'v0…' : 'Regenerate v0'}
-                </button>
-                {v0ChatId ? (
-                  <button
-                    type="button"
-                    disabled={busy}
-                    onClick={() => void runV0Refine()}
-                    className="btn-secondary-surface hidden rounded-md px-2 py-1 text-[10px] text-muted-foreground hover:text-foreground disabled:opacity-40 md:inline"
-                  >
-                    Refine
-                  </button>
-                ) : null}
-              </>
             ) : null}
             <button
               type="button"
@@ -1466,10 +1447,6 @@ export function IdeVisualEditor({
           </button>
         </div>
       </header>
-
-      {error ? (
-        <div className="border-b border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-100">{error}</div>
-      ) : null}
 
       <div className="flex min-h-0 flex-1">
         <main

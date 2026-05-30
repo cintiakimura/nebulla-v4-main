@@ -5,6 +5,34 @@
 
 const V0_API_BASE = "https://api.v0.dev/v1";
 
+/** Platform API model ids (@see https://v0.dev/docs/api/platform/chats/create). */
+export const V0_PLATFORM_MODEL_IDS = [
+  "v0-auto",
+  "v0-mini",
+  "v0-pro",
+  "v0-max",
+  "v0-max-fast",
+] as const;
+
+export type V0PlatformModelId = (typeof V0_PLATFORM_MODEL_IDS)[number];
+
+const LEGACY_MODEL_MAP: Record<string, V0PlatformModelId> = {
+  "v0-1.5-md": "v0-pro",
+  "v0-1.5-lg": "v0-max",
+  "v0-1.0-md": "v0-mini",
+};
+
+/** Resolve model for POST /chats — defaults to v0-pro (not deprecated v0-1.5-md). */
+export function resolveV0PlatformModelId(): V0PlatformModelId {
+  const raw = process.env.V0_MODEL_ID?.trim();
+  if (!raw) return "v0-pro";
+  if ((V0_PLATFORM_MODEL_IDS as readonly string[]).includes(raw)) return raw as V0PlatformModelId;
+  const mapped = LEGACY_MODEL_MAP[raw];
+  if (mapped) return mapped;
+  console.warn(`[v0] Invalid V0_MODEL_ID "${raw}" — using v0-pro. Valid: ${V0_PLATFORM_MODEL_IDS.join("|")}`);
+  return "v0-pro";
+}
+
 export type V0FileEntry = { name: string; content: string };
 
 export type V0ChatResult = {
@@ -123,7 +151,7 @@ export async function v0CreateChat(
   message: string,
   signal?: AbortSignal,
 ): Promise<{ ok: true; result: V0ChatResult } | { ok: false; status: number; error: string }> {
-  const modelId = process.env.V0_MODEL_ID?.trim() || "v0-1.5-md";
+  const modelId = resolveV0PlatformModelId();
   const res = await fetch(`${V0_API_BASE}/chats`, {
     method: "POST",
     headers: {

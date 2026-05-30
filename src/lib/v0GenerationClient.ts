@@ -20,6 +20,7 @@ export type V0GenerationResult = {
   resumed?: boolean;
   elapsedMs?: number;
   recovered?: boolean;
+  versionStatus?: string;
 };
 
 const V0_HEADERS = (): Record<string, string> => ({
@@ -35,9 +36,30 @@ const STARTING_LOG_EVERY_N_POLLS = 8;
 
 /** Prevent AIChat + UI Studio from running duplicate poll loops. */
 let v0GenerationInFlight: Promise<V0GenerationResult> | null = null;
+let v0PollAbort: AbortController | null = null;
 
-function sleep(ms: number): Promise<void> {
-  return new Promise((r) => window.setTimeout(r, ms));
+export function isV0GenerationInFlight(): boolean {
+  return v0GenerationInFlight !== null;
+}
+
+/** Stop the in-browser v0 poll loop (UI Studio Cancel). Server job cleared separately. */
+export function requestCancelV0ClientPoll(): void {
+  v0PollAbort?.abort();
+  v0PollAbort = null;
+}
+
+function sleep(ms: number, signal?: AbortSignal): Promise<void> {
+  if (signal?.aborted) {
+    return Promise.reject(new DOMException('v0 cancelled', 'AbortError'));
+  }
+  return new Promise((resolve, reject) => {
+    const t = window.setTimeout(resolve, ms);
+    const onAbort = () => {
+      window.clearTimeout(t);
+      reject(new DOMException('v0 cancelled', 'AbortError'));
+    };
+    signal?.addEventListener('abort', onAbort, { once: true });
+  });
 }
 
 function emitV0DemoReady(demoUrl?: string): void {
@@ -217,9 +239,14 @@ async function runV0GenerationWithPollingInner(options?: {
   );
 
   let autoStartedAfterEmptyPoll = false;
+  v0PollAbort = new AbortController();
+  const pollAbort = v0PollAbort;
 
   try {
     for (let i = 0; i < MAX_POLLS; i++) {
+      if (pollAbort.signal.aborted) {
+        return { ok: false, error: 'v0 cancelled.', hint: 'Click Generate v0 or Resume to try again.' };
+      }
       try {
         const pollResult = await postV0Poll(pollBody());
 
@@ -234,7 +261,7 @@ async function runV0GenerationWithPollingInner(options?: {
             const started = await postV0Start(body, onProgress);
             if (started.done) return started.done;
             pollChatId = started.pollChatId || pollChatId;
-            await sleep(POLL_MS);
+            await sleep(POLL_MS, pollAbort.signal);
             continue;
           }
           return {
@@ -244,8 +271,8 @@ async function runV0GenerationWithPollingInner(options?: {
           };
         }
 
-        const poll = pollResult;
-        if ('idle' in poll && poll.idle) {
+        const poll = pollResult as V0GenerationResult;
+        if (poll.idle) {
           if (i < 24) {
             if (i === 3 || i === 8 || i === 15) {
               onProgress?.('No v0 session yet — re-starting on server…', 'warn');
@@ -253,7 +280,7 @@ async function runV0GenerationWithPollingInner(options?: {
               if (started.done) return started.done;
               pollChatId = started.pollChatId || pollChatId;
             }
-            await sleep(POLL_MS);
+            await sleep(POLL_MS, pollAbort.signal);
             continue;
           }
           return {
@@ -293,6 +320,9 @@ async function runV0GenerationWithPollingInner(options?: {
           return { ok: false, error: formatV0UiError(poll.error, hasLocalV0ApiKey()), hint: poll.hint };
         }
       } catch (e) {
+        if (e instanceof DOMException && e.name === 'AbortError') {
+          return { ok: false, error: 'v0 cancelled.', hint: 'Session cleared or Cancel was clicked.' };
+        }
         const msg = e instanceof Error ? e.message : 'v0 poll failed';
         if (/v0-prompt\.md is empty|save Master Plan/i.test(msg)) {
           return {
@@ -308,7 +338,7 @@ async function runV0GenerationWithPollingInner(options?: {
           };
         }
       }
-      if (i < MAX_POLLS - 1) await sleep(POLL_MS);
+      if (i < MAX_POLLS - 1) await sleep(POLL_MS, pollAbort.signal);
     }
     return {
       ok: false,
@@ -316,6 +346,7 @@ async function runV0GenerationWithPollingInner(options?: {
         'v0 is still running after ~30 minutes. Use Resume v0 in UI Studio (same chat, no new charge) or wait and poll again.',
     };
   } finally {
+    if (v0PollAbort === pollAbort) v0PollAbort = null;
     stopWait();
   }
 }
