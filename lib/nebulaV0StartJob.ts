@@ -1,4 +1,4 @@
-import { v0CreateChat, type V0FileEntry } from "./nebulaV0Client";
+import { v0CreateChat, v0WaitForChatGeneration, type V0FileEntry } from "./nebulaV0Client";
 import {
   V0_START_STALE_MS,
   clearV0Pending,
@@ -27,6 +27,9 @@ export { V0_START_STALE_MS } from "./nebulaV0Pending";
 
 /** Hard cap on v0 POST /chats — v0-pro can be slow; background job is not HTTP-bound. */
 export const V0_CREATE_TIMEOUT_MS = 600_000;
+/** Server-side wait after chatId exists (v0-pro often returns pending first). */
+export const V0_GENERATION_WAIT_MS = 30 * 60 * 1000;
+export const V0_GENERATION_POLL_MS = 2500;
 
 const activeJobs = new Set<string>();
 
@@ -54,10 +57,8 @@ export function scheduleV0CreateChatJob(opts: V0StartJobOptions): boolean {
 
   activeJobs.add(workspaceRoot);
   void (async () => {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), V0_CREATE_TIMEOUT_MS);
     try {
-      const v0Call = await v0CreateChat(opts.apiKey, opts.promptText, controller.signal);
+      const v0Call = await v0CreateChat(opts.apiKey, opts.promptText);
       if (v0Call.ok === false) {
         writeV0Pending(workspaceRoot, {
           chatId: "",
@@ -70,24 +71,44 @@ export function scheduleV0CreateChatJob(opts: V0StartJobOptions): boolean {
         return;
       }
 
+      const chatId = v0Call.result.chatId;
       writeV0Pending(workspaceRoot, {
-        chatId: v0Call.result.chatId,
+        chatId,
         startedAt: Date.now(),
         projectDisplayName: opts.projectDisplayName,
         promptPreview: opts.promptText.slice(0, 500),
         starting: false,
       });
 
-      if (v0Call.result.files.length > 0) {
-        const applied = await opts.applyFiles(
-          v0Call.result.files,
-          v0Call.result.chatId,
-          v0Call.result.demoUrl,
-        );
+      let files = v0Call.result.files;
+      let demoUrl = v0Call.result.demoUrl;
+
+      if (files.length === 0) {
+        const wait = await v0WaitForChatGeneration(opts.apiKey, chatId, {
+          maxAttempts: Math.ceil(V0_GENERATION_WAIT_MS / V0_GENERATION_POLL_MS),
+          intervalMs: V0_GENERATION_POLL_MS,
+        });
+        if (wait.ok === false) {
+          writeV0Pending(workspaceRoot, {
+            chatId,
+            startedAt: Date.now(),
+            projectDisplayName: opts.projectDisplayName,
+            promptPreview: opts.promptText.slice(0, 500),
+            starting: false,
+            startError: wait.error,
+          });
+          return;
+        }
+        files = wait.files;
+        demoUrl = wait.demoUrl ?? demoUrl;
+      }
+
+      if (files.length > 0) {
+        const applied = await opts.applyFiles(files, chatId, demoUrl);
         if (applied.ok === false) {
           const pending = readV0Pending(workspaceRoot);
           writeV0Pending(workspaceRoot, {
-            chatId: v0Call.result.chatId,
+            chatId,
             startedAt: pending?.startedAt ?? Date.now(),
             projectDisplayName: opts.projectDisplayName,
             promptPreview: opts.promptText.slice(0, 500),
@@ -97,21 +118,20 @@ export function scheduleV0CreateChatJob(opts: V0StartJobOptions): boolean {
         }
       }
     } catch (e) {
-      const aborted = (e as { name?: string })?.name === "AbortError";
+      const pending = readV0Pending(workspaceRoot);
+      const chatId = pending?.chatId?.trim() || "";
       writeV0Pending(workspaceRoot, {
-        chatId: "",
-        startedAt: Date.now(),
+        chatId,
+        startedAt: pending?.startedAt ?? Date.now(),
         projectDisplayName: opts.projectDisplayName,
         promptPreview: opts.promptText.slice(0, 500),
         starting: false,
-        startError: aborted
-          ? "v0 API is still processing (waited 10 min). Poll again — credits may already have been used; do not click Generate repeatedly."
-          : e instanceof Error
+        startError:
+          e instanceof Error
             ? e.message
             : "v0 start failed",
       });
     } finally {
-      clearTimeout(timer);
       activeJobs.delete(workspaceRoot);
     }
   })();

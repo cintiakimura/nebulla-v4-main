@@ -242,7 +242,7 @@ export async function v0WaitForChatGeneration(
   return {
     ok: false,
     error:
-      "v0 is still generating after 5 minutes. Credits may have been used — wait a moment and try Generate again.",
+      "v0 is still generating after 30 minutes. Use Resume v0 in UI Studio — do not click Generate again (same chat, no new charge).",
   };
 }
 

@@ -2200,10 +2200,12 @@ No approved UI code yet.
       if (existing?.startError && !existing.chatId) {
         clearV0Pending(workspaceRoot);
       } else if (existing?.startError && existing.chatId) {
-        return res.status(422).json({
-          error: existing.startError,
+        return res.json({
+          ok: true,
           chatId: existing.chatId,
-          hint: "Poll /v0-poll to retry fetching files, or clear and Generate again.",
+          pending: true,
+          resumed: true,
+          hint: "Resuming v0 chat after a slow run — poll /v0-poll (no new charge).",
         });
       }
 
@@ -2263,10 +2265,12 @@ No approved UI code yet.
           : undefined;
       let pending = readV0Pending(workspaceRoot);
       if (pending?.startError && pending.chatId) {
-        return res.status(422).json({
-          error: pending.startError,
+        return res.json({
+          ok: true,
+          pending: true,
           chatId: pending.chatId,
-          hint: "Poll /v0-poll to retry fetching files, or clear and Generate again.",
+          versionStatus: "pending",
+          hint: pending.startError,
         });
       }
       if (pending?.startError && !pending.chatId) {
@@ -3249,6 +3253,7 @@ Implementation (single pass — do NOT stop after 1–2 files):
 Master Plan UI / v0:
 - If **"4. Pages and navigation"** or **"5. UI/UX design"** need updates, include them in master-plan.json first.
 - The server already wrote \`nebula-ui-studio/v0-prompt.md\`; refresh it if routes/design changed.
+- **UI styling:** Follow Master Plan §2 competitor research + §5 only. **Do NOT** copy Nebulla IDE / nebulla.dev product chrome (#080A14, #00D4D4, builder sidebar layout).
 
 CRITICAL OUTPUT CONTRACT (no deviation):
 - Do NOT paste implementation as casual markdown code fences in chat — use file blocks the server can apply.

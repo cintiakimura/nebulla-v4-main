@@ -64,8 +64,9 @@ export function fillMissingMasterPlanSectionsLocal(opts: {
 
   if (missing.includes("2. Text & Search")) {
     next["2. Text & Search"] = [
-      `- **Category:** apps similar to **${name}** (from discovery).`,
-      "- **Stack:** Next.js App Router, TypeScript, Tailwind, shadcn/ui (Nebulla default).",
+      `- **Category:** ${name} — research 5–10 real competitors and their dominant UX patterns before coding.`,
+      "- **Industry UI:** derive palette, density, and nav from competitor research + user discovery (not Nebulla IDE chrome).",
+      "- **Stack:** Next.js App Router, TypeScript, Tailwind, shadcn/ui.",
       "- **Integrations:** auth, dashboards, uploads as described in discovery.",
       ...(note ? [`- **Session focus:** ${note.slice(0, 400)}`] : []),
     ].join("\n");
@@ -95,12 +96,18 @@ export function fillMissingMasterPlanSectionsLocal(opts: {
 
   if (missing.includes("5. UI/UX design")) {
     const oneLiner = goal.split("\n").find((l) => l.trim())?.slice(0, 120) || name;
+    const research = String(
+      next["2. Text & Search"] ?? plan["2. Tech Research"] ?? "",
+    ).trim();
     next["5. UI/UX design"] = [
-      "- **Theme:** Cosmic Night — bg `#080A14`, accent `#00D4D4`, muted slate text",
-      "- **Typography:** Inter or system sans; clear hierarchy; generous spacing",
-      "- **Components:** shadcn/ui + Tailwind; responsive sidebar or top nav",
-      `- **Mood:** Polished workspace for **${oneLiner.replace(/\*\*/g, "")}**`,
-      ...(refHint ? ["", "**Brand references:**", refHint] : []),
+      "- **Theme:** Industry-appropriate palette from §2 competitor research and discovery — **not** Nebulla platform UI (#080A14 / #00D4D4).",
+      "- **Typography:** Clear sans-serif hierarchy; accessible contrast; spacing matched to product type",
+      "- **Components:** shadcn/ui + Tailwind; nav pattern from §4 (sidebar vs top nav per category norms)",
+      `- **Mood:** Purpose-built for **${oneLiner.replace(/\*\*/g, "")}** — mirror leading apps in this space`,
+      ...(research
+        ? ["- **Research anchor:** use patterns documented in §2 Text & Search"]
+        : ["- **Research anchor:** fill §2 with competitor UX before finalizing colors"]),
+      ...(refHint ? ["", "**Brand references (user-provided):**", refHint] : []),
     ].join("\n");
     updated.push("5. UI/UX design");
   }
@@ -385,10 +392,10 @@ export function hydrateMasterPlanDerivedSections(
         "App workspace";
       const refHint = summarizeDesignReferencesForPrompt(workspaceRoot, 200);
       out["5. UI/UX design"] = [
-        "- **Theme:** Cosmic Night — bg `#080A14`, accent `#00D4D4`, muted slate text",
-        "- **Typography:** Inter or system sans; clear hierarchy; generous spacing",
-        "- **Components:** shadcn/ui + Tailwind; responsive sidebar or top nav",
-        `- **Mood:** Polished workspace feel for **${oneLiner}**`,
+        "- **Theme:** Industry-appropriate palette from §2 competitor research — **not** Nebulla platform UI (#080A14 / #00D4D4)",
+        "- **Typography:** Clear sans-serif hierarchy; accessible contrast; spacing matched to product type",
+        "- **Components:** shadcn/ui + Tailwind; nav pattern from §4 (sidebar vs top nav per category norms)",
+        `- **Mood:** Purpose-built for **${oneLiner}** — mirror leading apps in this space`,
         ...(refHint ? ["", "**Brand references (uploaded):**", refHint] : []),
       ].join("\n");
       changed = true;

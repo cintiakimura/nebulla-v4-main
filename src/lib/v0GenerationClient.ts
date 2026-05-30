@@ -28,7 +28,8 @@ const V0_HEADERS = (): Record<string, string> => ({
 });
 
 const POLL_MS = 5000;
-const MAX_POLLS = 120;
+/** ~30 min — v0-pro can exceed 10 min; do not give up early and re-charge. */
+const MAX_POLLS = 360;
 const V0_START_TIMEOUT_MS = 20_000;
 const STARTING_LOG_EVERY_N_POLLS = 8;
 
@@ -304,7 +305,7 @@ async function runV0GenerationWithPollingInner(options?: {
     return {
       ok: false,
       error:
-        'v0 is still running after several minutes. Click Generate UI with v0 once (resume uses the same chat when possible).',
+        'v0 is still running after ~30 minutes. Use Resume v0 in UI Studio (same chat, no new charge) or wait and poll again.',
     };
   } finally {
     stopWait();

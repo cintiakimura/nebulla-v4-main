@@ -83,6 +83,7 @@ export function buildV0PromptMarkdown(
 ): string {
   const pagesNav = String(plan["4. Pages and navigation"] ?? "").trim();
   const uiUx = String(plan["5. UI/UX design"] ?? "").trim();
+  const research = String(plan["2. Text & Search"] ?? plan["2. Tech Research"] ?? "").trim();
   const goal = String(plan["1. Goal of the app"] ?? "").trim();
   const oneLiner = goal
     ? truncateForV0(goal.split(/\n/).find((l) => l.trim()) ?? goal, 160)
@@ -108,7 +109,11 @@ export function buildV0PromptMarkdown(
     "## Output",
     "- React + Tailwind + shadcn/ui under `app/` or `src/`",
     "- Working nav between routes above; production spacing/typography",
+    "- Match §5 palette and industry patterns from discovery — **never** Nebulla IDE chrome (#080A14 / #00D4D4)",
     "- No lorem-only shells",
+    ...(research
+      ? ["", "## Industry context (from §2)", truncateForV0(research.split("\n").slice(0, 4).join("\n"), 220)]
+      : []),
   ].join("\n");
 
   if (text.length > V0_PROMPT_MAX_CHARS) {

@@ -1,25 +1,27 @@
-# Nebula design system (SKILL)
+# Nebula project UI skill (user apps)
 
-Short conventions fed to **Nebula UI Studio** / Pencil mockup generation when a full Pencil CLI `SKILL.md` is not present in the workspace.
+Design guidance for **the user's app** (Master Plan, v0, Grok Code) — not for Nebula IDE chrome.
 
-## Visual language
+## Source of truth (strict order)
 
-- Prefer **Cosmic Night**: deep navy/slate backgrounds, soft borders (`white/5`–`white/10`), cyan or violet accents sparingly for primary actions.
-- **Typography**: clear hierarchy — one strong headline, supportive body, muted helper text. Use system UI stacks or project-chosen fonts from the Master Plan.
-- **Spacing**: consistent 4px grid; comfortable padding in cards and forms; avoid cramped controls.
+1. **Master Plan §2 Text & Search** — competitor/industry UX research from discovery
+2. **Master Plan §5 UI/UX design** — palette, typography, density, nav pattern
+3. **User uploads** — `nebulla-ide/design-references.json` (logo, brand guide)
 
-## Layout
+## Do not copy
 
-- Mobile-first responsive layouts; touch targets at least ~44px where applicable.
-- Use cards, sections, and clear separation between primary workflow vs. secondary metadata.
+- **Nebulla IDE / nebulla.dev product UI** (Cosmic Night `#080A14`, accent `#00D4D4`, builder sidebar)
+- Generic SaaS dark theme unless §2/§5 call for it
+- Placeholder lorem unless the plan requires it
 
-## Components
+## Visual language (when §5 is thin)
 
-- Prefer accessible patterns: visible focus, semantic structure, loading and empty states.
-- Buttons: one primary CTA per view; secondary actions are visually quieter.
+- Derive palette and nav from the product category and §2 competitors
+- Mobile-first responsive layouts; touch targets ~44px where applicable
+- One primary CTA per view; clear hierarchy and empty/loading states
 
-## Export / handoff
+## Stack
 
-- Generated UI should read as production-minded: named layers or logical grouping where relevant, no placeholder lorem unless the plan calls for it.
+- React + Tailwind + shadcn/ui + Lucide (unless Master Plan specifies otherwise)
 
-For the full Pencil CLI skill, install `@pencil.dev/cli` and use the upstream `SKILL.md` from the package or [unpkg](https://unpkg.com/@pencil.dev/cli@latest/SKILL.md).
+For legacy Pencil CLI skill, install `@pencil.dev/cli` and use upstream `SKILL.md` from the package.

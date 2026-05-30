@@ -169,7 +169,8 @@ TAB 4 HIDDEN RULES (Pages and navigation) — BACKEND ONLY:
   "Would like to add, remove, or change anything?"
 - **Mind map:** Routes come from Section 4 only — list every route as \`/path\` in backticks. Section 5 is not required for the mind map.
 - **Nebula UI Studio / v0 (critical):** Section **5. UI/UX design** is the primary source for v0 UI generation (colors, typography, components, layout). When Tab 4 is approved you may also emit <NEBULA_UI_STUDIO_PROMPT>...</NEBULA_UI_STUDIO_PROMPT> for nebula-ui-studio.md — never show raw tag content to the user.
-- **v0-prompt.md conciseness (mandatory):** \`nebula-ui-studio/v0-prompt.md\` **MUST** stay **800–1200 characters** (hard max 1500). Summarize only — never paste full §4 or §5. Format: app one-liner; up to **8** pages as \`Name → /route\`; visual system (palette, fonts, nav pattern); output = React + Tailwind + shadcn. Omit KPIs, APIs, legal, competitor research. First v0 pass covers primary routes only.
+- **UI/UX source of truth:** Master Plan **§2 Text & Search** (competitor/industry research) + **§5 UI/UX design** + user design references. **Never** copy Nebulla IDE / nebulla.dev product chrome (Cosmic Night #080A14, accent #00D4D4, sidebar layout of the Nebulla builder itself).
+- **v0-prompt.md conciseness (mandatory):** \`nebula-ui-studio/v0-prompt.md\` **MUST** stay **800–1200 characters** (hard max 1500). Summarize only — never paste full §4 or §5. Format: app one-liner; up to **8** pages as \`Name → /route\`; visual system (palette, fonts, nav pattern) **from §2+§5**; output = React + Tailwind + shadcn. First v0 pass covers primary routes only.
 
 TAB 4 ACTION CONTRACT (Pages and Navigation) — HIGHEST PRIORITY FOR SECTION 4:
 - This is question four of the Master Plan.
@@ -249,7 +250,7 @@ NEBULA UI STUDIO WRITE CONTRACT (PROMPT/CODE BOUNDARIES) — UNBREAKABLE:
 TAB 6 HIDDEN RULES (Environment Setup) — BACKEND ONLY:
 - This tab is internal-only and hidden from the client.
 - Pre-coding read sequence is mandatory and strict: read **project-workflow.md** first, then **master-plan.json**, then **environment-setup.md**, then **nebula-ui-studio.md**, then **project-execution-rules.md** (per project-workflow.md Foundation Phase / step 6); also review the active project's Secrets and Integrations page before starting implementation. **Infrastructure Manager** (control plane; same implementation as Project Manager API) has already run silently for Render ids; main Grok uses the server **MAIN_API_KEY_GROK** — do not re-announce it in chat.
-- Read the approved UI code from nebula-ui-studio.md (NEBULA_UI_STUDIO_CODE) and nebulla-sysh-ui-sysh-studio/approved/approved-ui.svg when planning implementation and Tab 6.
+- Read the approved UI code from nebula-ui-studio.md (NEBULA_UI_STUDIO_CODE) and nebulla-sysh-ui-sysh-studio/approved/approved-ui.svg **only when the user explicitly approved UI in Nebula UI Studio** — not for default/fallback styling.
 - Build Environment Setup (Tab 6) using that approved UI as the source of truth for layout, screens, and components.
 - The plan must use approved UI details: colors, layout, components, and Tailwind classes.
 - Nebula system architecture (must stay consistent in Tab 6 and any infra wording):
@@ -355,6 +356,12 @@ RULES:
 
 CURRENT MASTER PLAN: ${compactMasterPlanForChat(latestMP)}
 
-APPROVED_UI_UX_CODE_FROM_NEBULA_UI_STUDIO_FILE (also mirrored at nebulla-sysh-ui-sysh-studio/approved/approved-ui.svg after approval):
-${uiStudioApprovedCode || 'No approved UI code yet.'}`;
+${
+  uiStudioApprovedCode &&
+  !/no approved ui code yet|placeholder/i.test(uiStudioApprovedCode) &&
+  uiStudioApprovedCode.length > 80
+    ? `APPROVED_UI_UX_CODE_FROM_NEBULA_UI_STUDIO (user-approved in UI Studio — use for implementation):
+${uiStudioApprovedCode}`
+    : `PROJECT UI DIRECTION: No user-approved studio UI yet. Design from Master Plan §2 (competitor/industry research) and §5 only. Do NOT reuse Nebulla IDE product chrome or nebulla.dev marketing UI as the app theme.`
+}`;
 }
