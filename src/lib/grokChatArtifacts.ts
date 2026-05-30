@@ -12,10 +12,54 @@ export const MASTER_PLAN_TAB_NAMES = [...MASTER_PLAN_SECTION_KEYS] as const;
 
 /** Normalize common model mistakes before `/api/files/apply-generated`. */
 export function normalizeGrokFileBlockSyntax(raw: string): string {
-  return raw
-    .replace(/"""file:/gi, '```file:')
-    .replace(/'''file:/gi, '```file:')
+  let s = raw
+    .replace(/"""\s*file:/gi, '```file:')
+    .replace(/'''\s*file:/gi, '```file:')
     .replace(/```\s*file:/gi, '```file:');
+  // Grok often closes file blocks with """ or ''' instead of ```
+  s = s.replace(/```file:([^\n`]+)\n([\s\S]*?)"""/gi, '```file:$1\n$2```');
+  s = s.replace(/```file:([^\n`]+)\n([\s\S]*?)'''/gi, '```file:$1\n$2```');
+  return s;
+}
+
+const FILE_BLOCK_RE =
+  /```(?:file|filepath)\s*:\s*([^\n`]+)\n[\s\S]*?```|"""\s*file:\s*([^\n"]+)\n[\s\S]*?"""|'''\s*file:\s*([^\n']+)\n[\s\S]*?'''/gi;
+
+function stripAllFileBlocks(text: string, filePaths: string[]): string {
+  return text
+    .replace(FILE_BLOCK_RE, (_m, p1: string, p2: string, p3: string) => {
+      const path = (p1 || p2 || p3 || '').trim().replace(/^["'`]+|["'`]+$/g, '');
+      if (path) filePaths.push(path);
+      return '';
+    })
+    .replace(/```file:[^\n`]*[\s\S]*$/gi, (_m) => {
+      const pathMatch = _m.match(/```file:\s*([^\n`]+)/i);
+      if (pathMatch?.[1]) filePaths.push(pathMatch[1].trim());
+      return '';
+    })
+    .replace(/"""\s*file:[^\n"]*[\s\S]*$/gi, (_m) => {
+      const pathMatch = _m.match(/"""\s*file:\s*([^\n"]+)/i);
+      if (pathMatch?.[1]) filePaths.push(pathMatch[1].trim());
+      return '';
+    });
+}
+
+function buildIdeChatFallbackSummary(filePaths: string[], hadMasterPlan: boolean): string {
+  const uniq = [...new Set(filePaths.map((p) => p.trim()).filter(Boolean))];
+  const hasV0 = uniq.some((p) => /v0-prompt\.md$/i.test(p));
+  const parts: string[] = [];
+  if (hadMasterPlan) parts.push('Master Plan saved to your project tabs.');
+  if (hasV0) {
+    parts.push('v0 prompt saved to the project — UI Studio runs the first UI pass automatically.');
+  }
+  const other = uniq.filter((p) => !/v0-prompt\.md$/i.test(p));
+  if (other.length > 0) {
+    parts.push(`Updated ${other.length} workspace file(s).`);
+  }
+  if (parts.length === 0 && uniq.length > 0) {
+    return `Saved ${uniq.length} file(s) to the workspace.`;
+  }
+  return parts.join(' ');
 }
 
 export function splitMasterPlanSectionsFromBlock(block: string): Partial<Record<number, string>> {
@@ -26,11 +70,7 @@ export function splitMasterPlanSectionsFromBlock(block: string): Partial<Record<
 export function extractGrokFilePaths(raw: string): string[] {
   const normalized = normalizeGrokFileBlockSyntax(raw);
   const paths: string[] = [];
-  normalized.replace(/```(?:file|filepath)\s*:\s*([^\n`]+)\n[\s\S]*?```/gi, (_m, p: string) => {
-    const path = p.trim().replace(/^["'`]+|["'`]+$/g, '');
-    if (path) paths.push(path);
-    return '';
-  });
+  stripAllFileBlocks(normalized, paths);
   normalized.replace(
     /(?:^|\n)\s*(?:File|FILE)\s*:\s*([^\n]+)\n```[^\n]*\n[\s\S]*?```/gi,
     (_m, p: string) => {
@@ -112,11 +152,7 @@ export function formatAssistantForIdeChatDisplay(raw: string): IdeChatDisplayRes
     .replace(/\bANSWER_Q[1-6]\b/gi, '')
     .replace(/Already fill up the question tab\./gi, '');
 
-  text = text.replace(/```(?:file|filepath)\s*:\s*([^\n`]+)\n[\s\S]*?```/gi, (_m, p: string) => {
-    const path = p.trim().replace(/^["'`]+|["'`]+$/g, '');
-    if (path) filePaths.push(path);
-    return '';
-  });
+  text = stripAllFileBlocks(text, filePaths);
 
   text = text.replace(/(?:^|\n)\s*(?:File|FILE)\s*:\s*([^\n]+)\n```[^\n]*\n[\s\S]*?```/gi, (_m, p: string) => {
     const path = p.trim();
@@ -131,21 +167,22 @@ export function formatAssistantForIdeChatDisplay(raw: string): IdeChatDisplayRes
     .replace(/\n{3,}/g, '\n\n')
     .trim();
 
-  if (filePaths.length > 0 && !text) {
-    text = '';
-  } else if (filePaths.length > 0) {
-    // File-apply note stays off chat — workspace explorer updates instead.
-  }
+  const uniqPaths = [...new Set(filePaths.map((p) => p.trim()).filter(Boolean))];
 
-  if (!text) {
-    if (hadMasterPlan) {
-      text = '';
-    } else {
-      text = '';
+  if (!text && (uniqPaths.length > 0 || hadMasterPlan)) {
+    text = buildIdeChatFallbackSummary(uniqPaths, hadMasterPlan);
+  } else if (uniqPaths.some((p) => /v0-prompt\.md$/i.test(p))) {
+    // Drop any leftover v0 brief prose Grok pasted outside file blocks.
+    text = text
+      .replace(/(?:^|\n).*v0-prompt\.md.*(?:\n|$)/gi, '')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim();
+    if (!text) {
+      text = buildIdeChatFallbackSummary(uniqPaths, hadMasterPlan);
     }
   }
 
-  return { displayText: text, filePaths, hadMasterPlan, hadCodingTag };
+  return { displayText: text, filePaths: uniqPaths, hadMasterPlan, hadCodingTag };
 }
 
 /** Extra rules appended for IDE right-panel chat only. */
@@ -154,6 +191,8 @@ IDE CHAT SURFACE (project-execution-rules.md — strict):
 - **Two modes:** CONVERSATION_MODE (default) vs BUILD_MODE (user asks to build, fix, implement, scaffold, or presses Go).
 - **CONVERSATION_MODE:** Short natural prose only. No \`\`\`typescript\`, \`\`\`python\`, JSX, SQL, or multi-line code in chat. No Master Plan section text in chat.
 - **BUILD_MODE:** Master Plan only inside \`<START_MASTERPLAN>…</END_MASTERPLAN>\` (server persists to master-plan.json). Implementation only as \`\`\`file:relative/path\` … \`\`\` and/or \`START_CODING\` — server writes files under workspaceRoot. Never dump code in conversational prose in the same turn.
+- **v0 prompt (critical):** Write \`nebula-ui-studio/v0-prompt.md\` only as a \`\`\`file:…\`\`\` block (800–1200 chars). **Never paste the v0 prompt body in chat** — the UI hides file blocks; users must not see routes, palette, or page specs in the chat bubble. After Master Plan, one short line in chat is enough (e.g. "Master Plan saved — starting UI pipeline.").
+- **Never use** \`"""\`file:\` or triple-quote fences — use standard \`\`\`file:path\` only.
 - If unsure which mode: stay in CONVERSATION_MODE and ask one clarifying question, or tell the user to press **Go** for build mode.
 ${masterPlanSectionSeparationRules()}
 `.trim();

@@ -6,10 +6,14 @@ import { startGrokActivityWaitTicker } from './ideGrokActivityStatus';
 import { withProjectBody, withProjectQuery } from './nebulaProjectApi';
 
 const START_CODING_RE = /<\s*START_CODING\s*>|\bSTART_CODING\b/i;
-const FILE_BLOCK_RE = /```file:/i;
 
 export function hasGrokFileBlocks(text: string): boolean {
-  return FILE_BLOCK_RE.test(text);
+  const normalized = normalizeGrokFileBlockSyntax(text);
+  return (
+    /```(?:file|filepath)\s*:/i.test(normalized) ||
+    /"""\s*file:/i.test(text) ||
+    /'''\s*file:/i.test(text)
+  );
 }
 
 export function isCodingIntent(text: string): boolean {

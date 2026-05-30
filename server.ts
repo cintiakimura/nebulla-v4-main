@@ -2017,7 +2017,7 @@ No approved UI code yet.
     }
   });
 
-  app.post("/api/nebula-ui-studio/v0-start", async (req, res) => {
+  const handleV0Start = async (req: express.Request, res: express.Response) => {
     try {
       const body = req.body || {};
       const { promptText, projectDisplayName } = buildV0PromptTextForRequest(req, body);
@@ -2083,9 +2083,14 @@ No approved UI code yet.
       console.error("[nebula-ui-studio/v0-start]", e);
       return res.status(500).json({ error: e instanceof Error ? e.message : "v0 start failed" });
     }
-  });
+  };
 
-  app.post("/api/nebula-ui-studio/v0-poll", async (req, res) => {
+  app.post("/api/nebula-ui-studio/v0-start", handleV0Start);
+  /** Legacy bundles called this before v0-start/v0-poll (Render-safe background start). */
+  app.post("/api/nebulla-v0-generate", handleV0Start);
+  app.post("/api/nebula-v0-generate", handleV0Start);
+
+  const handleV0Poll = async (req: express.Request, res: express.Response) => {
     try {
       const body = req.body || {};
       const { workspaceRoot } = projectPathsFor(req);
@@ -2192,73 +2197,13 @@ No approved UI code yet.
       console.error("[nebula-ui-studio/v0-poll]", e);
       return res.status(500).json({ error: e instanceof Error ? e.message : "v0 poll failed" });
     }
-  });
+  };
 
-  app.post("/api/nebula-ui-studio/v0-generate", async (req, res) => {
-    try {
-      const body = req.body || {};
-      const { promptText, projectDisplayName } = buildV0PromptTextForRequest(req, body);
-      if (!promptText.trim()) {
-        return res.status(400).json({
-          error: "v0-prompt.md is empty — save Master Plan §4+§5 first.",
-        });
-      }
-      const pass = await runV0UiStudioPass({
-        req,
-        message: promptText,
-        projectDisplayName,
-      });
-      if (pass.ok === false) {
-        if (pass.pending && pass.chatId) {
-          return res.json({
-            ok: true,
-            pending: true,
-            chatId: pass.chatId,
-            written: [],
-            hint: pass.hint ?? pass.error,
-          });
-        }
-        const errLower = String(pass.error ?? "").toLowerCase();
-        const creditsLike =
-          errLower.includes("credit") ||
-          errLower.includes("quota") ||
-          errLower.includes("billing") ||
-          pass.status === 402 ||
-          pass.status === 429;
-        if (creditsLike) {
-          const { workspaceRoot } = projectPathsFor(req);
-          const displayName =
-            typeof body.projectDisplayName === "string" ? body.projectDisplayName : "Untitled Project";
-          const written = writeBasicUiScaffold(workspaceRoot, displayName);
-          ensurePreviewIndexHtml(workspaceRoot, displayName);
-          return res.json({
-            ok: true,
-            source: "basic-scaffold",
-            written,
-            error: pass.error,
-            hint:
-              "V0 credits unavailable — basic HTML preview written. Add credits or retry v0 when ready.",
-          });
-        }
-        return res.status(pass.status).json({
-          error: pass.hint ?? pass.error,
-          hint: pass.hint,
-        });
-      }
-      return res.json({
-        ok: true,
-        source: "v0",
-        pending: false,
-        chatId: pass.chatId,
-        written: pass.written,
-        skipped: pass.skipped,
-        demoUrl: pass.demoUrl,
-      });
-    } catch (e) {
-      console.error("[nebula-ui-studio/v0-generate]", e);
-      return res.status(500).json({ error: e instanceof Error ? e.message : "v0 generation failed" });
-    }
-  });
+  app.post("/api/nebula-ui-studio/v0-poll", handleV0Poll);
+  app.post("/api/nebulla-v0-poll", handleV0Poll);
+  app.post("/api/nebula-v0-poll", handleV0Poll);
+
+  app.post("/api/nebula-ui-studio/v0-generate", handleV0Start);
 
   app.post("/api/nebula-ui-studio/v0-update", async (req, res) => {
     const body = req.body || {};
@@ -3371,8 +3316,8 @@ ${answer.slice(0, 8000)}`;
         ].join("\n")
       : "";
     const modeBlock = buildMode
-      ? "BUILD_MODE: ON — user wants implementation. Master Plan only inside <START_MASTERPLAN>…</END_MASTERPLAN>. Code only as ```file:path``` blocks or START_CODING; never paste implementation as ```typescript``` in chat."
-      : "CONVERSATION_MODE: ON — short natural prose only; no markdown code fences or full file bodies unless the user explicitly asks for a one-line snippet.";
+      ? "BUILD_MODE: ON — user wants implementation. Master Plan only inside <START_MASTERPLAN>…</END_MASTERPLAN>. Code only as ```file:path``` blocks or START_CODING; never paste implementation as ```typescript``` in chat. v0-prompt.md only as ```file:nebula-ui-studio/v0-prompt.md``` (concise); NEVER paste the v0 prompt text in visible chat prose."
+      : "CONVERSATION_MODE: ON — short natural prose only; no markdown code fences, v0 prompts, Master Plan bodies, or full file bodies in chat.";
     const includeServerFileIndex =
       serverFileIndexBlock && !workspaceContextFromClient.includes("WORKSPACE_FILE_INDEX");
     const workspaceSystem = [workspaceBlock, rulesBlock, modeBlock, includeServerFileIndex ? serverFileIndexBlock : ""]

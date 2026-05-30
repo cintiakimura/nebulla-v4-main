@@ -24,6 +24,7 @@ import {
 import { dispatchOpenUiStudio, dispatchStartUiUxWorkflow } from '../../lib/nebulaUiStudioEvents';
 import {
   handlePostGrokCodingTurn,
+  hasGrokFileBlocks,
   isCodingIntent,
   runGoCodeAndApply,
 } from '../../lib/nebulaGrokCodingPipeline';
@@ -891,7 +892,7 @@ export function AIChat() {
 
       try {
         const willCode =
-          hadCodingTag || /```(?:file|filepath)\s*:/i.test(raw) || isCodingIntent(masterPlanSource);
+          hadCodingTag || hasGrokFileBlocks(raw) || isCodingIntent(masterPlanSource);
 
         if (willCode && !codingActivityRef.current) {
           beginCodingActivity('Grok Code — writing files to workspace', GO_WORK_STEPS, {
