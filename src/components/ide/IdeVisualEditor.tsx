@@ -22,6 +22,8 @@ import {
   ArrowDown,
   ArrowUp,
   Check,
+  ChevronLeft,
+  ChevronRight,
   Copy,
   History,
   Loader2,
@@ -40,6 +42,7 @@ import { cn } from '@/lib/utils';
 import { getBrowserProjectName, withProjectBody, withProjectQuery } from '../../lib/nebulaProjectApi';
 import { getStoredV0ApiKey, getV0RequestHeaders, hasLocalV0ApiKey, NEBULLA_V0_KEY_STORAGE } from '../../lib/v0Key';
 import { formatV0UiError } from '../../lib/v0ErrorMessage';
+import { computeV0Readiness } from '../../lib/v0Readiness';
 import { runV0GenerationWithPolling } from '../../lib/v0GenerationClient';
 
 const V0_FETCH_TIMEOUT_MS = 360_000;
@@ -64,8 +67,11 @@ type StudioStatus = {
   v0PendingChatId?: string;
   v0Starting?: boolean;
   v0StartError?: string;
+  v0DemoUrl?: string;
   eligibilityReason?: string;
 };
+
+type StudioPreviewSurface = 'v0-live' | 'visual-model';
 
 export type VisualStyle = {
   backgroundColor: string;
@@ -358,6 +364,20 @@ function cloneModel(m: EditorModel): EditorModel {
   return JSON.parse(JSON.stringify(m)) as EditorModel;
 }
 
+function colorInputValue(raw: string): string {
+  if (/^#[0-9a-fA-F]{6}$/.test(raw)) return raw;
+  if (/^#[0-9a-fA-F]{3}$/.test(raw)) return raw;
+  return '#0f172a';
+}
+
+const STUDIO_TOOLS = [
+  { id: 'select' as const, Icon: MousePointer2, label: 'Select' },
+  { id: 'move' as const, Icon: Move, label: 'Move' },
+  { id: 'resize' as const, Icon: Scaling, label: 'Resize' },
+  { id: 'text' as const, Icon: Type, label: 'Text' },
+  { id: 'color' as const, Icon: Pipette, label: 'Color' },
+] as const;
+
 export function IdeVisualEditor({
   onLock: _onLock,
   projectDisplayName,
@@ -384,6 +404,11 @@ export function IdeVisualEditor({
   const previewRef = useRef<HTMLDivElement>(null);
   const baselineRef = useRef<EditorModel | null>(null);
   const [studioTool, setStudioTool] = useState<StudioTool>('select');
+  const [propsPanelOpen, setPropsPanelOpen] = useState(true);
+  const [toolPopover, setToolPopover] = useState<StudioTool | null>(null);
+  const [previewSurface, setPreviewSurface] = useState<StudioPreviewSurface>('visual-model');
+  const [v0DemoUrl, setV0DemoUrl] = useState<string | null>(null);
+  const toolbarRef = useRef<HTMLDivElement>(null);
   const [mockNotice, setMockNotice] = useState('');
   const [hasV0ApiKey, setHasV0ApiKey] = useState<boolean | null>(null);
   const [v0ServerReady, setV0ServerReady] = useState<boolean | null>(null);
@@ -413,7 +438,7 @@ export function IdeVisualEditor({
     setUndoStack((s) => [...s.slice(-49), cloneModel(model)]);
   }, [model]);
 
-  const loadStudioStatus = useCallback(async () => {
+  const loadStudioStatus = useCallback(async (): Promise<StudioStatus | null> => {
     try {
       const r = await fetch(withProjectQuery('/api/nebula-ui-studio/status'), {
         credentials: 'include',
@@ -426,11 +451,29 @@ export function IdeVisualEditor({
           setHasV0ApiKey(true);
           setV0ServerReady(true);
         }
+        return d;
       }
     } catch {
       /* ignore */
     }
+    return null;
   }, []);
+
+  const v0Readiness = useMemo(
+    () =>
+      computeV0Readiness({
+        hasV0ApiKey,
+        hasLocalV0ApiKey: hasLocalV0ApiKey(),
+        v0ServerReady,
+        v0PromptExists: studioStatus?.v0PromptExists,
+        v0PromptLength: studioStatus?.v0PromptLength,
+        v0Starting: studioStatus?.v0Starting,
+        v0PendingChatId: studioStatus?.v0PendingChatId,
+        v0StartError: studioStatus?.v0StartError,
+        hasRealV0: studioStatus?.hasRealV0,
+      }),
+    [hasV0ApiKey, v0ServerReady, studioStatus],
+  );
 
   const loadEligibility = useCallback(async () => {
     try {
@@ -466,6 +509,36 @@ export function IdeVisualEditor({
     const onRunV0 = () => void runV0GenerationRef.current();
     window.addEventListener('nebula-ui-studio-run-v0', onRunV0);
     return () => window.removeEventListener('nebula-ui-studio-run-v0', onRunV0);
+  }, []);
+
+  useEffect(() => {
+    if (!toolPopover) return;
+    const onDoc = (e: MouseEvent) => {
+      if (toolbarRef.current?.contains(e.target as Node)) return;
+      setToolPopover(null);
+    };
+    document.addEventListener('mousedown', onDoc);
+    return () => document.removeEventListener('mousedown', onDoc);
+  }, [toolPopover]);
+
+  useEffect(() => {
+    const demo = studioStatus?.v0DemoUrl?.trim();
+    if (demo) setV0DemoUrl(demo);
+    if (demo && studioStatus?.hasRealV0) {
+      setPreviewSurface('v0-live');
+    }
+  }, [studioStatus?.v0DemoUrl, studioStatus?.hasRealV0]);
+
+  useEffect(() => {
+    const onDemo = (ev: Event) => {
+      const url = (ev as CustomEvent<{ demoUrl?: string }>).detail?.demoUrl?.trim();
+      if (url) {
+        setV0DemoUrl(url);
+        setPreviewSurface('v0-live');
+      }
+    };
+    window.addEventListener('nebula-v0-demo-ready', onDemo);
+    return () => window.removeEventListener('nebula-v0-demo-ready', onDemo);
   }, []);
 
   const refreshV0KeyState = useCallback(async () => {
@@ -831,6 +904,23 @@ export function IdeVisualEditor({
     setBusy(true);
     setError('');
     try {
+      const freshStatus = (await loadStudioStatus()) ?? studioStatus;
+      const preflight = computeV0Readiness({
+        hasV0ApiKey,
+        hasLocalV0ApiKey: hasLocalV0ApiKey(),
+        v0ServerReady,
+        v0PromptExists: freshStatus?.v0PromptExists,
+        v0PromptLength: freshStatus?.v0PromptLength,
+        v0Starting: freshStatus?.v0Starting,
+        v0PendingChatId: freshStatus?.v0PendingChatId,
+        v0StartError: freshStatus?.v0StartError,
+        hasRealV0: freshStatus?.hasRealV0,
+      });
+      if (!preflight.ready) {
+        setError(preflight.blockReason ?? 'v0 is not ready yet.');
+        return;
+      }
+
       const localKey = hasLocalV0ApiKey();
       if (localKey && v0ServerReady === false) {
         setError(formatV0UiError('not set on the server and no client key was sent', true));
@@ -863,9 +953,7 @@ export function IdeVisualEditor({
 
       const data = await runV0GenerationWithPolling({
         projectDisplayName: projectLabel,
-        resumeOnly: Boolean(
-          (studioStatus?.v0Pending || studioStatus?.v0Starting) && !studioStatus?.hasRealV0,
-        ),
+        resumeOnly: preflight.resumeOnly,
       });
       if (data.error && !data.written?.length) {
         throw new Error(data.hint || data.error);
@@ -885,6 +973,13 @@ export function IdeVisualEditor({
           /* ignore */
         }
       }
+      if (typeof data.demoUrl === 'string' && data.demoUrl.trim()) {
+        setV0DemoUrl(data.demoUrl.trim());
+        setPreviewSurface('v0-live');
+        window.dispatchEvent(
+          new CustomEvent('nebula-v0-demo-ready', { detail: { demoUrl: data.demoUrl.trim() } }),
+        );
+      }
       try {
         window.dispatchEvent(new CustomEvent('nebula-files-applied'));
       } catch {
@@ -893,12 +988,12 @@ export function IdeVisualEditor({
       const n = data.written?.length ?? 0;
       setMockNotice(
         n > 0
-          ? `v0 wrote ${n} file(s) to the workspace. Open Preview or continue in the visual editor.`
+          ? `v0 wrote ${n} file(s). Live v0 preview is shown below when available.`
           : 'v0 generation finished.',
       );
       await loadEligibility();
       window.dispatchEvent(new CustomEvent('nebula-ui-studio-v0-complete'));
-      window.dispatchEvent(new CustomEvent('nebula-open-ui-studio', { detail: { tab: 'design' } }));
+      window.dispatchEvent(new CustomEvent('nebula-open-app-preview'));
     } catch (e: unknown) {
       const msg =
         e instanceof Error && e.name === 'AbortError'
@@ -930,9 +1025,11 @@ export function IdeVisualEditor({
         }
       }
       setError(formatV0UiError(msg, hasLocalV0ApiKey()));
+      resumeV0StartedRef.current = false;
     } finally {
       v0RunningRef.current = false;
       setBusy(false);
+      await loadStudioStatus();
     }
   };
 
@@ -941,10 +1038,12 @@ export function IdeVisualEditor({
   useEffect(() => {
     if (hasV0ApiKey !== true || busy || v0RunningRef.current) return;
     if (studioStatus?.hasRealV0) return;
+    if (!v0Readiness.ready && !v0Readiness.resumeOnly) return;
 
-    const shouldResume = Boolean(studioStatus?.v0Pending || studioStatus?.v0Starting);
+    const shouldResume = v0Readiness.resumeOnly;
     const shouldAutoStart =
       !shouldResume &&
+      v0Readiness.ready &&
       eligible !== false &&
       Boolean(studioStatus?.v0PromptExists) &&
       !autoV0StartedRef.current;
@@ -961,13 +1060,15 @@ export function IdeVisualEditor({
 
     void runV0GenerationRef.current();
   }, [
-    studioStatus?.v0Pending,
+    studioStatus?.v0PendingChatId,
     studioStatus?.v0Starting,
     studioStatus?.hasRealV0,
     studioStatus?.v0PromptExists,
     hasV0ApiKey,
     busy,
     eligible,
+    v0Readiness.ready,
+    v0Readiness.resumeOnly,
   ]);
 
   const runV0Refine = async () => {
@@ -1172,17 +1273,34 @@ export function IdeVisualEditor({
             Dismiss
           </button>
         </div>
-      ) : (studioStatus?.v0Pending || studioStatus?.v0Starting) && !studioStatus.hasRealV0 ? (
+      ) : v0Readiness.resumeOnly && !studioStatus?.hasRealV0 ? (
         <div className="flex flex-wrap items-center gap-2 border-b border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-100">
           <span>v0 is still generating from a previous run. Credits may already have been used.</span>
           <button
             type="button"
-            disabled={busy}
+            disabled={busy || !v0Readiness.ready}
             onClick={() => void runV0Generation()}
             className="rounded-md bg-amber-500/20 px-2 py-0.5 font-medium text-amber-50 hover:bg-amber-500/30 disabled:opacity-40"
           >
             {busy ? 'Resuming…' : 'Resume v0 (no new charge)'}
           </button>
+        </div>
+      ) : !v0Readiness.ready && hasV0ApiKey !== false && !studioStatus?.hasRealV0 ? (
+        <div className="border-b border-rose-500/25 bg-rose-500/10 px-3 py-2 text-[11px] text-rose-50">
+          <p className="font-medium">v0 not ready — fix these before Generate:</p>
+          <ul className="mt-1.5 space-y-1">
+            {v0Readiness.checks.map((c) => (
+              <li key={c.id} className="flex items-start gap-2">
+                <span className={cn('mt-0.5 shrink-0', c.ok ? 'text-emerald-400' : 'text-rose-300')}>
+                  {c.ok ? '✓' : '○'}
+                </span>
+                <span>
+                  <span className={c.ok ? 'text-emerald-100/90' : 'text-rose-100'}>{c.label}</span>
+                  {c.hint ? <span className="block text-[10px] text-rose-200/80">{c.hint}</span> : null}
+                </span>
+              </li>
+            ))}
+          </ul>
         </div>
       ) : null}
 
@@ -1206,18 +1324,20 @@ export function IdeVisualEditor({
             {!eligible && hasV0ApiKey ? (
               <button
                 type="button"
-                disabled={busy}
+                disabled={busy || !v0Readiness.ready}
+                title={v0Readiness.blockReason ?? 'Generate UI with v0'}
                 onClick={() => void runV0Generation()}
                 className="btn-secondary-surface rounded-md px-2 py-1 text-[10px] text-muted-foreground hover:text-foreground disabled:opacity-40"
               >
-                {busy ? 'v0…' : 'Generate v0'}
+                {busy ? 'v0…' : v0Readiness.resumeOnly ? 'Resume v0' : 'Generate v0'}
               </button>
             ) : null}
             {hasV0ApiKey && eligible ? (
               <>
                 <button
                   type="button"
-                  disabled={busy}
+                  disabled={busy || !v0Readiness.ready}
+                  title={v0Readiness.blockReason ?? 'Regenerate v0 UI'}
                   onClick={() => void runV0Generation()}
                   className="btn-secondary-surface hidden rounded-md px-2 py-1 text-[10px] text-muted-foreground hover:text-foreground disabled:opacity-40 sm:inline"
                 >
@@ -1333,11 +1453,39 @@ export function IdeVisualEditor({
         >
           <div className="mx-auto flex max-w-4xl flex-col gap-2">
             <div className="flex items-center justify-between gap-2 px-1">
-              <div className="flex min-w-0 items-center gap-2">
+              <div className="flex min-w-0 flex-wrap items-center gap-2">
                 <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
                   Preview
                 </span>
-                {pageIds.length > 1 ? (
+                {v0DemoUrl ? (
+                  <div className="flex rounded-md border border-white/10 p-0.5">
+                    <button
+                      type="button"
+                      onClick={() => setPreviewSurface('v0-live')}
+                      className={cn(
+                        'rounded px-2 py-0.5 text-[10px] transition-colors',
+                        previewSurface === 'v0-live'
+                          ? 'bg-primary/20 text-primary'
+                          : 'text-muted-foreground hover:text-foreground',
+                      )}
+                    >
+                      v0 live
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPreviewSurface('visual-model')}
+                      className={cn(
+                        'rounded px-2 py-0.5 text-[10px] transition-colors',
+                        previewSurface === 'visual-model'
+                          ? 'bg-secondary text-foreground'
+                          : 'text-muted-foreground hover:text-foreground',
+                      )}
+                    >
+                      Visual model
+                    </button>
+                  </div>
+                ) : null}
+                {pageIds.length > 1 && previewSurface === 'visual-model' ? (
                   <select
                     value={activePage}
                     onChange={(e) => {
@@ -1356,10 +1504,19 @@ export function IdeVisualEditor({
                   <span className="text-[10px] text-muted-foreground">{activePage}</span>
                 )}
               </div>
-              {selected ? (
+              {previewSurface === 'visual-model' && selected ? (
                 <span className="truncate text-[10px] text-primary">
                   {selected.role} · {selected.type}
                 </span>
+              ) : previewSurface === 'v0-live' && v0DemoUrl ? (
+                <a
+                  href={v0DemoUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="truncate text-[10px] text-primary hover:underline"
+                >
+                  Open on v0.dev ↗
+                </a>
               ) : (
                 <span className="text-[10px] text-muted-foreground/70">Click an element to edit</span>
               )}
@@ -1370,10 +1527,23 @@ export function IdeVisualEditor({
                   <span className="h-2 w-2 rounded-full bg-red-500/80" />
                   <span className="h-2 w-2 rounded-full bg-amber-500/80" />
                   <span className="h-2 w-2 rounded-full bg-emerald-500/80" />
-                  <span className="ml-2 truncate text-[10px] text-muted-foreground">{activePage} — visual model</span>
+                  <span className="ml-2 truncate text-[10px] text-muted-foreground">
+                    {previewSurface === 'v0-live' && v0DemoUrl
+                      ? `${activePage} — v0 live preview`
+                      : `${activePage} — visual model`}
+                  </span>
                 </div>
               </div>
-              <div className="p-4 sm:p-6">{page ? renderNode(page.rootId) : null}</div>
+              {previewSurface === 'v0-live' && v0DemoUrl ? (
+                <iframe
+                  title="v0 live preview"
+                  src={v0DemoUrl}
+                  className="min-h-[420px] w-full flex-1 border-0 bg-white"
+                  sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals"
+                />
+              ) : (
+                <div className="p-4 sm:p-6">{page ? renderNode(page.rootId) : null}</div>
+              )}
             </div>
           </div>
           {selectedId && menuPos ? (

@@ -92,7 +92,9 @@ import { getProjectKeyFromRequest } from "./lib/nebulaProjectKey";
 import {
   isVisualEditorEligible,
   markV0FirstGenerationComplete,
+  persistV0SessionMeta,
   readEditorState,
+  readV0DemoUrl,
   writeEditorState,
   writeTimestampVersionDir,
   restoreImmutableV0IntoWorkspace,
@@ -651,6 +653,7 @@ No approved UI code yet.
     const withCode = upsertNebulaCommentSection(withPrompt, "NEBULA_UI_STUDIO_CODE", primaryCode);
     fs.writeFileSync(nebulaUiStudioPath, withCode, "utf8");
     clearV0Pending(workspaceRoot);
+    persistV0SessionMeta(workspaceRoot, { demoUrl: opts.demoUrl, chatId: opts.chatId });
 
     return {
       ok: true,
@@ -1307,6 +1310,7 @@ No approved UI code yet.
       const gate = isVisualEditorEligible(pp.workspaceRoot);
       const keyRes = resolveV0ApiKeyFromRequest(req);
       const pending = readV0Pending(pp.workspaceRoot);
+      const editorSt = readEditorState(pp.workspaceRoot);
       return res.json({
         ok: true,
         v0PromptPath: "nebula-ui-studio/v0-prompt.md",
@@ -1314,6 +1318,8 @@ No approved UI code yet.
         v0PromptLength: prompt.length,
         v0PromptPreview: prompt.slice(0, 500),
         hasRealV0: hasRealV0ApiGeneration(pp.workspaceRoot),
+        v0DemoUrl: editorSt.v0DemoUrl || readV0DemoUrl(pp.workspaceRoot),
+        v0ChatId: editorSt.v0ChatId || pending?.chatId,
         v0Pending: Boolean(pending?.chatId || pending?.starting),
         v0PendingChatId: pending?.chatId || undefined,
         v0Starting: Boolean(pending?.starting || isV0StartJobActive(pp.workspaceRoot)),
@@ -1340,6 +1346,23 @@ No approved UI code yet.
       res.json({ ok: true, written, source: "basic-scaffold" });
     } catch (err: unknown) {
       res.status(500).json({ error: err instanceof Error ? err.message : "basic scaffold failed" });
+    }
+  });
+
+  /** Preview metadata: prefer v0.dev live URL when available, else workspace HTML bootstrap. */
+  app.get("/api/app-preview/meta", (req, res) => {
+    try {
+      const pp = projectPathsFor(req);
+      const demoUrl = readV0DemoUrl(pp.workspaceRoot);
+      const hasReal = hasRealV0ApiGeneration(pp.workspaceRoot);
+      res.json({
+        ok: true,
+        v0DemoUrl: demoUrl,
+        preferV0: Boolean(demoUrl && hasReal),
+        hasRealV0: hasReal,
+      });
+    } catch (err: unknown) {
+      res.status(500).json({ error: err instanceof Error ? err.message : "preview meta failed" });
     }
   });
 
@@ -2098,17 +2121,17 @@ No approved UI code yet.
         typeof body.projectDisplayName === "string" && body.projectDisplayName.trim()
           ? String(body.projectDisplayName).trim()
           : undefined;
-      const pending = readV0Pending(workspaceRoot);
-      if (pending?.startError && !pending.chatId) {
-        clearV0Pending(workspaceRoot);
-        return res.status(422).json({ error: pending.startError });
-      }
+      let pending = readV0Pending(workspaceRoot);
       if (pending?.startError && pending.chatId) {
         return res.status(422).json({
           error: pending.startError,
           chatId: pending.chatId,
-          hint: "v0 returned files but apply failed — try Generate again or fix workspace paths.",
+          hint: "Poll /v0-poll to retry fetching files, or clear and Generate again.",
         });
+      }
+      if (pending?.startError && !pending.chatId) {
+        clearV0Pending(workspaceRoot);
+        pending = null;
       }
       if ((pending?.starting && !pending.chatId) || isV0StartJobActive(workspaceRoot)) {
         const elapsedMs = v0StartElapsedMs(pending);
@@ -2152,8 +2175,45 @@ No approved UI code yet.
       const chatId =
         typeof body.chatId === "string" && body.chatId.trim()
           ? body.chatId.trim()
-          : pending?.chatId;
+          : pending?.chatId?.trim() || "";
       if (!chatId) {
+        const keyRes = resolveV0ApiKeyFromRequest(req);
+        const promptText =
+          readV0PromptMarkdown(workspaceRoot).trim() ||
+          pending?.promptPreview?.trim() ||
+          "";
+        const canKick =
+          keyRes.ok === true &&
+          Boolean(promptText) &&
+          !isV0StartJobActive(workspaceRoot) &&
+          (!pending || isV0StartStale(pending));
+        if (canKick) {
+          kickV0BackgroundStart(
+            req,
+            workspaceRoot,
+            keyRes.apiKey,
+            promptText,
+            projectDisplayName || pending?.projectDisplayName,
+          );
+          return res.json({
+            ok: true,
+            pending: true,
+            starting: true,
+            recovered: true,
+            hint: "No v0 chat was tracked — started one in the background. Keep polling (one Generate only).",
+          });
+        }
+        if (keyRes.ok === false) {
+          return res.status(keyRes.code === "INVALID_LENGTH" ? 400 : 401).json({
+            error: keyRes.message,
+            hint: keyRes.hint,
+          });
+        }
+        if (!promptText.trim()) {
+          return res.status(400).json({
+            error: "v0-prompt.md is empty — save Master Plan §4+§5 first.",
+          });
+        }
         return res.status(400).json({
           error: "No v0 chat in progress. Call /v0-start first.",
           hint: "Open UI Studio and click Generate UI with v0 once.",

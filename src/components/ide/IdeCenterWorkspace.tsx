@@ -135,31 +135,6 @@ export function IdeCenterWorkspace() {
         </div>
       ) : null}
 
-      {activePane === 'ui-studio' ? (
-        <div className="surface-active tonal-seam-b flex shrink-0 items-center justify-between gap-2 border-b border-white/5 px-3 py-1.5">
-          <div className="flex min-w-0 items-center gap-1">
-            {(['design', 'mockups', 'preview'] as const).map((sub) => (
-              <button
-                key={sub}
-                type="button"
-                onClick={() => setUiStudioTab(sub)}
-                className={cn(
-                  'rounded-md px-2.5 py-1 text-[11px] font-medium transition-colors',
-                  uiStudioTab === sub
-                    ? 'active-tab-sheen bg-secondary/80 text-primary'
-                    : 'text-muted-foreground hover:bg-secondary/40 hover:text-foreground',
-                )}
-              >
-                {sub === 'design' ? 'Visual editor' : sub === 'mockups' ? 'Mockups' : 'Live preview'}
-              </button>
-            ))}
-          </div>
-          <span className="hidden truncate text-[10px] text-muted-foreground sm:inline">
-            v0 generates React UI · Mockups for SVG · Save writes to workspace
-          </span>
-        </div>
-      ) : null}
-
       <div className="relative min-h-0 flex-1 overflow-hidden">
         {openTabs.length === 0 && !activePath ? (
           <div className="flex h-full flex-col items-center justify-center gap-2 p-8 text-center">
@@ -193,20 +168,12 @@ export function IdeCenterWorkspace() {
               <MindMapIdeRoute />
             </PaneLayer>
             <PaneLayer visible={activePane === 'ui-studio'}>
-              {uiStudioTab === 'design' ? (
+              {uiStudioTab === 'mockups' ? (
+                <UiStudioMockupPanel />
+              ) : (
                 <IdeVisualEditor
                   onLock={() => activeTabId && closeTab(activeTabId)}
                   projectDisplayName={projectName}
-                />
-              ) : uiStudioTab === 'mockups' ? (
-                <UiStudioMockupPanel />
-              ) : (
-                <AppPreviewPanel
-                  pages={previewPages}
-                  onOpenSourceControl={() => openPanel('source-control')}
-                  defaultPanelOpen
-                  embeddedInDock
-                  hideChrome
                 />
               )}
             </PaneLayer>

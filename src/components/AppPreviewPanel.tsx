@@ -78,6 +78,32 @@ export function AppPreviewPanel({
     window.addEventListener('nebula-open-app-preview', onOpen);
     return () => window.removeEventListener('nebula-open-app-preview', onOpen);
   }, []);
+
+  useEffect(() => {
+    void loadPreviewMeta();
+    const onRefresh = () => {
+      void loadPreviewMeta();
+      setPreviewRev((n) => n + 1);
+    };
+    const onDemo = (ev: Event) => {
+      const url = (ev as CustomEvent<{ demoUrl?: string }>).detail?.demoUrl?.trim();
+      if (url) {
+        setV0DemoUrl(url);
+        setPreferV0Preview(true);
+        setPreviewRev((n) => n + 1);
+      } else {
+        onRefresh();
+      }
+    };
+    window.addEventListener('nebula-files-applied', onRefresh);
+    window.addEventListener('nebula-v0-demo-ready', onDemo);
+    window.addEventListener('nebula-ui-studio-v0-complete', onRefresh);
+    return () => {
+      window.removeEventListener('nebula-files-applied', onRefresh);
+      window.removeEventListener('nebula-v0-demo-ready', onDemo);
+      window.removeEventListener('nebula-ui-studio-v0-complete', onRefresh);
+    };
+  }, [loadPreviewMeta]);
   const [viewport, setViewport] = useState<ViewportMode>('desktop');
   const [fullscreen, setFullscreen] = useState(false);
   const [actAsUser, setActAsUser] = useState(false);
@@ -88,9 +114,26 @@ export function AppPreviewPanel({
   >([]);
   const [filesError, setFilesError] = useState<string | null>(null);
   const [previewRev, setPreviewRev] = useState(0);
+  const [v0DemoUrl, setV0DemoUrl] = useState<string | null>(null);
+  const [preferV0Preview, setPreferV0Preview] = useState(false);
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
-  const previewUrl = useMemo(() => buildPreviewUrl(previewRev), [previewRev]);
+  const workspacePreviewUrl = useMemo(() => buildPreviewUrl(previewRev), [previewRev]);
+  const previewUrl = preferV0Preview && v0DemoUrl ? v0DemoUrl : workspacePreviewUrl;
+
+  const loadPreviewMeta = useCallback(async () => {
+    try {
+      const res = await fetch(withProjectQuery('/api/app-preview/meta'), { credentials: 'include' });
+      const data = await readResponseJson<{ v0DemoUrl?: string; preferV0?: boolean }>(res);
+      if (res.ok) {
+        const url = typeof data.v0DemoUrl === 'string' ? data.v0DemoUrl.trim() : '';
+        setV0DemoUrl(url || null);
+        setPreferV0Preview(Boolean(data.preferV0 && url));
+      }
+    } catch {
+      /* ignore */
+    }
+  }, []);
 
   const pageOptions = useMemo(() => {
     const sorted = [...pages].sort((a, b) => (a.position?.x ?? 0) - (b.position?.x ?? 0));
@@ -241,6 +284,7 @@ export function AppPreviewPanel({
             title="Reload preview"
             aria-label="Reload preview"
             onClick={() => {
+              void loadPreviewMeta();
               void loadWorkspaceSourceFiles();
               setPreviewRev((n) => n + 1);
             }}
@@ -255,11 +299,54 @@ export function AppPreviewPanel({
             aria-expanded={menuOpen}
             onClick={() => setMenuOpen((o) => !o)}
           >
-            <span className="truncate font-mono text-[11px] text-slate-400">{pathDisplay}</span>
+            <span className="truncate font-mono text-[11px] text-slate-400">
+              {preferV0Preview && v0DemoUrl ? 'v0 live' : pathDisplay}
+            </span>
             <ChevronDown className={`ml-auto h-3.5 w-3.5 shrink-0 text-slate-500 ${menuOpen ? 'rotate-180' : ''}`} />
           </button>
           {menuOpen ? (
             <div className="absolute left-0 right-0 top-full z-[60] mt-1 max-h-64 overflow-y-auto rounded-lg border border-white/10 bg-[#0a0f18] py-2 text-[11px] shadow-xl">
+              {v0DemoUrl ? (
+                <>
+                  <p className="px-3 py-1 text-[9px] font-headline uppercase tracking-wider text-slate-500">
+                    Preview source
+                  </p>
+                  <div className="flex flex-col gap-0.5 px-2 pb-2">
+                    <button
+                      type="button"
+                      className={`rounded px-2 py-1.5 text-left text-[10px] ${
+                        preferV0Preview ? 'bg-cyan-500/15 text-cyan-100' : 'text-slate-400 hover:bg-white/5'
+                      }`}
+                      onClick={() => {
+                        setPreferV0Preview(true);
+                        setPreviewRev((n) => n + 1);
+                      }}
+                    >
+                      v0 live (recommended)
+                    </button>
+                    <button
+                      type="button"
+                      className={`rounded px-2 py-1.5 text-left text-[10px] ${
+                        !preferV0Preview ? 'bg-cyan-500/15 text-cyan-100' : 'text-slate-400 hover:bg-white/5'
+                      }`}
+                      onClick={() => {
+                        setPreferV0Preview(false);
+                        setPreviewRev((n) => n + 1);
+                      }}
+                    >
+                      Workspace HTML
+                    </button>
+                    <a
+                      href={v0DemoUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="rounded px-2 py-1.5 text-[10px] text-cyan-300 hover:bg-white/5"
+                    >
+                      Open v0.dev ↗
+                    </a>
+                  </div>
+                </>
+              ) : null}
               <p className="px-3 py-1 text-[9px] font-headline uppercase tracking-wider text-slate-500">Viewport</p>
               <div className="flex gap-1 px-2 pb-2">
                 <button

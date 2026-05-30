@@ -19,8 +19,8 @@ export type V0StartJobOptions = {
 
 /** If a start marker outlives the in-memory job (Render restart), recover on poll. */
 export const V0_START_STALE_MS = 90_000;
-/** Hard cap on v0 POST /chats — v0-pro can be slow but must not hang forever. */
-export const V0_CREATE_TIMEOUT_MS = 240_000;
+/** Hard cap on v0 POST /chats — v0-pro can be slow; background job is not HTTP-bound. */
+export const V0_CREATE_TIMEOUT_MS = 600_000;
 
 const activeJobs = new Set<string>();
 
@@ -99,7 +99,7 @@ export function scheduleV0CreateChatJob(opts: V0StartJobOptions): boolean {
         promptPreview: opts.promptText.slice(0, 500),
         starting: false,
         startError: aborted
-          ? "v0 API timed out after 4 minutes. Click Resume v0 to poll again (no new charge if a chat was created)."
+          ? "v0 API is still processing (waited 10 min). Poll again — credits may already have been used; do not click Generate repeatedly."
           : e instanceof Error
             ? e.message
             : "v0 start failed",

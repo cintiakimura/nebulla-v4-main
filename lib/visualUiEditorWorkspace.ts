@@ -34,6 +34,10 @@ export type VisualEditorState = {
   v0FirstGenerationComplete?: boolean;
   /** Immutable v0 output root, e.g. generated-ui/v0-original-myapp-2026-05-14T12-00-00-000Z */
   originalV0FolderRel?: string;
+  /** v0.dev live preview URL from the last successful v0 API pass. */
+  v0DemoUrl?: string;
+  /** Last v0 chat id (resume refine / poll without new charge). */
+  v0ChatId?: string;
   /** Last apply: backup folder with only paths Grok touched (pre-apply contents). */
   lastApplyVersionFolderRel?: string;
   /** @deprecated Full-workspace snapshots — no longer written by apply. */
@@ -137,6 +141,27 @@ export function writeEditorState(workspaceRoot: string, state: VisualEditorState
   }
   merged.updatedAt = new Date().toISOString();
   fs.writeFileSync(editorStatePath(workspaceRoot), JSON.stringify(merged, null, 2), "utf8");
+}
+
+/** Persist v0 live preview URL + chat id after a successful v0 apply (App Preview + UI Studio). */
+export function persistV0SessionMeta(
+  workspaceRoot: string,
+  meta: { demoUrl?: string; chatId?: string },
+): void {
+  const patch: VisualEditorState = {};
+  if (typeof meta.demoUrl === "string" && meta.demoUrl.trim()) {
+    patch.v0DemoUrl = meta.demoUrl.trim();
+  }
+  if (typeof meta.chatId === "string" && meta.chatId.trim()) {
+    patch.v0ChatId = meta.chatId.trim();
+  }
+  if (Object.keys(patch).length === 0) return;
+  writeEditorState(workspaceRoot, patch);
+}
+
+export function readV0DemoUrl(workspaceRoot: string): string | undefined {
+  const url = readEditorState(workspaceRoot).v0DemoUrl?.trim();
+  return url || undefined;
 }
 
 /** @deprecated Prefer writeTimestampVersionDir */

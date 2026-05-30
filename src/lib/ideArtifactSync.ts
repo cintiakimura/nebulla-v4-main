@@ -3,7 +3,8 @@ import type { GrokActivityProgressFn } from './ideGrokActivityStatus';
 import { startGrokActivityWaitTicker } from './ideGrokActivityStatus';
 import { withProjectBody, withProjectQuery } from './nebulaProjectApi';
 import { runV0GenerationWithPolling } from './v0GenerationClient';
-import { getV0RequestHeaders } from './v0Key';
+import { getV0RequestHeaders, hasLocalV0ApiKey } from './v0Key';
+import { computeV0Readiness } from './v0Readiness';
 
 const ideArtifactHeaders = (): Record<string, string> => ({
   'Content-Type': 'application/json',
@@ -99,11 +100,47 @@ export async function runV0UiGeneration(options?: {
   onProgress?: GrokActivityProgressFn;
   resumeOnly?: boolean;
 }): Promise<MasterPlanUiPipelineResult> {
+  let studioStatus: Awaited<ReturnType<typeof fetchV0StudioStatus>> = null;
+  try {
+    studioStatus = await fetchV0StudioStatus();
+  } catch {
+    /* ignore */
+  }
+  const readiness = computeV0Readiness({
+    hasV0ApiKey: studioStatus?.hasV0ApiKey,
+    hasLocalV0ApiKey: hasLocalV0ApiKey(),
+    v0PromptExists: studioStatus?.v0PromptExists,
+    v0PromptLength: studioStatus?.v0PromptLength,
+    v0Starting: studioStatus?.v0Starting,
+    v0PendingChatId: studioStatus?.v0PendingChatId,
+    v0StartError: studioStatus?.v0StartError,
+    hasRealV0: studioStatus?.hasRealV0,
+  });
+  if (!readiness.ready && !readiness.resumeOnly) {
+    const msg = readiness.blockReason ?? 'v0 is not ready — save Master Plan §4+§5 and add your API key.';
+    options?.onProgress?.(msg, 'error');
+    return {
+      v0Triggered: true,
+      v0Ok: false,
+      v0Error: msg,
+      hasRealV0: Boolean(studioStatus?.hasRealV0),
+    };
+  }
+
   const v0 = await runV0GenerationWithPolling({
     projectDisplayName: options?.projectName,
     onProgress: options?.onProgress,
-    resumeOnly: options?.resumeOnly,
+    resumeOnly: options?.resumeOnly ?? readiness.resumeOnly,
   });
+  if (v0.demoUrl?.trim()) {
+    try {
+      window.dispatchEvent(
+        new CustomEvent('nebula-v0-demo-ready', { detail: { demoUrl: v0.demoUrl.trim() } }),
+      );
+    } catch {
+      /* ignore */
+    }
+  }
   return {
     v0Triggered: true,
     v0Ok: Boolean(v0.ok && (v0.written?.length ?? 0) > 0),
@@ -111,6 +148,21 @@ export async function runV0UiGeneration(options?: {
     v0Error: v0.error,
     hasRealV0: Boolean(v0.written?.length),
   };
+}
+
+async function fetchV0StudioStatus(): Promise<{
+  hasV0ApiKey?: boolean;
+  v0PromptExists?: boolean;
+  v0PromptLength?: number;
+  v0Starting?: boolean;
+  v0PendingChatId?: string;
+  v0StartError?: string;
+  hasRealV0?: boolean;
+} | null> {
+  return fetchJson(withProjectQuery('/api/nebula-ui-studio/status'), {
+    credentials: 'include',
+    headers: ideArtifactHeaders(),
+  });
 }
 
 /** Master Plan save + mind map, then optional v0 (polled). */
