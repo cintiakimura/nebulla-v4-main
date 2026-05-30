@@ -1,7 +1,6 @@
 import { fetchJson, readResponseJson } from './apiFetch';
 import { extractGrokFilePaths, normalizeGrokFileBlockSyntax } from './grokChatArtifacts';
 import { runPostCodingWorkspaceSync } from './ideArtifactSync';
-import { cancelProjectBackgroundJobs } from './ideProjectReset';
 import type { GrokActivityProgressFn } from './ideGrokActivityStatus';
 import { startGrokActivityWaitTicker } from './ideGrokActivityStatus';
 import { withProjectBody, withProjectQuery } from './nebulaProjectApi';
@@ -144,6 +143,8 @@ type GoCodePayload = {
   codeModel?: string;
   pending?: boolean;
   coding?: boolean;
+  idle?: boolean;
+  hint?: string;
   v0PromptWritten?: boolean;
   v0PromptLength?: number;
 };
@@ -162,8 +163,11 @@ async function pollGoCodeUntilDone(
         body: JSON.stringify(withProjectBody({ projectName })),
       });
       const poll = await readResponseJson<
-        GoCodePayload & { hint?: string; elapsedMs?: number; error?: string }
+        GoCodePayload & { hint?: string; elapsedMs?: number; error?: string; idle?: boolean }
       >(response);
+      if (poll.idle) {
+        return poll;
+      }
       if (!response.ok && !poll.pending) {
         return poll;
       }
@@ -235,7 +239,9 @@ export async function runGoCodeAndApply(options: {
         body: JSON.stringify(withProjectBody({ projectName })),
       });
       prePoll = await readResponseJson<GoCodePayload>(preRes);
-      if (prePoll.pending && prePoll.coding) {
+      if (prePoll.idle) {
+        prePoll = null;
+      } else if (prePoll.pending && prePoll.coding) {
         onProgress?.('Grok Code already running — waiting for it to finish (do not press Go again)', 'warn');
       }
     } catch {
@@ -327,7 +333,6 @@ export async function runGoCodeAndApply(options: {
     onProgress?.(`Received Grok Code response (${codeText.length.toLocaleString()} chars)`, 'info');
     const apply = await applyGeneratedFiles(codeText, { userNote, projectName, onProgress });
     if (apply.ok) {
-      void cancelProjectBackgroundJobs();
       try {
         window.dispatchEvent(new CustomEvent('nebula-master-plan-updated'));
       } catch {

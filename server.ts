@@ -3333,8 +3333,8 @@ ${workflowContext}`;
           /* ignore */
         }
       }
-      if (payload.error && !payload.pending) {
-        return res.status(pending?.status === "error" ? 422 : 400).json(payload);
+      if (payload.error && !payload.pending && pending?.status === "error") {
+        return res.status(422).json(payload);
       }
       return res.json(payload);
     } catch (err: unknown) {

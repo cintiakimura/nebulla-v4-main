@@ -110,7 +110,12 @@ export function goCodePendingToPollResponse(
   jobActive: boolean,
 ): Record<string, unknown> {
   if (!pending) {
-    return { ok: false, error: "No Go coding session in progress. Press Go again." };
+    return {
+      ok: true,
+      pending: false,
+      idle: true,
+      hint: "No Go coding session on server — press Go to start, or the last job already finished.",
+    };
   }
   if (pending.status === "running" || jobActive) {
     return {
