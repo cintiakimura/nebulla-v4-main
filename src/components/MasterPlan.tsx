@@ -136,8 +136,17 @@ export function MasterPlan({
 
   const handleSave = async () => {
     setIsSaved(true);
-    // The updateSection already handles persistence, but we can trigger a full save if needed
-    console.log("Master Plan saved and locked.");
+    try {
+      await fetch(withProjectQuery('/api/ide/master-plan-ui-pipeline'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(withProjectBody({ autoV0: false })),
+      });
+      window.dispatchEvent(new CustomEvent('nebula-master-plan-updated'));
+    } catch (err) {
+      console.warn('Master Plan save pipeline failed:', err);
+    }
   };
 
   return (

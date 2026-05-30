@@ -46,6 +46,7 @@ import { computeV0Readiness } from '../../lib/v0Readiness';
 import { subscribeGrokCodingActive } from '../../lib/nebulaGrokCodingGate';
 import { runV0GenerationWithPolling } from '../../lib/v0GenerationClient';
 import { cancelProjectBackgroundJobs } from '../../lib/ideProjectReset';
+import { runMasterPlanUiPipeline } from '../../lib/ideArtifactSync';
 
 const V0_FETCH_TIMEOUT_MS = 360_000;
 
@@ -921,6 +922,11 @@ export function IdeVisualEditor({
     setBusy(true);
     setError('');
     try {
+      try {
+        await runMasterPlanUiPipeline({ projectName: projectLabel, autoV0: false });
+      } catch {
+        /* status endpoint also syncs v0-prompt */
+      }
       const freshStatus = (await loadStudioStatus()) ?? studioStatus;
       const preflight = computeV0Readiness({
         hasV0ApiKey,
@@ -1276,11 +1282,19 @@ export function IdeVisualEditor({
           <span>v0 is still generating from a previous run. Credits may already have been used.</span>
           <button
             type="button"
-            disabled={busy || !v0Readiness.ready}
+            disabled={busy || cancelV0Busy || !v0Readiness.ready}
             onClick={() => void runV0Generation()}
             className="rounded-md bg-amber-500/20 px-2 py-0.5 font-medium text-amber-50 hover:bg-amber-500/30 disabled:opacity-40"
           >
             {busy ? 'Resuming…' : 'Resume v0 (no new charge)'}
+          </button>
+          <button
+            type="button"
+            disabled={busy || cancelV0Busy}
+            onClick={() => void cancelStaleV0Session()}
+            className="rounded-md border border-amber-500/40 px-2 py-0.5 font-medium text-amber-50 hover:bg-amber-500/15 disabled:opacity-40"
+          >
+            {cancelV0Busy ? 'Cancelling…' : 'Cancel stale v0'}
           </button>
         </div>
       ) : !v0Readiness.ready && hasV0ApiKey !== false && !studioStatus?.hasRealV0 ? (

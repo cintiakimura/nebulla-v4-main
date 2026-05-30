@@ -28,6 +28,7 @@ import { dispatchOpenUiStudio, dispatchStartUiUxWorkflow } from '../lib/nebulaUi
 import { withProjectBody, withProjectQuery } from '../lib/nebulaProjectApi';
 import { cancelProjectBackgroundJobs } from '../lib/ideProjectReset';
 import { runGoCodeAndApply } from '../lib/nebulaGrokCodingPipeline';
+import { runMasterPlanUiPipeline } from '../lib/ideArtifactSync';
 import { buildNebulaAssistantSystemPrompt } from '../lib/nebulaAssistantSystemPrompt';
 import { fetchConversationLogEntries } from '../lib/conversationLogClient';
 import { uploadFileToR2 } from '../lib/nebulaStorageClient';
@@ -964,120 +965,35 @@ export function AssistantSidebar({
     ]);
     setInputText('');
     setIsLoading(true);
-    setChatStatus('Grok: writing short Master Plan summary only, then coding agent…');
+    setChatStatus('Grok Code on server — summary then implementation…');
 
-    const grokHeaders: Record<string, string> = { 'Content-Type': 'application/json' };
-
-    const payloadMessages = [
-      {
-        role: 'user' as const,
-        content:
-          userNote && userNote.trim()
-            ? `START_CODING — implement now. Session focus: ${userNote}. Output file artifacts only (paths + file bodies), no conversation.`
-            : 'START_CODING — implement now per project-execution-rules.md and master-plan.json. Output file artifacts only (paths + file bodies), no conversation.',
-      },
-    ];
+    void cancelProjectBackgroundJobs();
 
     try {
-      const data = await fetchJson<{
-        preCodingSummary?: string;
-        summarySaved?: boolean;
-        codeError?: string;
-        choices?: { message?: { content?: string } }[];
-        error?: string;
-      }>(withProjectQuery('/api/grok/go-code'), {
-        method: 'POST',
-        headers: grokHeaders,
-        credentials: 'include',
-        body: JSON.stringify(
-          withProjectBody({
-            userId,
-            projectName,
-            userNote: userNote || undefined,
-            messages: payloadMessages,
-          }),
-        ),
+      const go = await runGoCodeAndApply({
+        userId,
+        projectName,
+        userNote: userNote || undefined,
+        onProgress: (msg) => setChatStatus(msg),
       });
 
-      if (data.error && !data.summarySaved) {
-        setMessages((prev) => [...prev, { role: 'system', text: data.error || 'Go failed.' }]);
-        setChatStatus(null);
-        return;
-      }
-
-      setChatStatus('Master Plan updated — opening code mode with Grok Code output…');
-      try {
-        window.dispatchEvent(new CustomEvent('nebula-master-plan-updated'));
-      } catch {
-        /* ignore */
-      }
-
-      const codeText = data.choices?.[0]?.message?.content || '';
-      const cleanCode = codeText
-        .replace(/<REASONING>[\s\S]*?<\/REASONING>/gi, '')
-        .replace(/<START_MASTERPLAN>[\s\S]*?<\/START_MASTERPLAN>/gi, '')
-        .trim();
-
-      if (data.codeError) {
-        setMessages((prev) => [
-          ...prev,
-          {
-            role: 'system',
-            text: `Summary saved to Master Plan. Grok Code error: ${data.codeError.slice(0, 400)}`,
-          },
-        ]);
-      }
-
-      if (cleanCode) {
-        setChatStatus('Grok Code returned output. Applying file changes…');
+      if (go.ok) {
         try {
-          const apply = await fetchJson<{
-            success?: boolean;
-            written?: string[];
-            skipped?: string[];
-            parsedBlocks?: number;
-            usedFallbackPath?: string;
-            error?: string;
-          }>(withProjectQuery('/api/files/apply-generated'), {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(withProjectBody({ content: cleanCode })),
-          });
-          if (apply.error) {
-            setMessages((prev) => [
-              ...prev,
-              { role: 'system', text: `Code returned, but files were not applied: ${apply.error}` },
-            ]);
-            setChatStatus('Grok returned code, but file apply failed.');
-          } else {
-            const writtenCount = Array.isArray(apply.written) ? apply.written.length : 0;
-            const skippedCount = Array.isArray(apply.skipped) ? apply.skipped.length : 0;
-            setMessages((prev) => [
-              ...prev,
-              {
-                role: 'system',
-                text:
-                  writtenCount > 0
-                    ? `Applied ${writtenCount} file(s)${skippedCount ? `, skipped ${skippedCount}` : ''}${
-                        apply.usedFallbackPath ? ` (fallback path: ${apply.usedFallbackPath})` : ''
-                      }.`
-                    : 'No file blocks detected in output; nothing was written.',
-              },
-            ]);
-            setChatStatus(
-              writtenCount > 0
-                ? `Grok Code applied ${writtenCount} file(s).`
-                : 'Grok Code returned text, but no writable file blocks were found.',
-            );
-          }
-        } catch (applyErr: unknown) {
-          const msg = applyErr instanceof Error ? applyErr.message : 'Failed to apply files';
-          setMessages((prev) => [...prev, { role: 'system', text: `File apply error: ${msg}` }]);
-          setChatStatus('Grok returned code, but apply step failed.');
+          window.dispatchEvent(new CustomEvent('nebula-master-plan-updated'));
+          window.dispatchEvent(new CustomEvent('nebula-files-applied'));
+        } catch {
+          /* ignore */
         }
-      } else if (!data.codeError) {
-        setMessages((prev) => [...prev, { role: 'system', text: 'Grok Code returned empty output.' }]);
+        await runMasterPlanUiPipeline({ projectName, autoV0: false });
       }
+
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: 'system',
+          text: go.ok ? `Go complete. ${go.statusMessage}` : `Go could not finish. ${go.statusMessage}`,
+        },
+      ]);
 
       if ((window as any).openCodingMode) {
         (window as any).openCodingMode('project-execution-rules.md');
@@ -1091,11 +1007,7 @@ export function AssistantSidebar({
         /* ignore */
       }
 
-      setChatStatus(
-        data.summarySaved
-          ? 'Done — short summary saved under “Pre-coding summary (Grok)”; code shown above.'
-          : 'Done.',
-      );
+      setChatStatus(go.ok ? go.statusMessage : null);
       window.setTimeout(() => setChatStatus(null), 5000);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Go failed.';

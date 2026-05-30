@@ -557,6 +557,27 @@ No approved UI code yet.
     );
   };
 
+  const V0_PROMPT_MIN_LEN = 80;
+
+  /** Rebuild v0-prompt.md from Master Plan §4+§5 (and app routes when §4 is empty). */
+  const ensureV0PromptSynced = (
+    pp: ReturnType<typeof projectPathsFor>,
+  ): { content: string; synced: boolean } => {
+    let content = readV0PromptMarkdown(pp.workspaceRoot).trim();
+    if (content.length > V0_PROMPT_MIN_LEN) {
+      return { content, synced: false };
+    }
+    try {
+      const v0Sync = syncV0PromptFromMasterPlan(pp.workspaceRoot, pp.masterPlanPath);
+      mirrorV0PromptToStudioFile(pp, v0Sync.content);
+      content = v0Sync.content.trim();
+      return { content, synced: true };
+    } catch (e) {
+      console.warn("[ensureV0PromptSynced]", e);
+      return { content, synced: false };
+    }
+  };
+
   const writeV0FilesToWorkspace = (
     workspaceRoot: string,
     files: V0FileEntry[]
@@ -590,15 +611,10 @@ No approved UI code yet.
     req: express.Request,
     body: Record<string, unknown>,
   ): { promptText: string; projectDisplayName?: string } => {
-    const { nebulaUiStudioPath, workspaceRoot, masterPlanPath } = projectPathsFor(req);
-    ensureNebulaUiStudioFileAt(nebulaUiStudioPath);
-    const filePrompt = readV0PromptMarkdown(workspaceRoot);
-    const skillExcerpt = readSkillDesignSystemExcerpt(workspaceRoot);
-    const masterPlan = readMasterPlanFile(masterPlanPath);
-    if (!filePrompt.trim()) {
-      writeV0PromptMarkdown(workspaceRoot, masterPlan);
-    }
-    const canonicalPrompt = readV0PromptMarkdown(workspaceRoot);
+    const pp = projectPathsFor(req);
+    ensureNebulaUiStudioFileAt(pp.nebulaUiStudioPath);
+    const { content: canonicalPrompt } = ensureV0PromptSynced(pp);
+    const skillExcerpt = readSkillDesignSystemExcerpt(pp.workspaceRoot);
     const extra = typeof body.message === "string" ? body.message.trim() : "";
     const projectDisplayName =
       typeof body.projectDisplayName === "string" && body.projectDisplayName.trim()
@@ -607,11 +623,7 @@ No approved UI code yet.
     const skillBlock = skillExcerpt
       ? `Design system (SKILL.md):\n${skillExcerpt.slice(0, 280)}`
       : "";
-    const promptTextRaw = canonicalPrompt.trim()
-      ? [canonicalPrompt, skillBlock, extra].filter(Boolean).join("\n\n")
-      : [buildV0PromptMarkdown(masterPlan as Record<string, string>, workspaceRoot), skillBlock, extra]
-          .filter(Boolean)
-          .join("\n\n");
+    const promptTextRaw = [canonicalPrompt, skillBlock, extra].filter(Boolean).join("\n\n");
     return { promptText: clampV0PromptForApi(promptTextRaw), projectDisplayName };
   };
 
@@ -1017,17 +1029,23 @@ No approved UI code yet.
     }
 
     try {
-      const { masterPlanPath } = projectPathsFor(req);
+      const pp = projectPathsFor(req);
       let plan = {};
-      if (fs.existsSync(masterPlanPath)) {
-        plan = JSON.parse(fs.readFileSync(masterPlanPath, "utf8"));
+      if (fs.existsSync(pp.masterPlanPath)) {
+        plan = JSON.parse(fs.readFileSync(pp.masterPlanPath, "utf8"));
       }
-      
+
       // Update the specific tab content using mapped tabName as key
       (plan as any)[tabName] = content;
 
-      fs.writeFileSync(masterPlanPath, JSON.stringify(plan, null, 2), "utf8");
-      res.json({ success: true, tabName });
+      fs.writeFileSync(pp.masterPlanPath, JSON.stringify(plan, null, 2), "utf8");
+      const v0Sync = ensureV0PromptSynced(pp);
+      res.json({
+        success: true,
+        tabName,
+        v0PromptSynced: v0Sync.synced,
+        v0PromptLength: v0Sync.content.length,
+      });
     } catch (error) {
       console.error("Error updating master plan:", error);
       res.status(500).json({ error: "Failed to update master plan" });
@@ -1408,7 +1426,7 @@ No approved UI code yet.
       expireStaleV0Pending(pp.workspaceRoot, {
         jobActive: isV0StartJobActive(pp.workspaceRoot),
       });
-      const prompt = readV0PromptMarkdown(pp.workspaceRoot);
+      const { content: prompt } = ensureV0PromptSynced(pp);
       const gate = isVisualEditorEligible(pp.workspaceRoot);
       const keyRes = resolveV0ApiKeyFromRequest(req);
       const pending = readV0Pending(pp.workspaceRoot);
@@ -2296,10 +2314,12 @@ No approved UI code yet.
             hint: keyRes.hint,
           });
         }
-        const promptText = readV0PromptMarkdown(workspaceRoot).trim();
+        const ppPoll = projectPathsFor(req);
+        let promptText = ensureV0PromptSynced(ppPoll).content;
         if (!promptText.trim()) {
           return res.status(400).json({
             error: "v0-prompt.md is empty — save Master Plan §4+§5 first.",
+            hint: "Open Master Plan tabs 4+5, save, or press Go so routes from app/ hydrate the prompt.",
           });
         }
         return res.status(400).json({

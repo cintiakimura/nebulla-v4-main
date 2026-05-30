@@ -80,16 +80,27 @@ async function postV0Start(
 ): Promise<{ pollChatId?: string; done?: V0GenerationResult }> {
   onProgress?.('Starting v0 generation on server…', 'info');
   try {
-    const start = await fetchJson<V0GenerationResult>(
-      withProjectQuery('/api/nebula-ui-studio/v0-start'),
-      {
-        method: 'POST',
-        headers: V0_HEADERS(),
-        credentials: 'include',
-        body: JSON.stringify(body),
-        signal: AbortSignal.timeout(V0_START_TIMEOUT_MS),
-      },
-    );
+    const response = await fetch(withProjectQuery('/api/nebula-ui-studio/v0-start'), {
+      method: 'POST',
+      headers: V0_HEADERS(),
+      credentials: 'include',
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(V0_START_TIMEOUT_MS),
+    });
+    const start = await readResponseJson<V0GenerationResult & { error?: string; hint?: string }>(response);
+    if (!response.ok) {
+      const msg = start.error || `v0 start failed (${response.status})`;
+      if (/v0-prompt\.md is empty|save Master Plan/i.test(msg)) {
+        return {
+          done: {
+            ok: false,
+            error: formatV0UiError(msg, hasLocalV0ApiKey()),
+            hint: start.hint || 'Save Master Plan §4+§5, then click Generate v0 once.',
+          },
+        };
+      }
+      return { done: { ok: false, error: formatV0UiError(msg, hasLocalV0ApiKey()), hint: start.hint } };
+    }
     if (start.error && !start.chatId && !start.pending) {
       return { done: { ok: false, error: formatV0UiError(start.error, hasLocalV0ApiKey()) } };
     }
@@ -133,6 +144,13 @@ async function postV0Poll(
     const msg = typeof data.error === 'string' ? data.error : `Request failed: ${response.status}`;
     if (response.status === 400 && /no v0 chat in progress/i.test(msg)) {
       return { kind: 'no-chat', message: msg };
+    }
+    if (response.status === 400 && /v0-prompt\.md is empty|save Master Plan/i.test(msg)) {
+      return {
+        ok: false,
+        error: formatV0UiError(msg, hasLocalV0ApiKey()),
+        hint: 'Master Plan §4+§5 are synced on save — refresh UI Studio, then click Generate v0 once.',
+      };
     }
     const hint = typeof data.hint === 'string' ? data.hint : undefined;
     throw new Error(hint ? `${msg}\n\n${hint}` : msg);
@@ -196,6 +214,10 @@ async function runV0GenerationWithPollingInner(options?: {
       try {
         const pollResult = await postV0Poll(pollBody());
 
+        if ('ok' in pollResult && pollResult.ok === false && pollResult.error) {
+          return pollResult;
+        }
+
         if ('kind' in pollResult && pollResult.kind === 'no-chat') {
           if (!autoStartedAfterEmptyPoll) {
             autoStartedAfterEmptyPoll = true;
@@ -237,6 +259,13 @@ async function runV0GenerationWithPollingInner(options?: {
         }
       } catch (e) {
         const msg = e instanceof Error ? e.message : 'v0 poll failed';
+        if (/v0-prompt\.md is empty|save Master Plan/i.test(msg)) {
+          return {
+            ok: false,
+            error: formatV0UiError(msg, hasLocalV0ApiKey()),
+            hint: 'Open Master Plan §4+§5 and save, or press Go — then click Generate v0 once.',
+          };
+        }
         if (i >= MAX_POLLS - 1) {
           return {
             ok: false,
