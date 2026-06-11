@@ -118,8 +118,25 @@ let dbReady = false;
 /** After a failed schema/connect init, do not recreate the pool until process restart (avoids connect storms on bad URLs). */
 let poolInitFailed = false;
 
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
 function hasDb(): boolean {
   return Boolean(pool && dbReady);
+}
+
+/** Active pool for route handlers — always use this instead of a mount-time local `p` reference. */
+function requireDbPool(): pg.Pool {
+  if (!pool || !dbReady) {
+    throw new Error("Database not configured");
+  }
+  return pool;
+}
+
+function pgErrorCode(err: unknown): string | undefined {
+  return typeof err === "object" && err !== null && "code" in err
+    ? String((err as { code?: unknown }).code)
+    : undefined;
 }
 
 /** Best-effort host hint for logs (does not print password). */
@@ -134,15 +151,38 @@ function describeDatabaseUrlHost(url: string): string {
   return `${host}:${port}`;
 }
 
+/** Render internal URLs sometimes omit the regional suffix; external clients need the full host. */
+function normalizeDatabaseUrl(raw: string): string {
+  const url = raw.trim();
+  if (!url) return url;
+  if (/@[^/]+\.[^/]+\//.test(url)) return url;
+  const m = url.match(/@(dpg-[a-z0-9-]+)(?::(\d+))?(\/|$)/i);
+  if (!m?.[1]) return url;
+  const region =
+    process.env.DATABASE_RENDER_REGION?.trim() ||
+    process.env.RENDER_POSTGRES_REGION?.trim() ||
+    "oregon";
+  const port = m[2] ? `:${m[2]}` : "";
+  const suffix = m[3] || "/";
+  return url.replace(`@${m[1]}${port}${suffix}`, `@${m[1]}.${region}-postgres.render.com${port}${suffix}`);
+}
+
 function getPool(): pg.Pool | null {
-  const url = process.env.DATABASE_URL?.trim();
-  if (!url || poolInitFailed) return null;
+  const rawUrl = process.env.DATABASE_URL?.trim();
+  if (!rawUrl || poolInitFailed) return null;
+  const url = normalizeDatabaseUrl(rawUrl);
   if (!pool) {
     pool = new pg.Pool({
       connectionString: url,
       ssl: process.env.DATABASE_SSL === "false" ? false : { rejectUnauthorized: false },
       max: 10,
       connectionTimeoutMillis: 15000,
+    });
+    pool.on("connect", (client) => {
+      void client.query("SET search_path TO public");
+    });
+    pool.on("error", (err) => {
+      console.error("[nebula] PostgreSQL pool error:", err);
     });
   }
   return pool;
@@ -165,14 +205,18 @@ export function getRenderPublicConfig() {
     /** When false, new projects get a synthetic `local-…` id (Render project API not configured). */
     renderWorkspaceApiReady: Boolean(
       process.env.RENDER_API_KEY?.trim() &&
-        (process.env.RENDER_OWNER_ID?.trim() || process.env.RENDER_WORKSPACE_ID?.trim())
+        (process.env.RENDER_OWNER_ID?.trim() ||
+          process.env.RENDER_WORKSPACE_ID?.trim() ||
+          process.env.WORKSPACE_ID?.trim())
     ),
   };
 }
 
 async function ensureTables(p: pg.Pool) {
+  await p.query(`CREATE EXTENSION IF NOT EXISTS "pgcrypto";`);
+  await p.query(`SET search_path TO public`);
   await p.query(`
-    CREATE TABLE IF NOT EXISTS nebula_users (
+    CREATE TABLE IF NOT EXISTS public.nebula_users (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       provider TEXT NOT NULL,
       provider_user_id TEXT NOT NULL,
@@ -184,9 +228,9 @@ async function ensureTables(p: pg.Pool) {
     );
   `);
   await p.query(`
-    CREATE TABLE IF NOT EXISTS nebula_projects (
+    CREATE TABLE IF NOT EXISTS public.nebula_projects (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-      user_id UUID NOT NULL REFERENCES nebula_users(id) ON DELETE CASCADE,
+      user_id UUID NOT NULL REFERENCES public.nebula_users(id) ON DELETE CASCADE,
       name TEXT NOT NULL,
       pages JSONB NOT NULL DEFAULT '[]',
       edges JSONB NOT NULL DEFAULT '[]',
@@ -194,11 +238,11 @@ async function ensureTables(p: pg.Pool) {
       UNIQUE(user_id, name)
     );
   `);
-  await p.query(`CREATE INDEX IF NOT EXISTS idx_nebula_projects_user ON nebula_projects(user_id);`);
-  await p.query(`ALTER TABLE nebula_projects ADD COLUMN IF NOT EXISTS workspace_id TEXT;`);
+  await p.query(`CREATE INDEX IF NOT EXISTS idx_nebula_projects_user ON public.nebula_projects(user_id);`);
+  await p.query(`ALTER TABLE public.nebula_projects ADD COLUMN IF NOT EXISTS workspace_id TEXT;`);
   await p.query(`
-    CREATE TABLE IF NOT EXISTS nebula_client_workspaces (
-      user_id UUID PRIMARY KEY REFERENCES nebula_users(id) ON DELETE CASCADE,
+    CREATE TABLE IF NOT EXISTS public.nebula_client_workspaces (
+      user_id UUID PRIMARY KEY REFERENCES public.nebula_users(id) ON DELETE CASCADE,
       email TEXT,
       workspace_id TEXT NOT NULL UNIQUE,
       workspace_name TEXT NOT NULL,
@@ -212,11 +256,11 @@ async function ensureTables(p: pg.Pool) {
      ON nebula_client_workspaces (LOWER(email))
      WHERE email IS NOT NULL;`
   );
-  await p.query(`ALTER TABLE nebula_users ADD COLUMN IF NOT EXISTS password_hash TEXT;`);
+  await p.query(`ALTER TABLE public.nebula_users ADD COLUMN IF NOT EXISTS password_hash TEXT;`);
   await p.query(`
-    CREATE TABLE IF NOT EXISTS nebula_password_resets (
+    CREATE TABLE IF NOT EXISTS public.nebula_password_resets (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-      user_id UUID NOT NULL REFERENCES nebula_users(id) ON DELETE CASCADE,
+      user_id UUID NOT NULL REFERENCES public.nebula_users(id) ON DELETE CASCADE,
       token_hash TEXT NOT NULL,
       expires_at TIMESTAMPTZ NOT NULL,
       used_at TIMESTAMPTZ,
@@ -224,15 +268,17 @@ async function ensureTables(p: pg.Pool) {
     );
   `);
   await p.query(
-    `CREATE INDEX IF NOT EXISTS idx_nebula_pw_reset_token ON nebula_password_resets(token_hash);`
+    `CREATE INDEX IF NOT EXISTS idx_nebula_pw_reset_token ON public.nebula_password_resets(token_hash);`
   );
   await p.query(
-    `CREATE INDEX IF NOT EXISTS idx_nebula_pw_reset_expires ON nebula_password_resets(expires_at);`
+    `CREATE INDEX IF NOT EXISTS idx_nebula_pw_reset_expires ON public.nebula_password_resets(expires_at);`
   );
-  await p.query(`ALTER TABLE nebula_users ADD COLUMN IF NOT EXISTS billing_tier TEXT NOT NULL DEFAULT 'free';`);
+  await p.query(
+    `ALTER TABLE public.nebula_users ADD COLUMN IF NOT EXISTS billing_tier TEXT NOT NULL DEFAULT 'free';`
+  );
   await p.query(`
-    CREATE TABLE IF NOT EXISTS nebula_token_usage_monthly (
-      user_id UUID NOT NULL REFERENCES nebula_users(id) ON DELETE CASCADE,
+    CREATE TABLE IF NOT EXISTS public.nebula_token_usage_monthly (
+      user_id UUID NOT NULL REFERENCES public.nebula_users(id) ON DELETE CASCADE,
       month_year TEXT NOT NULL,
       total_tokens INTEGER NOT NULL DEFAULT 0,
       grok3_tokens INTEGER NOT NULL DEFAULT 0,
@@ -242,10 +288,10 @@ async function ensureTables(p: pg.Pool) {
     );
   `);
   await p.query(
-    `CREATE INDEX IF NOT EXISTS idx_nebula_token_usage_month ON nebula_token_usage_monthly (month_year);`
+    `CREATE INDEX IF NOT EXISTS idx_nebula_token_usage_month ON public.nebula_token_usage_monthly (month_year);`
   );
-  await p.query(`ALTER TABLE nebula_users ADD COLUMN IF NOT EXISTS grok_api_key_encrypted TEXT;`);
-  await p.query(`ALTER TABLE nebula_users ADD COLUMN IF NOT EXISTS grok_key_validated_at TIMESTAMPTZ;`);
+  await p.query(`ALTER TABLE public.nebula_users ADD COLUMN IF NOT EXISTS grok_api_key_encrypted TEXT;`);
+  await p.query(`ALTER TABLE public.nebula_users ADD COLUMN IF NOT EXISTS grok_key_validated_at TIMESTAMPTZ;`);
 }
 
 function sessionSecret(): string {
@@ -331,7 +377,10 @@ function setSessionCookie(res: Response, token: string, remember: boolean) {
 async function createRenderProjectForNebula(displayName: string): Promise<{ id: string; name: string; raw: unknown }> {
   const renderApiKey = process.env.RENDER_API_KEY?.trim();
   const ownerId =
-    process.env.RENDER_OWNER_ID?.trim() || process.env.RENDER_WORKSPACE_ID?.trim() || "";
+    process.env.RENDER_OWNER_ID?.trim() ||
+    process.env.RENDER_WORKSPACE_ID?.trim() ||
+    process.env.WORKSPACE_ID?.trim() ||
+    "";
   if (!renderApiKey) {
     throw new Error("RENDER_API_KEY is not configured.");
   }
@@ -411,17 +460,17 @@ export async function resolveNebulaProjectDiskKey(req: Request): Promise<string>
   const dbPool = getPool();
   if (!uid || !projectName || !dbPool || !dbReady) return fallback;
   try {
-    const r = await dbPool.query(`SELECT workspace_id FROM nebula_projects WHERE user_id = $1 AND name = $2`, [
-      uid,
-      projectName,
-    ]);
+    const r = await dbPool.query(
+      `SELECT workspace_id FROM public.nebula_projects WHERE user_id = $1::uuid AND name = $2`,
+      [uid, projectName]
+    );
     let wid = r.rows[0]?.workspace_id as string | undefined;
     if (!wid) {
       const rw = await provisionRenderWorkspaceForNewProject(uid, projectName);
       wid = rw.id;
       await dbPool.query(
-        `UPDATE nebula_projects SET workspace_id = $1, updated_at = NOW()
-         WHERE user_id = $2 AND name = $3 AND (workspace_id IS NULL OR workspace_id = '')`,
+        `UPDATE public.nebula_projects SET workspace_id = $1, updated_at = NOW()
+         WHERE user_id = $2::uuid AND name = $3 AND (workspace_id IS NULL OR workspace_id = '')`,
         [wid, uid, projectName]
       );
     }
@@ -436,19 +485,19 @@ export async function mountRenderStack(app: Express) {
   app.use(cookieParser() as any);
 
   const dbUrl = process.env.DATABASE_URL?.trim() || "";
-  let p = getPool();
+  const bootPool = getPool();
   dbReady = false;
   registerNebulaPgPool(null);
-  if (p) {
+  if (bootPool) {
     try {
-      await ensureTables(p);
+      await ensureTables(bootPool);
       dbReady = true;
-      registerNebulaPgPool(p);
+      registerNebulaPgPool(bootPool);
       console.log("[nebula] PostgreSQL (Render) schema ready.");
     } catch (e) {
       console.error("[nebula] PostgreSQL init failed:", e);
       if (dbUrl) {
-        console.warn("[nebula] DATABASE_URL target:", describeDatabaseUrlHost(dbUrl));
+        console.warn("[nebula] DATABASE_URL target:", describeDatabaseUrlHost(normalizeDatabaseUrl(dbUrl)));
         console.warn(
           "[nebula] Fix: use Render → PostgreSQL → Connections → **External** URL (full hostname), or remove DATABASE_URL for local dev without cloud auth.",
         );
@@ -457,26 +506,28 @@ export async function mountRenderStack(app: Express) {
       poolInitFailed = true;
       registerNebulaPgPool(null);
       try {
-        await p.end();
+        await bootPool.end();
       } catch {
         /* ignore */
       }
-      p = null;
       pool = null;
     }
   }
 
   const ensureInitialProjectForUser = async (uid: string, preferredName?: string): Promise<void> => {
-    if (!p) throw new Error("Database not configured");
-    const current = await p.query(`SELECT COUNT(*)::int AS count FROM nebula_projects WHERE user_id = $1`, [uid]);
+    const db = requireDbPool();
+    const current = await db.query(
+      `SELECT COUNT(*)::int AS count FROM public.nebula_projects WHERE user_id = $1::uuid`,
+      [uid]
+    );
     const count = Number((current.rows[0] as { count?: number })?.count || 0);
     if (count > 0) return;
 
     const projectName = (preferredName || "").trim() || "Untitled Project";
     const workspace = await provisionRenderWorkspaceForNewProject(uid, projectName);
-    await p.query(
-      `INSERT INTO nebula_projects (user_id, name, pages, edges, workspace_id, updated_at)
-       VALUES ($1, $2, '[]'::jsonb, '[]'::jsonb, $3, NOW())
+    await db.query(
+      `INSERT INTO public.nebula_projects (user_id, name, pages, edges, workspace_id, updated_at)
+       VALUES ($1::uuid, $2, '[]'::jsonb, '[]'::jsonb, $3, NOW())
        ON CONFLICT (user_id, name) DO NOTHING`,
       [uid, projectName, workspace.id]
     );
@@ -491,13 +542,14 @@ export async function mountRenderStack(app: Express) {
   };
 
   const backfillMissingWorkspaceIds = async (uid: string, rows: ProjectListRow[]): Promise<void> => {
-    if (!p) return;
+    if (!hasDb()) return;
+    const db = requireDbPool();
     for (const row of rows) {
       const wid = row.workspace_id != null ? String(row.workspace_id).trim() : "";
       if (wid) continue;
       const rw = await provisionRenderWorkspaceForNewProject(uid, row.name);
-      await p.query(
-        `UPDATE nebula_projects SET workspace_id = $1, updated_at = NOW() WHERE user_id = $2 AND name = $3`,
+      await db.query(
+        `UPDATE public.nebula_projects SET workspace_id = $1, updated_at = NOW() WHERE user_id = $2::uuid AND name = $3`,
         [rw.id, uid, row.name]
       );
       row.workspace_id = rw.id;
@@ -529,7 +581,7 @@ export async function mountRenderStack(app: Express) {
     }
     if (opts.syncAllProjects) {
       const r = await pool.query(
-        `SELECT name, pages, edges, workspace_id, updated_at FROM nebula_projects WHERE user_id = $1::uuid ORDER BY updated_at DESC`,
+        `SELECT name, pages, edges, workspace_id, updated_at FROM public.nebula_projects WHERE user_id = $1::uuid ORDER BY updated_at DESC`,
         [uid]
       );
       const rows = r.rows as ProjectListRow[];
@@ -537,7 +589,7 @@ export async function mountRenderStack(app: Express) {
       renderTouched = rows.length > 0;
     } else if (opts.projectName?.trim()) {
       const r = await pool.query(
-        `SELECT name, pages, edges, workspace_id, updated_at FROM nebula_projects WHERE user_id = $1::uuid AND name = $2`,
+        `SELECT name, pages, edges, workspace_id, updated_at FROM public.nebula_projects WHERE user_id = $1::uuid AND name = $2`,
         [uid, opts.projectName.trim()]
       );
       const rows = r.rows as ProjectListRow[];
@@ -559,15 +611,42 @@ export async function mountRenderStack(app: Express) {
     return { grokSaved, renderTouched, usage };
   };
 
+  app.get("/api/health/db", async (_req, res) => {
+    if (!hasDb()) {
+      return res.status(503).json({ ok: false, error: "Database not configured" });
+    }
+    try {
+      const db = requireDbPool();
+      const r = await db.query(`SELECT 1 AS ok`);
+      const users = await db.query(`SELECT to_regclass('public.nebula_users') AS users_table`);
+      return res.json({
+        ok: true,
+        ping: r.rows[0]?.ok === 1,
+        usersTable: Boolean(users.rows[0]?.users_table),
+      });
+    } catch (e) {
+      console.error("[nebula] /api/health/db:", e);
+      return res.status(500).json({
+        ok: false,
+        error: "Database query failed",
+        code: pgErrorCode(e),
+      });
+    }
+  });
+
   app.post("/api/control-plane/project-manager/run", async (req, res) => {
     const uid = readSession(req);
     if (!uid) return res.status(401).json({ error: "Unauthorized" });
-    if (!hasDb() || !p) return res.status(503).json({ error: "Database not configured" });
+    if (!hasDb()) return res.status(503).json({ error: "Database not configured" });
     const projectName = typeof req.body?.projectName === "string" ? req.body.projectName.trim() : "";
     const grokApiKey = typeof req.body?.grokApiKey === "string" ? req.body.grokApiKey.trim() : "";
     const syncAllProjects = Boolean(req.body?.syncAllProjects);
     try {
-      const result = await runProjectManagerSilently(p, uid, { projectName, grokApiKey, syncAllProjects });
+      const result = await runProjectManagerSilently(requireDbPool(), uid, {
+        projectName,
+        grokApiKey,
+        syncAllProjects,
+      });
       res.json({ ok: true, ...result });
     } catch (e) {
       console.error("[nebula] /api/control-plane/project-manager/run:", e);
@@ -580,12 +659,17 @@ export async function mountRenderStack(app: Express) {
     if (!uid || !hasDb()) {
       return res.json({ user: null });
     }
+    if (!UUID_RE.test(uid)) {
+      res.clearCookie(SESSION_COOKIE, { path: "/" });
+      return res.json({ user: null });
+    }
     try {
-      const r = await p.query(
+      const db = requireDbPool();
+      const r = await db.query(
         `SELECT id, provider, provider_user_id, email, display_name, avatar_url, created_at,
                 (password_hash IS NOT NULL) AS has_password,
                 billing_tier
-         FROM nebula_users WHERE id = $1`,
+         FROM public.nebula_users WHERE id = $1::uuid`,
         [uid]
       );
       const row = r.rows[0] as {
@@ -672,7 +756,8 @@ export async function mountRenderStack(app: Express) {
       return res.status(400).json({ error: 'Type exactly: DELETE MY ACCOUNT' });
     }
     try {
-      await p.query(`DELETE FROM nebula_users WHERE id = $1`, [uid]);
+      const db = requireDbPool();
+      await db.query(`DELETE FROM public.nebula_users WHERE id = $1::uuid`, [uid]);
       res.clearCookie(SESSION_COOKIE, { path: "/" });
       return res.json({ ok: true });
     } catch (e) {
@@ -771,8 +856,9 @@ export async function mountRenderStack(app: Express) {
       }
       const display = gh.name || gh.login || "GitHub User";
 
-      const ins = await p.query(
-        `INSERT INTO nebula_users (provider, provider_user_id, email, display_name, avatar_url, password_hash)
+      const db = requireDbPool();
+      const ins = await db.query(
+        `INSERT INTO public.nebula_users (provider, provider_user_id, email, display_name, avatar_url, password_hash)
          VALUES ('github', $1, $2, $3, $4, NULL)
          ON CONFLICT (provider, provider_user_id) DO UPDATE
          SET email = EXCLUDED.email, display_name = EXCLUDED.display_name, avatar_url = EXCLUDED.avatar_url
@@ -807,9 +893,10 @@ export async function mountRenderStack(app: Express) {
           ? String(req.body.projectName).trim()
           : undefined;
       try {
+        const db = requireDbPool();
         const hash = await hashPassword(rawPassword);
-        const ins = await p.query(
-          `INSERT INTO nebula_users (provider, provider_user_id, email, display_name, avatar_url, password_hash)
+        const ins = await db.query(
+          `INSERT INTO public.nebula_users (provider, provider_user_id, email, display_name, avatar_url, password_hash)
            VALUES ('email', $1, $2, $3, NULL, $4)
            RETURNING id`,
           [emailAddr, emailAddr, display, hash]
@@ -819,8 +906,8 @@ export async function mountRenderStack(app: Express) {
         setSessionCookie(res, signSession(userId), remember);
         return res.json({ ok: true });
       } catch (e: unknown) {
-        const err = e as { code?: string };
-        if (err?.code === "23505") {
+        const code = pgErrorCode(e);
+        if (code === "23505") {
           return res.status(409).json({ error: "An account with this email already exists." });
         }
         console.error("[nebula] register (email):", e);
@@ -846,9 +933,10 @@ export async function mountRenderStack(app: Express) {
     const password = req.body.password as string;
     const display = (typeof rawUser === "string" ? rawUser.trim() : username).slice(0, 80) || username;
     try {
+      const db = requireDbPool();
       const hash = await hashPassword(password);
-      const ins = await p.query(
-        `INSERT INTO nebula_users (provider, provider_user_id, email, display_name, avatar_url, password_hash)
+      const ins = await db.query(
+        `INSERT INTO public.nebula_users (provider, provider_user_id, email, display_name, avatar_url, password_hash)
          VALUES ('username', $1, NULL, $2, NULL, $3)
          RETURNING id`,
         [username, display, hash]
@@ -860,8 +948,8 @@ export async function mountRenderStack(app: Express) {
       setSessionCookie(res, signSession(userId), remember);
       return res.json({ ok: true });
     } catch (e: unknown) {
-      const err = e as { code?: string };
-      if (err?.code === "23505") {
+      const code = pgErrorCode(e);
+      if (code === "23505") {
         return res.status(409).json({ error: "That username is already taken." });
       }
       console.error("[nebula] register:", e);
@@ -883,11 +971,12 @@ export async function mountRenderStack(app: Express) {
       return res.status(400).json({ error: "Email and password are required." });
     }
     try {
+      const db = requireDbPool();
       const u = normalizeUsername(rawLogin);
       let row: { id: string; password_hash: string | null } | undefined;
       if (u) {
-        const r = await p.query(
-          `SELECT id, password_hash FROM nebula_users WHERE provider = 'username' AND provider_user_id = $1`,
+        const r = await db.query(
+          `SELECT id, password_hash FROM public.nebula_users WHERE provider = 'username' AND provider_user_id = $1`,
           [u]
         );
         row = r.rows[0] as { id: string; password_hash: string | null } | undefined;
@@ -895,8 +984,8 @@ export async function mountRenderStack(app: Express) {
       if (!row) {
         const em = normalizeEmail(String(rawLogin).trim());
         if (em) {
-          const r2 = await p.query(
-            `SELECT id, password_hash FROM nebula_users WHERE provider = 'email' AND provider_user_id = $1`,
+          const r2 = await db.query(
+            `SELECT id, password_hash FROM public.nebula_users WHERE provider = 'email' AND provider_user_id = $1`,
             [em]
           );
           row = r2.rows[0] as { id: string; password_hash: string | null } | undefined;
@@ -919,17 +1008,22 @@ export async function mountRenderStack(app: Express) {
     const email = normalizeEmail(req.body?.email);
     if (!email) return res.status(400).json({ error: "Valid email is required." });
     try {
-      const r = await p.query(`SELECT id FROM nebula_users WHERE provider = 'email' AND provider_user_id = $1`, [
-        email,
-      ]);
+      const db = requireDbPool();
+      const r = await db.query(
+        `SELECT id FROM public.nebula_users WHERE provider = 'email' AND provider_user_id = $1`,
+        [email]
+      );
       const row = r.rows[0] as { id: string } | undefined;
       if (row) {
         const rawToken = crypto.randomBytes(32).toString("hex");
         const tokenHash = hashResetToken(rawToken);
         const expires = new Date(Date.now() + 60 * 60 * 1000);
-        await p.query(`DELETE FROM nebula_password_resets WHERE user_id = $1 AND used_at IS NULL`, [row.id]);
-        await p.query(
-          `INSERT INTO nebula_password_resets (user_id, token_hash, expires_at) VALUES ($1, $2, $3)`,
+        await db.query(
+          `DELETE FROM public.nebula_password_resets WHERE user_id = $1::uuid AND used_at IS NULL`,
+          [row.id]
+        );
+        await db.query(
+          `INSERT INTO public.nebula_password_resets (user_id, token_hash, expires_at) VALUES ($1::uuid, $2, $3)`,
           [row.id, tokenHash, expires.toISOString()]
         );
         const base = publicBaseUrl(req);
@@ -952,8 +1046,9 @@ export async function mountRenderStack(app: Express) {
     const password = req.body.password as string;
     const tokenHash = hashResetToken(token);
     try {
-      const r = await p.query(
-        `SELECT id, user_id FROM nebula_password_resets
+      const db = requireDbPool();
+      const r = await db.query(
+        `SELECT id, user_id FROM public.nebula_password_resets
          WHERE token_hash = $1 AND used_at IS NULL AND expires_at > NOW()`,
         [tokenHash]
       );
@@ -962,9 +1057,12 @@ export async function mountRenderStack(app: Express) {
         return res.status(400).json({ error: "This reset link is invalid or has expired. Request a new one." });
       }
       const hash = await hashPassword(password);
-      await p.query(`UPDATE nebula_users SET password_hash = $1 WHERE id = $2`, [hash, row.user_id]);
-      await p.query(`UPDATE nebula_password_resets SET used_at = NOW() WHERE id = $1`, [row.id]);
-      await p.query(`DELETE FROM nebula_password_resets WHERE user_id = $1 AND id <> $2`, [row.user_id, row.id]);
+      await db.query(`UPDATE public.nebula_users SET password_hash = $1 WHERE id = $2::uuid`, [hash, row.user_id]);
+      await db.query(`UPDATE public.nebula_password_resets SET used_at = NOW() WHERE id = $1::uuid`, [row.id]);
+      await db.query(`DELETE FROM public.nebula_password_resets WHERE user_id = $1::uuid AND id <> $2::uuid`, [
+        row.user_id,
+        row.id,
+      ]);
       return res.json({ ok: true });
     } catch (e) {
       console.error("[nebula] reset-password:", e);
@@ -979,17 +1077,18 @@ export async function mountRenderStack(app: Express) {
     if (!hasDb()) return res.status(503).json({ error: "Database not configured" });
     const oneName = typeof req.query.name === "string" ? req.query.name.trim() : "";
     try {
+      const db = requireDbPool();
       if (oneName) {
-        const r = await p.query(
-          `SELECT name, pages, edges, workspace_id, updated_at FROM nebula_projects WHERE user_id = $1 AND name = $2`,
+        const r = await db.query(
+          `SELECT name, pages, edges, workspace_id, updated_at FROM public.nebula_projects WHERE user_id = $1::uuid AND name = $2`,
           [uid, oneName]
         );
         const rows = r.rows as ProjectListRow[];
         await backfillMissingWorkspaceIds(uid, rows);
         return res.json({ projects: rows, project: rows[0] || null });
       }
-      const r = await p.query(
-        `SELECT name, pages, edges, workspace_id, updated_at FROM nebula_projects WHERE user_id = $1 ORDER BY updated_at DESC`,
+      const r = await db.query(
+        `SELECT name, pages, edges, workspace_id, updated_at FROM public.nebula_projects WHERE user_id = $1::uuid ORDER BY updated_at DESC`,
         [uid]
       );
       const rows = r.rows as ProjectListRow[];
@@ -1010,31 +1109,32 @@ export async function mountRenderStack(app: Express) {
       return res.status(400).json({ error: "name is required" });
     }
     try {
+      const db = requireDbPool();
       const trimmed = name.trim();
-      const existing = await p.query(`SELECT workspace_id FROM nebula_projects WHERE user_id = $1 AND name = $2`, [
-        uid,
-        trimmed,
-      ]);
+      const existing = await db.query(
+        `SELECT workspace_id FROM public.nebula_projects WHERE user_id = $1::uuid AND name = $2`,
+        [uid, trimmed]
+      );
       let workspaceId = existing.rows[0]?.workspace_id as string | undefined;
       if (!workspaceId || !String(workspaceId).trim()) {
         const rw = await provisionRenderWorkspaceForNewProject(uid, trimmed);
         workspaceId = rw.id;
       }
-      await p.query(
-        `INSERT INTO nebula_projects (user_id, name, pages, edges, workspace_id, updated_at)
-         VALUES ($1, $2, $3::jsonb, $4::jsonb, $5, NOW())
+      await db.query(
+        `INSERT INTO public.nebula_projects (user_id, name, pages, edges, workspace_id, updated_at)
+         VALUES ($1::uuid, $2, $3::jsonb, $4::jsonb, $5, NOW())
          ON CONFLICT (user_id, name) DO UPDATE
          SET pages = EXCLUDED.pages,
              edges = EXCLUDED.edges,
              workspace_id = COALESCE(
-               NULLIF(TRIM(nebula_projects.workspace_id), ''),
+               NULLIF(TRIM(public.nebula_projects.workspace_id), ''),
                EXCLUDED.workspace_id
              ),
              updated_at = NOW()
          RETURNING name, pages, edges, workspace_id, updated_at`,
         [uid, trimmed, JSON.stringify(pages ?? []), JSON.stringify(edges ?? []), workspaceId]
       );
-      void runProjectManagerSilently(p, uid, { projectName: trimmed }).catch(() => {});
+      void runProjectManagerSilently(db, uid, { projectName: trimmed }).catch(() => {});
       res.json({ ok: true });
     } catch (e) {
       console.error("[nebula] POST /api/projects:", e);
@@ -1049,7 +1149,8 @@ export async function mountRenderStack(app: Express) {
     const name = req.params.name;
     if (!name) return res.status(400).json({ error: "name required" });
     try {
-      await p.query(`DELETE FROM nebula_projects WHERE user_id = $1 AND name = $2`, [uid, name]);
+      const db = requireDbPool();
+      await db.query(`DELETE FROM public.nebula_projects WHERE user_id = $1::uuid AND name = $2`, [uid, name]);
       res.json({ ok: true });
     } catch (e) {
       console.error("[nebula] DELETE /api/projects:", e);

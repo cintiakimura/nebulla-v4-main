@@ -55,7 +55,7 @@ function utcMonthYear(d = new Date()): string {
 }
 
 async function fetchBillingTierForUser(pool: pg.Pool, userId: string): Promise<UserTier> {
-  const r = await pool.query(`SELECT billing_tier FROM nebula_users WHERE id = $1::uuid`, [userId]);
+  const r = await pool.query(`SELECT billing_tier FROM public.nebula_users WHERE id = $1::uuid`, [userId]);
   const raw = r.rows[0]?.billing_tier as string | undefined;
   return normalizeUserTier(raw);
 }

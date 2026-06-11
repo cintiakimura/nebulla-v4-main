@@ -13,14 +13,14 @@ export async function saveUserGrokApiKey(pool: pg.Pool, uid: string, plain: stri
   if (!isPlausibleGrokApiKey(plain)) return { ok: false };
   const enc = encryptAtRest(plain.trim());
   await pool.query(
-    `UPDATE nebula_users SET grok_api_key_encrypted = $2, grok_key_validated_at = NOW() WHERE id = $1::uuid`,
+    `UPDATE public.nebula_users SET grok_api_key_encrypted = $2, grok_key_validated_at = NOW() WHERE id = $1::uuid`,
     [uid, enc]
   );
   return { ok: true };
 }
 
 export async function getUserGrokApiKeyDecrypted(pool: pg.Pool, uid: string): Promise<string | undefined> {
-  const r = await pool.query(`SELECT grok_api_key_encrypted FROM nebula_users WHERE id = $1::uuid`, [uid]);
+  const r = await pool.query(`SELECT grok_api_key_encrypted FROM public.nebula_users WHERE id = $1::uuid`, [uid]);
   const enc = r.rows[0]?.grok_api_key_encrypted as string | undefined;
   if (!enc || typeof enc !== "string" || !enc.trim()) return undefined;
   const dec = decryptAtRest(enc.trim());
