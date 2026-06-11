@@ -533,6 +533,29 @@ export async function mountRenderStack(app: Express) {
     );
   };
 
+  /** Never block sign-in when first-project seeding fails (Render API / schema edge cases). */
+  const ensureInitialProjectForUserSafe = async (uid: string, preferredName?: string): Promise<void> => {
+    try {
+      await ensureInitialProjectForUser(uid, preferredName);
+    } catch (e) {
+      console.error("[nebula] ensureInitialProjectForUser:", e);
+    }
+  };
+
+  const authDbErrorResponse = (res: Response, label: string, err: unknown) => {
+    const code = pgErrorCode(err);
+    console.error(`[nebula] ${label}:`, err);
+    if (code === "42P01") {
+      return res.status(503).json({
+        error: "Database schema is not ready. Redeploy the server or run PostgreSQL migrations.",
+      });
+    }
+    if (code === "ECONNREFUSED" || code === "57P01" || code === "08006") {
+      return res.status(503).json({ error: "Database temporarily unavailable. Try again in a moment." });
+    }
+    return res.status(500).json({ error: `${label} failed.` });
+  };
+
   type ProjectListRow = {
     name: string;
     pages: unknown;
@@ -866,7 +889,7 @@ export async function mountRenderStack(app: Express) {
         [providerUserId, email, display, gh.avatar_url || null]
       );
       const userId = ins.rows[0].id as string;
-      await ensureInitialProjectForUser(userId);
+      await ensureInitialProjectForUserSafe(userId);
       const sessionJwt = signSession(userId);
       setSessionCookie(res, sessionJwt, remember);
 
@@ -902,7 +925,7 @@ export async function mountRenderStack(app: Express) {
           [emailAddr, emailAddr, display, hash]
         );
         const userId = ins.rows[0].id as string;
-        await ensureInitialProjectForUser(userId, preferredFirstProjectName);
+        await ensureInitialProjectForUserSafe(userId, preferredFirstProjectName);
         setSessionCookie(res, signSession(userId), remember);
         return res.json({ ok: true });
       } catch (e: unknown) {
@@ -910,8 +933,7 @@ export async function mountRenderStack(app: Express) {
         if (code === "23505") {
           return res.status(409).json({ error: "An account with this email already exists." });
         }
-        console.error("[nebula] register (email):", e);
-        return res.status(500).json({ error: "Registration failed." });
+        return authDbErrorResponse(res, "Registration", e);
       }
     }
 
@@ -944,7 +966,7 @@ export async function mountRenderStack(app: Express) {
       const userId = ins.rows[0].id as string;
       const preferredFirstProjectName =
         typeof req.body?.projectName === "string" ? req.body.projectName : undefined;
-      await ensureInitialProjectForUser(userId, preferredFirstProjectName);
+      await ensureInitialProjectForUserSafe(userId, preferredFirstProjectName);
       setSessionCookie(res, signSession(userId), remember);
       return res.json({ ok: true });
     } catch (e: unknown) {
@@ -952,8 +974,7 @@ export async function mountRenderStack(app: Express) {
       if (code === "23505") {
         return res.status(409).json({ error: "That username is already taken." });
       }
-      console.error("[nebula] register:", e);
-      return res.status(500).json({ error: "Registration failed." });
+      return authDbErrorResponse(res, "Registration", e);
     }
   });
 
@@ -994,12 +1015,11 @@ export async function mountRenderStack(app: Express) {
       if (!row?.password_hash || !(await verifyPassword(password, row.password_hash))) {
         return res.status(401).json({ error: "Invalid email or password." });
       }
-      await ensureInitialProjectForUser(row.id);
+      await ensureInitialProjectForUserSafe(row.id);
       setSessionCookie(res, signSession(row.id), remember);
       return res.json({ ok: true });
     } catch (e) {
-      console.error("[nebula] login:", e);
-      return res.status(500).json({ error: "Login failed." });
+      return authDbErrorResponse(res, "Login", e);
     }
   });
 
