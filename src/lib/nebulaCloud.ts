@@ -230,10 +230,22 @@ export function bindGuestWorkspace(): { projectName: string; projectKey: string 
 
   const guestId = readActiveGuestProjectId();
   const rows = readGuestIndex();
+
+  // 1. Restore explicit active guest project if valid
   if (guestId && rows.some((r) => r.id === guestId)) {
     key = guestId;
     name = rows.find((r) => r.id === guestId)?.name?.trim() || name || 'Local project';
-  } else if (!name || key === 'default') {
+  }
+  // 2. If no active id but we have projects, pick the most recently updated one
+  else if (rows.length > 0) {
+    const sorted = [...rows].sort((a, b) => (b.updatedAt || '').localeCompare(a.updatedAt || ''));
+    const mostRecent = sorted[0];
+    key = mostRecent.id;
+    name = mostRecent.name;
+    writeActiveGuestProjectId(key);
+  }
+  // 3. No projects at all → create a default one
+  else if (!name || key === 'default') {
     const entry = createGuestProject({
       pages: [],
       edges: [],

@@ -152,6 +152,21 @@ export function TopBar({
             )}
           </button>
 
+          {/* New Project (Guest Mode) */}
+          <button
+            type="button"
+            onClick={() => {
+              try {
+                localStorage.removeItem('nebula_active_project_id_v1');
+              } catch {}
+              window.location.reload();
+            }}
+            title="Start a new project"
+            className="btn-secondary-surface type-label-sm hidden h-8 items-center gap-1 rounded-md px-2 text-muted-foreground hover:text-foreground sm:inline-flex"
+          >
+            New
+          </button>
+
           <button
             type="button"
             onClick={() => onOpenSourceControl?.()}

@@ -26,6 +26,7 @@ import { sendIdeAssistantGrokTurn } from '../../lib/ideAssistantGrokChat';
 import {
   conversationEntriesToIdeMessages,
   IDE_CHAT_DISCOVERY_BOOTSTRAP,
+  IDE_CHAT_FAST_PROJECT_BOOTSTRAP,
   isHiddenBootstrapUserMessage,
 } from '../../lib/ideChatBootstrap';
 import { fetchConversationLogEntries } from '../../lib/conversationLogClient';
@@ -49,6 +50,8 @@ import {
   detectProjectNameAnswer,
   fetchIdeWorkspaceMeta,
 } from '../../lib/ideWorkspaceChatContext';
+import { createGuestProject, writeActiveGuestProjectId } from '../../lib/nebulaProjectStore';
+import { setBrowserProjectKey, setBrowserProjectName } from '../../lib/nebulaProjectApi';
 import { ideContextSnippetForChat, useIdeWorkspace } from '@/components/ide/IdeWorkspaceContext';
 import {
   advanceGrokActivity,
@@ -847,11 +850,72 @@ export function AIChat() {
 
   const sendChatRef = useRef<(override?: string) => Promise<void>>(async () => {});
 
+  /** Detect natural language project creation requests like "Create a new project: fitness tracker" */
+  function detectProjectCreationIntent(text: string): { description: string } | null {
+    const t = text.trim();
+    const lower = t.toLowerCase();
+
+    const patterns = [
+      /create (a )?new project[:\-]?\s*(.+)/i,
+      /start (a )?new project[:\-]?\s*(.+)/i,
+      /new project[:\-]?\s*(.+)/i,
+      /let's (make|build|create) (a )?new (app|project)[:\-]?\s*(.+)/i,
+    ];
+
+    for (const re of patterns) {
+      const m = t.match(re);
+      if (m) {
+        const desc = (m[2] || m[4] || m[1] || '').trim();
+        if (desc.length > 3) {
+          return { description: desc };
+        }
+      }
+    }
+
+    // Also support "Project: X" at the very start
+    if (lower.startsWith('project:')) {
+      const desc = t.slice(8).trim();
+      if (desc.length > 3) return { description: desc };
+    }
+
+    return null;
+  }
+
   const sendChat = useCallback(async (textOverride?: string) => {
     const text = (textOverride ?? inputRef.current).trim();
     if (!text || sending) return;
 
     if (micInputBlocked) return;
+
+    // Fast project creation from chat ("Create a new project: ...")
+    const projectCreation = detectProjectCreationIntent(text);
+    if (projectCreation) {
+      const shortName = projectCreation.description.split(' ').slice(0, 4).join(' ').replace(/[^a-z0-9 ]/gi, '').trim() || 'New Project';
+      const entry = createGuestProject({
+        pages: [],
+        edges: [],
+        projectName: shortName || 'New Project',
+      });
+      writeActiveGuestProjectId(entry.id);
+      setBrowserProjectKey(entry.id);
+      setBrowserProjectName(entry.name);
+      clearIdeWorkspaceMetaCache();
+
+      setInput('');
+      inputRef.current = '';
+
+      // Send the hidden fast bootstrap first (Grok will start the short interview)
+      setTimeout(() => {
+        void sendChatRef.current(IDE_CHAT_FAST_PROJECT_BOOTSTRAP);
+      }, 10);
+
+      // Then send the user's description as the visible follow-up
+      setTimeout(() => {
+        void sendChatRef.current(projectCreation.description);
+      }, 80);
+
+      return;
+    }
 
     if (serverHasGrokKey === null) {
       try {
