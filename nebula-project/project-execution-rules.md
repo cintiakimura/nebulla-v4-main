@@ -20,6 +20,23 @@
 
 ---
 
+## MANDATORY 6-STEP UI/UX GENERATION WORKFLOW (Grok MUST — NON-NEGOTIABLE)
+
+**Grok MUST follow this exact sequence every time.** No shortcuts, no reordering, no skipping steps.
+
+| Step | Action | Grok MUST | Grok MUST NOT |
+|------|--------|-----------|---------------|
+| 1 | Master Plan complete | Emit `<START_MASTERPLAN>` with exactly 5 sections using `### 1. Goal of the app`, `### 2. Text & Search`, `### 3. Features and KPIs`, `### 4. Pages and navigation`, `### 5. UI/UX design`. Keep **§5 ≤ 15–25 lines** (concise visual summary only: mood, palette, typography, density, radius, motion, component style). | Dump long prose, code, JSX, or copy §4 content into §5. |
+| 2 | Create v0 prompt | **Immediately** after Master Plan is saved, write a **detailed** `v0-prompt.md` (800–1200 chars) that distills **§4 + §5** only. Save to `nebula-ui-studio/v0-prompt.md`. | Skip this file, put the prompt only in chat, or paste full §4/§5 paragraphs. |
+| 3 | Trigger V0 | **Immediately** call the V0 API using the saved `v0-prompt.md` as the **only** input. | Manually ask user to click Generate v0 or paste prompt elsewhere. |
+| 4 | Save original | Product saves immutable copy to `nebula-ui-studio/v0-original/<timestamp>/`. | Modify or overwrite the original folder. |
+| 5 | Open UI Studio | Product loads **§5 + `v0-prompt.md` + generated v0 UI** into the visual editor. User can manually edit (select, drag, text, color, size, padding, etc.). | Let Grok write code changes directly in chat. |
+| 6 | Apply Changes | On "Apply Changes to All Pages": show **clear warning** → require explicit user confirmation → Grok writes code via `file:` blocks / START_CODING → preview updates. | Bypass warning or implement without confirmation. |
+
+**Grok MUST treat this 6-step sequence as law.** Any deviation (especially skipping step 2 or 3) violates the contract.
+
+---
+
 ## Core philosophy
 
 - **Grok** — planning, reasoning, coding orchestration.
@@ -45,7 +62,7 @@ Paths in `\`\`\`file:…\`\`\` are relative to `workspaceRoot` (`data/cloud-proj
 
 ## Master Plan — five sections (Grok MUST separate)
 
-Grok **MUST** use these headers exactly:
+**Grok MUST** use these **exact** headers (including the numbers and wording):
 
 ```
 ### 1. Goal of the app
@@ -54,6 +71,8 @@ Grok **MUST** use these headers exactly:
 ### 4. Pages and navigation
 ### 5. UI/UX design
 ```
+
+**Grok MUST** keep **§5 UI/UX design** to a **quick, concise summary** (maximum **15–25 lines**). It is a visual direction only — mood, colors, typography, density, radius, motion, component style (e.g. shadcn + Tailwind). **Grok MUST NOT** write long descriptions, code, or copy content from §4 into §5.
 
 | § | Title | Grok MUST put here | Grok MUST NOT put here |
 |---|--------|-------------------|------------------------|

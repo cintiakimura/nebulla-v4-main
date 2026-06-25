@@ -12,17 +12,34 @@
 
 ## Workflow diagram (strict sequence)
 
+**Grok and the product MUST follow this exact order. No reordering or skipping is allowed.**
+
 ```
 Interview done
-    → Master Plan (5 sections, §5 ≤ 15–25 lines)
-    → Mind Map sync (§4 ONLY)          ← parallel, MUST NOT wait for §5/v0
-    → nebula-ui-studio/v0-prompt.md    ← IMMEDIATELY after Master Plan
-    → V0 API (auto)                    ← IMMEDIATELY after v0-prompt.md
-    → v0-original/<timestamp>/         ← immutable restore
-    → UI Studio (§5 + v0-prompt + UI)
-    → Apply Changes to All Pages       ← warning + confirm
-    → Grok file apply → App Preview
+    → Master Plan (exactly 5 sections with ### headers; §5 ≤ 15–25 lines concise summary)
+    → Mind Map sync (from §4 Pages and navigation ONLY)   ← MUST NOT wait for §5 or v0
+    → nebula-ui-studio/v0-prompt.md (detailed, §4 + §5 combined) ← IMMEDIATELY after Master Plan
+    → V0 API triggered automatically (using v0-prompt.md as sole input)
+    → v0-original/<timestamp>/ saved (immutable restore copy)
+    → Nebula UI Studio loads (§5 + v0-prompt.md + generated UI) for manual editing
+    → User edits visually → "Apply Changes to All Pages" (warning + explicit confirmation)
+    → Grok implements via file: blocks → App Preview updated
 ```
+
+**This is the only valid sequence.** Any deviation (especially skipping v0-prompt.md creation or the automatic V0 trigger) is a violation.
+
+---
+
+## Mandatory 6-Step UI/UX Generation Process (Grok MUST)
+
+1. **Master Plan complete** — Grok emits the five sections. §5 is a short visual summary only (15–25 lines max).
+2. **Create `v0-prompt.md`** — Grok **immediately** writes a concise but detailed prompt (800–1200 chars) combining §4 + §5 and saves it to `nebula-ui-studio/v0-prompt.md`.
+3. **Trigger V0 API** — Grok **immediately** calls the V0 API using the saved prompt file as the **only** source.
+4. **Save original output** — Product writes the first v0 result to the immutable folder `nebula-ui-studio/v0-original/<timestamp>/`.
+5. **Open in UI Studio** — Product loads §5 + `v0-prompt.md` + the generated UI into the visual editor. User performs manual edits.
+6. **Apply Changes** — On user confirmation of "Apply Changes to All Pages", Grok writes the approved changes into the actual source files using proper `file:` blocks and updates the live preview.
+
+**Grok MUST NOT** write large code blocks in chat at any point. All implementation goes through the file apply mechanism.
 
 ---
 

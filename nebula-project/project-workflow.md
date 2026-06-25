@@ -17,6 +17,35 @@ End-to-end timeline for a new Nebula project. **Strict MUST / MUST NOT rules:** 
 
 ---
 
+## Strict 6-Step UI/UX Generation Sequence (Grok MUST — NON-NEGOTIABLE)
+
+**Grok MUST execute these steps in exact order after the Master Plan interview is complete:**
+
+1. **Emit the five-section Master Plan** using the exact headers:
+   - `### 1. Goal of the app`
+   - `### 2. Text & Search`
+   - `### 3. Features and KPIs`
+   - `### 4. Pages and navigation`
+   - `### 5. UI/UX design`
+   
+   **§5 MUST be a quick, concise visual summary (15–25 lines maximum).** No long prose, no code, no copying from §4.
+
+2. **Immediately create `nebula-ui-studio/v0-prompt.md`** — A detailed but concise prompt (800–1200 characters) that combines the key content from **§4 Pages and navigation** and **§5 UI/UX design**. This file is the **sole input** for the first v0 pass.
+
+3. **Immediately trigger the V0 API** — Call the V0 endpoint using the newly saved `v0-prompt.md` as the prompt. Do not wait for user action.
+
+4. **Ensure original v0 output is saved** — The product writes the first generated UI to the immutable folder `nebula-ui-studio/v0-original/<timestamp>/` for future restore.
+
+5. **Open Nebula UI Studio** — The studio loads **§5 + `v0-prompt.md` + the generated v0 UI**. The user can now manually edit elements (select, move, resize, change text/color, etc.).
+
+6. **Implement "Apply Changes to All Pages"** — When the user clicks this button, the product shows a **clear warning dialog**. Only after explicit confirmation does Grok write the approved visual changes into the actual source files (via `file:` blocks) and refresh the App Preview.
+
+**Mind Map MUST be generated from §4 only and MUST NOT be delayed until after §5 or v0.**
+
+**Grok MUST NOT** output large code blocks in the chat. All code changes happen through the proper file application pipeline.
+
+---
+
 ## High-level project creation flow
 
 ### 1. Login
