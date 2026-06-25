@@ -1093,7 +1093,7 @@ export async function mountRenderStack(app: Express) {
   // --- Projects API ---
   app.get("/api/projects", async (req, res) => {
     const uid = readSession(req);
-    if (!uid) return res.status(401).json({ error: "Unauthorized" });
+    if (!uid) return res.json({ projects: [] });
     if (!hasDb()) return res.status(503).json({ error: "Database not configured" });
     const oneName = typeof req.query.name === "string" ? req.query.name.trim() : "";
     try {
