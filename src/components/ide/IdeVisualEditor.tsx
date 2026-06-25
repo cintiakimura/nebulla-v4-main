@@ -401,6 +401,7 @@ export function IdeVisualEditor({
   const [applyConfirmOpen, setApplyConfirmOpen] = useState(false);
   const [revertConfirmOpen, setRevertConfirmOpen] = useState(false);
   const [restoreOriginalConfirmOpen, setRestoreOriginalConfirmOpen] = useState(false);
+  const [applyAllPagesConfirmOpen, setApplyAllPagesConfirmOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -1363,8 +1364,9 @@ export function IdeVisualEditor({
                 disabled={busy}
                 onClick={() => void runV0Refine()}
                 className="btn-secondary-surface hidden rounded-md px-2 py-1 text-[10px] text-muted-foreground hover:text-foreground disabled:opacity-40 md:inline"
+                title="Send current visual edits to v0 for an optimized regeneration (cheaper than new full prompt)"
               >
-                Refine
+                Apply Changes &amp; Regenerate with v0
               </button>
             ) : null}
             <button
@@ -1426,7 +1428,7 @@ export function IdeVisualEditor({
           <button
             type="button"
             disabled={!selected}
-            onClick={() => applySimilarAllPages()}
+            onClick={() => setApplyAllPagesConfirmOpen(true)}
             className="rounded-md px-2 py-1 text-[10px] text-muted-foreground hover:bg-secondary/50 hover:text-foreground disabled:opacity-40"
           >
             Apply to all pages
@@ -1554,10 +1556,10 @@ export function IdeVisualEditor({
               )}
             </div>
           </div>
-          {selectedId && menuPos ? (
+          {selectedId && previewSurface === 'visual-model' ? (
             <div
               className="pointer-events-auto absolute z-20 flex min-w-[180px] flex-col overflow-hidden rounded-lg border border-blue-500/50 bg-[#0c1a2e] py-1 text-[11px] shadow-xl"
-              style={{ top: menuPos.top, left: menuPos.left }}
+              style={{ top: menuPos ? menuPos.top : 80, left: menuPos ? menuPos.left : 24 }}
               onClick={(e) => e.stopPropagation()}
             >
               <span className="px-2 py-1 text-[10px] text-slate-500">Element</span>
@@ -1614,6 +1616,215 @@ export function IdeVisualEditor({
             </div>
           ) : null}
         </main>
+
+        {/* Right Properties Panel (Design mode) */}
+        {previewSurface === 'visual-model' && selected ? (
+          <aside className="w-72 shrink-0 border-l border-white/10 bg-[#050a14] overflow-y-auto">
+            <div className="sticky top-0 z-10 border-b border-white/10 bg-[#050a14] px-3 py-2 text-[11px] font-medium text-muted-foreground">
+              Properties · {selected.role}
+            </div>
+            <div className="p-3 space-y-4 text-[11px]">
+              {/* Text */}
+              {(selected.type === 'text' || selected.type === 'button') && (
+                <div>
+                  <div className="mb-1.5 text-[10px] uppercase tracking-wider text-slate-500">Text</div>
+                  <input
+                    type="text"
+                    value={selected.text || ''}
+                    onChange={(e) => updateNodeText(selectedId!, e.target.value)}
+                    className="w-full rounded border border-white/10 bg-black/40 px-2 py-1 text-foreground"
+                    placeholder="Label"
+                  />
+                  <div className="mt-2 grid grid-cols-2 gap-2">
+                    <label className="flex flex-col gap-0.5">
+                      <span className="text-[10px] text-slate-500">Color</span>
+                      <input
+                        type="color"
+                        value={selected.style.color || '#e2e8f0'}
+                        onChange={(e) => updateSelectedStyle({ color: e.target.value })}
+                        className="h-8 w-full rounded border border-white/10 bg-black/40"
+                      />
+                    </label>
+                    <label className="flex flex-col gap-0.5">
+                      <span className="text-[10px] text-slate-500">Opacity</span>
+                      <input
+                        type="range"
+                        min={0}
+                        max={1}
+                        step={0.05}
+                        value={selected.style.opacity ?? 1}
+                        onChange={(e) => updateSelectedStyle({ opacity: parseFloat(e.target.value) })}
+                        className="accent-cyan-400"
+                      />
+                    </label>
+                  </div>
+                </div>
+              )}
+
+              {/* Background */}
+              <div>
+                <div className="mb-1.5 text-[10px] uppercase tracking-wider text-slate-500">Background</div>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="color"
+                    value={selected.style.backgroundColor || '#0f172a'}
+                    onChange={(e) => updateSelectedStyle({ backgroundColor: e.target.value })}
+                    className="h-8 w-12 rounded border border-white/10 bg-black/40"
+                  />
+                  <input
+                    type="text"
+                    value={selected.style.backgroundColor || ''}
+                    onChange={(e) => updateSelectedStyle({ backgroundColor: e.target.value })}
+                    className="flex-1 rounded border border-white/10 bg-black/40 px-2 py-1 font-mono text-[10px] text-foreground"
+                    placeholder="#0f172a"
+                  />
+                </div>
+              </div>
+
+              {/* Size */}
+              <div>
+                <div className="mb-1.5 text-[10px] uppercase tracking-wider text-slate-500">Size</div>
+                <div className="grid grid-cols-2 gap-2">
+                  <label className="flex flex-col gap-0.5">
+                    <span className="text-[10px] text-slate-500">Width</span>
+                    <input
+                      type="text"
+                      value={selected.style.width || 'auto'}
+                      onChange={(e) => updateSelectedStyle({ width: e.target.value })}
+                      className="rounded border border-white/10 bg-black/40 px-2 py-1 font-mono text-[10px]"
+                      placeholder="auto / 100% / 320px"
+                    />
+                  </label>
+                  <label className="flex flex-col gap-0.5">
+                    <span className="text-[10px] text-slate-500">Height</span>
+                    <input
+                      type="text"
+                      value={selected.style.height || 'auto'}
+                      onChange={(e) => updateSelectedStyle({ height: e.target.value })}
+                      className="rounded border border-white/10 bg-black/40 px-2 py-1 font-mono text-[10px]"
+                      placeholder="auto / 200px"
+                    />
+                  </label>
+                </div>
+                <div className="mt-2">
+                  <label className="flex flex-col gap-0.5">
+                    <span className="text-[10px] text-slate-500">Border Radius</span>
+                    <input
+                      type="range"
+                      min={0}
+                      max={32}
+                      step={1}
+                      value={selected.style.borderRadius ?? 8}
+                      onChange={(e) => updateSelectedStyle({ borderRadius: parseInt(e.target.value, 10) })}
+                      className="accent-cyan-400"
+                    />
+                    <span className="font-mono text-[10px] text-slate-400">{selected.style.borderRadius ?? 8}px</span>
+                  </label>
+                </div>
+              </div>
+
+              {/* Padding */}
+              <div>
+                <div className="mb-1.5 flex items-center justify-between text-[10px] uppercase tracking-wider text-slate-500">
+                  <span>Padding</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const p = selected.style.paddingTop ?? 16;
+                      updateSelectedStyle({ paddingTop: p, paddingRight: p, paddingBottom: p, paddingLeft: p });
+                    }}
+                    className="text-[9px] text-cyan-400 hover:underline"
+                  >
+                    Equal
+                  </button>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  {[
+                    { k: 'paddingTop' as const, l: 'Top' },
+                    { k: 'paddingRight' as const, l: 'Right' },
+                    { k: 'paddingBottom' as const, l: 'Bottom' },
+                    { k: 'paddingLeft' as const, l: 'Left' },
+                  ].map(({ k, l }) => (
+                    <label key={k} className="flex flex-col gap-0.5">
+                      <span className="text-[10px] text-slate-500">{l}</span>
+                      <input
+                        type="number"
+                        min={0}
+                        max={128}
+                        value={selected.style[k] ?? 0}
+                        onChange={(e) => updateSelectedStyle({ [k]: parseInt(e.target.value, 10) || 0 })}
+                        className="rounded border border-white/10 bg-black/40 px-2 py-1 font-mono text-[10px]"
+                      />
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              {/* Margin */}
+              <div>
+                <div className="mb-1.5 flex items-center justify-between text-[10px] uppercase tracking-wider text-slate-500">
+                  <span>Margin</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const m = selected.style.marginTop ?? 0;
+                      updateSelectedStyle({ marginTop: m, marginRight: m, marginBottom: m, marginLeft: m });
+                    }}
+                    className="text-[9px] text-cyan-400 hover:underline"
+                  >
+                    Equal
+                  </button>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  {[
+                    { k: 'marginTop' as const, l: 'Top' },
+                    { k: 'marginRight' as const, l: 'Right' },
+                    { k: 'marginBottom' as const, l: 'Bottom' },
+                    { k: 'marginLeft' as const, l: 'Left' },
+                  ].map(({ k, l }) => (
+                    <label key={k} className="flex flex-col gap-0.5">
+                      <span className="text-[10px] text-slate-500">{l}</span>
+                      <input
+                        type="number"
+                        min={-64}
+                        max={128}
+                        value={selected.style[k] ?? 0}
+                        onChange={(e) => updateSelectedStyle({ [k]: parseInt(e.target.value, 10) || 0 })}
+                        className="rounded border border-white/10 bg-black/40 px-2 py-1 font-mono text-[10px]"
+                      />
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              {/* Border */}
+              <div>
+                <div className="mb-1.5 text-[10px] uppercase tracking-wider text-slate-500">Border</div>
+                <label className="flex flex-col gap-0.5">
+                  <span className="text-[10px] text-slate-500">Box Shadow</span>
+                  <input
+                    type="text"
+                    value={selected.style.boxShadow || ''}
+                    onChange={(e) => updateSelectedStyle({ boxShadow: e.target.value })}
+                    className="rounded border border-white/10 bg-black/40 px-2 py-1 font-mono text-[10px]"
+                    placeholder="0 1px 3px rgba(0,0,0,0.35)"
+                  />
+                </label>
+              </div>
+
+              <div className="pt-2 border-t border-white/10">
+                <button
+                  type="button"
+                  onClick={() => setApplyAllPagesConfirmOpen(true)}
+                  className="w-full rounded-lg border border-white/15 py-2 text-[11px] text-cyan-300 hover:bg-white/5"
+                >
+                  Apply to all pages
+                </button>
+                <p className="mt-1 text-[9px] text-center text-slate-500">Changes the style of matching roles across pages.</p>
+              </div>
+            </div>
+          </aside>
+        ) : null}
       </div>
 
       <footer className="surface-active flex shrink-0 items-center justify-between gap-2 border-t border-white/5 px-3 py-1.5 text-[10px] text-muted-foreground">
@@ -1730,6 +1941,43 @@ export function IdeVisualEditor({
                 className="rounded-lg bg-cyan-600 px-4 py-2 text-xs font-headline text-white disabled:opacity-40"
               >
                 {busy ? <Loader2 className="inline h-4 w-4 animate-spin" /> : <History className="inline h-4 w-4" />} Confirm restore
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {/* Apply to All Pages Confirmation */}
+      {applyAllPagesConfirmOpen ? (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-xl border border-amber-500/30 bg-[#071422] p-6 shadow-2xl">
+            <div className="mb-3 flex items-start gap-2">
+              <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-400" />
+              <div>
+                <h3 className="font-headline text-sm text-amber-100">Apply style to all pages?</h3>
+                <p className="mt-2 text-xs leading-relaxed text-slate-400">
+                  This will overwrite the style of every element with the same role (<code className="text-amber-300/90">{selected?.role}</code>) across <strong>all pages</strong> in this visual model.
+                  This cannot be undone automatically. Consider using "Match style (page)" first to preview.
+                </p>
+              </div>
+            </div>
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                type="button"
+                className="rounded-lg border border-white/15 px-4 py-2 text-xs text-slate-300"
+                onClick={() => setApplyAllPagesConfirmOpen(false)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setApplyAllPagesConfirmOpen(false);
+                  applySimilarAllPages();
+                }}
+                className="rounded-lg bg-amber-600 px-4 py-2 text-xs font-headline text-white"
+              >
+                Apply to all pages
               </button>
             </div>
           </div>

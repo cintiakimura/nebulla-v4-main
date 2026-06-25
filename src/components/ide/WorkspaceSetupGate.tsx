@@ -66,11 +66,10 @@ export function WorkspaceSetupGate({ onReady }: { onReady: (ctx: WorkspaceContex
         setUser(result.user);
         setProjects(result.projects);
       }
-      if (result.status === 'needs_login') {
-        setConfig(result.config);
-      }
-      if (result.status === 'no_database') {
-        setConfig(result.config);
+      // Guest mode is the default during development — auto-enter without showing login.
+      if (result.status === 'needs_login' || result.status === 'no_database') {
+        handleGuestContinue();
+        return;
       }
       if (result.status === 'error') {
         setError(result.message);
