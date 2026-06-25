@@ -191,6 +191,19 @@ Re-sync only when §4 changes and user/product runs sync again.
 
 ---
 
+## Mandatory Agent Methods (Grok MUST)
+
+**Before ANY code change or edit:**
+- Mentally complete every item in `nebulla-project/code-review-checklist.md`.
+
+**Whenever a bug is reported or discovered:**
+- Strictly follow every step in `nebulla-project/debugging-method.md` (Verify → Analyze → Trace → Fix → Validate).
+- Never skip steps or jump to a fix.
+
+These two files are **non-negotiable**. Skipping them causes repeated bugs, incomplete fixes, and wasted user time.
+
+---
+
 ## Other rules (abbreviated)
 
 **Infrastructure Manager** — Render + DB; validates **V0_API_KEY**.
