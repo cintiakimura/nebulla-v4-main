@@ -616,7 +616,32 @@ No approved UI code yet.
   ): { promptText: string; projectDisplayName?: string } => {
     const pp = projectPathsFor(req);
     ensureNebulaUiStudioFileAt(pp.nebulaUiStudioPath);
-    const { content: canonicalPrompt } = ensureV0PromptSynced(pp);
+
+    // 1. Read Master Plan and extract "5. UI/UX design"
+    let uiUxDesign = "";
+    try {
+      const plan = readMasterPlanFile(pp.masterPlanPath);
+      uiUxDesign = String(plan["5. UI/UX design"] ?? plan["5. UI/UX Design"] ?? "").trim();
+    } catch {
+      /* ignore */
+    }
+
+    // 2. Read saved v0-prompt.md
+    const savedPrompt = readV0PromptMarkdown(pp.workspaceRoot).trim();
+
+    // 3. Combine into a strong prompt (saved prompt first, then enrich with current §5)
+    let combined = savedPrompt;
+    if (uiUxDesign && uiUxDesign.length > 20) {
+      if (!combined.includes(uiUxDesign.slice(0, 40))) {
+        combined = [combined, `UI/UX Design (from Master Plan):\n${uiUxDesign}`]
+          .filter(Boolean)
+          .join("\n\n");
+      }
+    }
+    if (!combined.trim() && uiUxDesign) {
+      combined = `UI/UX Design:\n${uiUxDesign}`;
+    }
+
     const skillExcerpt = readSkillDesignSystemExcerpt(pp.workspaceRoot);
     const extra = typeof body.message === "string" ? body.message.trim() : "";
     const projectDisplayName =
@@ -626,7 +651,7 @@ No approved UI code yet.
     const skillBlock = skillExcerpt
       ? `Design system (SKILL.md):\n${skillExcerpt.slice(0, 280)}`
       : "";
-    const promptTextRaw = [canonicalPrompt, skillBlock, extra].filter(Boolean).join("\n\n");
+    const promptTextRaw = [combined, skillBlock, extra].filter(Boolean).join("\n\n");
     return { promptText: clampV0PromptForApi(promptTextRaw), projectDisplayName };
   };
 
