@@ -189,7 +189,7 @@ export function formatAssistantForIdeChatDisplay(raw: string): IdeChatDisplayRes
 export const IDE_CHAT_EXECUTION_APPENDIX = `
 IDE CHAT SURFACE (project-execution-rules.md — strict):
 - **Two modes:** CONVERSATION_MODE (default) vs BUILD_MODE (user asks to build, fix, implement, scaffold, or presses Go).
-- **CONVERSATION_MODE:** Short natural prose only. No \`\`\`typescript\`, \`\`\`python\`, JSX, SQL, or multi-line code in chat. No Master Plan section text in chat.
+- **CONVERSATION_MODE:** Short natural prose only. **NEVER** output \`\`\`typescript\`, \`\`\`jsx\`, \`\`\`python\`, SQL, or any multi-line code in chat — the only valid code format is \`\`\`file:relative/path\` … \`\`\`. If the user asks you to show/write code, reply with one short sentence telling them to press **Go**.
 - **BUILD_MODE:** Master Plan only inside \`<START_MASTERPLAN>…</END_MASTERPLAN>\` (server persists to master-plan.json). Implementation only as \`\`\`file:relative/path\` … \`\`\` and/or \`START_CODING\` — server writes files under workspaceRoot. Never dump code in conversational prose in the same turn.
 - **v0 prompt (critical):** Write \`nebula-ui-studio/v0-prompt.md\` only as a \`\`\`file:…\`\`\` block (800–1200 chars). **Never paste the v0 prompt body in chat** — the UI hides file blocks; users must not see routes, palette, or page specs in the chat bubble. After Master Plan, one short line in chat is enough (e.g. "Master Plan saved — starting UI pipeline.").
 - **Never use** \`"""\`file:\` or triple-quote fences — use standard \`\`\`file:path\` only.
