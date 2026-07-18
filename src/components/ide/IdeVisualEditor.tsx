@@ -941,6 +941,20 @@ export function IdeVisualEditor({
     setBusy(true);
     setError('');
     try {
+      // If there was a previous start error, clear it automatically so the user can retry
+      if (studioStatus?.v0StartError) {
+        try {
+          await fetch(withProjectQuery('/api/nebula-ui-studio/v0-clear'), {
+            method: 'POST',
+            headers: persistHeaders(),
+            body: JSON.stringify(withProjectBody({})),
+          });
+          await loadStudioStatus();
+        } catch {
+          /* ignore clear failure, proceed anyway */
+        }
+      }
+
       try {
         await runMasterPlanUiPipeline({ projectName: projectLabel, autoV0: false });
       } catch {
@@ -958,7 +972,9 @@ export function IdeVisualEditor({
         v0StartError: freshStatus?.v0StartError,
         hasRealV0: freshStatus?.hasRealV0,
       });
-      if (!explicitResume && !preflight.ready) {
+      // Allow retry if the only blocker is a previous start error (we cleared it above)
+      const hasStartErrorBlock = !preflight.ready && freshStatus?.v0StartError;
+      if (!explicitResume && !preflight.ready && !hasStartErrorBlock) {
         setError(preflight.blockReason ?? 'v0 is not ready yet.');
         return;
       }

@@ -92,7 +92,11 @@ export function UiStudioV0Panel({
             ? readiness.blockReason || 'Complete checklist below before Generate.'
             : 'Ready — click Generate v0 once (avoid double-clicks).');
 
-  const canGenerate = hasV0ApiKey !== false && readiness.ready && !running && !cancelBusy;
+  const canGenerate =
+    hasV0ApiKey !== false &&
+    !running &&
+    !cancelBusy &&
+    (readiness.ready || Boolean(studioStatus?.v0StartError));
   const canResume =
     hasV0ApiKey !== false &&
     !running &&
