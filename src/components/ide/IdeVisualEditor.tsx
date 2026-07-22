@@ -944,14 +944,19 @@ export function IdeVisualEditor({
       // If there was a previous start error, clear it automatically so the user can retry
       if (studioStatus?.v0StartError) {
         try {
-          await fetch(withProjectQuery('/api/nebula-ui-studio/v0-clear'), {
+          const clearRes = await fetch(withProjectQuery('/api/nebula-ui-studio/v0-clear'), {
             method: 'POST',
             headers: persistHeaders(),
             body: JSON.stringify(withProjectBody({})),
           });
+          if (!clearRes.ok) {
+            const clearBody = (await clearRes.json().catch(() => ({}))) as { error?: string };
+            throw new Error(clearBody.error || `v0 clear failed (${clearRes.status})`);
+          }
           await loadStudioStatus();
-        } catch {
-          /* ignore clear failure, proceed anyway */
+        } catch (clearErr) {
+          setError(clearErr instanceof Error ? clearErr.message : 'Failed to clear previous v0 error');
+          return;
         }
       }
 

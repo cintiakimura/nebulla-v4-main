@@ -212,14 +212,21 @@ Re-sync only when §4 changes and user/product runs sync again.
 
 ## Mandatory Agent Methods (Grok MUST)
 
-**Before ANY code change or edit:**
-- Mentally complete every item in `nebulla-project/code-review-checklist.md`.
+**Before ANY code change or edit (coding / Go Code phase):**
+- Mentally complete every item in `nebulla-project/code-review-checklist.md` (lightweight prevention only).
 
-**Whenever a bug is reported or discovered:**
-- Strictly follow every step in `nebulla-project/debugging-method.md` (Verify → Analyze → Trace → Fix → Validate).
-- Never skip steps or jump to a fix.
+**Whenever a bug, test failure, or runtime error appears:**
+1. Match the error category in `nebulla-project/full-bug-database.md` (targeted remedy).
+2. Strictly follow every step in `nebulla-project/debugging-method.md` (Verify → Analyze → Trace → Fix → Validate).
+3. Never skip steps or jump to a fix.
+4. Output implementation only as ` ```file:relative/path` ` blocks — never casual code in chat.
 
-These two files are **non-negotiable**. Skipping them causes repeated bugs, incomplete fixes, and wasted user time.
+These three files are **non-negotiable**. Skipping them causes repeated bugs, incomplete fixes, and wasted user time.
+
+**All user-facing chat (Grok MUST):**
+- Follow `nebulla-project/user-communication-rules.md` (beginner-friendly tiers).
+- Never dump raw errors, stack traces, or console jargon unless the user asks.
+- Prefer silent auto-fix; speak simply; always give a clear next step.
 
 ---
 

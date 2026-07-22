@@ -2441,6 +2441,19 @@ No approved UI code yet.
   app.post("/api/nebulla-v0-poll", handleV0Poll);
   app.post("/api/nebula-v0-poll", handleV0Poll);
 
+  /** Clear stale v0 pending state (errors, stuck sessions) so Generate v0 can retry. */
+  app.post("/api/nebula-ui-studio/v0-clear", (req, res) => {
+    try {
+      const pp = projectPathsFor(req);
+      const cleared = cancelProjectBackgroundAttempts(pp.workspaceRoot);
+      return res.json({ ok: true, cleared });
+    } catch (err: unknown) {
+      return res.status(500).json({
+        error: err instanceof Error ? err.message : "v0 clear failed",
+      });
+    }
+  });
+
   app.post("/api/nebula-ui-studio/v0-generate", handleV0Start);
 
   app.post("/api/nebula-ui-studio/v0-update", async (req, res) => {

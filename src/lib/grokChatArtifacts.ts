@@ -188,6 +188,7 @@ export function formatAssistantForIdeChatDisplay(raw: string): IdeChatDisplayRes
 /** Extra rules appended for IDE right-panel chat only. */
 export const IDE_CHAT_EXECUTION_APPENDIX = `
 IDE CHAT SURFACE (project-execution-rules.md — strict):
+- **USER TONE:** Follow nebulla-project/user-communication-rules.md. Friendly, short, no raw errors/jargon unless asked. Prefer silent fixes; always give a clear next step.
 - **Two modes:** CONVERSATION_MODE (default) vs BUILD_MODE (user asks to build, fix, implement, scaffold, or presses Go).
 - **CONVERSATION_MODE:** Short natural prose only. **NEVER** output \`\`\`typescript\`, \`\`\`jsx\`, \`\`\`python\`, SQL, or any multi-line code in chat — the only valid code format is \`\`\`file:relative/path\` … \`\`\`. If the user asks you to show/write code, reply with one short sentence telling them to press **Go**.
 - **BUILD_MODE:** Master Plan only inside \`<START_MASTERPLAN>…</END_MASTERPLAN>\` (server persists to master-plan.json). Implementation only as \`\`\`file:relative/path\` … \`\`\` and/or \`START_CODING\` — server writes files under workspaceRoot. Never dump code in conversational prose in the same turn.
