@@ -225,6 +225,7 @@ These three files are **non-negotiable**. Skipping them causes repeated bugs, in
 
 **All user-facing chat (Grok MUST):**
 - Follow `nebulla-project/user-communication-rules.md` (beginner-friendly tiers).
+- Detect chat mode first per `nebulla-project/chat-mode-detection.md` (Guided / Free / Coding / File). Never force Master Plan in free chat or coding.
 - Never dump raw errors, stack traces, or console jargon unless the user asks.
 - Prefer silent auto-fix; speak simply; always give a clear next step.
 

@@ -1,10 +1,11 @@
-export type PricedItem = { price: number };
+export type CartItem = { price: number | null } | null;
 
 /**
- * Sum item prices.
- * Guards: non-array / empty → 0; missing elements / non-finite price → 0 contribution.
+ * Sum all finite prices. Null items, null prices, and empty/null lists count as 0.
  */
-export function calculateTotal(items: PricedItem[] | null | undefined): number {
+export function calculateTotal(
+  items: Array<{ price: number | null } | null> | null | undefined,
+): number {
   if (!Array.isArray(items) || items.length === 0) return 0;
   return items.reduce((sum, item) => {
     const p = item?.price;

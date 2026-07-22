@@ -207,6 +207,42 @@ const resolveWorkspaceRelative = (workspaceRoot: string, relativePath: string): 
   return target;
 };
 
+const FILE_OPEN_MAX_BYTES = 2_000_000;
+
+function getLanguageFromPath(filePath: string): string {
+  const p = String(filePath || "").split("?")[0].toLowerCase();
+  if (p.endsWith(".ts") || p.endsWith(".tsx")) return "typescript";
+  if (p.endsWith(".js") || p.endsWith(".jsx")) return "javascript";
+  if (p.endsWith(".md")) return "markdown";
+  return "plaintext";
+}
+
+/** Convert a github.com blob URL (or raw URL) into a raw.githubusercontent.com URL. */
+function toGitHubRawUrl(url: string, branch = "main"): string | null {
+  try {
+    const u = new URL(String(url || "").trim());
+    const host = u.hostname.toLowerCase();
+    if (host === "raw.githubusercontent.com") return u.toString();
+    if (host !== "github.com" && host !== "www.github.com") return null;
+    const parts = u.pathname.split("/").filter(Boolean);
+    if (parts.length >= 5 && parts[2] === "blob") {
+      const [owner, repo, , ref, ...rest] = parts;
+      if (!rest.length) return null;
+      return `https://raw.githubusercontent.com/${owner}/${repo}/${ref}/${rest.join("/")}`;
+    }
+    // path without /blob/ — treat remainder as file path under branch
+    if (parts.length >= 3) {
+      const [owner, repo, ...rest] = parts;
+      if (!rest.length) return null;
+      const safeBranch = String(branch || "main").replace(/[^\w.\-\/]/g, "") || "main";
+      return `https://raw.githubusercontent.com/${owner}/${repo}/${safeBranch}/${rest.join("/")}`;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 dotenv.config({ path: path.join(REPO_ROOT, ".env") });
 const envLocalPath = path.join(REPO_ROOT, ".env.local");
 if (fs.existsSync(envLocalPath)) {
@@ -1154,6 +1190,106 @@ No approved UI code yet.
       res.json({ content });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
+    }
+  });
+
+  /** Open a workspace-relative file (File Ops mode) — content + language hint. */
+  app.post("/api/files/open", (req, res) => {
+    try {
+      const { workspaceRoot } = projectPathsFor(req);
+      const filePath =
+        typeof req.body?.path === "string"
+          ? req.body.path.trim().replace(/^\.\/+/, "").replace(/\\/g, "/")
+          : "";
+      if (!filePath) return res.status(400).json({ error: "path is required" });
+
+      const tryResolveUnder = (root: string, rel: string): string | null => {
+        try {
+          const full = resolveWorkspaceRelative(root, rel);
+          if (fs.existsSync(full) && !fs.statSync(full).isDirectory()) return full;
+        } catch {
+          /* access denied or missing */
+        }
+        return null;
+      };
+
+      // Workspace first; then repo product docs (nebulla-project/, nebula-project/).
+      let fullPath =
+        tryResolveUnder(workspaceRoot, filePath) ||
+        tryResolveUnder(REPO_ROOT, filePath) ||
+        tryResolveUnder(NEBULA_PROJECT_ROOT, filePath);
+
+      // Allow nebulla-project/foo.md → nebula-project/foo.md template docs
+      if (!fullPath && filePath.startsWith("nebulla-project/")) {
+        const alt = filePath.replace(/^nebulla-project\//, "");
+        fullPath = tryResolveUnder(NEBULA_PROJECT_ROOT, alt);
+      }
+
+      if (!fullPath) {
+        return res.status(404).json({ error: "File not found" });
+      }
+      const size = fs.statSync(fullPath).size;
+      if (size > FILE_OPEN_MAX_BYTES) {
+        return res.status(413).json({ error: "File too large to open" });
+      }
+
+      const content = fs.readFileSync(fullPath, "utf8");
+      return res.json({
+        success: true,
+        path: filePath,
+        content,
+        language: getLanguageFromPath(filePath),
+      });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Failed to open file";
+      if (/Access denied/i.test(msg)) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+      return res.status(500).json({ error: "Failed to open file" });
+    }
+  });
+
+  /** Open a single public GitHub file (blob or raw URL). */
+  app.post("/api/files/open-github", async (req, res) => {
+    try {
+      const url = typeof req.body?.url === "string" ? req.body.url.trim() : "";
+      const branch =
+        typeof req.body?.branch === "string" && req.body.branch.trim()
+          ? req.body.branch.trim()
+          : "main";
+      if (!url) return res.status(400).json({ error: "url is required" });
+
+      const rawUrl = toGitHubRawUrl(url, branch);
+      if (!rawUrl) {
+        return res.status(400).json({
+          error: "Only public github.com or raw.githubusercontent.com file URLs are supported",
+        });
+      }
+
+      const response = await fetch(rawUrl, {
+        headers: { Accept: "text/plain" },
+        signal: AbortSignal.timeout(20_000),
+      });
+      if (!response.ok) {
+        return res.status(response.status === 404 ? 404 : 502).json({
+          error: response.status === 404 ? "File not found on GitHub" : "Failed to fetch GitHub file",
+        });
+      }
+
+      const content = await response.text();
+      if (Buffer.byteLength(content, "utf8") > FILE_OPEN_MAX_BYTES) {
+        return res.status(413).json({ error: "File too large to open" });
+      }
+
+      return res.json({
+        success: true,
+        source: "github",
+        url,
+        content,
+        language: getLanguageFromPath(url),
+      });
+    } catch {
+      return res.status(500).json({ error: "Failed to open GitHub file" });
     }
   });
 
