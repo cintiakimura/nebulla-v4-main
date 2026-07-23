@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom/client';
 import App from './App';
 import './index.css';
 import { SwarmProvider } from './components/swarm/SwarmProvider';
+import { ModelSettingsProvider } from './components/settings/ModelSettingsContext';
 import { setBrowserProjectKey, setBrowserProjectName } from './lib/nebulaProjectApi';
 import {
   getWorkspaceModePreference,
@@ -39,8 +40,10 @@ if (
  */
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    <SwarmProvider>
-      <App />
-    </SwarmProvider>
+    <ModelSettingsProvider billingTier="free">
+      <SwarmProvider>
+        <App />
+      </SwarmProvider>
+    </ModelSettingsProvider>
   </React.StrictMode>,
 );

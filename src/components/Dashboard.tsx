@@ -515,12 +515,18 @@ function isServerReservedGrokSecretName(raw: string): boolean {
   const n = raw.trim().toUpperCase();
   return (
     n === 'MAIN_API_KEY_GROK' ||
-    n === 'MAIN_API_KEY_GROK' ||
+    n === 'MAIN_AI_API_KEY' ||
     n === 'GROK_API_KEY_LUMEN' ||
-    n === 'GROK_API_KEY' ||
-    n === 'V0_API_KEY'
+    n === 'GROK_API_KEY'
   );
 }
+
+const SECRET_CATEGORY_OPTIONS: { id: SecretCategory; label: string }[] = [
+  { id: 'api_key', label: 'API key' },
+  { id: 'oauth_token', label: 'OAuth token' },
+  { id: 'variable', label: 'Env variable' },
+  { id: 'generic', label: 'Generic' },
+];
 
 function ProjectSecretsEditor({ activeProjectKey }: { activeProjectKey: string }) {
   const [entries, setEntries] = useState<SecretEntry[]>([]);
@@ -532,6 +538,16 @@ function ProjectSecretsEditor({ activeProjectKey }: { activeProjectKey: string }
     const cleaned = next.filter((e) => !isServerReservedGrokSecretName(e.name));
     setEntries(cleaned);
     saveProjectSecrets(activeProjectKey, cleaned);
+    try {
+      const v0 = cleaned.find((e) => e.name.trim().toUpperCase() === 'V0_API_KEY');
+      if (v0?.value.trim()) {
+        localStorage.setItem('nebulla_v0_api_key', v0.value.trim());
+        window.dispatchEvent(new CustomEvent('nebula-v0-key-updated'));
+      }
+      window.dispatchEvent(new CustomEvent('nebula-secrets-updated'));
+    } catch {
+      /* ignore */
+    }
   };
 
   useEffect(() => {
@@ -557,7 +573,10 @@ function ProjectSecretsEditor({ activeProjectKey }: { activeProjectKey: string }
     return () => document.removeEventListener('mousedown', onDoc);
   }, [rowMenuId]);
 
-  const patchEntry = (id: string, patch: Partial<Pick<SecretEntry, 'name' | 'value'>>) => {
+  const patchEntry = (
+    id: string,
+    patch: Partial<Pick<SecretEntry, 'name' | 'value' | 'category' | 'note'>>,
+  ) => {
     if (patch.name !== undefined && isServerReservedGrokSecretName(patch.name)) return;
     persist(entries.map((x) => (x.id === id ? { ...x, ...patch } : x)));
   };
@@ -575,7 +594,7 @@ function ProjectSecretsEditor({ activeProjectKey }: { activeProjectKey: string }
     setRowMenuId(null);
   };
 
-  const addRow = () => {
+  const addRow = (category: SecretCategory = 'api_key') => {
     const id = newSecretId();
     persist([
       ...entries,
@@ -583,7 +602,7 @@ function ProjectSecretsEditor({ activeProjectKey }: { activeProjectKey: string }
         id,
         name: '',
         value: '',
-        category: 'variable' as SecretCategory,
+        category,
       },
     ]);
     window.requestAnimationFrame(() => {
@@ -610,94 +629,153 @@ function ProjectSecretsEditor({ activeProjectKey }: { activeProjectKey: string }
   return (
     <div className="space-y-4">
       <p className="text-xs text-slate-500 leading-relaxed rounded-lg border border-white/10 bg-black/20 px-3 py-2">
-        <code className="text-cyan-300/90">MAIN_API_KEY_GROK</code> is set on the server only (see{' '}
-        <code className="text-slate-400">.env</code> / <span className="text-slate-400">environment-setup.md</span>). It
-        cannot be added or edited here.
+        Store API keys and env vars for this project in this browser. Server-only{' '}
+        <code className="text-cyan-300/90">MAIN_API_KEY_GROK</code> cannot be added here — set it in{' '}
+        <code className="text-slate-400">.env</code> / Render. <code className="text-cyan-300/90">V0_API_KEY</code> and
+        other integration keys can be saved below.
       </p>
+
+      <div className="flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          onClick={() => addRow('api_key')}
+          className="inline-flex items-center gap-2 rounded-lg border border-white/15 bg-transparent px-3 py-2 text-xs font-headline text-cyan-200 transition-colors hover:border-cyan-500/35 hover:text-cyan-100"
+        >
+          <Plus className="w-3.5 h-3.5" />
+          Add secret
+        </button>
+        <button
+          type="button"
+          onClick={() => addRow('api_key')}
+          className="inline-flex items-center gap-2 rounded-lg border border-white/15 bg-transparent px-3 py-2 text-xs font-headline text-slate-300 transition-colors hover:border-cyan-500/35 hover:text-cyan-200"
+        >
+          <Key className="w-3.5 h-3.5" />
+          Add API key
+        </button>
+        <button
+          type="button"
+          onClick={() => addRow('variable')}
+          className="inline-flex items-center gap-2 rounded-lg border border-white/15 bg-transparent px-3 py-2 text-xs font-headline text-slate-300 transition-colors hover:border-cyan-500/35 hover:text-cyan-200"
+        >
+          <Plus className="w-3.5 h-3.5" />
+          Add env variable
+        </button>
+      </div>
+
       <ul className="space-y-3">
         {entries.map((e) => (
           <li
             key={e.id}
-            className="rounded-lg border border-white/10 bg-black/25 p-3 flex flex-col sm:flex-row sm:items-center gap-3"
+            className="rounded-lg border border-white/10 bg-black/25 p-3 flex flex-col gap-3"
           >
-            <label className="sr-only" htmlFor={`secret-name-${e.id}`}>
-              Variable name
-            </label>
-            <input
-              id={`secret-name-${e.id}`}
-              value={e.name}
-              onChange={(ev) => patchEntry(e.id, { name: ev.target.value })}
-              onBlur={() => cleanupEmptyRow(e.id)}
-              placeholder="VARIABLE_NAME"
-              autoComplete="off"
-              className="flex-1 min-w-0 bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-sm text-slate-200 font-mono focus:border-cyan-500/40 outline-none"
-            />
-            <div className="flex flex-1 min-w-0 items-center gap-2">
-              <label className="sr-only" htmlFor={`secret-value-${e.id}`}>
-                Secret
+            <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+              <label className="sr-only" htmlFor={`secret-name-${e.id}`}>
+                Variable name
               </label>
               <input
-                id={`secret-value-${e.id}`}
-                type={revealedId === e.id ? 'text' : 'password'}
-                value={e.value}
-                onChange={(ev) => patchEntry(e.id, { value: ev.target.value })}
+                id={`secret-name-${e.id}`}
+                value={e.name}
+                onChange={(ev) => patchEntry(e.id, { name: ev.target.value })}
                 onBlur={() => cleanupEmptyRow(e.id)}
-                placeholder="Secret value"
+                placeholder="VARIABLE_NAME"
                 autoComplete="off"
                 className="flex-1 min-w-0 bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-sm text-slate-200 font-mono focus:border-cyan-500/40 outline-none"
               />
-              <button
-                type="button"
-                onClick={() => setRevealedId((prev) => (prev === e.id ? null : e.id))}
-                className="shrink-0 p-2 rounded-lg border border-white/10 text-slate-400 hover:text-cyan-300 hover:border-cyan-500/30 transition-colors"
-                title={revealedId === e.id ? 'Hide secret' : 'Reveal secret'}
-                aria-pressed={revealedId === e.id}
-              >
-                {revealedId === e.id ? <EyeOff className="w-4 h-4" aria-hidden /> : <Eye className="w-4 h-4" aria-hidden />}
-              </button>
-              <div className="relative shrink-0" data-nebulla-secret-menu>
+              <div className="flex flex-1 min-w-0 items-center gap-2">
+                <label className="sr-only" htmlFor={`secret-value-${e.id}`}>
+                  Secret
+                </label>
+                <input
+                  id={`secret-value-${e.id}`}
+                  type={revealedId === e.id ? 'text' : 'password'}
+                  value={e.value}
+                  onChange={(ev) => patchEntry(e.id, { value: ev.target.value })}
+                  onBlur={() => cleanupEmptyRow(e.id)}
+                  placeholder="Secret value"
+                  autoComplete="off"
+                  className="flex-1 min-w-0 bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-sm text-slate-200 font-mono focus:border-cyan-500/40 outline-none"
+                />
                 <button
                   type="button"
-                  onClick={() => setRowMenuId((id) => (id === e.id ? null : e.id))}
-                  className="p-2 rounded-lg border border-white/10 text-slate-400 hover:text-cyan-200 hover:border-cyan-500/30"
-                  title="Actions"
-                  aria-haspopup="menu"
-                  aria-expanded={rowMenuId === e.id}
+                  onClick={() => setRevealedId((prev) => (prev === e.id ? null : e.id))}
+                  className="shrink-0 p-2 rounded-lg border border-white/10 bg-transparent text-slate-400 hover:text-cyan-300 hover:border-cyan-500/30 transition-colors"
+                  title={revealedId === e.id ? 'Hide secret' : 'Reveal secret'}
+                  aria-pressed={revealedId === e.id}
                 >
-                  <MoreHorizontal className="w-4 h-4" />
+                  {revealedId === e.id ? <EyeOff className="w-4 h-4" aria-hidden /> : <Eye className="w-4 h-4" aria-hidden />}
                 </button>
-                {rowMenuId === e.id ? (
-                  <div className="absolute right-0 top-full mt-1 z-20 min-w-[10.5rem] rounded-lg border border-white/15 bg-[#061520] py-1 shadow-xl">
-                    <button
-                      type="button"
-                      onClick={() => focusName(e.id)}
-                      className="w-full text-left px-3 py-2 text-xs text-slate-200 hover:bg-white/10 flex items-center gap-2"
-                    >
-                      <Pencil className="w-3.5 h-3.5 shrink-0" />
-                      Edit
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => copyValue(e)}
-                      className="w-full text-left px-3 py-2 text-xs text-slate-200 hover:bg-white/10 flex items-center gap-2"
-                    >
-                      <Copy className="w-3.5 h-3.5 shrink-0" />
-                      {copiedId === e.id ? 'Copied' : 'Copy'}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setRowMenuId(null);
-                        if (window.confirm('Delete this secret?')) removeOne(e.id);
-                      }}
-                      className="w-full text-left px-3 py-2 text-xs text-red-300/90 hover:bg-red-500/10 flex items-center gap-2"
-                    >
-                      <Trash2 className="w-3.5 h-3.5 shrink-0" />
-                      Delete
-                    </button>
-                  </div>
-                ) : null}
+                <div className="relative shrink-0" data-nebulla-secret-menu>
+                  <button
+                    type="button"
+                    onClick={() => setRowMenuId((id) => (id === e.id ? null : e.id))}
+                    className="p-2 rounded-lg border border-white/10 bg-transparent text-slate-400 hover:text-cyan-200 hover:border-cyan-500/30"
+                    title="Actions"
+                    aria-haspopup="menu"
+                    aria-expanded={rowMenuId === e.id}
+                  >
+                    <MoreHorizontal className="w-4 h-4" />
+                  </button>
+                  {rowMenuId === e.id ? (
+                    <div className="absolute right-0 top-full mt-1 z-20 min-w-[10.5rem] rounded-lg border border-white/15 bg-[#061520] py-1 shadow-xl">
+                      <button
+                        type="button"
+                        onClick={() => focusName(e.id)}
+                        className="w-full text-left px-3 py-2 text-xs text-slate-200 hover:bg-white/10 flex items-center gap-2"
+                      >
+                        <Pencil className="w-3.5 h-3.5 shrink-0" />
+                        Edit
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => copyValue(e)}
+                        className="w-full text-left px-3 py-2 text-xs text-slate-200 hover:bg-white/10 flex items-center gap-2"
+                      >
+                        <Copy className="w-3.5 h-3.5 shrink-0" />
+                        {copiedId === e.id ? 'Copied' : 'Copy'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setRowMenuId(null);
+                          if (window.confirm('Delete this secret?')) removeOne(e.id);
+                        }}
+                        className="w-full text-left px-3 py-2 text-xs text-red-300/90 hover:bg-red-500/10 flex items-center gap-2"
+                      >
+                        <Trash2 className="w-3.5 h-3.5 shrink-0" />
+                        Delete
+                      </button>
+                    </div>
+                  ) : null}
+                </div>
               </div>
+            </div>
+            <div className="flex flex-col sm:flex-row gap-2 sm:items-center">
+              <label className="sr-only" htmlFor={`secret-category-${e.id}`}>
+                Category
+              </label>
+              <select
+                id={`secret-category-${e.id}`}
+                value={e.category}
+                onChange={(ev) => patchEntry(e.id, { category: ev.target.value as SecretCategory })}
+                className="w-full sm:w-40 bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-xs text-slate-300 focus:border-cyan-500/40 outline-none"
+              >
+                {SECRET_CATEGORY_OPTIONS.map((opt) => (
+                  <option key={opt.id} value={opt.id}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+              <label className="sr-only" htmlFor={`secret-note-${e.id}`}>
+                Note
+              </label>
+              <input
+                id={`secret-note-${e.id}`}
+                value={e.note ?? ''}
+                onChange={(ev) => patchEntry(e.id, { note: ev.target.value })}
+                placeholder="Optional note"
+                autoComplete="off"
+                className="flex-1 min-w-0 bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-xs text-slate-300 focus:border-cyan-500/40 outline-none"
+              />
             </div>
           </li>
         ))}
@@ -705,27 +783,27 @@ function ProjectSecretsEditor({ activeProjectKey }: { activeProjectKey: string }
 
       {entries.length === 0 ? (
         <p className="text-sm text-slate-500 py-6 text-center border border-dashed border-white/10 rounded-lg">
-          No secrets yet. Add a row to store API keys or env variables (this browser only).
+          No secrets yet. Use Add secret to store API keys or env variables (this browser only).
         </p>
       ) : null}
-
-      <div className="flex justify-start">
-        <button
-          type="button"
-          onClick={addRow}
-          className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-headline border border-cyan-500/30 text-cyan-300 bg-cyan-500/10 hover:bg-cyan-500/20 transition-colors"
-        >
-          <Plus className="w-3.5 h-3.5" />
-          Add secret
-        </button>
-      </div>
     </div>
   );
 }
 
 function SecretsTab({ activeProjectKey }: { activeProjectKey: string }) {
   return (
-    <div className="animate-in slide-in-from-right-4 duration-300">
+    <div className="space-y-6 animate-in slide-in-from-right-4 duration-300">
+      <div>
+        <h3 className="text-xl font-headline text-cyan-300 mb-1 flex items-center gap-2">
+          <Key className="w-6 h-6" aria-hidden />
+          My Secrets
+        </h3>
+        <p className="text-sm text-slate-500 mb-2">
+          Browser-stored keys and variables for{' '}
+          <span className="font-mono text-cyan-500/80">{activeProjectKey}</span>. Reveal, copy, edit, or delete each
+          row.
+        </p>
+      </div>
       <ProjectSecretsEditor activeProjectKey={activeProjectKey} />
     </div>
   );

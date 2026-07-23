@@ -21,12 +21,12 @@ export function upsertProjectSecret(
 ): void {
   const trimmedName = name.trim();
   const upper = trimmedName.toUpperCase();
+  // Server-only Grok keys — never store in browser secrets. V0_API_KEY is allowed here.
   if (
     upper === 'MAIN_API_KEY_GROK' ||
     upper === 'MAIN_AI_API_KEY' ||
     upper === 'GROK_API_KEY_LUMEN' ||
-    upper === 'GROK_API_KEY' ||
-    upper === 'V0_API_KEY'
+    upper === 'GROK_API_KEY'
   ) {
     return;
   }
