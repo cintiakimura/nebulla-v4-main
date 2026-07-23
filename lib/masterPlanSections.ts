@@ -194,10 +194,15 @@ MASTER PLAN SECTION SEPARATION (mandatory inside <START_MASTERPLAN>…</END_MAST
 const MIN_SECTION_CHARS = 80;
 const RESEARCH_HINT_RE =
   /competitor|research|study|studies|feature|ui\/ux|navigation|pillar|supporting/i;
+const PROJECT_TYPE_RE = /\b(web\s*app|mobile\s*app|landing\s*page)\b/i;
+/** At least a few capitalized product-like names (real competitors, not fluff). */
+const COMPETITOR_NAME_HINT_RE =
+  /\b([A-Z][a-zA-Z0-9]{2,}(?:\s+[A-Z][a-zA-Z0-9]{2,}){0,2})\b/g;
 
 /**
  * True when the saved Master Plan is solid enough to skip full Discovery:
- * all five user sections present with substance, and §2 shows research-pillar content.
+ * all five user sections present with substance, Project Type in §1,
+ * and §2 shows research-pillar content (competitors + evidence language).
  */
 export function isMasterPlanCompleteForDiscovery(
   raw: Record<string, unknown> | null | undefined,
@@ -208,9 +213,20 @@ export function isMasterPlanCompleteForDiscovery(
     const body = (n[key] || "").trim();
     if (body.length < MIN_SECTION_CHARS) return false;
   }
+  const goal = (n["1. Goal of the app"] || "").trim();
+  const hasProjectType = PROJECT_TYPE_RE.test(goal) || /project\s*type/i.test(goal);
+
   const research = (n["2. Tech and Research"] || "").trim();
   if (research.length < 200) return false;
   if (!RESEARCH_HINT_RE.test(research)) return false;
+  const names = research.match(COMPETITOR_NAME_HINT_RE) || [];
+  const uniq = new Set(names.map((s) => s.trim()));
+  const hasCompetitorSignal =
+    uniq.size >= 3 || /\b(competitors?|competitive)\b/i.test(research);
+  if (!hasCompetitorSignal) return false;
+
+  // Prefer explicit Project Type; allow strong legacy research plans without it.
+  if (!hasProjectType && !(research.length >= 350 && uniq.size >= 5)) return false;
   return true;
 }
 

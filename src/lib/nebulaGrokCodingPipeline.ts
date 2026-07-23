@@ -513,8 +513,8 @@ export async function handlePostGrokCodingTurn(options: {
   }
 
   const planning = planningPhase.trim();
-  const wantsCoding =
-    isCodingIntent(planning) || isCodingIntent(assistantContent) || /\bANSWER_Q1\b/i.test(planning);
+  // Only START_CODING / explicit coding tags launch Go — never ANSWER_Qn (tab approval ≠ implement).
+  const wantsCoding = isCodingIntent(planning) || isCodingIntent(assistantContent);
 
   if (!wantsCoding) {
     return { ran: false };

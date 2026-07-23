@@ -602,24 +602,19 @@ No approved UI code yet.
     );
   };
 
-  const V0_PROMPT_MIN_LEN = 80;
-
-  /** Rebuild v0-prompt.md from Master Plan §4+§5 (and app routes when §4 is empty). */
+  /** Always rebuild v0-prompt.md from current Master Plan (avoids stale prompts after §4/§5 edits). */
   const ensureV0PromptSynced = (
     pp: ReturnType<typeof projectPathsFor>,
   ): { content: string; synced: boolean } => {
-    let content = readV0PromptMarkdown(pp.workspaceRoot).trim();
-    if (content.length > V0_PROMPT_MIN_LEN) {
-      return { content, synced: false };
-    }
     try {
+      const prev = readV0PromptMarkdown(pp.workspaceRoot).trim();
       const v0Sync = syncV0PromptFromMasterPlan(pp.workspaceRoot, pp.masterPlanPath);
       mirrorV0PromptToStudioFile(pp, v0Sync.content);
-      content = v0Sync.content.trim();
-      return { content, synced: true };
+      const content = v0Sync.content.trim();
+      return { content, synced: content !== prev };
     } catch (e) {
       console.warn("[ensureV0PromptSynced]", e);
-      return { content, synced: false };
+      return { content: readV0PromptMarkdown(pp.workspaceRoot).trim(), synced: false };
     }
   };
 
@@ -659,29 +654,12 @@ No approved UI code yet.
     const pp = projectPathsFor(req);
     ensureNebulaUiStudioFileAt(pp.nebulaUiStudioPath);
 
-    // 1. Read Master Plan and extract "5. UI/UX design"
-    let uiUxDesign = "";
-    try {
-      const plan = readMasterPlanFile(pp.masterPlanPath);
-      uiUxDesign = String(plan["5. UI/UX design"] ?? plan["5. UI/UX Design"] ?? "").trim();
-    } catch {
-      /* ignore */
-    }
-
-    // 2. Read saved v0-prompt.md
-    const savedPrompt = readV0PromptMarkdown(pp.workspaceRoot).trim();
-
-    // 3. Combine into a strong prompt (saved prompt first, then enrich with current §5)
-    let combined = savedPrompt;
-    if (uiUxDesign && uiUxDesign.length > 20) {
-      if (!combined.includes(uiUxDesign.slice(0, 40))) {
-        combined = [combined, `UI/UX Design (from Master Plan):\n${uiUxDesign}`]
-          .filter(Boolean)
-          .join("\n\n");
-      }
-    }
-    if (!combined.trim() && uiUxDesign) {
-      combined = `UI/UX Design:\n${uiUxDesign}`;
+    // Rebuild concise brief from Master Plan (§4 routes + §5 visuals + project type).
+    // Do not re-append full §5 — that bloated prompts and truncated routes first.
+    const synced = ensureV0PromptSynced(pp);
+    let combined = synced.content.trim();
+    if (!combined) {
+      combined = readV0PromptMarkdown(pp.workspaceRoot).trim();
     }
 
     const skillExcerpt = readSkillDesignSystemExcerpt(pp.workspaceRoot);
@@ -691,7 +669,7 @@ No approved UI code yet.
         ? String(body.projectDisplayName).trim()
         : undefined;
     const skillBlock = skillExcerpt
-      ? `Design system (SKILL.md):\n${skillExcerpt.slice(0, 280)}`
+      ? `Design system (SKILL.md):\n${skillExcerpt.slice(0, 200)}`
       : "";
     const promptTextRaw = [combined, skillBlock, extra].filter(Boolean).join("\n\n");
     return { promptText: clampV0PromptForApi(promptTextRaw), projectDisplayName };
@@ -3484,14 +3462,9 @@ Strict rules:
           plan = {};
         }
       }
+      // Session notes belong only in PRE_CODING_SUMMARY — never pollute §1 Goal
+      // (Project Type parsing + v0 one-liner depend on a clean goal).
       plan[PRE_CODING_SUMMARY_KEY] = summary;
-      const goalKey = "1. Goal of the app";
-      const existingGoal = String(plan[goalKey] ?? "").trim();
-      if (!existingGoal) {
-        plan[goalKey] = summary;
-      } else if (!existingGoal.includes(summary.slice(0, 80))) {
-        plan[goalKey] = `${existingGoal}\n\n**Latest coding session (Go):**\n${summary}`;
-      }
       fs.writeFileSync(masterPlanPath, JSON.stringify(plan, null, 2), "utf8");
       v0Sync = syncV0PromptFromMasterPlan(ppGo.workspaceRoot, masterPlanPath);
       mirrorV0PromptToStudioFile(ppGo, v0Sync.content);
@@ -3908,14 +3881,13 @@ ${workflowContext}`;
 The user answered ONLY the first discovery question (core feature of their app). Infer reasonable defaults for audience, stack, pages, integrations, and environment (aligned with project-execution-rules.md) without asking the user.
 
 Output in ONE reply, in this order:
-1) <START_MASTERPLAN> ... </END_MASTERPLAN> with ALL six sections using these exact headings inside the block:
+1) <START_MASTERPLAN> ... </END_MASTERPLAN> with ALL five canonical sections using these exact headings:
    ### 1. Goal of the app
-   ### 2. Tech Research
+   ### 2. Tech and Research
    ### 3. Features and KPIs
    ### 4. Pages and navigation
    ### 5. UI/UX design
-   ### 6. Environment Setup
-   Each section must be substantive (not placeholders).
+   Each section must be substantive (not placeholders). §1 must state Project Type (Web App / Mobile App / Landing Page). §2 must name real competitors (Mandatory Research Pillars).
 2) <FINISH_MASTERPLAN>
 3) <START_CODING>
 
@@ -3923,7 +3895,7 @@ Optional: include ANSWER_Qn + <GROK_B_SUMMARY_Qn> for tabs as needed. After the 
 
 Hard guard:
 - Never copy/paste orchestration policy text from project-execution-rules.md into any Master Plan section.
-- Master Plan sections must contain product-specific app content only (goal/research/features/pages/ui/environment), not internal workflow instructions.
+- Master Plan sections must contain product-specific app content only (goal/research/features/pages/ui), not internal workflow instructions.
 
 Workflow reference (read order; do not paste verbatim into chat output):
 ${wf}

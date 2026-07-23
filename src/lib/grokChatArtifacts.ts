@@ -214,5 +214,59 @@ BUILD_MODE is active for this turn. Do not explain code in chat — emit file ar
 `.trim();
 }
 
+/** Compact NDM reminder injected when Smart Chat detects debugging mode. */
+export const NDM_DEBUG_APPENDIX = `
+ACTIVE MODE: DEBUGGING — Nebula Debugging Method (NDM) is mandatory this turn:
+1) Verify — expected vs actual; exact error/stack/UI symptom.
+2) Analyze — imports/paths, null/undefined, env, API mismatches, async, deps (check full-bug-database.md patterns).
+3) Trace — follow call stack / data flow; use code-review-checklist.md mentally.
+4) Fix — smallest safe change only via \`\`\`file:relative/path\` … \`\`\` (no large refactors).
+5) Validate — confirm the original bug is fixed; note remaining risks in one short sentence.
+Do not jump to a fix before Verify → Analyze → Trace. Prefer silent auto-fix language ("we fixed…").
+`.trim();
+
+/**
+ * Turn Smart Chat Handler hints into a short system appendix so mode detection
+ * actually reaches the model (previously codingHint was unused).
+ */
+export function chatModeSystemAppendix(options: {
+  mode?: string;
+  codingHint?: string;
+  discoveryRequired?: boolean;
+}): string {
+  const mode = (options.mode || '').trim();
+  const hint = (options.codingHint || '').trim();
+  const discoveryRequired = Boolean(options.discoveryRequired);
+  const parts: string[] = [];
+
+  if (mode) {
+    parts.push(`DETECTED_CHAT_MODE: ${mode}${discoveryRequired ? ' (Master Plan incomplete — Discovery still required before full build)' : ''}`);
+  }
+
+  if (mode === 'debugging' || /NDM:/i.test(hint)) {
+    parts.push(NDM_DEBUG_APPENDIX);
+  } else if (hint === 'guided-onboarding' || hint === 'discovery-required' || hint === 'discovery-required-after-file') {
+    parts.push(
+      'ACTIVE MODE: DISCOVERY — Ask exactly one clear question. Collect Project Type + Mandatory Research Pillars before Architecture/Coding/UI. Do not emit START_CODING until Master Plan is solid.',
+    );
+  } else if (hint) {
+    parts.push(`MODE_GUIDANCE: ${hint}`);
+  }
+
+  if (mode === 'coding' && !discoveryRequired) {
+    parts.push(
+      'ACTIVE MODE: CODING — Architecture-first. Prefer smallest safe change. Output only START_CODING and/or ```file:relative/path``` blocks. No casual ```typescript fences.',
+    );
+  }
+
+  if (mode === 'ui' && !discoveryRequired) {
+    parts.push(
+      'ACTIVE MODE: UI GENERATION — Ground v0 / UI Studio in §2 research + Project Type + §4 routes + §5 visuals. No vague "modern/clean" alone.',
+    );
+  }
+
+  return parts.join('\n\n').trim();
+}
+
 // Re-export for callers that need tab key by index
 export { masterPlanKeyForTabIndex };

@@ -42,3 +42,10 @@ Check the most common bug categories **first** (in this order):
 ---
 
 **Grok MUST follow NDM** whenever a bug is reported or discovered. Skipping steps leads to incomplete fixes and repeated issues.
+
+---
+
+## Output contract while debugging
+- Prefer a short Verify/Analyze note in chat (1–3 sentences), then apply the fix only as `file:relative/path` fenced blocks.
+- Never dump large refactors or casual language fences (typescript/jsx) in chat.
+- After Fix, state what was validated (or what the user should click to confirm).

@@ -10,7 +10,7 @@ export const IDE_CHAT_DISCOVERY_BOOTSTRAP =
  * Tells Grok to do a very short interview (max 3-4 questions) then produce the Master Plan.
  */
 export const IDE_CHAT_FAST_PROJECT_BOOTSTRAP =
-  "FAST PROJECT MODE. The user gave a short description for a new app. Respect project-execution-rules.md and create a proper Master Plan, but keep the discovery extremely short — ask at most 3-4 essential follow-up questions total, then move quickly to writing the full Master Plan sections (§1-§6). Start by acknowledging the prompt and asking the first 1-2 questions only.";
+  "FAST PROJECT MODE. The user gave a short description for a new app. Respect project-execution-rules.md and create a proper Master Plan, but keep the discovery extremely short — ask at most 3-4 essential follow-up questions total (include Project Type if unknown), then move quickly to writing the full Master Plan with the five canonical sections (§1 Goal, §2 Tech and Research, §3 Features and KPIs, §4 Pages and navigation, §5 UI/UX design). Start by acknowledging the prompt and asking the first 1–2 questions only.";
 
 const BOOTSTRAP_PREFIX = "I'm ready. Follow project-execution-rules.md INITIAL ONBOARDING:";
 

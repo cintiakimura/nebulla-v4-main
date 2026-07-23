@@ -261,7 +261,6 @@ export function AssistantSidebar({
   const ttsChunkPlayResolveRef = useRef<(() => void) | null>(null);
   /** Abort in-flight `/api/grok/chat` so Revert / interrupt can cancel the pending reply. */
   const grokChatAbortRef = useRef<AbortController | null>(null);
-  const q1ExecutionTriggeredRef = useRef(false);
   /** After Grok TTS ends, wait before turning the mic channel back on (project-execution-rules.md). */
   const micPostTtsUnlockTimerRef = useRef<number | null>(null);
 
@@ -634,67 +633,8 @@ export function AssistantSidebar({
         }
       };
 
-      // Auto-trigger: after Q1 approval, execute project-execution-rules.md with Grok 4.
-      if (
-        /\bANSWER_Q1\b/i.test(masterPlanSource) &&
-        hasExplicitApproval &&
-        !q1ExecutionTriggeredRef.current &&
-        !/<\s*START_MASTERPLAN\b|\bSTART_CODING\b|<\s*START_CODING\s*>/i.test(masterPlanSource)
-      ) {
-        q1ExecutionTriggeredRef.current = true;
-        setBuildQueue((prev) => [...prev, 'Auto-trigger: running first generation coding']);
-        setChatStatus('Grok approved Q1. Running rules and preparing first-generation coding…');
-        try {
-          const executeData = await fetchJson<{
-            choices?: { message?: { content?: string } }[];
-          }>(withProjectQuery('/api/grok/execute-project-rules'), {
-            method: 'POST',
-            headers: grokHeaders,
-            credentials: 'include',
-            body: JSON.stringify(
-              withProjectBody({
-                userId,
-                projectName,
-                messages: [
-                  ...messages.slice(-8).map((m) => ({
-                    role: m.role === 'model' ? 'assistant' : m.role,
-                    content: m.text,
-                  })),
-                  { role: 'assistant', content: masterPlanSource },
-                ],
-              }),
-            ),
-          });
-          const autoResponse = executeData.choices?.[0]?.message?.content || '';
-          const autoClean = autoResponse
-            .replace(/<REASONING>[\s\S]*?<\/REASONING>/g, '')
-            .replace(/<GROK_B_SUMMARY_Q([1-6])>[\s\S]*?<\/GROK_B_SUMMARY_Q\1>/g, '')
-            .trim();
-          const hasCodingTag = /<\s*START_CODING\s*>|\bSTART_CODING\b/i.test(autoResponse);
-          if (hasCodingTag) {
-            setChatStatus('Coding mode detected. Opening project execution rules in code mode…');
-            await runGoCodePipeline(autoResponse, textToSend);
-          } else if (autoClean) {
-            setMessages((prev) => [
-              ...prev,
-              { role: 'model', text: autoClean, fullText: autoResponse },
-              {
-                role: 'system',
-                text: 'Rules execution returned planning output only; use Go to start Grok Code if coding has not begun.',
-              },
-            ]);
-          }
-        } catch (e: any) {
-          console.error('Auto-trigger execution failed:', e);
-          setMessages((prev) => [
-            ...prev,
-            { role: 'system', text: `Auto-trigger failed: ${e?.message || 'Could not execute project rules.'}` },
-          ]);
-        } finally {
-          setBuildQueue((prev) => prev.slice(0, -1));
-          window.setTimeout(() => setChatStatus(null), 3000);
-        }
-      }
+      // ANSWER_Qn updates Master Plan tabs only — never auto-launch Go Code.
+      // Coding starts from explicit START_CODING / ```file:``` blocks / user pressing Go.
 
       // Grok 4 behavior: Trigger UI/UX Workflow
       if (masterPlanSource.includes('<START_UIUX>')) {

@@ -1,6 +1,7 @@
 import { fetchJson, readResponseJson } from './apiFetch';
 import {
   buildModeSystemAppendix,
+  chatModeSystemAppendix,
   IDE_CHAT_EXECUTION_APPENDIX,
 } from './grokChatArtifacts';
 import { withProjectBody, withProjectQuery } from './nebulaProjectApi';
@@ -64,6 +65,10 @@ export async function sendIdeAssistantGrokTurn(options: {
   buildMode?: boolean;
   /** Catalog model id from ModelSettings / TopBar. */
   chatModel?: AiChatModelId | string;
+  /** From Smart Chat Handler — wires mode + NDM / discovery guidance into the system prompt. */
+  chatMode?: string;
+  codingHint?: string;
+  discoveryRequired?: boolean;
   signal?: AbortSignal;
 }): Promise<{ assistantContent: string; planningPhase: string; claudeFallbackNotice?: string }> {
   const { textToSend, history, userId, projectName, ideAppendix, signal } = options;
@@ -82,12 +87,19 @@ export async function sendIdeAssistantGrokTurn(options: {
     enrichment: formatWorkspaceEnrichmentBlock(overview),
   });
 
+  const modeAppendix = chatModeSystemAppendix({
+    mode: options.chatMode,
+    codingHint: options.codingHint,
+    discoveryRequired: options.discoveryRequired,
+  });
+
   let systemPrompt =
     buildNebulaAssistantSystemPrompt(latestMP, uiStudioApprovedCode, {
       providerLabel: selection.providerLabel,
       modelLabel: selection.label,
     }) +
     `\n\n${IDE_CHAT_EXECUTION_APPENDIX}` +
+    (modeAppendix ? `\n\n${modeAppendix}` : '') +
     (buildMode ? `\n\n${buildModeSystemAppendix()}` : '') +
     (ideAppendix.trim()
       ? `\n\nIDE_EDITOR_SURFACE (active workspace file context — user may be editing here):\n${ideAppendix.trim()}`

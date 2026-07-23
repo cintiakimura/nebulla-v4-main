@@ -930,8 +930,11 @@ export function AIChat() {
 
     if (micInputBlocked) return;
 
-    // Smart Chat Handler — File mode ONLY (local/GitHub + rich preview).
+    // Smart Chat Handler — File mode short-circuits; other modes pass hints into Grok.
     // Never intercept hidden bootstrap, Master Plan discovery replies, or Go Code turns.
+    let chatMode: string | undefined;
+    let codingHint: string | undefined;
+    let discoveryRequired: boolean | undefined;
     if (!isHiddenBootstrapUserMessage(text)) {
       try {
         let masterPlanComplete = false;
@@ -948,6 +951,9 @@ export function AIChat() {
           masterPlanComplete = false;
         }
         const smart = await handleSmartChatMessage(text, { masterPlanComplete });
+        chatMode = smart.mode;
+        codingHint = smart.codingHint;
+        discoveryRequired = smart.modeMeta?.discoveryRequired ?? !masterPlanComplete;
         if (smart.mode === 'file' && smart.handledLocally) {
           const stamp = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
           const userMsg: Message = {
@@ -1132,6 +1138,9 @@ export function AIChat() {
           ideAppendix,
           buildMode,
           chatModel,
+          chatMode,
+          codingHint,
+          discoveryRequired,
         }));
       } finally {
         stopGrokWait();

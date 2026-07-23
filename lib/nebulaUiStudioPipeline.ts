@@ -76,6 +76,33 @@ function summarizeUiUxForV0(uiUx: string): string {
   return truncateForV0(body, V0_UIUX_MAX_CHARS);
 }
 
+function extractProjectTypeForV0(goal: string): string {
+  const labeled = goal.match(/project\s*type\s*[:\-–—]\s*(web\s*app|mobile\s*app|landing\s*page)/i);
+  if (labeled?.[1]) {
+    const n = labeled[1].toLowerCase().replace(/\s+/g, " ").trim();
+    if (n === "web app") return "Web App";
+    if (n === "mobile app") return "Mobile App";
+    if (n === "landing page") return "Landing Page";
+  }
+  if (/\bmobile\s*app\b/i.test(goal)) return "Mobile App";
+  if (/\blanding\s*page\b/i.test(goal)) return "Landing Page";
+  if (/\bweb\s*app\b/i.test(goal)) return "Web App";
+  return "";
+}
+
+/** Competitor / pattern one-liners from §2 for v0 (not full research dump). */
+function summarizeResearchForV0(research: string): string {
+  const raw = research.trim();
+  if (!raw) return "";
+  const lines = raw
+    .split(/\n/)
+    .map((l) => l.trim().replace(/^[-*•#]+\s*/, ""))
+    .filter((l) => l.length > 8 && l.length < 160)
+    .filter((l) => /competitor|pattern|nav|ui|ux|inspired|similar|like\b/i.test(l));
+  const picked = (lines.length > 0 ? lines : raw.split(/\n/).map((l) => l.trim()).filter(Boolean)).slice(0, 4);
+  return truncateForV0(picked.map((l) => `- ${l.slice(0, 120)}`).join("\n"), 220);
+}
+
 /** Build a concise v0 brief from Master Plan §4 + §5 (never paste full sections). */
 export function buildV0PromptMarkdown(
   plan: Record<string, string>,
@@ -87,17 +114,28 @@ export function buildV0PromptMarkdown(
     plan["2. Tech and Research"] ?? plan["2. Text & Search"] ?? plan["2. Tech Research"] ?? "",
   ).trim();
   const goal = String(plan["1. Goal of the app"] ?? "").trim();
+  const projectType = extractProjectTypeForV0(goal);
   const oneLiner = goal
-    ? truncateForV0(goal.split(/\n/).find((l) => l.trim()) ?? goal, 160)
+    ? truncateForV0(goal.split(/\n/).find((l) => l.trim() && !/project\s*type/i.test(l)) ?? goal, 160)
     : "App from Master Plan discovery.";
 
   const brandRefs =
     workspaceRoot?.trim() ? summarizeDesignReferencesForPrompt(workspaceRoot, 380) : "";
 
+  const deviceLine =
+    projectType === "Mobile App"
+      ? "- Target: **mobile app** UI (phone-first layouts, touch targets, bottom/tab nav where appropriate)"
+      : projectType === "Landing Page"
+        ? "- Target: **marketing landing page** (hero-first, single scroll story, strong CTA)"
+        : "- Target: **web app** (desktop + responsive; app shell / sidebar or top nav as §5 specifies)";
+
+  const researchLines = summarizeResearchForV0(research);
+
   let text = [
     "# v0 UI pass (concise)",
     "",
     `App: ${oneLiner}`,
+    ...(projectType ? [`Project type: ${projectType}`] : []),
     "",
     "## Pages (first pass — max 8 routes)",
     summarizePagesForV0(pagesNav),
@@ -107,15 +145,16 @@ export function buildV0PromptMarkdown(
     ...(brandRefs
       ? ["", "## Brand / design references (match logo & palette when provided)", brandRefs]
       : []),
+    ...(researchLines
+      ? ["", "## Research-grounded patterns (§2)", researchLines]
+      : []),
     "",
     "## Output",
+    deviceLine,
     "- React + Tailwind + shadcn/ui under `app/` or `src/`",
     "- Working nav between routes above; production spacing/typography",
-    "- Match §5 palette and industry patterns from discovery — **never** Nebulla IDE chrome (#080A14 / #00D4D4)",
-    "- No lorem-only shells",
-    ...(research
-      ? ["", "## Industry context (from §2)", truncateForV0(research.split("\n").slice(0, 4).join("\n"), 220)]
-      : []),
+    "- Match §5 palette and competitor UI patterns — **never** Nebulla IDE chrome (#080A14 / #00D4D4)",
+    "- No lorem-only shells; real labels from §4 page purposes",
   ].join("\n");
 
   if (text.length > V0_PROMPT_MAX_CHARS) {
