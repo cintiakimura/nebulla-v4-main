@@ -48,7 +48,8 @@ type IdeWorkspaceValue = {
   openFile: (relativePath: string) => Promise<void>;
   setActivePath: (path: string | null) => void;
   updateActiveContent: (text: string) => void;
-  saveTab: (path: string) => Promise<void>;
+  /** Optional `contentOverride` when saving immediately after an in-memory edit (find/replace). */
+  saveTab: (path: string, contentOverride?: string) => Promise<void>;
   /** Returns false if user cancelled (dirty tab). */
   closeTab: (path: string) => boolean;
   activeTab: EditorTab | null;
@@ -185,21 +186,29 @@ export function IdeWorkspaceProvider({ children }: { children: ReactNode }) {
   );
 
   const saveTab = useCallback(
-    async (path: string) => {
+    async (path: string, contentOverride?: string) => {
       const tab = tabsRef.current.find((t) => t.path === path);
-      if (!tab || !tab.dirty) return;
+      if (!tab && contentOverride === undefined) return;
+      const content = contentOverride !== undefined ? contentOverride : tab?.content;
+      if (content === undefined) return;
+      if (contentOverride === undefined && !tab?.dirty) return;
       setSaveError(null);
       try {
         await fetchJson(withProjectQuery('/api/files/content'), {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(withProjectBody({ path, content: tab.content })),
+          body: JSON.stringify(withProjectBody({ path, content })),
         });
-        setTabs((prev) => prev.map((t) => (t.path === path ? { ...t, dirty: false } : t)));
+        setTabs((prev) =>
+          prev.map((t) =>
+            t.path === path ? { ...t, content, dirty: false } : t,
+          ),
+        );
         void refreshTree();
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
         setSaveError(msg);
+        throw e;
       }
     },
     [refreshTree],

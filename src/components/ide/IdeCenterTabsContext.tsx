@@ -56,11 +56,11 @@ export function IdeCenterTabsProvider({ children }: { children: ReactNode }) {
   const [activeTabId, setActiveTabId] = useState<string | null>(() => DEFAULT_HOME_TAB.id);
   const [uiStudioTab, setUiStudioTab] = useState<UiStudioTab>('design');
 
-  // Drop legacy full-screen Source Control center tabs (moved to left sidebar).
+  // Drop legacy full-screen Source Control / Search center tabs.
   useEffect(() => {
-    const scId = panelTabId('source-control');
-    setPanelTabs((prev) => prev.filter((t) => t.pane !== 'source-control'));
-    setActiveTabId((id) => (id === scId ? DEFAULT_HOME_TAB.id : id));
+    const drop = new Set([panelTabId('source-control'), panelTabId('search')]);
+    setPanelTabs((prev) => prev.filter((t) => t.pane !== 'source-control' && t.pane !== 'search'));
+    setActiveTabId((id) => (id && drop.has(id) ? DEFAULT_HOME_TAB.id : id));
   }, []);
 
   const fileCenterTabs = useMemo<CenterTab[]>(() => {
@@ -108,6 +108,8 @@ export function IdeCenterTabsProvider({ children }: { children: ReactNode }) {
         }
         return;
       }
+      // Search page removed — find/replace is the TopBar search icon only.
+      if (pane === 'search') return;
       if (opts?.uiStudioTab) setUiStudioTab(opts.uiStudioTab);
       const id = panelTabId(pane);
       setPanelTabs((prev) => {

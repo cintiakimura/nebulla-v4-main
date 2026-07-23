@@ -9,7 +9,7 @@ export type IdeCenterPane =
   | 'projects'
   | 'secrets'
   | 'dns'
-  | 'search';
+  | 'search'; // legacy pane id — redirected away; find/replace lives in TopBar icon only
 
 /** Primary center tabs (workflow + Master Plan). Source Control lives in the left sidebar. */
 export const IDE_CENTER_PRIMARY_TABS: { id: IdeCenterPane; label: string }[] = [
@@ -20,14 +20,13 @@ export const IDE_CENTER_PRIMARY_TABS: { id: IdeCenterPane; label: string }[] = [
   { id: 'ui-studio', label: 'UI Studio' },
 ];
 
-/** Open from the left nav only — not duplicated in the six-tab bar. */
-export const IDE_CENTER_NAV_ONLY_PANES: IdeCenterPane[] = ['projects', 'secrets', 'dns', 'search'];
+/** Open from the left nav only — not duplicated in the six-tab bar. Search removed (TopBar find icon). */
+export const IDE_CENTER_NAV_ONLY_PANES: IdeCenterPane[] = ['projects', 'secrets', 'dns'];
 
 const NAV_ONLY_LABELS: Record<(typeof IDE_CENTER_NAV_ONLY_PANES)[number], string> = {
   projects: 'My Projects',
   secrets: 'Secrets',
   dns: 'DNS',
-  search: 'Search',
 };
 
 export const IDE_CENTER_PANE_TABS: { id: IdeCenterPane; label: string }[] = [
@@ -46,6 +45,8 @@ export function readStoredCenterPane(): IdeCenterPane {
     const raw = localStorage.getItem(CENTER_PANE_LS);
     // Source Control is a left sidebar now — never restore it as a full center takeover.
     if (raw === 'source-control') return 'projects';
+    // Search page removed — find/replace is the TopBar search icon only.
+    if (raw === 'search') return 'projects';
     if (raw && IDE_CENTER_PANE_TABS.some((t) => t.id === raw)) return raw as IdeCenterPane;
   } catch {
     /* ignore */

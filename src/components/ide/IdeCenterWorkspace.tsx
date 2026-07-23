@@ -10,13 +10,11 @@ import {
   MonitorPlay,
   Network,
   Palette,
-  Search,
   X,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { AppPreviewPanel } from '../AppPreviewPanel';
 import { MasterPlan } from '../MasterPlan';
-import { WorkspaceSearchPanel } from '../WorkspaceSearchPanel';
 import { dispatchOpenLeftSidebar } from '../../lib/ideLeftSidebar';
 import { IdeDashboardEmbed } from './IdeDashboardEmbed';
 import { MyProjectsHome } from './MyProjectsHome';
@@ -38,7 +36,6 @@ const PANEL_ICONS: Partial<Record<IdeCenterPane, React.ReactNode>> = {
   projects: <LayoutGrid className="h-3 w-3 shrink-0 opacity-70" aria-hidden />,
   secrets: <KeyRound className="h-3 w-3 shrink-0 opacity-70" aria-hidden />,
   dns: <Globe className="h-3 w-3 shrink-0 opacity-70" aria-hidden />,
-  search: <Search className="h-3 w-3 shrink-0 opacity-70" aria-hidden />,
 };
 
 export function IdeCenterWorkspace() {
@@ -183,9 +180,6 @@ export function IdeCenterWorkspace() {
             </PaneLayer>
             <PaneLayer visible={activePane === 'dns'}>
               <IdeDashboardEmbed initialTab="dns" />
-            </PaneLayer>
-            <PaneLayer visible={activePane === 'search'}>
-              <WorkspaceSearchPanel projectKey={projectKey} />
             </PaneLayer>
           </>
         )}

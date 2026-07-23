@@ -9,7 +9,6 @@ import {
   MonitorPlay,
   Network,
   Palette,
-  Search,
   Settings,
   Sparkles,
 } from 'lucide-react';
@@ -34,7 +33,6 @@ const items: NavItem[] = [
   { id: 'secrets', icon: <KeyRound className="h-5 w-5" />, label: 'Secrets' },
   { id: 'project-settings', icon: <Settings className="h-5 w-5" />, label: 'Settings' },
   { id: 'dns', icon: <Globe className="h-5 w-5" />, label: 'DNS' },
-  { id: 'search', icon: <Search className="h-5 w-5" />, label: 'Search' },
 ];
 
 export function VerticalNav({

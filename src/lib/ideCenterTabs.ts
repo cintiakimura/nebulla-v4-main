@@ -20,7 +20,7 @@ export const PANEL_LABELS: Record<IdeCenterPane, string> = {
   projects: 'My Projects',
   secrets: 'Secrets',
   dns: 'DNS',
-  search: 'Search',
+  search: 'Search', // unused center pane; TopBar find icon only
 };
 
 export function fileTabId(path: string): string {
