@@ -54,7 +54,7 @@ export function IdeFileEditor() {
   }, [activePath]);
 
   return (
-    <div className="flex h-full flex-col bg-background">
+    <div className="flex h-full flex-col bg-[#11012C]">
       <div className="surface-active flex h-7 min-h-7 shrink-0 items-center justify-between gap-2 border-b border-white/5 px-3">
         <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
           {crumbs.length === 0 ? (

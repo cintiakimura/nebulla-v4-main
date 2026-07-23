@@ -308,13 +308,13 @@
 
   .nebulla-codemirror {
     height: 100%;
-    background: #282c34;
+    background: #11012c;
   }
 
   .nebulla-codemirror .cm-editor {
     height: 100%;
-    background: #282c34 !important;
-    color: #abb2bf;
+    background: #11012c !important;
+    color: #e8e0f5;
   }
 
   .nebulla-codemirror .cm-scroller {
@@ -323,62 +323,62 @@
   }
 
   .nebulla-codemirror .cm-content {
-    caret-color: #528bff;
+    caret-color: #c4a1ff;
   }
 
   .nebulla-codemirror .cm-gutters {
-    background: #21252b !important;
-    border-right: 1px solid #181a1f;
-    color: #5c6370;
+    background: #0c0122 !important;
+    border-right: 1px solid #1e0a42;
+    color: #8b7aa8;
   }
 
   .nebulla-codemirror .cm-activeLineGutter {
-    background: #2c313a;
+    background: #1a0638;
   }
 
   .nebulla-codemirror .cm-activeLine {
-    background: #2c313a66;
+    background: #1a063866;
   }
 
   .nebulla-codemirror .cm-selectionBackground,
   .nebulla-codemirror .cm-content ::selection {
-    background: #3e4451 !important;
+    background: #3d1a6e !important;
   }
 
   .nebulla-codemirror .cm-matchingBracket {
-    background: #3e4451;
-    outline: 1px solid #528bff;
+    background: #3d1a6e;
+    outline: 1px solid #c4a1ff;
   }
 
   .nebulla-codemirror .tok-keyword {
-    color: #c678dd;
+    color: #d4a5ff;
   }
   .nebulla-codemirror .tok-string {
-    color: #98c379;
+    color: #9ee6a8;
   }
   .nebulla-codemirror .tok-number {
-    color: #d19a66;
+    color: #f0b27a;
   }
   .nebulla-codemirror .tok-comment {
-    color: #5c6370;
+    color: #7d6e96;
     font-style: italic;
   }
   .nebulla-codemirror .tok-variableName {
-    color: #e06c75;
+    color: #f0a0b0;
   }
   .nebulla-codemirror .tok-typeName,
   .nebulla-codemirror .tok-className {
-    color: #e5c07b;
+    color: #f0d48a;
   }
   .nebulla-codemirror .tok-propertyName {
-    color: #61afef;
+    color: #8ec8ff;
   }
   .nebulla-codemirror .tok-heading,
   .nebulla-codemirror .tok-strong {
-    color: #e5c07b;
+    color: #f0d48a;
     font-weight: 600;
   }
   .nebulla-codemirror .tok-link {
-    color: #56b6c2;
+    color: #7dd3d8;
   }
 }

@@ -36,7 +36,7 @@ function formatV0StatusLine(
     return 'v0 generating UI on server — polling for files (1–4 min)…';
   }
   if (readiness.resumeOnly) {
-    return 'v0 session active — Resume in UI Studio (or Cancel stale v0)';
+    return 'v0 session active — use Resume in chat, or Cancel / Clear if stuck';
   }
   if (studio.v0StartError && !studio.v0PendingChatId) {
     return `v0 error: ${studio.v0StartError.slice(0, 100)}`;
@@ -47,7 +47,7 @@ function formatV0StatusLine(
       : 'v0 not ready — add API key and save Master Plan §4+§5';
   }
   const promptLen = studio.v0PromptLength ?? 0;
-  return `v0 ready — prompt ${promptLen} chars; click Generate v0 in UI Studio when you want visual UI`;
+  return `v0 ready — prompt ${promptLen} chars; runs automatically after Master Plan / Go`;
 }
 
 function formatV0StatusDetail(studio: ChatV0StudioStatus, readiness: V0ReadinessResult): string {

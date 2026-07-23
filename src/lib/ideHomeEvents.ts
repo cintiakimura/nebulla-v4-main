@@ -3,6 +3,11 @@
  * Keeps Master Plan / Go Code intact until the user explicitly starts guided chat.
  */
 
+import type { NebulaProjectType } from './nebulaProjectType';
+import { setStoredProjectType } from './nebulaProjectType';
+
+export type { NebulaProjectType } from './nebulaProjectType';
+
 export const NEBULA_START_GUIDED_CHAT = 'nebula-start-guided-chat';
 export const NEBULA_START_FREE_CHAT = 'nebula-start-free-chat';
 export const NEBULA_CHAT_OPEN_FILE = 'nebula-chat-open-file';
@@ -12,8 +17,6 @@ export const NEBULA_START_GUIDED_ON_READY_KEY = 'nebula_start_guided_on_ready';
 
 /** Discovery project type chosen on My Projects (Web / Mobile / Landing). */
 export const NEBULA_PENDING_PROJECT_TYPE_KEY = 'nebula_pending_project_type_v1';
-
-export type NebulaProjectType = 'Web App' | 'Mobile App' | 'Landing Page';
 
 export type StartGuidedChatDetail = {
   projectType?: NebulaProjectType;
@@ -70,6 +73,8 @@ export function setPendingProjectType(type: NebulaProjectType): void {
   } catch {
     /* ignore */
   }
+  // Durable copy for UI Studio / App Preview framing (survives consumePendingProjectType).
+  setStoredProjectType(type);
 }
 
 export function peekPendingProjectType(): NebulaProjectType | null {
@@ -86,6 +91,7 @@ export function peekPendingProjectType(): NebulaProjectType | null {
 export function consumePendingProjectType(): NebulaProjectType | null {
   const v = peekPendingProjectType();
   if (!v) return null;
+  setStoredProjectType(v);
   try {
     localStorage.removeItem(NEBULA_PENDING_PROJECT_TYPE_KEY);
   } catch {

@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { readResponseJson } from '../lib/apiFetch';
 import { withProjectQuery } from '../lib/nebulaProjectApi';
+import { resolveProjectType, studioDeviceModeForType } from '../lib/nebulaProjectType';
 
 const PREVIEW_WIDTH_LS = 'nebulla_app_preview_width_px';
 
@@ -73,6 +74,7 @@ export function AppPreviewPanel({
   const [panelOpen, setPanelOpen] = useState(defaultPanelOpen);
   const [panelWidth, setPanelWidth] = useState(readStoredPreviewWidth);
   const [viewport, setViewport] = useState<ViewportMode>('desktop');
+  const [viewportTouched, setViewportTouched] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
   const [actAsUser, setActAsUser] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -109,6 +111,25 @@ export function AppPreviewPanel({
     window.addEventListener('nebula-open-app-preview', onOpen);
     return () => window.removeEventListener('nebula-open-app-preview', onOpen);
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    const applyDefault = async () => {
+      if (viewportTouched) return;
+      const type = await resolveProjectType();
+      if (cancelled || viewportTouched) return;
+      setViewport(studioDeviceModeForType(type));
+    };
+    void applyDefault();
+    const onPlan = () => void applyDefault();
+    window.addEventListener('nebula-master-plan-updated', onPlan);
+    window.addEventListener('nebula-project-reset', onPlan);
+    return () => {
+      cancelled = true;
+      window.removeEventListener('nebula-master-plan-updated', onPlan);
+      window.removeEventListener('nebula-project-reset', onPlan);
+    };
+  }, [viewportTouched]);
 
   useEffect(() => {
     void loadPreviewMeta();
@@ -358,6 +379,7 @@ export function AppPreviewPanel({
                       : 'border-white/10 text-slate-400 hover:bg-white/5'
                   }`}
                   onClick={() => {
+                    setViewportTouched(true);
                     setViewport('desktop');
                   }}
                 >
@@ -371,6 +393,7 @@ export function AppPreviewPanel({
                       : 'border-white/10 text-slate-400 hover:bg-white/5'
                   }`}
                   onClick={() => {
+                    setViewportTouched(true);
                     setViewport('mobile');
                   }}
                 >
@@ -480,7 +503,10 @@ export function AppPreviewPanel({
           type="button"
           title={viewport === 'desktop' ? 'Desktop — click for mobile' : 'Mobile — click for desktop'}
           aria-label="Toggle device width"
-          onClick={() => setViewport((v) => (v === 'desktop' ? 'mobile' : 'desktop'))}
+          onClick={() => {
+            setViewportTouched(true);
+            setViewport((v) => (v === 'desktop' ? 'mobile' : 'desktop'));
+          }}
           className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-white/10 text-slate-400 hover:border-cyan-500/35 hover:text-cyan-300"
         >
           {viewport === 'desktop' ? <Monitor className="h-3.5 w-3.5" /> : <Smartphone className="h-3.5 w-3.5" />}

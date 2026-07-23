@@ -29,12 +29,14 @@ import {
   Loader2,
   Maximize2,
   Minimize2,
+  Monitor,
   MousePointer2,
   Move,
   Pipette,
   RotateCcw,
   Save,
   Scaling,
+  Smartphone,
   Trash2,
   Type,
 } from 'lucide-react';
@@ -45,9 +47,18 @@ import { formatV0UiError } from '../../lib/v0ErrorMessage';
 import { computeV0Readiness } from '../../lib/v0Readiness';
 import { subscribeGrokCodingActive } from '../../lib/nebulaGrokCodingGate';
 import { runV0GenerationWithPolling, requestCancelV0ClientPoll } from '../../lib/v0GenerationClient';
-import { cancelProjectBackgroundJobs } from '../../lib/ideProjectReset';
 import { runMasterPlanUiPipeline } from '../../lib/ideArtifactSync';
-import { UiStudioV0Panel } from './UiStudioV0Panel';
+import { emitChatV0Progress, emitChatV0Watch } from '../../lib/chatV0Status';
+import {
+  NEBULA_UI_STUDIO_CANCEL_V0,
+  NEBULA_UI_STUDIO_CLEAR_V0,
+} from '../../lib/nebulaUiStudioEvents';
+import {
+  resolveProjectType,
+  studioDeviceModeForType,
+  type NebulaProjectType,
+  type StudioDeviceMode,
+} from '../../lib/nebulaProjectType';
 
 const V0_FETCH_TIMEOUT_MS = 360_000;
 
@@ -413,16 +424,21 @@ export function IdeVisualEditor({
   const [toolPopover, setToolPopover] = useState<StudioTool | null>(null);
   const [previewSurface, setPreviewSurface] = useState<StudioPreviewSurface>('visual-model');
   const [v0DemoUrl, setV0DemoUrl] = useState<string | null>(null);
+  const [projectType, setProjectType] = useState<NebulaProjectType | null>(null);
+  const [deviceMode, setDeviceMode] = useState<StudioDeviceMode>('desktop');
   const toolbarRef = useRef<HTMLDivElement>(null);
-  const [mockNotice, setMockNotice] = useState('');
   const [hasV0ApiKey, setHasV0ApiKey] = useState<boolean | null>(null);
   const [v0ServerReady, setV0ServerReady] = useState<boolean | null>(null);
   const [studioStatus, setStudioStatus] = useState<StudioStatus | null>(null);
   const [grokCodingActive, setGrokCodingActive] = useState(false);
   const v0RunningRef = useRef(false);
   const resumeV0StartedRef = useRef(false);
-  const [cancelV0Busy, setCancelV0Busy] = useState(false);
-  const runV0GenerationRef = useRef<() => Promise<void>>(async () => {});
+  const runV0GenerationRef = useRef<(opts?: { resumeOnly?: boolean }) => Promise<void>>(async () => {});
+  const notifyV0 = useCallback((line: string, isError = false) => {
+    emitChatV0Progress(line);
+    if (isError) setError(line);
+    else setError('');
+  }, []);
   const v0StorageKey = `nebulla-v0-chat-${projectLabel.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 48)}`;
   const [v0ChatId, setV0ChatId] = useState<string | null>(() => {
     try {
@@ -465,22 +481,6 @@ export function IdeVisualEditor({
     return null;
   }, []);
 
-  const v0Readiness = useMemo(
-    () =>
-      computeV0Readiness({
-        hasV0ApiKey,
-        hasLocalV0ApiKey: hasLocalV0ApiKey(),
-        v0ServerReady,
-        v0PromptExists: studioStatus?.v0PromptExists,
-        v0PromptLength: studioStatus?.v0PromptLength,
-        v0Starting: studioStatus?.v0Starting,
-        v0PendingChatId: studioStatus?.v0PendingChatId,
-        v0StartError: studioStatus?.v0StartError,
-        hasRealV0: studioStatus?.hasRealV0,
-      }),
-    [hasV0ApiKey, v0ServerReady, studioStatus],
-  );
-
   const loadEligibility = useCallback(async () => {
     try {
       const r = await fetch(withProjectQuery('/api/visual-ui-editor/eligibility'));
@@ -499,12 +499,22 @@ export function IdeVisualEditor({
   }, [loadEligibility]);
 
   useEffect(() => {
-    const onProgress = (ev: Event) => {
-      const line = (ev as CustomEvent<{ line?: string }>).detail?.line?.trim();
-      if (line) setMockNotice(line);
+    let cancelled = false;
+    const refreshType = async () => {
+      const type = await resolveProjectType();
+      if (cancelled) return;
+      setProjectType(type);
+      setDeviceMode(studioDeviceModeForType(type));
     };
-    window.addEventListener('nebula-chat-v0-progress', onProgress);
-    return () => window.removeEventListener('nebula-chat-v0-progress', onProgress);
+    void refreshType();
+    const onPlan = () => void refreshType();
+    window.addEventListener('nebula-master-plan-updated', onPlan);
+    window.addEventListener('nebula-project-reset', onPlan);
+    return () => {
+      cancelled = true;
+      window.removeEventListener('nebula-master-plan-updated', onPlan);
+      window.removeEventListener('nebula-project-reset', onPlan);
+    };
   }, []);
 
   useEffect(() => {
@@ -539,10 +549,35 @@ export function IdeVisualEditor({
   }, [loadEligibility]);
 
   useEffect(() => {
-    const onRunV0 = () => void runV0GenerationRef.current();
+    const onRunV0 = (ev: Event) => {
+      const detail = (ev as CustomEvent<{ resumeOnly?: boolean }>).detail;
+      void runV0GenerationRef.current({ resumeOnly: Boolean(detail?.resumeOnly) });
+    };
+    // Chat owns cancel/clear API + status lines; editor only stops local poll/busy.
+    const onCancelV0 = () => {
+      requestCancelV0ClientPoll();
+      v0RunningRef.current = false;
+      setBusy(false);
+      void loadStudioStatus();
+    };
+    const onClearV0 = () => {
+      requestCancelV0ClientPoll();
+      v0RunningRef.current = false;
+      setBusy(false);
+      void loadStudioStatus();
+      void loadEligibility();
+    };
     window.addEventListener('nebula-ui-studio-run-v0', onRunV0);
-    return () => window.removeEventListener('nebula-ui-studio-run-v0', onRunV0);
-  }, []);
+    window.addEventListener('nebula-ui-studio-run-v0-exec', onRunV0);
+    window.addEventListener(NEBULA_UI_STUDIO_CANCEL_V0, onCancelV0);
+    window.addEventListener(NEBULA_UI_STUDIO_CLEAR_V0, onClearV0);
+    return () => {
+      window.removeEventListener('nebula-ui-studio-run-v0', onRunV0);
+      window.removeEventListener('nebula-ui-studio-run-v0-exec', onRunV0);
+      window.removeEventListener(NEBULA_UI_STUDIO_CANCEL_V0, onCancelV0);
+      window.removeEventListener(NEBULA_UI_STUDIO_CLEAR_V0, onClearV0);
+    };
+  }, [loadStudioStatus, loadEligibility]);
 
   useEffect(() => {
     if (!toolPopover) return;
@@ -771,7 +806,6 @@ export function IdeVisualEditor({
     pushUndo();
     setModel(cloneModel(baselineRef.current));
     clearSelection();
-    setMockNotice('');
   };
 
   const toggleFullscreen = async () => {
@@ -834,10 +868,11 @@ export function IdeVisualEditor({
     setError('');
     const canApply = await ensureEligibleForApply();
     if (!canApply) {
-      setMockNotice(
+      notifyV0(
         hasV0ApiKey
-          ? 'Run **Generate UI with v0** once to register the first UI generation, then Save Changes & Update Code will write to the workspace.'
-          : 'Add V0_API_KEY and run v0 generation, or complete Grok coding with an app/ folder first.',
+          ? 'Save needs a first v0 UI generation — wait for auto v0, or Resume in chat.'
+          : 'Add V0_API_KEY and wait for auto v0, or complete Grok coding with an app/ folder first.',
+        true,
       );
       setApplyConfirmOpen(false);
       setBusy(false);
@@ -934,7 +969,7 @@ export function IdeVisualEditor({
   const runV0Generation = async (opts?: { resumeOnly?: boolean }) => {
     const explicitResume = opts?.resumeOnly === true;
     if (busy && !explicitResume) {
-      setMockNotice('v0 already running — use Cancel to stop, or Resume to poll the same chat.');
+      notifyV0('v0 already running — use Cancel in chat to stop, or Resume to poll the same chat.');
       return;
     }
     v0RunningRef.current = true;
@@ -980,11 +1015,11 @@ export function IdeVisualEditor({
       // Allow retry if the only blocker is a previous start error (we cleared it above)
       const hasStartErrorBlock = !preflight.ready && freshStatus?.v0StartError;
       if (!explicitResume && !preflight.ready && !hasStartErrorBlock) {
-        setError(preflight.blockReason ?? 'v0 is not ready yet.');
+        notifyV0(preflight.blockReason ?? 'v0 is not ready yet.', true);
         return;
       }
       if (explicitResume && !preflight.ready && !preflight.resumeOnly && !freshStatus?.v0PendingChatId?.trim()) {
-        setError('No v0 session to resume — click Generate v0 or Clear first.');
+        notifyV0('No v0 session to resume — Clear in chat, then wait for auto v0.', true);
         return;
       }
 
@@ -1000,7 +1035,7 @@ export function IdeVisualEditor({
           if (fb.ok && (fbData.written?.length ?? 0) > 0) {
             window.dispatchEvent(new CustomEvent('nebula-files-applied'));
             window.dispatchEvent(new CustomEvent('nebula-open-app-preview'));
-            setMockNotice(
+            notifyV0(
               fbData.hint ||
                 `No V0_API_KEY — Nebula wrote a basic HTML preview (${fbData.written!.join(', ')}).`,
             );
@@ -1010,7 +1045,7 @@ export function IdeVisualEditor({
         } catch {
           /* fall through */
         }
-        setError(formatV0UiError('not set on the server and no client key was sent', false));
+        notifyV0(formatV0UiError('not set on the server and no client key was sent', false), true);
         return;
       }
 
@@ -1018,16 +1053,12 @@ export function IdeVisualEditor({
         projectDisplayName: projectLabel,
         resumeOnly: explicitResume && preflight.resumeOnly,
         onProgress: (msg, kind) => {
-          if (kind === 'error') {
-            setError(msg);
-          } else {
-            setMockNotice(msg);
-          }
+          notifyV0(msg, kind === 'error');
         },
       });
       if (data.error && !data.written?.length) {
         if (/cancelled/i.test(data.error)) {
-          setMockNotice(data.hint || data.error);
+          notifyV0(data.hint || data.error);
           return;
         }
         throw new Error(data.hint || data.error);
@@ -1035,7 +1066,7 @@ export function IdeVisualEditor({
       if (data.source === 'basic-scaffold') {
         window.dispatchEvent(new CustomEvent('nebula-files-applied'));
         window.dispatchEvent(new CustomEvent('nebula-open-app-preview'));
-        setMockNotice(data.hint || 'Basic UI preview shell written (V0 credits unavailable).');
+        notifyV0(data.hint || 'Basic UI preview shell written (V0 credits unavailable).');
         await loadEligibility();
         return;
       }
@@ -1060,18 +1091,19 @@ export function IdeVisualEditor({
         /* ignore */
       }
       const n = data.written?.length ?? 0;
-      setMockNotice(
+      notifyV0(
         n > 0
-          ? `v0 wrote ${n} file(s). Live v0 preview is shown below when available.`
+          ? `v0 wrote ${n} file(s). Live v0 preview is shown in UI Studio when available.`
           : 'v0 generation finished.',
       );
+      emitChatV0Watch(false);
       await loadEligibility();
       window.dispatchEvent(new CustomEvent('nebula-ui-studio-v0-complete'));
       window.dispatchEvent(new CustomEvent('nebula-open-app-preview'));
     } catch (e: unknown) {
       const msg =
         e instanceof Error && e.name === 'AbortError'
-          ? 'v0 request timed out (6 min). v0-pro can be slow — try again or use a shorter prompt.'
+          ? 'v0 request timed out (6 min). v0-pro can be slow — try Resume in chat or use a shorter prompt.'
           : e instanceof Error
             ? e.message
             : 'v0 generation failed';
@@ -1087,10 +1119,9 @@ export function IdeVisualEditor({
           if (fb.ok && (fbData.written?.length ?? 0) > 0) {
             window.dispatchEvent(new CustomEvent('nebula-files-applied'));
             window.dispatchEvent(new CustomEvent('nebula-open-app-preview'));
-            setMockNotice(
+            notifyV0(
               `V0 unavailable — Nebula applied a basic HTML preview (${fbData.written!.join(', ')}). Open Preview in the explorer.`,
             );
-            setError('');
             await loadEligibility();
             return;
           }
@@ -1098,7 +1129,7 @@ export function IdeVisualEditor({
           /* fall through */
         }
       }
-      setError(formatV0UiError(msg, hasLocalV0ApiKey()));
+      notifyV0(formatV0UiError(msg, hasLocalV0ApiKey()), true);
       resumeV0StartedRef.current = false;
     } finally {
       v0RunningRef.current = false;
@@ -1108,43 +1139,6 @@ export function IdeVisualEditor({
   };
 
   runV0GenerationRef.current = runV0Generation;
-
-  const cancelStaleV0Session = async () => {
-    setCancelV0Busy(true);
-    setError('');
-    requestCancelV0ClientPoll();
-    v0RunningRef.current = false;
-    setBusy(false);
-    try {
-      await cancelProjectBackgroundJobs();
-      setMockNotice('');
-      await loadStudioStatus();
-      await loadEligibility();
-      setMockNotice('v0 session cleared — click Generate v0 for a fresh run.');
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to clear v0 session');
-    } finally {
-      setCancelV0Busy(false);
-    }
-  };
-
-  const cancelActiveV0Run = async () => {
-    setCancelV0Busy(true);
-    setError('');
-    requestCancelV0ClientPoll();
-    v0RunningRef.current = false;
-    setBusy(false);
-    try {
-      await cancelProjectBackgroundJobs();
-      await loadStudioStatus();
-      await loadEligibility();
-      setMockNotice('v0 cancelled — polling stopped. Use Resume if v0-pro is still working on v0.dev.');
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to cancel v0');
-    } finally {
-      setCancelV0Busy(false);
-    }
-  };
 
   const runV0Refine = async () => {
     if (!v0ChatId) {
@@ -1183,7 +1177,7 @@ export function IdeVisualEditor({
         }
       }
       const n = data.written?.length ?? 0;
-      setMockNotice(n > 0 ? `v0 refined ${n} file(s) in the workspace.` : 'v0 refine finished.');
+      notifyV0(n > 0 ? `v0 refined ${n} file(s) in the workspace.` : 'v0 refine finished.');
       await loadEligibility();
       try {
         window.dispatchEvent(new CustomEvent('nebula-files-applied'));
@@ -1191,7 +1185,7 @@ export function IdeVisualEditor({
         /* ignore */
       }
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'v0 refine failed');
+      notifyV0(e instanceof Error ? e.message : 'v0 refine failed', true);
     } finally {
       setBusy(false);
     }
@@ -1341,24 +1335,12 @@ export function IdeVisualEditor({
       ref={shellRef}
       className="flex h-full min-h-0 w-full flex-col overflow-hidden bg-background text-foreground"
     >
-      <UiStudioV0Panel
-        busy={busy}
-        cancelBusy={cancelV0Busy}
-        readiness={v0Readiness}
-        studioStatus={studioStatus}
-        progressLine={mockNotice}
-        errorLine={error}
-        chatId={v0ChatId}
-        hasV0ApiKey={hasV0ApiKey}
-        onGenerate={() => void runV0Generation()}
-        onResume={() => void runV0Generation({ resumeOnly: true })}
-        onCancel={() => void cancelActiveV0Run()}
-        onClearSession={() => void cancelStaleV0Session()}
-        onRefreshStatus={() => void loadStudioStatus()}
-        onDismissProgress={() => setMockNotice('')}
-      />
-
       <header className="surface-active shrink-0 border-b border-white/5">
+        {error ? (
+          <p className="border-b border-rose-500/25 bg-rose-500/10 px-3 py-1.5 text-[11px] text-rose-100" role="alert">
+            {error}
+          </p>
+        ) : null}
         <div className="flex h-9 items-center justify-between gap-2 px-2 sm:px-3">
           <div className="flex min-w-0 items-center gap-2">
             <span className="truncate text-xs font-medium tracking-wide text-foreground">UI Studio</span>
@@ -1478,12 +1460,52 @@ export function IdeVisualEditor({
           }}
           onClick={() => clearSelection()}
         >
-          <div className="mx-auto flex max-w-4xl flex-col gap-2">
+          <div
+            className={cn(
+              'mx-auto flex w-full flex-col gap-2',
+              deviceMode === 'mobile' ? 'max-w-[420px]' : 'max-w-4xl',
+            )}
+          >
             <div className="flex items-center justify-between gap-2 px-1">
               <div className="flex min-w-0 flex-wrap items-center gap-2">
                 <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
                   Preview
                 </span>
+                {projectType ? (
+                  <span className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] text-slate-300">
+                    {projectType}
+                  </span>
+                ) : null}
+                <div className="flex rounded-md border border-white/10 p-0.5">
+                  <button
+                    type="button"
+                    title="Desktop frame"
+                    onClick={() => setDeviceMode('desktop')}
+                    className={cn(
+                      'inline-flex items-center gap-1 rounded px-2 py-0.5 text-[10px] transition-colors',
+                      deviceMode === 'desktop'
+                        ? 'bg-secondary text-foreground'
+                        : 'text-muted-foreground hover:text-foreground',
+                    )}
+                  >
+                    <Monitor className="h-3 w-3" />
+                    <span className="hidden sm:inline">Desktop</span>
+                  </button>
+                  <button
+                    type="button"
+                    title="Mobile frame"
+                    onClick={() => setDeviceMode('mobile')}
+                    className={cn(
+                      'inline-flex items-center gap-1 rounded px-2 py-0.5 text-[10px] transition-colors',
+                      deviceMode === 'mobile'
+                        ? 'bg-secondary text-foreground'
+                        : 'text-muted-foreground hover:text-foreground',
+                    )}
+                  >
+                    <Smartphone className="h-3 w-3" />
+                    <span className="hidden sm:inline">Mobile</span>
+                  </button>
+                </div>
                 {v0DemoUrl ? (
                   <div className="flex rounded-md border border-white/10 p-0.5">
                     <button
@@ -1548,30 +1570,63 @@ export function IdeVisualEditor({
                 <span className="text-[10px] text-muted-foreground/70">Click an element to edit</span>
               )}
             </div>
-            <div className="overflow-hidden rounded-xl border border-white/10 bg-[#0a1628] shadow-[0_8px_32px_rgba(0,0,0,0.45)] ring-1 ring-white/5">
-              <div className="border-b border-white/5 bg-black/20 px-3 py-1.5">
-                <div className="flex items-center gap-1.5">
-                  <span className="h-2 w-2 rounded-full bg-red-500/80" />
-                  <span className="h-2 w-2 rounded-full bg-amber-500/80" />
-                  <span className="h-2 w-2 rounded-full bg-emerald-500/80" />
-                  <span className="ml-2 truncate text-[10px] text-muted-foreground">
-                    {previewSurface === 'v0-live' && v0DemoUrl
-                      ? `${activePage} — v0 live preview`
-                      : `${activePage} — visual model`}
-                  </span>
+
+            {deviceMode === 'mobile' ? (
+              <div className="mx-auto w-full max-w-[390px]">
+                <div className="overflow-hidden rounded-[2rem] border-[6px] border-[#1a1f2e] bg-[#0a1628] shadow-[0_12px_40px_rgba(0,0,0,0.55)] ring-1 ring-white/10">
+                  <div className="relative flex h-7 items-center justify-center border-b border-white/5 bg-black/40">
+                    <span className="absolute left-1/2 top-1.5 h-3.5 w-20 -translate-x-1/2 rounded-full bg-black/80" />
+                    <span className="sr-only">Mobile device frame</span>
+                  </div>
+                  {previewSurface === 'v0-live' && v0DemoUrl ? (
+                    <iframe
+                      title="v0 live preview (mobile)"
+                      src={v0DemoUrl}
+                      className="min-h-[640px] w-full border-0 bg-white"
+                      sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals"
+                    />
+                  ) : (
+                    <div className="min-h-[640px] overflow-auto p-3 sm:p-4">
+                      {page ? renderNode(page.rootId) : null}
+                    </div>
+                  )}
+                  <div className="flex h-5 items-center justify-center border-t border-white/5 bg-black/30">
+                    <span className="h-1 w-16 rounded-full bg-white/25" />
+                  </div>
                 </div>
+                <p className="mt-2 text-center text-[10px] text-muted-foreground/70">
+                  {projectType === 'Mobile App'
+                    ? 'Mobile App — phone canvas (390px)'
+                    : 'Mobile preview — 390px'}
+                </p>
               </div>
-              {previewSurface === 'v0-live' && v0DemoUrl ? (
-                <iframe
-                  title="v0 live preview"
-                  src={v0DemoUrl}
-                  className="min-h-[420px] w-full flex-1 border-0 bg-white"
-                  sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals"
-                />
-              ) : (
-                <div className="p-4 sm:p-6">{page ? renderNode(page.rootId) : null}</div>
-              )}
-            </div>
+            ) : (
+              <div className="overflow-hidden rounded-xl border border-white/10 bg-[#0a1628] shadow-[0_8px_32px_rgba(0,0,0,0.45)] ring-1 ring-white/5">
+                <div className="border-b border-white/5 bg-black/20 px-3 py-1.5">
+                  <div className="flex items-center gap-1.5">
+                    <span className="h-2 w-2 rounded-full bg-red-500/80" />
+                    <span className="h-2 w-2 rounded-full bg-amber-500/80" />
+                    <span className="h-2 w-2 rounded-full bg-emerald-500/80" />
+                    <span className="ml-2 truncate text-[10px] text-muted-foreground">
+                      {previewSurface === 'v0-live' && v0DemoUrl
+                        ? `${activePage} — v0 live preview`
+                        : `${activePage} — visual model`}
+                      {projectType ? ` · ${projectType}` : ''}
+                    </span>
+                  </div>
+                </div>
+                {previewSurface === 'v0-live' && v0DemoUrl ? (
+                  <iframe
+                    title="v0 live preview"
+                    src={v0DemoUrl}
+                    className="min-h-[420px] w-full flex-1 border-0 bg-white"
+                    sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals"
+                  />
+                ) : (
+                  <div className="p-4 sm:p-6">{page ? renderNode(page.rootId) : null}</div>
+                )}
+              </div>
+            )}
           </div>
           {selectedId && previewSurface === 'visual-model' ? (
             <div

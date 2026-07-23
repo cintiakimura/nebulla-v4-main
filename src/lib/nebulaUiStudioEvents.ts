@@ -9,10 +9,16 @@ export type OpenUiStudioOptions = {
 
 const OPEN_EVENT = 'nebula-open-ui-studio';
 const RUN_V0_EVENT = 'nebula-ui-studio-run-v0';
+const CANCEL_V0_EVENT = 'nebula-ui-studio-cancel-v0';
+const CLEAR_V0_EVENT = 'nebula-ui-studio-clear-v0';
+
+export type RunV0GenerateOptions = {
+  resumeOnly?: boolean;
+};
 
 type BridgeHandlers = {
   openUiStudio: (opts?: OpenUiStudioOptions) => void;
-  runV0Generate: () => void;
+  runV0Generate: (opts?: RunV0GenerateOptions) => void;
 };
 
 let handlers: BridgeHandlers | null = null;
@@ -32,7 +38,10 @@ export function registerNebulaUiStudioBridge(h: BridgeHandlers): () => void {
     const detail = (ev as CustomEvent<OpenUiStudioOptions>).detail;
     handlers?.openUiStudio(detail);
   };
-  const onRunV0 = () => handlers?.runV0Generate();
+  const onRunV0 = (ev: Event) => {
+    const detail = (ev as CustomEvent<RunV0GenerateOptions>).detail;
+    handlers?.runV0Generate(detail);
+  };
 
   window.addEventListener(OPEN_EVENT, onOpen);
   window.addEventListener(RUN_V0_EVENT, onRunV0);
@@ -54,13 +63,26 @@ export function dispatchOpenUiStudio(opts?: OpenUiStudioOptions): void {
   }
 }
 
-export function dispatchRunV0Generate(): void {
+export function dispatchRunV0Generate(opts?: RunV0GenerateOptions): void {
   if (handlers) {
-    handlers.runV0Generate();
+    handlers.runV0Generate(opts);
   } else {
-    window.dispatchEvent(new Event(RUN_V0_EVENT));
+    window.dispatchEvent(new CustomEvent(RUN_V0_EVENT, { detail: opts ?? {} }));
   }
 }
+
+/** Stop client poll + cancel server v0 job (chat / UI Studio share this). */
+export function dispatchCancelV0(): void {
+  window.dispatchEvent(new Event(CANCEL_V0_EVENT));
+}
+
+/** Clear stale v0 pending state on the server. */
+export function dispatchClearV0Session(): void {
+  window.dispatchEvent(new Event(CLEAR_V0_EVENT));
+}
+
+export const NEBULA_UI_STUDIO_CANCEL_V0 = CANCEL_V0_EVENT;
+export const NEBULA_UI_STUDIO_CLEAR_V0 = CLEAR_V0_EVENT;
 
 /** Open UI Studio and optionally run first v0 generation (project-execution-rules § v0). */
 export function dispatchStartUiUxWorkflow(opts?: OpenUiStudioOptions): void {

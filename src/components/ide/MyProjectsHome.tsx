@@ -195,10 +195,11 @@ export function MyProjectsHome() {
     if (startingType) return;
     setStartingType(type);
     try {
-      setPendingProjectType(type);
       markGuidedStartOnReady();
       await resetProjectFromScratch(type);
       await createProjectForCurrentSession(type);
+      // Persist after reset/create so projectKey is current (UI Studio device framing).
+      setPendingProjectType(type);
       window.location.reload();
     } catch (err) {
       console.error('[MyProjectsHome] start typed project failed', err);

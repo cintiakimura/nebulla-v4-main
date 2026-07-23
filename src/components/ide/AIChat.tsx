@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Bot, Loader2, Mic, Rocket, Send, User } from 'lucide-react';
+import { Bot, Hand, Loader2, Mic, Rocket, Send, User } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { fetchSessionUser, syncActiveCloudProjectFromSession, upsertCloudProject } from '../../lib/nebulaCloud';
 import {
@@ -75,7 +75,9 @@ import {
   type GrokActivityStep,
   type GrokActivityLogKind,
 } from '../../lib/ideGrokActivityStatus';
-import { fetchChatV0StatusSnapshot } from '../../lib/chatV0Status';
+import { emitChatV0Progress, emitChatV0Watch, fetchChatV0StatusSnapshot } from '../../lib/chatV0Status';
+import { requestCancelV0ClientPoll } from '../../lib/v0GenerationClient';
+import { getV0RequestHeaders } from '../../lib/v0Key';
 import {
   MIC_REENABLE_AFTER_TTS_MS,
   OPEN_TALK_MIN_SPEAKING_MS,
@@ -84,8 +86,8 @@ import {
   splitTextForTts,
   stripAssistantTagsForVoice,
   TTS_START_DEBOUNCE_MS,
-  VOICE_SILENCE_BEFORE_SEND_MS,
 } from '../../lib/voiceTtsShared';
+import { IdeGrokActivityPanel } from './IdeGrokActivityPanel';
 
 const IDLE_GROK_ACTIVITY: GrokActivityStatus = {
   headline: 'Ready',
@@ -305,11 +307,52 @@ export function AIChat() {
   }, [refreshChatV0Status]);
 
   useEffect(() => {
+    void refreshChatV0Status();
+  }, [refreshChatV0Status]);
+
+  useEffect(() => {
     if (!v0WatchActive && grokActivity.tone !== 'work') return;
     void refreshChatV0Status();
     const id = window.setInterval(() => void refreshChatV0Status(), 4000);
     return () => window.clearInterval(id);
   }, [v0WatchActive, grokActivity.tone, refreshChatV0Status]);
+
+  // Fallback cancel/clear when UI Studio editor is not mounted.
+  useEffect(() => {
+    const onCancel = () => {
+      requestCancelV0ClientPoll();
+      emitChatV0Watch(false);
+      void cancelProjectBackgroundJobs().then(() => {
+        emitChatV0Progress('v0 cancelled — polling stopped. Use Resume if v0-pro is still working.');
+        void refreshChatV0Status();
+      });
+    };
+    const onClear = () => {
+      requestCancelV0ClientPoll();
+      emitChatV0Watch(false);
+      void (async () => {
+        await cancelProjectBackgroundJobs();
+        try {
+          await fetch(withProjectQuery('/api/nebula-ui-studio/v0-clear'), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', ...getV0RequestHeaders() },
+            credentials: 'include',
+            body: JSON.stringify(withProjectBody({})),
+          });
+        } catch {
+          /* ignore */
+        }
+        emitChatV0Progress('v0 session cleared — auto v0 will start again when ready.');
+        void refreshChatV0Status();
+      })();
+    };
+    window.addEventListener('nebula-ui-studio-cancel-v0', onCancel);
+    window.addEventListener('nebula-ui-studio-clear-v0', onClear);
+    return () => {
+      window.removeEventListener('nebula-ui-studio-cancel-v0', onCancel);
+      window.removeEventListener('nebula-ui-studio-clear-v0', onClear);
+    };
+  }, [refreshChatV0Status]);
 
   // Stream activity log into the chat as status messages (newest at bottom).
   useEffect(() => {
@@ -335,6 +378,13 @@ export function AIChat() {
       return next;
     });
   }, [grokActivity.liveLog]);
+
+  const showActivityPanel =
+    grokActivity.tone === 'work' ||
+    v0WatchActive ||
+    v0Live ||
+    Boolean(grokActivity.v0Status) ||
+    grokActivity.liveLog.length > 0;
 
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
@@ -841,68 +891,6 @@ export function AIChat() {
   useEffect(() => {
     setSendError(null);
   }, [activePath]);
-
-  const scheduleVoiceAutoSend = useCallback((transcript: string) => {
-    clearVoiceIdleTimer();
-    const t = transcript.trim();
-    if (!t) return;
-    voiceIdleTimerRef.current = window.setTimeout(() => {
-      voiceIdleTimerRef.current = null;
-      void sendChatRef.current(t);
-    }, VOICE_SILENCE_BEFORE_SEND_MS);
-  }, []);
-
-  useEffect(() => {
-    if (!('webkitSpeechRecognition' in window)) return;
-    const SR = (window as unknown as { webkitSpeechRecognition: new () => IdeSpeechRecognition }).webkitSpeechRecognition;
-    const recognition = new SR();
-    recognition.continuous = false;
-    recognition.interimResults = true;
-    recognition.lang = 'en-US';
-
-    recognition.onresult = (event: IdeSpeechRecognitionEvent) => {
-      let finalText = '';
-      for (let i = event.resultIndex; i < event.results.length; i++) {
-        if (event.results[i].isFinal) {
-          finalText += event.results[i][0].transcript;
-        }
-      }
-      if (finalText) {
-        voiceDraftRef.current = `${voiceDraftRef.current}${voiceDraftRef.current ? ' ' : ''}${finalText}`.trim();
-        setInput(voiceDraftRef.current);
-        inputRef.current = voiceDraftRef.current;
-      }
-    };
-
-    recognition.onerror = (ev: IdeSpeechRecognitionErrorEvent) => {
-      if (ev.error === 'aborted') return;
-      console.warn('[AIChat] speech recognition:', ev.error);
-      setAccessoryHint(`Voice input: ${ev.error === 'not-allowed' ? 'allow the microphone for this site.' : ev.error}`);
-      window.setTimeout(() => setAccessoryHint(null), 4500);
-      stopVoiceRecognition();
-    };
-
-    recognition.onend = () => {
-      setIsRecordingVoice(false);
-      const draft = voiceDraftRef.current.trim();
-      voiceDraftRef.current = '';
-      if (isHandsFreeRef.current) return;
-      if (draft) {
-        scheduleVoiceAutoSend(draft);
-      }
-    };
-
-    voiceRecognitionRef.current = recognition;
-    return () => {
-      stopHandsFree();
-      try {
-        recognition.stop();
-      } catch {
-        /* ignore */
-      }
-      voiceRecognitionRef.current = null;
-    };
-  }, [scheduleVoiceAutoSend, stopHandsFree]);
 
   const sendChatRef = useRef<(override?: string) => Promise<void>>(async () => {});
 
@@ -1521,29 +1509,95 @@ export function AIChat() {
   };
 
   const toggleVoiceMic = () => {
-    if (sending || micInputBlocked) return;
-    const r = voiceRecognitionRef.current;
-    if (!r) {
+    if (sending) return;
+
+    // Stop if already recording
+    if (isRecordingVoice || voiceRecognitionRef.current) {
+      stopVoiceRecognition();
+      setIsRecordingVoice(false);
+      return;
+    }
+
+    // Clear TTS / cooldown so mic can start without focusing the textarea first
+    if (micInputBlocked || isTtsPlaying || micCooldown) {
+      interruptVoiceAndTts();
+    }
+    stopHandsFree();
+    clearVoiceIdleTimer();
+
+    const w = window as unknown as {
+      SpeechRecognition?: new () => IdeSpeechRecognition;
+      webkitSpeechRecognition?: new () => IdeSpeechRecognition;
+    };
+    const SR = w.SpeechRecognition || w.webkitSpeechRecognition;
+    if (!SR) {
       setAccessoryHint('Speech recognition is not supported in this browser.');
       window.setTimeout(() => setAccessoryHint(null), 4000);
       return;
     }
-    if (isRecordingVoice) {
-      try {
-        r.stop();
-      } catch {
-        /* ignore */
+
+    // Create recognition inside this click (user gesture) — fixes Chrome requiring
+    // a prior focus/click in the text field before r.start() works.
+    const recognition = new SR();
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.lang = 'en-US';
+
+    const baseText = inputRef.current.trim();
+    voiceDraftRef.current = baseText;
+
+    recognition.onresult = (event: IdeSpeechRecognitionEvent) => {
+      let finals = '';
+      let interim = '';
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const piece = event.results[i][0]?.transcript ?? '';
+        if (event.results[i].isFinal) finals += piece;
+        else interim += piece;
       }
-      return;
-    }
-    stopHandsFree();
-    clearVoiceIdleTimer();
-    voiceDraftRef.current = '';
+      if (finals) {
+        voiceDraftRef.current = `${voiceDraftRef.current}${voiceDraftRef.current ? ' ' : ''}${finals}`.trim();
+      }
+      const shown = `${voiceDraftRef.current}${interim ? (voiceDraftRef.current ? ' ' : '') + interim : ''}`.trim();
+      setInput(shown);
+      inputRef.current = shown;
+    };
+
+    recognition.onerror = (ev: IdeSpeechRecognitionErrorEvent) => {
+      if (ev.error === 'aborted') return;
+      console.warn('[AIChat] speech recognition:', ev.error);
+      setAccessoryHint(
+        `Voice input: ${ev.error === 'not-allowed' ? 'allow the microphone for this site.' : ev.error}`,
+      );
+      window.setTimeout(() => setAccessoryHint(null), 4500);
+      setIsRecordingVoice(false);
+      if (voiceRecognitionRef.current === recognition) {
+        voiceRecognitionRef.current = null;
+      }
+    };
+
+    recognition.onend = () => {
+      setIsRecordingVoice(false);
+      // Keep transcript in the box — user clicks Send (mic stays off after Send).
+      if (voiceRecognitionRef.current === recognition) {
+        voiceRecognitionRef.current = null;
+      }
+      const draft = voiceDraftRef.current.trim();
+      if (draft) {
+        setInput(draft);
+        inputRef.current = draft;
+      }
+    };
+
+    voiceRecognitionRef.current = recognition;
     try {
-      r.start();
+      recognition.start();
       setIsRecordingVoice(true);
+      setAccessoryHint('Listening… click Send when done, or mic again to stop.');
+      window.setTimeout(() => setAccessoryHint(null), 3500);
     } catch (err) {
       console.warn('[AIChat] mic start', err);
+      voiceRecognitionRef.current = null;
+      setIsRecordingVoice(false);
       setAccessoryHint('Could not start the microphone — check browser permissions.');
       window.setTimeout(() => setAccessoryHint(null), 4500);
     }
@@ -1724,6 +1778,10 @@ export function AIChat() {
 
   return (
     <div className="surface-active tonal-seam-l flex h-full min-h-0 flex-col overflow-hidden">
+      {showActivityPanel ? (
+        <IdeGrokActivityPanel activity={grokActivity} v0Live={v0Live || v0WatchActive} />
+      ) : null}
+
       {showGrokKeyBanner ? (
         <div
           className="shrink-0 border-b border-amber-500/40 bg-gradient-to-r from-amber-500/20 via-amber-500/12 to-transparent px-3 py-3"
@@ -1856,35 +1914,55 @@ export function AIChat() {
             }}
             placeholder="Message Grok…"
             rows={3}
-            disabled={sending || micInputBlocked}
+            disabled={sending}
             className="type-body-md min-h-[4.5rem] w-full resize-y bg-transparent text-foreground outline-none placeholder:text-muted-foreground disabled:opacity-50"
           />
 
           <div className="mt-2 flex items-center justify-between gap-3">
             <div className="flex items-center gap-1.5">
               <ChatRoundButton
-                label={isRecordingVoice ? 'Stop dictation' : 'Speak (microphone)'}
+                label="Interrupt Grok voice"
                 onClick={() => {
                   interruptVoiceAndTts();
-                  toggleVoiceMic();
+                  setAccessoryHint('Stopped voice playback and any pending dictation send.');
+                  window.setTimeout(() => setAccessoryHint(null), 3200);
                 }}
-                disabled={sending || micInputBlocked}
+              >
+                <Hand className="h-[18px] w-[18px]" />
+              </ChatRoundButton>
+              <ChatRoundButton
+                label={isRecordingVoice ? 'Stop microphone' : 'Start microphone'}
+                onClick={() => toggleVoiceMic()}
+                disabled={sending}
               >
                 <Mic
                   className={cn(
                     'h-[18px] w-[18px]',
                     isRecordingVoice ? 'text-destructive' : '',
-                    micInputBlocked ? 'opacity-50' : '',
                   )}
                 />
               </ChatRoundButton>
             </div>
 
             <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => void handleGo()}
+                disabled={sending}
+                title="Go: Grok Code writes files to your workspace"
+                className="btn-primary-cta flex h-9 shrink-0 items-center gap-1.5 rounded-full px-4 text-[0.8125rem] disabled:opacity-40"
+              >
+                <Rocket className="h-3.5 w-3.5" />
+                Go
+              </button>
               <ChatRoundButton
                 label="Send message"
-                onClick={() => void sendChat()}
-                disabled={!input.trim() || sending || micInputBlocked}
+                onClick={() => {
+                  stopVoiceRecognition();
+                  setIsRecordingVoice(false);
+                  void sendChat();
+                }}
+                disabled={!input.trim() || sending}
               >
                 <Send className="h-[18px] w-[18px]" />
               </ChatRoundButton>

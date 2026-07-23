@@ -1,6 +1,8 @@
 import { fetchJson } from './apiFetch';
 import { clearIdeWorkspaceMetaCache } from './ideWorkspaceChatContext';
 import { withProjectBody, withProjectQuery } from './nebulaProjectApi';
+import { clearStoredProjectType } from './nebulaProjectType';
+import { NEBULA_PENDING_PROJECT_TYPE_KEY } from './ideHomeEvents';
 
 export type ProjectResetResult = {
   ok?: boolean;
@@ -38,6 +40,8 @@ export function clearProjectDiscoveryClientState(): void {
     localStorage.removeItem('nebula_master_plan_open_tab');
     localStorage.removeItem('nebula_auto_start_chat');
     localStorage.removeItem('nebula_initial_prompt');
+    localStorage.removeItem(NEBULA_PENDING_PROJECT_TYPE_KEY);
+    clearStoredProjectType();
   } catch {
     /* ignore */
   }
