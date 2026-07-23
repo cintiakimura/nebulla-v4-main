@@ -112,7 +112,7 @@ import {
 } from "./lib/nebulaUiStudioGrok";
 import { getNebullaPersistRoot, getNebulaProjectDocsRoot } from "./lib/nebulaWorkspaceRoot";
 import { ensureCloudProjectWorkspace } from "./lib/nebulaCloudProjectRoot";
-import { getProjectKeyFromRequest } from "./lib/nebulaProjectKey";
+import { getProjectKeyFromRequest, sanitizeProjectKey } from "./lib/nebulaProjectKey";
 import {
   isVisualEditorEligible,
   markV0FirstGenerationComplete,
@@ -1086,7 +1086,7 @@ No approved UI code yet.
 
     const tabNames: Record<number, string> = {
       1: "1. Goal of the app",
-      2: "2. Text & Search",
+      2: "2. Tech and Research",
       3: "3. Features and KPIs",
       4: "4. Pages and navigation",
       5: "5. UI/UX design",
@@ -1676,12 +1676,20 @@ No approved UI code yet.
     try {
       const pp = projectPathsFor(req);
       const idx = path.join(pp.workspaceRoot, "index.html");
+      if (!fs.existsSync(idx) || fs.statSync(idx).size < 80) {
+        const q = req.query as Record<string, unknown>;
+        const displayName =
+          (typeof q.projectName === "string" && q.projectName.trim()) ||
+          pp.projectKey ||
+          "Untitled Project";
+        ensurePreviewIndexHtml(pp.workspaceRoot, displayName);
+      }
       if (!fs.existsSync(idx)) {
         return res
           .status(200)
           .type("html")
           .send(
-            `<!DOCTYPE html><html><head><meta charset="utf-8"/><title>No preview</title></head><body style="background:#0a1628;color:#94a3b8;font-family:system-ui;padding:2rem">No <code>index.html</code> in this workspace yet.</body></html>`,
+            `<!DOCTYPE html><html><head><meta charset="utf-8"/><title>No preview</title></head><body style="background:#0a1628;color:#94a3b8;font-family:system-ui;padding:2rem">No <code>index.html</code> in this workspace yet. Use <strong>Go</strong> to generate the app, then open Preview again.</body></html>`,
           );
       }
       let html = fs.readFileSync(idx, "utf8");
@@ -1705,24 +1713,34 @@ No approved UI code yet.
     try {
       const asterisk = req.path.slice("/api/app-preview/p/".length);
       const slash = asterisk.indexOf("/");
-      const projectKey = slash === -1 ? asterisk : asterisk.slice(0, slash);
+      const projectKeyRaw = slash === -1 ? asterisk : asterisk.slice(0, slash);
+      const projectKey = sanitizeProjectKey(projectKeyRaw);
       const relEncoded = slash === -1 ? "" : asterisk.slice(slash + 1);
       let relPath = relEncoded ? decodeURIComponent(relEncoded.replace(/\+/g, " ")) : "";
       relPath = relPath.replace(/^\.\/+/, "").replace(/^\/+/, "");
       if (!relPath) relPath = "index.html";
 
-      const diskKey = projectDiskKey(req as NebulaRequest);
-      if (projectKey !== diskKey) {
-        res.status(403).type("text/plain").send("Project key mismatch");
-        return;
-      }
-      const { workspaceRoot } = projectPathsFor(req);
+      // Path key is authoritative — iframe asset requests do not carry ?projectKey=
+      // (previously compared path key vs query/default and returned 403 Project key mismatch).
+      const { workspaceRoot } = ensureCloudProjectWorkspace(
+        REPO_ROOT,
+        NEBULA_PROJECT_ROOT,
+        projectKey,
+      );
       const target = path.resolve(workspaceRoot, relPath);
       if (!target.startsWith(workspaceRoot)) {
         res.status(403).end();
         return;
       }
       if (!fs.existsSync(target)) {
+        // Soft fallback: ensure a basic preview shell exists for empty workspaces
+        if (relPath === "index.html") {
+          ensurePreviewIndexHtml(workspaceRoot, projectKey);
+          if (fs.existsSync(target)) {
+            res.sendFile(target);
+            return;
+          }
+        }
         res.status(404).type("text/plain").send("Not found");
         return;
       }

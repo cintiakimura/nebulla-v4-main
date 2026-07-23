@@ -2,8 +2,11 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   FolderOpen,
   Github,
+  Globe2,
+  LayoutTemplate,
   Loader2,
   MessageCircle,
+  Smartphone,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
@@ -17,6 +20,7 @@ import {
   writeActiveGuestProjectId,
 } from '../../lib/nebulaProjectStore';
 import {
+  createProjectForCurrentSession,
   fetchSessionUser,
   listCloudProjectsDetailed,
   selectCloudProjectByName,
@@ -25,7 +29,11 @@ import {
 import {
   dispatchChatOpenFile,
   dispatchStartFreeChat,
+  markGuidedStartOnReady,
+  setPendingProjectType,
+  type NebulaProjectType,
 } from '../../lib/ideHomeEvents';
+import { resetProjectFromScratch } from '../../lib/ideProjectReset';
 import { ChatFilePreview } from './ChatFilePreview';
 import { openGitHubFile, openLocalFile } from '../../lib/fileOperations';
 import type { SmartChatFilePreview } from '../../lib/smartChatHandler';
@@ -55,6 +63,32 @@ function formatWhen(iso: string): string {
 
 type FileModalMode = 'local' | 'github' | null;
 
+const PROJECT_TYPES: {
+  id: NebulaProjectType;
+  title: string;
+  blurb: string;
+  icon: typeof Globe2;
+}[] = [
+  {
+    id: 'Web App',
+    title: 'Web App',
+    blurb: 'Multi-page product in the browser — dashboards, accounts, workflows.',
+    icon: Globe2,
+  },
+  {
+    id: 'Mobile App',
+    title: 'Mobile App',
+    blurb: 'Mobile-first experience — touch UI, compact layouts, app-like flows.',
+    icon: Smartphone,
+  },
+  {
+    id: 'Landing Page',
+    title: 'Landing Page',
+    blurb: 'Marketing or launch site — hero, story, and conversion-focused sections.',
+    icon: LayoutTemplate,
+  },
+];
+
 /**
  * Default post-login home — My Projects + quick actions.
  */
@@ -67,6 +101,7 @@ export function MyProjectsHome() {
   const [fileBusy, setFileBusy] = useState(false);
   const [fileError, setFileError] = useState('');
   const [preview, setPreview] = useState<SmartChatFilePreview | null>(null);
+  const [startingType, setStartingType] = useState<NebulaProjectType | null>(null);
 
   const refreshList = useCallback(async () => {
     setLoadingList(true);
@@ -156,6 +191,21 @@ export function MyProjectsHome() {
     window.location.reload();
   }, []);
 
+  const onStartTypedProject = useCallback(async (type: NebulaProjectType) => {
+    if (startingType) return;
+    setStartingType(type);
+    try {
+      setPendingProjectType(type);
+      markGuidedStartOnReady();
+      await resetProjectFromScratch(type);
+      await createProjectForCurrentSession(type);
+      window.location.reload();
+    } catch (err) {
+      console.error('[MyProjectsHome] start typed project failed', err);
+      setStartingType(null);
+    }
+  }, [startingType]);
+
   const onJustChat = useCallback(() => {
     dispatchStartFreeChat();
   }, []);
@@ -208,7 +258,7 @@ export function MyProjectsHome() {
     }
   }, [fileInput, fileModal]);
 
-  const quickActions = useMemo(
+  const continueActions = useMemo(
     () => [
       {
         id: 'local' as const,
@@ -253,7 +303,7 @@ export function MyProjectsHome() {
             Nebulla
           </p>
           <p className="max-w-xl text-base leading-relaxed text-muted-foreground">
-            Welcome back. Open something you already started, or pick a simple way to begin.
+            Welcome back. Pick a project type to start Discovery, or open something you already started.
           </p>
         </header>
 
@@ -263,21 +313,62 @@ export function MyProjectsHome() {
               New Project
             </h2>
             <p className="max-w-xl text-sm leading-relaxed text-muted-foreground">
-              Choose how you want to start. No rush — each option is a clear next step.
+              Choose what you are building. Grok will skip the type question and ask for your main goal next.
             </p>
           </div>
 
           <div className="grid gap-4 sm:grid-cols-3">
-            {quickActions.map((action) => {
+            {PROJECT_TYPES.map((action) => {
+              const Icon = action.icon;
+              const busy = startingType === action.id;
+              return (
+                <button
+                  key={action.id}
+                  type="button"
+                  disabled={Boolean(startingType)}
+                  onClick={() => void onStartTypedProject(action.id)}
+                  className="flex min-h-[11.5rem] flex-col items-start gap-4 rounded-2xl border border-white/10 bg-white/[0.03] p-5 text-left transition hover:border-cyan-500/35 hover:bg-cyan-500/5 disabled:cursor-wait disabled:opacity-60"
+                >
+                  <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-cyan-500/10 text-cyan-300">
+                    {busy ? (
+                      <Loader2 className="h-5 w-5 animate-spin" />
+                    ) : (
+                      <Icon className="h-5 w-5" />
+                    )}
+                  </span>
+                  <span className="space-y-1.5">
+                    <span className="block text-sm font-semibold text-foreground">
+                      {action.title}
+                    </span>
+                    <span className="block text-xs leading-relaxed text-muted-foreground">
+                      {action.blurb}
+                    </span>
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </section>
+
+        <section className="space-y-6">
+          <div className="space-y-2">
+            <h2 className="text-base font-semibold text-foreground">Or continue</h2>
+            <p className="max-w-xl text-sm leading-relaxed text-muted-foreground">
+              Open a file, pull from GitHub, or chat freely without starting a new build.
+            </p>
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-3">
+            {continueActions.map((action) => {
               const Icon = action.icon;
               return (
                 <button
                   key={action.id}
                   type="button"
                   onClick={action.onClick}
-                  className="flex min-h-[11.5rem] flex-col items-start gap-4 rounded-2xl border border-white/10 bg-white/[0.03] p-5 text-left transition hover:border-cyan-500/35 hover:bg-cyan-500/5"
+                  className="flex min-h-[10rem] flex-col items-start gap-4 rounded-2xl border border-white/10 bg-white/[0.02] p-5 text-left transition hover:border-white/20 hover:bg-white/[0.04]"
                 >
-                  <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-cyan-500/10 text-cyan-300">
+                  <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/5 text-muted-foreground">
                     <Icon className="h-5 w-5" />
                   </span>
                   <span className="space-y-1.5">
@@ -313,8 +404,9 @@ export function MyProjectsHome() {
           {projects.length === 0 && !loadingList ? (
             <div className="rounded-2xl border border-dashed border-white/10 px-6 py-12 text-center">
               <p className="text-sm leading-relaxed text-muted-foreground">
-                No projects yet. Pick an option under{' '}
-                <span className="text-foreground">New Project</span> to get started.
+                No projects yet. Pick <span className="text-foreground">Web App</span>,{' '}
+                <span className="text-foreground">Mobile App</span>, or{' '}
+                <span className="text-foreground">Landing Page</span> above to get started.
               </p>
             </div>
           ) : (

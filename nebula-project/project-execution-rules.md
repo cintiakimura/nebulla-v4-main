@@ -26,7 +26,7 @@
 
 | Step | Action | Grok MUST | Grok MUST NOT |
 |------|--------|-----------|---------------|
-| 1 | Master Plan complete | Emit `<START_MASTERPLAN>` with exactly 5 sections using `### 1. Goal of the app`, `### 2. Text & Search`, `### 3. Features and KPIs`, `### 4. Pages and navigation`, `### 5. UI/UX design`. Keep **§5 ≤ 15–25 lines** (concise visual summary only: mood, palette, typography, density, radius, motion, component style). | Dump long prose, code, JSX, or copy §4 content into §5. |
+| 1 | Master Plan complete | Emit `<START_MASTERPLAN>` with exactly 5 sections using `### 1. Goal of the app`, `### 2. Tech and Research`, `### 3. Features and KPIs`, `### 4. Pages and navigation`, `### 5. UI/UX design`. Keep **§5 ≤ 15–25 lines** (concise visual summary only: mood, palette, typography, density, radius, motion, component style). | Dump long prose, code, JSX, or copy §4 content into §5. |
 | 2 | Create v0 prompt | **Immediately** after Master Plan is saved, write a **detailed** `v0-prompt.md` (800–1200 chars) that distills **§4 + §5** only. Save to `nebula-ui-studio/v0-prompt.md`. | Skip this file, put the prompt only in chat, or paste full §4/§5 paragraphs. |
 | 3 | Trigger V0 | **Immediately** call the V0 API using the saved `v0-prompt.md` as the **only** input. | Manually ask user to click Generate v0 or paste prompt elsewhere. |
 | 4 | Save original | Product saves immutable copy to `nebula-ui-studio/v0-original/<timestamp>/`. | Modify or overwrite the original folder. |
@@ -109,7 +109,7 @@ Paths in `\`\`\`file:…\`\`\` are relative to `workspaceRoot` (`data/cloud-proj
 
 ```
 ### 1. Goal of the app
-### 2. Text & Search
+### 2. Tech and Research
 ### 3. Features and KPIs
 ### 4. Pages and navigation
 ### 5. UI/UX design
@@ -120,7 +120,7 @@ Paths in `\`\`\`file:…\`\`\` are relative to `workspaceRoot` (`data/cloud-proj
 | § | Title | Grok MUST put here | Grok MUST NOT put here |
 |---|--------|-------------------|------------------------|
 | 1 | Goal of the app | Purpose, users, scope | §2–§5 content |
-| 2 | Text & Search | Research pillars: 8–12 real competitors, ranked features, evidence | Pages, UI, code |
+| 2 | Tech and Research | Research pillars: 8–12 real competitors, ranked features, evidence | Pages, UI, code |
 | 3 | Features and KPIs | Features + KPIs | Routes, UI, code |
 | 4 | **Pages and navigation** | Every page: name, purpose, roles, sections, buttons+actions, nav, features, key data, **`/routes`** | Visual design essay, code |
 | 5 | **UI/UX design** | **Short concrete visual summary** (15–25 lines max; research-grounded) | Vague-only adjectives; long text; §4 copy; **any code** |

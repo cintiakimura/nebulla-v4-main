@@ -10,7 +10,11 @@ import {
   createGuestProject,
   readActiveGuestProjectId,
   readGuestIndex,
+  readGuestProjectData,
+  updateGuestIndexMeta,
   writeActiveGuestProjectId,
+  writeGuestIndex,
+  writeGuestProjectData,
 } from './nebulaProjectStore';
 import {
   getBrowserProjectKey,
@@ -205,6 +209,60 @@ export async function upsertCloudProject(payload: {
   if (!res.ok) return false;
   void fireSilentProjectManager({ projectName: payload.name });
   return true;
+}
+
+/**
+ * Persist the active project's display name into guest index / cloud projects list.
+ * Keeps the same disk `projectKey`; only the human-readable name changes.
+ */
+export async function renameActiveProjectDisplayName(
+  nextName: string,
+  mode: 'cloud' | 'guest' = 'guest',
+): Promise<{ projectName: string; projectKey: string }> {
+  const trimmed = nextName.trim();
+  const key = getBrowserProjectKey();
+  const previous = getBrowserProjectName().trim();
+
+  if (!trimmed) {
+    return { projectName: previous, projectKey: key };
+  }
+
+  setBrowserProjectName(trimmed);
+
+  if (mode === 'guest') {
+    const idx = readGuestIndex();
+    if (idx.some((e) => e.id === key)) {
+      updateGuestIndexMeta(key, trimmed);
+    } else {
+      writeGuestIndex([
+        { id: key, name: trimmed, updatedAt: new Date().toISOString() },
+        ...idx,
+      ]);
+    }
+    const data = readGuestProjectData(key);
+    writeGuestProjectData(key, {
+      pages: data?.pages ?? [],
+      edges: data?.edges ?? [],
+      projectName: trimmed,
+    });
+    writeActiveGuestProjectId(key);
+    dispatchWorkspaceSynced(trimmed, key);
+    return { projectName: trimmed, projectKey: key };
+  }
+
+  // Cloud: upsert under new name, preserving pages/edges from previous row when possible
+  const existing = (previous && (await getCloudProject(previous))) || (await getCloudProject(trimmed));
+  const pages = existing?.pages ?? [];
+  const edges = existing?.edges ?? [];
+  const ok = await upsertCloudProject({ name: trimmed, pages, edges });
+  if (ok) {
+    if (previous && previous !== trimmed) {
+      await deleteCloudProject(previous);
+    }
+    persistActiveCloudSelection(trimmed, key);
+    dispatchWorkspaceSynced(trimmed, key);
+  }
+  return { projectName: getBrowserProjectName().trim() || trimmed, projectKey: key };
 }
 
 export async function deleteCloudProject(name: string): Promise<boolean> {

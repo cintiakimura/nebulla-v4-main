@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Check, ChevronDown, Copy, MonitorPlay, Search, X } from 'lucide-react';
+import { Check, ChevronDown, MonitorPlay, Search, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Logo } from '@/components/Logo';
 import { getBrowserProjectName } from '../../lib/nebulaProjectApi';
@@ -17,11 +17,14 @@ const models: { id: IdeChatModelId; name: string; badge: string | null }[] = AI_
 
 export function TopBar({
   workspaceLabel,
+  onProjectNameCommit,
   onSwitchWorkspace,
   onOpenAccount,
 }: {
   /** Active cloud/local project name from workspace gate. */
   workspaceLabel?: string;
+  /** Persist renamed project into user projects (guest index / cloud). */
+  onProjectNameCommit?: (name: string) => void | Promise<void>;
   /** Re-open project picker (sign-in / switch project). */
   onSwitchWorkspace?: () => void;
   /** Opens My services (API keys, GitHub, etc.). */
@@ -30,16 +33,32 @@ export function TopBar({
   const { chatModel, setChatModel, activePath, activeTab, updateActiveContent, saveTab } =
     useIdeWorkspace();
   const [isModelOpen, setIsModelOpen] = useState(false);
-  const [projectCopied, setProjectCopied] = useState(false);
   const [findOpen, setFindOpen] = useState(false);
   const [findQuery, setFindQuery] = useState('');
   const [replaceQuery, setReplaceQuery] = useState('');
   const [replaceMsg, setReplaceMsg] = useState<string | null>(null);
+  const [draftName, setDraftName] = useState(
+    () => workspaceLabel?.trim() || getBrowserProjectName().trim() || '',
+  );
   const modelWrapRef = useRef<HTMLDivElement>(null);
   const findWrapRef = useRef<HTMLDivElement>(null);
   const findInputRef = useRef<HTMLInputElement>(null);
+  const nameInputRef = useRef<HTMLInputElement>(null);
 
-  const projectName = workspaceLabel?.trim() || getBrowserProjectName().trim() || 'Untitled project';
+  useEffect(() => {
+    const next = workspaceLabel?.trim() || getBrowserProjectName().trim() || '';
+    setDraftName(next);
+  }, [workspaceLabel]);
+
+  useEffect(() => {
+    const onSync = (ev: Event) => {
+      const detail = (ev as CustomEvent<{ projectName?: string }>).detail;
+      const n = detail?.projectName?.trim() || getBrowserProjectName().trim() || '';
+      setDraftName(n);
+    };
+    window.addEventListener('nebula-workspace-context-synced', onSync);
+    return () => window.removeEventListener('nebula-workspace-context-synced', onSync);
+  }, []);
 
   const closeModelMenu = useCallback(() => setIsModelOpen(false), []);
   useClickOutside(modelWrapRef, closeModelMenu, isModelOpen);
@@ -98,15 +117,14 @@ export function TopBar({
     }
   }, [findQuery, replaceQuery, activePath, activeTab, matchCount, updateActiveContent, saveTab]);
 
-  const copyProjectName = useCallback(async () => {
-    try {
-      await navigator.clipboard.writeText(projectName);
-      setProjectCopied(true);
-      window.setTimeout(() => setProjectCopied(false), 2000);
-    } catch {
-      /* ignore */
+  const commitProjectName = useCallback(() => {
+    const trimmed = draftName.trim();
+    if (!trimmed) {
+      setDraftName(workspaceLabel?.trim() || getBrowserProjectName().trim() || '');
+      return;
     }
-  }, [projectName]);
+    void onProjectNameCommit?.(trimmed);
+  }, [draftName, onProjectNameCommit, workspaceLabel]);
 
   return (
     <div className="surface-active tonal-seam-b flex h-12 flex-col">
@@ -117,27 +135,40 @@ export function TopBar({
             <span className="app-logotype text-foreground">Nebulla.beta</span>
           </div>
 
-          <button
-            type="button"
-            onClick={() => (onSwitchWorkspace ? onSwitchWorkspace() : void copyProjectName())}
-            title={
-              onSwitchWorkspace
-                ? 'Switch or create project'
-                : projectCopied
-                  ? 'Copied!'
-                  : 'Active project — click to copy name'
-            }
-            className="btn-secondary-surface type-title-sm hidden max-w-[220px] items-center gap-1.5 truncate rounded-md px-2 py-1 text-muted-foreground sm:flex"
-          >
-            <span className="truncate">{projectName}</span>
+          <div className="hidden min-w-0 max-w-[280px] items-center gap-1.5 sm:flex">
+            <input
+              ref={nameInputRef}
+              type="text"
+              value={draftName}
+              onChange={(e) => setDraftName(e.target.value)}
+              onBlur={() => commitProjectName()}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  commitProjectName();
+                  nameInputRef.current?.blur();
+                }
+                if (e.key === 'Escape') {
+                  setDraftName(workspaceLabel?.trim() || getBrowserProjectName().trim() || '');
+                  nameInputRef.current?.blur();
+                }
+              }}
+              placeholder="Project name"
+              aria-label="Project name"
+              title="Project name — used when saving to your projects"
+              className="btn-secondary-surface type-title-sm w-full min-w-[140px] truncate rounded-md px-2 py-1 text-muted-foreground outline-none ring-primary/30 placeholder:text-muted-foreground/50 focus:text-foreground focus:ring"
+            />
             {onSwitchWorkspace ? (
-              <span className="shrink-0 text-[10px] text-primary/80">Switch</span>
-            ) : projectCopied ? (
-              <span className="shrink-0 text-[10px] text-primary">Copied</span>
-            ) : (
-              <Copy className="h-3 w-3 shrink-0 opacity-50" aria-hidden />
-            )}
-          </button>
+              <button
+                type="button"
+                onClick={onSwitchWorkspace}
+                title="Switch or create project"
+                className="btn-secondary-surface shrink-0 rounded-md px-2 py-1 text-[10px] text-primary/80 hover:text-primary"
+              >
+                Switch
+              </button>
+            ) : null}
+          </div>
         </div>
 
         <div className="flex shrink-0 items-center gap-2 sm:gap-3">

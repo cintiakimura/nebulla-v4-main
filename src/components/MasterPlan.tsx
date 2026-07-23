@@ -3,7 +3,9 @@ import { BookOpen, Lock, Save, X } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { readResponseJson } from '../lib/apiFetch';
 import { PRE_CODING_SUMMARY_KEY } from '../lib/masterPlanSections';
-import { withProjectBody, withProjectQuery } from '../lib/nebulaProjectApi';
+import { getBrowserProjectName, withProjectQuery } from '../lib/nebulaProjectApi';
+import { runMasterPlanUiPipelineWithV0 } from '../lib/ideArtifactSync';
+import { dispatchOpenUiStudio } from '../lib/nebulaUiStudioEvents';
 
 export function MasterPlan({
   onClose,
@@ -14,9 +16,9 @@ export function MasterPlan({
 }) {
   const [planData, setPlanData] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
-  const [titles, setTitles] = useState<string[]>([
+  const [titles] = useState<string[]>([
     '1. Goal of the app',
-    '2. Text & Search',
+    '2. Tech and Research',
     '3. Features and KPIs',
     '4. Pages and navigation',
     '5. UI/UX design',
@@ -79,8 +81,19 @@ export function MasterPlan({
   const sectionContent = (title: string): string => {
     const direct = planData[title]?.trim();
     if (direct) return planData[title];
-    if (title === '2. Text & Search' && planData['2. Tech Research']?.trim()) {
-      return planData['2. Tech Research'];
+    if (title === '2. Tech and Research') {
+      const legacy =
+        planData['2. Text & Search']?.trim() ||
+        planData['2. Tech & Research']?.trim() ||
+        planData['2. Tech Research']?.trim();
+      if (legacy) {
+        return (
+          planData['2. Text & Search'] ||
+          planData['2. Tech & Research'] ||
+          planData['2. Tech Research'] ||
+          ''
+        );
+      }
     }
     return '';
   };
@@ -137,13 +150,19 @@ export function MasterPlan({
   const handleSave = async () => {
     setIsSaved(true);
     try {
-      await fetch(withProjectQuery('/api/ide/master-plan-ui-pipeline'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify(withProjectBody({ autoV0: false })),
+      const projectName = getBrowserProjectName().trim() || 'Untitled Project';
+      const pipeline = await runMasterPlanUiPipelineWithV0({
+        projectName,
+        autoV0: true,
       });
       window.dispatchEvent(new CustomEvent('nebula-master-plan-updated'));
+      if (pipeline.v0Ok) {
+        window.dispatchEvent(new CustomEvent('nebula-ui-studio-v0-complete'));
+        window.dispatchEvent(new CustomEvent('nebula-files-applied'));
+        dispatchOpenUiStudio({ tab: 'design' });
+      } else if (pipeline.v0PromptWritten) {
+        dispatchOpenUiStudio({ tab: 'design' });
+      }
     } catch (err) {
       console.warn('Master Plan save pipeline failed:', err);
     }

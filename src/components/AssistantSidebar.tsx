@@ -19,7 +19,7 @@ import {
   readOnboardingAutopilotDone,
 } from '../lib/ideProjectReset';
 import { runGoCodeAndApply } from '../lib/nebulaGrokCodingPipeline';
-import { runMasterPlanUiPipeline } from '../lib/ideArtifactSync';
+import { runMasterPlanUiPipelineWithV0 } from '../lib/ideArtifactSync';
 import { buildNebulaAssistantSystemPrompt } from '../lib/nebulaAssistantSystemPrompt';
 import { fetchConversationLogEntries } from '../lib/conversationLogClient';
 import { uploadFileToR2 } from '../lib/nebulaStorageClient';
@@ -699,7 +699,7 @@ export function AssistantSidebar({
 
       // Grok 4 behavior: Trigger UI/UX Workflow
       if (masterPlanSource.includes('<START_UIUX>')) {
-        dispatchStartUiUxWorkflow({ tab: 'design', autoV0: false });
+        dispatchStartUiUxWorkflow({ tab: 'design', autoV0: true });
       }
 
       const uiStudioPromptMatch = masterPlanSource.match(/<NEBULA_UI_STUDIO_PROMPT>([\s\S]*?)<\/NEBULA_UI_STUDIO_PROMPT>/i);
@@ -988,7 +988,7 @@ export function AssistantSidebar({
         } catch {
           /* ignore */
         }
-        await runMasterPlanUiPipeline({ projectName, autoV0: false });
+        await runMasterPlanUiPipelineWithV0({ projectName, autoV0: true });
       }
 
       setMessages((prev) => [

@@ -988,12 +988,8 @@ export function IdeVisualEditor({
         return;
       }
 
-      const localKey = hasLocalV0ApiKey();
-      if (localKey && v0ServerReady === false) {
-        setError(formatV0UiError('not set on the server and no client key was sent', true));
-        return;
-      }
-      if (hasV0ApiKey === false) {
+      const hasAnyV0Key = hasV0ApiKey === true || hasLocalV0ApiKey() || v0ServerReady === true;
+      if (!hasAnyV0Key) {
         try {
           const fb = await fetch(withProjectQuery('/api/nebula-ui-studio/basic-scaffold'), {
             method: 'POST',
@@ -1014,7 +1010,7 @@ export function IdeVisualEditor({
         } catch {
           /* fall through */
         }
-        setError(formatV0UiError('not set on the server and no client key was sent', hasLocalV0ApiKey()));
+        setError(formatV0UiError('not set on the server and no client key was sent', false));
         return;
       }
 

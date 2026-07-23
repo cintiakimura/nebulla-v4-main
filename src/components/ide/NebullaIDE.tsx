@@ -22,6 +22,7 @@ import {
 import {
   ensureCloudWorkspaceReady,
   fetchSessionUser,
+  renameActiveProjectDisplayName,
   type NebulaSessionUser,
 } from '../../lib/nebulaCloud';
 import { fetchNebulaPublicConfig, type NebulaPublicConfig } from '../../lib/nebulaPublicConfig';
@@ -199,6 +200,20 @@ function NebullaIDEShell() {
     setCloudBannerDismissed(false);
   }, []);
 
+  const handleProjectNameCommit = useCallback(
+    async (name: string) => {
+      const mode = workspaceCtx?.mode ?? 'guest';
+      const result = await renameActiveProjectDisplayName(name, mode);
+      setWorkspaceCtx((prev) =>
+        prev
+          ? { ...prev, projectName: result.projectName, projectKey: result.projectKey }
+          : prev,
+      );
+      setWorkspaceProjectKey(result.projectKey);
+    },
+    [workspaceCtx?.mode],
+  );
+
   /** After WorkspaceSetupGate: optional first-time welcome (non-blocking). */
   useEffect(() => {
     if (!workspaceCtx || welcomeCheckedRef.current) return;
@@ -355,11 +370,8 @@ function NebullaIDEShell() {
       ) : null}
 
       <TopBar
-        workspaceLabel={
-          workspaceCtx
-            ? `${workspaceCtx.projectName}${workspaceCtx.mode === 'guest' ? ' (local)' : ''}`
-            : undefined
-        }
+        workspaceLabel={workspaceCtx?.projectName}
+        onProjectNameCommit={handleProjectNameCommit}
         onSwitchWorkspace={() => setWorkspaceCtx(null)}
         onOpenAccount={() => setMyServicesOpen(true)}
       />

@@ -23,8 +23,8 @@ import {
 import { sendIdeAssistantGrokTurn } from '../../lib/ideAssistantGrokChat';
 import {
   conversationEntriesToIdeMessages,
-  IDE_CHAT_DISCOVERY_BOOTSTRAP,
   IDE_CHAT_FAST_PROJECT_BOOTSTRAP,
+  buildDiscoveryBootstrap,
   isHiddenBootstrapUserMessage,
 } from '../../lib/ideChatBootstrap';
 import { fetchConversationLogEntries } from '../../lib/conversationLogClient';
@@ -54,9 +54,11 @@ import { handleSmartChatMessage, type SmartChatFilePreview } from '../../lib/sma
 import { isMasterPlanCompleteForDiscovery } from '../../lib/masterPlanSections';
 import {
   consumeGuidedStartOnReady,
+  consumePendingProjectType,
   NEBULA_CHAT_OPEN_FILE,
   NEBULA_START_FREE_CHAT,
   NEBULA_START_GUIDED_CHAT,
+  type StartGuidedChatDetail,
 } from '../../lib/ideHomeEvents';
 import { ideContextSnippetForChat, useIdeWorkspace } from '@/components/ide/IdeWorkspaceContext';
 import { ChatFilePreview } from '@/components/ide/ChatFilePreview';
@@ -738,6 +740,11 @@ export function AIChat() {
     };
   }, [diskProjectKey]);
 
+  const startGuidedDiscovery = useCallback(() => {
+    const projectType = consumePendingProjectType();
+    void sendChatRef.current(buildDiscoveryBootstrap(projectType));
+  }, []);
+
   useEffect(() => {
     const onReset = () => {
       setMessages([]);
@@ -748,12 +755,12 @@ export function AIChat() {
       // New Project flow marks guided start; do not auto-interview on every reset.
       if (serverHasGrokKey === true && consumeGuidedStartOnReady()) {
         bootstrapStartedRef.current = true;
-        void sendChatRef.current(IDE_CHAT_DISCOVERY_BOOTSTRAP);
+        startGuidedDiscovery();
       }
     };
     window.addEventListener('nebula-project-reset', onReset);
     return () => window.removeEventListener('nebula-project-reset', onReset);
-  }, [serverHasGrokKey]);
+  }, [serverHasGrokKey, startGuidedDiscovery]);
 
   // Post-login: stay quiet until My Projects → New Project (or explicit guided event).
   useEffect(() => {
@@ -763,18 +770,23 @@ export function AIChat() {
     if (bootstrapStartedRef.current || sendingRef.current) return;
     if (!consumeGuidedStartOnReady()) return;
     bootstrapStartedRef.current = true;
-    void sendChatRef.current(IDE_CHAT_DISCOVERY_BOOTSTRAP);
-  }, [serverHasGrokKey, messages.length, diskProjectKey]);
+    startGuidedDiscovery();
+  }, [serverHasGrokKey, messages.length, diskProjectKey, startGuidedDiscovery]);
 
   useEffect(() => {
     const stamp = () =>
       new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
 
-    const onGuided = () => {
+    const onGuided = (ev: Event) => {
       if (sendingRef.current) return;
       if (messagesRef.current.length > 0) return;
       bootstrapStartedRef.current = true;
-      void sendChatRef.current(IDE_CHAT_DISCOVERY_BOOTSTRAP);
+      const detail = (ev as CustomEvent<StartGuidedChatDetail>).detail;
+      const fromEvent = detail?.projectType;
+      // Prefer event detail; always clear any pending storage so reload does not re-ask.
+      const projectType = fromEvent ?? consumePendingProjectType();
+      if (fromEvent) consumePendingProjectType();
+      void sendChatRef.current(buildDiscoveryBootstrap(projectType));
     };
 
     const onFree = () => {
@@ -1173,8 +1185,8 @@ export function AIChat() {
           setGrokActivity((prev) =>
             advanceGrokActivity(prev, 3, {
               currentAction: willCode
-                ? 'UI Studio pipeline — v0 prompt & mind map (v0 runs after Grok Code)…'
-                : 'UI Studio pipeline — v0 prompt, mind map, optional v0…',
+                ? 'UI Studio pipeline — v0 prompt & mind map (auto v0 after Grok Code)…'
+                : 'UI Studio pipeline — v0 prompt, mind map, auto v0…',
               stepDetail: {
                 index: 2,
                 detail: `Saved ${mpSaved} Master Plan section(s). Building v0 prompt & mind map from §4…`,
@@ -1188,7 +1200,8 @@ export function AIChat() {
         }
         masterPlanPipeline = await runMasterPlanUiPipelineWithV0({
           projectName,
-          autoV0: false,
+          // Defer v0 while Grok Code is about to run; otherwise auto-start client poll path.
+          autoV0: !willCode,
           onProgress: showWorkActivity ? pushActivity : undefined,
         });
         if ((masterPlanPipeline.mindMapPageCount ?? 0) > 0 || masterPlanPipeline.v0Ok) {
@@ -1299,7 +1312,7 @@ export function AIChat() {
           }
           masterPlanPipeline = await runMasterPlanUiPipelineWithV0({
             projectName,
-            autoV0: false,
+            autoV0: true,
             onProgress: pushActivity,
           });
           if (masterPlanPipeline.v0Ok) {
@@ -1332,7 +1345,7 @@ export function AIChat() {
         !masterPlanPipeline.v0Ok &&
         !masterPlanPipeline.v0Triggered
       ) {
-        dispatchStartUiUxWorkflow({ tab: 'design', autoV0: false });
+        dispatchStartUiUxWorkflow({ tab: 'design', autoV0: true });
       }
 
       if (spoken.trim()) {
@@ -1664,19 +1677,21 @@ export function AIChat() {
       window.dispatchEvent(new CustomEvent('nebula-master-plan-updated'));
       setGrokActivity((prev) =>
         advanceGrokActivity(prev, 4, {
-          currentAction: 'Grok Code done — syncing mind map & v0 prompt (Generate v0 in UI Studio when ready)…',
-          log: { message: 'UI Studio pipeline (v0 prompt & mind map)', kind: 'info' },
+          currentAction: 'Grok Code done — starting auto v0 UI generation…',
+          log: { message: 'UI Studio pipeline (v0 prompt, mind map, auto v0)', kind: 'info' },
         }),
       );
       const pipeline = await runMasterPlanUiPipelineWithV0({
         projectName,
-        autoV0: false,
+        autoV0: true,
         onProgress: pushActivity,
       });
       const v0Snap = await refreshChatV0Status();
       if (pipeline.v0Ok) {
         window.dispatchEvent(new CustomEvent('nebula-ui-studio-v0-complete'));
         window.dispatchEvent(new CustomEvent('nebula-files-applied'));
+        dispatchOpenUiStudio({ tab: 'design' });
+      } else if (pipeline.v0PromptWritten) {
         dispatchOpenUiStudio({ tab: 'design' });
       }
       if (pipeline.v0PromptWritten) {

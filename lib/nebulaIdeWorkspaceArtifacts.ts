@@ -62,15 +62,15 @@ export function fillMissingMasterPlanSectionsLocal(opts: {
     updated.push("1. Goal of the app");
   }
 
-  if (missing.includes("2. Text & Search")) {
-    next["2. Text & Search"] = [
+  if (missing.includes("2. Tech and Research")) {
+    next["2. Tech and Research"] = [
       `- **Category:** ${name} — research 5–10 real competitors and their dominant UX patterns before coding.`,
       "- **Industry UI:** derive palette, density, and nav from competitor research + user discovery (not Nebulla IDE chrome).",
       "- **Stack:** Next.js App Router, TypeScript, Tailwind, shadcn/ui.",
       "- **Integrations:** auth, dashboards, uploads as described in discovery.",
       ...(note ? [`- **Session focus:** ${note.slice(0, 400)}`] : []),
     ].join("\n");
-    updated.push("2. Text & Search");
+    updated.push("2. Tech and Research");
   }
 
   if (missing.includes("3. Features and KPIs")) {
@@ -97,7 +97,10 @@ export function fillMissingMasterPlanSectionsLocal(opts: {
   if (missing.includes("5. UI/UX design")) {
     const oneLiner = goal.split("\n").find((l) => l.trim())?.slice(0, 120) || name;
     const research = String(
-      next["2. Text & Search"] ?? plan["2. Tech Research"] ?? "",
+      next["2. Tech and Research"] ??
+        next["2. Text & Search"] ??
+        plan["2. Tech Research"] ??
+        "",
     ).trim();
     next["5. UI/UX design"] = [
       "- **Theme:** Industry-appropriate palette from §2 competitor research and discovery — **not** Nebulla platform UI (#080A14 / #00D4D4).",
@@ -105,7 +108,7 @@ export function fillMissingMasterPlanSectionsLocal(opts: {
       "- **Components:** shadcn/ui + Tailwind; nav pattern from §4 (sidebar vs top nav per category norms)",
       `- **Mood:** Purpose-built for **${oneLiner.replace(/\*\*/g, "")}** — mirror leading apps in this space`,
       ...(research
-        ? ["- **Research anchor:** use patterns documented in §2 Text & Search"]
+        ? ["- **Research anchor:** use patterns documented in §2 Tech and Research"]
         : ["- **Research anchor:** fill §2 with competitor UX before finalizing colors"]),
       ...(refHint ? ["", "**Brand references (user-provided):**", refHint] : []),
     ].join("\n");

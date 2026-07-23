@@ -23,7 +23,7 @@ End-to-end timeline for a new Nebula project. **Strict MUST / MUST NOT rules:** 
 
 1. **Emit the five-section Master Plan** using the exact headers:
    - `### 1. Goal of the app`
-   - `### 2. Text & Search`
+   - `### 2. Tech and Research`
    - `### 3. Features and KPIs`
    - `### 4. Pages and navigation`
    - `### 5. UI/UX design`

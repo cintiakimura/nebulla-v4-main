@@ -56,7 +56,7 @@ Output EXACTLY one block: <START_MASTERPLAN>...</END_MASTERPLAN>
 
 Inside, use these five headers exactly (### prefix recommended):
 ### 1. Goal of the app
-### 2. Text & Search
+### 2. Tech and Research
 ### 3. Features and KPIs
 ### 4. Pages and navigation
 ### 5. UI/UX design

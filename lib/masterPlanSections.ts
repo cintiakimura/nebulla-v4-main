@@ -5,7 +5,7 @@
 
 export const MASTER_PLAN_SECTION_KEYS = [
   "1. Goal of the app",
-  "2. Text & Search",
+  "2. Tech and Research",
   "3. Features and KPIs",
   "4. Pages and navigation",
   "5. UI/UX design",
@@ -21,7 +21,9 @@ export const MASTER_PLAN_USER_SECTION_KEYS = [...MASTER_PLAN_SECTION_KEYS] as co
 
 /** Legacy JSON keys → canonical keys when reading master-plan.json */
 export const MASTER_PLAN_LEGACY_KEY_ALIASES: Record<string, string> = {
-  "2. Tech Research": "2. Text & Search",
+  "2. Tech Research": "2. Tech and Research",
+  "2. Text & Search": "2. Tech and Research",
+  "2. Tech & Research": "2. Tech and Research",
 };
 
 export const MASTER_PLAN_ALL_KEYS = [
@@ -34,7 +36,7 @@ const ORCHESTRATION_DUMP_RE =
 
 const SECTION_META: { index: number; titlePattern: string }[] = [
   { index: 1, titlePattern: "Goal of the app" },
-  { index: 2, titlePattern: "(?:Text\\s*&\\s*Search|Tech\\s*Research)" },
+  { index: 2, titlePattern: "(?:Tech\\s+and\\s+Research|Tech\\s*&\\s*Research|Text\\s*&\\s*Search|Tech\\s*Research)" },
   { index: 3, titlePattern: "Features and KPIs" },
   { index: 4, titlePattern: "Pages and navigation" },
   { index: 5, titlePattern: "UI\\/UX design" },
@@ -42,7 +44,7 @@ const SECTION_META: { index: number; titlePattern: string }[] = [
 ];
 
 const LINE_HEADING_RE =
-  /^\s{0,3}(?:#{1,4}\s*)?(\d)\.\s*(Goal of the app|Text\s*&\s*Search|Tech\s*Research|Features and KPIs|Pages and navigation|UI\/UX design|Environment Setup)\s*$/i;
+  /^\s{0,3}(?:#{1,4}\s*)?(\d)\.\s*(Goal of the app|Tech\s+and\s+Research|Tech\s*&\s*Research|Text\s*&\s*Search|Tech\s*Research|Features and KPIs|Pages and navigation|UI\/UX design|Environment Setup)\s*$/i;
 
 export function masterPlanKeyForTabIndex(tabIndex: number): string | undefined {
   if (tabIndex >= 1 && tabIndex <= MASTER_PLAN_SECTION_KEYS.length) {
@@ -175,7 +177,7 @@ export function masterPlanSectionSeparationRules(): string {
 MASTER PLAN SECTION SEPARATION (mandatory inside <START_MASTERPLAN>…</END_MASTERPLAN>):
 - Use exactly these five section headers, each on its own line (### prefix recommended):
   ### 1. Goal of the app
-  ### 2. Text & Search
+  ### 2. Tech and Research
   ### 3. Features and KPIs
   ### 4. Pages and navigation
   ### 5. UI/UX design
@@ -206,7 +208,7 @@ export function isMasterPlanCompleteForDiscovery(
     const body = (n[key] || "").trim();
     if (body.length < MIN_SECTION_CHARS) return false;
   }
-  const research = (n["2. Text & Search"] || "").trim();
+  const research = (n["2. Tech and Research"] || "").trim();
   if (research.length < 200) return false;
   if (!RESEARCH_HINT_RE.test(research)) return false;
   return true;

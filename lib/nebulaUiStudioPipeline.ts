@@ -83,7 +83,9 @@ export function buildV0PromptMarkdown(
 ): string {
   const pagesNav = String(plan["4. Pages and navigation"] ?? "").trim();
   const uiUx = String(plan["5. UI/UX design"] ?? "").trim();
-  const research = String(plan["2. Text & Search"] ?? plan["2. Tech Research"] ?? "").trim();
+  const research = String(
+    plan["2. Tech and Research"] ?? plan["2. Text & Search"] ?? plan["2. Tech Research"] ?? "",
+  ).trim();
   const goal = String(plan["1. Goal of the app"] ?? "").trim();
   const oneLiner = goal
     ? truncateForV0(goal.split(/\n/).find((l) => l.trim()) ?? goal, 160)

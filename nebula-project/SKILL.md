@@ -4,7 +4,7 @@ Design guidance for **the user's app** (Master Plan, v0, Grok Code) — not for 
 
 ## Source of truth (strict order)
 
-1. **Master Plan §2 Text & Search** — competitor/industry UX research from discovery
+1. **Master Plan §2 Tech and Research** — competitor/industry UX research from discovery
 2. **Master Plan §5 UI/UX design** — palette, typography, density, nav pattern
 3. **User uploads** — `nebulla-ide/design-references.json` (logo, brand guide)
 

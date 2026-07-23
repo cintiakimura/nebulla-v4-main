@@ -10,9 +10,18 @@ export const NEBULA_CHAT_OPEN_FILE = 'nebula-chat-open-file';
 /** Persist across reload after "New Project" creates a fresh workspace. */
 export const NEBULA_START_GUIDED_ON_READY_KEY = 'nebula_start_guided_on_ready';
 
-export function dispatchStartGuidedChat(): void {
+/** Discovery project type chosen on My Projects (Web / Mobile / Landing). */
+export const NEBULA_PENDING_PROJECT_TYPE_KEY = 'nebula_pending_project_type_v1';
+
+export type NebulaProjectType = 'Web App' | 'Mobile App' | 'Landing Page';
+
+export type StartGuidedChatDetail = {
+  projectType?: NebulaProjectType;
+};
+
+export function dispatchStartGuidedChat(detail?: StartGuidedChatDetail): void {
   try {
-    window.dispatchEvent(new CustomEvent(NEBULA_START_GUIDED_CHAT));
+    window.dispatchEvent(new CustomEvent(NEBULA_START_GUIDED_CHAT, { detail: detail ?? {} }));
   } catch {
     /* ignore */
   }
@@ -53,4 +62,34 @@ export function consumeGuidedStartOnReady(): boolean {
     /* ignore */
   }
   return false;
+}
+
+export function setPendingProjectType(type: NebulaProjectType): void {
+  try {
+    localStorage.setItem(NEBULA_PENDING_PROJECT_TYPE_KEY, type);
+  } catch {
+    /* ignore */
+  }
+}
+
+export function peekPendingProjectType(): NebulaProjectType | null {
+  try {
+    const v = localStorage.getItem(NEBULA_PENDING_PROJECT_TYPE_KEY)?.trim();
+    if (v === 'Web App' || v === 'Mobile App' || v === 'Landing Page') return v;
+  } catch {
+    /* ignore */
+  }
+  return null;
+}
+
+/** Read and clear pending project type (once per guided start). */
+export function consumePendingProjectType(): NebulaProjectType | null {
+  const v = peekPendingProjectType();
+  if (!v) return null;
+  try {
+    localStorage.removeItem(NEBULA_PENDING_PROJECT_TYPE_KEY);
+  } catch {
+    /* ignore */
+  }
+  return v;
 }

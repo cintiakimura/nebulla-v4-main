@@ -16,7 +16,7 @@ Nebulla is architecture-first. Analyze the user's input **and project state** (e
 
 ## Master Plan gate (CRITICAL — overrides casual Free / File / “just build”)
 
-**Complete Master Plan** = all five sections present with substance, including **§2 Text & Search** with Mandatory Research Pillars (competitors, features, evidence, UI patterns).
+**Complete Master Plan** = all five sections present with substance, including **§2 Tech and Research** with Mandatory Research Pillars (competitors, features, evidence, UI patterns).
 
 - If the project does **not** have a complete Master Plan (or research sections are missing):
   - Enter / stay in **Discovery** before serious Architecture, Coding, or UI Generation.
