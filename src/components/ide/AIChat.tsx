@@ -12,6 +12,7 @@ import { readResponseJson } from '../../lib/apiFetch';
 import {
   getBrowserProjectKey,
   getBrowserProjectName,
+  setBrowserProjectKey,
   setBrowserProjectName,
   withProjectBody,
   withProjectQuery,
@@ -51,8 +52,9 @@ import {
   fetchIdeWorkspaceMeta,
 } from '../../lib/ideWorkspaceChatContext';
 import { createGuestProject, writeActiveGuestProjectId } from '../../lib/nebulaProjectStore';
-import { setBrowserProjectKey, setBrowserProjectName } from '../../lib/nebulaProjectApi';
+import { handleSmartChatMessage, type SmartChatFilePreview } from '../../lib/smartChatHandler';
 import { ideContextSnippetForChat, useIdeWorkspace } from '@/components/ide/IdeWorkspaceContext';
+import { ChatFilePreview } from '@/components/ide/ChatFilePreview';
 import {
   advanceGrokActivity,
   createGrokActivity,
@@ -126,6 +128,8 @@ type Message = {
   role: 'user' | 'assistant';
   content: string;
   timestamp: string;
+  /** Rich file preview from Smart Chat Handler (File mode) */
+  filePreview?: SmartChatFilePreview;
 };
 
 function SoundWaveIcon({ className }: { className?: string }) {
@@ -886,6 +890,37 @@ export function AIChat() {
     if (!text || sending) return;
 
     if (micInputBlocked) return;
+
+    // Smart Chat Handler — File mode opens local/GitHub files with rich preview
+    try {
+      const smart = await handleSmartChatMessage(text);
+      if (smart.handledLocally) {
+        const stamp = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+        const userMsg: Message = {
+          id: `u-${Date.now()}`,
+          role: 'user',
+          content: text,
+          timestamp: stamp,
+        };
+        const assistantMsg: Message = {
+          id: `a-${Date.now()}`,
+          role: 'assistant',
+          content: smart.assistantMessage,
+          timestamp: stamp,
+          filePreview: smart.filePreview,
+        };
+        setMessages((p) => {
+          const next = [...p, userMsg, assistantMsg];
+          messagesRef.current = next;
+          return next;
+        });
+        setInput('');
+        inputRef.current = '';
+        return;
+      }
+    } catch {
+      /* fall through to normal Grok chat */
+    }
 
     // Fast project creation from chat ("Create a new project: ...")
     const projectCreation = detectProjectCreationIntent(text);
@@ -1702,6 +1737,7 @@ export function AIChat() {
                 )}
               >
                 <p className="whitespace-pre-wrap">{message.content}</p>
+                {message.filePreview ? <ChatFilePreview preview={message.filePreview} /> : null}
               </div>
               <p className="type-label-sm mt-0.5 opacity-80">{message.timestamp}</p>
             </div>

@@ -1,17 +1,15 @@
-/**
- * INTENTIONALLY BUGGY — system test draft.
- */
 import * as React from "react";
 
 export type GreetingUser = { name: string } | null | undefined;
 
 type Props = { user: GreetingUser };
 
-/** Buggy: reads user.name with no guard. */
+/** Friendly greeting that never crashes when user is missing. */
 export function SafeUserGreeting({ user }: Props) {
-  return (
-    <p className="text-sm text-foreground">
-      Hello, {user.name}!
-    </p>
-  );
+  const name =
+    user && typeof user.name === "string" && user.name.trim()
+      ? user.name.trim()
+      : "there";
+
+  return <p className="text-sm text-foreground">Hello, {name}!</p>;
 }
