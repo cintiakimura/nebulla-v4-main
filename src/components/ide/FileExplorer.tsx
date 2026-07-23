@@ -163,7 +163,7 @@ export function FileExplorer() {
       </div>
       {explorerHint ? (
         <p
-          className="type-label-sm border-b border-cyan-500/20 bg-cyan-500/10 px-3 py-1.5 text-cyan-100/90"
+          className="type-label-sm border-b border-primary/20 bg-primary/10 px-3 py-1.5 text-primary/90"
           role="status"
         >
           {explorerHint}

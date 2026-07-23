@@ -154,7 +154,7 @@ export function TerminalPanel({ collapsed = false, onToggleCollapse }: TerminalP
 
       <div
         ref={scrollRef}
-        className="type-body-md min-h-0 flex-1 cursor-text overflow-auto bg-[#0a0e14] p-2 font-mono text-[12px] leading-[1.45]"
+        className="type-body-md min-h-0 flex-1 cursor-text overflow-auto bg-[var(--surface)] p-2 font-mono text-[12px] leading-[1.45]"
         onClick={() => inputRef.current?.focus()}
       >
         {lines.length === 0 ? (

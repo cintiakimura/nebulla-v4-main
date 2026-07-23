@@ -1,8 +1,9 @@
 import {
   expireStaleGoCodePending,
+  readGoCodeLastResult,
   readGoCodePending,
+  writeGoCodeLastResult,
   writeGoCodePending,
-  type GoCodePendingState,
 } from "./nebulaGoCodePending";
 
 export const GO_CODE_JOB_TIMEOUT_MS = 600_000;
@@ -58,14 +59,18 @@ export function scheduleGoCodeJob(opts: GoCodeJobOptions): boolean {
 
       if (!codeRes.ok) {
         const errText = await codeRes.text();
-        writeGoCodePending(workspaceRoot, {
-          status: "error",
+        const errState = {
+          status: "error" as const,
           startedAt: readGoCodePending(workspaceRoot)?.startedAt ?? Date.now(),
           preCodingSummary: opts.preCodingSummary,
           codeError: errText.slice(0, 800),
           codeModel: opts.codeModel,
           projectDisplayName: opts.projectDisplayName,
-        });
+          conversationLogged: false,
+          consumed: false,
+        };
+        writeGoCodePending(workspaceRoot, errState);
+        writeGoCodeLastResult(workspaceRoot, errState);
         return;
       }
 
@@ -74,19 +79,24 @@ export function scheduleGoCodeJob(opts: GoCodeJobOptions): boolean {
       };
       const codeText = codeData.choices?.[0]?.message?.content?.trim() || "";
 
-      writeGoCodePending(workspaceRoot, {
-        status: codeText ? "done" : "error",
+      const doneState = {
+        status: (codeText ? "done" : "error") as "done" | "error",
         startedAt: readGoCodePending(workspaceRoot)?.startedAt ?? Date.now(),
         preCodingSummary: opts.preCodingSummary,
         codeText: codeText || undefined,
         codeModel: opts.codeModel,
         projectDisplayName: opts.projectDisplayName,
         codeError: codeText ? undefined : "Grok Code returned empty output.",
-      });
+        conversationLogged: false,
+        consumed: false,
+      };
+      writeGoCodePending(workspaceRoot, doneState);
+      // Durable backup — survives missed one-shot polls until consume/apply.
+      writeGoCodeLastResult(workspaceRoot, doneState);
     } catch (e) {
       const aborted = (e as { name?: string })?.name === "AbortError";
-      writeGoCodePending(workspaceRoot, {
-        status: "error",
+      const errState = {
+        status: "error" as const,
         startedAt: readGoCodePending(workspaceRoot)?.startedAt ?? Date.now(),
         preCodingSummary: opts.preCodingSummary,
         codeError: aborted
@@ -96,7 +106,11 @@ export function scheduleGoCodeJob(opts: GoCodeJobOptions): boolean {
             : "Grok Code failed",
         codeModel: opts.codeModel,
         projectDisplayName: opts.projectDisplayName,
-      });
+        conversationLogged: false,
+        consumed: false,
+      };
+      writeGoCodePending(workspaceRoot, errState);
+      writeGoCodeLastResult(workspaceRoot, errState);
     } finally {
       clearTimeout(timer);
       activeJobs.delete(workspaceRoot);
@@ -107,7 +121,7 @@ export function scheduleGoCodeJob(opts: GoCodeJobOptions): boolean {
 }
 
 export function goCodePendingToPollResponse(
-  pending: GoCodePendingState | null,
+  pending: ReturnType<typeof readGoCodePending>,
   jobActive: boolean,
   workspaceRoot?: string,
 ): Record<string, unknown> {
@@ -115,6 +129,35 @@ export function goCodePendingToPollResponse(
     expireStaleGoCodePending(workspaceRoot, { jobActive });
     pending = readGoCodePending(workspaceRoot);
   }
+
+  // Prefer in-progress / unfinished pending; fall back to durable last-result if unconsumed.
+  if (!pending && workspaceRoot) {
+    const last = readGoCodeLastResult(workspaceRoot);
+    if (last && !last.consumed && (last.codeText || last.codeError)) {
+      if (last.codeError && !last.codeText) {
+        return {
+          ok: false,
+          pending: false,
+          preCodingSummary: last.preCodingSummary,
+          codeError: last.codeError || "Grok Code failed",
+          summarySaved: Boolean(last.preCodingSummary),
+          durable: true,
+        };
+      }
+      return {
+        ok: true,
+        pending: false,
+        summarySaved: true,
+        preCodingSummary: last.preCodingSummary,
+        codeModel: last.codeModel,
+        choices: last.codeText ? [{ message: { content: last.codeText } }] : [],
+        codeError: last.codeError,
+        durable: true,
+        awaitConsume: true,
+      };
+    }
+  }
+
   if (!pending) {
     return {
       ok: true,
@@ -133,6 +176,14 @@ export function goCodePendingToPollResponse(
       hint: "Grok Code is still running on the server — keep polling.",
     };
   }
+  if (pending.consumed) {
+    return {
+      ok: true,
+      pending: false,
+      idle: true,
+      hint: "Go Code result already applied — press Go to start a new pass.",
+    };
+  }
   if (pending.status === "error") {
     return {
       ok: false,
@@ -140,6 +191,7 @@ export function goCodePendingToPollResponse(
       preCodingSummary: pending.preCodingSummary,
       codeError: pending.codeError || "Grok Code failed",
       summarySaved: Boolean(pending.preCodingSummary),
+      awaitConsume: true,
     };
   }
   return {
@@ -150,5 +202,6 @@ export function goCodePendingToPollResponse(
     codeModel: pending.codeModel,
     choices: pending.codeText ? [{ message: { content: pending.codeText } }] : [],
     codeError: pending.codeError,
+    awaitConsume: true,
   };
 }

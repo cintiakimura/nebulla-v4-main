@@ -103,7 +103,11 @@ import {
   isGoCodeJobActive,
   scheduleGoCodeJob,
 } from "./lib/nebulaGoCodeJob";
-import { clearGoCodePending, readGoCodePending } from "./lib/nebulaGoCodePending";
+import {
+  consumeGoCodeResult,
+  readGoCodePending,
+  writeGoCodePending,
+} from "./lib/nebulaGoCodePending";
 import {
   callGrokGenerateUiSvg,
   heuristicSvgEditRisks,
@@ -3406,7 +3410,8 @@ Your ONLY output for this turn: a **short** pre-coding summary for the Master Pl
 
 Strict rules:
 - Emit EXACTLY one block: <PRE_CODING_SUMMARY>...</PRE_CODING_SUMMARY>
-- Inside: maximum 1200 characters. Use bullets or tight prose: scope, assumptions, first areas to implement, risks.
+- Inside: maximum 1200 characters. Use bullets or tight prose: scope from Master Plan §3/§4, Project Type, assumptions, first files/routes to implement, risks.
+- Architecture-first: prioritize clean structure and smallest safe first slice over speculative extras.
 - Do NOT paste project-execution-rules.md or long policy text.
 - Do NOT replace full Master Plan sections; this is a session brief only.
 - Do NOT emit START_CODING, ANSWER_Qn, or <START_MASTERPLAN> here.`;
@@ -3490,8 +3495,18 @@ Strict rules:
 
       const workflowContext = buildProjectWorkflowExecutionContext(req);
       const codeModel = process.env.GROK_CODE_MODEL?.trim() || "grok-code-fast-1";
+      const codeQualityContract = `ARCHITECTURE-FIRST CODING QUALITY (mandatory):
+- Nebulla wins on pure logic + clean architecture — not agent count. Prefer maintainable, typed, smallest-safe code.
+- Mentally apply nebulla-project/code-review-checklist.md before every file (imports, nulls, env, HTTP, security, boundaries, hydration, loops).
+- Implement ONLY routes/features from Master Plan §3/§4; respect Project Type in §1 (Web App / Mobile App / Landing Page) for nav density and layout.
+- No hallucinated packages, APIs, env vars, or paths — create them explicitly in this response if needed.
+- Prefer smallest safe change over clever refactors. Explicit error handling on I/O.
+- UI: §2 research patterns + §5 visuals + Project Type — NEVER Nebulla IDE chrome (#080A14 / #00D4D4).`;
+
       const codeSystemPrompt = continuation
         ? `You are Grok Code (CONTINUATION pass). master-plan.json is ready but app files are missing.
+
+${codeQualityContract}
 
 Output the COMPLETE application in THIS single response:
 - Every route page under \`app/\` from Master Plan §4
@@ -3508,9 +3523,11 @@ A short pre-coding summary was just saved to master-plan.json under the key "${P
 
 Follow project-execution-rules.md strictly. Use the workflow context in order.
 
+${codeQualityContract}
+
 Master Plan (project-execution-rules § A — MUST be complete before code):
 - master-plan.json below MUST have all five sections populated before you output app files.
-- If ANY of §2–§5 are still thin, emit \`\`\`file:master-plan.json\`\`\` FIRST with the full JSON object (preserve existing keys, fill empty sections from discovery).
+- If ANY of §2–§5 are still thin, emit \`\`\`file:master-plan.json\`\`\` FIRST with the full JSON object (preserve existing keys, fill empty sections from discovery — real competitors in §2, routes in §4, concrete palette in §5).
 - §4: routes as \`- **Name** (\`/route\`)\`; §5: 15–25 lines max (palette, typography, nav — no §4 copy).
 
 Implementation (single pass — do NOT stop after 1–2 files):
@@ -3617,13 +3634,27 @@ ${workflowContext}`;
   app.post("/api/grok/go-code/poll", (req, res) => {
     try {
       const pp = projectPathsFor(req);
+      const body = req.body || {};
+      // Client ack after successful apply — clears pending; result stays durable until then.
+      if (body.consume === true || body.ack === true) {
+        const consumed = consumeGoCodeResult(pp.workspaceRoot);
+        return res.json({
+          ok: true,
+          pending: false,
+          idle: true,
+          consumed,
+          hint: consumed
+            ? "Go Code result acknowledged — safe to start a new Go pass."
+            : "No pending Go Code result to consume.",
+        });
+      }
+
       const jobActive = isGoCodeJobActive(pp.workspaceRoot);
       let pending = readGoCodePending(pp.workspaceRoot);
       const payload = goCodePendingToPollResponse(pending, jobActive, pp.workspaceRoot);
       pending = readGoCodePending(pp.workspaceRoot);
       if (pending && !payload.pending && (pending.status === "done" || pending.status === "error")) {
         try {
-          const body = req.body || {};
           const convProject =
             typeof body.projectName === "string" && body.projectName.trim()
               ? String(body.projectName).trim()
@@ -3643,10 +3674,16 @@ ${workflowContext}`;
           console.warn("[go-code poll] v0 prompt sync failed:", syncErr);
         }
       }
-      if (pending && !payload.pending && pending.status === "done" && pending.codeText) {
+      // Log once while result remains available for re-poll / apply.
+      if (
+        pending &&
+        !payload.pending &&
+        pending.status === "done" &&
+        pending.codeText &&
+        !pending.conversationLogged
+      ) {
         try {
           const uid = readNebulaSessionUserId(req) || "anonymous";
-          const body = req.body || {};
           const convProject =
             typeof body.projectName === "string" && body.projectName.trim()
               ? String(body.projectName).trim()
@@ -3656,20 +3693,18 @@ ${workflowContext}`;
             "assistant",
             pending.codeText.trim().slice(0, 8000),
           );
+          writeGoCodePending(pp.workspaceRoot, {
+            ...pending,
+            conversationLogged: true,
+          });
         } catch {
           /* ignore */
         }
       }
-      if (payload.error && !payload.pending && pending?.status === "error") {
+      if (payload.error && !payload.pending && (pending?.status === "error" || payload.codeError)) {
         return res.status(422).json(payload);
       }
-      if (pending?.status === "done" && !payload.pending && payload.choices) {
-        try {
-          clearGoCodePending(pp.workspaceRoot);
-        } catch {
-          /* ignore */
-        }
-      }
+      // Do NOT clear on first successful poll — client must consume after apply.
       return res.json(payload);
     } catch (err: unknown) {
       return res.status(500).json({
@@ -3887,7 +3922,12 @@ Output in ONE reply, in this order:
    ### 3. Features and KPIs
    ### 4. Pages and navigation
    ### 5. UI/UX design
-   Each section must be substantive (not placeholders). §1 must state Project Type (Web App / Mobile App / Landing Page). §2 must name real competitors (Mandatory Research Pillars).
+   Each section must be substantive (not placeholders).
+   - §1: Project Type (Web App / Mobile App / Landing Page — infer best fit) + goal/users/scope.
+   - §2: Mandatory Research Pillars — **8–12 real, existing competitor product names** (never invent brands), ranked most-used features, evidence/studies or exact phrase "No supporting studies found for this feature.", UI patterns for the Project Type.
+   - §3: features + 3 measurable KPIs each from Pillar 2.
+   - §4: concrete pages as \`- **Name** (\`/route\`)\` with purpose and key actions (min 5 routes when Web/Mobile App).
+   - §5: 15–25 lines — hex palette, typography, nav for Project Type (no vague "modern/clean" alone).
 2) <FINISH_MASTERPLAN>
 3) <START_CODING>
 
@@ -3896,6 +3936,7 @@ Optional: include ANSWER_Qn + <GROK_B_SUMMARY_Qn> for tabs as needed. After the 
 Hard guard:
 - Never copy/paste orchestration policy text from project-execution-rules.md into any Master Plan section.
 - Master Plan sections must contain product-specific app content only (goal/research/features/pages/ui), not internal workflow instructions.
+- Research must visibly shape §4/§5 (not generic SaaS filler).
 
 Workflow reference (read order; do not paste verbatim into chat output):
 ${wf}
@@ -3942,12 +3983,12 @@ ${answer.slice(0, 8000)}`;
     );
     const rulesBlock = rulesExcerpt
       ? [
-          "PROJECT_EXECUTION_RULES (workspace copy — authoritative for chat vs build, onboarding one question at a time, TTS brevity):",
+          "PROJECT_EXECUTION_RULES (workspace copy — chat vs build, onboarding, TTS). If anything conflicts with the main system prompt INSTRUCTION HIERARCHY / INITIAL ONBOARDING / CODING QUALITY CONTRACT, those win:",
           rulesExcerpt,
         ].join("\n")
       : "";
     const modeBlock = buildMode
-      ? "BUILD_MODE: ON — user wants implementation. Master Plan only inside <START_MASTERPLAN>…</END_MASTERPLAN>. Code only as ```file:path``` blocks or START_CODING; never paste implementation as ```typescript``` in chat. v0-prompt.md only as ```file:nebula-ui-studio/v0-prompt.md``` (concise); NEVER paste the v0 prompt text in visible chat prose."
+      ? "BUILD_MODE: ON — architecture-first implementation. Master Plan only inside <START_MASTERPLAN>…</END_MASTERPLAN>. Code only as ```file:path``` blocks or START_CODING; never paste implementation as ```typescript``` in chat. Prefer smallest safe change; no hallucinated APIs. v0-prompt.md only as ```file:nebula-ui-studio/v0-prompt.md``` (concise); NEVER paste the v0 prompt text in visible chat prose."
       : "CONVERSATION_MODE: ON — short natural prose only; no markdown code fences, v0 prompts, Master Plan bodies, or full file bodies in chat.";
     const includeServerFileIndex =
       serverFileIndexBlock && !workspaceContextFromClient.includes("WORKSPACE_FILE_INDEX");

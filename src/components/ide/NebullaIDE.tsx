@@ -11,6 +11,7 @@ import { TerminalPanel } from '@/components/ide/TerminalPanel';
 import { TopBar } from '@/components/ide/TopBar';
 import { VerticalNav } from '@/components/ide/VerticalNav';
 import { MyServicesOnboarding } from '@/components/MyServicesOnboarding';
+import { UserProfilePage } from '@/components/UserProfilePage';
 import { WelcomeOnboardingModal } from '@/components/ide/WelcomeOnboardingModal';
 import { FileExplorer } from '@/components/ide/FileExplorer';
 import { SourceControlPanel } from '@/components/SourceControlPanel';
@@ -164,6 +165,7 @@ function NebullaIDEShell() {
   }, []);
 
   const [myServicesOpen, setMyServicesOpen] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
   const [myServicesUser, setMyServicesUser] = useState<NebulaSessionUser | null>(null);
   const [myServicesConfig, setMyServicesConfig] = useState<NebulaPublicConfig>({});
   const [workspaceCtx, setWorkspaceCtx] = useState<WorkspaceContext | null>(null);
@@ -250,14 +252,33 @@ function NebullaIDEShell() {
   }, []);
 
   useEffect(() => {
-    if (!myServicesOpen) return;
+    if (!myServicesOpen && !profileOpen) return;
     void refreshMyServicesContext();
-  }, [myServicesOpen, refreshMyServicesContext]);
+  }, [myServicesOpen, profileOpen, refreshMyServicesContext]);
 
   useEffect(() => {
-    const openMyServices = () => setMyServicesOpen(true);
+    const openMyServices = () => {
+      setProfileOpen(false);
+      setMyServicesOpen(true);
+    };
+    const openProfile = () => {
+      setMyServicesOpen(false);
+      setProfileOpen(true);
+    };
     window.addEventListener('nebula-open-my-services', openMyServices);
-    return () => window.removeEventListener('nebula-open-my-services', openMyServices);
+    window.addEventListener('nebula-open-user-profile', openProfile);
+    return () => {
+      window.removeEventListener('nebula-open-my-services', openMyServices);
+      window.removeEventListener('nebula-open-user-profile', openProfile);
+    };
+  }, []);
+
+  const handleSessionEnded = useCallback(() => {
+    setProfileOpen(false);
+    setMyServicesOpen(false);
+    setMyServicesUser(null);
+    setWorkspaceCtx(null);
+    welcomeCheckedRef.current = false;
   }, []);
 
   useEffect(() => {
@@ -326,8 +347,9 @@ function NebullaIDEShell() {
 
   const selectNavItem = useCallback(
     (id: string) => {
-      // Settings = onboarding / GitHub + API keys (MyServicesOnboarding).
+      // Settings gear = workspace onboarding (GitHub + API keys). Profile is NB in the top bar.
       if (id === 'project-settings') {
+        setProfileOpen(false);
         setMyServicesOpen(true);
         return;
       }
@@ -354,19 +376,37 @@ function NebullaIDEShell() {
         : activeNavId;
 
   return (
-      <div className="flex h-screen flex-col overflow-hidden bg-background text-foreground">
+    <div className="flex h-screen flex-col overflow-hidden bg-background text-foreground">
       {!workspaceCtx ? <WorkspaceSetupGate onReady={handleWorkspaceReady} /> : null}
       <WelcomeOnboardingModal
         open={welcomeOpen && Boolean(workspaceCtx)}
         user={myServicesUser ?? workspaceCtx?.user ?? null}
         onClose={() => setWelcomeOpen(false)}
       />
+      {profileOpen ? (
+        <div
+          className="fixed inset-0 z-[200] flex flex-col overflow-hidden"
+          role="dialog"
+          aria-modal="true"
+          aria-label="User profile"
+        >
+          <UserProfilePage
+            onClose={() => setProfileOpen(false)}
+            onLoggedOut={handleSessionEnded}
+            onAccountDeleted={handleSessionEnded}
+            onOpenOnboarding={() => {
+              setProfileOpen(false);
+              setMyServicesOpen(true);
+            }}
+          />
+        </div>
+      ) : null}
       {myServicesOpen ? (
         <div
           className="fixed inset-0 z-[200] flex flex-col overflow-hidden"
           role="dialog"
           aria-modal="true"
-          aria-label="Settings"
+          aria-label="Onboarding"
         >
           <MyServicesOnboarding
             user={myServicesUser}
@@ -380,7 +420,10 @@ function NebullaIDEShell() {
         workspaceLabel={workspaceCtx?.projectName}
         onProjectNameCommit={handleProjectNameCommit}
         onSwitchWorkspace={() => setWorkspaceCtx(null)}
-        onOpenAccount={() => setMyServicesOpen(true)}
+        onOpenAccount={() => {
+          setMyServicesOpen(false);
+          setProfileOpen(true);
+        }}
       />
 
       {cloudBanner && !cloudBannerDismissed && workspaceCtx ? (

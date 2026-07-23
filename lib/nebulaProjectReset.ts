@@ -1,6 +1,6 @@
 import fs from "fs";
 import path from "path";
-import { clearGoCodePending } from "./nebulaGoCodePending";
+import { clearGoCodeLastResult, clearGoCodePending } from "./nebulaGoCodePending";
 import { clearV0Pending } from "./nebulaV0Pending";
 import { clearDesignReferences } from "./nebulaDesignReferences";
 import { readEditorState, writeEditorState } from "./visualUiEditorWorkspace";
@@ -47,6 +47,8 @@ export function cancelProjectBackgroundAttempts(workspaceRoot: string): string[]
   cleared.push("nebulla-ide/v0-pending.json");
   clearGoCodePending(workspaceRoot);
   cleared.push("nebulla-ide/go-code-pending.json");
+  clearGoCodeLastResult(workspaceRoot);
+  cleared.push("nebulla-ide/go-code-last-result.json");
 
   try {
     const st = readEditorState(workspaceRoot);

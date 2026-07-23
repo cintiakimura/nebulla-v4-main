@@ -30,7 +30,7 @@ function logKindClass(kind: GrokActivityLogEntry['kind']): string {
     case 'warn':
       return 'text-amber-200/90';
     case 'file':
-      return 'text-cyan-200/90';
+      return 'text-primary/90';
     default:
       return 'text-muted-foreground/85';
   }
@@ -188,7 +188,7 @@ export function IdeGrokActivityPanel({
                       disabled={v0Busy}
                       title="Poll existing v0 chat — no new charge"
                       onClick={() => runV0Action(() => dispatchRunV0Generate({ resumeOnly: true }))}
-                      className="inline-flex items-center gap-1 rounded-md border border-cyan-500/40 bg-cyan-500/10 px-2 py-1 text-[10px] text-cyan-50 hover:bg-cyan-500/20 disabled:opacity-40"
+                      className="inline-flex items-center gap-1 rounded-md border border-primary/40 bg-primary/10 px-2 py-1 text-[10px] text-primary hover:bg-primary/20 disabled:opacity-40"
                     >
                       Resume
                     </button>

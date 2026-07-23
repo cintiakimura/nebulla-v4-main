@@ -29,7 +29,7 @@ export function ChatFilePreview({ preview, className }: Props) {
   return (
     <div
       className={cn(
-        'mt-2 overflow-hidden rounded-lg border border-white/10 bg-[#0d1117] text-left shadow-sm',
+        'mt-2 overflow-hidden rounded-lg border border-border bg-[var(--surface-bright)] text-left shadow-sm',
         className,
       )}
     >
@@ -37,7 +37,7 @@ export function ChatFilePreview({ preview, className }: Props) {
         {preview.source === 'github' ? (
           <Github className="h-3.5 w-3.5 shrink-0 text-slate-300" aria-hidden />
         ) : (
-          <FolderOpen className="h-3.5 w-3.5 shrink-0 text-cyan-300" aria-hidden />
+          <FolderOpen className="h-3.5 w-3.5 shrink-0 text-primary" aria-hidden />
         )}
         <FileCode2 className="h-3.5 w-3.5 shrink-0 text-slate-400" aria-hidden />
         <div className="min-w-0 flex-1">

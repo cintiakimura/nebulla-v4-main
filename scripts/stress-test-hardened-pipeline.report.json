@@ -1,0 +1,150 @@
+{
+  "projectKey": "stress-mry2koiv",
+  "base": "http://127.0.0.1:3000",
+  "reports": [
+    {
+      "id": 1,
+      "name": "New Project \u2013 Full Discovery",
+      "what": "Live multi-turn Discovery from bootstrap with natural short answers (no My Projects type preselect)",
+      "mode": "guided/Discovery",
+      "correct": "PASS",
+      "quality": "Good",
+      "notes": [
+        "T1 bootstrap: HTTP 200, q=1, mp=false, coding=false | What's the main thing your app should do\u2014if you had to describe it in one core feature, what would it be?",
+        "T2 goal answer: HTTP 200, q=1, mp=false, coding=false | What type of project are you building? - Web App - Mobile App - Landing Page - Other (please specify)",
+        "T2 asked Project Type: true",
+        "T3 project type: HTTP 200, q=1, mp=false, coding=false | Who is the primary audience or target user for this habit tracker?",
+        "T4 audience: HTTP 200, q=1, mp=false, coding=false | Are there any security, privacy, or data sensitivity requirements for user habit data?",
+        "T5 competitors/scale: HTTP 200, q=1, mp=false, coding=false | Are there multiple user roles with different permissions, or is this a single-user app?",
+        "T6 name+design: HTTP 200, q=1, mp=false, coding=false | Are there multiple user roles with different permissions, or is this a single-user app?",
+        "T7 final check / proceed: HTTP 200, q=0, mp=true, coding=true | <START_MASTERPLAN> ### 1. Goal of the app StreakLite is a single-user Web App that helps busy professionals build and maintain simple daily habits through quick check-ins and visib",
+        "produced Master Plan tags: true; START_CODING: true",
+        "MP research competitors=true routes=6 hex=true evidence=true",
+        "master-plan/read HTTP 200 keys=1. Goal of the app,2. Tech and Research,3. Features and KPIs,4. Pages and navigation,5. UI/UX design,6. Environment Setup",
+        "Quality caveat: T5 and T6 repeated the same roles question; skipped explicit project-name/design closing sequence before emit.",
+        "Still emitted solid MP + START_CODING on T7 with competitors, 6 routes, hex, evidence \u2014 gate signals present."
+      ],
+      "failures": []
+    },
+    {
+      "id": 2,
+      "name": "Vague \u201cjust build\u201d request",
+      "what": "Mode detection on vague build phrases + live Grok turn with empty Master Plan",
+      "mode": "guided|guided|guided|guided",
+      "correct": "PASS",
+      "quality": "Good",
+      "notes": [
+        "\"just build a habit tracker\" \u2192 mode=guided discoveryRequired=true appendixDiscovery=true",
+        "\"make me an app\" \u2192 mode=guided discoveryRequired=true appendixDiscovery=true",
+        "\"just build something\" \u2192 mode=guided discoveryRequired=true appendixDiscovery=true",
+        "\"build an app for habits\" \u2192 mode=guided discoveryRequired=true appendixDiscovery=true",
+        "LIVE HTTP 200, chars=105, questions=1, jumpedToCode=false",
+        "LIVE preview: What's the main thing your app should do\u2014if you had to describe it in one core feature, what would it be?"
+      ],
+      "failures": []
+    },
+    {
+      "id": 3,
+      "name": "Open file then expand",
+      "what": "Local/GitHub file mode + smartChat Discovery nudge + expand/build intent with incomplete plan",
+      "mode": "debugging\u2192free",
+      "correct": "FAIL",
+      "quality": "Weak",
+      "notes": [
+        "open local \u2192 mode=debugging discoveryRequired=true",
+        "smartChat handledLocally=false hint=NDM: Verify \u2192 Analyze \u2192 Trace \u2192 Fix \u2192 Validate; use full-bug-database.md; smallest safe fix. preview=false",
+        "smartChat msg preview: Let's debug carefully: Verify \u2192 Analyze \u2192 Trace \u2192 Fix \u2192 Validate.",
+        "expand after file \u2192 mode=free discoveryRequired=true",
+        "expand smart \u2192 mode=free hint=discovery-required",
+        "github open \u2192 mode=file discoveryRequired=true",
+        "API open local HTTP 200 ok=true",
+        "ROOT CAUSE: path full-bug-database.md matches DEBUG_RE \\bbug\\b; file open short-circuit skipped when looksDebug; debugging prioritized under incomplete plan.",
+        "Control: open code-review-checklist.md \u2192 file mode correctly."
+      ],
+      "failures": [
+        "Expected file mode, got debugging",
+        "File open was not handled locally",
+        "Expected codingHint discovery-required-after-file, got NDM: Verify \u2192 Analyze \u2192 Trace \u2192 Fix \u2192 Validate; use full-bug-database.md; smallest safe fix.",
+        "File-open reply missing Discovery nudge",
+        "Expand intent should force Discovery; got free"
+      ]
+    },
+    {
+      "id": 4,
+      "name": "Debugging path (NDM)",
+      "what": "Mode detection for bug language + live Grok debug turn with thin plan",
+      "mode": "debugging",
+      "correct": "PASS",
+      "quality": "Good",
+      "notes": [
+        "\"fix the login bug\" \u2192 debugging ndmAppendix=true",
+        "\"there is a runtime error on login\" \u2192 debugging ndmAppendix=true",
+        "\"debug this stack trace crash\" \u2192 debugging ndmAppendix=true",
+        "\"the habit check-in is broken\" \u2192 debugging ndmAppendix=true",
+        "LIVE HTTP 200, chars=920, ndmish=true, restartedDiscovery=false, hasFileBlocks=true",
+        "LIVE preview: **Verify:** Confirmed the exact symptom\u2014clicking Sign in on the login form does nothing and throws `Cannot read properties of null (reading 'email')` in the console.  **Analyze:** The root cause is a missing null-check on a form/DOM element (most likely `document.getElementById('email')` or a ref) before accessing `.em"
+      ],
+      "failures": []
+    },
+    {
+      "id": 5,
+      "name": "Thin vs Solid Master Plan",
+      "what": "Ran isMasterPlanCompleteForDiscovery on empty, thin, and solid fixtures",
+      "mode": "gate",
+      "correct": "PASS",
+      "quality": "Good",
+      "notes": [
+        "thin=false",
+        "solid=true",
+        "empty=false",
+        "Thin lacks routes, evidence phrase, concrete UI tokens"
+      ],
+      "failures": []
+    },
+    {
+      "id": 6,
+      "name": "Go Code / Implementation",
+      "what": "Seeded solid Master Plan, verified go-code contract in server, kicked /api/grok/go-code and polled",
+      "mode": "coding/Go",
+      "correct": "PARTIAL",
+      "quality": "Acceptable",
+      "notes": [
+        "seed tab 1 HTTP 200",
+        "seed tab 2 HTTP 200",
+        "seed tab 3 HTTP 200",
+        "seed tab 4 HTTP 200",
+        "seed tab 5 HTTP 200",
+        "server go-code includes ARCHITECTURE-FIRST contract: true",
+        "go-code HTTP 200 keys=preCodingSummary,summarySaved,pending,coding,codeModel,continuation,masterPlanFilled,masterPlanFillSource,v0PromptWritten,v0PromptLength,hint",
+        "go-code body preview: {\"preCodingSummary\":\"Scope (Master Plan \u00a73/\u00a74): Web App (StreakLite) for busy professionals; core daily check-ins + streaks. First slice: implement /login, /home (today's habits + one-tap check-in), /settings routes only. Use existing palette, shadcn/Tailwind, sidebar nav.\\n\\nProject Type: Next.js web app (assumes React + Tailwind already scaffolded; single-user, no roles).\\n\\nAssumptions: Local s",
+        "poll[0] HTTP 404 status=undefined written=0",
+        "final written count/signal: 0",
+        "app/ listing HTTP 200 entries=8",
+        "app files sample: nebula-ui-studio, nebulla-ide, nebulla-sysh-ui-sysh-studio, environment-setup.md, project-execution-rules.md, project-workflow.md, SKILL.md, ui-studio.md",
+        "FOLLOW-UP: Correct poll is POST /api/grok/go-code/poll (GET 404). First completed poll clears pending \u2014 must capture choices immediately.",
+        "FOLLOW-UP re-run: Go returned 11 file blocks; apply-generated wrote all 11 paths under app/ and components/.",
+        "FOLLOW-UP paths match \u00a74: login, home, settings, stats, habits/[id], layout, globals, Sidebar, HabitCard, LoginForm.",
+        "FOLLOW-UP layout uses Master Plan palette #0B1220 / #F8FAFC; title StreakLite.",
+        "Caveat: server does not auto-apply; IDE client must apply. Test harness initially missed this."
+      ],
+      "failures": [
+        "Initial stress harness used GET poll (404) and missed one-shot choices payload \u2014 operational fragility for API consumers"
+      ]
+    },
+    {
+      "id": 7,
+      "name": "v0 / UI prompt quality",
+      "what": "buildV0PromptMarkdown on thin vs solid Master Plans (no v0 API call \u2014 prompt grounding only)",
+      "mode": "ui",
+      "correct": "PASS",
+      "quality": "Good",
+      "notes": [
+        "thin prompt chars=1062",
+        "solid prompt chars=1487",
+        "solid preview:\n# v0 UI pass (concise)\n\nApp: Help beginners build daily habits with streak accountability.\nProject type: Web App\n\n## Pages (first pass \u2014 max 8 routes)\n- **Login** (`/login`) \u2014 email/password\n- **Home** (`/home`) \u2014 today habits + check-in buttons\n- **Habit detail** (`/habits/[id]`) \u2014 history + streak\n- **Stats** (`/stats`) \u2014 weekly chart\n- **Settings** (`/settings`) \u2014 reminders, theme\n\n## Visual system\n- Palette: #0B1220 background, #22C55E success/check, #F8FAFC text, #334155 borders.\n- Typography: Source Sans 3 / IBM Plex Sans.\n- Nav: sidebar on Web App desktop; density comfortable.\n- Components: large check buttons, streak badge, calm cards.\n- shadcn + Tailwind. Avoid Nebulla IDE chrome.\n\n",
+        "thin looks generic/weak=true"
+      ],
+      "failures": []
+    }
+  ]
+}

@@ -284,6 +284,10 @@ async function kickGoCodeJob(options: {
         prePoll = null;
       } else if (prePoll.pending && prePoll.coding) {
         onProgress?.('Grok Code already running — waiting for it to finish (do not press Go again)', 'warn');
+      } else if (prePoll.choices?.[0]?.message?.content?.trim()) {
+        // Unconsumed durable result — do not start a new Go and overwrite it.
+        onProgress?.('Recovering unapplied Go Code result from server', 'info');
+        return prePoll;
       }
     } catch {
       prePoll = null;
@@ -450,6 +454,20 @@ export async function runGoCodeAndApply(options: {
       const apply = await applyGeneratedFiles(codeText, { userNote, projectName, onProgress });
       totalWritten += apply.writtenCount;
       allWrittenPaths.push(...apply.writtenPaths);
+
+      if (apply.ok && apply.writtenCount > 0) {
+        // Ack durable server result only after files are applied — missed polls can re-fetch until then.
+        try {
+          await fetch(withProjectQuery('/api/grok/go-code/poll'), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify(withProjectBody({ projectName, consume: true })),
+          });
+        } catch {
+          /* keep durable result for retry */
+        }
+      }
 
       if (!apply.ok) {
         partialPlanOnly = isPlanOnlyApply(apply.writtenPaths);

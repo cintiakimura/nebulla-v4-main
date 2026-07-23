@@ -138,13 +138,16 @@ export async function handleSmartChatMessage(
   }
 
   // Non-file modes — pass through to existing Grok chat (Master Plan + Go intact).
+  // Incomplete plan + guided = hard Discovery (codingHint guided-onboarding), not a soft free hint.
+  const hardDiscovery = Boolean(discoveryRequired && mode === 'guided');
   return {
     mode,
     modeMeta,
     handledLocally: false,
     assistantMessage: describeChatMode(mode, discoveryRequired),
-    codingHint:
-      discoveryRequired && (mode === 'coding' || mode === 'ui' || mode === 'architecture')
+    codingHint: hardDiscovery
+      ? 'guided-onboarding'
+      : discoveryRequired && (mode === 'coding' || mode === 'ui' || mode === 'architecture')
         ? 'guided-onboarding'
         : mode === 'coding'
           ? 'Use nebulla-project/code-review-checklist.md; prefer smallest safe change; architecture first unless user explicitly requested code.'

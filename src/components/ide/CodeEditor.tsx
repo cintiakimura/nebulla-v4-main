@@ -63,7 +63,7 @@ export function CodeEditor({ hidePreviewButton = false }: { hidePreviewButton?: 
   }, [activePath]);
 
   return (
-    <div className="flex h-full flex-col bg-[#11012C]">
+    <div className="flex h-full flex-col bg-[var(--surface-bright)]">
       <div className="surface-active tonal-seam-b flex h-9 items-center justify-between gap-2 pr-2">
         <div className="flex min-w-0 flex-1 items-center overflow-x-auto">
           {tabs.length === 0 ? (

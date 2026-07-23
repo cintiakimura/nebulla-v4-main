@@ -127,7 +127,7 @@ export function MyServicesOnboarding({
         <div className="flex items-center gap-3 min-w-0">
           <Logo className="w-9 h-9 shrink-0" />
           <div className="min-w-0">
-            <p className="font-headline text-lg text-slate-100 tracking-tight truncate">Settings</p>
+            <p className="font-headline text-lg text-slate-100 tracking-tight truncate">Onboarding</p>
             <p className="text-xs text-slate-500 truncate">Connect GitHub and your API keys</p>
           </div>
         </div>
@@ -138,7 +138,7 @@ export function MyServicesOnboarding({
             onClick={onClose}
             className="flex h-10 w-10 items-center justify-center rounded-xl border border-white/10 text-slate-400 hover:bg-white/5 hover:text-slate-200 transition-colors"
             title="Close"
-            aria-label="Close Settings"
+            aria-label="Close Onboarding"
           >
             <X className="h-5 w-5" aria-hidden />
           </button>
@@ -149,11 +149,12 @@ export function MyServicesOnboarding({
         <div className="max-w-2xl mx-auto px-5 py-10 md:py-14 md:px-8 flex flex-col gap-10 pb-28">
           <div className="space-y-2">
             <h1 className="text-2xl md:text-3xl font-headline font-normal text-slate-50 tracking-tight">
-              Welcome — wire up your workspace
+              Workspace onboarding
             </h1>
             <p className="text-sm text-slate-400 leading-relaxed">
-              A quick, friendly setup. You can change v0 and other secrets anytime under My Projects → Secrets, or reopen
-              Account (NB).
+              Connect GitHub and save your v0 key here. Account details and logout live on your{' '}
+              <span className="text-slate-300">User profile</span> (NB in the top bar). Secrets can also be edited under My
+              Projects → Secrets.
             </p>
           </div>
 

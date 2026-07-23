@@ -63,9 +63,12 @@ Inside, use these five headers exactly (### prefix recommended):
 
 Rules:
 - Synthesize ALL five sections from discovery — implementation-grade depth, no empty placeholders.
-- §4: every page as \`- **Name** (\`/route\`)\` — up to 12 routes.
-- §5: **15–25 lines max** — palette, typography, nav pattern; NO code; NO copy-paste of §4.
-- Do NOT emit START_CODING, file blocks, or chat prose outside the tags.`;
+- §1: state Project Type (Web App / Mobile App / Landing Page) clearly; goal + users + scope only.
+- §2: Mandatory Research Pillars — **8–12 real competitor product names** (never invent), ranked most-used features, evidence/studies or exact phrase "No supporting studies found for this feature.", plus UI/UX patterns for the Project Type.
+- §3: features with measurable KPIs derived from Pillar 2 ranking.
+- §4: every page as \`- **Name** (\`/route\`)\` — up to 12 routes; purpose + roles + key actions (drives Mind Map). Vague pages forbidden.
+- §5: **15–25 lines max** — concrete palette (hex), typography, nav pattern for Project Type; NO code; NO copy-paste of §4.
+- Research must visibly shape §4/§5. Do NOT emit START_CODING, file blocks, or chat prose outside the tags.`;
 
   const user = `Project: ${opts.projectName}
 Thin or missing sections: ${missing.join(", ")}

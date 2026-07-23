@@ -94,13 +94,54 @@ function extractProjectTypeForV0(goal: string): string {
 function summarizeResearchForV0(research: string): string {
   const raw = research.trim();
   if (!raw) return "";
+
+  const competitorLine = (() => {
+    const listMatch = raw.match(
+      /(?:competitors?|competitive\s+(?:set|landscape)|similar\s+(?:apps?|products?))\s*[:\-–—]\s*([^\n]+)/i,
+    );
+    if (listMatch?.[1]) {
+      return `- Competitors: ${listMatch[1].trim().slice(0, 140)}`;
+    }
+    const names = raw.match(/\b([A-Z][a-zA-Z0-9]{2,}(?:\s+[A-Z][a-zA-Z0-9]{2,}){0,2})\b/g) || [];
+    const stop = new Set([
+      "The", "And", "For", "With", "Tech", "Research", "Features", "Pages", "Project", "Type",
+      "Web", "Mobile", "Landing", "Page", "Most", "Used", "Supporting", "Studies", "Found",
+    ]);
+    const uniq: string[] = [];
+    for (const n of names) {
+      const head = n.split(/\s+/)[0] || "";
+      if (stop.has(head) || stop.has(n)) continue;
+      if (!uniq.includes(n)) uniq.push(n);
+      if (uniq.length >= 6) break;
+    }
+    return uniq.length >= 3 ? `- Competitors: ${uniq.slice(0, 6).join(", ")}` : "";
+  })();
+
   const lines = raw
     .split(/\n/)
     .map((l) => l.trim().replace(/^[-*•#]+\s*/, ""))
     .filter((l) => l.length > 8 && l.length < 160)
-    .filter((l) => /competitor|pattern|nav|ui|ux|inspired|similar|like\b/i.test(l));
-  const picked = (lines.length > 0 ? lines : raw.split(/\n/).map((l) => l.trim()).filter(Boolean)).slice(0, 4);
-  return truncateForV0(picked.map((l) => `- ${l.slice(0, 120)}`).join("\n"), 220);
+    .filter((l) => /competitor|pattern|nav|ui|ux|inspired|similar|like\b|layout|density|sidebar|bottom/i.test(l));
+  const picked = (lines.length > 0 ? lines : raw.split(/\n/).map((l) => l.trim()).filter(Boolean)).slice(0, 3);
+  const bullets = [
+    ...(competitorLine ? [competitorLine] : []),
+    ...picked.map((l) => `- ${l.slice(0, 120)}`),
+  ].slice(0, 5);
+  return truncateForV0(bullets.join("\n"), 280);
+}
+
+/** Top feature names from §3 for v0 priority (keeps UI focused). */
+function summarizeFeaturesForV0(features: string): string {
+  const raw = features.trim();
+  if (!raw) return "";
+  const lines = raw
+    .split(/\n/)
+    .map((l) => l.trim().replace(/^[-*•#]+\s*/, ""))
+    .filter((l) => l.length > 4 && l.length < 100)
+    .filter((l) => !/^kpi\b/i.test(l));
+  const picked = lines.slice(0, 5);
+  if (picked.length === 0) return "";
+  return truncateForV0(picked.map((l) => `- ${l.slice(0, 90)}`).join("\n"), 200);
 }
 
 /** Build a concise v0 brief from Master Plan §4 + §5 (never paste full sections). */
@@ -113,6 +154,7 @@ export function buildV0PromptMarkdown(
   const research = String(
     plan["2. Tech and Research"] ?? plan["2. Text & Search"] ?? plan["2. Tech Research"] ?? "",
   ).trim();
+  const features = String(plan["3. Features and KPIs"] ?? "").trim();
   const goal = String(plan["1. Goal of the app"] ?? "").trim();
   const projectType = extractProjectTypeForV0(goal);
   const oneLiner = goal
@@ -130,6 +172,7 @@ export function buildV0PromptMarkdown(
         : "- Target: **web app** (desktop + responsive; app shell / sidebar or top nav as §5 specifies)";
 
   const researchLines = summarizeResearchForV0(research);
+  const featureLines = summarizeFeaturesForV0(features);
 
   let text = [
     "# v0 UI pass (concise)",
@@ -142,6 +185,9 @@ export function buildV0PromptMarkdown(
     "",
     "## Visual system",
     summarizeUiUxForV0(uiUx),
+    ...(featureLines
+      ? ["", "## Priority features (surface in UI)", featureLines]
+      : []),
     ...(brandRefs
       ? ["", "## Brand / design references (match logo & palette when provided)", brandRefs]
       : []),
@@ -155,6 +201,7 @@ export function buildV0PromptMarkdown(
     "- Working nav between routes above; production spacing/typography",
     "- Match §5 palette and competitor UI patterns — **never** Nebulla IDE chrome (#080A14 / #00D4D4)",
     "- No lorem-only shells; real labels from §4 page purposes",
+    "- Architecture-first: clear hierarchy, consistent components, accessible contrast",
   ].join("\n");
 
   if (text.length > V0_PROMPT_MAX_CHARS) {

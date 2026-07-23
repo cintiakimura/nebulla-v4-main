@@ -201,7 +201,7 @@ export function TopBar({
             </button>
 
             {findOpen ? (
-              <div className="elevation-popover absolute right-0 top-full z-50 mt-1 w-[260px] rounded-lg border border-white/10 bg-[#0a0e14] p-2.5 shadow-xl">
+              <div className="elevation-popover absolute right-0 top-full z-50 mt-1 w-[260px] rounded-lg border border-border bg-[var(--surface-bright)] p-2.5 shadow-xl">
                 <div className="mb-2 flex items-center justify-between gap-2">
                   <p className="text-[11px] font-medium text-slate-200">Find & replace</p>
                   <button
@@ -222,7 +222,7 @@ export function TopBar({
                     setReplaceMsg(null);
                   }}
                   placeholder="Find in open file…"
-                  className="mb-1.5 w-full rounded-md border border-white/10 bg-black/40 px-2 py-1.5 text-xs text-slate-100 outline-none ring-cyan-500/30 placeholder:text-slate-600 focus:ring"
+                  className="mb-1.5 w-full rounded-md border border-border bg-[var(--surface)] px-2 py-1.5 text-xs text-foreground outline-none ring-primary/30 placeholder:text-muted-foreground focus:ring"
                   aria-label="Find"
                 />
                 <input
@@ -233,7 +233,7 @@ export function TopBar({
                     setReplaceMsg(null);
                   }}
                   placeholder="Replace with…"
-                  className="mb-2 w-full rounded-md border border-white/10 bg-black/40 px-2 py-1.5 text-xs text-slate-100 outline-none ring-cyan-500/30 placeholder:text-slate-600 focus:ring"
+                  className="mb-2 w-full rounded-md border border-border bg-[var(--surface)] px-2 py-1.5 text-xs text-foreground outline-none ring-primary/30 placeholder:text-muted-foreground focus:ring"
                   aria-label="Replace"
                 />
                 <div className="flex items-center justify-between gap-2">
@@ -248,7 +248,7 @@ export function TopBar({
                     type="button"
                     onClick={() => void applyReplace()}
                     disabled={!findQuery || !activePath || matchCount === 0}
-                    className="inline-flex items-center gap-1 rounded-md bg-cyan-600 px-2 py-1 text-[11px] font-medium text-white hover:bg-cyan-500 disabled:opacity-40"
+                    className="inline-flex items-center gap-1 rounded-md bg-primary px-2 py-1 text-[11px] font-medium text-primary-foreground hover:brightness-110 disabled:opacity-40"
                     title="Apply replacement in the open file"
                   >
                     <Check className="h-3 w-3" aria-hidden />
@@ -303,8 +303,8 @@ export function TopBar({
           <button
             type="button"
             onClick={onOpenAccount}
-            title="Settings — GitHub and API keys"
-            aria-label="Open Settings"
+            title="User profile — account details and log out"
+            aria-label="Open user profile"
             className="surface-float flex h-7 w-7 items-center justify-center rounded-full transition-opacity hover:opacity-90 disabled:opacity-40"
             disabled={!onOpenAccount}
           >

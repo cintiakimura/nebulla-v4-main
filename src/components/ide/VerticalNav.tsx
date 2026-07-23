@@ -26,8 +26,8 @@ const items: NavItem[] = [
   { id: 'mind-map', icon: <Network className="h-5 w-5" />, label: 'Mind Map' },
   { id: 'visual-ui-editor', icon: <Palette className="h-5 w-5" />, label: 'Nebula UI Studio' },
   { id: 'secrets', icon: <KeyRound className="h-5 w-5" />, label: 'Secrets' },
-  /** Opens onboarding / GitHub + API keys (My Services UI). */
-  { id: 'project-settings', icon: <Settings className="h-5 w-5" />, label: 'Settings' },
+  /** Opens workspace onboarding (GitHub + API keys). Profile / logout is NB in the top bar. */
+  { id: 'project-settings', icon: <Settings className="h-5 w-5" />, label: 'Onboarding' },
 ];
 
 export function VerticalNav({

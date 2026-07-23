@@ -197,7 +197,7 @@ IDE CHAT SURFACE (project-execution-rules.md — strict):
 - **GUARDIAN DOCS:** nebulla-project/code-review-checklist.md (before coding); nebulla-project/full-bug-database.md + nebulla-project/debugging-method.md (on errors); nebulla-project/user-communication-rules.md (tone).
 - **Two surface modes:** CONVERSATION_MODE (default) vs BUILD_MODE (build/fix/implement/Go).
 - **CONVERSATION_MODE:** Short natural prose only. **NEVER** output \`\`\`typescript\`, \`\`\`jsx\`, \`\`\`python\`, SQL, or any multi-line code in chat — the only valid code format is \`\`\`file:relative/path\` … \`\`\`. If the user asks you to show/write code, reply with one short sentence telling them to press **Go**.
-- **BUILD_MODE (UNCHANGED CORE — Master Plan + Go Code):** Master Plan only inside \`<START_MASTERPLAN>…</END_MASTERPLAN>\` (server persists to master-plan.json). Implementation only as \`\`\`file:relative/path\` … \`\`\` and/or \`START_CODING\` — server writes files under workspaceRoot. Never dump code in conversational prose in the same turn.
+- **BUILD_MODE (UNCHANGED CORE — Master Plan + Go Code):** Master Plan only inside \`<START_MASTERPLAN>…</END_MASTERPLAN>\` (server persists to master-plan.json). Implementation only as \`\`\`file:relative/path\` … \`\`\` and/or \`START_CODING\` — server writes files under workspaceRoot. Never dump code in conversational prose in the same turn. Architecture-first: code-review-checklist.md, smallest safe change, no hallucinated APIs/paths.
 - **v0 prompt (critical):** Write \`nebula-ui-studio/v0-prompt.md\` only as a \`\`\`file:…\`\`\` block (800–1200 chars). **Never paste the v0 prompt body in chat** — the UI hides file blocks; users must not see routes, palette, or page specs in the chat bubble. After Master Plan, one short line in chat is enough (e.g. "Master Plan saved — starting UI pipeline.").
 - **Never use** \`"""\`file:\` or triple-quote fences — use standard \`\`\`file:path\` only.
 - If unsure which mode: stay in CONVERSATION_MODE / Free Chat and ask one clarifying question, or tell the user to press **Go** for build mode.
@@ -218,11 +218,22 @@ BUILD_MODE is active for this turn. Do not explain code in chat — emit file ar
 export const NDM_DEBUG_APPENDIX = `
 ACTIVE MODE: DEBUGGING — Nebula Debugging Method (NDM) is mandatory this turn:
 1) Verify — expected vs actual; exact error/stack/UI symptom.
-2) Analyze — imports/paths, null/undefined, env, API mismatches, async, deps (check full-bug-database.md patterns).
-3) Trace — follow call stack / data flow; use code-review-checklist.md mentally.
-4) Fix — smallest safe change only via \`\`\`file:relative/path\` … \`\`\` (no large refactors).
+2) Analyze — imports/paths, null/undefined, env, API mismatches, async, deps (check full-bug-database.md patterns). List 2–5 causes; pick one root cause.
+3) Trace — follow call stack / data flow; use code-review-checklist.md mentally. Explain briefly before coding.
+4) Fix — smallest safe change only via \`\`\`file:relative/path\` … \`\`\` (no large refactors; no casual \`\`\`typescript fences).
 5) Validate — confirm the original bug is fixed; note remaining risks in one short sentence.
+Output contract: 1–3 sentences (Verify→Analyze→Trace) → file: Fix blocks → one Validate line.
 Do not jump to a fix before Verify → Analyze → Trace. Prefer silent auto-fix language ("we fixed…").
+`.trim();
+
+/** Compact coding quality reminder when Smart Chat detects coding mode. */
+export const CODING_QUALITY_APPENDIX = `
+ACTIVE MODE: CODING — Architecture-first quality contract:
+1) Mentally scan nebulla-project/code-review-checklist.md before every file block.
+2) Follow Master Plan §1–§5 + Project Type; do not invent contradicting routes/features.
+3) Smallest safe change; no drive-by refactors.
+4) No hallucinated APIs/packages/env/paths — create them explicitly if needed in the same response.
+5) Output only START_CODING and/or \`\`\`file:relative/path\` … \`\`\` — never casual code fences in chat.
 `.trim();
 
 /**
@@ -247,21 +258,25 @@ export function chatModeSystemAppendix(options: {
     parts.push(NDM_DEBUG_APPENDIX);
   } else if (hint === 'guided-onboarding' || hint === 'discovery-required' || hint === 'discovery-required-after-file') {
     parts.push(
-      'ACTIVE MODE: DISCOVERY — Ask exactly one clear question. Collect Project Type + Mandatory Research Pillars before Architecture/Coding/UI. Do not emit START_CODING until Master Plan is solid.',
+      'ACTIVE MODE: DISCOVERY — Ask exactly one clear question. Follow INITIAL ONBOARDING order (goal → Project Type unless My Projects already set it → remaining info → Research Pillars → closing questions). Do not emit START_CODING until the final-check reply. Do not run Tab 2–6 interview loops yet.',
     );
   } else if (hint) {
     parts.push(`MODE_GUIDANCE: ${hint}`);
   }
 
   if (mode === 'coding' && !discoveryRequired) {
-    parts.push(
-      'ACTIVE MODE: CODING — Architecture-first. Prefer smallest safe change. Output only START_CODING and/or ```file:relative/path``` blocks. No casual ```typescript fences.',
-    );
+    parts.push(CODING_QUALITY_APPENDIX);
   }
 
   if (mode === 'ui' && !discoveryRequired) {
     parts.push(
-      'ACTIVE MODE: UI GENERATION — Ground v0 / UI Studio in §2 research + Project Type + §4 routes + §5 visuals. No vague "modern/clean" alone.',
+      'ACTIVE MODE: UI GENERATION — Ground v0 / UI Studio in §2 research (real competitors + UI patterns) + Project Type + §4 routes + §5 visuals. No vague "modern/clean" alone. Keep v0-prompt.md 800–1200 chars.',
+    );
+  }
+
+  if (discoveryRequired && mode === 'free') {
+    parts.push(
+      'DISCOVERY STILL REQUIRED — You may answer casually, but if the user asks to build/architecture/UI, switch to one Discovery question immediately. Do not emit START_CODING.',
     );
   }
 

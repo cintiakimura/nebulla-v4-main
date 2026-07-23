@@ -46,6 +46,7 @@ Check the most common bug categories **first** (in this order):
 ---
 
 ## Output contract while debugging
-- Prefer a short Verify/Analyze note in chat (1–3 sentences), then apply the fix only as `file:relative/path` fenced blocks.
+- Prefer a short Verify → Analyze → Trace note in chat (1–3 sentences), then apply the fix only as `file:relative/path` fenced blocks.
 - Never dump large refactors or casual language fences (typescript/jsx) in chat.
-- After Fix, state what was validated (or what the user should click to confirm).
+- After Fix, state what was validated (or what the user should click to confirm) in one short Validate line.
+- Mentally re-check `code-review-checklist.md` before applying the Fix.

@@ -194,7 +194,47 @@ MASTER PLAN SECTION SEPARATION (mandatory inside <START_MASTERPLAN>…</END_MAST
 const MIN_SECTION_CHARS = 80;
 const RESEARCH_HINT_RE =
   /competitor|research|study|studies|feature|ui\/ux|navigation|pillar|supporting/i;
+const EVIDENCE_HINT_RE =
+  /no supporting studies|stud(?:y|ies)|statistic|case study|evidence|research shows|data (?:shows|suggests)/i;
 const PROJECT_TYPE_RE = /\b(web\s*app|mobile\s*app|landing\s*page)\b/i;
+const ROUTE_HINT_RE = /`\/[^`]+`|(?:^|[\s(])\/[a-z0-9][\w/-]*/i;
+const UI_CONCRETE_RE =
+  /#[0-9a-fA-F]{3,8}\b|\b(?:palette|typography|font|sidebar|bottom\s*nav|nav(?:igation)?|density|shadcn|tailwind)\b/i;
+/** Stopwords that inflate capitalized-name competitor heuristics. */
+const COMPETITOR_NAME_STOP = new Set([
+  "The",
+  "And",
+  "For",
+  "With",
+  "From",
+  "This",
+  "That",
+  "App",
+  "Goal",
+  "Tech",
+  "Research",
+  "Features",
+  "Pages",
+  "Navigation",
+  "Project",
+  "Type",
+  "Web",
+  "Mobile",
+  "Landing",
+  "Page",
+  "User",
+  "Users",
+  "Most",
+  "Used",
+  "Common",
+  "Important",
+  "Supporting",
+  "Studies",
+  "Found",
+  "Feature",
+  "Module",
+  "Core",
+]);
 /** At least a few capitalized product-like names (real competitors, not fluff). */
 const COMPETITOR_NAME_HINT_RE =
   /\b([A-Z][a-zA-Z0-9]{2,}(?:\s+[A-Z][a-zA-Z0-9]{2,}){0,2})\b/g;
@@ -202,7 +242,7 @@ const COMPETITOR_NAME_HINT_RE =
 /**
  * True when the saved Master Plan is solid enough to skip full Discovery:
  * all five user sections present with substance, Project Type in §1,
- * and §2 shows research-pillar content (competitors + evidence language).
+ * §2 research pillars (competitors + evidence), §4 routes, §5 concrete UI.
  */
 export function isMasterPlanCompleteForDiscovery(
   raw: Record<string, unknown> | null | undefined,
@@ -219,11 +259,22 @@ export function isMasterPlanCompleteForDiscovery(
   const research = (n["2. Tech and Research"] || "").trim();
   if (research.length < 200) return false;
   if (!RESEARCH_HINT_RE.test(research)) return false;
+  if (!EVIDENCE_HINT_RE.test(research)) return false;
   const names = research.match(COMPETITOR_NAME_HINT_RE) || [];
-  const uniq = new Set(names.map((s) => s.trim()));
+  const uniq = new Set(
+    names.map((s) => s.trim()).filter((s) => !COMPETITOR_NAME_STOP.has(s.split(/\s+/)[0] || "")),
+  );
   const hasCompetitorSignal =
-    uniq.size >= 3 || /\b(competitors?|competitive)\b/i.test(research);
+    uniq.size >= 4 ||
+    (/\b(competitors?|competitive)\b/i.test(research) && uniq.size >= 2);
   if (!hasCompetitorSignal) return false;
+
+  const pages = (n["4. Pages and navigation"] || "").trim();
+  const routeHits = pages.match(new RegExp(ROUTE_HINT_RE.source, "gi")) || [];
+  if (routeHits.length < 2) return false;
+
+  const ui = (n["5. UI/UX design"] || "").trim();
+  if (!UI_CONCRETE_RE.test(ui)) return false;
 
   // Prefer explicit Project Type; allow strong legacy research plans without it.
   if (!hasProjectType && !(research.length >= 350 && uniq.size >= 5)) return false;

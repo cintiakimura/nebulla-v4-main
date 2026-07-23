@@ -180,7 +180,7 @@ function statusKindClass(kind?: GrokActivityLogKind): string {
     case 'warn':
       return 'text-amber-200/90';
     case 'file':
-      return 'text-cyan-200/90';
+      return 'text-primary/90';
     case 'wait':
       return 'text-muted-foreground';
     default:
@@ -1834,7 +1834,7 @@ export function AIChat() {
                     type="button"
                     onClick={() => void handleGo()}
                     disabled={sending}
-                    className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-lg border border-cyan-500/40 bg-cyan-500/15 px-3 py-2.5 text-sm font-semibold text-cyan-100 transition hover:bg-cyan-500/25 disabled:opacity-45"
+                    className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-lg border border-primary/40 bg-primary/15 px-3 py-2.5 text-sm font-semibold text-primary transition hover:bg-primary/25 disabled:opacity-45"
                   >
                     <Rocket className="h-4 w-4 shrink-0" aria-hidden />
                     Go — write code to workspace

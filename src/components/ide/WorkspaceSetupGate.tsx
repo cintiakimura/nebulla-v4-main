@@ -249,12 +249,12 @@ export function WorkspaceSetupGate({ onReady }: { onReady: (ctx: WorkspaceContex
 
   return (
     <div
-      className="fixed inset-0 z-[300] flex items-center justify-center bg-[#020814]/95 p-4 backdrop-blur-sm"
+      className="fixed inset-0 z-[300] flex items-center justify-center bg-[color-mix(in_srgb,var(--surface)_95%,transparent)] p-4 backdrop-blur-sm"
       role="dialog"
       aria-modal="true"
       aria-label="Workspace setup"
     >
-      <div className="w-full max-w-md rounded-2xl border border-white/10 bg-[#0a0e14] p-6 shadow-2xl shadow-black/50">
+      <div className="w-full max-w-md rounded-2xl border border-border bg-[var(--surface-bright)] p-6 shadow-2xl shadow-black/50">
         <div className="mb-6 flex items-center gap-3">
           <Logo className="h-9 w-9 shrink-0" />
           <div>
