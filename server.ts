@@ -470,6 +470,7 @@ async function startServer() {
         r2MissingOnBoot.length > 0
           ? `Set ${r2MissingOnBoot.join(", ")} in .env for Cloudflare R2 uploads.`
           : undefined,
+      d1ProvisioningReady: Boolean(render.d1ProvisioningReady),
       pencilMockupsReady: Boolean(pencilKey),
       nebulaUiStudioDemo: Boolean(!pencilKey && useBundledDemoMockupWithoutKey()),
       workspaceMode: "cloud",

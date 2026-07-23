@@ -100,7 +100,7 @@ async function loadModeDetector() {
     /* use inline */
   }
 
-  // Keep in sync with src/lib/chatModeDetector.ts (simplified for e2e smoke)
+  // Keep in sync with src/lib/chatModeDetector.ts (simplified for e2e smoke; full Discovery gate uses masterPlanComplete)
   const GUIDED_RE =
     /\b(new project|create (an? )?app|start from scratch|build (an? )?app|start a project)\b/i;
   const DEBUG_RE =

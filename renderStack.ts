@@ -8,11 +8,20 @@ import { getProjectKeyFromRequest, sanitizeProjectKey } from "./lib/nebulaProjec
 import { registerNebulaPgPool } from "./lib/nebulaPgPool";
 import { getMonthlyUsageSnapshot } from "./lib/token-usage";
 import { saveUserGrokApiKey } from "./lib/nebulaUserGrokStore";
+import {
+  isD1ProvisioningConfigured,
+  provisionD1ForNebulaProject,
+  type D1ProvisionResult,
+} from "./lib/nebulaD1Provisioning";
+import { getNebullaPersistRoot, getNebulaProjectDocsRoot } from "./lib/nebulaWorkspaceRoot";
 import cookieParser from "cookie-parser";
 import jwt from "jsonwebtoken";
 import pg from "pg";
 import crypto from "crypto";
 import { promisify } from "util";
+
+const RENDER_STACK_REPO_ROOT = getNebullaPersistRoot();
+const RENDER_STACK_NEBULA_PROJECT = getNebulaProjectDocsRoot(RENDER_STACK_REPO_ROOT);
 
 const scryptAsync = promisify(crypto.scrypt);
 
@@ -211,6 +220,8 @@ export function getRenderPublicConfig() {
           process.env.RENDER_WORKSPACE_ID?.trim() ||
           process.env.WORKSPACE_ID?.trim())
     ),
+    /** Cloudflare D1 auto-provision for user app DBs (needs CLOUDFLARE_API_TOKEN + account id). */
+    d1ProvisioningReady: isD1ProvisioningConfigured(),
   };
 }
 
@@ -242,6 +253,8 @@ async function ensureTables(p: pg.Pool) {
   `);
   await p.query(`CREATE INDEX IF NOT EXISTS idx_nebula_projects_user ON public.nebula_projects(user_id);`);
   await p.query(`ALTER TABLE public.nebula_projects ADD COLUMN IF NOT EXISTS workspace_id TEXT;`);
+  await p.query(`ALTER TABLE public.nebula_projects ADD COLUMN IF NOT EXISTS d1_database_id TEXT;`);
+  await p.query(`ALTER TABLE public.nebula_projects ADD COLUMN IF NOT EXISTS d1_database_name TEXT;`);
   await p.query(`
     CREATE TABLE IF NOT EXISTS public.nebula_client_workspaces (
       user_id UUID PRIMARY KEY REFERENCES public.nebula_users(id) ON DELETE CASCADE,
@@ -448,6 +461,64 @@ async function createRenderProjectForNebula(displayName: string): Promise<{ id: 
   };
 }
 
+
+/**
+ * Create Cloudflare D1 for the user's app (one DB per Nebulla project).
+ * Never throws — project creation continues if D1 fails.
+ * Stores uuid/name on nebula_projects and writes .env.d1 into the project workspace.
+ */
+async function provisionAndPersistD1ForProject(
+  db: pg.Pool,
+  uid: string,
+  projectName: string,
+  workspaceId: string
+): Promise<{ d1DatabaseId: string | null; d1DatabaseName: string | null; d1Error: string | null }> {
+  const existing = await db.query(
+    `SELECT d1_database_id, d1_database_name FROM public.nebula_projects
+     WHERE user_id = $1::uuid AND name = $2`,
+    [uid, projectName]
+  );
+  const row = existing.rows[0] as { d1_database_id?: string | null; d1_database_name?: string | null } | undefined;
+  const already = row?.d1_database_id != null ? String(row.d1_database_id).trim() : "";
+  if (already) {
+    return {
+      d1DatabaseId: already,
+      d1DatabaseName: row?.d1_database_name != null ? String(row.d1_database_name) : null,
+      d1Error: null,
+    };
+  }
+
+  const diskKey = sanitizeProjectKey(workspaceId);
+  const result: D1ProvisionResult = await provisionD1ForNebulaProject({
+    repoRoot: RENDER_STACK_REPO_ROOT,
+    nebulaProjectTemplateRoot: RENDER_STACK_NEBULA_PROJECT,
+    projectName,
+    projectDiskKey: diskKey,
+  });
+
+  if (!result.ok) {
+    return { d1DatabaseId: null, d1DatabaseName: null, d1Error: result.error };
+  }
+
+  await db.query(
+    `UPDATE public.nebula_projects
+     SET d1_database_id = $1, d1_database_name = $2, updated_at = NOW()
+     WHERE user_id = $3::uuid AND name = $4
+       AND (d1_database_id IS NULL OR TRIM(d1_database_id) = '')`,
+    [result.database.uuid, result.database.name, uid, projectName]
+  );
+
+  console.log(
+    `[nebula] Linked D1 ${result.database.uuid} to project "${projectName}" (user=${uid.slice(0, 8)}…)`
+  );
+
+  return {
+    d1DatabaseId: result.database.uuid,
+    d1DatabaseName: result.database.name,
+    d1Error: null,
+  };
+}
+
 /** One Render workspace per Nebula project (unique ID stored on `nebula_projects.workspace_id`). */
 async function provisionRenderWorkspaceForNewProject(
   _userId: string,
@@ -506,6 +577,9 @@ export async function resolveNebulaProjectDiskKey(req: Request): Promise<string>
          WHERE user_id = $2::uuid AND name = $3 AND (workspace_id IS NULL OR workspace_id = '')`,
         [wid, uid, projectName]
       );
+      void provisionAndPersistD1ForProject(dbPool, uid, projectName, wid).catch((e) => {
+        console.warn("[nebula] D1 on disk-key resolve:", e);
+      });
     }
     return wid ? sanitizeProjectKey(wid) : fallback;
   } catch (e) {
@@ -564,6 +638,11 @@ export async function mountRenderStack(app: Express) {
        ON CONFLICT (user_id, name) DO NOTHING`,
       [uid, projectName, workspace.id]
     );
+    try {
+      await provisionAndPersistD1ForProject(db, uid, projectName, workspace.id);
+    } catch (e) {
+      console.warn("[nebula] D1 provision after initial project:", e);
+    }
   };
 
   /** Never block sign-in when first-project seeding fails (Render API / schema edge cases). */
@@ -594,6 +673,8 @@ export async function mountRenderStack(app: Express) {
     pages: unknown;
     edges: unknown;
     workspace_id: string | null;
+    d1_database_id: string | null;
+    d1_database_name: string | null;
     updated_at: string;
   };
 
@@ -601,14 +682,26 @@ export async function mountRenderStack(app: Express) {
     if (!hasDb()) return;
     const db = requireDbPool();
     for (const row of rows) {
-      const wid = row.workspace_id != null ? String(row.workspace_id).trim() : "";
-      if (wid) continue;
-      const rw = await provisionRenderWorkspaceForNewProject(uid, row.name);
-      await db.query(
-        `UPDATE public.nebula_projects SET workspace_id = $1, updated_at = NOW() WHERE user_id = $2::uuid AND name = $3`,
-        [rw.id, uid, row.name]
-      );
-      row.workspace_id = rw.id;
+      let wid = row.workspace_id != null ? String(row.workspace_id).trim() : "";
+      if (!wid) {
+        const rw = await provisionRenderWorkspaceForNewProject(uid, row.name);
+        await db.query(
+          `UPDATE public.nebula_projects SET workspace_id = $1, updated_at = NOW() WHERE user_id = $2::uuid AND name = $3`,
+          [rw.id, uid, row.name]
+        );
+        row.workspace_id = rw.id;
+        wid = rw.id;
+      }
+      const d1id = row.d1_database_id != null ? String(row.d1_database_id).trim() : "";
+      if (!d1id && wid) {
+        try {
+          const d1 = await provisionAndPersistD1ForProject(db, uid, row.name, wid);
+          row.d1_database_id = d1.d1DatabaseId;
+          row.d1_database_name = d1.d1DatabaseName;
+        } catch (e) {
+          console.warn("[nebula] D1 backfill:", e);
+        }
+      }
     }
   };
 
@@ -637,7 +730,7 @@ export async function mountRenderStack(app: Express) {
     }
     if (opts.syncAllProjects) {
       const r = await pool.query(
-        `SELECT name, pages, edges, workspace_id, updated_at FROM public.nebula_projects WHERE user_id = $1::uuid ORDER BY updated_at DESC`,
+        `SELECT name, pages, edges, workspace_id, d1_database_id, d1_database_name, updated_at FROM public.nebula_projects WHERE user_id = $1::uuid ORDER BY updated_at DESC`,
         [uid]
       );
       const rows = r.rows as ProjectListRow[];
@@ -645,7 +738,7 @@ export async function mountRenderStack(app: Express) {
       renderTouched = rows.length > 0;
     } else if (opts.projectName?.trim()) {
       const r = await pool.query(
-        `SELECT name, pages, edges, workspace_id, updated_at FROM public.nebula_projects WHERE user_id = $1::uuid AND name = $2`,
+        `SELECT name, pages, edges, workspace_id, d1_database_id, d1_database_name, updated_at FROM public.nebula_projects WHERE user_id = $1::uuid AND name = $2`,
         [uid, opts.projectName.trim()]
       );
       const rows = r.rows as ProjectListRow[];
@@ -1156,7 +1249,7 @@ export async function mountRenderStack(app: Express) {
       const db = requireDbPool();
       if (oneName) {
         const r = await db.query(
-          `SELECT name, pages, edges, workspace_id, updated_at FROM public.nebula_projects WHERE user_id = $1::uuid AND name = $2`,
+          `SELECT name, pages, edges, workspace_id, d1_database_id, d1_database_name, updated_at FROM public.nebula_projects WHERE user_id = $1::uuid AND name = $2`,
           [uid, oneName]
         );
         const rows = r.rows as ProjectListRow[];
@@ -1164,7 +1257,7 @@ export async function mountRenderStack(app: Express) {
         return res.json({ projects: rows, project: rows[0] || null });
       }
       const r = await db.query(
-        `SELECT name, pages, edges, workspace_id, updated_at FROM public.nebula_projects WHERE user_id = $1::uuid ORDER BY updated_at DESC`,
+        `SELECT name, pages, edges, workspace_id, d1_database_id, d1_database_name, updated_at FROM public.nebula_projects WHERE user_id = $1::uuid ORDER BY updated_at DESC`,
         [uid]
       );
       const rows = r.rows as ProjectListRow[];
@@ -1189,7 +1282,7 @@ export async function mountRenderStack(app: Express) {
       const db = requireDbPool();
       const trimmed = name.trim();
       const existing = await db.query(
-        `SELECT workspace_id, pages, edges FROM public.nebula_projects WHERE user_id = $1::uuid AND name = $2`,
+        `SELECT workspace_id, d1_database_id, d1_database_name, pages, edges FROM public.nebula_projects WHERE user_id = $1::uuid AND name = $2`,
         [uid, trimmed]
       );
       let workspaceId = existing.rows[0]?.workspace_id as string | undefined;
@@ -1211,7 +1304,7 @@ export async function mountRenderStack(app: Express) {
           : hasExisting
             ? JSON.stringify(existing.rows[0].edges ?? [])
             : JSON.stringify(edges ?? []);
-      await db.query(
+      const saved = await db.query(
         `INSERT INTO public.nebula_projects (user_id, name, pages, edges, workspace_id, updated_at)
          VALUES ($1::uuid, $2, $3::jsonb, $4::jsonb, $5, NOW())
          ON CONFLICT (user_id, name) DO UPDATE
@@ -1222,11 +1315,32 @@ export async function mountRenderStack(app: Express) {
                EXCLUDED.workspace_id
              ),
              updated_at = NOW()
-         RETURNING name, pages, edges, workspace_id, updated_at`,
+         RETURNING name, pages, edges, workspace_id, d1_database_id, d1_database_name, updated_at`,
         [uid, trimmed, pagesJson, edgesJson, workspaceId]
       );
+      let d1Warning: string | null = null;
+      let d1DatabaseId: string | null =
+        (saved.rows[0] as ProjectListRow | undefined)?.d1_database_id != null
+          ? String((saved.rows[0] as ProjectListRow).d1_database_id).trim() || null
+          : null;
+      let d1DatabaseName: string | null =
+        (saved.rows[0] as ProjectListRow | undefined)?.d1_database_name != null
+          ? String((saved.rows[0] as ProjectListRow).d1_database_name)
+          : null;
+      if (!d1DatabaseId && workspaceId) {
+        const d1 = await provisionAndPersistD1ForProject(db, uid, trimmed, workspaceId);
+        d1DatabaseId = d1.d1DatabaseId;
+        d1DatabaseName = d1.d1DatabaseName;
+        d1Warning = d1.d1Error;
+      }
       void runProjectManagerSilently(db, uid, { projectName: trimmed }).catch(() => {});
-      res.json({ ok: true });
+      res.json({
+        ok: true,
+        workspace_id: workspaceId,
+        d1_database_id: d1DatabaseId,
+        d1_database_name: d1DatabaseName,
+        ...(d1Warning ? { d1Warning } : {}),
+      });
     } catch (e) {
       console.error("[nebula] POST /api/projects:", e);
       res.status(500).json({ error: "Failed to save project" });

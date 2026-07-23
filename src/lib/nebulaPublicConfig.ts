@@ -19,6 +19,8 @@ export type NebulaPublicConfig = {
   freeTierTokenLimitDisabled?: boolean;
   r2MissingEnv?: string[];
   r2StorageHint?: string;
+  /** True when CLOUDFLARE_API_TOKEN + account id are set for per-project D1 provisioning. */
+  d1ProvisioningReady?: boolean;
 };
 
 export async function fetchNebulaPublicConfig(): Promise<NebulaPublicConfig> {

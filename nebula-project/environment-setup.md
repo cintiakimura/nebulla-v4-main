@@ -33,8 +33,22 @@ These are **created or assigned when** the Render workspace, PostgreSQL instance
 
 | Variable | Source |
 |----------|--------|
-| `DATABASE_URL` | Render PostgreSQL → **Connect** / connection string for **that** instance (internal or external URL as appropriate). Paste verbatim. |
+| `DATABASE_URL` | Render PostgreSQL → **Connect** / connection string for **that** instance (internal or external URL as appropriate). Paste verbatim. **Nebulla platform only** (users, sessions, project list) — not the customer's app DB. |
 | `PUBLIC_SITE_URL` | Render Web Service → public **HTTPS** origin (assigned URL or custom domain). Must match OAuth and email link bases for that deployment. |
+
+---
+
+## 2b. Cloudflare D1 (per Nebulla project — user application data)
+
+When a Nebulla project is created, the control plane **auto-provisions one Cloudflare D1 database** (if `CLOUDFLARE_API_TOKEN` + account id are set on the Nebulla server). IDs are stored on `nebula_projects` and written into the project workspace (`.env`, `.env.d1`, `nebula-d1.json`).
+
+| Variable | Role |
+|----------|------|
+| `CLOUDFLARE_ACCOUNT_ID` | Cloudflare account id (same as R2 when using `R2_ACCOUNT_ID`) |
+| `CLOUDFLARE_D1_DATABASE_ID` | D1 database UUID — use as `database_id` in Workers `wrangler.toml` binding |
+| `CLOUDFLARE_D1_DATABASE_NAME` | Human-readable D1 name |
+
+**Do not** put the platform `CLOUDFLARE_API_TOKEN` into the generated app env (account-wide). Apps should use a Workers D1 binding with `CLOUDFLARE_D1_DATABASE_ID`.
 
 ---
 

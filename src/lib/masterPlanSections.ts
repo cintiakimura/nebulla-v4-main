@@ -9,4 +9,5 @@ export {
   normalizeMasterPlanRecord,
   parseMasterPlanBlock,
   masterPlanSectionSeparationRules,
+  isMasterPlanCompleteForDiscovery,
 } from '../../lib/masterPlanSections';

@@ -4,6 +4,10 @@
  *
  * Mode sequence (product): Chat/Discovery → Architecture → Coding → Debugging → UI Generation
  * (+ File Ops short-circuit). Detector labels map to that sequence.
+ *
+ * Critical: File / Free Chat / paste-code / "just build" must NOT permanently skip Discovery.
+ * If the project lacks a complete Master Plan (with research pillars), prefer Discovery
+ * before serious Architecture / Coding / UI work.
  */
 
 export type ChatMode =
@@ -20,10 +24,20 @@ export type ChatModeResult = {
   /** Short, beginner-friendly label for UI badges */
   label: string;
   confidence: 'high' | 'medium' | 'low';
+  /**
+   * When true, Master Plan is incomplete — Discovery + Research Pillars are still required
+   * before architecture/coding (even after a File open).
+   */
+  discoveryRequired?: boolean;
+};
+
+export type DetectChatModeOptions = {
+  /** When false/undefined, treat Master Plan as incomplete and gate build paths into Discovery. */
+  masterPlanComplete?: boolean;
 };
 
 const GUIDED_RE =
-  /\b(new project|create (an? )?app|start from scratch|build (an? )?app|start a project)\b/i;
+  /\b(new project|create (an? )?app|start from scratch|build (an? )?app|start a project|just build|build something|make (me )?(an? )?app)\b/i;
 
 const ARCHITECTURE_RE =
   /\b(master plan|architecture|pages and navigation|tech\s*&\s*search|text\s*&\s*search|features and kpis|refine (the )?plan)\b/i;
@@ -47,13 +61,23 @@ const LOCAL_PATH_HINT_RE =
 
 /**
  * Detect which chat mode best matches the user message.
- * Defaults to free chat when unsure (never force Master Plan).
- * File mode must not steal Coding / Guided / Architecture / Debugging intents.
+ * File mode must not permanently skip Discovery when the Master Plan is incomplete.
  */
-export function detectChatMode(input: string): ChatModeResult {
+export function detectChatMode(
+  input: string,
+  opts?: DetectChatModeOptions,
+): ChatModeResult {
   const text = String(input || '').trim();
+  const masterPlanComplete = opts?.masterPlanComplete === true;
+  const discoveryRequired = !masterPlanComplete;
+
   if (!text) {
-    return { mode: 'free', label: 'Chat', confidence: 'low' };
+    return {
+      mode: discoveryRequired ? 'guided' : 'free',
+      label: discoveryRequired ? 'Discovery' : 'Chat',
+      confidence: 'low',
+      discoveryRequired,
+    };
   }
 
   const looksGuided = GUIDED_RE.test(text);
@@ -70,44 +94,86 @@ export function detectChatMode(input: string): ChatModeResult {
     (hasOpenVerb && hasFilePath) ||
     (FILE_RE.test(text) && hasOpenVerb);
 
-  // Explicit GitHub / open-path file ops (even if "fix" appears later in the message)
+  // File ops still open — but Discovery remains required when Master Plan is incomplete
   if (hasGitHubUrl || (hasOpenVerb && hasFilePath && !looksGuided && !looksArchitecture)) {
-    return { mode: 'file', label: 'Files', confidence: 'high' };
+    return {
+      mode: 'file',
+      label: 'Files',
+      confidence: 'high',
+      discoveryRequired,
+    };
   }
 
-  // Guided discovery for new projects
+  // Incomplete Master Plan: force Discovery for build / architecture / UI / guided intents
+  // (Debugging existing code may still run; Free casual Q&A may stay free.)
+  if (discoveryRequired) {
+    if (looksGuided || looksCoding || looksArchitecture || looksUi) {
+      return {
+        mode: 'guided',
+        label: 'Discovery',
+        confidence: 'high',
+        discoveryRequired: true,
+      };
+    }
+    if (looksDebug) {
+      return {
+        mode: 'debugging',
+        label: 'Debugging',
+        confidence: 'high',
+        discoveryRequired: true,
+      };
+    }
+    if (looksFile) {
+      return {
+        mode: 'file',
+        label: 'Files',
+        confidence: 'medium',
+        discoveryRequired: true,
+      };
+    }
+    // Free chat is allowed, but discoveryRequired stays true so the model resumes Discovery
+    // before architecture / coding.
+    return {
+      mode: 'free',
+      label: 'Chat',
+      confidence: 'medium',
+      discoveryRequired: true,
+    };
+  }
+
+  // Master Plan complete — normal mode matrix
   if (looksGuided) {
-    return { mode: 'guided', label: 'Discovery', confidence: 'high' };
+    return { mode: 'guided', label: 'Discovery', confidence: 'high', discoveryRequired: false };
   }
 
-  // Debugging before generic coding ("fix the bug" vs "fix login")
   if (looksDebug) {
-    return { mode: 'debugging', label: 'Debugging', confidence: 'high' };
+    return { mode: 'debugging', label: 'Debugging', confidence: 'high', discoveryRequired: false };
   }
 
-  // UI Generation (Studio / v0)
   if (looksUi) {
-    return { mode: 'ui', label: 'UI', confidence: 'high' };
+    return { mode: 'ui', label: 'UI', confidence: 'high', discoveryRequired: false };
   }
 
-  // Architecture / Master Plan refinement
   if (looksArchitecture) {
-    return { mode: 'architecture', label: 'Architecture', confidence: 'high' };
+    return { mode: 'architecture', label: 'Architecture', confidence: 'high', discoveryRequired: false };
   }
 
   if (looksCoding) {
-    return { mode: 'coding', label: 'Coding', confidence: 'high' };
+    return { mode: 'coding', label: 'Coding', confidence: 'high', discoveryRequired: false };
   }
 
   if (looksFile) {
-    return { mode: 'file', label: 'Files', confidence: 'medium' };
+    return { mode: 'file', label: 'Files', confidence: 'medium', discoveryRequired: false };
   }
 
-  return { mode: 'free', label: 'Chat', confidence: 'medium' };
+  return { mode: 'free', label: 'Chat', confidence: 'medium', discoveryRequired: false };
 }
 
 /** Friendly one-liner explaining the active mode (for optional UI hints). */
-export function describeChatMode(mode: ChatMode): string {
+export function describeChatMode(mode: ChatMode, discoveryRequired?: boolean): string {
+  if (discoveryRequired && mode !== 'file' && mode !== 'debugging') {
+    return "Let's finish Discovery first (goal, project type, and research) before architecture or coding.";
+  }
   switch (mode) {
     case 'guided':
       return "Let's discover your product — one clear question at a time.";
@@ -120,9 +186,13 @@ export function describeChatMode(mode: ChatMode): string {
     case 'ui':
       return "I'll craft a specific, research-grounded UI / V0 prompt.";
     case 'file':
-      return "I'll open the file and show a preview.";
+      return discoveryRequired
+        ? "I'll open the file — then we should finish Discovery before building."
+        : "I'll open the file and show a preview.";
     case 'free':
     default:
-      return "I'm here to chat, brainstorm, and help — depth over rush.";
+      return discoveryRequired
+        ? "Happy to chat — when you're ready to build, we'll complete Discovery and the Research Pillars first."
+        : "I'm here to chat, brainstorm, and help — depth over rush.";
   }
 }

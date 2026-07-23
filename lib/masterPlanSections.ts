@@ -188,3 +188,27 @@ MASTER PLAN SECTION SEPARATION (mandatory inside <START_MASTERPLAN>…</END_MAST
 - Mind Map uses Section 4 only. v0 UI generation uses §2 research + Section 5 primarily (plus concise §4 routes in v0-prompt.md).
 `.trim();
 }
+
+const MIN_SECTION_CHARS = 80;
+const RESEARCH_HINT_RE =
+  /competitor|research|study|studies|feature|ui\/ux|navigation|pillar|supporting/i;
+
+/**
+ * True when the saved Master Plan is solid enough to skip full Discovery:
+ * all five user sections present with substance, and §2 shows research-pillar content.
+ */
+export function isMasterPlanCompleteForDiscovery(
+  raw: Record<string, unknown> | null | undefined,
+): boolean {
+  if (!raw || typeof raw !== "object") return false;
+  const n = normalizeMasterPlanRecord(raw);
+  for (const key of MASTER_PLAN_SECTION_KEYS) {
+    const body = (n[key] || "").trim();
+    if (body.length < MIN_SECTION_CHARS) return false;
+  }
+  const research = (n["2. Text & Search"] || "").trim();
+  if (research.length < 200) return false;
+  if (!RESEARCH_HINT_RE.test(research)) return false;
+  return true;
+}
+

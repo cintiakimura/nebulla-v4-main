@@ -145,6 +145,8 @@ export type CloudProjectRow = {
   pages: unknown;
   edges: unknown;
   workspace_id?: string | null;
+  d1_database_id?: string | null;
+  d1_database_name?: string | null;
   updated_at: string;
 };
 
