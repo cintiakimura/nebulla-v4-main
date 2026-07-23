@@ -1,9 +1,9 @@
 /**
- * GROK Service for Nebulla
- * Handles communication with grok-4 (the unified reasoning model)
+ * Chat service for Nebulla — multi-provider via `/api/grok/chat` (default Grok).
  */
 
 import { fetchJson } from './apiFetch';
+import { DEFAULT_AI_CHAT_MODEL, resolveAiChatSelection, type AiChatModelId } from './aiProvider';
 
 export interface ChatMessage {
   role: 'user' | 'assistant' | 'system';
@@ -11,29 +11,33 @@ export interface ChatMessage {
 }
 
 /**
- * Send a message to GROK 4.1
+ * Send messages through the provider-agnostic chat façade.
  */
-export async function sendToGROK(messages: ChatMessage[]): Promise<string> {
+export async function sendToGROK(
+  messages: ChatMessage[],
+  opts?: { chatModel?: AiChatModelId | string },
+): Promise<string> {
+  const selection = resolveAiChatSelection(opts?.chatModel ?? DEFAULT_AI_CHAT_MODEL);
   try {
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
-    };
-
     const data = await fetchJson<{ choices?: { message?: { content?: string } }[] }>(
       '/api/grok/chat',
       {
         method: 'POST',
-        headers,
+        headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
         body: JSON.stringify({
           messages,
-          model: 'grok-4',
+          chatModel: selection.chatModel,
+          aiProvider: selection.aiProvider,
         }),
-      }
+      },
     );
     return data.choices?.[0]?.message?.content || '';
   } catch (error) {
-    console.error('Error calling grok-4:', error);
+    console.error('Error calling AI chat:', error);
     throw error;
   }
 }
+
+/** Alias — same façade; name clarifies multi-provider support. */
+export const sendToAiChat = sendToGROK;

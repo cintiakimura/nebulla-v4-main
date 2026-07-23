@@ -40,7 +40,8 @@ import {
   hasGrokFileBlocks,
   isCodingIntent,
   runGoCodeAndApply,
-} from '../../lib/nebulaGrokCodingPipeline';
+} from '../../lib/nebulaAiCodingPipeline';
+import { isShortCodingGoNudge, SHORT_CODING_GO_SUMMARY } from '../../lib/ideShortCodingNudge';
 import { setGrokCodingActive } from '../../lib/nebulaGrokCodingGate';
 import { runMasterPlanUiPipelineWithV0, runPostCodingWorkspaceSync } from '../../lib/ideArtifactSync';
 import {
@@ -135,6 +136,9 @@ type Message = {
   timestamp: string;
   /** Rich file preview from Smart Chat Handler (File mode) */
   filePreview?: SmartChatFilePreview;
+  /** Short "Press Go" style reply — show prominent Go CTA */
+  showGoCta?: boolean;
+  goSummary?: string;
 };
 
 function SoundWaveIcon({ className }: { className?: string }) {
@@ -240,8 +244,16 @@ function ChatPipelineStatusBar({
 }
 
 export function AIChat() {
-  const { activePath, activeTab, diskProjectKey, refreshTree, gitBranch, tabs, workspacePaths } =
-    useIdeWorkspace();
+  const {
+    activePath,
+    activeTab,
+    diskProjectKey,
+    refreshTree,
+    gitBranch,
+    tabs,
+    workspacePaths,
+    chatModel,
+  } = useIdeWorkspace();
   const [workspaceRootLabel, setWorkspaceRootLabel] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
@@ -1130,6 +1142,7 @@ export function AIChat() {
           projectName,
           ideAppendix,
           buildMode,
+          chatModel,
         }));
       } finally {
         stopGrokWait();
@@ -1158,6 +1171,11 @@ export function AIChat() {
       const { displayText, hadCodingTag } = formatAssistantForIdeChatDisplay(raw);
       const willCode =
         hadCodingTag || hasGrokFileBlocks(raw) || isCodingIntent(masterPlanSource);
+      const userWantsCode = isCodingIntent(text) || willCode;
+      const shortGoNudge =
+        userWantsCode &&
+        !hasGrokFileBlocks(raw) &&
+        isShortCodingGoNudge(displayText || raw);
 
       let masterPlanPipeline: Awaited<ReturnType<typeof runMasterPlanUiPipelineWithV0>> = {};
       if (mpSaved > 0) {
@@ -1199,10 +1217,21 @@ export function AIChat() {
         }
       }
 
-      const spoken = stripAssistantTagsForVoice(displayText);
+      const spoken = stripAssistantTagsForVoice(
+        shortGoNudge ? SHORT_CODING_GO_SUMMARY : displayText,
+      );
       const ts = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
       const toAppend: Message[] = [];
-      if (displayText.trim()) {
+      if (shortGoNudge) {
+        toAppend.push({
+          id: `a-${Date.now()}`,
+          role: 'assistant',
+          content: SHORT_CODING_GO_SUMMARY,
+          timestamp: ts,
+          showGoCta: true,
+          goSummary: displayText.trim() || 'Press Go to generate files in your workspace.',
+        });
+      } else if (displayText.trim()) {
         toAppend.push({
           id: `a-${Date.now()}`,
           role: 'assistant',
@@ -1793,6 +1822,20 @@ export function AIChat() {
                 )}
               >
                 <p className="whitespace-pre-wrap">{message.content}</p>
+                {message.goSummary && message.showGoCta ? (
+                  <p className="mt-1.5 text-[11px] text-muted-foreground">{message.goSummary}</p>
+                ) : null}
+                {message.showGoCta ? (
+                  <button
+                    type="button"
+                    onClick={() => void handleGo()}
+                    disabled={sending}
+                    className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-lg border border-cyan-500/40 bg-cyan-500/15 px-3 py-2.5 text-sm font-semibold text-cyan-100 transition hover:bg-cyan-500/25 disabled:opacity-45"
+                  >
+                    <Rocket className="h-4 w-4 shrink-0" aria-hidden />
+                    Go — write code to workspace
+                  </button>
+                ) : null}
                 {message.filePreview ? <ChatFilePreview preview={message.filePreview} /> : null}
               </div>
               <p className="type-label-sm mt-0.5 opacity-80">{message.timestamp}</p>

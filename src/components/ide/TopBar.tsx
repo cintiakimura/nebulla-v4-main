@@ -5,10 +5,15 @@ import { Logo } from '@/components/Logo';
 import { getBrowserProjectName } from '../../lib/nebulaProjectApi';
 import { useClickOutside } from '../../lib/useClickOutside';
 import { type IdeChatModelId, useIdeWorkspace } from '@/components/ide/IdeWorkspaceContext';
+import { AI_CHAT_MODELS, AI_PROVIDER_LABELS } from '../../lib/aiProvider';
 
-const models: { id: IdeChatModelId; name: string; badge: string | null }[] = [
-  { id: 'grok-4', name: 'Grok', badge: 'Latest' },
-];
+const models: { id: IdeChatModelId; name: string; badge: string | null }[] = AI_CHAT_MODELS.map(
+  (m) => ({
+    id: m.id,
+    name: `${m.label}`,
+    badge: m.provider === 'xai' && m.id === 'grok-4.1' ? 'Default' : AI_PROVIDER_LABELS[m.provider],
+  }),
+);
 
 export function TopBar({
   workspaceLabel,

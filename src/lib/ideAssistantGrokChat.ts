@@ -12,6 +12,11 @@ import {
   formatWorkspaceEnrichmentBlock,
 } from './ideWorkspaceChatContext';
 import { buildNebulaAssistantSystemPrompt } from './nebulaAssistantSystemPrompt';
+import {
+  DEFAULT_AI_CHAT_MODEL,
+  resolveAiChatSelection,
+  type AiChatModelId,
+} from './aiProvider';
 
 export type IdeChatTurnMessage = { role: 'user' | 'assistant' | 'system'; content: string };
 
@@ -47,7 +52,8 @@ export async function fetchMasterPlanAndUiStudio(): Promise<{
 }
 
 /**
- * One Grok chat turn for the IDE panel — `/api/grok/chat` with workspace path + mode on every request.
+ * One assistant chat turn for the IDE panel — `/api/grok/chat` with workspace path + mode on every request.
+ * Provider/model come from ModelSelector / TopBar (default Grok).
  */
 export async function sendIdeAssistantGrokTurn(options: {
   textToSend: string;
@@ -56,10 +62,13 @@ export async function sendIdeAssistantGrokTurn(options: {
   projectName: string;
   ideAppendix: string;
   buildMode?: boolean;
+  /** Catalog model id from ModelSettings / TopBar. */
+  chatModel?: AiChatModelId | string;
   signal?: AbortSignal;
 }): Promise<{ assistantContent: string; planningPhase: string; claudeFallbackNotice?: string }> {
   const { textToSend, history, userId, projectName, ideAppendix, signal } = options;
   const buildMode = options.buildMode ?? detectBuildModeIntent(textToSend);
+  const selection = resolveAiChatSelection(options.chatModel ?? DEFAULT_AI_CHAT_MODEL);
 
   const [wsMeta, planCtx, overview] = await Promise.all([
     fetchIdeWorkspaceMeta(true),
@@ -74,7 +83,10 @@ export async function sendIdeAssistantGrokTurn(options: {
   });
 
   let systemPrompt =
-    buildNebulaAssistantSystemPrompt(latestMP, uiStudioApprovedCode) +
+    buildNebulaAssistantSystemPrompt(latestMP, uiStudioApprovedCode, {
+      providerLabel: selection.providerLabel,
+      modelLabel: selection.label,
+    }) +
     `\n\n${IDE_CHAT_EXECUTION_APPENDIX}` +
     (buildMode ? `\n\n${buildModeSystemAppendix()}` : '') +
     (ideAppendix.trim()
@@ -109,7 +121,8 @@ export async function sendIdeAssistantGrokTurn(options: {
       withProjectBody({
         userId,
         projectName: projectName || wsMeta.projectName,
-        chatModel: 'grok-4',
+        chatModel: selection.chatModel,
+        aiProvider: selection.aiProvider,
         buildMode,
         workspaceContext,
         onboardingAutopilot: false,

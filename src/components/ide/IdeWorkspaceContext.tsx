@@ -20,6 +20,12 @@ import {
   IDE_SWARM_FOCUS_SNIPPET_MAX,
   syncWindowSwarmFocusFromPayload,
 } from '../../lib/ideSwarmFocus';
+import {
+  AI_CHAT_MODELS,
+  DEFAULT_AI_CHAT_MODEL,
+  normalizeAiChatModelId,
+  type AiChatModelId,
+} from '../../lib/aiProvider';
 
 export type EditorTab = {
   path: string;
@@ -28,9 +34,9 @@ export type EditorTab = {
   loading: boolean;
 };
 
-/** IDE right-sidebar chat uses Grok + server main AI key only (project execution rules). */
-export const IDE_CHAT_MODELS = ['grok-4'] as const;
-export type IdeChatModelId = (typeof IDE_CHAT_MODELS)[number];
+/** IDE chat model catalog (Grok default; Claude / OpenAI via ModelSelector + TopBar). */
+export const IDE_CHAT_MODELS = AI_CHAT_MODELS.map((m) => m.id);
+export type IdeChatModelId = AiChatModelId;
 
 type IdeWorkspaceValue = {
   /** Browser/server disk scope for APIs (guest UUID, `default`, etc.) — bumps after `refreshTree`. */
@@ -73,7 +79,13 @@ export function IdeWorkspaceProvider({ children }: { children: ReactNode }) {
   const [overviewError, setOverviewError] = useState<string | null>(null);
   const [tabs, setTabs] = useState<EditorTab[]>([]);
   const [activePath, setActivePath] = useState<string | null>(null);
-  const [chatModel, setChatModelState] = useState<IdeChatModelId>('grok-4');
+  const [chatModel, setChatModelState] = useState<IdeChatModelId>(() => {
+    try {
+      return normalizeAiChatModelId(localStorage.getItem('nebula-chat-model-family'));
+    } catch {
+      return DEFAULT_AI_CHAT_MODEL;
+    }
+  });
   const [saveError, setSaveError] = useState<string | null>(null);
   const tabsRef = useRef(tabs);
   tabsRef.current = tabs;
@@ -86,7 +98,14 @@ export function IdeWorkspaceProvider({ children }: { children: ReactNode }) {
   );
 
   const setChatModel = useCallback((id: IdeChatModelId) => {
-    setChatModelState(id);
+    const next = normalizeAiChatModelId(id);
+    setChatModelState(next);
+    try {
+      localStorage.setItem('nebula-chat-model-family', next);
+      window.dispatchEvent(new CustomEvent('nebula-chat-model-changed', { detail: { modelId: next } }));
+    } catch {
+      /* ignore */
+    }
   }, []);
 
   const refreshTree = useCallback(async () => {

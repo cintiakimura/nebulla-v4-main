@@ -189,11 +189,19 @@ export function MyServicesOnboarding({
                   <Github className="w-6 h-6 shrink-0" aria-hidden />
                   Login with GitHub
                 </button>
-                {!githubOk && cloudOk ? (
+                {!githubOk ? (
                   <p className="text-xs text-amber-400/90">
-                    GitHub OAuth is not configured on this host. Ask your admin for{' '}
-                    <code className="text-slate-400">GITHUB_CLIENT_ID</code> /{' '}
-                    <code className="text-slate-400">GITHUB_CLIENT_SECRET</code>.
+                    {config.githubClientIdConfigured && !config.githubClientSecretConfigured ? (
+                      <>
+                        Add <code className="text-slate-400">GITHUB_CLIENT_SECRET</code> to{' '}
+                        <code className="text-slate-400">.env</code> (CLIENT_ID alone is not enough), then restart.
+                      </>
+                    ) : (
+                      <>
+                        GitHub OAuth needs both <code className="text-slate-400">GITHUB_CLIENT_ID</code> and{' '}
+                        <code className="text-slate-400">GITHUB_CLIENT_SECRET</code> on the server.
+                      </>
+                    )}
                   </p>
                 ) : null}
                 <label className="flex items-center gap-2 text-xs text-slate-500 cursor-pointer select-none">

@@ -435,7 +435,8 @@ export function AssistantSidebar({
           withProjectBody({
             userId,
             projectName,
-            chatModel: modelSettings.chatModel,
+            chatModel: modelSettings.selection.chatModel,
+            aiProvider: modelSettings.selection.aiProvider,
             onboardingAutopilot: Boolean(opts?.onboardingAutopilot),
             messages: opts?.onboardingAutopilot
               ? [{ role: 'user', content: textToSend }]

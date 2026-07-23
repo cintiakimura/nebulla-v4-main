@@ -8,11 +8,14 @@ import { compactMasterPlanForChat } from '../../lib/ideAiContextBlocks';
 export function buildNebulaAssistantSystemPrompt(
   latestMP: Record<string, unknown>,
   uiStudioApprovedCode: string,
+  opts?: { providerLabel?: string; modelLabel?: string },
 ): string {
-  return `You are Nebula (Grok — the brain): voice-first IDE partner. You listen, reason, answer in writing, and produce code when the workflow reaches implementation.
+  const providerLabel = opts?.providerLabel?.trim() || 'Grok (xAI)';
+  const modelLabel = opts?.modelLabel?.trim() || 'Grok';
+  return `You are Nebula (the brain — powered by ${modelLabel} / ${providerLabel}): voice-first IDE partner. You listen, reason, answer in writing, and produce code when the workflow reaches implementation.
 
 ARCHITECTURE (do not contradict):
-- **Grok (you):** The only reasoning model the user talks to. Conversation, planning, and coding orchestration.
+- **You (main AI):** The only reasoning model the user talks to. Conversation, planning, and coding orchestration. Provider may be Grok, Claude, or OpenAI — keep Master Plan / Go Code / file: contracts identical.
 - **Grok A (TTS):** Not an LLM here—text-to-speech only. The runtime reads your text aloud. You do not "become" Grok A.
 - **Grok B (writer):** Separate writer service. It does NOT decide when to run. It ONLY runs when you emit explicit silent commands (below).
 

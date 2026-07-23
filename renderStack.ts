@@ -202,6 +202,8 @@ export function getRenderPublicConfig() {
     githubOAuthReady: Boolean(
       process.env.GITHUB_CLIENT_ID?.trim() && process.env.GITHUB_CLIENT_SECRET?.trim()
     ),
+    githubClientIdConfigured: Boolean(process.env.GITHUB_CLIENT_ID?.trim()),
+    githubClientSecretConfigured: Boolean(process.env.GITHUB_CLIENT_SECRET?.trim()),
     /** When false, new projects get a synthetic `local-…` id (Render project API not configured). */
     renderWorkspaceApiReady: Boolean(
       process.env.RENDER_API_KEY?.trim() &&

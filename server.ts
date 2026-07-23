@@ -43,6 +43,11 @@ import {
   FREE_TIER_MONTHLY_LIMIT_MESSAGE,
 } from "./lib/nebulaMainGrokResolver";
 import { callClaudeChatCompletion } from "./lib/nebulaClaudeFallback";
+import {
+  resolveApiKeyForProvider,
+  runAiChatCompletion,
+  toOpenAiStyleChatResponse,
+} from "./lib/aiChatCompletion";
 import { formatWorkspaceFileIndexBlock } from "./lib/ideAiContextBlocks";
 import {
   bootstrapMasterPlanFromWorkspace,
@@ -3831,32 +3836,40 @@ ${workflowContext}`;
     const buildMode = Boolean(body.buildMode);
     const workspaceContextFromClient =
       typeof body.workspaceContext === "string" ? body.workspaceContext.trim() : "";
-    const keyRes = await resolveMainGrokApiKeyDetailed(req);
+    const clientChatModel = typeof body.chatModel === "string" ? body.chatModel.trim() : "";
+    const clientAiProviderRaw =
+      typeof body.aiProvider === "string" ? body.aiProvider.trim().toLowerCase() : "";
+    const preferredProvider =
+      clientAiProviderRaw === "anthropic" ||
+      clientAiProviderRaw === "openai" ||
+      clientAiProviderRaw === "xai"
+        ? clientAiProviderRaw
+        : clientChatModel.toLowerCase().includes("claude")
+          ? "anthropic"
+          : clientChatModel.toLowerCase().includes("gpt")
+            ? "openai"
+            : "xai";
 
-    if (keyRes.ok === false) {
-      const status = keyRes.code === "INVALID_LENGTH" ? 400 : 401;
-      console.error(`[grok/chat] ${keyRes.code}: ${keyRes.message}`);
-      return res.status(status).json({
-        error: keyRes.message,
-        code: keyRes.code,
-        hint: keyRes.hint,
-      });
+    const keyProbe = resolveApiKeyForProvider(preferredProvider);
+    if (!keyProbe) {
+      const keyRes = await resolveMainGrokApiKeyDetailed(req);
+      if (keyRes.ok === false) {
+        const status = keyRes.code === "INVALID_LENGTH" ? 400 : 401;
+        console.error(`[grok/chat] ${keyRes.code}: ${keyRes.message}`);
+        return res.status(status).json({
+          error: keyRes.message,
+          code: keyRes.code,
+          hint: keyRes.hint,
+        });
+      }
     }
-    const apiKey = keyRes.apiKey;
-    const mainAiProvider = detectMainAiProvider(apiKey);
+    const mainAiProvider = keyProbe?.provider ?? "xai";
     const convUserId =
       typeof userId === "string" && userId.trim() ? userId.trim() : "anonymous";
     const convProject =
       typeof projectName === "string" && projectName.trim() ? projectName.trim() : "Untitled Project";
     const ppChat = projectPathsFor(req);
     const convScopeChat = { userId: convUserId, projectKey: ppChat.projectKey, projectLabel: convProject };
-
-    /** Default chat model for detected provider; override with MAIN_AI_CHAT_MODEL. */
-    let resolvedModel = resolveMainAiChatModel(mainAiProvider);
-    const clientChatModel = typeof body.chatModel === "string" ? body.chatModel.trim() : "";
-    if (mainAiProvider === "xai" && (clientChatModel === "grok-4" || clientChatModel === "grok-4.1")) {
-      resolvedModel = process.env.GROK_CHAT_MODEL_GROK41?.trim() || "grok-4";
-    }
 
     let messagesForApi: { role: string; content?: string }[] = Array.isArray(messages) ? messages : [];
 
@@ -3973,17 +3986,99 @@ ${answer.slice(0, 8000)}`;
       console.warn("[grok/chat] Unexpected limit check error (continuing):", limitErr);
     }
 
-    if (mainAiProvider === "anthropic") {
-      const claudeResult = await callClaudeChatCompletion(messagesForApi, apiKey, resolvedModel);
-      if (claudeResult.ok === false) {
-        console.error(`[main-ai/chat] Anthropic error (${claudeResult.status}):`, claudeResult.error);
-        return res.status(claudeResult.status >= 400 && claudeResult.status < 600 ? claudeResult.status : 502).json({
-          error: claudeResult.error,
-          provider: "anthropic",
-        });
+    try {
+      const completion = await runAiChatCompletion({
+        messages: messagesForApi,
+        preferredProvider,
+        clientChatModel,
+      });
+
+      if (completion.ok === false) {
+        console.error(
+          `[main-ai/chat] ${completion.provider} error (${completion.status}):`,
+          completion.error,
+        );
+        if (
+          preferredProvider === "xai" &&
+          isGrokQuotaLimitError(completion.status, completion.error)
+        ) {
+          if (await respondWithClaudeQuotaFallback(messagesForApi, convScopeChat, res)) {
+            return;
+          }
+        }
+        const isAuthKeyError =
+          completion.status === 401 ||
+          /invalid.*api.*key|incorrect.*api.*key|unauthor/i.test(completion.error);
+        const onRender =
+          process.env.RENDER === "true" || Boolean(process.env.RENDER_SERVICE_ID?.trim());
+        const renderKeyHint = onRender
+          ? ` On Render: open your web service → Environment → set MAIN_API_KEY_GROK (and optional CLAUDE_API_KEY / OPENAI_API_KEY), save, then redeploy.`
+          : "";
+        return res
+          .status(completion.status >= 400 && completion.status < 600 ? completion.status : 502)
+          .json({
+            error:
+              completion.status === 401
+                ? `AI provider rejected this API key (401). ${completion.error}${renderKeyHint}`
+                : completion.error,
+            provider: completion.provider,
+            ...(isAuthKeyError ? { hint: `${MAIN_AI_KEY_SETUP_HINT}${renderKeyHint}` } : {}),
+          });
       }
-      const responseText = claudeResult.content;
+
+      const responseText = completion.content;
+      /** Planning text — used for Master Plan + Grok B summaries (provider-agnostic). */
+      const planningCapture = responseText;
+
+      // Grok B (writer): run as soon as meaningful summary content appears.
+      const summarySource = planningCapture;
+      const answerTabMatches = [...summarySource.matchAll(/\bANSWER_Q([1-6])\b/gi)];
+      const answerTabs = [...new Set(answerTabMatches.map((m) => parseInt(m[1], 10)))].sort(
+        (a, b) => a - b,
+      );
+      const summaries = extractGrokBSummaries(summarySource);
+      const blockFallbackSummaries = extractSummariesFromMasterPlanBlock(summarySource);
+      const mergedSummaries: Partial<Record<number, string>> = {
+        ...blockFallbackSummaries,
+        ...summaries,
+      };
+      const summaryTabs = Object.keys(mergedSummaries)
+        .map((k) => parseInt(k, 10))
+        .filter((n) => Number.isInteger(n) && n >= 1 && n <= 6)
+        .sort((a, b) => a - b);
+      const shouldRunWriter = answerTabs.length > 0 || summaryTabs.length > 0;
+      if (shouldRunWriter) {
+        const targetTabs = answerTabs.length > 0 ? answerTabs : summaryTabs;
+        const summaryEntries = targetTabs
+          .map((idx) => {
+            const summary = mergedSummaries[idx];
+            return summary ? ({ tabIndex: idx, summary } as const) : null;
+          })
+          .filter((entry): entry is { tabIndex: number; summary: string } => entry !== null);
+
+        if (summaryEntries.length === 0) {
+          console.warn("[GROK B] Trigger ignored: missing <GROK_B_SUMMARY_Qn> payload.");
+        } else {
+          appendWriterAuditEvent({
+            userId: convUserId,
+            projectKey: ppChat.projectKey,
+            projectName: convProject,
+            triggeredQn: summaryEntries.map((x) => x.tabIndex),
+          });
+          console.log(
+            `[GROK B] Trigger: ANSWER_Q tabs=${summaryEntries.map((x) => x.tabIndex).join(",")}`,
+          );
+          runGrokB(projectPathsFor(req).masterPlanPath, summaryEntries).catch((err) => {
+            console.error("[GROK B] Failed to update Master Plan:", err);
+          });
+        }
+      }
+
       const cleanText = stripAssistantTagsForMemory(responseText);
+      if (cleanText) {
+        console.log("[TTS] Response ready for speech:", cleanText.substring(0, 50) + "...");
+      }
+
       try {
         const lastUser = [...messagesForApi].reverse().find((m) => m.role === "user");
         if (lastUser && typeof lastUser.content === "string" && lastUser.content.length > 0) {
@@ -3993,166 +4088,39 @@ ${answer.slice(0, 8000)}`;
           appendConversationTurn(convScopeChat, "assistant", cleanText);
         }
       } catch (logErr) {
-        console.error("Conversation memory append failed (Anthropic):", logErr);
-      }
-      return res.json({
-        choices: [{ message: { content: responseText } }],
-        mainAiProvider: "anthropic",
-        mainAiModel: resolvedModel,
-      });
-    }
-
-    if (mainAiProvider === "openai") {
-      return res.status(501).json({
-        error:
-          "OpenAI keys in MAIN_API_KEY_GROK are not wired yet. Use an xAI (xai-…) or Anthropic (sk-ant-…) key, or set CLAUDE_API_KEY for Grok quota fallback.",
-        provider: "openai",
-      });
-    }
-
-    try {
-      const response = await fetch("https://api.x.ai/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${apiKey}`,
-        },
-        body: JSON.stringify({
-          model: resolvedModel,
-          messages: messagesForApi,
-          stream: false,
-        }),
-      });
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error(`GROK API error (${response.status}):`, errorText.slice(0, 500));
-        if (mainAiProvider === "xai" && isGrokQuotaLimitError(response.status, errorText)) {
-          if (await respondWithClaudeQuotaFallback(messagesForApi, convScopeChat, res)) {
-            return;
-          }
-        }
-        let parsed: Record<string, unknown> = {};
-        try {
-          parsed = JSON.parse(errorText) as Record<string, unknown>;
-        } catch {
-          parsed = {};
-        }
-        const upstreamMsg =
-          (typeof parsed.error === "string" && parsed.error) ||
-          (typeof parsed.message === "string" && parsed.message) ||
-          errorText.slice(0, 400);
-        const isAuthKeyError =
-          response.status === 401 ||
-          /invalid.*api.*key|incorrect.*api.*key|unauthor/i.test(String(upstreamMsg));
-        const onRender = process.env.RENDER === "true" || Boolean(process.env.RENDER_SERVICE_ID?.trim());
-        const renderKeyHint = onRender
-          ? ` On Render: open your web service → Environment → set MAIN_API_KEY_GROK to a fresh key from https://console.x.ai (no quotes), save, then redeploy.`
-          : "";
-        const hint = isAuthKeyError ? `${MAIN_AI_KEY_SETUP_HINT}${renderKeyHint}` : undefined;
-        return res.status(response.status).json({
-          ...parsed,
-          error:
-            response.status === 401
-              ? `Main AI provider rejected this API key (401). ${upstreamMsg}${renderKeyHint}`
-              : upstreamMsg,
-          provider: mainAiProvider,
-          ...(hint ? { hint } : {}),
-        });
-      }
-
-      const data = await response.json();
-      let responseText = data.choices?.[0]?.message?.content || "";
-      /** Grok 4 planning text — used for Master Plan + Grok B summaries. */
-      const grok4PlanningCapture = responseText;
-
-      // START_CODING: return Grok-4 planning immediately; IDE runs Grok Code via /api/grok/go-code
-      // with live activity (avoids blocking this request for minutes with no client feedback).
-
-  // Grok B (writer): run as soon as meaningful summary content appears.
-  // ANSWER_Qn still works, but summaries alone are enough to start writing immediately.
-  const summarySource = grok4PlanningCapture;
-  const answerTabMatches = [...summarySource.matchAll(/\bANSWER_Q([1-6])\b/gi)];
-  const answerTabs = [...new Set(answerTabMatches.map((m) => parseInt(m[1], 10)))].sort(
-    (a, b) => a - b
-  );
-  const summaries = extractGrokBSummaries(summarySource);
-  const blockFallbackSummaries = extractSummariesFromMasterPlanBlock(summarySource);
-  const mergedSummaries: Partial<Record<number, string>> = {
-    ...blockFallbackSummaries,
-    ...summaries,
-  };
-  const summaryTabs = Object.keys(mergedSummaries)
-    .map((k) => parseInt(k, 10))
-    .filter((n) => Number.isInteger(n) && n >= 1 && n <= 6)
-    .sort((a, b) => a - b);
-  const shouldRunWriter = answerTabs.length > 0 || summaryTabs.length > 0;
-  if (shouldRunWriter) {
-    const targetTabs = answerTabs.length > 0 ? answerTabs : summaryTabs;
-    const summaryEntries = targetTabs
-      .map((idx) => {
-        const summary = mergedSummaries[idx];
-        return summary ? ({ tabIndex: idx, summary } as const) : null;
-      })
-      .filter((entry): entry is { tabIndex: number; summary: string } => entry !== null);
-
-    if (summaryEntries.length === 0) {
-      console.warn("[GROK B] Trigger ignored: missing <GROK_B_SUMMARY_Qn> payload.");
-    } else {
-      appendWriterAuditEvent({
-        userId: convUserId,
-        projectKey: ppChat.projectKey,
-        projectName: convProject,
-        triggeredQn: summaryEntries.map((x) => x.tabIndex),
-      });
-      console.log(
-        `[GROK B] Trigger: ANSWER_Q tabs=${summaryEntries.map((x) => x.tabIndex).join(",")}`
-      );
-      runGrokB(projectPathsFor(req).masterPlanPath, summaryEntries).catch((err) => {
-        console.error("[GROK B] Failed to update Master Plan:", err);
-      });
-    }
-  }
-
-      const cleanText = stripAssistantTagsForMemory(responseText);
-
-      if (cleanText) {
-        // Voice chat flow: Audio is now handled via direct /api/speak endpoint to avoid base64 overhead
-        console.log("[TTS] Response ready for speech:", cleanText.substring(0, 50) + "...");
-      }
-
-      try {
-        const lastUser = [...messagesForApi]
-          .reverse()
-          .find((m) => m.role === "user");
-        if (lastUser && typeof lastUser.content === "string" && lastUser.content.length > 0) {
-          appendConversationTurn(convScopeChat, "user", lastUser.content);
-        }
-        if (cleanText) {
-          // Persist only user-visible assistant text; never store internal control tags in memory logs.
-          appendConversationTurn(convScopeChat, "assistant", cleanText);
-        }
-      } catch (logErr) {
         console.error("Conversation memory append failed:", logErr);
       }
 
-      // We return the full responseText to the frontend so it can maintain state.
-      // The frontend will be responsible for stripping tags for display.
       try {
-        const mainTok = xaiUsageTotal(data.usage);
+        const mainTok = completion.usage.totalTokens;
         if (convUserId !== "anonymous" && mainTok > 0) {
-          await addTokens(convUserId, mainTok, "grok-4");
+          await addTokens(
+            convUserId,
+            mainTok,
+            completion.provider === "xai" ? "grok-4" : "grok-4",
+          );
         }
       } catch (btErr) {
         console.warn("[billing] addTokens:", btErr);
       }
-      res.json(data);
+
+      const payload = toOpenAiStyleChatResponse(completion);
+      if (completion.fallbackNotice) {
+        (payload as { claudeFallbackNotice?: string }).claudeFallbackNotice =
+          completion.fallbackNotice;
+      }
+      res.json(payload);
     } catch (error) {
-      console.error("Error calling GROK API:", error);
+      console.error("Error calling main AI chat:", error);
       captureError(error instanceof Error ? error : new Error(String(error)), {
         source: "server",
         route: "/api/grok/chat",
       });
-      res.status(500).json({ error: "Failed to call GROK API", details: error instanceof Error ? error.message : String(error) });
+      res.status(500).json({
+        error: "Failed to call AI chat API",
+        details: error instanceof Error ? error.message : String(error),
+        provider: mainAiProvider,
+      });
     }
   });
 

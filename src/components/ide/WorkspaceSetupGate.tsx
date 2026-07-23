@@ -70,20 +70,32 @@ export function WorkspaceSetupGate({ onReady }: { onReady: (ctx: WorkspaceContex
         setUser(result.user);
         setProjects(result.projects);
       }
-      // Only auto-enter guest when the user last chose guest (or DB is unavailable).
+      // Local / no Postgres: always continue as guest so development is unblocked.
+      if (result.status === 'no_database') {
+        setWorkspaceModePreference('guest');
+        const g = bindGuestWorkspace();
+        finishReady({
+          projectName: g.projectName,
+          projectKey: g.projectKey,
+          user: null,
+          mode: 'guest',
+        });
+        return;
+      }
+      // Only auto-enter guest when the user last chose guest.
       // Never silently drop a cloud login into guest — that felt like "logged out on refresh".
       if (result.status === 'needs_login') {
         if (getWorkspaceModePreference() === 'guest') {
-          handleGuestContinue();
+          const g = bindGuestWorkspace();
+          finishReady({
+            projectName: g.projectName,
+            projectKey: g.projectKey,
+            user: null,
+            mode: 'guest',
+          });
           return;
         }
         // Show sign-in UI (Stay signed in checkbox applies on next login).
-      }
-      if (result.status === 'no_database') {
-        if (getWorkspaceModePreference() === 'guest' || getWorkspaceModePreference() === null) {
-          handleGuestContinue();
-          return;
-        }
       }
       if (result.status === 'error') {
         setError(result.message);
@@ -266,9 +278,13 @@ export function WorkspaceSetupGate({ onReady }: { onReady: (ctx: WorkspaceContex
 
         {phase.status === 'no_database' ? (
           <div className="space-y-3 text-sm text-slate-400">
-            <p>
-              Cloud projects need <code className="text-cyan-300/90">DATABASE_URL</code> on the server. Without it,
-              GitHub login and file storage cannot run.
+            <p className="rounded-lg border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-amber-100/95">
+              Cloud features need <code className="text-cyan-200/90">DATABASE_URL</code>. Continuing as guest.
+            </p>
+            <p className="text-xs leading-relaxed text-slate-500">
+              {config.databaseConnectionFailed
+                ? 'Postgres did not connect — use Render’s External database URL, or remove DATABASE_URL for guest-only local work.'
+                : 'Without a database, GitHub login and cloud projects cannot run. Local files still work in guest mode.'}
             </p>
             <button
               type="button"
@@ -282,6 +298,18 @@ export function WorkspaceSetupGate({ onReady }: { onReady: (ctx: WorkspaceContex
 
         {phase.status === 'needs_login' ? (
           <div className="space-y-4">
+            {(config.databaseConnectionFailed || !cloudOk) && (
+              <p className="rounded-lg border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-xs text-amber-100/95">
+                Cloud features need <code className="text-cyan-200/90">DATABASE_URL</code>. Continuing as guest is
+                available below.
+              </p>
+            )}
+            {!githubOk && config.githubClientIdConfigured && !config.githubClientSecretConfigured ? (
+              <p className="rounded-lg border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-xs text-amber-100/95">
+                GitHub login needs <code className="text-cyan-200/90">GITHUB_CLIENT_SECRET</code> in{' '}
+                <code className="text-slate-400">.env</code> (CLIENT_ID alone is not enough).
+              </p>
+            ) : null}
             <p className="text-sm text-slate-400 leading-relaxed">
               Sign in with <strong className="font-normal text-slate-200">email</strong> or GitHub to save projects to
               the cloud. Grok receives your project name, workspace path, file index, and Master Plan on every message.

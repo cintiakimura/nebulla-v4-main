@@ -33,6 +33,7 @@ import {
 import { navIdToCenterPane } from '../../lib/ideCenterPanes';
 import { registerNebulaUiStudioBridge } from '../../lib/nebulaUiStudioEvents';
 import { shouldShowWelcomeOnboarding } from '../../lib/nebulaWelcomeOnboarding';
+import { cloudBlockedBannerMessage } from '../../lib/ideCloudStatus';
 
 const EXPLORER_MIN = 160;
 const EXPLORER_MAX = 480;
@@ -167,6 +168,8 @@ function NebullaIDEShell() {
   const [workspaceCtx, setWorkspaceCtx] = useState<WorkspaceContext | null>(null);
   const [workspaceProjectKey, setWorkspaceProjectKey] = useState(() => getBrowserProjectKey());
   const [welcomeOpen, setWelcomeOpen] = useState(false);
+  const [cloudBanner, setCloudBanner] = useState<string | null>(null);
+  const [cloudBannerDismissed, setCloudBannerDismissed] = useState(false);
   const welcomeCheckedRef = useRef(false);
 
   const refreshMyServicesContext = useCallback(async () => {
@@ -193,6 +196,7 @@ function NebullaIDEShell() {
   const handleWorkspaceReady = useCallback((ctx: WorkspaceContext) => {
     setWorkspaceCtx(ctx);
     setWorkspaceProjectKey(ctx.projectKey);
+    setCloudBannerDismissed(false);
   }, []);
 
   /** After WorkspaceSetupGate: optional first-time welcome (non-blocking). */
@@ -202,6 +206,12 @@ function NebullaIDEShell() {
     const projectKey = workspaceCtx.projectKey || getBrowserProjectKey();
     void (async () => {
       const { cfg, u } = await refreshMyServicesContext();
+      const banner = cloudBlockedBannerMessage(cfg);
+      if (banner && (workspaceCtx.mode === 'guest' || !cfg.cloudStorageReady)) {
+        setCloudBanner(banner);
+      } else {
+        setCloudBanner(null);
+      }
       const show = shouldShowWelcomeOnboarding({
         projectKey,
         hasServerMainAiKey: Boolean(cfg.hasMainAiApiKey),
@@ -228,6 +238,12 @@ function NebullaIDEShell() {
     if (!myServicesOpen) return;
     void refreshMyServicesContext();
   }, [myServicesOpen, refreshMyServicesContext]);
+
+  useEffect(() => {
+    const openMyServices = () => setMyServicesOpen(true);
+    window.addEventListener('nebula-open-my-services', openMyServices);
+    return () => window.removeEventListener('nebula-open-my-services', openMyServices);
+  }, []);
 
   useEffect(() => {
     const onMsg = (ev: MessageEvent) => {
@@ -347,6 +363,22 @@ function NebullaIDEShell() {
         onSwitchWorkspace={() => setWorkspaceCtx(null)}
         onOpenAccount={() => setMyServicesOpen(true)}
       />
+
+      {cloudBanner && !cloudBannerDismissed && workspaceCtx ? (
+        <div
+          className="flex shrink-0 items-start gap-3 border-b border-amber-500/25 bg-amber-500/10 px-4 py-2.5 text-xs leading-relaxed text-amber-50/95 sm:items-center sm:text-[13px]"
+          role="status"
+        >
+          <p className="min-w-0 flex-1">{cloudBanner}</p>
+          <button
+            type="button"
+            onClick={() => setCloudBannerDismissed(true)}
+            className="shrink-0 rounded-md border border-amber-500/30 px-2 py-1 text-[11px] text-amber-100/90 hover:bg-amber-500/15"
+          >
+            Dismiss
+          </button>
+        </div>
+      ) : null}
 
       <div className="flex flex-1 overflow-hidden">
         <VerticalNav activeItem={navActiveItem} onSelectItem={selectNavItem} />

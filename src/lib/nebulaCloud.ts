@@ -394,7 +394,8 @@ export type WorkspaceReadyResult =
  */
 export async function ensureCloudWorkspaceReady(): Promise<WorkspaceReadyResult> {
   const config = await fetchNebulaPublicConfig();
-  if (!config.cloudStorageReady) {
+  // Postgres unavailable / not configured — local guest mode (no cloud login).
+  if (!config.cloudStorageReady || config.databaseConnectionFailed) {
     return { status: 'no_database', config };
   }
 

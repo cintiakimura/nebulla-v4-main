@@ -1,6 +1,10 @@
 export type NebulaPublicConfig = {
   cloudStorageReady?: boolean;
   githubOAuthReady?: boolean;
+  /** True when GITHUB_CLIENT_ID is set (secret may still be missing). */
+  githubClientIdConfigured?: boolean;
+  /** True when GITHUB_CLIENT_SECRET is set. */
+  githubClientSecretConfigured?: boolean;
   databaseConnectionFailed?: boolean;
   databaseUrlConfigured?: boolean;
   pencilMockupsReady?: boolean;
