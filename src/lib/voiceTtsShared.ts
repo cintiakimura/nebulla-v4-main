@@ -1,6 +1,7 @@
 /**
  * Voice + TTS helpers aligned with `nebula-project/project-execution-rules.md`:
  * - TTS starts as soon as Grok text is available (chunked playback for latency).
+ * - First chunk is kept short so synthesis + first audio start sooner.
  * - Mic stays off while TTS runs; re-enable only after `MIC_REENABLE_AFTER_TTS_MS` quiet period.
  * - IDE Open Talk: min speaking window, pause grace, then silence before auto-send.
  */
@@ -16,9 +17,15 @@ export const OPEN_TALK_SILENCE_SEND_MS = 2_800;
 
 /** Push-to-talk / Assistant sidebar single-shot silence before send. */
 export const VOICE_SILENCE_BEFORE_SEND_MS = 1800;
-/** First audio chunk: start immediately once Grok body is ready. */
+/** First audio chunk: start immediately once Grok body is ready (no artificial delay). */
 export const TTS_START_DEBOUNCE_MS = 0;
-export const MAX_TTS_CHUNK_CHARS = 560;
+/** Keep follow-up chunks reasonably sized for fewer round-trips. */
+export const MAX_TTS_CHUNK_CHARS = 420;
+/**
+ * First spoken unit — short so xAI TTS returns faster and playback can start
+ * while later chunks are prefetched.
+ */
+export const FIRST_TTS_CHUNK_CHARS = 140;
 
 export function stripForTtsSpokenText(s: string): string {
   return s
@@ -28,40 +35,67 @@ export function stripForTtsSpokenText(s: string): string {
     .replace(/^#{1,6}\s+/gm, '');
 }
 
+function pushChunked(chunks: string[], text: string, maxChars: number): void {
+  const t = text.trim();
+  if (!t) return;
+  if (t.length <= maxChars) {
+    chunks.push(t);
+    return;
+  }
+  for (let i = 0; i < t.length; i += maxChars) {
+    const piece = t.slice(i, i + maxChars).trim();
+    if (piece) chunks.push(piece);
+  }
+}
+
+/**
+ * Split spoken text into TTS requests. The first chunk is biased short so
+ * audio can start within ~first sentence while the rest is synthesized.
+ */
 export function splitTextForTts(text: string): string[] {
-  const t = stripForTtsSpokenText(text);
-  const paras = t
-    .split(/\n\s*\n/)
-    .map((p) => p.replace(/\s+/g, ' ').trim())
-    .filter(Boolean);
+  const t = stripForTtsSpokenText(text).replace(/\s+/g, ' ').trim();
+  if (!t) return [];
+
   const chunks: string[] = [];
-  for (const para of paras) {
-    if (para.length <= MAX_TTS_CHUNK_CHARS) {
-      chunks.push(para);
-      continue;
-    }
-    const sentences = para.match(/[^.!?]+[.!?]+|[^.!?]+$/g) || [para];
-    let buf = '';
-    for (const raw of sentences) {
-      const s = raw.trim();
-      if (!s) continue;
-      const next = buf ? `${buf} ${s}` : s;
-      if (next.length <= MAX_TTS_CHUNK_CHARS) {
-        buf = next;
+
+  // Prefer a natural first break: sentence end, then comma/semicolon, then hard cut.
+  let firstEnd = -1;
+  const sentenceHit = t.slice(0, FIRST_TTS_CHUNK_CHARS + 80).match(/^[\s\S]{20,}?[.!?](?:\s|$)/);
+  if (sentenceHit) {
+    firstEnd = sentenceHit[0].trimEnd().length;
+  } else {
+    const soft = t.slice(0, FIRST_TTS_CHUNK_CHARS + 40).match(/^[\s\S]{24,}?[,;:](?:\s|$)/);
+    if (soft) firstEnd = soft[0].trimEnd().length;
+    else firstEnd = Math.min(FIRST_TTS_CHUNK_CHARS, t.length);
+  }
+  if (firstEnd < 12) firstEnd = Math.min(FIRST_TTS_CHUNK_CHARS, t.length);
+
+  const first = t.slice(0, firstEnd).trim();
+  const rest = t.slice(firstEnd).trim();
+  if (first) chunks.push(first);
+  if (!rest) return chunks;
+
+  const paras = rest
+    .split(/(?<=[.!?])\s+/)
+    .map((p) => p.trim())
+    .filter(Boolean);
+
+  let buf = '';
+  for (const s of paras) {
+    const next = buf ? `${buf} ${s}` : s;
+    if (next.length <= MAX_TTS_CHUNK_CHARS) {
+      buf = next;
+    } else {
+      if (buf) chunks.push(buf);
+      if (s.length <= MAX_TTS_CHUNK_CHARS) {
+        buf = s;
       } else {
-        if (buf) chunks.push(buf);
-        if (s.length <= MAX_TTS_CHUNK_CHARS) {
-          buf = s;
-        } else {
-          for (let i = 0; i < s.length; i += MAX_TTS_CHUNK_CHARS) {
-            chunks.push(s.slice(i, i + MAX_TTS_CHUNK_CHARS).trim());
-          }
-          buf = '';
-        }
+        pushChunked(chunks, s, MAX_TTS_CHUNK_CHARS);
+        buf = '';
       }
     }
-    if (buf) chunks.push(buf);
   }
+  if (buf) chunks.push(buf);
   return chunks.filter(Boolean);
 }
 

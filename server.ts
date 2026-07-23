@@ -3,6 +3,7 @@ import path from "path";
 import express from "express";
 import fs from "fs";
 import { exec, execFile, spawn } from "child_process";
+import { Readable } from "stream";
 import { promisify } from "util";
 
 const execFileAsync = promisify(execFile);
@@ -4151,20 +4152,48 @@ ${answer.slice(0, 8000)}`;
     if (!text) return res.status(400).json({ error: "Text is required" });
 
     try {
-      const audio = await speak(text);
+      const t0 = Date.now();
+      const upstream = await speakUpstream(text);
+      if (!upstream.body) {
+        const audio = Buffer.from(await upstream.arrayBuffer());
+        res.set({
+          "Content-Type": "audio/mpeg",
+          "Content-Length": audio.length.toString(),
+          "Cache-Control": "no-store",
+        });
+        res.send(audio);
+        console.log(`[TTS] buffered speak ${Date.now() - t0}ms (${audio.length}b)`);
+        return;
+      }
+
+      res.status(200);
       res.set({
         "Content-Type": "audio/mpeg",
-        "Content-Length": audio.length.toString(),
-        "Cache-Control": "public, max-age=3600",
+        "Cache-Control": "no-store",
+        // Discourage reverse-proxy buffering so the browser can start sooner.
+        "X-Accel-Buffering": "no",
       });
-      res.send(audio);
+      // Chunked transfer — do not set Content-Length.
+      const nodeStream = Readable.fromWeb(upstream.body as import("stream/web").ReadableStream);
+      console.log(`[TTS] streaming speak start ${Date.now() - t0}ms (chars=${text.length})`);
+      nodeStream.on("error", (err) => {
+        console.error("[TTS] upstream stream error:", err);
+        if (!res.headersSent) {
+          res.status(500).json({ error: "TTS failed" });
+        } else {
+          res.destroy(err);
+        }
+      });
+      nodeStream.pipe(res);
     } catch (error) {
       console.error("TTS endpoint failed:", error);
       captureError(error instanceof Error ? error : new Error(String(error)), {
         source: "server",
         route: "/api/speak",
       });
-      res.status(500).json({ error: "TTS failed" });
+      if (!res.headersSent) {
+        res.status(500).json({ error: "TTS failed" });
+      }
     }
   };
 
@@ -4261,10 +4290,10 @@ startServer().catch((err) => {
   process.exit(1);
 });
 
-async function speak(text: string): Promise<Buffer> {
-  // Use new Grok TTS API key for speech generation.
+/** Open upstream Grok TTS and return the Response (body streamed — do not buffer). */
+async function speakUpstream(text: string): Promise<Response> {
   const apiKey = process.env.GROK_TTS_NEW_API_KEY;
-  
+
   if (!apiKey) {
     throw new Error("GROK_TTS_NEW_API_KEY is not set. Please check your environment variables.");
   }
@@ -4272,7 +4301,7 @@ async function speak(text: string): Promise<Buffer> {
   const response = await fetch("https://api.x.ai/v1/audio/speech", {
     method: "POST",
     headers: {
-      "Authorization": `Bearer ${apiKey}`,
+      Authorization: `Bearer ${apiKey}`,
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
@@ -4284,17 +4313,16 @@ async function speak(text: string): Promise<Buffer> {
   });
 
   if (response.ok) {
-    return Buffer.from(await response.arrayBuffer());
+    return response;
   }
 
   const primaryError = await response.text();
   console.warn(`[TTS] New endpoint failed (${response.status}). Trying compatibility fallback.`);
 
-  // Compatibility fallback while Grok TTS rollout stabilizes across accounts/regions.
   const fallback = await fetch("https://api.x.ai/v1/tts", {
     method: "POST",
     headers: {
-      "Authorization": `Bearer ${apiKey}`,
+      Authorization: `Bearer ${apiKey}`,
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
@@ -4312,11 +4340,17 @@ async function speak(text: string): Promise<Buffer> {
   if (!fallback.ok) {
     const fallbackError = await fallback.text();
     throw new Error(
-      `TTS Error (new=${response.status}, fallback=${fallback.status}) new="${primaryError}" fallback="${fallbackError}"`
+      `TTS Error (new=${response.status}, fallback=${fallback.status}) new="${primaryError}" fallback="${fallbackError}"`,
     );
   }
 
-  return Buffer.from(await fallback.arrayBuffer());
+  return fallback;
+}
+
+/** Buffered helper for any non-streaming callers. */
+async function speak(text: string): Promise<Buffer> {
+  const upstream = await speakUpstream(text);
+  return Buffer.from(await upstream.arrayBuffer());
 }
 
 function extractGrokBSummaries(responseText: string): Partial<Record<number, string>> {

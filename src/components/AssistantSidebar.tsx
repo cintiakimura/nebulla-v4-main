@@ -25,10 +25,9 @@ import { fetchConversationLogEntries } from '../lib/conversationLogClient';
 import { uploadFileToR2 } from '../lib/nebulaStorageClient';
 import {
   MIC_REENABLE_AFTER_TTS_MS,
-  splitTextForTts,
-  TTS_START_DEBOUNCE_MS,
   VOICE_SILENCE_BEFORE_SEND_MS,
 } from '../lib/voiceTtsShared';
+import { playTtsText } from '../lib/ttsPlayback';
 
 import { MASTER_PLAN_SECTION_KEYS, parseMasterPlanBlock } from '../lib/masterPlanSections';
 
@@ -773,101 +772,56 @@ export function AssistantSidebar({
 
           const controller = new AbortController();
           ttsRequestAbortRef.current = controller;
-          ttsDebounceTimerRef.current = window.setTimeout(async () => {
+
+          pauseListeningForOutgoingTts();
+          isAiSpeakingRef.current = true;
+          setIsAiSpeaking(true);
+
+          const resumeIfStillActive = () => {
             if (runId !== ttsRunIdRef.current) return;
+            setIsAiSpeaking(false);
+            isAiSpeakingRef.current = false;
+            (window as any).nebula_currentAudio = null;
+            if (ttsObjectUrlRef.current) {
+              URL.revokeObjectURL(ttsObjectUrlRef.current);
+              ttsObjectUrlRef.current = null;
+            }
+            resumeListeningAfterOutgoingTtsRef.current();
+          };
 
-            const chunks = splitTextForTts(cleanText);
-            if (chunks.length === 0) return;
-
-            pauseListeningForOutgoingTts();
-            isAiSpeakingRef.current = true;
-            setIsAiSpeaking(true);
-
-            const resumeIfStillActive = () => {
-              if (runId !== ttsRunIdRef.current) return;
-              setIsAiSpeaking(false);
-              isAiSpeakingRef.current = false;
-              (window as any).nebula_currentAudio = null;
-              if (ttsObjectUrlRef.current) {
-                URL.revokeObjectURL(ttsObjectUrlRef.current);
-                ttsObjectUrlRef.current = null;
-              }
-              resumeListeningAfterOutgoingTtsRef.current();
-            };
-
-            try {
-              for (let i = 0; i < chunks.length; i++) {
-                if (runId !== ttsRunIdRef.current || controller.signal.aborted) {
-                  resumeIfStillActive();
-                  return;
-                }
-                const speakRes = await fetch('/api/speak', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ text: chunks[i] }),
-                  signal: controller.signal,
-                });
-                if (!speakRes.ok) {
-                  const errBody = await speakRes.text();
-                  throw new Error(`TTS request failed (${speakRes.status}): ${errBody.slice(0, 140)}`);
-                }
-                const audioBlob = await speakRes.blob();
-                const audioUrl = URL.createObjectURL(audioBlob);
-                if (ttsObjectUrlRef.current) URL.revokeObjectURL(ttsObjectUrlRef.current);
-                ttsObjectUrlRef.current = audioUrl;
-
-                await new Promise<void>((resolve) => {
-                  if (runId !== ttsRunIdRef.current) {
-                    URL.revokeObjectURL(audioUrl);
-                    resolve();
-                    return;
+          const t0 = performance.now();
+          void playTtsText({
+            text: cleanText,
+            speakUrl: '/api/speak',
+            signal: controller.signal,
+            onAudio: (audio) => {
+              (window as any).nebula_currentAudio = audio;
+              if (audio) {
+                ttsChunkPlayResolveRef.current = () => {
+                  try {
+                    audio.pause();
+                  } catch {
+                    /* ignore */
                   }
-                  const audio = new Audio(audioUrl);
-                  (window as any).nebula_currentAudio = audio;
-                  let finished = false;
-                  const done = () => {
-                    if (finished) return;
-                    finished = true;
-                    ttsChunkPlayResolveRef.current = null;
-                    try {
-                      URL.revokeObjectURL(audioUrl);
-                    } catch {
-                      /* ignore */
-                    }
-                    if (ttsObjectUrlRef.current === audioUrl) ttsObjectUrlRef.current = null;
-                    resolve();
-                  };
-                  ttsChunkPlayResolveRef.current = done;
-                  audio.onended = done;
-                  audio.onerror = done;
-                  audio.play().catch((e) => {
-                    if (e?.name !== 'AbortError') {
-                      console.error('[TTS] Playback error:', e);
-                    }
-                    done();
-                  });
-                });
+                };
+              } else {
+                ttsChunkPlayResolveRef.current = null;
               }
-
-              resumeIfStillActive();
-            } catch (audioErr: unknown) {
+            },
+          })
+            .then(() => {
+              console.debug(`[TTS] sidebar turn ${Math.round(performance.now() - t0)}ms`);
+            })
+            .catch((audioErr: unknown) => {
               const stale = runId !== ttsRunIdRef.current;
               const aborted = (audioErr as { name?: string })?.name === 'AbortError';
               if (!stale && !aborted) {
                 console.error('[TTS] Chunked speech failed:', audioErr);
               }
-              if (!stale) {
-                setIsAiSpeaking(false);
-                isAiSpeakingRef.current = false;
-                (window as any).nebula_currentAudio = null;
-                if (ttsObjectUrlRef.current) {
-                  URL.revokeObjectURL(ttsObjectUrlRef.current);
-                  ttsObjectUrlRef.current = null;
-                }
-                resumeListeningAfterOutgoingTtsRef.current();
-              }
-            }
-          }, TTS_START_DEBOUNCE_MS);
+            })
+            .finally(() => {
+              if (runId === ttsRunIdRef.current) resumeIfStillActive();
+            });
         } catch (audioErr) {
           if ((audioErr as any)?.name !== 'AbortError') {
             console.error("[TTS] Audio initialization failed:", audioErr);

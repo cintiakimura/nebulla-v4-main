@@ -83,10 +83,9 @@ import {
   OPEN_TALK_MIN_SPEAKING_MS,
   OPEN_TALK_PAUSE_GRACE_MS,
   OPEN_TALK_SILENCE_SEND_MS,
-  splitTextForTts,
   stripAssistantTagsForVoice,
-  TTS_START_DEBOUNCE_MS,
 } from '../../lib/voiceTtsShared';
+import { playTtsText } from '../../lib/ttsPlayback';
 import { IdeGrokActivityPanel } from './IdeGrokActivityPanel';
 
 const IDLE_GROK_ACTIVITY: GrokActivityStatus = {
@@ -1167,6 +1166,43 @@ export function AIChat() {
         !hasGrokFileBlocks(raw) &&
         isShortCodingGoNudge(displayText || raw);
 
+      const spoken = stripAssistantTagsForVoice(
+        shortGoNudge ? SHORT_CODING_GO_SUMMARY : displayText,
+      );
+      const ts = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+      const toAppend: Message[] = [];
+      if (shortGoNudge) {
+        toAppend.push({
+          id: `a-${Date.now()}`,
+          role: 'assistant',
+          content: SHORT_CODING_GO_SUMMARY,
+          timestamp: ts,
+          showGoCta: true,
+          goSummary: displayText.trim() || 'Press Go to generate files in your workspace.',
+        });
+      } else if (displayText.trim()) {
+        toAppend.push({
+          id: `a-${Date.now()}`,
+          role: 'assistant',
+          content: displayText.trim(),
+          timestamp: ts,
+        });
+      }
+      if (toAppend.length > 0) {
+        setMessages((p) => {
+          const next = [...p, ...toAppend];
+          messagesRef.current = next;
+          return next;
+        });
+      }
+
+      // Start TTS as soon as spoken text exists — do not wait for UI pipeline / coding.
+      if (spoken.trim()) {
+        scheduledTts = true;
+        handsFreeResumeAfterTtsRef.current = openTalkDesiredRef.current;
+        void playTtsForText(spoken);
+      }
+
       let masterPlanPipeline: Awaited<ReturnType<typeof runMasterPlanUiPipelineWithV0>> = {};
       if (mpSaved > 0) {
         if (showWorkActivity) {
@@ -1206,36 +1242,6 @@ export function AIChat() {
             /* ignore */
           }
         }
-      }
-
-      const spoken = stripAssistantTagsForVoice(
-        shortGoNudge ? SHORT_CODING_GO_SUMMARY : displayText,
-      );
-      const ts = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-      const toAppend: Message[] = [];
-      if (shortGoNudge) {
-        toAppend.push({
-          id: `a-${Date.now()}`,
-          role: 'assistant',
-          content: SHORT_CODING_GO_SUMMARY,
-          timestamp: ts,
-          showGoCta: true,
-          goSummary: displayText.trim() || 'Press Go to generate files in your workspace.',
-        });
-      } else if (displayText.trim()) {
-        toAppend.push({
-          id: `a-${Date.now()}`,
-          role: 'assistant',
-          content: displayText.trim(),
-          timestamp: ts,
-        });
-      }
-      if (toAppend.length > 0) {
-        setMessages((p) => {
-          const next = [...p, ...toAppend];
-          messagesRef.current = next;
-          return next;
-        });
       }
 
       try {
@@ -1336,11 +1342,6 @@ export function AIChat() {
         dispatchStartUiUxWorkflow({ tab: 'design', autoV0: true });
       }
 
-      if (spoken.trim()) {
-        scheduledTts = true;
-        handsFreeResumeAfterTtsRef.current = openTalkDesiredRef.current;
-        void playTtsForText(spoken);
-      }
     } catch (e) {
       if (codingActivityRef.current) {
         resetCodingActivity();
@@ -1396,116 +1397,65 @@ export function AIChat() {
     setMicCooldown(false);
     setIsTtsPlaying(true);
 
-    ttsDebounceTimerRef.current = window.setTimeout(async () => {
-      ttsDebounceTimerRef.current = null;
+    const resumeHandsFree = openTalkDesiredRef.current;
+    stopVoiceRecognition();
+    pauseHandsFreeListening();
+    handsFreeResumeAfterTtsRef.current = resumeHandsFree;
+
+    const finishPlayback = () => {
       if (runId !== ttsRunIdRef.current) return;
-
-      const chunks = splitTextForTts(plain);
-      if (chunks.length === 0) {
-        setIsTtsPlaying(false);
-        const shouldResume = handsFreeResumeAfterTtsRef.current;
-        handsFreeResumeAfterTtsRef.current = false;
-        if (shouldResume) {
-          clearMicCooldownTimer();
-          micCooldownTimerRef.current = window.setTimeout(() => {
-            micCooldownTimerRef.current = null;
-            setMicCooldown(false);
-            resumeOpenTalkIfWanted();
-          }, MIC_REENABLE_AFTER_TTS_MS);
-        }
-        return;
+      setIsTtsPlaying(false);
+      const w = window as unknown as { nebula_ide_currentAudio?: HTMLAudioElement | null };
+      w.nebula_ide_currentAudio = null;
+      if (ttsObjectUrlRef.current) {
+        URL.revokeObjectURL(ttsObjectUrlRef.current);
+        ttsObjectUrlRef.current = null;
       }
-
-      const resumeHandsFree = openTalkDesiredRef.current;
-      stopVoiceRecognition();
-      pauseHandsFreeListening();
-      handsFreeResumeAfterTtsRef.current = resumeHandsFree;
-
-      const finishPlayback = () => {
-        if (runId !== ttsRunIdRef.current) return;
-        setIsTtsPlaying(false);
-        const w = window as unknown as { nebula_ide_currentAudio?: HTMLAudioElement | null };
-        w.nebula_ide_currentAudio = null;
-        if (ttsObjectUrlRef.current) {
-          URL.revokeObjectURL(ttsObjectUrlRef.current);
-          ttsObjectUrlRef.current = null;
+      setMicCooldown(true);
+      clearMicCooldownTimer();
+      micCooldownTimerRef.current = window.setTimeout(() => {
+        micCooldownTimerRef.current = null;
+        setMicCooldown(false);
+        if (handsFreeResumeAfterTtsRef.current) {
+          handsFreeResumeAfterTtsRef.current = false;
+          resumeOpenTalkIfWanted();
         }
-        setMicCooldown(true);
-        clearMicCooldownTimer();
-        micCooldownTimerRef.current = window.setTimeout(() => {
-          micCooldownTimerRef.current = null;
-          setMicCooldown(false);
-          if (handsFreeResumeAfterTtsRef.current) {
-            handsFreeResumeAfterTtsRef.current = false;
-            resumeOpenTalkIfWanted();
-          }
-        }, MIC_REENABLE_AFTER_TTS_MS);
-      };
+      }, MIC_REENABLE_AFTER_TTS_MS);
+    };
 
-      try {
-        for (let i = 0; i < chunks.length; i++) {
-          if (runId !== ttsRunIdRef.current || controller.signal.aborted) {
-            finishPlayback();
-            return;
-          }
-          const speakRes = await fetch(withProjectQuery('/api/speak'), {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            credentials: 'include',
-            body: JSON.stringify({ text: chunks[i] }),
-            signal: controller.signal,
-          });
-          if (!speakRes.ok) {
-            const errBody = await speakRes.text();
-            throw new Error(`TTS failed (${speakRes.status}): ${errBody.slice(0, 120)}`);
-          }
-          const audioBlob = await speakRes.blob();
-          const audioUrl = URL.createObjectURL(audioBlob);
-          if (ttsObjectUrlRef.current) URL.revokeObjectURL(ttsObjectUrlRef.current);
-          ttsObjectUrlRef.current = audioUrl;
-
-          await new Promise<void>((resolve) => {
-            if (runId !== ttsRunIdRef.current) {
-              URL.revokeObjectURL(audioUrl);
-              resolve();
-              return;
-            }
-            const audio = new Audio(audioUrl);
-            const w = window as unknown as { nebula_ide_currentAudio?: HTMLAudioElement | null };
-            w.nebula_ide_currentAudio = audio;
-            let doneOnce = false;
-            const done = () => {
-              if (doneOnce) return;
-              doneOnce = true;
-              ttsChunkResolveRef.current = null;
+    const t0 = performance.now();
+    try {
+      await playTtsText({
+        text: plain,
+        speakUrl: withProjectQuery('/api/speak'),
+        signal: controller.signal,
+        credentials: 'include',
+        onAudio: (audio) => {
+          const w = window as unknown as { nebula_ide_currentAudio?: HTMLAudioElement | null };
+          w.nebula_ide_currentAudio = audio;
+          if (audio) {
+            // Interrupt path resolves via abort + audio.pause in interruptVoiceAndTts.
+            ttsChunkResolveRef.current = () => {
               try {
-                URL.revokeObjectURL(audioUrl);
+                audio.pause();
               } catch {
                 /* ignore */
               }
-              if (ttsObjectUrlRef.current === audioUrl) ttsObjectUrlRef.current = null;
-              resolve();
             };
-            ttsChunkResolveRef.current = done;
-            audio.onended = done;
-            audio.onerror = done;
-            audio.play().catch((err) => {
-              if ((err as { name?: string })?.name !== 'AbortError') {
-                console.warn('[AIChat] TTS playback', err);
-              }
-              done();
-            });
-          });
-        }
-        finishPlayback();
-      } catch (e) {
-        const aborted = (e as { name?: string })?.name === 'AbortError';
-        if (!aborted && runId === ttsRunIdRef.current) {
-          console.warn('[AIChat] TTS', e);
-        }
-        finishPlayback();
+          } else {
+            ttsChunkResolveRef.current = null;
+          }
+        },
+      });
+      console.debug(`[TTS] full turn ${Math.round(performance.now() - t0)}ms`);
+    } catch (e) {
+      const aborted = (e as { name?: string })?.name === 'AbortError';
+      if (!aborted && runId === ttsRunIdRef.current) {
+        console.warn('[AIChat] TTS', e);
       }
-    }, TTS_START_DEBOUNCE_MS);
+    } finally {
+      if (runId === ttsRunIdRef.current) finishPlayback();
+    }
   };
 
   const toggleVoiceMic = () => {
