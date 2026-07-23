@@ -54,13 +54,16 @@ function summarizeMarkdownPreview(content: string, maxLines = 8): string {
 }
 
 /**
- * Pre-handle a user message. File mode opens local/GitHub files and returns a preview.
- * Other modes return guidance and let the existing Grok chat continue.
+ * Pre-handle a user message.
+ * - File mode: open local/GitHub files and return a rich preview (handled locally).
+ * - Guided / Free / Coding: NEVER handled locally — Master Plan, v0, and Go Code
+ *   continue through the existing Grok pipeline unchanged.
  */
 export async function handleSmartChatMessage(userText: string): Promise<SmartChatHandlerResult> {
   const modeMeta = detectChatMode(userText);
   const { mode } = modeMeta;
 
+  // Only File mode short-circuits the Grok / Master Plan / Go pipeline.
   if (mode === 'file') {
     const gh = extractGitHubUrl(userText);
     let opened: OpenFileResult;
@@ -112,32 +115,17 @@ export async function handleSmartChatMessage(userText: string): Promise<SmartCha
     };
   }
 
-  if (mode === 'guided') {
-    return {
-      mode,
-      modeMeta,
-      handledLocally: false,
-      assistantMessage: describeChatMode('guided'),
-      codingHint: 'guided-onboarding',
-    };
-  }
-
-  if (mode === 'coding') {
-    return {
-      mode,
-      modeMeta,
-      handledLocally: false,
-      assistantMessage: describeChatMode('coding'),
-      codingHint:
-        'Use nebulla-project/code-review-checklist.md; on errors use full-bug-database.md + NDM.',
-    };
-  }
-
-  // Free chat — continue to Grok
+  // Guided / Coding / Free — pass through to existing Grok chat (Master Plan + Go intact).
   return {
-    mode: 'free',
+    mode,
     modeMeta,
     handledLocally: false,
-    assistantMessage: describeChatMode('free'),
+    assistantMessage: describeChatMode(mode),
+    codingHint:
+      mode === 'coding'
+        ? 'Use nebulla-project/code-review-checklist.md; on errors use full-bug-database.md + NDM.'
+        : mode === 'guided'
+          ? 'guided-onboarding'
+          : undefined,
   };
 }

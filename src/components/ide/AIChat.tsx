@@ -891,35 +891,38 @@ export function AIChat() {
 
     if (micInputBlocked) return;
 
-    // Smart Chat Handler — File mode opens local/GitHub files with rich preview
-    try {
-      const smart = await handleSmartChatMessage(text);
-      if (smart.handledLocally) {
-        const stamp = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-        const userMsg: Message = {
-          id: `u-${Date.now()}`,
-          role: 'user',
-          content: text,
-          timestamp: stamp,
-        };
-        const assistantMsg: Message = {
-          id: `a-${Date.now()}`,
-          role: 'assistant',
-          content: smart.assistantMessage,
-          timestamp: stamp,
-          filePreview: smart.filePreview,
-        };
-        setMessages((p) => {
-          const next = [...p, userMsg, assistantMsg];
-          messagesRef.current = next;
-          return next;
-        });
-        setInput('');
-        inputRef.current = '';
-        return;
+    // Smart Chat Handler — File mode ONLY (local/GitHub + rich preview).
+    // Never intercept hidden bootstrap, Master Plan discovery replies, or Go Code turns.
+    if (!isHiddenBootstrapUserMessage(text)) {
+      try {
+        const smart = await handleSmartChatMessage(text);
+        if (smart.mode === 'file' && smart.handledLocally) {
+          const stamp = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+          const userMsg: Message = {
+            id: `u-${Date.now()}`,
+            role: 'user',
+            content: text,
+            timestamp: stamp,
+          };
+          const assistantMsg: Message = {
+            id: `a-${Date.now()}`,
+            role: 'assistant',
+            content: smart.assistantMessage,
+            timestamp: stamp,
+            filePreview: smart.filePreview,
+          };
+          setMessages((p) => {
+            const next = [...p, userMsg, assistantMsg];
+            messagesRef.current = next;
+            return next;
+          });
+          setInput('');
+          inputRef.current = '';
+          return;
+        }
+      } catch {
+        /* fall through to normal Grok / Master Plan / Go chat */
       }
-    } catch {
-      /* fall through to normal Grok chat */
     }
 
     // Fast project creation from chat ("Create a new project: ...")

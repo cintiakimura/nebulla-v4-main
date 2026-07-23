@@ -29,6 +29,7 @@ const LOCAL_PATH_HINT_RE =
 /**
  * Detect which chat mode best matches the user message.
  * Defaults to free chat when unsure (never force Master Plan).
+ * File mode must not steal Coding / Guided intents (Master Plan + Go Code stay intact).
  */
 export function detectChatMode(input: string): ChatModeResult {
   const text = String(input || '').trim();
@@ -36,21 +37,33 @@ export function detectChatMode(input: string): ChatModeResult {
     return { mode: 'free', label: 'Chat', confidence: 'low' };
   }
 
-  // File ops win when a GitHub URL or clear open/load intent is present
-  if (GITHUB_URL_RE.test(text) || FILE_RE.test(text) || /\bopen\b.+\.(md|ts|tsx|js|jsx)\b/i.test(text)) {
+  const looksGuided = GUIDED_RE.test(text);
+  const looksCoding = CODING_RE.test(text) || /```/.test(text);
+  const hasGitHubUrl = GITHUB_URL_RE.test(text);
+  const hasOpenVerb = /\b(open|load|show|read)\b/i.test(text);
+  const hasFilePath =
+    LOCAL_PATH_HINT_RE.test(text) || /\b[\w./-]+\.(?:ts|tsx|js|jsx|md|json|css)\b/i.test(text);
+  const looksFile =
+    hasGitHubUrl ||
+    (hasOpenVerb && hasFilePath) ||
+    (FILE_RE.test(text) && hasOpenVerb);
+
+  // Explicit GitHub / open-path file ops (even if "fix" appears later in the message)
+  if (hasGitHubUrl || (hasOpenVerb && hasFilePath && !looksGuided)) {
     return { mode: 'file', label: 'Files', confidence: 'high' };
   }
 
-  if (LOCAL_PATH_HINT_RE.test(text) && /\b(open|load|show|read)\b/i.test(text)) {
-    return { mode: 'file', label: 'Files', confidence: 'medium' };
-  }
-
-  if (GUIDED_RE.test(text)) {
+  // Guided / Coding take priority over vague "file" wording so Go / Master Plan stay intact
+  if (looksGuided) {
     return { mode: 'guided', label: 'New project', confidence: 'high' };
   }
 
-  if (CODING_RE.test(text) || /```/.test(text)) {
+  if (looksCoding) {
     return { mode: 'coding', label: 'Coding', confidence: 'high' };
+  }
+
+  if (looksFile) {
+    return { mode: 'file', label: 'Files', confidence: 'medium' };
   }
 
   return { mode: 'free', label: 'Chat', confidence: 'medium' };
