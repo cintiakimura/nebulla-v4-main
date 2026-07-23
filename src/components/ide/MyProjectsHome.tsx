@@ -252,9 +252,6 @@ export function MyProjectsHome() {
           <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-cyan-400/80">
             Nebulla
           </p>
-          <h1 className="font-headline text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">
-            My Projects
-          </h1>
           <p className="max-w-xl text-base leading-relaxed text-muted-foreground">
             Welcome back. Open something you already started, or pick a simple way to begin.
           </p>
