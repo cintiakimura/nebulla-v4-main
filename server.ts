@@ -89,8 +89,7 @@ import {
   normalizeV0WriteRel,
   pickPrimaryUiFile,
   v0CreateChat,
-  v0FindChatVersionFiles,
-  v0GetChat,
+  v0ResolveChatFiles,
   v0SendChatMessage,
   type V0FileEntry,
 } from "./lib/nebulaV0Client";
@@ -711,12 +710,20 @@ No approved UI code yet.
       }
     | { ok: false; status: number; error: string } => {
     const { workspaceRoot, nebulaUiStudioPath, masterPlanPath } = projectPathsFor(req);
-    const allFilesMap: Record<string, string> = {};
-    for (const f of v0Files) {
-      const rel = normalizeV0WriteRel(f.name);
-      if (rel) allFilesMap[rel] = f.content;
-    }
-    if (Object.keys(allFilesMap).length === 0) {
+    const normalized = v0Files.map((f) => ({
+      name: normalizeV0WriteRel(f.name),
+      content: f.content,
+    }));
+    const { written, skipped, filesMap } = writeV0FilesToWorkspace(workspaceRoot, normalized);
+
+    if (written.length === 0) {
+      if (skipped.length > 0) {
+        return {
+          ok: false,
+          status: 422,
+          error: `v0 returned ${v0Files.length} file(s) but none matched allowed paths (src/, app/, components/, etc.). Skipped: ${skipped.slice(0, 6).join(", ")}`,
+        };
+      }
       return {
         ok: false,
         status: 422,
@@ -728,36 +735,24 @@ No approved UI code yet.
     const projectNameSafe = sanitizeProjectNameForVersions(
       opts.projectDisplayName?.trim() || getProjectKeyFromRequest(req),
     );
+    // Mark complete only after real workspace writes succeeded
     markV0FirstGenerationComplete(workspaceRoot, projectNameSafe, {
-      files: allFilesMap,
+      files: filesMap,
       source: "v0-api",
       notes: "Nebula UI Studio v0 generation",
     });
-    saveCanonicalV0OriginalCopy(workspaceRoot, allFilesMap);
+    saveCanonicalV0OriginalCopy(workspaceRoot, filesMap);
     seedPreviewModelFromMasterPlan(
       workspaceRoot,
       masterPlanPath,
       opts.projectDisplayName?.trim() || "Untitled Project",
     );
 
-    const { written, skipped } = writeV0FilesToWorkspace(
-      workspaceRoot,
-      v0Files.map((f) => ({ name: normalizeV0WriteRel(f.name), content: f.content })),
-    );
-
-    if (written.length === 0 && skipped.length > 0) {
-      return {
-        ok: false,
-        status: 422,
-        error: `v0 returned ${v0Files.length} file(s) but none matched allowed paths (src/, app/, components/, etc.). Skipped: ${skipped.slice(0, 6).join(", ")}`,
-      };
-    }
-
     ensureNebulaUiStudioFileAt(nebulaUiStudioPath);
     const existing = fs.readFileSync(nebulaUiStudioPath, "utf8");
     const promptFromDisk = readV0PromptMarkdown(workspaceRoot) || opts.message.slice(0, 120000);
     const withPrompt = upsertNebulaCommentSection(existing, "NEBULA_UI_STUDIO_PROMPT", promptFromDisk);
-    const primaryCode = pickPrimaryUiFile(v0Files);
+    const primaryCode = pickPrimaryUiFile(normalized.filter((f) => written.includes(f.name)));
     const withCode = upsertNebulaCommentSection(withPrompt, "NEBULA_UI_STUDIO_CODE", primaryCode);
     fs.writeFileSync(nebulaUiStudioPath, withCode, "utf8");
     clearV0Pending(workspaceRoot);
@@ -778,7 +773,7 @@ No approved UI code yet.
     projectDisplayName?: string,
     promptText?: string,
   ): Promise<
-    | { ok: true; pending: true; chatId: string; versionStatus?: string }
+    | { ok: true; pending: true; chatId: string; versionStatus?: string; demoUrl?: string }
     | {
         ok: true;
         pending: false;
@@ -800,18 +795,10 @@ No approved UI code yet.
       };
     }
 
-    const got = await v0GetChat(keyRes.apiKey, chatId);
-    if (got.ok === false) {
-      return { ok: false, status: got.status, error: got.error };
-    }
-
-    let v0Files = got.result.files;
-    let demoUrl = got.result.demoUrl;
-    const status = got.result.versionStatus;
-
-    if (v0Files.length === 0 && status === "completed") {
-      v0Files = await v0FindChatVersionFiles(keyRes.apiKey, chatId);
-    }
+    const resolved = await v0ResolveChatFiles(keyRes.apiKey, chatId);
+    let v0Files = resolved.files;
+    let demoUrl = resolved.demoUrl;
+    const status = resolved.versionStatus;
 
     if (v0Files.length === 0) {
       if (status === "failed") {
@@ -824,13 +811,23 @@ No approved UI code yet.
         };
       }
       if (status === "pending" || status === undefined) {
-        return { ok: true, pending: true, chatId, versionStatus: status ?? "pending" };
+        console.log(
+          `[v0-poll] chat=${chatId.slice(0, 12)}… status=${status ?? "unknown"} files=0 demo=${demoUrl ? "yes" : "no"}`,
+        );
+        return {
+          ok: true,
+          pending: true,
+          chatId,
+          versionStatus: status ?? "pending",
+          demoUrl,
+        };
       }
       return {
         ok: false,
         status: 422,
         error:
           "v0 finished but returned no files. Check nebula-ui-studio/v0-prompt.md or regenerate on v0.dev.",
+        hint: demoUrl ? `Preview may still be available: ${demoUrl}` : undefined,
       };
     }
 
@@ -2699,6 +2696,10 @@ No approved UI code yet.
           pending: true,
           chatId: pass.chatId,
           versionStatus: pass.versionStatus,
+          demoUrl: pass.demoUrl,
+          hint: pass.demoUrl
+            ? "v0 preview URL is ready — still waiting for file payload to land in the workspace."
+            : undefined,
         });
       }
       return res.json({ ok: true, pending: false, source: pass.source, ...pass });

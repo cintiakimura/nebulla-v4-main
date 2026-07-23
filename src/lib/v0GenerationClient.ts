@@ -291,10 +291,15 @@ async function runV0GenerationWithPollingInner(options?: {
         }
         if (poll.chatId) pollChatId = poll.chatId;
         if (poll.pending && pollChatId && (i === 0 || i % STARTING_LOG_EVERY_N_POLLS === 0)) {
+          if (poll.demoUrl?.trim()) {
+            emitV0DemoReady(poll.demoUrl);
+          }
           const statusHint =
             poll.versionStatus === 'failed'
               ? 'v0 reported failure — checking for partial files…'
-              : `v0 generating (${pollChatId.slice(0, 8)}…) — waiting for UI files…`;
+              : poll.demoUrl
+                ? `v0 preview ready — still syncing UI files into workspace (${pollChatId.slice(0, 8)}…)…`
+                : `v0 generating (${pollChatId.slice(0, 8)}…) — waiting for UI files…`;
           onProgress?.(statusHint, 'info');
           emitChatV0Progress(statusHint);
         }

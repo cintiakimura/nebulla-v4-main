@@ -39,12 +39,13 @@ export type V0ChatResult = {
   chatId: string;
   files: V0FileEntry[];
   demoUrl?: string;
+  versionId?: string;
   versionStatus?: "pending" | "completed" | "failed";
   raw: Record<string, unknown>;
 };
 
 function normalizeFileName(name: string): string {
-  return name.replace(/\\/g, "/").replace(/^\/+/, "");
+  return name.replace(/\\/g, "/").replace(/^(\.\/)+/, "").replace(/^\/+/, "");
 }
 
 function readMetaPath(meta: unknown): string | undefined {
@@ -113,6 +114,14 @@ function extractFilesFromChatPayload(data: Record<string, unknown>): V0FileEntry
   collectFilesFromArray(version.files, out, seen);
   collectFilesFromArray(data.files, out, seen);
 
+  // Some payloads nest files under data / result
+  const nestedData = data.data as Record<string, unknown> | undefined;
+  if (nestedData && typeof nestedData === "object") {
+    collectFilesFromArray(nestedData.files, out, seen);
+    const nestedLatest = nestedData.latestVersion as Record<string, unknown> | undefined;
+    if (nestedLatest) collectFilesFromArray(nestedLatest.files, out, seen);
+  }
+
   const messages = data.messages;
   if (Array.isArray(messages)) {
     for (const msg of messages) {
@@ -127,8 +136,30 @@ function extractFilesFromChatPayload(data: Record<string, unknown>): V0FileEntry
 
 function readVersionStatus(data: Record<string, unknown>): V0ChatResult["versionStatus"] {
   const latest = data.latestVersion as Record<string, unknown> | undefined;
-  const status = latest?.status;
-  if (status === "pending" || status === "completed" || status === "failed") return status;
+  const raw = latest?.status ?? data.status;
+  if (typeof raw !== "string") return undefined;
+  const s = raw.toLowerCase().trim();
+  if (s === "failed" || s === "error") return "failed";
+  if (s === "completed" || s === "complete" || s === "ready" || s === "success") return "completed";
+  if (
+    s === "pending" ||
+    s === "generating" ||
+    s === "streaming" ||
+    s === "in_progress" ||
+    s === "processing" ||
+    s === "running"
+  ) {
+    return "pending";
+  }
+  return undefined;
+}
+
+function readVersionId(data: Record<string, unknown>): string | undefined {
+  const latest = data.latestVersion as Record<string, unknown> | undefined;
+  for (const key of ["id", "versionId"]) {
+    const v = latest?.[key] ?? data[key];
+    if (typeof v === "string" && v.trim()) return v.trim();
+  }
   return undefined;
 }
 
@@ -183,7 +214,14 @@ export async function v0CreateChat(
   const files = extractFilesFromChatPayload(data);
   return {
     ok: true,
-    result: { chatId, files, demoUrl, versionStatus: readVersionStatus(data), raw: data },
+    result: {
+      chatId,
+      files,
+      demoUrl,
+      versionId: readVersionId(data),
+      versionStatus: readVersionStatus(data),
+      raw: data,
+    },
   };
 }
 
@@ -210,11 +248,40 @@ export async function v0GetChat(
   const files = extractFilesFromChatPayload(data);
   return {
     ok: true,
-    result: { chatId: id, files, demoUrl, versionStatus: readVersionStatus(data), raw: data },
+    result: {
+      chatId: id,
+      files,
+      demoUrl,
+      versionId: readVersionId(data),
+      versionStatus: readVersionStatus(data),
+      raw: data,
+    },
   };
 }
 
-/** List recent versions — fallback when latestVersion.files is empty but status is completed. */
+/** GET /chats/{chatId}/versions/{versionId} — often has files when chat.latestVersion.files is empty. */
+export async function v0GetVersionFiles(
+  apiKey: string,
+  chatId: string,
+  versionId: string,
+): Promise<V0FileEntry[]> {
+  const res = await fetch(
+    `${V0_API_BASE}/chats/${encodeURIComponent(chatId)}/versions/${encodeURIComponent(versionId)}`,
+    { method: "GET", headers: { Authorization: `Bearer ${apiKey}` } },
+  );
+  if (!res.ok) return [];
+  let data: Record<string, unknown>;
+  try {
+    data = JSON.parse(await res.text()) as Record<string, unknown>;
+  } catch {
+    return [];
+  }
+  const direct = extractFilesFromChatPayload(data);
+  if (direct.length > 0) return direct;
+  return extractFilesFromChatPayload({ latestVersion: data });
+}
+
+/** List recent versions — fallback when latestVersion.files is empty. */
 export async function v0FindChatVersionFiles(
   apiKey: string,
   chatId: string
@@ -234,10 +301,45 @@ export async function v0FindChatVersionFiles(
   if (!Array.isArray(rows)) return [];
   for (const row of rows) {
     if (!row || typeof row !== "object") continue;
-    const files = extractFilesFromChatPayload(row as Record<string, unknown>);
+    const rec = row as Record<string, unknown>;
+    const files = extractFilesFromChatPayload(rec);
     if (files.length > 0) return files;
+    const vid = typeof rec.id === "string" ? rec.id.trim() : "";
+    if (vid) {
+      const byId = await v0GetVersionFiles(apiKey, chatId, vid);
+      if (byId.length > 0) return byId;
+    }
   }
   return [];
+}
+
+/**
+ * Resolve files aggressively: chat payload → version by id → versions list.
+ * Call whenever inline files are empty (not only when status === completed).
+ */
+export async function v0ResolveChatFiles(
+  apiKey: string,
+  chatId: string,
+  hint?: { versionId?: string; files?: V0FileEntry[] },
+): Promise<{ files: V0FileEntry[]; demoUrl?: string; versionStatus?: V0ChatResult["versionStatus"]; versionId?: string }> {
+  const got = hint?.files?.length
+    ? null
+    : await v0GetChat(apiKey, chatId);
+  if (got && got.ok === false) {
+    return { files: [] };
+  }
+  let files = hint?.files?.length ? hint.files : got?.ok ? got.result.files : [];
+  let demoUrl = got?.ok ? got.result.demoUrl : undefined;
+  let versionStatus = got?.ok ? got.result.versionStatus : undefined;
+  let versionId = hint?.versionId || (got?.ok ? got.result.versionId : undefined);
+
+  if (files.length === 0 && versionId) {
+    files = await v0GetVersionFiles(apiKey, chatId, versionId);
+  }
+  if (files.length === 0) {
+    files = await v0FindChatVersionFiles(apiKey, chatId);
+  }
+  return { files, demoUrl, versionStatus, versionId };
 }
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -256,25 +358,19 @@ export async function v0WaitForChatGeneration(
   const intervalMs = opts?.intervalMs ?? 2500;
 
   for (let i = 0; i < maxAttempts; i++) {
-    const got = await v0GetChat(apiKey, chatId);
-    if (got.ok === false) return { ok: false, error: got.error };
-
-    const status = got.result.versionStatus;
-    const files = got.result.files;
+    const resolved = await v0ResolveChatFiles(apiKey, chatId);
+    const status = resolved.versionStatus;
+    const files = resolved.files;
 
     if (status === "failed" && files.length === 0) {
       return { ok: false, error: "v0 generation failed on the v0 side. Open v0.dev and retry with a shorter prompt." };
     }
 
     if (files.length > 0) {
-      return { ok: true, files, demoUrl: got.result.demoUrl };
+      return { ok: true, files, demoUrl: resolved.demoUrl };
     }
 
     if (status === "completed") {
-      const fromVersions = await v0FindChatVersionFiles(apiKey, chatId);
-      if (fromVersions.length > 0) {
-        return { ok: true, files: fromVersions, demoUrl: got.result.demoUrl };
-      }
       return {
         ok: false,
         error:
