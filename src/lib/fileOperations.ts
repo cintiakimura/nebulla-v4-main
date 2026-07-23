@@ -6,6 +6,16 @@
 import { withProjectBody, withProjectQuery } from './nebulaProjectApi';
 import { readResponseJson } from './apiFetch';
 
+/** Browser uses relative URLs; Node/tests need an absolute origin. */
+function apiUrl(pathWithQuery: string): string {
+  if (typeof window !== 'undefined') return pathWithQuery;
+  const base = (process.env.TEST_BASE_URL || process.env.VITE_DEV_SERVER || 'http://127.0.0.1:3000').replace(
+    /\/$/,
+    '',
+  );
+  return `${base}${pathWithQuery.startsWith('/') ? '' : '/'}${pathWithQuery}`;
+}
+
 export type OpenedFile = {
   success: true;
   path?: string;
@@ -59,7 +69,7 @@ export async function openLocalFile(filePath: string): Promise<OpenFileResult> {
   }
 
   try {
-    const res = await fetch(withProjectQuery('/api/files/open'), {
+    const res = await fetch(apiUrl(withProjectQuery('/api/files/open')), {
       method: 'POST',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
@@ -105,7 +115,7 @@ export async function openGitHubFile(url: string, branch = 'main'): Promise<Open
   }
 
   try {
-    const res = await fetch(withProjectQuery('/api/files/open-github'), {
+    const res = await fetch(apiUrl(withProjectQuery('/api/files/open-github')), {
       method: 'POST',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
