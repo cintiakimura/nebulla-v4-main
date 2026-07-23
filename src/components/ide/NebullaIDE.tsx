@@ -11,6 +11,7 @@ import { TerminalPanel } from '@/components/ide/TerminalPanel';
 import { TopBar } from '@/components/ide/TopBar';
 import { VerticalNav } from '@/components/ide/VerticalNav';
 import { MyServicesOnboarding } from '@/components/MyServicesOnboarding';
+import { WelcomeOnboardingModal } from '@/components/ide/WelcomeOnboardingModal';
 import { FileExplorer } from '@/components/ide/FileExplorer';
 import { IdeWorkspaceProvider, useIdeWorkspace } from '@/components/ide/IdeWorkspaceContext';
 import {
@@ -26,6 +27,7 @@ import {
 } from '@/components/ide/WorkspaceSetupGate';
 import { navIdToCenterPane } from '../../lib/ideCenterPanes';
 import { registerNebulaUiStudioBridge } from '../../lib/nebulaUiStudioEvents';
+import { shouldShowWelcomeOnboarding } from '../../lib/nebulaWelcomeOnboarding';
 
 const EXPLORER_MIN = 160;
 const EXPLORER_MAX = 480;
@@ -139,11 +141,14 @@ function NebullaIDEShell() {
   const [myServicesConfig, setMyServicesConfig] = useState<NebulaPublicConfig>({});
   const [workspaceCtx, setWorkspaceCtx] = useState<WorkspaceContext | null>(null);
   const [workspaceProjectKey, setWorkspaceProjectKey] = useState(() => getBrowserProjectKey());
+  const [welcomeOpen, setWelcomeOpen] = useState(false);
+  const welcomeCheckedRef = useRef(false);
 
   const refreshMyServicesContext = useCallback(async () => {
     const [cfg, u] = await Promise.all([fetchNebulaPublicConfig(), fetchSessionUser()]);
     setMyServicesConfig(cfg);
     setMyServicesUser(u);
+    return { cfg, u };
   }, []);
 
   useEffect(() => {
@@ -154,6 +159,25 @@ function NebullaIDEShell() {
     setWorkspaceCtx(ctx);
     setWorkspaceProjectKey(ctx.projectKey);
   }, []);
+
+  /** After WorkspaceSetupGate: optional first-time welcome (non-blocking). */
+  useEffect(() => {
+    if (!workspaceCtx || welcomeCheckedRef.current) return;
+    welcomeCheckedRef.current = true;
+    const projectKey = workspaceCtx.projectKey || getBrowserProjectKey();
+    void (async () => {
+      const { cfg, u } = await refreshMyServicesContext();
+      const show = shouldShowWelcomeOnboarding({
+        projectKey,
+        hasServerMainAiKey: Boolean(cfg.hasMainAiApiKey),
+      });
+      if (show) {
+        setMyServicesUser(u);
+        setWelcomeOpen(true);
+        dispatchOpenCenterPanel('projects');
+      }
+    })();
+  }, [workspaceCtx, refreshMyServicesContext]);
 
   useEffect(() => {
     const onWorkspaceSync = () => setWorkspaceProjectKey(getBrowserProjectKey());
@@ -246,6 +270,11 @@ function NebullaIDEShell() {
   return (
       <div className="flex h-screen flex-col overflow-hidden bg-background text-foreground">
       {!workspaceCtx ? <WorkspaceSetupGate onReady={handleWorkspaceReady} /> : null}
+      <WelcomeOnboardingModal
+        open={welcomeOpen && Boolean(workspaceCtx)}
+        user={myServicesUser ?? workspaceCtx?.user ?? null}
+        onClose={() => setWelcomeOpen(false)}
+      />
       {myServicesOpen ? (
         <div
           className="fixed inset-0 z-[200] flex flex-col overflow-hidden"
