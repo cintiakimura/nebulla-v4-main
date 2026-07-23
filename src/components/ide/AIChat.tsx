@@ -12,7 +12,6 @@ import { readResponseJson } from '../../lib/apiFetch';
 import {
   getBrowserProjectKey,
   getBrowserProjectName,
-  setBrowserProjectKey,
   setBrowserProjectName,
   withProjectBody,
   withProjectQuery,
@@ -51,7 +50,7 @@ import {
   detectProjectNameAnswer,
   fetchIdeWorkspaceMeta,
 } from '../../lib/ideWorkspaceChatContext';
-import { createGuestProject, writeActiveGuestProjectId } from '../../lib/nebulaProjectStore';
+import { createProjectForCurrentSession } from '../../lib/nebulaCloud';
 import { handleSmartChatMessage, type SmartChatFilePreview } from '../../lib/smartChatHandler';
 import {
   consumeGuidedStartOnReady,
@@ -983,15 +982,14 @@ export function AIChat() {
     // Fast project creation from chat ("Create a new project: ...")
     const projectCreation = detectProjectCreationIntent(text);
     if (projectCreation) {
-      const shortName = projectCreation.description.split(' ').slice(0, 4).join(' ').replace(/[^a-z0-9 ]/gi, '').trim() || 'New Project';
-      const entry = createGuestProject({
-        pages: [],
-        edges: [],
-        projectName: shortName || 'New Project',
-      });
-      writeActiveGuestProjectId(entry.id);
-      setBrowserProjectKey(entry.id);
-      setBrowserProjectName(entry.name);
+      const shortName =
+        projectCreation.description
+          .split(' ')
+          .slice(0, 4)
+          .join(' ')
+          .replace(/[^a-z0-9 ]/gi, '')
+          .trim() || 'New Project';
+      await createProjectForCurrentSession(shortName || 'New Project');
       clearIdeWorkspaceMetaCache();
 
       setInput('');

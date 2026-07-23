@@ -7,8 +7,10 @@ import {
   createAndSelectCloudProject,
   ensureCloudWorkspaceReady,
   fetchSessionUser,
+  getWorkspaceModePreference,
   listCloudProjects,
   selectCloudProjectByName,
+  setWorkspaceModePreference,
   type CloudProjectRow,
   type NebulaSessionUser,
   type WorkspaceReadyResult,
@@ -54,6 +56,7 @@ export function WorkspaceSetupGate({ onReady }: { onReady: (ctx: WorkspaceContex
       setPhase(result);
 
       if (result.status === 'ready') {
+        if (result.mode === 'cloud') setWorkspaceModePreference('cloud');
         finishReady({
           projectName: result.projectName,
           projectKey: result.projectKey,
@@ -63,13 +66,24 @@ export function WorkspaceSetupGate({ onReady }: { onReady: (ctx: WorkspaceContex
         return;
       }
       if (result.status === 'needs_project') {
+        setWorkspaceModePreference('cloud');
         setUser(result.user);
         setProjects(result.projects);
       }
-      // Guest mode is the default during development — auto-enter without showing login.
-      if (result.status === 'needs_login' || result.status === 'no_database') {
-        handleGuestContinue();
-        return;
+      // Only auto-enter guest when the user last chose guest (or DB is unavailable).
+      // Never silently drop a cloud login into guest — that felt like "logged out on refresh".
+      if (result.status === 'needs_login') {
+        if (getWorkspaceModePreference() === 'guest') {
+          handleGuestContinue();
+          return;
+        }
+        // Show sign-in UI (Stay signed in checkbox applies on next login).
+      }
+      if (result.status === 'no_database') {
+        if (getWorkspaceModePreference() === 'guest' || getWorkspaceModePreference() === null) {
+          handleGuestContinue();
+          return;
+        }
       }
       if (result.status === 'error') {
         setError(result.message);
@@ -141,6 +155,7 @@ export function WorkspaceSetupGate({ onReady }: { onReady: (ctx: WorkspaceContex
           return;
         }
       }
+      setWorkspaceModePreference('cloud');
       await runEnsure();
     } catch {
       setError('Network error.');
@@ -195,6 +210,7 @@ export function WorkspaceSetupGate({ onReady }: { onReady: (ctx: WorkspaceContex
   };
 
   const handleGuestContinue = () => {
+    setWorkspaceModePreference('guest');
     const g = bindGuestWorkspace();
     finishReady({
       projectName: g.projectName,

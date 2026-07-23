@@ -357,16 +357,47 @@ function githubOAuthRedirectBase(req: Request): string {
   return publicBaseUrl(req);
 }
 
-function setSessionCookie(res: Response, token: string, remember: boolean) {
-  const secure = process.env.NODE_ENV === "production";
-  const cookieOptions: Record<string, unknown> = {
+function sessionCookieSecure(): boolean {
+  return process.env.NODE_ENV === "production";
+}
+
+function sessionCookieBaseOptions(): Record<string, unknown> {
+  return {
     httpOnly: true,
-    secure,
-    sameSite: "lax",
+    secure: sessionCookieSecure(),
+    sameSite: "lax" as const,
     path: "/",
+  };
+}
+
+/**
+ * Persist session as httpOnly cookie.
+ * `remember=true` (Stay signed in) → 30-day Max-Age so login survives browser restart.
+ * `remember=false` → session cookie (survives refresh, ends when browser closes).
+ */
+function setSessionCookie(res: Response, token: string, remember: boolean) {
+  const cookieOptions: Record<string, unknown> = {
+    ...sessionCookieBaseOptions(),
   };
   if (remember) cookieOptions.maxAge = SESSION_MAX_AGE_MS;
   res.cookie(SESSION_COOKIE, token, cookieOptions);
+}
+
+function clearSessionCookie(res: Response) {
+  res.clearCookie(SESSION_COOKIE, sessionCookieBaseOptions());
+}
+
+/** Parse Stay-signed-in flag; default true when omitted so logins persist across refresh. */
+function parseRememberFlag(raw: unknown): boolean {
+  if (raw === false || raw === 0 || raw === "0" || raw === "false") return false;
+  if (raw === true || raw === 1 || raw === "1" || raw === "true") return true;
+  return true;
+}
+
+function setNoStoreAuthHeaders(res: Response) {
+  res.setHeader("Cache-Control", "private, no-store, no-cache, must-revalidate");
+  res.setHeader("Pragma", "no-cache");
+  res.setHeader("Vary", "Cookie");
 }
 
 /**
@@ -678,13 +709,27 @@ export async function mountRenderStack(app: Express) {
   });
 
   app.get("/api/auth/session", async (req, res) => {
+    setNoStoreAuthHeaders(res);
     const uid = readSession(req);
-    if (!uid || !hasDb()) {
+    if (!uid) {
       return res.json({ user: null });
     }
     if (!UUID_RE.test(uid)) {
-      res.clearCookie(SESSION_COOKIE, { path: "/" });
+      clearSessionCookie(res);
       return res.json({ user: null });
+    }
+    // Valid JWT but DB not ready — still report signed-in so the client does not drop to guest.
+    if (!hasDb()) {
+      return res.json({
+        user: {
+          uid,
+          displayName: null,
+          email: null,
+          photoURL: null,
+          billingTier: "free",
+        },
+        dbUnavailable: true,
+      });
     }
     try {
       const db = requireDbPool();
@@ -706,7 +751,10 @@ export async function mountRenderStack(app: Express) {
         has_password: boolean;
         billing_tier: string;
       };
-      if (!row) return res.json({ user: null });
+      if (!row) {
+        clearSessionCookie(res);
+        return res.json({ user: null });
+      }
       const sessionEmail =
         row.provider === "username"
           ? row.display_name || row.provider_user_id
@@ -765,7 +813,8 @@ export async function mountRenderStack(app: Express) {
   });
 
   app.post("/api/auth/logout", (_req, res) => {
-    res.clearCookie(SESSION_COOKIE, { path: "/" });
+    setNoStoreAuthHeaders(res);
+    clearSessionCookie(res);
     res.json({ ok: true });
   });
 
@@ -781,7 +830,7 @@ export async function mountRenderStack(app: Express) {
     try {
       const db = requireDbPool();
       await db.query(`DELETE FROM public.nebula_users WHERE id = $1::uuid`, [uid]);
-      res.clearCookie(SESSION_COOKIE, { path: "/" });
+      clearSessionCookie(res);
       return res.json({ ok: true });
     } catch (e) {
       console.error("[nebula] delete-account:", e);
@@ -802,9 +851,10 @@ export async function mountRenderStack(app: Express) {
     if (!id) return res.status(503).send("GITHUB_CLIENT_ID not configured");
     const redirectUri = `${githubOAuthRedirectBase(req)}/api/auth/github/callback`;
     const state = crypto.randomBytes(16).toString("hex");
-    const remember = String(req.query.remember || "").toLowerCase() === "1" || String(req.query.remember || "").toLowerCase() === "true";
-    res.cookie("oauth_state", state, { httpOnly: true, maxAge: 600000, path: "/", sameSite: "lax" });
-    res.cookie(OAUTH_REMEMBER_COOKIE, remember ? "1" : "0", { httpOnly: true, maxAge: 600000, path: "/", sameSite: "lax" });
+    const remember = parseRememberFlag(req.query.remember);
+    const oauthCookieOpts = { ...sessionCookieBaseOptions(), maxAge: 600000 };
+    res.cookie("oauth_state", state, oauthCookieOpts);
+    res.cookie(OAUTH_REMEMBER_COOKIE, remember ? "1" : "0", oauthCookieOpts);
     const q = new URLSearchParams({
       client_id: id,
       redirect_uri: redirectUri,
@@ -823,9 +873,10 @@ export async function mountRenderStack(app: Express) {
     const code = typeof req.query.code === "string" ? req.query.code : "";
     const state = typeof req.query.state === "string" ? req.query.state : "";
     const cookieState = req.cookies?.oauth_state;
-    const remember = req.cookies?.[OAUTH_REMEMBER_COOKIE] === "1";
-    res.clearCookie("oauth_state", { path: "/" });
-    res.clearCookie(OAUTH_REMEMBER_COOKIE, { path: "/" });
+    // Missing oauth_remember → stay signed in (matches checkbox default).
+    const remember = req.cookies?.[OAUTH_REMEMBER_COOKIE] !== "0";
+    res.clearCookie("oauth_state", sessionCookieBaseOptions());
+    res.clearCookie(OAUTH_REMEMBER_COOKIE, sessionCookieBaseOptions());
     if (!code || !state || state !== cookieState) {
       return res.status(400).send("Invalid OAuth state");
     }
@@ -902,8 +953,9 @@ export async function mountRenderStack(app: Express) {
 
   // --- Register: email + password (frictionless) or legacy username + password ---
   app.post("/api/auth/register", async (req, res) => {
+    setNoStoreAuthHeaders(res);
     if (!hasDb()) return res.status(503).json({ error: "Database not configured" });
-    const remember = Boolean(req.body?.remember);
+    const remember = parseRememberFlag(req.body?.remember);
     const emailAddr = normalizeEmail(req.body?.email);
     const rawPassword = req.body?.password;
 
@@ -979,6 +1031,7 @@ export async function mountRenderStack(app: Express) {
   });
 
   app.post("/api/auth/login", async (req, res) => {
+    setNoStoreAuthHeaders(res);
     if (!hasDb()) return res.status(503).json({ error: "Database not configured" });
     const rawLogin =
       typeof req.body?.username === "string"
@@ -987,7 +1040,7 @@ export async function mountRenderStack(app: Express) {
           ? req.body.email
           : "";
     const password = req.body?.password;
-    const remember = Boolean(req.body?.remember);
+    const remember = parseRememberFlag(req.body?.remember);
     if (!String(rawLogin).trim() || typeof password !== "string") {
       return res.status(400).json({ error: "Email and password are required." });
     }
@@ -1092,8 +1145,9 @@ export async function mountRenderStack(app: Express) {
 
   // --- Projects API ---
   app.get("/api/projects", async (req, res) => {
+    setNoStoreAuthHeaders(res);
     const uid = readSession(req);
-    if (!uid) return res.json({ projects: [] });
+    if (!uid) return res.status(401).json({ error: "Unauthorized", projects: [] });
     if (!hasDb()) return res.status(503).json({ error: "Database not configured" });
     const oneName = typeof req.query.name === "string" ? req.query.name.trim() : "";
     try {
@@ -1121,6 +1175,7 @@ export async function mountRenderStack(app: Express) {
   });
 
   app.post("/api/projects", async (req, res) => {
+    setNoStoreAuthHeaders(res);
     const uid = readSession(req);
     if (!uid) return res.status(401).json({ error: "Unauthorized" });
     if (!hasDb()) return res.status(503).json({ error: "Database not configured" });
@@ -1132,7 +1187,7 @@ export async function mountRenderStack(app: Express) {
       const db = requireDbPool();
       const trimmed = name.trim();
       const existing = await db.query(
-        `SELECT workspace_id FROM public.nebula_projects WHERE user_id = $1::uuid AND name = $2`,
+        `SELECT workspace_id, pages, edges FROM public.nebula_projects WHERE user_id = $1::uuid AND name = $2`,
         [uid, trimmed]
       );
       let workspaceId = existing.rows[0]?.workspace_id as string | undefined;
@@ -1140,6 +1195,20 @@ export async function mountRenderStack(app: Express) {
         const rw = await provisionRenderWorkspaceForNewProject(uid, trimmed);
         workspaceId = rw.id;
       }
+      // Avoid wiping existing mind-map JSON when callers upsert with empty arrays on "create".
+      const hasExisting = Boolean(existing.rows[0]);
+      const pagesJson =
+        pages !== undefined && !(hasExisting && Array.isArray(pages) && pages.length === 0)
+          ? JSON.stringify(pages)
+          : hasExisting
+            ? JSON.stringify(existing.rows[0].pages ?? [])
+            : JSON.stringify(pages ?? []);
+      const edgesJson =
+        edges !== undefined && !(hasExisting && Array.isArray(edges) && edges.length === 0)
+          ? JSON.stringify(edges)
+          : hasExisting
+            ? JSON.stringify(existing.rows[0].edges ?? [])
+            : JSON.stringify(edges ?? []);
       await db.query(
         `INSERT INTO public.nebula_projects (user_id, name, pages, edges, workspace_id, updated_at)
          VALUES ($1::uuid, $2, $3::jsonb, $4::jsonb, $5, NOW())
@@ -1152,7 +1221,7 @@ export async function mountRenderStack(app: Express) {
              ),
              updated_at = NOW()
          RETURNING name, pages, edges, workspace_id, updated_at`,
-        [uid, trimmed, JSON.stringify(pages ?? []), JSON.stringify(edges ?? []), workspaceId]
+        [uid, trimmed, pagesJson, edgesJson, workspaceId]
       );
       void runProjectManagerSilently(db, uid, { projectName: trimmed }).catch(() => {});
       res.json({ ok: true });

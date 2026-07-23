@@ -16,7 +16,12 @@ import {
   readGuestIndex,
   writeActiveGuestProjectId,
 } from '../../lib/nebulaProjectStore';
-import { listCloudProjects, fetchSessionUser } from '../../lib/nebulaCloud';
+import {
+  fetchSessionUser,
+  listCloudProjectsDetailed,
+  selectCloudProjectByName,
+  setWorkspaceModePreference,
+} from '../../lib/nebulaCloud';
 import {
   dispatchChatOpenFile,
   dispatchStartFreeChat,
@@ -56,6 +61,7 @@ type FileModalMode = 'local' | 'github' | null;
 export function MyProjectsHome() {
   const [projects, setProjects] = useState<ListedProject[]>([]);
   const [loadingList, setLoadingList] = useState(true);
+  const [listNote, setListNote] = useState<string | null>(null);
   const [fileModal, setFileModal] = useState<FileModalMode>(null);
   const [fileInput, setFileInput] = useState('');
   const [fileBusy, setFileBusy] = useState(false);
@@ -64,6 +70,7 @@ export function MyProjectsHome() {
 
   const refreshList = useCallback(async () => {
     setLoadingList(true);
+    setListNote(null);
     try {
       const guest = readGuestIndex().map((e) => ({
         key: e.id,
@@ -76,13 +83,23 @@ export function MyProjectsHome() {
       try {
         const user = await fetchSessionUser();
         if (user?.uid) {
-          const rows = await listCloudProjects();
-          cloud = rows.map((r) => ({
-            key: `cloud:${r.name}`,
-            name: r.name,
-            updatedAt: r.updated_at || new Date().toISOString(),
-            source: 'cloud' as const,
-          }));
+          const listed = await listCloudProjectsDetailed();
+          if (!listed.ok) {
+            setListNote(
+              listed.error === 'unauthorized'
+                ? 'Session expired — sign in again to see cloud projects.'
+                : listed.error === 'unavailable'
+                  ? 'Cloud database is unavailable right now. Local projects still show below.'
+                  : 'Could not load cloud projects. Local projects still show below.',
+            );
+          } else {
+            cloud = listed.projects.map((r) => ({
+              key: `cloud:${r.name}`,
+              name: r.name,
+              updatedAt: r.updated_at || new Date().toISOString(),
+              source: 'cloud' as const,
+            }));
+          }
         }
       } catch {
         /* guest-only is fine */
@@ -91,7 +108,12 @@ export function MyProjectsHome() {
       const ck = getBrowserProjectKey();
       const currentName = getBrowserProjectName().trim() || ck;
       const merged = [...cloud, ...guest];
-      if (!merged.some((p) => p.key === ck || p.name === currentName)) {
+      if (
+        currentName &&
+        ck &&
+        ck !== 'default' &&
+        !merged.some((p) => p.key === ck || p.name === currentName || p.key === `cloud:${currentName}`)
+      ) {
         merged.unshift({
           key: ck,
           name: currentName,
@@ -113,15 +135,20 @@ export function MyProjectsHome() {
 
   const activeKey = getBrowserProjectKey();
 
-  const onOpenProject = useCallback((p: ListedProject) => {
+  const onOpenProject = useCallback(async (p: ListedProject) => {
     if (p.source === 'cloud') {
-      setBrowserProjectName(p.name);
-      try {
-        localStorage.setItem('nebula_active_cloud_project_name_v1', p.name);
-      } catch {
-        /* ignore */
+      const ok = await selectCloudProjectByName(p.name);
+      if (!ok) {
+        setBrowserProjectName(p.name);
+        setWorkspaceModePreference('cloud');
+        try {
+          localStorage.setItem('nebula_active_cloud_project_name_v1', p.name);
+        } catch {
+          /* ignore */
+        }
       }
     } else {
+      setWorkspaceModePreference('guest');
       setBrowserProjectKey(p.key);
       writeActiveGuestProjectId(p.key);
       setBrowserProjectName(p.name);
@@ -280,6 +307,12 @@ export function MyProjectsHome() {
             )}
           </div>
 
+          {listNote ? (
+            <p className="rounded-lg border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-xs text-amber-100/90">
+              {listNote}
+            </p>
+          ) : null}
+
           {projects.length === 0 && !loadingList ? (
             <div className="rounded-2xl border border-dashed border-white/10 px-6 py-12 text-center">
               <p className="text-sm leading-relaxed text-muted-foreground">
@@ -315,7 +348,7 @@ export function MyProjectsHome() {
                     </div>
                     <button
                       type="button"
-                      onClick={() => onOpenProject(p)}
+                      onClick={() => void onOpenProject(p)}
                       className="rounded-md border border-white/15 px-3 py-1.5 text-xs font-medium text-foreground hover:bg-white/5"
                     >
                       Open

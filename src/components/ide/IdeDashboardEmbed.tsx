@@ -7,14 +7,13 @@ import {
   setBrowserProjectName,
 } from '../../lib/nebulaProjectApi';
 import {
-  createGuestProject,
   readGuestIndex,
   removeGuestProject,
   updateGuestIndexMeta,
   writeActiveGuestProjectId,
   clearActiveGuestProjectId,
-  type ProjectPayload,
 } from '../../lib/nebulaProjectStore';
+import { createProjectForCurrentSession } from '../../lib/nebulaCloud';
 import { resetProjectFromScratch } from '../../lib/ideProjectReset';
 
 export function IdeDashboardEmbed({
@@ -91,12 +90,7 @@ export function IdeDashboardEmbed({
             : 'New project';
     void (async () => {
       await resetProjectFromScratch(label);
-      const payload: ProjectPayload = {
-        pages: [],
-        edges: [],
-        projectName: label,
-      };
-      createGuestProject(payload);
+      await createProjectForCurrentSession(label);
       window.location.reload();
     })();
   }, []);

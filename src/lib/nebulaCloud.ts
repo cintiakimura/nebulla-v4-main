@@ -21,10 +21,62 @@ import {
 import { clearIdeWorkspaceMetaCache } from './ideWorkspaceChatContext';
 
 const ACTIVE_CLOUD_PROJECT_NAME_KEY = 'nebula_active_cloud_project_name_v1';
+const ACTIVE_CLOUD_PROJECT_KEY_LS = 'nebula_active_cloud_project_key_v1';
+/** Remember whether the user last used cloud login vs explicit guest (survives refresh). */
+const WORKSPACE_MODE_KEY = 'nebula_workspace_mode_v1';
 
 function sanitizeBrowserProjectKey(raw: string): string {
   const cleaned = raw.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 64);
   return cleaned || 'default';
+}
+
+export type WorkspaceMode = 'cloud' | 'guest';
+
+export function getWorkspaceModePreference(): WorkspaceMode | null {
+  try {
+    const v = localStorage.getItem(WORKSPACE_MODE_KEY);
+    if (v === 'cloud' || v === 'guest') return v;
+  } catch {
+    /* ignore */
+  }
+  return null;
+}
+
+export function setWorkspaceModePreference(mode: WorkspaceMode): void {
+  try {
+    localStorage.setItem(WORKSPACE_MODE_KEY, mode);
+  } catch {
+    /* ignore */
+  }
+}
+
+export function clearWorkspaceModePreference(): void {
+  try {
+    localStorage.removeItem(WORKSPACE_MODE_KEY);
+  } catch {
+    /* ignore */
+  }
+}
+
+function persistActiveCloudSelection(name: string, diskKey: string): void {
+  try {
+    localStorage.setItem(ACTIVE_CLOUD_PROJECT_NAME_KEY, name);
+    localStorage.setItem(ACTIVE_CLOUD_PROJECT_KEY_LS, diskKey);
+  } catch {
+    /* ignore */
+  }
+}
+
+/** Early restore of last cloud project name/key (before session sync finishes). */
+export function restorePersistedCloudProjectHint(): void {
+  try {
+    const name = localStorage.getItem(ACTIVE_CLOUD_PROJECT_NAME_KEY)?.trim();
+    const key = localStorage.getItem(ACTIVE_CLOUD_PROJECT_KEY_LS)?.trim();
+    if (name) setBrowserProjectName(name);
+    if (key) setBrowserProjectKey(sanitizeBrowserProjectKey(key));
+  } catch {
+    /* ignore */
+  }
 }
 
 export type NebulaSessionUser = {
@@ -44,7 +96,11 @@ export type NebulaSessionUser = {
 
 export async function fetchSessionUser(): Promise<NebulaSessionUser | null> {
   try {
-    const res = await fetch('/api/auth/session', { credentials: 'include' });
+    const res = await fetch('/api/auth/session', {
+      credentials: 'include',
+      cache: 'no-store',
+      headers: { 'Cache-Control': 'no-cache' },
+    });
     const data = await readResponseJson<{ user?: NebulaSessionUser | null }>(res);
     if (!res.ok || !data.user) return null;
     const u = data.user;
@@ -59,7 +115,14 @@ export async function fetchSessionUser(): Promise<NebulaSessionUser | null> {
 }
 
 export async function logoutNebula(): Promise<void> {
-  await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
+  await fetch('/api/auth/logout', { method: 'POST', credentials: 'include', cache: 'no-store' });
+  clearWorkspaceModePreference();
+  try {
+    localStorage.removeItem(ACTIVE_CLOUD_PROJECT_NAME_KEY);
+    localStorage.removeItem(ACTIVE_CLOUD_PROJECT_KEY_LS);
+  } catch {
+    /* ignore */
+  }
 }
 
 /** Permanently deletes the signed-in user; `confirmation` must be exactly `DELETE MY ACCOUNT`. */
@@ -85,12 +148,38 @@ export type CloudProjectRow = {
   updated_at: string;
 };
 
+export type ListCloudProjectsResult = {
+  ok: boolean;
+  projects: CloudProjectRow[];
+  error?: 'unauthorized' | 'unavailable' | 'failed';
+};
+
+export async function listCloudProjectsDetailed(): Promise<ListCloudProjectsResult> {
+  try {
+    const res = await fetch('/api/projects', {
+      credentials: 'include',
+      cache: 'no-store',
+      headers: { 'Cache-Control': 'no-cache' },
+    });
+    if (res.status === 401) {
+      return { ok: false, projects: [], error: 'unauthorized' };
+    }
+    if (res.status === 503) {
+      return { ok: false, projects: [], error: 'unavailable' };
+    }
+    if (!res.ok) {
+      return { ok: false, projects: [], error: 'failed' };
+    }
+    const data = await readResponseJson<{ projects: CloudProjectRow[] }>(res);
+    return { ok: true, projects: data.projects || [] };
+  } catch {
+    return { ok: false, projects: [], error: 'failed' };
+  }
+}
+
 export async function listCloudProjects(): Promise<CloudProjectRow[]> {
-  const res = await fetch('/api/projects', { credentials: 'include' });
-  if (res.status === 401) return [];
-  if (!res.ok) return [];
-  const data = await readResponseJson<{ projects: CloudProjectRow[] }>(res);
-  return data.projects || [];
+  const result = await listCloudProjectsDetailed();
+  return result.projects;
 }
 
 export async function getCloudProject(name: string): Promise<CloudProjectRow | null> {
@@ -159,22 +248,9 @@ export async function syncActiveCloudProjectFromSession(): Promise<{
   clearIdeWorkspaceMetaCache();
   const guestActive = readActiveGuestProjectId();
   if (guestActive) clearActiveGuestProjectId();
-
-  try {
-    localStorage.setItem(ACTIVE_CLOUD_PROJECT_NAME_KEY, name);
-  } catch {
-    /* ignore */
-  }
-
-  try {
-    window.dispatchEvent(
-      new CustomEvent('nebula-workspace-context-synced', {
-        detail: { projectName: name, projectKey: diskKey },
-      }),
-    );
-  } catch {
-    /* ignore */
-  }
+  setWorkspaceModePreference('cloud');
+  persistActiveCloudSelection(name, diskKey);
+  dispatchWorkspaceSynced(name, diskKey);
 
   return { synced: true, projectName: name, projectKey: diskKey };
 }
@@ -206,11 +282,8 @@ export async function selectCloudProjectByName(name: string): Promise<boolean> {
   setBrowserProjectKey(diskKey);
   clearIdeWorkspaceMetaCache();
   clearActiveGuestProjectId();
-  try {
-    localStorage.setItem(ACTIVE_CLOUD_PROJECT_NAME_KEY, trimmed);
-  } catch {
-    /* ignore */
-  }
+  setWorkspaceModePreference('cloud');
+  persistActiveCloudSelection(trimmed, diskKey);
   dispatchWorkspaceSynced(trimmed, diskKey);
   return true;
 }
@@ -218,9 +291,46 @@ export async function selectCloudProjectByName(name: string): Promise<boolean> {
 /** Create (or update) a cloud project and make it active in the browser. */
 export async function createAndSelectCloudProject(name: string): Promise<boolean> {
   const trimmed = name.trim() || 'Untitled Project';
+  const existing = await getCloudProject(trimmed);
+  if (existing) return selectCloudProjectByName(trimmed);
   const ok = await upsertCloudProject({ name: trimmed, pages: [], edges: [] });
   if (!ok) return false;
   return selectCloudProjectByName(trimmed);
+}
+
+/**
+ * Create a project for the current session: cloud (PostgreSQL) when signed in,
+ * otherwise guest localStorage. Returns the active name/key.
+ */
+export async function createProjectForCurrentSession(name: string): Promise<{
+  projectName: string;
+  projectKey: string;
+  mode: 'cloud' | 'guest';
+}> {
+  const trimmed = name.trim() || 'Untitled Project';
+  const user = await fetchSessionUser();
+  if (user?.uid) {
+    const ok = await createAndSelectCloudProject(trimmed);
+    if (ok) {
+      return {
+        projectName: getBrowserProjectName().trim() || trimmed,
+        projectKey: getBrowserProjectKey(),
+        mode: 'cloud',
+      };
+    }
+  }
+  const entry = createGuestProject({
+    pages: [],
+    edges: [],
+    projectName: trimmed,
+  });
+  writeActiveGuestProjectId(entry.id);
+  setBrowserProjectKey(entry.id);
+  setBrowserProjectName(entry.name);
+  setWorkspaceModePreference('guest');
+  clearIdeWorkspaceMetaCache();
+  dispatchWorkspaceSynced(entry.name, entry.id);
+  return { projectName: entry.name, projectKey: entry.id, mode: 'guest' };
 }
 
 /** Local guest workspace (no GitHub) — for dev / try-before-login. */
@@ -258,6 +368,7 @@ export function bindGuestWorkspace(): { projectName: string; projectKey: string 
 
   setBrowserProjectKey(key);
   setBrowserProjectName(name);
+  setWorkspaceModePreference('guest');
   clearIdeWorkspaceMetaCache();
   dispatchWorkspaceSynced(name, key);
   return { projectName: name, projectKey: key };

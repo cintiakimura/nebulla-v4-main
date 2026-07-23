@@ -4,12 +4,29 @@ import App from './App';
 import './index.css';
 import { SwarmProvider } from './components/swarm/SwarmProvider';
 import { setBrowserProjectKey, setBrowserProjectName } from './lib/nebulaProjectApi';
+import {
+  getWorkspaceModePreference,
+  restorePersistedCloudProjectHint,
+} from './lib/nebulaCloud';
 import { readActiveGuestProjectId, readGuestIndex } from './lib/nebulaProjectStore';
 
-/** Guest “create project” persists active id in localStorage; in-memory `projectKey` resets on reload — restore before any API calls. */
+/**
+ * Restore active project before any API calls.
+ * - Guest: active id from nebulaProjectStore
+ * - Cloud: last cloud name/key hint (session sync confirms after login)
+ * nebulaProjectApi also restores its own key/name from localStorage on import.
+ */
+const mode = getWorkspaceModePreference();
+if (mode === 'cloud' || mode === null) {
+  restorePersistedCloudProjectHint();
+}
 const activeGuestId = readActiveGuestProjectId();
 const guestRows = readGuestIndex();
-if (activeGuestId?.trim() && guestRows.some((e) => e.id === activeGuestId)) {
+if (
+  (mode === 'guest' || !mode) &&
+  activeGuestId?.trim() &&
+  guestRows.some((e) => e.id === activeGuestId)
+) {
   setBrowserProjectKey(activeGuestId);
   const row = guestRows.find((e) => e.id === activeGuestId);
   const n = row?.name?.trim();
