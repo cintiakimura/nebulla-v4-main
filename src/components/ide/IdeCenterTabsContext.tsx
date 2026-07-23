@@ -56,6 +56,13 @@ export function IdeCenterTabsProvider({ children }: { children: ReactNode }) {
   const [activeTabId, setActiveTabId] = useState<string | null>(() => DEFAULT_HOME_TAB.id);
   const [uiStudioTab, setUiStudioTab] = useState<UiStudioTab>('design');
 
+  // Drop legacy full-screen Source Control center tabs (moved to left sidebar).
+  useEffect(() => {
+    const scId = panelTabId('source-control');
+    setPanelTabs((prev) => prev.filter((t) => t.pane !== 'source-control'));
+    setActiveTabId((id) => (id === scId ? DEFAULT_HOME_TAB.id : id));
+  }, []);
+
   const fileCenterTabs = useMemo<CenterTab[]>(() => {
     const seen = new Set<string>();
     const out: CenterTab[] = [];
@@ -90,6 +97,17 @@ export function IdeCenterTabsProvider({ children }: { children: ReactNode }) {
   const openPanel = useCallback(
     (pane: IdeCenterPane, opts?: { uiStudioTab?: UiStudioTab }) => {
       if (pane === 'code') return;
+      // Source Control is a collapsible left sidebar (like Explorer), not a center pane.
+      if (pane === 'source-control') {
+        try {
+          window.dispatchEvent(
+            new CustomEvent('nebula-open-left-sidebar', { detail: { view: 'source-control' } }),
+          );
+        } catch {
+          /* ignore */
+        }
+        return;
+      }
       if (opts?.uiStudioTab) setUiStudioTab(opts.uiStudioTab);
       const id = panelTabId(pane);
       setPanelTabs((prev) => {

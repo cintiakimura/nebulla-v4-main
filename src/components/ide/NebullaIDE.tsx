@@ -13,7 +13,12 @@ import { VerticalNav } from '@/components/ide/VerticalNav';
 import { MyServicesOnboarding } from '@/components/MyServicesOnboarding';
 import { WelcomeOnboardingModal } from '@/components/ide/WelcomeOnboardingModal';
 import { FileExplorer } from '@/components/ide/FileExplorer';
+import { SourceControlPanel } from '@/components/SourceControlPanel';
 import { IdeWorkspaceProvider, useIdeWorkspace } from '@/components/ide/IdeWorkspaceContext';
+import {
+  NEBULA_OPEN_LEFT_SIDEBAR,
+  type IdeLeftSidebarView,
+} from '../../lib/ideLeftSidebar';
 import {
   ensureCloudWorkspaceReady,
   fetchSessionUser,
@@ -131,10 +136,30 @@ export function NebullaIDE() {
 function NebullaIDEShell() {
   const { activeNavId, openPanel } = useIdeCenterTabs();
   const explorer = useDragResize(EXPLORER_DEFAULT, EXPLORER_MIN, EXPLORER_MAX, 'horizontal-right');
-  const [explorerOpen, setExplorerOpen] = useState(true);
+  const [leftSidebarOpen, setLeftSidebarOpen] = useState(true);
+  const [leftSidebarView, setLeftSidebarView] = useState<IdeLeftSidebarView>('explorer');
   const chat = useDragResize(CHAT_DEFAULT, CHAT_MIN, CHAT_MAX, 'horizontal-left');
   const terminal = useDragResize(TERMINAL_DEFAULT, TERMINAL_MIN, TERMINAL_MAX, 'vertical');
   const [terminalCollapsed, setTerminalCollapsed] = useState(false);
+
+  /** Same view again collapses; different view switches content and stays open. */
+  const toggleLeftSidebar = useCallback(
+    (view: IdeLeftSidebarView) => {
+      if (leftSidebarOpen && leftSidebarView === view) {
+        setLeftSidebarOpen(false);
+        return;
+      }
+      setLeftSidebarView(view);
+      setLeftSidebarOpen(true);
+    },
+    [leftSidebarOpen, leftSidebarView],
+  );
+
+  /** Open (or switch to) a left sidebar view without toggling closed. */
+  const openLeftSidebar = useCallback((view: IdeLeftSidebarView) => {
+    setLeftSidebarView(view);
+    setLeftSidebarOpen(true);
+  }, []);
 
   const [myServicesOpen, setMyServicesOpen] = useState(false);
   const [myServicesUser, setMyServicesUser] = useState<NebulaSessionUser | null>(null);
@@ -154,6 +179,16 @@ function NebullaIDEShell() {
   useEffect(() => {
     document.title = 'Nebulla.beta — Workspace';
   }, []);
+
+  useEffect(() => {
+    const onOpen = (ev: Event) => {
+      const detail = (ev as CustomEvent<{ view?: IdeLeftSidebarView }>).detail;
+      const view = detail?.view === 'source-control' ? 'source-control' : 'explorer';
+      openLeftSidebar(view);
+    };
+    window.addEventListener(NEBULA_OPEN_LEFT_SIDEBAR, onOpen);
+    return () => window.removeEventListener(NEBULA_OPEN_LEFT_SIDEBAR, onOpen);
+  }, [openLeftSidebar]);
 
   const handleWorkspaceReady = useCallback((ctx: WorkspaceContext) => {
     setWorkspaceCtx(ctx);
@@ -258,14 +293,25 @@ function NebullaIDEShell() {
         return;
       }
       if (id === 'explorer') {
-        setExplorerOpen((v) => !v);
+        toggleLeftSidebar('explorer');
+        return;
+      }
+      if (id === 'source-control') {
+        toggleLeftSidebar('source-control');
         return;
       }
       const pane = navIdToCenterPane(id);
       if (pane !== 'code') openPanel(pane);
     },
-    [openPanel],
+    [openPanel, toggleLeftSidebar],
   );
+
+  const navActiveItem =
+    leftSidebarOpen && (leftSidebarView === 'explorer' || leftSidebarView === 'source-control')
+      ? leftSidebarView
+      : activeNavId === 'source-control'
+        ? 'explorer'
+        : activeNavId;
 
   return (
       <div className="flex h-screen flex-col overflow-hidden bg-background text-foreground">
@@ -298,23 +344,31 @@ function NebullaIDEShell() {
         }
         onSwitchWorkspace={() => setWorkspaceCtx(null)}
         onOpenAccount={() => setMyServicesOpen(true)}
-        onOpenSourceControl={() => openPanel('source-control')}
+        onOpenSourceControl={() => openLeftSidebar('source-control')}
       />
 
       <div className="flex flex-1 overflow-hidden">
         <VerticalNav
           onOpenMyServices={() => setMyServicesOpen(true)}
-          activeItem={activeNavId}
+          activeItem={navActiveItem}
           onSelectItem={selectNavItem}
         />
 
-        {explorerOpen ? (
+        {leftSidebarOpen ? (
           <>
             <div
               className="surface-active tonal-seam-r hidden shrink-0 overflow-hidden md:block"
               style={{ width: explorer.size }}
             >
-              <IdeExplorerSidebar />
+              {leftSidebarView === 'source-control' ? (
+                <SourceControlPanel
+                  projectKey={workspaceProjectKey}
+                  projectName={workspaceCtx?.projectName || getBrowserProjectName()}
+                  compact
+                />
+              ) : (
+                <IdeExplorerSidebar />
+              )}
             </div>
 
             <ResizeHandle onMouseDown={explorer.onMouseDown} orientation="horizontal" />

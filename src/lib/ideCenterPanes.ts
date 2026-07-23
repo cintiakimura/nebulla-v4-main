@@ -11,14 +11,13 @@ export type IdeCenterPane =
   | 'dns'
   | 'search';
 
-/** Six primary center tabs (workflow + Master Plan sections). Always visible. */
+/** Primary center tabs (workflow + Master Plan). Source Control lives in the left sidebar. */
 export const IDE_CENTER_PRIMARY_TABS: { id: IdeCenterPane; label: string }[] = [
   { id: 'code', label: 'Code' },
   { id: 'preview', label: 'App preview' },
   { id: 'master-plan', label: 'Master Plan' },
   { id: 'mind-map', label: 'Mind map' },
   { id: 'ui-studio', label: 'UI Studio' },
-  { id: 'source-control', label: 'Source Control' },
 ];
 
 /** Open from the left nav only — not duplicated in the six-tab bar. */
@@ -45,6 +44,8 @@ const CENTER_PANE_LS = 'nebulla_ide_center_pane_v2';
 export function readStoredCenterPane(): IdeCenterPane {
   try {
     const raw = localStorage.getItem(CENTER_PANE_LS);
+    // Source Control is a left sidebar now — never restore it as a full center takeover.
+    if (raw === 'source-control') return 'projects';
     if (raw && IDE_CENTER_PANE_TABS.some((t) => t.id === raw)) return raw as IdeCenterPane;
   } catch {
     /* ignore */
@@ -61,7 +62,7 @@ export function storeCenterPane(pane: IdeCenterPane): void {
 }
 
 export function navIdToCenterPane(navId: string): IdeCenterPane {
-  if (navId === 'explorer') return 'code';
+  if (navId === 'explorer' || navId === 'source-control') return 'code';
   if (navId === 'visual-ui-editor') return 'ui-studio';
   if (IDE_CENTER_PANE_TABS.some((t) => t.id === navId)) return navId as IdeCenterPane;
   return 'code';

@@ -3,10 +3,12 @@ import {
   ChevronDown,
   ChevronRight,
   FileCode,
+  Folder,
   GitBranch,
   GitCommit,
   RefreshCw,
 } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import { readResponseJson } from '../lib/apiFetch';
 import { withProjectQuery } from '../lib/nebulaProjectApi';
 import { IdeCollapsibleSection } from './ide/IdeCollapsibleSection';
@@ -23,12 +25,20 @@ type LatestCommit = {
 
 type Overview = {
   nebulaProjectRoot: string;
+  nebulaFiles?: { relativePath: string; size: number; mtimeMs: number }[];
   git: {
     branch: string;
     entries: GitEntry[];
     error?: string;
     latestCommit?: LatestCommit | null;
   } | null;
+};
+
+type TreeNode = {
+  name: string;
+  path: string;
+  isFile: boolean;
+  children: TreeNode[];
 };
 
 function statusLabel(status: string): string {
@@ -40,6 +50,16 @@ function statusLabel(status: string): string {
   if (idx === 'R') return 'Renamed';
   if (idx === 'M' || wt === 'M') return 'Modified';
   return 'Changed';
+}
+
+function statusLetter(status: string): string {
+  const label = statusLabel(status);
+  if (label === 'Untracked') return 'U';
+  if (label === 'Added') return 'A';
+  if (label === 'Deleted') return 'D';
+  if (label === 'Renamed') return 'R';
+  if (label === 'Modified') return 'M';
+  return 'C';
 }
 
 function statusTone(status: string): string {
@@ -69,6 +89,42 @@ function fmtCommitDate(iso: string): string {
   }
 }
 
+function buildFileTree(paths: string[]): TreeNode[] {
+  const root: TreeNode = { name: '', path: '', isFile: false, children: [] };
+  const byPath = new Map<string, TreeNode>();
+  byPath.set('', root);
+  for (const fullPath of [...new Set(paths)].sort((a, b) => a.localeCompare(b))) {
+    const clean = fullPath.replace(/^\/+|\/+$/g, '');
+    if (!clean) continue;
+    const parts = clean.split('/').filter(Boolean);
+    let acc = '';
+    let parent = root;
+    for (let i = 0; i < parts.length; i++) {
+      const part = parts[i];
+      acc = acc ? `${acc}/${part}` : part;
+      const isFile = i === parts.length - 1;
+      let node = byPath.get(acc);
+      if (!node) {
+        node = { name: part, path: acc, isFile, children: [] };
+        byPath.set(acc, node);
+        parent.children.push(node);
+      } else if (isFile) {
+        node.isFile = true;
+      }
+      parent = node;
+    }
+  }
+  const sortNodes = (nodes: TreeNode[]) => {
+    nodes.sort((a, b) => {
+      if (a.isFile !== b.isFile) return a.isFile ? 1 : -1;
+      return a.name.localeCompare(b.name);
+    });
+    nodes.forEach((n) => sortNodes(n.children));
+  };
+  sortNodes(root.children);
+  return root.children;
+}
+
 function ChangeRow({ entry, onOpen }: { entry: GitEntry; onOpen: (path: string) => void }) {
   return (
     <button
@@ -86,20 +142,99 @@ function ChangeRow({ entry, onOpen }: { entry: GitEntry; onOpen: (path: string) 
   );
 }
 
+function StatusTreeRows({
+  nodes,
+  depth,
+  expanded,
+  toggle,
+  statusByPath,
+  onOpen,
+}: {
+  nodes: TreeNode[];
+  depth: number;
+  expanded: Record<string, boolean>;
+  toggle: (path: string) => void;
+  statusByPath: Map<string, string>;
+  onOpen: (path: string) => void;
+}) {
+  return (
+    <>
+      {nodes.map((n) => {
+        const st = statusByPath.get(n.path);
+        const folderHasChanges =
+          !n.isFile &&
+          [...statusByPath.keys()].some((p) => p === n.path || p.startsWith(`${n.path}/`));
+        return (
+          <div key={n.path} className="select-none">
+            <button
+              type="button"
+              className="flex w-full items-center gap-1 rounded-md py-0.5 text-left text-[11px] text-foreground/90 hover:bg-secondary/50"
+              style={{ paddingLeft: 6 + depth * 12 }}
+              onClick={() => {
+                if (n.isFile) onOpen(n.path);
+                else toggle(n.path);
+              }}
+              title={n.path}
+            >
+              {!n.isFile ? (
+                expanded[n.path] ? (
+                  <ChevronDown className="h-3 w-3 shrink-0 text-muted-foreground" aria-hidden />
+                ) : (
+                  <ChevronRight className="h-3 w-3 shrink-0 text-muted-foreground" aria-hidden />
+                )
+              ) : (
+                <span className="w-3 shrink-0" />
+              )}
+              {n.isFile ? (
+                <FileCode className="h-3 w-3 shrink-0 text-muted-foreground" aria-hidden />
+              ) : (
+                <Folder className="h-3 w-3 shrink-0 text-muted-foreground" aria-hidden />
+              )}
+              <span className="min-w-0 flex-1 truncate">{n.name}</span>
+              {st ? (
+                <span className={cn('shrink-0 font-mono text-[10px] font-semibold', statusTone(st))}>
+                  {statusLetter(st)}
+                </span>
+              ) : folderHasChanges ? (
+                <span className="shrink-0 font-mono text-[10px] text-muted-foreground/70">•</span>
+              ) : null}
+            </button>
+            {!n.isFile && expanded[n.path] ? (
+              <StatusTreeRows
+                nodes={n.children}
+                depth={depth + 1}
+                expanded={expanded}
+                toggle={toggle}
+                statusByPath={statusByPath}
+                onOpen={onOpen}
+              />
+            ) : null}
+          </div>
+        );
+      })}
+    </>
+  );
+}
+
 export function SourceControlPanel({
   projectKey = 'default',
   projectName = '',
+  compact = false,
 }: {
   projectKey?: string;
   projectName?: string;
+  /** Tighter chrome for the left IDE sidebar. */
+  compact?: boolean;
 }) {
   const [data, setData] = useState<Overview | null>(null);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
   const [changesOpen, setChangesOpen] = useState(true);
+  const [treeOpen, setTreeOpen] = useState(true);
   const [stagedOpen, setStagedOpen] = useState(true);
   const [unstagedOpen, setUnstagedOpen] = useState(true);
-  const [commitOpen, setCommitOpen] = useState(true);
+  const [commitOpen, setCommitOpen] = useState(!compact);
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -110,7 +245,11 @@ export function SourceControlPanel({
       if (!res.ok) {
         throw new Error(typeof j.error === 'string' ? j.error : `HTTP ${res.status}`);
       }
-      setData({ nebulaProjectRoot: j.nebulaProjectRoot, git: j.git ?? null });
+      setData({
+        nebulaProjectRoot: j.nebulaProjectRoot,
+        nebulaFiles: j.nebulaFiles,
+        git: j.git ?? null,
+      });
     } catch (e) {
       setErr(e instanceof Error ? e.message : 'Failed to load source control');
       setData(null);
@@ -150,13 +289,50 @@ export function SourceControlPanel({
   const latest = data?.git?.latestCommit ?? null;
   const branch = data?.git?.branch ?? '—';
 
+  const statusByPath = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const e of entries) m.set(e.path.replace(/\\/g, '/'), e.status);
+    return m;
+  }, [entries]);
+
+  const treePaths = useMemo(() => {
+    const fromFiles = (data?.nebulaFiles ?? []).map((f) => f.relativePath.replace(/\\/g, '/'));
+    const fromGit = entries.map((e) => e.path.replace(/\\/g, '/'));
+    return [...new Set([...fromFiles, ...fromGit])];
+  }, [data?.nebulaFiles, entries]);
+
+  const fileTree = useMemo(() => buildFileTree(treePaths), [treePaths]);
+
+  useEffect(() => {
+    // Auto-expand top-level folders so the tree is useful immediately.
+    if (fileTree.length === 0) return;
+    setExpanded((prev) => {
+      const next = { ...prev };
+      for (const n of fileTree) {
+        if (!n.isFile && next[n.path] === undefined) next[n.path] = true;
+      }
+      return next;
+    });
+  }, [fileTree]);
+
+  const toggleFolder = (path: string) => {
+    setExpanded((prev) => ({ ...prev, [path]: !prev[path] }));
+  };
+
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden bg-background">
-      <div className="tonal-seam-b flex shrink-0 items-center justify-between gap-2 border-b border-white/5 px-3 py-2">
+      <div
+        className={cn(
+          'tonal-seam-b flex shrink-0 items-center justify-between gap-2 border-b border-white/5',
+          compact ? 'px-2 py-1.5' : 'px-3 py-2',
+        )}
+      >
         <div className="flex min-w-0 items-center gap-2">
           <GitBranch className="h-4 w-4 shrink-0 text-primary/80" aria-hidden />
           <div className="min-w-0">
-            <h2 className="type-title-sm text-foreground">Source Control</h2>
+            <h2 className={cn('text-foreground', compact ? 'text-xs font-semibold' : 'type-title-sm')}>
+              Source Control
+            </h2>
             <p className="truncate font-mono text-[10px] text-muted-foreground">
               {branch !== '—' ? (
                 <>
@@ -185,7 +361,7 @@ export function SourceControlPanel({
         <p className="shrink-0 border-b border-red-500/20 bg-red-950/20 px-3 py-2 text-xs text-red-300">{err}</p>
       ) : null}
 
-      <div className="min-h-0 flex-1 overflow-y-auto px-2 py-2">
+      <div className={cn('min-h-0 flex-1 overflow-y-auto', compact ? 'px-1 py-1' : 'px-2 py-2')}>
         {loading && !data ? (
           <p className="px-2 py-4 text-xs text-muted-foreground">Loading git status…</p>
         ) : null}
@@ -274,6 +450,29 @@ export function SourceControlPanel({
                       ) : null}
                     </div>
                   ) : null}
+                </div>
+              )}
+            </IdeCollapsibleSection>
+
+            <IdeCollapsibleSection
+              title="Files"
+              open={treeOpen}
+              onToggle={() => setTreeOpen((v) => !v)}
+              count={treePaths.length}
+              className="mb-1"
+            >
+              {fileTree.length === 0 ? (
+                <p className="px-2 py-2 text-xs text-muted-foreground">No project files yet.</p>
+              ) : (
+                <div className="pb-2">
+                  <StatusTreeRows
+                    nodes={fileTree}
+                    depth={0}
+                    expanded={expanded}
+                    toggle={toggleFolder}
+                    statusByPath={statusByPath}
+                    onOpen={openFile}
+                  />
                 </div>
               )}
             </IdeCollapsibleSection>

@@ -3,7 +3,6 @@ import {
   BookMarked,
   Circle,
   ExternalLink,
-  GitBranch,
   Globe,
   KeyRound,
   LayoutGrid,
@@ -17,8 +16,8 @@ import {
 import { cn } from '@/lib/utils';
 import { AppPreviewPanel } from '../AppPreviewPanel';
 import { MasterPlan } from '../MasterPlan';
-import { SourceControlPanel } from '../SourceControlPanel';
 import { WorkspaceSearchPanel } from '../WorkspaceSearchPanel';
+import { dispatchOpenLeftSidebar } from '../../lib/ideLeftSidebar';
 import { IdeDashboardEmbed } from './IdeDashboardEmbed';
 import { MyProjectsHome } from './MyProjectsHome';
 import { IdeVisualEditor } from './IdeVisualEditor';
@@ -36,7 +35,6 @@ const PANEL_ICONS: Partial<Record<IdeCenterPane, React.ReactNode>> = {
   'master-plan': <BookMarked className="h-3 w-3 shrink-0 opacity-70" aria-hidden />,
   'mind-map': <Network className="h-3 w-3 shrink-0 opacity-70" aria-hidden />,
   'ui-studio': <Palette className="h-3 w-3 shrink-0 opacity-70" aria-hidden />,
-  'source-control': <GitBranch className="h-3 w-3 shrink-0 opacity-70" aria-hidden />,
   projects: <LayoutGrid className="h-3 w-3 shrink-0 opacity-70" aria-hidden />,
   secrets: <KeyRound className="h-3 w-3 shrink-0 opacity-70" aria-hidden />,
   dns: <Globe className="h-3 w-3 shrink-0 opacity-70" aria-hidden />,
@@ -52,7 +50,6 @@ export function IdeCenterWorkspace() {
     setUiStudioTab,
     activateTab,
     closeTab,
-    openPanel,
   } = useIdeCenterTabs();
   const { tabs: fileTabs, activePath } = useIdeWorkspace();
 
@@ -153,7 +150,7 @@ export function IdeCenterWorkspace() {
             <PaneLayer visible={activePane === 'preview'}>
               <AppPreviewPanel
                 pages={previewPages}
-                onOpenSourceControl={() => openPanel('source-control')}
+                onOpenSourceControl={() => dispatchOpenLeftSidebar('source-control')}
                 defaultPanelOpen
                 embeddedInDock
                 hideChrome
@@ -177,9 +174,6 @@ export function IdeCenterWorkspace() {
                   projectDisplayName={projectName}
                 />
               )}
-            </PaneLayer>
-            <PaneLayer visible={activePane === 'source-control'}>
-              <SourceControlPanel projectName={projectName} />
             </PaneLayer>
             <PaneLayer visible={activePane === 'projects'}>
               <MyProjectsHome />
