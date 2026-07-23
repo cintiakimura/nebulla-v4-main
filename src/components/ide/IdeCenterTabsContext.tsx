@@ -21,6 +21,13 @@ import {
 import type { UiStudioTab } from '../../lib/nebulaUiStudioEvents';
 import { useIdeWorkspace } from './IdeWorkspaceContext';
 
+const DEFAULT_HOME_TAB: CenterTab = {
+  id: panelTabId('projects'),
+  kind: 'panel',
+  pane: 'projects',
+  label: PANEL_LABELS.projects,
+};
+
 type IdeCenterTabsValue = {
   openTabs: CenterTab[];
   activeTabId: string | null;
@@ -44,8 +51,9 @@ export function useIdeCenterTabs(): IdeCenterTabsValue {
 
 export function IdeCenterTabsProvider({ children }: { children: ReactNode }) {
   const { tabs, activePath, setActivePath, openFile, closeTab: closeFileTab } = useIdeWorkspace();
-  const [panelTabs, setPanelTabs] = useState<CenterTab[]>([]);
-  const [activeTabId, setActiveTabId] = useState<string | null>(null);
+  /** Default post-login view: My Projects (not empty editors / auto chat). */
+  const [panelTabs, setPanelTabs] = useState<CenterTab[]>(() => [DEFAULT_HOME_TAB]);
+  const [activeTabId, setActiveTabId] = useState<string | null>(() => DEFAULT_HOME_TAB.id);
   const [uiStudioTab, setUiStudioTab] = useState<UiStudioTab>('design');
 
   const fileCenterTabs = useMemo<CenterTab[]>(() => {

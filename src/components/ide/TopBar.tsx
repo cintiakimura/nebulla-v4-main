@@ -11,6 +11,7 @@ import { type IdeChatModelId, useIdeWorkspace } from '@/components/ide/IdeWorksp
 import { buildIdeSwarmFocusFromEditor } from '../../lib/ideSwarmFocus';
 import { fetchMasterPlanAndUiStudio } from '../../lib/ideAssistantGrokChat';
 import { compactMasterPlanForInspect } from '../../lib/ideMasterPlanSummary';
+import { dispatchOpenCenterPanel } from '@/components/ide/IdeCenterTabsContext';
 
 const models: { id: IdeChatModelId; name: string; badge: string | null }[] = [
   { id: 'grok-4', name: 'Grok', badge: 'Latest' },
@@ -152,19 +153,13 @@ export function TopBar({
             )}
           </button>
 
-          {/* New Project (Guest Mode) */}
           <button
             type="button"
-            onClick={() => {
-              try {
-                localStorage.removeItem('nebula_active_project_id_v1');
-              } catch {}
-              window.location.reload();
-            }}
-            title="Start a new project"
+            onClick={() => dispatchOpenCenterPanel('projects')}
+            title="My Projects — start new or open existing"
             className="btn-secondary-surface type-label-sm hidden h-8 items-center gap-1 rounded-md px-2 text-muted-foreground hover:text-foreground sm:inline-flex"
           >
-            New
+            Projects
           </button>
 
           <button

@@ -20,6 +20,7 @@ import { MasterPlan } from '../MasterPlan';
 import { SourceControlPanel } from '../SourceControlPanel';
 import { WorkspaceSearchPanel } from '../WorkspaceSearchPanel';
 import { IdeDashboardEmbed } from './IdeDashboardEmbed';
+import { MyProjectsHome } from './MyProjectsHome';
 import { IdeVisualEditor } from './IdeVisualEditor';
 import { UiStudioMockupPanel } from './UiStudioMockupPanel';
 import { MindMapIdeRoute } from './MindMapIdeRoute';
@@ -181,7 +182,7 @@ export function IdeCenterWorkspace() {
               <SourceControlPanel projectName={projectName} />
             </PaneLayer>
             <PaneLayer visible={activePane === 'projects'}>
-              <IdeDashboardEmbed initialTab="projects" />
+              <MyProjectsHome />
             </PaneLayer>
             <PaneLayer visible={activePane === 'secrets'}>
               <IdeDashboardEmbed initialTab="secrets" />

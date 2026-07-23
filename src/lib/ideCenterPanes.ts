@@ -25,7 +25,7 @@ export const IDE_CENTER_PRIMARY_TABS: { id: IdeCenterPane; label: string }[] = [
 export const IDE_CENTER_NAV_ONLY_PANES: IdeCenterPane[] = ['projects', 'secrets', 'dns', 'search'];
 
 const NAV_ONLY_LABELS: Record<(typeof IDE_CENTER_NAV_ONLY_PANES)[number], string> = {
-  projects: 'Projects',
+  projects: 'My Projects',
   secrets: 'Secrets',
   dns: 'DNS',
   search: 'Search',
@@ -49,7 +49,7 @@ export function readStoredCenterPane(): IdeCenterPane {
   } catch {
     /* ignore */
   }
-  return 'code';
+  return 'projects';
 }
 
 export function storeCenterPane(pane: IdeCenterPane): void {

@@ -53,6 +53,12 @@ import {
 } from '../../lib/ideWorkspaceChatContext';
 import { createGuestProject, writeActiveGuestProjectId } from '../../lib/nebulaProjectStore';
 import { handleSmartChatMessage, type SmartChatFilePreview } from '../../lib/smartChatHandler';
+import {
+  consumeGuidedStartOnReady,
+  NEBULA_CHAT_OPEN_FILE,
+  NEBULA_START_FREE_CHAT,
+  NEBULA_START_GUIDED_CHAT,
+} from '../../lib/ideHomeEvents';
 import { ideContextSnippetForChat, useIdeWorkspace } from '@/components/ide/IdeWorkspaceContext';
 import { ChatFilePreview } from '@/components/ide/ChatFilePreview';
 import {
@@ -754,7 +760,8 @@ export function AIChat() {
       chatHistoryLoadedRef.current = true;
       bootstrapStartedRef.current = false;
       setSendError(null);
-      if (serverHasGrokKey === true) {
+      // New Project flow marks guided start; do not auto-interview on every reset.
+      if (serverHasGrokKey === true && consumeGuidedStartOnReady()) {
         bootstrapStartedRef.current = true;
         void sendChatRef.current(IDE_CHAT_DISCOVERY_BOOTSTRAP);
       }
@@ -763,14 +770,62 @@ export function AIChat() {
     return () => window.removeEventListener('nebula-project-reset', onReset);
   }, [serverHasGrokKey]);
 
+  // Post-login: stay quiet until My Projects → New Project (or explicit guided event).
   useEffect(() => {
     if (serverHasGrokKey !== true) return;
     if (!chatHistoryLoadedRef.current) return;
     if (messagesRef.current.length > 0) return;
     if (bootstrapStartedRef.current || sendingRef.current) return;
+    if (!consumeGuidedStartOnReady()) return;
     bootstrapStartedRef.current = true;
     void sendChatRef.current(IDE_CHAT_DISCOVERY_BOOTSTRAP);
   }, [serverHasGrokKey, messages.length, diskProjectKey]);
+
+  useEffect(() => {
+    const stamp = () =>
+      new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+
+    const onGuided = () => {
+      if (sendingRef.current) return;
+      if (messagesRef.current.length > 0) return;
+      bootstrapStartedRef.current = true;
+      void sendChatRef.current(IDE_CHAT_DISCOVERY_BOOTSTRAP);
+    };
+
+    const onFree = () => {
+      if (messagesRef.current.length > 0) return;
+      bootstrapStartedRef.current = true;
+      const welcome: Message = {
+        id: `a-free-${Date.now()}`,
+        role: 'assistant',
+        content:
+          "Hi! I'm here whenever you need me — ask a question, brainstorm, or tell me what you'd like to build. No interview required.",
+        timestamp: stamp(),
+      };
+      setMessages([welcome]);
+      messagesRef.current = [welcome];
+    };
+
+    const onOpenFile = (ev: Event) => {
+      const detail = (ev as CustomEvent<{ path?: string; url?: string }>).detail || {};
+      const text = detail.url
+        ? detail.url
+        : detail.path
+          ? `open file ${detail.path}`
+          : '';
+      if (!text) return;
+      void sendChatRef.current(text);
+    };
+
+    window.addEventListener(NEBULA_START_GUIDED_CHAT, onGuided);
+    window.addEventListener(NEBULA_START_FREE_CHAT, onFree);
+    window.addEventListener(NEBULA_CHAT_OPEN_FILE, onOpenFile as EventListener);
+    return () => {
+      window.removeEventListener(NEBULA_START_GUIDED_CHAT, onGuided);
+      window.removeEventListener(NEBULA_START_FREE_CHAT, onFree);
+      window.removeEventListener(NEBULA_CHAT_OPEN_FILE, onOpenFile as EventListener);
+    };
+  }, []);
 
   useEffect(() => {
     const onSync = () => {
