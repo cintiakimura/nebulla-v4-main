@@ -288,7 +288,7 @@ function NebullaIDEShell() {
 
   const selectNavItem = useCallback(
     (id: string) => {
-      if (id === 'project-settings') {
+      if (id === 'project-settings' || id === 'my-services') {
         setMyServicesOpen(true);
         return;
       }

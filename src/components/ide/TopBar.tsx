@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState } from 'react';
-import { ChevronDown, Copy, GitBranch, MonitorPlay } from 'lucide-react';
+import { ChevronDown, Copy, GitBranch, MonitorPlay, Sparkles } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useSwarm } from '@/components/swarm/SwarmProvider';
 import { Logo } from '@/components/Logo';
@@ -160,6 +160,17 @@ export function TopBar({
             className="btn-secondary-surface type-label-sm hidden h-8 items-center gap-1 rounded-md px-2 text-muted-foreground hover:text-foreground sm:inline-flex"
           >
             Projects
+          </button>
+
+          <button
+            type="button"
+            onClick={() => onOpenAccount?.()}
+            disabled={!onOpenAccount}
+            title="My Services — GitHub, API keys, account"
+            className="btn-secondary-surface type-label-sm hidden h-8 items-center gap-1 rounded-md px-2 text-muted-foreground hover:text-foreground sm:inline-flex"
+          >
+            <Sparkles className="h-3.5 w-3.5" aria-hidden />
+            Services
           </button>
 
           <button
