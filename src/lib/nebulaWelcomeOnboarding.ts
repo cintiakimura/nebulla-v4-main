@@ -11,7 +11,7 @@ export const WELCOME_ONBOARDING_SEEN_KEY = 'nebula_welcome_onboarding_seen_v1';
 export const WELCOME_ONBOARDING_SESSION_SKIP_KEY = 'nebula_welcome_onboarding_session_skip_v1';
 export const WELCOME_PREFERRED_AI_PROVIDER_KEY = 'nebula_preferred_ai_provider_v1';
 
-export type WelcomeAiProvider = 'grok' | 'claude' | 'openai' | 'gemini' | 'other';
+export type WelcomeAiProvider = 'grok' | 'claude' | 'openai' | 'gemini' | 'v0' | 'other';
 
 /** Secret env name stored in project Secrets (avoids reserved main-Grok names). */
 export function aiProviderSecretName(provider: WelcomeAiProvider): string {
@@ -24,6 +24,8 @@ export function aiProviderSecretName(provider: WelcomeAiProvider): string {
       return 'OPENAI_API_KEY';
     case 'gemini':
       return 'GEMINI_API_KEY';
+    case 'v0':
+      return 'V0_API_KEY';
     default:
       return 'AI_API_KEY';
   }
@@ -39,6 +41,8 @@ export function aiProviderLabel(provider: WelcomeAiProvider): string {
       return 'OpenAI';
     case 'gemini':
       return 'Google Gemini';
+    case 'v0':
+      return 'V0';
     default:
       return 'Other';
   }
@@ -55,6 +59,8 @@ export function aiProviderKeysUrl(provider: WelcomeAiProvider): string | null {
       return 'https://platform.openai.com/api-keys';
     case 'gemini':
       return 'https://aistudio.google.com/app/apikey';
+    case 'v0':
+      return 'https://v0.dev/settings/api-keys';
     default:
       return null;
   }
@@ -120,7 +126,16 @@ export function setPreferredAiProvider(provider: WelcomeAiProvider): void {
 export function getPreferredAiProvider(): WelcomeAiProvider | null {
   try {
     const v = localStorage.getItem(WELCOME_PREFERRED_AI_PROVIDER_KEY);
-    if (v === 'grok' || v === 'claude' || v === 'openai' || v === 'gemini' || v === 'other') return v;
+    if (
+      v === 'grok' ||
+      v === 'claude' ||
+      v === 'openai' ||
+      v === 'gemini' ||
+      v === 'v0' ||
+      v === 'other'
+    ) {
+      return v;
+    }
   } catch {
     /* ignore */
   }
@@ -134,6 +149,7 @@ export function hasLocalAiApiKeys(projectKey: string): boolean {
     'ANTHROPIC_API_KEY',
     'OPENAI_API_KEY',
     'GEMINI_API_KEY',
+    'V0_API_KEY',
     'AI_API_KEY',
     'CLAUDE_API_KEY',
   ];

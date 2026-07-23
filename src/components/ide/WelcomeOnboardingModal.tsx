@@ -16,6 +16,7 @@ import { fetchNebulaPublicConfig } from '../../lib/nebulaPublicConfig';
 import { getBrowserProjectKey } from '../../lib/nebulaProjectApi';
 import { upsertProjectSecret } from '../../lib/nebulaSecretHelpers';
 import { formatGithubConnectionStatus } from '../../lib/githubDisplay';
+import { setStoredV0ApiKey } from '../../lib/v0Key';
 import {
   aiProviderKeysUrl,
   aiProviderLabel,
@@ -33,11 +34,18 @@ const QUICK_SETUP: {
   label: string;
   recommended?: boolean;
   href: string;
+  hint?: string;
 }[] = [
   { id: 'grok', label: 'Grok / xAI', recommended: true, href: 'https://console.x.ai/' },
   { id: 'claude', label: 'Claude', href: 'https://console.anthropic.com/settings/keys' },
   { id: 'openai', label: 'OpenAI', href: 'https://platform.openai.com/api-keys' },
   { id: 'gemini', label: 'Google Gemini', href: 'https://aistudio.google.com/app/apikey' },
+  {
+    id: 'v0',
+    label: 'V0 API Key',
+    href: 'https://v0.dev/settings/api-keys',
+    hint: 'UI generation',
+  },
 ];
 
 type Props = {
@@ -125,10 +133,19 @@ export function WelcomeOnboardingModal({ open, user, onClose }: Props) {
       const projectKey = getBrowserProjectKey();
       const secretName = aiProviderSecretName(provider);
       upsertProjectSecret(projectKey, secretName, value, 'api_key');
-      setPreferredAiProvider(provider);
+      if (provider === 'v0') {
+        setStoredV0ApiKey(value);
+        window.dispatchEvent(new CustomEvent('nebula-v0-key-updated'));
+      } else {
+        setPreferredAiProvider(provider);
+      }
       setApiKey('');
       setKeySaved(true);
-      setKeyMsg(`Saved! ${aiProviderLabel(provider)} is ready for this project.`);
+      setKeyMsg(
+        provider === 'v0'
+          ? 'Saved! V0 is ready for UI generation in this project.'
+          : `Saved! ${aiProviderLabel(provider)} is ready for this project.`,
+      );
       window.dispatchEvent(new CustomEvent('nebula-secrets-updated'));
     } catch {
       setKeyMsg('Could not save. Check that browser storage is allowed.');
@@ -205,8 +222,8 @@ export function WelcomeOnboardingModal({ open, user, onClose }: Props) {
 
             <section className="space-y-3 rounded-xl border border-white/10 bg-white/[0.03] p-4 sm:p-5">
               <p className="text-sm leading-relaxed text-slate-300">
-                To give you full control and the best performance, Nebulla uses{' '}
-                <strong className="font-semibold text-slate-100">your own AI API key</strong>.
+                To give you full control, Nebulla uses{' '}
+                <strong className="font-semibold text-slate-100">your own AI and V0 API keys</strong>.
               </p>
               <ul className="space-y-1.5 text-sm text-slate-400">
                 <li className="flex gap-2">
@@ -225,21 +242,15 @@ export function WelcomeOnboardingModal({ open, user, onClose }: Props) {
                   <span className="text-cyan-400/90" aria-hidden>
                     •
                   </span>
-                  <span>You can choose the fastest or cheapest model</span>
-                </li>
-                <li className="flex gap-2">
-                  <span className="text-cyan-400/90" aria-hidden>
-                    •
-                  </span>
-                  <span>Your data stays more private</span>
+                  <span>Best performance with your preferred models</span>
                 </li>
               </ul>
               <div className="flex gap-2.5 rounded-lg border border-cyan-500/25 bg-cyan-500/10 px-3 py-2.5">
                 <Zap className="mt-0.5 h-4 w-4 shrink-0 text-cyan-300" aria-hidden />
                 <p className="text-xs leading-relaxed text-cyan-50/95 sm:text-[13px]">
                   We strongly recommend <strong className="font-semibold text-white">Grok (xAI)</strong> for
-                  the best coding, reasoning, and speed — but you can also use Claude, OpenAI, Google Gemini,
-                  or others if you prefer.
+                  coding, but you can use Claude, OpenAI, or others. Add a{' '}
+                  <strong className="font-semibold text-white">V0</strong> key for the best UI generation.
                 </p>
               </div>
             </section>
@@ -248,7 +259,7 @@ export function WelcomeOnboardingModal({ open, user, onClose }: Props) {
             <section className="space-y-3">
               <div className="flex items-center gap-2">
                 <KeyRound className="h-4 w-4 text-cyan-300/90" aria-hidden />
-                <h3 className="text-sm font-semibold text-slate-100">Get an API key</h3>
+                <h3 className="text-sm font-semibold text-slate-100">Quick setup</h3>
               </div>
               <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                 {QUICK_SETUP.map((item) => (
@@ -265,7 +276,9 @@ export function WelcomeOnboardingModal({ open, user, onClose }: Props) {
                       'group inline-flex items-center justify-between gap-2 rounded-xl border px-3.5 py-3 text-left text-sm transition',
                       item.recommended
                         ? 'border-cyan-500/40 bg-cyan-500/10 text-cyan-50 hover:bg-cyan-500/15'
-                        : 'border-white/10 bg-white/[0.03] text-slate-200 hover:border-white/20 hover:bg-white/[0.05]',
+                        : item.id === 'v0'
+                          ? 'border-violet-400/30 bg-violet-500/10 text-slate-100 hover:bg-violet-500/15'
+                          : 'border-white/10 bg-white/[0.03] text-slate-200 hover:border-white/20 hover:bg-white/[0.05]',
                     )}
                   >
                     <span className="min-w-0">
@@ -273,6 +286,10 @@ export function WelcomeOnboardingModal({ open, user, onClose }: Props) {
                       {item.recommended ? (
                         <span className="mt-0.5 block text-[10px] font-medium uppercase tracking-wide text-cyan-300/90">
                           Recommended
+                        </span>
+                      ) : item.hint ? (
+                        <span className="mt-0.5 block text-[10px] font-medium uppercase tracking-wide text-violet-300/90">
+                          {item.hint}
                         </span>
                       ) : null}
                     </span>
@@ -283,7 +300,8 @@ export function WelcomeOnboardingModal({ open, user, onClose }: Props) {
 
               <div className="space-y-2 rounded-xl border border-white/10 bg-black/25 p-3.5">
                 <p className="text-xs text-slate-500">
-                  Then paste your key below (saved in Secrets for this project). Selected:{' '}
+                  Then paste your key below (saved in Secrets for this project
+                  {provider === 'v0' ? ', and used for UI Studio / v0' : ''}). Selected:{' '}
                   <span className="text-slate-300">{aiProviderLabel(provider)}</span>
                   {keysUrl ? (
                     <>
