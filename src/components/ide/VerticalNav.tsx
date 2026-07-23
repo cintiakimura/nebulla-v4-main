@@ -3,10 +3,8 @@ import {
   BookMarked,
   FolderTree,
   GitBranch,
-  Globe,
   KeyRound,
   LayoutGrid,
-  MonitorPlay,
   Network,
   Palette,
   Settings,
@@ -26,13 +24,11 @@ const items: NavItem[] = [
   { id: 'source-control', icon: <GitBranch className="h-5 w-5" />, label: 'Source Control' },
   { id: 'projects', icon: <LayoutGrid className="h-5 w-5" />, label: 'My Projects' },
   { id: 'my-services', icon: <Sparkles className="h-5 w-5" />, label: 'My Services' },
-  { id: 'preview', icon: <MonitorPlay className="h-5 w-5" />, label: 'App Preview' },
   { id: 'master-plan', icon: <BookMarked className="h-5 w-5" />, label: 'Master Plan' },
   { id: 'mind-map', icon: <Network className="h-5 w-5" />, label: 'Mind Map' },
   { id: 'visual-ui-editor', icon: <Palette className="h-5 w-5" />, label: 'Nebula UI Studio' },
   { id: 'secrets', icon: <KeyRound className="h-5 w-5" />, label: 'Secrets' },
   { id: 'project-settings', icon: <Settings className="h-5 w-5" />, label: 'Settings' },
-  { id: 'dns', icon: <Globe className="h-5 w-5" />, label: 'DNS' },
 ];
 
 export function VerticalNav({

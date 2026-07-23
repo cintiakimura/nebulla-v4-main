@@ -35,11 +35,10 @@ import { ChatModelSelector } from '@/components/settings/ModelSelector';
 
 export type DashboardTab = 'projects' | 'project-settings' | 'secrets' | 'dns';
 
-const DASH_TABS: { id: DashboardTab; label: string }[] = [
+const DASH_TABS: { id: Exclude<DashboardTab, 'dns'>; label: string }[] = [
   { id: 'projects', label: 'Projects' },
   { id: 'project-settings', label: 'Settings' },
   { id: 'secrets', label: 'Secrets' },
-  { id: 'dns', label: 'DNS' },
 ];
 
 interface DashboardProps {
@@ -108,8 +107,9 @@ export function Dashboard({
               activeProjectKey={activeProjectKey}
             />
           )}
-          {activeTab === 'secrets' && <SecretsTab activeProjectKey={activeProjectKey} />}
-          {activeTab === 'dns' && <DnsTab />}
+          {(activeTab === 'secrets' || activeTab === 'dns') && (
+            <SecretsTab activeProjectKey={activeProjectKey} />
+          )}
         </div>
       </div>
       <VersionHistoryModal open={versionHistoryOpen} onClose={() => setVersionHistoryOpen(false)} />
@@ -465,17 +465,18 @@ function ProjectSettingsTab({
   );
 }
 
-function DnsTab() {
+/** DNS & domain — shown under Secrets (standalone DNS page disabled). */
+function DnsSection() {
   const [customDomain, setCustomDomain] = useState('');
 
   return (
-    <div className="space-y-8 animate-in slide-in-from-right-4 duration-300">
+    <div className="space-y-6">
       <div>
         <h3 className="text-xl font-headline text-cyan-300 mb-1 flex items-center gap-2">
           <Globe className="w-6 h-6" />
           DNS & domain
         </h3>
-        <p className="text-sm text-slate-500 mb-6">
+        <p className="text-sm text-slate-500 mb-2">
           Point your domain at the deployed Render service. Values here are for planning only until your control plane syncs them to Render.
         </p>
       </div>
@@ -724,8 +725,11 @@ function ProjectSecretsEditor({ activeProjectKey }: { activeProjectKey: string }
 
 function SecretsTab({ activeProjectKey }: { activeProjectKey: string }) {
   return (
-    <div className="animate-in slide-in-from-right-4 duration-300">
+    <div className="space-y-10 animate-in slide-in-from-right-4 duration-300">
       <ProjectSecretsEditor activeProjectKey={activeProjectKey} />
+      <div className="border-t border-white/10 pt-8">
+        <DnsSection />
+      </div>
     </div>
   );
 }

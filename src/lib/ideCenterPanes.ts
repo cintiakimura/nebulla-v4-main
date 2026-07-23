@@ -20,13 +20,12 @@ export const IDE_CENTER_PRIMARY_TABS: { id: IdeCenterPane; label: string }[] = [
   { id: 'ui-studio', label: 'UI Studio' },
 ];
 
-/** Open from the left nav only — not duplicated in the six-tab bar. Search removed (TopBar find icon). */
-export const IDE_CENTER_NAV_ONLY_PANES: IdeCenterPane[] = ['projects', 'secrets', 'dns'];
+/** Open from the left nav only — not duplicated in the six-tab bar. Search/DNS removed (DNS lives under Secrets). */
+export const IDE_CENTER_NAV_ONLY_PANES: IdeCenterPane[] = ['projects', 'secrets'];
 
 const NAV_ONLY_LABELS: Record<(typeof IDE_CENTER_NAV_ONLY_PANES)[number], string> = {
   projects: 'My Projects',
   secrets: 'Secrets',
-  dns: 'DNS',
 };
 
 export const IDE_CENTER_PANE_TABS: { id: IdeCenterPane; label: string }[] = [
@@ -47,6 +46,8 @@ export function readStoredCenterPane(): IdeCenterPane {
     if (raw === 'source-control') return 'projects';
     // Search page removed — find/replace is the TopBar search icon only.
     if (raw === 'search') return 'projects';
+    // DNS page disabled — content lives under Secrets.
+    if (raw === 'dns') return 'secrets';
     if (raw && IDE_CENTER_PANE_TABS.some((t) => t.id === raw)) return raw as IdeCenterPane;
   } catch {
     /* ignore */
@@ -65,6 +66,7 @@ export function storeCenterPane(pane: IdeCenterPane): void {
 export function navIdToCenterPane(navId: string): IdeCenterPane {
   if (navId === 'explorer' || navId === 'source-control') return 'code';
   if (navId === 'visual-ui-editor') return 'ui-studio';
+  if (navId === 'dns') return 'secrets';
   if (IDE_CENTER_PANE_TABS.some((t) => t.id === navId)) return navId as IdeCenterPane;
   return 'code';
 }

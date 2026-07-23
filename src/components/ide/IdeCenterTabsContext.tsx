@@ -56,11 +56,28 @@ export function IdeCenterTabsProvider({ children }: { children: ReactNode }) {
   const [activeTabId, setActiveTabId] = useState<string | null>(() => DEFAULT_HOME_TAB.id);
   const [uiStudioTab, setUiStudioTab] = useState<UiStudioTab>('design');
 
-  // Drop legacy full-screen Source Control / Search center tabs.
+  // Drop legacy full-screen Source Control / Search / DNS center tabs.
   useEffect(() => {
-    const drop = new Set([panelTabId('source-control'), panelTabId('search')]);
-    setPanelTabs((prev) => prev.filter((t) => t.pane !== 'source-control' && t.pane !== 'search'));
-    setActiveTabId((id) => (id && drop.has(id) ? DEFAULT_HOME_TAB.id : id));
+    const drop = new Set([panelTabId('source-control'), panelTabId('search'), panelTabId('dns')]);
+    setPanelTabs((prev) => {
+      const next = prev.filter(
+        (t) => t.pane !== 'source-control' && t.pane !== 'search' && t.pane !== 'dns',
+      );
+      // If DNS was open, ensure Secrets is available.
+      if (prev.some((t) => t.pane === 'dns') && !next.some((t) => t.pane === 'secrets')) {
+        next.push({
+          id: panelTabId('secrets'),
+          kind: 'panel',
+          pane: 'secrets',
+          label: PANEL_LABELS.secrets,
+        });
+      }
+      return next;
+    });
+    setActiveTabId((id) => {
+      if (id === panelTabId('dns')) return panelTabId('secrets');
+      return id && drop.has(id) ? DEFAULT_HOME_TAB.id : id;
+    });
   }, []);
 
   const fileCenterTabs = useMemo<CenterTab[]>(() => {
@@ -110,11 +127,16 @@ export function IdeCenterTabsProvider({ children }: { children: ReactNode }) {
       }
       // Search page removed — find/replace is the TopBar search icon only.
       if (pane === 'search') return;
+      // DNS page disabled — open Secrets (DNS section is embedded there).
+      const targetPane: IdeCenterPane = pane === 'dns' ? 'secrets' : pane;
       if (opts?.uiStudioTab) setUiStudioTab(opts.uiStudioTab);
-      const id = panelTabId(pane);
+      const id = panelTabId(targetPane);
       setPanelTabs((prev) => {
         if (prev.some((t) => t.id === id)) return prev;
-        return [...prev, { id, kind: 'panel', pane, label: PANEL_LABELS[pane] ?? pane }];
+        return [
+          ...prev,
+          { id, kind: 'panel', pane: targetPane, label: PANEL_LABELS[targetPane] ?? targetPane },
+        ];
       });
       setActiveTabId(id);
     },

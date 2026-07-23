@@ -3,7 +3,6 @@ import {
   BookMarked,
   Circle,
   ExternalLink,
-  Globe,
   KeyRound,
   LayoutGrid,
   Loader2,
@@ -35,7 +34,6 @@ const PANEL_ICONS: Partial<Record<IdeCenterPane, React.ReactNode>> = {
   'ui-studio': <Palette className="h-3 w-3 shrink-0 opacity-70" aria-hidden />,
   projects: <LayoutGrid className="h-3 w-3 shrink-0 opacity-70" aria-hidden />,
   secrets: <KeyRound className="h-3 w-3 shrink-0 opacity-70" aria-hidden />,
-  dns: <Globe className="h-3 w-3 shrink-0 opacity-70" aria-hidden />,
 };
 
 export function IdeCenterWorkspace() {
@@ -177,9 +175,6 @@ export function IdeCenterWorkspace() {
             </PaneLayer>
             <PaneLayer visible={activePane === 'secrets'}>
               <IdeDashboardEmbed initialTab="secrets" />
-            </PaneLayer>
-            <PaneLayer visible={activePane === 'dns'}>
-              <IdeDashboardEmbed initialTab="dns" />
             </PaneLayer>
           </>
         )}

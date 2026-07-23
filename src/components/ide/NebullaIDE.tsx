@@ -344,7 +344,6 @@ function NebullaIDEShell() {
         }
         onSwitchWorkspace={() => setWorkspaceCtx(null)}
         onOpenAccount={() => setMyServicesOpen(true)}
-        onOpenSourceControl={() => openLeftSidebar('source-control')}
       />
 
       <div className="flex flex-1 overflow-hidden">

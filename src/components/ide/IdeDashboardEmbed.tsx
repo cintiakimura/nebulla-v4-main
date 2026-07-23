@@ -21,13 +21,15 @@ export function IdeDashboardEmbed({
 }: {
   initialTab: DashboardTab;
 }) {
-  const [activeTab, setActiveTab] = useState<DashboardTab>(initialTab);
+  const [activeTab, setActiveTab] = useState<DashboardTab>(() =>
+    initialTab === 'dns' ? 'secrets' : initialTab,
+  );
   const [projectName, setProjectNameState] = useState(
     () => getBrowserProjectName().trim() || 'Untitled project',
   );
 
   useEffect(() => {
-    setActiveTab(initialTab);
+    setActiveTab(initialTab === 'dns' ? 'secrets' : initialTab);
   }, [initialTab]);
 
   useEffect(() => {

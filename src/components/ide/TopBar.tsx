@@ -1,11 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Check, ChevronDown, Copy, GitBranch, MonitorPlay, Search, Sparkles, X } from 'lucide-react';
+import { Check, ChevronDown, Copy, MonitorPlay, Search, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Logo } from '@/components/Logo';
 import { getBrowserProjectName } from '../../lib/nebulaProjectApi';
 import { useClickOutside } from '../../lib/useClickOutside';
 import { type IdeChatModelId, useIdeWorkspace } from '@/components/ide/IdeWorkspaceContext';
-import { dispatchOpenCenterPanel } from '@/components/ide/IdeCenterTabsContext';
 
 const models: { id: IdeChatModelId; name: string; badge: string | null }[] = [
   { id: 'grok-4', name: 'Grok', badge: 'Latest' },
@@ -15,7 +14,6 @@ export function TopBar({
   workspaceLabel,
   onSwitchWorkspace,
   onOpenAccount,
-  onOpenSourceControl,
 }: {
   /** Active cloud/local project name from workspace gate. */
   workspaceLabel?: string;
@@ -23,10 +21,8 @@ export function TopBar({
   onSwitchWorkspace?: () => void;
   /** Opens My services (API keys, GitHub, etc.). */
   onOpenAccount?: () => void;
-  /** Opens Source Control (git status & workspace files). */
-  onOpenSourceControl?: () => void;
 }) {
-  const { chatModel, setChatModel, gitBranch, activePath, activeTab, updateActiveContent, saveTab } =
+  const { chatModel, setChatModel, activePath, activeTab, updateActiveContent, saveTab } =
     useIdeWorkspace();
   const [isModelOpen, setIsModelOpen] = useState(false);
   const [projectCopied, setProjectCopied] = useState(false);
@@ -136,43 +132,6 @@ export function TopBar({
             ) : (
               <Copy className="h-3 w-3 shrink-0 opacity-50" aria-hidden />
             )}
-          </button>
-
-          <button
-            type="button"
-            onClick={() => dispatchOpenCenterPanel('projects')}
-            title="My Projects — start new or open existing"
-            className="btn-secondary-surface type-label-sm hidden h-8 items-center gap-1 rounded-md px-2 text-muted-foreground hover:text-foreground sm:inline-flex"
-          >
-            Projects
-          </button>
-
-          <button
-            type="button"
-            onClick={() => onOpenAccount?.()}
-            disabled={!onOpenAccount}
-            title="My Services — GitHub, API keys, account"
-            className="btn-secondary-surface type-label-sm hidden h-8 items-center gap-1 rounded-md px-2 text-muted-foreground hover:text-foreground sm:inline-flex"
-          >
-            <Sparkles className="h-3.5 w-3.5" aria-hidden />
-            Services
-          </button>
-
-          <button
-            type="button"
-            onClick={() => onOpenSourceControl?.()}
-            disabled={!onOpenSourceControl}
-            title={
-              onOpenSourceControl
-                ? gitBranch
-                  ? `Source control · ${gitBranch}`
-                  : 'Source control'
-                : undefined
-            }
-            aria-label="Open source control"
-            className="btn-secondary-surface type-label-sm hidden h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:text-foreground disabled:pointer-events-none disabled:opacity-40 sm:inline-flex"
-          >
-            <GitBranch className="h-4 w-4" aria-hidden />
           </button>
         </div>
 
