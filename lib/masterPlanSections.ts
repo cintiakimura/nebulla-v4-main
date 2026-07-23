@@ -181,10 +181,10 @@ MASTER PLAN SECTION SEPARATION (mandatory inside <START_MASTERPLAN>…</END_MAST
   ### 5. UI/UX design
 - Put content ONLY under the matching section. Never dump Tabs 2–5 into "1. Goal of the app".
 - Section 1 = product goal, users, problem, scope only.
-- Section 2 = research, competitors, search/discovery, evidence (Text & Search).
-- Section 3 = features list with KPIs.
-- Section 4 = every page, route (e.g. \`/dashboard\`), navigation, buttons — drives Mind Map.
-- Section 5 = visual design system, colors, typography, components — drives Nebula UI Studio / v0.
-- Mind Map uses Section 4 only. v0 UI generation uses Section 5 primarily.
+- Section 2 = Mandatory Research Pillars 1–3: **8–12 real competitors** (actual names), ranked most-used features, evidence/studies (or exact phrase "No supporting studies found for this feature.").
+- Section 3 = features list with KPIs (from Pillar 2 ranking).
+- Section 4 = every page at developer depth: exact name, purpose, roles, sections, every important button + action, nav method, features on page, key data displayed/collected, routes (e.g. \`/dashboard\`) — drives Mind Map. Vague pages forbidden.
+- Section 5 = concrete visual direction from Pillar 4 + target user (palette, type, density, nav, components) — drives Nebula UI Studio / v0. No vague-only "modern/clean/user-friendly".
+- Mind Map uses Section 4 only. v0 UI generation uses §2 research + Section 5 primarily (plus concise §4 routes in v0-prompt.md).
 `.trim();
 }

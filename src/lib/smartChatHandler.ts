@@ -56,8 +56,8 @@ function summarizeMarkdownPreview(content: string, maxLines = 8): string {
 /**
  * Pre-handle a user message.
  * - File mode: open local/GitHub files and return a rich preview (handled locally).
- * - Guided / Free / Coding: NEVER handled locally — Master Plan, v0, and Go Code
- *   continue through the existing Grok pipeline unchanged.
+ * - Guided / Free / Coding / Debugging / Architecture / UI: NEVER handled locally —
+ *   Master Plan, v0, and Go Code continue through the existing Grok pipeline unchanged.
  */
 export async function handleSmartChatMessage(userText: string): Promise<SmartChatHandlerResult> {
   const modeMeta = detectChatMode(userText);
@@ -115,7 +115,7 @@ export async function handleSmartChatMessage(userText: string): Promise<SmartCha
     };
   }
 
-  // Guided / Coding / Free — pass through to existing Grok chat (Master Plan + Go intact).
+  // Non-file modes — pass through to existing Grok chat (Master Plan + Go intact).
   return {
     mode,
     modeMeta,
@@ -123,9 +123,15 @@ export async function handleSmartChatMessage(userText: string): Promise<SmartCha
     assistantMessage: describeChatMode(mode),
     codingHint:
       mode === 'coding'
-        ? 'Use nebulla-project/code-review-checklist.md; on errors use full-bug-database.md + NDM.'
-        : mode === 'guided'
-          ? 'guided-onboarding'
-          : undefined,
+        ? 'Use nebulla-project/code-review-checklist.md; prefer smallest safe change; architecture first unless user explicitly requested code.'
+        : mode === 'debugging'
+          ? 'NDM: Verify → Analyze → Trace → Fix → Validate; use full-bug-database.md; smallest safe fix.'
+          : mode === 'architecture'
+            ? 'Mandatory Research Pillars before §§2–5 / V0; Master Plan tags only.'
+            : mode === 'ui'
+              ? 'Research-grounded V0/UI Studio prompt; no vague modern/clean/user-friendly alone.'
+              : mode === 'guided'
+                ? 'guided-onboarding'
+                : undefined,
   };
 }

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Bot, Hand, Loader2, Mic, Paperclip, Rocket, Send, User } from 'lucide-react';
+import { Bot, Loader2, Mic, Rocket, Send, User } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { fetchSessionUser, syncActiveCloudProjectFromSession, upsertCloudProject } from '../../lib/nebulaCloud';
 import {
@@ -16,10 +16,8 @@ import {
   withProjectBody,
   withProjectQuery,
 } from '../../lib/nebulaProjectApi';
-import { uploadFileToR2 } from '../../lib/nebulaStorageClient';
 import {
   cancelProjectBackgroundJobs,
-  registerDesignReference,
   resetProjectFromScratch,
 } from '../../lib/ideProjectReset';
 import { sendIdeAssistantGrokTurn } from '../../lib/ideAssistantGrokChat';
@@ -141,24 +139,6 @@ type Message = {
   goSummary?: string;
 };
 
-function SoundWaveIcon({ className }: { className?: string }) {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      className={cn('h-[18px] w-[18px]', className)}
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      aria-hidden
-    >
-      <path d="M8 9v6" />
-      <path d="M12 6v12" />
-      <path d="M16 10v4" />
-    </svg>
-  );
-}
-
 function ChatRoundButton({
   children,
   label,
@@ -263,8 +243,6 @@ export function AIChat() {
   const [v0WatchActive, setV0WatchActive] = useState(false);
   const [v0Live, setV0Live] = useState(false);
   const codingActivityRef = useRef(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const [uploadBusy, setUploadBusy] = useState(false);
 
   const resetCodingActivity = useCallback(() => {
     codingActivityRef.current = false;
@@ -368,7 +346,7 @@ export function AIChat() {
   const [isTtsPlaying, setIsTtsPlaying] = useState(false);
   /** Mic stays off for `MIC_REENABLE_AFTER_TTS_MS` after TTS ends. */
   const [micCooldown, setMicCooldown] = useState(false);
-  const [isHandsFree, setIsHandsFree] = useState(false);
+  const [, setIsHandsFree] = useState(false);
 
   const messagesRef = useRef(messages);
   const inputRef = useRef(input);
@@ -695,17 +673,6 @@ export function AIChat() {
     setIsHandsFree(true);
     void startHandsFree({ resumeOnly: true });
   }, [startHandsFree]);
-
-  const toggleHandsFree = useCallback(() => {
-    if (isHandsFreeRef.current) {
-      stopHandsFree();
-      setAccessoryHint('Open talk stopped.');
-      window.setTimeout(() => setAccessoryHint(null), 2200);
-      return;
-    }
-    void startHandsFree();
-  }, [startHandsFree, stopHandsFree]);
-
 
   const refreshWorkspaceMeta = useCallback(async () => {
     try {
@@ -1517,36 +1484,6 @@ export function AIChat() {
     }, TTS_START_DEBOUNCE_MS);
   };
 
-  const handleDesignFileUpload = useCallback(async (file: File) => {
-    if (uploadBusy || sending) return;
-    setUploadBusy(true);
-    setAccessoryHint(`Uploading ${file.name}…`);
-    try {
-      const uploaded = await uploadFileToR2(file, {
-        projectKey: getBrowserProjectKey(),
-        category: file.type.startsWith('image/') ? 'images' : 'assets',
-      });
-      if (!uploaded.ok) {
-        setAccessoryHint('error' in uploaded ? uploaded.error : 'Upload failed');
-        window.setTimeout(() => setAccessoryHint(null), 5000);
-        return;
-      }
-      await registerDesignReference({
-        filename: file.name,
-        url: uploaded.url,
-        storageKey: uploaded.key,
-        note: 'Brand / design reference from discovery upload',
-      });
-      setAccessoryHint(`Saved design reference: ${file.name}`);
-      window.setTimeout(() => setAccessoryHint(null), 4500);
-    } catch (e) {
-      setAccessoryHint(e instanceof Error ? e.message : 'Upload failed');
-      window.setTimeout(() => setAccessoryHint(null), 5000);
-    } finally {
-      setUploadBusy(false);
-    }
-  }, [uploadBusy, sending]);
-
   const toggleVoiceMic = () => {
     if (sending || micInputBlocked) return;
     const r = voiceRecognitionRef.current;
@@ -1883,67 +1820,24 @@ export function AIChat() {
           <div className="mt-2 flex items-center justify-between gap-3">
             <div className="flex items-center gap-1.5">
               <ChatRoundButton
-                label={isHandsFree ? 'Stop open talk (hands-free)' : 'Start open talk (hands-free)'}
-                onClick={() => toggleHandsFree()}
-                disabled={sending}
-              >
-                <SoundWaveIcon
-                  className={cn(isHandsFree ? 'text-primary' : '', micInputBlocked ? 'opacity-50' : '')}
-                />
-              </ChatRoundButton>
-              <ChatRoundButton
-                label="Interrupt Grok voice"
+                label={isRecordingVoice ? 'Stop dictation' : 'Speak (microphone)'}
                 onClick={() => {
                   interruptVoiceAndTts();
-                  setAccessoryHint('Stopped voice playback and any pending dictation send.');
-                  window.setTimeout(() => setAccessoryHint(null), 3200);
+                  toggleVoiceMic();
                 }}
-              >
-                <Hand className="h-[18px] w-[18px]" />
-              </ChatRoundButton>
-              <ChatRoundButton
-                label={isRecordingVoice ? 'Stop dictation' : 'Speak (push-to-talk)'}
-                onClick={() => toggleVoiceMic()}
-                disabled={sending || micInputBlocked || isHandsFree}
+                disabled={sending || micInputBlocked}
               >
                 <Mic
                   className={cn(
                     'h-[18px] w-[18px]',
                     isRecordingVoice ? 'text-destructive' : '',
-                    micInputBlocked || isHandsFree ? 'opacity-50' : '',
+                    micInputBlocked ? 'opacity-50' : '',
                   )}
                 />
               </ChatRoundButton>
             </div>
 
             <div className="flex items-center gap-1.5">
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*,.pdf,.svg,.png,.jpg,.jpeg,.webp,.gif"
-                className="hidden"
-                onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  e.target.value = '';
-                  if (file) void handleDesignFileUpload(file);
-                }}
-              />
-              <ChatRoundButton
-                label="Attach design reference (logo, brand guide)"
-                onClick={() => fileInputRef.current?.click()}
-                disabled={uploadBusy || sending}
-              >
-                <Paperclip className={cn('h-[18px] w-[18px]', uploadBusy ? 'opacity-50' : '')} />
-              </ChatRoundButton>
-              <button
-                type="button"
-                onClick={handleGo}
-                disabled={!input.trim() || sending || micInputBlocked}
-                className="btn-primary-cta flex h-9 shrink-0 items-center gap-1.5 rounded-full px-4 text-[0.8125rem] disabled:opacity-40"
-              >
-                <Rocket className="h-3.5 w-3.5" />
-                Go
-              </button>
               <ChatRoundButton
                 label="Send message"
                 onClick={() => void sendChat()}

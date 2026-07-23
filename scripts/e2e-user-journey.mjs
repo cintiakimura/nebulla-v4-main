@@ -100,11 +100,17 @@ async function loadModeDetector() {
     /* use inline */
   }
 
-  // Keep in sync with src/lib/chatModeDetector.ts
+  // Keep in sync with src/lib/chatModeDetector.ts (simplified for e2e smoke)
   const GUIDED_RE =
-    /\b(new project|create (an? )?app|start from scratch|build (an? )?app|master plan|start a project)\b/i;
+    /\b(new project|create (an? )?app|start from scratch|build (an? )?app|start a project)\b/i;
+  const DEBUG_RE =
+    /\b(debug|debugging|bug|broken|not working|failing test|fix (this |the )?(bug|error|issue|crash))\b/i;
+  const UI_RE =
+    /\b(ui studio|nebula ui|v0(\.dev)?|mockup|ui\/ux|generate ui)\b/i;
+  const ARCHITECTURE_RE =
+    /\b(master plan|architecture|pages and navigation)\b/i;
   const CODING_RE =
-    /\b(write code|fix|implement|add feature|refactor|edit (the )?code|generate (a )?component|paste)\b/i;
+    /\b(write code|implement|add feature|refactor|edit (the )?code|generate (a )?component|paste|go code)\b/i;
   const GITHUB_URL_RE = /https?:\/\/(?:www\.)?(?:github\.com|raw\.githubusercontent\.com)\//i;
   const LOCAL_PATH_HINT_RE =
     /(?:^|\s)((?:nebulla-project|nebula-project|src|app|lib|components)\/[\w./-]+|[\w./-]+\.(?:ts|tsx|js|jsx|md|json|css))\b/i;
@@ -113,13 +119,19 @@ async function loadModeDetector() {
     const text = String(input || '').trim();
     if (!text) return { mode: 'free' };
     const looksGuided = GUIDED_RE.test(text);
-    const looksCoding = CODING_RE.test(text) || /```/.test(text);
+    const looksDebug = DEBUG_RE.test(text);
+    const looksUi = UI_RE.test(text);
+    const looksArchitecture = ARCHITECTURE_RE.test(text);
+    const looksCoding = CODING_RE.test(text) || /```/.test(text) || /\bfix\b/i.test(text);
     const hasGitHubUrl = GITHUB_URL_RE.test(text);
     const hasOpenVerb = /\b(open|load|show|read)\b/i.test(text);
     const hasFilePath =
       LOCAL_PATH_HINT_RE.test(text) || /\b[\w./-]+\.(?:ts|tsx|js|jsx|md|json|css)\b/i.test(text);
-    if (hasGitHubUrl || (hasOpenVerb && hasFilePath && !looksGuided)) return { mode: 'file' };
+    if (hasGitHubUrl || (hasOpenVerb && hasFilePath && !looksGuided && !looksArchitecture)) return { mode: 'file' };
     if (looksGuided) return { mode: 'guided' };
+    if (looksDebug) return { mode: 'debugging' };
+    if (looksUi) return { mode: 'ui' };
+    if (looksArchitecture) return { mode: 'architecture' };
     if (looksCoding) return { mode: 'coding' };
     return { mode: 'free' };
   };
