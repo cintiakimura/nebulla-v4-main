@@ -288,7 +288,8 @@ function NebullaIDEShell() {
 
   const selectNavItem = useCallback(
     (id: string) => {
-      if (id === 'project-settings' || id === 'my-services') {
+      // Settings = onboarding / GitHub + API keys (MyServicesOnboarding).
+      if (id === 'project-settings') {
         setMyServicesOpen(true);
         return;
       }
@@ -306,8 +307,9 @@ function NebullaIDEShell() {
     [openPanel, toggleLeftSidebar],
   );
 
-  const navActiveItem =
-    leftSidebarOpen && (leftSidebarView === 'explorer' || leftSidebarView === 'source-control')
+  const navActiveItem = myServicesOpen
+    ? 'project-settings'
+    : leftSidebarOpen && (leftSidebarView === 'explorer' || leftSidebarView === 'source-control')
       ? leftSidebarView
       : activeNavId === 'source-control'
         ? 'explorer'
@@ -326,7 +328,7 @@ function NebullaIDEShell() {
           className="fixed inset-0 z-[200] flex flex-col overflow-hidden"
           role="dialog"
           aria-modal="true"
-          aria-label="My services"
+          aria-label="Settings"
         >
           <MyServicesOnboarding
             user={myServicesUser}
@@ -347,11 +349,7 @@ function NebullaIDEShell() {
       />
 
       <div className="flex flex-1 overflow-hidden">
-        <VerticalNav
-          onOpenMyServices={() => setMyServicesOpen(true)}
-          activeItem={navActiveItem}
-          onSelectItem={selectNavItem}
-        />
+        <VerticalNav activeItem={navActiveItem} onSelectItem={selectNavItem} />
 
         {leftSidebarOpen ? (
           <>

@@ -127,8 +127,8 @@ export function MyServicesOnboarding({
         <div className="flex items-center gap-3 min-w-0">
           <Logo className="w-9 h-9 shrink-0" />
           <div className="min-w-0">
-            <p className="font-headline text-lg text-slate-100 tracking-tight truncate">My services</p>
-            <p className="text-xs text-slate-500 truncate">Connect GitHub and your API keys — Cosmic Night</p>
+            <p className="font-headline text-lg text-slate-100 tracking-tight truncate">Settings</p>
+            <p className="text-xs text-slate-500 truncate">Connect GitHub and your API keys</p>
           </div>
         </div>
         <div className="flex items-center gap-2 shrink-0">
@@ -138,7 +138,7 @@ export function MyServicesOnboarding({
             onClick={onClose}
             className="flex h-10 w-10 items-center justify-center rounded-xl border border-white/10 text-slate-400 hover:bg-white/5 hover:text-slate-200 transition-colors"
             title="Close"
-            aria-label="Close My services"
+            aria-label="Close Settings"
           >
             <X className="h-5 w-5" aria-hidden />
           </button>

@@ -2156,6 +2156,117 @@ No approved UI code yet.
     }
   });
 
+  async function readGitPorcelainEntries(workspaceRoot: string) {
+    const { stdout: porcOut } = await execFileAsync(
+      "git",
+      ["-C", workspaceRoot, "status", "--porcelain", "-u"],
+      { maxBuffer: 10 * 1024 * 1024, encoding: "utf8" }
+    );
+    return parseGitPorcelain(porcOut || "").filter((e) => isUserAppProductPath(e.path));
+  }
+
+  async function ensureGitCommitIdentity(workspaceRoot: string) {
+    try {
+      await execFileAsync("git", ["-C", workspaceRoot, "var", "GIT_AUTHOR_IDENT"], {
+        maxBuffer: 1024 * 1024,
+        encoding: "utf8",
+      });
+    } catch {
+      await execFileAsync("git", ["-C", workspaceRoot, "config", "user.email", "nebulla@users.noreply.local"], {
+        maxBuffer: 1024 * 1024,
+        encoding: "utf8",
+      });
+      await execFileAsync("git", ["-C", workspaceRoot, "config", "user.name", "Nebulla"], {
+        maxBuffer: 1024 * 1024,
+        encoding: "utf8",
+      });
+    }
+  }
+
+  /** Stage product-path changes (`git add`). Body: `{ paths?: string[] }` — omit to stage all unstaged. */
+  app.post("/api/source-control/stage", async (req, res) => {
+    try {
+      const { workspaceRoot } = projectPathsFor(req);
+      if (!fs.existsSync(path.join(workspaceRoot, ".git"))) {
+        return res.status(400).json({ error: "No git repository in this workspace" });
+      }
+      const rawPaths = Array.isArray(req.body?.paths) ? req.body.paths : null;
+      let paths: string[];
+      if (rawPaths && rawPaths.length > 0) {
+        paths = [
+          ...new Set(
+            rawPaths
+              .filter((p: unknown): p is string => typeof p === "string" && p.trim().length > 0)
+              .map((p: string) => p.replace(/\\/g, "/").replace(/^\.\/+/, ""))
+              .filter((p: string) => isUserAppProductPath(p))
+          ),
+        ];
+      } else {
+        const entries = await readGitPorcelainEntries(workspaceRoot);
+        paths = [
+          ...new Set(
+            entries
+              .filter((e) => {
+                const idx = e.status[0] ?? " ";
+                const wt = e.status[1] ?? " ";
+                return wt !== " " || idx === "?";
+              })
+              .map((e) => e.path)
+          ),
+        ];
+      }
+      if (paths.length === 0) {
+        return res.json({ ok: true, staged: 0 });
+      }
+      await execFileAsync("git", ["-C", workspaceRoot, "add", "--", ...paths], {
+        maxBuffer: 10 * 1024 * 1024,
+        encoding: "utf8",
+      });
+      res.json({ ok: true, staged: paths.length, paths });
+    } catch (err: unknown) {
+      console.error("/api/source-control/stage:", err);
+      res.status(500).json({ error: err instanceof Error ? err.message : "stage failed" });
+    }
+  });
+
+  /** Commit staged product changes. Body: `{ message: string }`. */
+  app.post("/api/source-control/commit", async (req, res) => {
+    try {
+      const { workspaceRoot } = projectPathsFor(req);
+      if (!fs.existsSync(path.join(workspaceRoot, ".git"))) {
+        return res.status(400).json({ error: "No git repository in this workspace" });
+      }
+      const message = typeof req.body?.message === "string" ? req.body.message.trim() : "";
+      if (!message) {
+        return res.status(400).json({ error: "Commit message is required" });
+      }
+      const entries = await readGitPorcelainEntries(workspaceRoot);
+      const hasStaged = entries.some((e) => {
+        const idx = e.status[0] ?? " ";
+        return idx !== " " && idx !== "?";
+      });
+      if (!hasStaged) {
+        return res.status(400).json({ error: "Nothing staged to commit — stage changes first" });
+      }
+      await ensureGitCommitIdentity(workspaceRoot);
+      const { stdout } = await execFileAsync(
+        "git",
+        ["-C", workspaceRoot, "commit", "-m", message],
+        { maxBuffer: 10 * 1024 * 1024, encoding: "utf8" }
+      );
+      res.json({ ok: true, output: (stdout || "").trim() });
+    } catch (err: unknown) {
+      console.error("/api/source-control/commit:", err);
+      const msg =
+        err && typeof err === "object" && "stderr" in err && typeof (err as { stderr: unknown }).stderr === "string"
+          ? (err as { stderr: string }).stderr.trim()
+          : err instanceof Error
+            ? err.message
+            : "commit failed";
+      res.status(500).json({ error: msg || "commit failed" });
+    }
+  });
+
   // Example backend function: execute terminal command
   app.post("/api/terminal/exec", (req, res) => {
     const { command } = req.body;

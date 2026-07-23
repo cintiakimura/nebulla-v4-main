@@ -267,8 +267,8 @@ export function TopBar({
           <button
             type="button"
             onClick={onOpenAccount}
-            title="Account & My services"
-            aria-label="Account and My services"
+            title="Settings — GitHub and API keys"
+            aria-label="Open Settings"
             className="surface-float flex h-7 w-7 items-center justify-center rounded-full transition-opacity hover:opacity-90 disabled:opacity-40"
             disabled={!onOpenAccount}
           >

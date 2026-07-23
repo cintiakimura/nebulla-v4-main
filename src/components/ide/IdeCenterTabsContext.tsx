@@ -127,7 +127,7 @@ export function IdeCenterTabsProvider({ children }: { children: ReactNode }) {
       }
       // Search page removed — find/replace is the TopBar search icon only.
       if (pane === 'search') return;
-      // DNS page disabled — open Secrets (DNS section is embedded there).
+      // DNS is not a side-nav page — open Secrets center pane; user picks DNS in the tab list.
       const targetPane: IdeCenterPane = pane === 'dns' ? 'secrets' : pane;
       if (opts?.uiStudioTab) setUiStudioTab(opts.uiStudioTab);
       const id = panelTabId(targetPane);

@@ -6,6 +6,7 @@ import {
   Folder,
   GitBranch,
   GitCommit,
+  Plus,
   RefreshCw,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -235,6 +236,9 @@ export function SourceControlPanel({
   const [unstagedOpen, setUnstagedOpen] = useState(true);
   const [commitOpen, setCommitOpen] = useState(!compact);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const [commitMessage, setCommitMessage] = useState('');
+  const [actionBusy, setActionBusy] = useState<'stage' | 'commit' | null>(null);
+  const [actionMsg, setActionMsg] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -257,6 +261,60 @@ export function SourceControlPanel({
       setLoading(false);
     }
   }, [projectKey, projectName]);
+
+  const stageAll = useCallback(async () => {
+    setActionBusy('stage');
+    setActionMsg(null);
+    setErr(null);
+    try {
+      const res = await fetch(withProjectQuery('/api/source-control/stage'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({}),
+      });
+      const j = await readResponseJson<{ ok?: boolean; staged?: number; error?: string }>(res);
+      if (!res.ok) {
+        throw new Error(typeof j.error === 'string' ? j.error : `HTTP ${res.status}`);
+      }
+      setActionMsg(j.staged ? `Staged ${j.staged} file${j.staged === 1 ? '' : 's'}` : 'Nothing to stage');
+      await load();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : 'Stage failed');
+    } finally {
+      setActionBusy(null);
+    }
+  }, [load]);
+
+  const commitStaged = useCallback(async () => {
+    const message = commitMessage.trim();
+    if (!message) {
+      setErr('Enter a commit message first');
+      return;
+    }
+    setActionBusy('commit');
+    setActionMsg(null);
+    setErr(null);
+    try {
+      const res = await fetch(withProjectQuery('/api/source-control/commit'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ message }),
+      });
+      const j = await readResponseJson<{ ok?: boolean; error?: string }>(res);
+      if (!res.ok) {
+        throw new Error(typeof j.error === 'string' ? j.error : `HTTP ${res.status}`);
+      }
+      setCommitMessage('');
+      setActionMsg('Committed');
+      await load();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : 'Commit failed');
+    } finally {
+      setActionBusy(null);
+    }
+  }, [commitMessage, load]);
 
   useEffect(() => {
     void load();
@@ -381,6 +439,42 @@ export function SourceControlPanel({
                 {data.git.error}
               </p>
             ) : null}
+
+            <div className={cn('mb-2 space-y-2', compact ? 'px-1' : 'px-1.5')}>
+              <textarea
+                value={commitMessage}
+                onChange={(e) => setCommitMessage(e.target.value)}
+                placeholder="Message (required for commit)"
+                rows={compact ? 2 : 3}
+                className="w-full resize-none rounded-md border border-white/10 bg-transparent px-2 py-1.5 font-mono text-[11px] text-foreground placeholder:text-muted-foreground/70 outline-none focus:border-cyan-500/35"
+                aria-label="Commit message"
+              />
+              <div className="flex flex-wrap items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => void stageAll()}
+                  disabled={actionBusy !== null || unstaged.length === 0}
+                  className="inline-flex h-7 items-center gap-1 rounded-md border border-white/15 bg-transparent px-2.5 text-[11px] text-foreground/90 transition-colors hover:border-cyan-500/35 hover:text-cyan-200 disabled:cursor-not-allowed disabled:opacity-40"
+                  title="Stage all unstaged changes"
+                >
+                  <Plus className="h-3 w-3" aria-hidden />
+                  {actionBusy === 'stage' ? 'Staging…' : 'Stage'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void commitStaged()}
+                  disabled={actionBusy !== null || staged.length === 0 || !commitMessage.trim()}
+                  className="inline-flex h-7 items-center gap-1 rounded-md border border-white/15 bg-transparent px-2.5 text-[11px] text-foreground/90 transition-colors hover:border-cyan-500/35 hover:text-cyan-200 disabled:cursor-not-allowed disabled:opacity-40"
+                  title="Commit staged changes"
+                >
+                  <GitCommit className="h-3 w-3" aria-hidden />
+                  {actionBusy === 'commit' ? 'Committing…' : 'Commit'}
+                </button>
+              </div>
+              {actionMsg ? (
+                <p className="text-[10px] text-emerald-400/90">{actionMsg}</p>
+              ) : null}
+            </div>
 
             <IdeCollapsibleSection
               title="Changes"

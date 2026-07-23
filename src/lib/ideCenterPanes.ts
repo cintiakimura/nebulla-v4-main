@@ -20,7 +20,7 @@ export const IDE_CENTER_PRIMARY_TABS: { id: IdeCenterPane; label: string }[] = [
   { id: 'ui-studio', label: 'UI Studio' },
 ];
 
-/** Open from the left nav only — not duplicated in the six-tab bar. Search/DNS removed (DNS lives under Secrets). */
+/** Open from the left nav only. DNS is a tab inside Secrets dashboard, not a side-nav page. */
 export const IDE_CENTER_NAV_ONLY_PANES: IdeCenterPane[] = ['projects', 'secrets'];
 
 const NAV_ONLY_LABELS: Record<(typeof IDE_CENTER_NAV_ONLY_PANES)[number], string> = {
