@@ -4,8 +4,6 @@ import {
   Github,
   Loader2,
   MessageCircle,
-  Plus,
-  Sparkles,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
@@ -15,17 +13,13 @@ import {
   setBrowserProjectName,
 } from '../../lib/nebulaProjectApi';
 import {
-  createGuestProject,
   readGuestIndex,
   writeActiveGuestProjectId,
-  type ProjectPayload,
 } from '../../lib/nebulaProjectStore';
 import { listCloudProjects, fetchSessionUser } from '../../lib/nebulaCloud';
-import { resetProjectFromScratch } from '../../lib/ideProjectReset';
 import {
   dispatchChatOpenFile,
   dispatchStartFreeChat,
-  markGuidedStartOnReady,
 } from '../../lib/ideHomeEvents';
 import { ChatFilePreview } from './ChatFilePreview';
 import { openGitHubFile, openLocalFile } from '../../lib/fileOperations';
@@ -58,12 +52,10 @@ type FileModalMode = 'local' | 'github' | null;
 
 /**
  * Default post-login home — My Projects + quick actions.
- * Does not auto-start Master Plan chat until "New Project" is chosen.
  */
 export function MyProjectsHome() {
   const [projects, setProjects] = useState<ListedProject[]>([]);
   const [loadingList, setLoadingList] = useState(true);
-  const [busyNew, setBusyNew] = useState(false);
   const [fileModal, setFileModal] = useState<FileModalMode>(null);
   const [fileInput, setFileInput] = useState('');
   const [fileBusy, setFileBusy] = useState(false);
@@ -120,20 +112,6 @@ export function MyProjectsHome() {
   }, [refreshList]);
 
   const activeKey = getBrowserProjectKey();
-
-  const onNewProject = useCallback(async () => {
-    if (busyNew) return;
-    setBusyNew(true);
-    try {
-      await resetProjectFromScratch('New Project');
-      const payload: ProjectPayload = { pages: [], edges: [], projectName: 'New Project' };
-      createGuestProject(payload);
-      markGuidedStartOnReady();
-      window.location.reload();
-    } catch {
-      setBusyNew(false);
-    }
-  }, [busyNew]);
 
   const onOpenProject = useCallback((p: ListedProject) => {
     if (p.source === 'cloud') {
@@ -208,7 +186,7 @@ export function MyProjectsHome() {
       {
         id: 'local' as const,
         title: 'Open existing file',
-        blurb: 'Browse a file already in your project.',
+        blurb: 'Look at a file already in your project — great when you know where to start.',
         icon: FolderOpen,
         onClick: () => {
           setFileModal('local');
@@ -220,7 +198,7 @@ export function MyProjectsHome() {
       {
         id: 'github' as const,
         title: 'Open from GitHub',
-        blurb: 'Paste a public GitHub file link.',
+        blurb: 'Paste a public GitHub file link and we will open it for you.',
         icon: Github,
         onClick: () => {
           setFileModal('github');
@@ -232,7 +210,7 @@ export function MyProjectsHome() {
       {
         id: 'chat' as const,
         title: 'Just chat / Ask anything',
-        blurb: 'Free chat — no project interview.',
+        blurb: 'Free mode — ask questions, explore ideas, no interview required.',
         icon: MessageCircle,
         onClick: onJustChat,
       },
@@ -242,57 +220,59 @@ export function MyProjectsHome() {
 
   return (
     <div className="min-h-0 flex-1 overflow-auto bg-background">
-      <div className="mx-auto flex w-full max-w-3xl flex-col gap-8 px-6 py-10 sm:px-10">
-        <header className="space-y-2">
+      <div className="mx-auto flex w-full max-w-3xl flex-col gap-12 px-6 py-12 sm:px-10 sm:py-16">
+        <header className="space-y-3">
           <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-cyan-400/80">
             Nebulla
           </p>
           <h1 className="font-headline text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">
             My Projects
           </h1>
-          <p className="max-w-xl text-sm text-muted-foreground">
-            Start something new, open a file, or just ask a question. You choose the pace.
+          <p className="max-w-xl text-base leading-relaxed text-muted-foreground">
+            Welcome back. Open something you already started, or pick a simple way to begin.
           </p>
         </header>
 
-        <button
-          type="button"
-          disabled={busyNew}
-          onClick={() => void onNewProject()}
-          className="group flex w-full items-center justify-center gap-3 rounded-xl bg-cyan-600 px-6 py-4 text-base font-semibold text-white shadow-[0_0_0_1px_rgba(34,211,238,0.25)] transition hover:bg-cyan-500 disabled:opacity-60"
-        >
-          {busyNew ? (
-            <Loader2 className="h-5 w-5 animate-spin" />
-          ) : (
-            <Plus className="h-5 w-5 transition group-hover:scale-110" />
-          )}
-          New Project
-          <Sparkles className="h-4 w-4 opacity-80" aria-hidden />
-        </button>
+        <section className="space-y-6">
+          <div className="space-y-2">
+            <h2 className="font-headline text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
+              New Project
+            </h2>
+            <p className="max-w-xl text-sm leading-relaxed text-muted-foreground">
+              Choose how you want to start. No rush — each option is a clear next step.
+            </p>
+          </div>
 
-        <section className="grid gap-3 sm:grid-cols-3">
-          {quickActions.map((action) => {
-            const Icon = action.icon;
-            return (
-              <button
-                key={action.id}
-                type="button"
-                onClick={action.onClick}
-                className="flex flex-col items-start gap-3 rounded-xl border border-white/10 bg-white/[0.03] p-4 text-left transition hover:border-cyan-500/35 hover:bg-cyan-500/5"
-              >
-                <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-cyan-500/10 text-cyan-300">
-                  <Icon className="h-4 w-4" />
-                </span>
-                <span className="text-sm font-medium text-foreground">{action.title}</span>
-                <span className="text-xs leading-relaxed text-muted-foreground">{action.blurb}</span>
-              </button>
-            );
-          })}
+          <div className="grid gap-4 sm:grid-cols-3">
+            {quickActions.map((action) => {
+              const Icon = action.icon;
+              return (
+                <button
+                  key={action.id}
+                  type="button"
+                  onClick={action.onClick}
+                  className="flex min-h-[11.5rem] flex-col items-start gap-4 rounded-2xl border border-white/10 bg-white/[0.03] p-5 text-left transition hover:border-cyan-500/35 hover:bg-cyan-500/5"
+                >
+                  <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-cyan-500/10 text-cyan-300">
+                    <Icon className="h-5 w-5" />
+                  </span>
+                  <span className="space-y-1.5">
+                    <span className="block text-sm font-semibold text-foreground">
+                      {action.title}
+                    </span>
+                    <span className="block text-xs leading-relaxed text-muted-foreground">
+                      {action.blurb}
+                    </span>
+                  </span>
+                </button>
+              );
+            })}
+          </div>
         </section>
 
-        <section className="space-y-3">
+        <section className="space-y-4">
           <div className="flex items-center justify-between gap-2">
-            <h2 className="text-sm font-medium text-foreground">Your projects</h2>
+            <h2 className="text-base font-semibold text-foreground">Your projects</h2>
             {loadingList ? (
               <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
             ) : (
@@ -301,20 +281,21 @@ export function MyProjectsHome() {
           </div>
 
           {projects.length === 0 && !loadingList ? (
-            <div className="rounded-xl border border-dashed border-white/10 px-4 py-8 text-center">
-              <p className="text-sm text-muted-foreground">
-                No projects yet. Press <span className="text-foreground">New Project</span> to begin.
+            <div className="rounded-2xl border border-dashed border-white/10 px-6 py-12 text-center">
+              <p className="text-sm leading-relaxed text-muted-foreground">
+                No projects yet. Pick an option under{' '}
+                <span className="text-foreground">New Project</span> to get started.
               </p>
             </div>
           ) : (
-            <ul className="divide-y divide-white/5 overflow-hidden rounded-xl border border-white/10">
+            <ul className="divide-y divide-white/5 overflow-hidden rounded-2xl border border-white/10">
               {projects.map((p) => {
                 const isActive = p.key === activeKey || p.name === getBrowserProjectName();
                 return (
                   <li
                     key={`${p.source}-${p.key}`}
                     className={cn(
-                      'flex flex-wrap items-center justify-between gap-3 px-4 py-3',
+                      'flex flex-wrap items-center justify-between gap-3 px-5 py-4',
                       isActive && 'bg-cyan-500/[0.06]',
                     )}
                   >
@@ -327,7 +308,7 @@ export function MyProjectsHome() {
                           </span>
                         ) : null}
                       </p>
-                      <p className="text-xs text-muted-foreground">
+                      <p className="mt-0.5 text-xs text-muted-foreground">
                         Last modified {formatWhen(p.updatedAt)}
                         {p.source === 'cloud' ? ' · Cloud' : p.source === 'guest' ? ' · Local' : ''}
                       </p>
