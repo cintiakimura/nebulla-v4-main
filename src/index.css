@@ -4,66 +4,68 @@
 @custom-variant dark (&:is(.dark *));
 
 /*
- * Nebulla IDE — black theme (COLORS ONLY; layout / buttons / resize unchanged).
- * All backgrounds #000000 · Borders light grey (color only) · Text #FFFFFF
- * Titles #5750CC · Subtitles #679BD1 · Misc #C6937C
- * CodeMirror token colors preserved.
+ * Nebulla IDE — refined / delicate black theme (colors only).
+ * Inspired by calm AI chat UIs: true black, hairline seams, rare accents.
+ * Accents (use sparingly): title #5750CC · subtitle #679BD1 · misc #C6937C
+ * Layout / resize / collapse unchanged. CodeMirror tokens preserved.
  * Rollback: src/theme-backups/original-ui-2026-07-24/
  */
 :root,
 .dark {
   --surface: #000000;
   --surface-container: #000000;
-  --surface-bright: #000000;
-  --surface-container-highest: #000000;
-  --on-surface-variant: #679bd1;
-  --outline-variant: #bdbdbd;
+  --surface-bright: #0a0a0a;
+  --surface-container-highest: #111111;
+  --on-surface-variant: #8a8a8a;
+  --outline-variant: #2e2e2e;
   --primary: #5750cc;
-  --primary-container: #5750cc;
+  --primary-container: #3f3a9e;
   --on-primary-container: #ffffff;
-  --secondary-container: #000000;
-  --success: #22c55e;
+  --secondary-container: #111111;
+  --success: #6b9b7a;
 
   --title: #5750cc;
   --subtitle: #679bd1;
   --misc: #c6937c;
+  --elevated: #111111;
+  --hairline: #2e2e2e;
 
   --background: #000000;
-  --foreground: #ffffff;
+  --foreground: #f2f2f2;
   --card: #000000;
-  --card-foreground: #ffffff;
-  --popover: #000000;
-  --popover-foreground: #ffffff;
+  --card-foreground: #f2f2f2;
+  --popover: #0a0a0a;
+  --popover-foreground: #f2f2f2;
   --primary-foreground: #ffffff;
-  --secondary: #000000;
-  --secondary-foreground: #ffffff;
-  --muted: #000000;
-  --muted-foreground: #c6937c;
-  --accent: var(--misc);
-  --accent-foreground: #ffffff;
-  --destructive: #ef4444;
+  --secondary: #0a0a0a;
+  --secondary-foreground: #f2f2f2;
+  --muted: #0a0a0a;
+  --muted-foreground: #8a8a8a;
+  --accent: #111111;
+  --accent-foreground: #f2f2f2;
+  --destructive: #c45c5c;
   --destructive-foreground: #ffffff;
-  --border: #bdbdbd;
-  --input: #000000;
-  --ring: color-mix(in srgb, var(--primary) 40%, transparent);
+  --border: #2e2e2e;
+  --input: #0a0a0a;
+  --ring: color-mix(in srgb, var(--primary) 28%, transparent);
   --chart-1: var(--primary);
   --chart-2: var(--subtitle);
   --chart-3: var(--misc);
   --chart-4: #5750cc;
   --chart-5: #c6937c;
-  --radius: 0.5rem;
+  --radius: 0.75rem;
   --sidebar: #000000;
-  --sidebar-foreground: #ffffff;
+  --sidebar-foreground: #f2f2f2;
   --sidebar-primary: var(--primary);
   --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #000000;
-  --sidebar-accent-foreground: #ffffff;
+  --sidebar-accent: #111111;
+  --sidebar-accent-foreground: #f2f2f2;
   --sidebar-border: var(--border);
   --sidebar-ring: var(--ring);
 
-  --shadow-ambient-popover: 0px 8px 32px rgba(0, 0, 0, 0.55);
-  --gradient-active-tab: linear-gradient(90deg, color-mix(in srgb, var(--primary) 12%, transparent) 0%, transparent 72%);
-  --gradient-primary-cta: linear-gradient(135deg, var(--primary-container) 0%, var(--primary) 100%);
+  --shadow-ambient-popover: 0 12px 40px rgba(0, 0, 0, 0.55);
+  --gradient-active-tab: linear-gradient(90deg, color-mix(in srgb, var(--primary) 8%, transparent) 0%, transparent 70%);
+  --gradient-primary-cta: var(--primary);
 }
 
 @theme {
@@ -133,12 +135,16 @@
     font-family: var(--font-sans);
     font-weight: 400;
     -webkit-font-smoothing: antialiased;
+    letter-spacing: 0.01em;
   }
 
-  /* No bold — weight only; does not change button size/layout */
   b,
-  strong {
-    font-weight: 400;
+  strong,
+  .font-medium,
+  .font-semibold,
+  .font-bold,
+  .font-extrabold {
+    font-weight: 400 !important;
   }
 
   body {
@@ -150,16 +156,12 @@
     height: 100vh;
   }
 
-  /* Page titles use accent; keep layout classes untouched */
+  /* Hierarchy via size — keep headings soft white, not loud accents */
   h1,
-  h2 {
-    color: var(--title);
-    font-weight: 400;
-  }
-
+  h2,
   h3,
   h4 {
-    color: var(--subtitle);
+    color: var(--foreground);
     font-weight: 400;
   }
 }
@@ -167,7 +169,7 @@
 @layer utilities {
   .type-body-md {
     font-size: 0.875rem;
-    line-height: 1.5;
+    line-height: 1.55;
     font-weight: 400;
     color: var(--foreground);
   }
@@ -176,8 +178,8 @@
     font-size: 0.6875rem;
     line-height: 1.35;
     font-weight: 400;
-    letter-spacing: 0.02em;
-    color: var(--subtitle);
+    letter-spacing: 0.03em;
+    color: var(--muted-foreground);
   }
 
   .type-title-sm {
@@ -185,16 +187,16 @@
     line-height: 1.4;
     font-weight: 400;
     letter-spacing: 0.01em;
-    color: var(--title);
+    color: var(--foreground);
   }
 
   .kyn-logotype {
     font-size: 0.8125rem;
     line-height: 1.25;
     font-weight: 400;
-    letter-spacing: 0.05rem;
+    letter-spacing: 0.06rem;
     text-transform: lowercase;
-    color: var(--title);
+    color: var(--foreground);
   }
 
   .app-logotype {
@@ -203,7 +205,7 @@
     font-weight: 400;
     letter-spacing: 0.04rem;
     text-transform: none;
-    color: var(--title);
+    color: var(--foreground);
   }
 
   .surface-base {
@@ -215,30 +217,29 @@
   }
 
   .surface-float {
-    background-color: color-mix(in srgb, #000000 92%, transparent);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
+    background-color: var(--elevated);
   }
 
   .elevation-popover {
     background-color: var(--surface-container-highest);
     box-shadow: var(--shadow-ambient-popover);
+    border: 0.5px solid var(--hairline);
   }
 
   .tonal-seam-b {
-    box-shadow: inset 0 -1px 0 0 var(--border);
+    box-shadow: inset 0 -0.5px 0 0 var(--hairline);
   }
 
   .tonal-seam-t {
-    box-shadow: inset 0 1px 0 0 var(--border);
+    box-shadow: inset 0 0.5px 0 0 var(--hairline);
   }
 
   .tonal-seam-r {
-    box-shadow: inset -1px 0 0 0 var(--border);
+    box-shadow: inset -0.5px 0 0 0 var(--hairline);
   }
 
   .tonal-seam-l {
-    box-shadow: inset 1px 0 0 0 var(--border);
+    box-shadow: inset 0.5px 0 0 0 var(--hairline);
   }
 
   .active-tab-sheen {
@@ -246,38 +247,38 @@
   }
 
   .btn-primary-cta {
-    background-image: var(--gradient-primary-cta);
+    background: var(--primary);
     color: var(--on-primary-container);
     border: none;
-    transition: background-color 0.3s ease, filter 0.3s ease, opacity 0.3s ease;
+    transition: opacity 0.25s ease, filter 0.25s ease;
     font-weight: 400;
   }
 
   .btn-primary-cta:hover:not(:disabled) {
-    filter: brightness(1.06);
+    filter: brightness(1.08);
   }
 
   .btn-primary-cta:disabled {
-    opacity: 0.45;
+    opacity: 0.4;
   }
 
   .btn-secondary-surface {
     background-color: transparent;
     color: var(--foreground);
     border: none;
-    transition: background-color 0.3s ease, color 0.2s ease;
+    transition: background-color 0.25s ease, color 0.2s ease;
     font-weight: 400;
   }
 
   .btn-secondary-surface:hover {
-    background-color: color-mix(in srgb, #ffffff 6%, transparent);
+    background-color: var(--elevated);
   }
 
   .input-ghost-focus:focus,
   .input-ghost-focus:focus-visible {
-    outline: 1px solid var(--border);
+    outline: 0.5px solid var(--hairline);
     outline-offset: 0;
-    border-color: var(--border);
+    border-color: var(--hairline);
   }
 
   .ide-resize-hit {
@@ -289,8 +290,7 @@
 
   .ide-resize-hit:hover,
   .ide-resize-hit:active {
-    background-color: color-mix(in srgb, var(--primary) 35%, transparent);
-    box-shadow: 0 0 12px color-mix(in srgb, var(--primary) 20%, transparent);
+    background-color: color-mix(in srgb, var(--primary) 30%, transparent);
   }
 
   .ide-resize-hit-row {
@@ -302,13 +302,12 @@
 
   .ide-resize-hit-row:hover,
   .ide-resize-hit-row:active {
-    background-color: color-mix(in srgb, var(--primary) 35%, transparent);
-    box-shadow: 0 0 12px color-mix(in srgb, var(--primary) 20%, transparent);
+    background-color: color-mix(in srgb, var(--primary) 30%, transparent);
   }
 
   .glass-panel {
-    background: color-mix(in srgb, #000000 80%, transparent);
-    backdrop-filter: blur(20px);
+    background: color-mix(in srgb, #0a0a0a 88%, transparent);
+    backdrop-filter: blur(16px);
   }
 
   .text-13 {
@@ -356,29 +355,28 @@
 
   .nebulla-codemirror .cm-gutters {
     background: #000000 !important;
-    border-right: 1px solid var(--outline-variant);
+    border-right: 0.5px solid var(--outline-variant);
     color: var(--on-surface-variant);
   }
 
   .nebulla-codemirror .cm-activeLineGutter {
-    background: color-mix(in srgb, var(--primary) 12%, #000000);
+    background: color-mix(in srgb, var(--primary) 8%, #000000);
   }
 
   .nebulla-codemirror .cm-activeLine {
-    background: color-mix(in srgb, var(--primary) 10%, transparent);
+    background: color-mix(in srgb, #ffffff 3%, transparent);
   }
 
   .nebulla-codemirror .cm-selectionBackground,
   .nebulla-codemirror .cm-content ::selection {
-    background: color-mix(in srgb, var(--primary) 35%, transparent) !important;
+    background: color-mix(in srgb, var(--primary) 28%, transparent) !important;
   }
 
   .nebulla-codemirror .cm-matchingBracket {
-    background: color-mix(in srgb, var(--primary) 28%, transparent);
-    outline: 1px solid var(--primary);
+    background: color-mix(in srgb, var(--primary) 20%, transparent);
+    outline: 0.5px solid var(--primary);
   }
 
-  /* Code token colors — unchanged from original theme */
   .nebulla-codemirror .tok-keyword {
     color: #a89bff;
   }

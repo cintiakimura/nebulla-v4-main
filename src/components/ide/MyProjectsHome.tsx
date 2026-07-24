@@ -301,10 +301,10 @@ export function MyProjectsHome() {
       <div className="mx-auto flex w-full max-w-3xl flex-col gap-12 px-6 py-12 sm:px-10 sm:py-16">
         <section className="space-y-6">
           <div className="space-y-2">
-            <h2 className="font-headline text-2xl font-normal tracking-tight text-[color:var(--title)] sm:text-3xl">
+            <h2 className="font-headline text-2xl font-normal tracking-tight text-foreground sm:text-3xl">
               New Project
             </h2>
-            <p className="max-w-xl text-sm leading-relaxed text-[color:var(--misc)]">
+            <p className="max-w-xl text-sm leading-relaxed text-muted-foreground">
               Choose what you are building. Grok will skip the type question and ask for your main goal next.
             </p>
           </div>
@@ -319,9 +319,9 @@ export function MyProjectsHome() {
                   type="button"
                   disabled={Boolean(startingType)}
                   onClick={() => void onStartTypedProject(action.id)}
-                  className="flex min-h-[11.5rem] flex-col items-start gap-4 rounded-2xl border border-border bg-black p-5 text-left transition hover:border-[color:var(--subtitle)] hover:bg-black disabled:cursor-wait disabled:opacity-60"
+                  className="flex min-h-[11.5rem] flex-col items-start gap-4 rounded-2xl border border-border bg-black p-5 text-left transition hover:bg-[#111111] disabled:cursor-wait disabled:opacity-60"
                 >
-                  <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-black text-[color:var(--subtitle)]">
+                  <span className="flex h-11 w-11 items-center justify-center rounded-full bg-[#111111] text-foreground/70">
                     {busy ? (
                       <Loader2 className="h-5 w-5 animate-spin" />
                     ) : (
@@ -329,10 +329,10 @@ export function MyProjectsHome() {
                     )}
                   </span>
                   <span className="space-y-1.5">
-                    <span className="block text-sm font-normal text-[color:var(--subtitle)]">
+                    <span className="block text-sm font-normal text-foreground">
                       {action.title}
                     </span>
-                    <span className="block text-xs leading-relaxed text-[color:var(--misc)]">
+                    <span className="block text-xs leading-relaxed text-muted-foreground">
                       {action.blurb}
                     </span>
                   </span>
@@ -344,8 +344,8 @@ export function MyProjectsHome() {
 
         <section className="space-y-6">
           <div className="space-y-2">
-            <h2 className="text-base font-normal text-[color:var(--title)]">Or continue</h2>
-            <p className="max-w-xl text-sm leading-relaxed text-[color:var(--misc)]">
+            <h2 className="text-base font-normal text-foreground">Or continue</h2>
+            <p className="max-w-xl text-sm leading-relaxed text-muted-foreground">
               Open a file, pull from GitHub, or chat freely without starting a new build.
             </p>
           </div>
@@ -358,16 +358,16 @@ export function MyProjectsHome() {
                   key={action.id}
                   type="button"
                   onClick={action.onClick}
-                  className="flex min-h-[10rem] flex-col items-start gap-4 rounded-2xl border border-border bg-black p-5 text-left transition hover:border-[color:var(--subtitle)] hover:bg-black"
+                  className="flex min-h-[10rem] flex-col items-start gap-4 rounded-2xl border border-border bg-black p-5 text-left transition hover:bg-[#111111]"
                 >
-                  <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-black text-[color:var(--subtitle)]">
+                  <span className="flex h-10 w-10 items-center justify-center rounded-full bg-[#111111] text-foreground/60">
                     <Icon className="h-5 w-5" />
                   </span>
                   <span className="space-y-1.5">
-                    <span className="block text-sm font-normal text-[color:var(--subtitle)]">
+                    <span className="block text-sm font-normal text-foreground">
                       {action.title}
                     </span>
-                    <span className="block text-xs leading-relaxed text-[color:var(--misc)]">
+                    <span className="block text-xs leading-relaxed text-muted-foreground">
                       {action.blurb}
                     </span>
                   </span>
@@ -379,7 +379,7 @@ export function MyProjectsHome() {
 
         <section className="space-y-4">
           <div className="flex items-center justify-between gap-2">
-            <h2 className="text-base font-normal text-[color:var(--title)]">Your projects</h2>
+            <h2 className="text-base font-normal text-foreground">Your projects</h2>
             {loadingList ? (
               <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
             ) : (
@@ -394,7 +394,7 @@ export function MyProjectsHome() {
           ) : null}
 
           {projects.length === 0 && !loadingList ? (
-            <div className="rounded-2xl border border-dashed border-white/10 px-6 py-12 text-center">
+            <div className="rounded-2xl border border-dashed border-border px-6 py-12 text-center">
               <p className="text-sm leading-relaxed text-muted-foreground">
                 No projects yet. Pick <span className="text-foreground">Web App</span>,{' '}
                 <span className="text-foreground">Mobile App</span>, or{' '}
@@ -402,7 +402,7 @@ export function MyProjectsHome() {
               </p>
             </div>
           ) : (
-            <ul className="divide-y divide-white/5 overflow-hidden rounded-2xl border border-white/10">
+            <ul className="divide-y divide-border overflow-hidden rounded-2xl border border-border">
               {projects.map((p) => {
                 const isActive = p.key === activeKey || p.name === getBrowserProjectName();
                 return (
@@ -410,14 +410,14 @@ export function MyProjectsHome() {
                     key={`${p.source}-${p.key}`}
                     className={cn(
                       'flex flex-wrap items-center justify-between gap-3 px-5 py-4',
-                      isActive && 'bg-cyan-500/[0.06]',
+                      isActive && 'bg-[#111111]',
                     )}
                   >
                     <div className="min-w-0">
-                      <p className="truncate text-sm font-medium text-foreground">
+                      <p className="truncate text-sm font-normal text-foreground">
                         {p.name}
                         {isActive ? (
-                          <span className="ml-2 text-[10px] font-normal uppercase tracking-wide text-cyan-400/90">
+                          <span className="ml-2 text-[10px] font-normal uppercase tracking-wide text-muted-foreground">
                             Active
                           </span>
                         ) : null}
@@ -430,7 +430,7 @@ export function MyProjectsHome() {
                     <button
                       type="button"
                       onClick={() => void onOpenProject(p)}
-                      className="rounded-md border border-white/15 px-3 py-1.5 text-xs font-medium text-foreground hover:bg-white/5"
+                      className="rounded-full border border-border px-3 py-1.5 text-xs font-normal text-foreground hover:bg-[#111111]"
                     >
                       Open
                     </button>
@@ -443,9 +443,9 @@ export function MyProjectsHome() {
       </div>
 
       {fileModal ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-lg rounded-xl border border-white/10 bg-[#0b1220] p-5 shadow-2xl">
-            <h3 className="text-base font-semibold text-foreground">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-lg rounded-2xl border border-border bg-[#0a0a0a] p-5 shadow-2xl">
+            <h3 className="text-base font-normal text-foreground">
               {fileModal === 'github' ? 'Open from GitHub' : 'Open existing file'}
             </h3>
             <p className="mt-1 text-xs text-muted-foreground">
@@ -464,7 +464,7 @@ export function MyProjectsHome() {
                   ? 'https://raw.githubusercontent.com/…'
                   : 'path/to/file.md'
               }
-              className="mt-4 w-full rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-foreground outline-none ring-cyan-500/40 focus:ring"
+              className="mt-4 w-full rounded-xl border border-border bg-black px-3 py-2 text-sm text-foreground outline-none ring-primary/25 focus:ring"
               autoFocus
             />
             {fileError ? <p className="mt-2 text-xs text-rose-300">{fileError}</p> : null}
@@ -477,7 +477,7 @@ export function MyProjectsHome() {
               <button
                 type="button"
                 onClick={() => setFileModal(null)}
-                className="rounded-md px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground"
+                className="rounded-full px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground"
               >
                 Close
               </button>
@@ -485,7 +485,7 @@ export function MyProjectsHome() {
                 type="button"
                 disabled={fileBusy}
                 onClick={() => void submitFileModal()}
-                className="inline-flex items-center gap-1.5 rounded-md bg-cyan-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-cyan-500 disabled:opacity-50"
+                className="inline-flex items-center gap-1.5 rounded-full bg-primary px-3 py-1.5 text-xs font-normal text-primary-foreground hover:brightness-110 disabled:opacity-50"
               >
                 {fileBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
                 Open

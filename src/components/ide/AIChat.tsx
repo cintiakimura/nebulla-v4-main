@@ -1794,8 +1794,8 @@ export function AIChat() {
             <div className={cn('max-w-[85%]', message.role === 'user' ? 'text-right' : 'text-left')}>
               <div
                 className={cn(
-                  'type-body-md inline-block rounded-lg px-3 py-2',
-                  message.role === 'user' ? 'surface-float text-primary' : 'surface-active text-foreground',
+                  'type-body-md inline-block rounded-2xl px-3 py-2',
+                  message.role === 'user' ? 'bg-[#111111] text-foreground' : 'bg-transparent text-foreground',
                 )}
               >
                 <p className="whitespace-pre-wrap">{message.content}</p>

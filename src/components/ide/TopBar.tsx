@@ -130,9 +130,9 @@ export function TopBar({
     <div className="surface-active tonal-seam-b flex h-12 flex-col">
       <div className="flex h-12 items-center justify-between px-3">
         <div className="flex min-w-0 items-center gap-3">
-          <div className="flex shrink-0 items-center gap-2">
-            <Logo className="h-[22px] w-[22px] shrink-0 opacity-95" />
-            <span className="app-logotype text-foreground">Nebulla.beta</span>
+          <div className="flex h-full max-h-12 shrink-0 items-center gap-2.5">
+            <Logo className="h-[43px] w-[43px] max-h-[90%] shrink-0 object-contain opacity-95" />
+            <span className="app-logotype">Nebulla.beta</span>
           </div>
 
           <div className="hidden min-w-0 max-w-[280px] items-center gap-1.5 sm:flex">

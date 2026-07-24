@@ -24,13 +24,13 @@ function formatLogTime(at: number): string {
 function logKindClass(kind: GrokActivityLogEntry['kind']): string {
   switch (kind) {
     case 'success':
-      return 'text-emerald-300/90';
+      return 'text-foreground/80';
     case 'error':
-      return 'text-red-300/95';
+      return 'text-red-300/90';
     case 'warn':
-      return 'text-amber-200/90';
+      return 'text-[color:var(--misc)]';
     case 'file':
-      return 'text-primary/90';
+      return 'text-[color:var(--subtitle)]';
     default:
       return 'text-muted-foreground/85';
   }
@@ -100,10 +100,10 @@ export function IdeGrokActivityPanel({
       className={cn(
         'shrink-0 border-b px-3 py-3',
         isError
-          ? 'border-red-500/25 bg-red-500/10'
+          ? 'border-red-500/20 bg-red-500/[0.06]'
           : isWork || v0Live
-            ? 'border-primary/20 bg-primary/5'
-            : 'border-emerald-500/20 bg-emerald-500/5',
+            ? 'border-border bg-[#0a0a0a]'
+            : 'border-border bg-[#0a0a0a]',
       )}
       role="status"
       aria-live="polite"
@@ -114,10 +114,10 @@ export function IdeGrokActivityPanel({
           className={cn(
             'mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full',
             isError
-              ? 'bg-red-500/20 text-red-300'
+              ? 'bg-red-500/15 text-red-300'
               : isWork || v0Live
-                ? 'bg-primary/15 text-primary'
-                : 'bg-emerald-500/15 text-emerald-300',
+                ? 'bg-[#111111] text-primary'
+                : 'bg-[#111111] text-foreground/70',
           )}
         >
           {isWork || v0Live ? (
@@ -134,7 +134,7 @@ export function IdeGrokActivityPanel({
             <p
               className={cn(
                 'type-label-sm font-headline tracking-wide',
-                isError ? 'text-red-100' : isWork || v0Live ? 'text-primary' : 'text-emerald-200',
+                isError ? 'text-red-100' : 'text-muted-foreground',
               )}
             >
               {v0Live && !isWork ? 'v0 generating' : activity.headline}
@@ -145,7 +145,7 @@ export function IdeGrokActivityPanel({
           </div>
 
           {activity.currentAction ? (
-            <p className="type-body-md font-medium leading-snug text-foreground">{activity.currentAction}</p>
+            <p className="type-body-md font-normal leading-snug text-foreground">{activity.currentAction}</p>
           ) : activity.subhead ? (
             <p className="type-body-md leading-relaxed text-muted-foreground">{activity.subhead}</p>
           ) : null}
@@ -153,15 +153,13 @@ export function IdeGrokActivityPanel({
           {activity.v0Status ? (
             <div
               className={cn(
-                'rounded-md border px-2.5 py-1.5 text-[11px] leading-snug',
-                isWork || v0Live
-                  ? 'border-violet-500/25 bg-violet-500/10 text-violet-100'
-                  : isError
-                    ? 'border-white/10 bg-black/20 text-muted-foreground'
-                    : 'border-emerald-500/20 bg-emerald-500/10 text-emerald-100',
+                'rounded-xl border px-2.5 py-1.5 text-[11px] leading-snug',
+                isError
+                  ? 'border-border bg-black text-muted-foreground'
+                  : 'border-border bg-[#111111] text-foreground/85',
               )}
             >
-              <p className="font-medium tracking-wide">
+              <p className="font-normal tracking-wide">
                 <span className="text-[10px] uppercase text-muted-foreground/80">v0 · </span>
                 {activity.v0Status}
               </p>
@@ -176,7 +174,7 @@ export function IdeGrokActivityPanel({
                       disabled={v0Busy}
                       title="Stop client polling and cancel server v0 job"
                       onClick={() => runV0Action(() => dispatchCancelV0())}
-                      className="inline-flex items-center gap-1 rounded-md border border-white/15 px-2 py-1 text-[10px] text-slate-200 hover:bg-white/5 disabled:opacity-40"
+                      className="inline-flex items-center gap-1 rounded-full border border-border px-2 py-1 text-[10px] text-foreground/80 hover:bg-[#111111] disabled:opacity-40"
                     >
                       <Square className="h-3 w-3" />
                       Cancel
@@ -188,7 +186,7 @@ export function IdeGrokActivityPanel({
                       disabled={v0Busy}
                       title="Poll existing v0 chat — no new charge"
                       onClick={() => runV0Action(() => dispatchRunV0Generate({ resumeOnly: true }))}
-                      className="inline-flex items-center gap-1 rounded-md border border-primary/40 bg-primary/10 px-2 py-1 text-[10px] text-primary hover:bg-primary/20 disabled:opacity-40"
+                      className="inline-flex items-center gap-1 rounded-full border border-border bg-[#111111] px-2 py-1 text-[10px] text-foreground hover:bg-[#161616] disabled:opacity-40"
                     >
                       Resume
                     </button>
@@ -199,7 +197,7 @@ export function IdeGrokActivityPanel({
                       disabled={v0Busy}
                       title="Clear v0 pending state on server"
                       onClick={() => runV0Action(() => dispatchClearV0Session())}
-                      className="inline-flex items-center gap-1 rounded-md border border-amber-500/35 bg-amber-500/10 px-2 py-1 text-[10px] text-amber-50 hover:bg-amber-500/20 disabled:opacity-40"
+                      className="inline-flex items-center gap-1 rounded-full border border-border px-2 py-1 text-[10px] text-muted-foreground hover:text-foreground disabled:opacity-40"
                     >
                       <Trash2 className="h-3 w-3" />
                       Clear
@@ -211,8 +209,8 @@ export function IdeGrokActivityPanel({
           ) : null}
 
           {history.length > 0 ? (
-            <div className="rounded-lg border border-white/5 bg-black/20 px-2.5 py-1.5">
-              <p className="mb-1 text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground/70">
+            <div className="rounded-xl border border-border bg-black px-2.5 py-1.5">
+              <p className="mb-1 text-[10px] font-normal uppercase tracking-[0.12em] text-muted-foreground/70">
                 Live activity
               </p>
               <ul className="space-y-0.5 font-mono text-[10px] leading-relaxed">
@@ -228,7 +226,7 @@ export function IdeGrokActivityPanel({
           ) : null}
 
           {activity.steps.length > 0 && !isWork ? (
-            <ol className="space-y-1 rounded-lg border border-white/5 bg-black/15 px-2.5 py-2">
+            <ol className="space-y-1 rounded-xl border border-border bg-black px-2.5 py-2">
               {activity.steps.map((step, i) => {
                 const done = i < activity.activeStepIndex;
                 const failed = isError && i === activity.activeStepIndex;
@@ -236,7 +234,7 @@ export function IdeGrokActivityPanel({
                   <li key={`${step.label}-${i}`} className="flex gap-2 text-left">
                     <span className="mt-0.5 shrink-0" aria-hidden>
                       {done ? (
-                        <Check className="h-3 w-3 text-emerald-400/90" />
+                        <Check className="h-3 w-3 text-foreground/55" />
                       ) : failed ? (
                         <XCircle className="h-3 w-3 text-red-400" />
                       ) : (
