@@ -638,7 +638,7 @@ export function AssistantSidebar({
 
       // Grok 4 behavior: Trigger UI/UX Workflow
       if (masterPlanSource.includes('<START_UIUX>')) {
-        dispatchStartUiUxWorkflow({ tab: 'design', autoV0: true });
+        dispatchStartUiUxWorkflow({ tab: 'design', autoV0: false });
       }
 
       const uiStudioPromptMatch = masterPlanSource.match(/<NEBULA_UI_STUDIO_PROMPT>([\s\S]*?)<\/NEBULA_UI_STUDIO_PROMPT>/i);
@@ -882,7 +882,7 @@ export function AssistantSidebar({
         } catch {
           /* ignore */
         }
-        await runMasterPlanUiPipelineWithV0({ projectName, autoV0: true });
+        await runMasterPlanUiPipelineWithV0({ projectName, autoV0: false });
       }
 
       setMessages((prev) => [

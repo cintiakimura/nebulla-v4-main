@@ -59,7 +59,7 @@ export async function runMasterPlanUiPipeline(options?: {
           body: JSON.stringify(
             withProjectBody({
               projectName: options?.projectName?.trim() || undefined,
-              autoV0: options?.autoV0 !== false,
+              autoV0: options?.autoV0 === true,
             }),
           ),
         },
@@ -290,9 +290,14 @@ export async function runPostCodingWorkspaceSync(options?: {
     window.dispatchEvent(new CustomEvent('nebula-files-applied'));
     window.dispatchEvent(new CustomEvent('nebula-open-app-preview'));
     if (sync.uiStudioUnlocked) {
-      window.dispatchEvent(
-        new CustomEvent('nebula-open-ui-studio', { detail: { tab: 'design' as const } }),
-      );
+      // Active generator is UI Studio Beta (not original V0 studio).
+      window.dispatchEvent(new CustomEvent('nebula-open-ui-studio-beta'));
+      try {
+        const { dispatchOpenUiStudioBeta } = await import('./uiStudioBetaEngine');
+        dispatchOpenUiStudioBeta();
+      } catch {
+        /* ignore */
+      }
     }
     onProgress?.('Workspace sync complete', 'success');
   } catch {

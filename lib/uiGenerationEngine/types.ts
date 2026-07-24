@@ -142,6 +142,20 @@ export type UiGenContextState = {
   major_edits: string[];
   final_status: "accepted" | "rejected" | "pending" | "";
 
+  /** Policy fields (manual §§ A–H + After File Creation). */
+  auto_triggered: "yes" | "no" | "";
+  regeneration_count: number;
+  max_regenerations: number;
+  preference_feedback: string;
+  recovery_path: "guided_improvement" | "manual_refinement" | "partial_redesign" | "none" | "";
+  user_visible_stage: string;
+
+  /** Grounding from applied workspace files. */
+  file_routes: string[];
+  file_button_labels: string[];
+  file_headings: string[];
+  file_scanned: string[];
+
   step_log: string[];
   failure_reason: string;
 
@@ -237,6 +251,16 @@ export function emptyContextState(): UiGenContextState {
     refined_by_user: "no",
     major_edits: [],
     final_status: "pending",
+    auto_triggered: "no",
+    regeneration_count: 0,
+    max_regenerations: 3,
+    preference_feedback: "",
+    recovery_path: "none",
+    user_visible_stage: "",
+    file_routes: [],
+    file_button_labels: [],
+    file_headings: [],
+    file_scanned: [],
     step_log: [],
     failure_reason: "",
     generated_code: "",

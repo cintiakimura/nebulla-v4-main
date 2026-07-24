@@ -415,6 +415,14 @@ export function IdeUiStudioBeta({
   const [applyAllPagesConfirmOpen, setApplyAllPagesConfirmOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [engineStage, setEngineStage] = useState('');
+  const [regenCount, setRegenCount] = useState(0);
+  const [maxRegens, setMaxRegens] = useState(3);
+  const [preferenceRecovery, setPreferenceRecovery] = useState(false);
+  const [preferenceQuestion, setPreferenceQuestion] = useState(
+    'I can see this still isn’t right. What bothers you most — layout, colors, spacing, missing sections, or overall style?',
+  );
+  const [preferenceDraft, setPreferenceDraft] = useState('');
   const [isFullscreen, setIsFullscreen] = useState(false);
   const shellRef = useRef<HTMLDivElement>(null);
   const previewRef = useRef<HTMLDivElement>(null);
@@ -726,9 +734,33 @@ export function IdeUiStudioBeta({
     setSelectedId(null);
   };
 
-  const runEngineGenerate = async () => {
+  const runEngineGenerate = async (opts?: {
+    regenerate?: boolean;
+    preferenceFeedback?: string;
+    guidedImprovement?: boolean;
+    autoTriggered?: boolean;
+    writtenPaths?: string[];
+  }) => {
     setBusy(true);
     setError('');
+    setPreferenceRecovery(false);
+    setEngineStage(
+      opts?.regenerate
+        ? 'Generate again…'
+        : opts?.autoTriggered
+          ? 'Reading Master Plan'
+          : 'Reading Master Plan',
+    );
+    const poll = window.setInterval(() => {
+      void fetch(withProjectQuery('/api/ui-studio-beta/status'), { credentials: 'include' })
+        .then((r) => r.json())
+        .then((st: { user_visible_stage?: string; regeneration_count?: number; max_regenerations?: number }) => {
+          if (st.user_visible_stage) setEngineStage(st.user_visible_stage);
+          if (typeof st.regeneration_count === 'number') setRegenCount(st.regeneration_count);
+          if (typeof st.max_regenerations === 'number') setMaxRegens(st.max_regenerations);
+        })
+        .catch(() => undefined);
+    }, 1000);
     try {
       const r = await fetch(withProjectQuery('/api/ui-studio-beta/generate'), {
         method: 'POST',
@@ -741,6 +773,11 @@ export function IdeUiStudioBeta({
           withProjectBody({
             projectName: projectLabel,
             pageName: activePage !== 'Home' ? activePage : undefined,
+            regenerate: opts?.regenerate === true,
+            autoTriggered: opts?.autoTriggered === true,
+            preferenceFeedback: opts?.preferenceFeedback,
+            guidedImprovement: opts?.guidedImprovement === true,
+            writtenPaths: opts?.writtenPaths,
           }),
         ),
       });
@@ -749,10 +786,44 @@ export function IdeUiStudioBeta({
         error?: string;
         editorModel?: EditorModel;
         generatedCode?: string;
+        preference_recovery?: boolean;
+        preference_recovery_question?: string;
+        regeneration_count?: number;
+        max_regenerations?: number;
+        user_visible_stage?: string;
         context?: { page_name?: string; quality_gate_result?: string };
       };
+      if (typeof data.regeneration_count === 'number') setRegenCount(data.regeneration_count);
+      if (typeof data.max_regenerations === 'number') setMaxRegens(data.max_regenerations);
+      if (data.user_visible_stage) setEngineStage(data.user_visible_stage);
+      if (data.preference_recovery) {
+        setPreferenceRecovery(true);
+        setPreferenceQuestion(
+          data.preference_recovery_question ||
+            'I can see this still isn’t right. What bothers you most — layout, colors, spacing, missing sections, or overall style?',
+        );
+        setError(data.error || 'Regeneration limit reached — preference recovery');
+        window.dispatchEvent(
+          new CustomEvent('nebula-ui-studio-beta-complete', {
+            detail: {
+              ok: false,
+              preference_recovery: true,
+              preference_recovery_question: data.preference_recovery_question,
+              error: data.error,
+              regeneration_count: data.regeneration_count,
+              max_regenerations: data.max_regenerations,
+            },
+          }),
+        );
+        return;
+      }
       if (!r.ok || !data.ok) {
         setError(data.error || 'UI Generation Engine failed');
+        window.dispatchEvent(
+          new CustomEvent('nebula-ui-studio-beta-complete', {
+            detail: { ok: false, error: data.error || 'UI Generation Engine failed' },
+          }),
+        );
         return;
       }
       if (data.editorModel?.pages) {
@@ -765,13 +836,77 @@ export function IdeUiStudioBeta({
         clearSelection();
         setPreviewSurface('visual-model');
       }
+      setEngineStage('Ready in preview');
       await persistModelRemote();
+      window.dispatchEvent(
+        new CustomEvent('nebula-ui-studio-beta-complete', {
+          detail: {
+            ok: true,
+            editorModel: data.editorModel,
+            generatedCode: data.generatedCode,
+            context: data.context,
+            regeneration_count: data.regeneration_count,
+            max_regenerations: data.max_regenerations,
+            user_visible_stage: 'Ready in preview',
+          },
+        }),
+      );
     } catch (e) {
       setError(e instanceof Error ? e.message : 'UI Generation Engine request failed');
+      window.dispatchEvent(
+        new CustomEvent('nebula-ui-studio-beta-complete', {
+          detail: {
+            ok: false,
+            error: e instanceof Error ? e.message : 'UI Generation Engine request failed',
+          },
+        }),
+      );
     } finally {
+      window.clearInterval(poll);
       setBusy(false);
     }
   };
+
+  useEffect(() => {
+    const onRun = (ev: Event) => {
+      const detail = (ev as CustomEvent<{
+        autoTriggered?: boolean;
+        regenerate?: boolean;
+        preferenceFeedback?: string;
+        guidedImprovement?: boolean;
+        writtenPaths?: string[];
+      }>).detail;
+      void runEngineGenerate({
+        autoTriggered: detail?.autoTriggered,
+        regenerate: detail?.regenerate,
+        preferenceFeedback: detail?.preferenceFeedback,
+        guidedImprovement: detail?.guidedImprovement,
+        writtenPaths: detail?.writtenPaths,
+      });
+    };
+    const onComplete = (ev: Event) => {
+      const detail = (ev as CustomEvent<{ editorModel?: EditorModel; context?: { page_name?: string } }>).detail;
+      if (detail?.editorModel?.pages) {
+        setModel(detail.editorModel);
+        baselineRef.current = cloneModel(detail.editorModel);
+        const pages = Object.keys(detail.editorModel.pages);
+        const preferred = detail.context?.page_name;
+        if (preferred && pages.includes(preferred)) setActivePage(preferred);
+        else if (pages[0]) setActivePage(pages[0]);
+        clearSelection();
+        setPreviewSurface('visual-model');
+        setEngineStage('Ready in preview');
+      }
+    };
+    window.addEventListener('nebula-ui-studio-beta-run', onRun);
+    window.addEventListener('nebula-ui-studio-beta-complete', onComplete);
+    return () => {
+      window.removeEventListener('nebula-ui-studio-beta-run', onRun);
+      window.removeEventListener('nebula-ui-studio-beta-complete', onComplete);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount listener once; runEngineGenerate closes over latest state via refs if needed
+  }, [projectLabel, activePage]);
+
 
   const revertVisualToBaseline = () => {
     if (!baselineRef.current) return;
@@ -1302,6 +1437,47 @@ export function IdeUiStudioBeta({
             {error}
           </p>
         ) : null}
+        {preferenceRecovery ? (
+          <div className="border-b border-border bg-card px-3 py-2">
+            <p className="text-[11px] text-foreground whitespace-pre-wrap">{preferenceQuestion}</p>
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <input
+                type="text"
+                value={preferenceDraft}
+                onChange={(e) => setPreferenceDraft(e.target.value)}
+                placeholder="e.g. spacing and colors"
+                className="min-w-[180px] flex-1 rounded-md border border-border bg-background px-2 py-1 text-[11px] text-foreground"
+              />
+              <button
+                type="button"
+                disabled={busy || !preferenceDraft.trim()}
+                onClick={() => {
+                  const feedback = preferenceDraft.trim();
+                  setPreferenceDraft('');
+                  void runEngineGenerate({
+                    preferenceFeedback: feedback,
+                    guidedImprovement: true,
+                  });
+                }}
+                className="rounded-md bg-primary px-2 py-1 text-[10px] text-primary-foreground disabled:opacity-40"
+              >
+                Guided improvement
+              </button>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => {
+                  setPreferenceRecovery(false);
+                  setError('Use the Properties panel to refine text, color, spacing, border, shadow, order, or delete.');
+                  setEngineStage('Manual refinement');
+                }}
+                className="rounded-md border border-border px-2 py-1 text-[10px] text-foreground"
+              >
+                Manual Properties
+              </button>
+            </div>
+          </div>
+        ) : null}
         <div className="flex h-9 items-center justify-between gap-2 px-2 sm:px-3">
           <div className="flex min-w-0 items-center gap-2">
             <span className="truncate text-xs font-medium tracking-wide text-foreground">UI Studio Beta</span>
@@ -1318,15 +1494,33 @@ export function IdeUiStudioBeta({
           </div>
 
           <div className="flex shrink-0 items-center gap-1">
+            {engineStage ? (
+              <span className="hidden max-w-[160px] truncate text-[10px] md:max-w-[220px] sm:inline" style={{ color: 'var(--subtitle)' }} title={engineStage}>
+                {busy ? <Loader2 className="mr-1 inline h-3 w-3 animate-spin" /> : null}
+                {engineStage}
+              </span>
+            ) : null}
+            <span className="hidden text-[10px] text-muted-foreground md:inline">
+              {regenCount}/{maxRegens}
+            </span>
             <button
               type="button"
               disabled={busy}
               onClick={() => void runEngineGenerate()}
-              className="rounded-md border border-primary/40 bg-primary/15 px-2.5 py-1 text-[11px] font-medium text-primary hover:bg-primary/25 disabled:opacity-40 sm:px-3"
-              title="Run Nebulla UI Generation Engine from Master Plan (UI Studio Beta only)"
+              className="rounded-md border border-primary/40 bg-primary/15 px-2.5 py-1 text-[11px] text-primary hover:bg-primary/25 disabled:opacity-40 sm:px-3"
+              title="Run Nebulla UI Generation Engine from Master Plan + files (UI Studio Beta only)"
             >
               {busy ? <Loader2 className="mr-1 inline h-3 w-3 animate-spin" /> : null}
               Generate UI
+            </button>
+            <button
+              type="button"
+              disabled={busy || preferenceRecovery || regenCount >= maxRegens}
+              onClick={() => void runEngineGenerate({ regenerate: true })}
+              className="rounded-md border border-border px-2 py-1 text-[10px] text-foreground hover:bg-secondary disabled:opacity-40"
+              title="Generate again (max 3 attempts)"
+            >
+              Generate again
             </button>
             {hasV0ApiKey && eligible && v0ChatId ? (
               <button

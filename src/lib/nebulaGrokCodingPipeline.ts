@@ -6,6 +6,7 @@ import type { GrokActivityProgressFn } from './ideGrokActivityStatus';
 import { startGrokActivityWaitTicker } from './ideGrokActivityStatus';
 import { getGrokRequestHeaders } from './grokUserKey';
 import { withProjectBody, withProjectQuery } from './nebulaProjectApi';
+import { triggerUiStudioBetaAfterFilesApplied } from './uiStudioBetaEngine';
 
 const START_CODING_RE = /<\s*START_CODING\s*>|\bSTART_CODING\b/i;
 const GO_POLL_MS = 5000;
@@ -68,7 +69,7 @@ function buildGoCompleteMessage(
     appFiles.length > 0
       ? ` App routes: ${appFiles.slice(0, 6).join(', ')}${appFiles.length > 6 ? '…' : ''}.`
       : '';
-  return `Slice complete${passNote}. Applied ${totalWritten} file(s).${routeHint} Validate this slice (NDM happy path) before the next Go. Master Plan / v0 prompt synced — Generate v0 in UI Studio when ready.`;
+  return `Slice complete${passNote}. Applied ${totalWritten} file(s).${routeHint} Validate this slice (NDM happy path) before the next Go. Master Plan synced — UI Studio Beta will generate from Master Plan + these files.`;
 }
 
 function stripNonFileArtifacts(text: string): string {
@@ -499,8 +500,17 @@ export async function runGoCodeAndApply(options: {
       onProgress?.(statusMessage, 'success');
     }
 
+    const ok = totalWritten > 0 && !partialPlanOnly;
+    if (ok) {
+      await triggerUiStudioBetaAfterFilesApplied({
+        writtenPaths: allWrittenPaths,
+        projectName,
+        onProgress,
+      });
+    }
+
     return {
-      ok: totalWritten > 0 && !partialPlanOnly,
+      ok,
       statusMessage,
       codeText: lastCodeText,
       totalWritten,
@@ -528,6 +538,13 @@ export async function handlePostGrokCodingTurn(options: {
   if (hasGrokFileBlocks(assistantContent)) {
     onProgress?.('Applying file blocks from Grok chat response', 'info');
     const apply = await applyGeneratedFiles(assistantContent, { userNote, projectName, onProgress });
+    if (apply.ok) {
+      await triggerUiStudioBetaAfterFilesApplied({
+        writtenPaths: apply.writtenPaths,
+        projectName,
+        onProgress,
+      });
+    }
     return { ran: true, statusMessage: apply.message };
   }
 
@@ -557,6 +574,7 @@ export async function handlePostGrokCodingTurn(options: {
   });
   if (go.ok) {
     await afterFilesAppliedArtifacts(userNote, projectName, onProgress);
+    // UI Studio Beta already triggered inside runGoCodeAndApply after successful apply.
   }
   return { ran: true, statusMessage: go.statusMessage };
 }

@@ -84,10 +84,10 @@ export function dispatchClearV0Session(): void {
 export const NEBULA_UI_STUDIO_CANCEL_V0 = CANCEL_V0_EVENT;
 export const NEBULA_UI_STUDIO_CLEAR_V0 = CLEAR_V0_EVENT;
 
-/** Open UI Studio and optionally run first v0 generation (project-execution-rules § v0). */
+/** Open UI Studio and optionally run first v0 generation. Default: no auto V0 (UI Studio Beta is active generator). */
 export function dispatchStartUiUxWorkflow(opts?: OpenUiStudioOptions): void {
   dispatchOpenUiStudio({ tab: opts?.tab ?? 'design', ...opts });
-  if (opts?.autoV0 !== false) {
+  if (opts?.autoV0 === true) {
     window.setTimeout(() => dispatchRunV0Generate(), 400);
   }
 }

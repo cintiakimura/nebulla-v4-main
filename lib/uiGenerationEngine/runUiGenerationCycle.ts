@@ -11,7 +11,12 @@ import { hydrateAndPersistMasterPlan } from "../nebulaIdeWorkspaceArtifacts";
 import { MASTER_PLAN_SECTION_KEYS } from "../masterPlanSections";
 import { writePreviewModel } from "../visualUiEditorPreview";
 import { appendStepLog, writeContextFile } from "./contextIO";
+import { readCyclePolicy, setUserVisibleStage, writeCyclePolicy } from "./cyclePolicy";
 import { rankSeedPatterns, tryFigmaCandidates } from "./seedPatterns";
+import {
+  collectWorkspaceFileFacts,
+  formatFileFactsForBrief,
+} from "./workspaceFileFacts";
 import {
   emptyContextState,
   type Complexity,
@@ -25,12 +30,25 @@ import {
   type UiGenContextState,
 } from "./types";
 
+const PREFERENCE_RECOVERY_QUESTION =
+  "I can see this still isn’t right. What bothers you most — layout, colors, spacing, missing sections, or overall style?";
+
 export type RunUiGenerationInput = {
   workspaceRoot: string;
   masterPlanPath: string;
   projectName?: string;
   pageName?: string;
   apiKeyOverride?: string;
+  /** First automatic post-coding generation. */
+  autoTriggered?: boolean;
+  /** User clicked Generate again. */
+  regenerate?: boolean;
+  /** Preference recovery answer after 3 attempts. */
+  preferenceFeedback?: string;
+  /** Guided improvement after preference recovery. */
+  guidedImprovement?: boolean;
+  /** Recently applied file paths for grounding. */
+  writtenPaths?: string[];
 };
 
 export type RunUiGenerationResult = {
@@ -41,6 +59,11 @@ export type RunUiGenerationResult = {
   editorModel?: unknown;
   generatedCode?: string;
   error?: string;
+  preference_recovery?: boolean;
+  preference_recovery_question?: string;
+  regeneration_count?: number;
+  max_regenerations?: number;
+  user_visible_stage?: string;
 };
 
 function nowIso(): string {
@@ -62,6 +85,21 @@ function firstLines(text: string, n: number): string {
     .filter(Boolean)
     .slice(0, n)
     .join(" ");
+}
+
+function uniqMerge(a: string[], b: string[], max = 12): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const item of [...a, ...b]) {
+    const t = item.trim();
+    if (!t) continue;
+    const key = t.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(t);
+    if (out.length >= max) break;
+  }
+  return out;
 }
 
 function extractBullets(text: string, limit = 8): string[] {
@@ -192,9 +230,38 @@ function fail(
 ): RunUiGenerationResult {
   state.status = status;
   state.failure_reason = reason;
+  state.user_visible_stage = status === "pending_discovery" ? "Needs discovery" : "Failed";
   appendStepLog(state, `FAILED — ${reason}`);
+  try {
+    writeCyclePolicy(workspaceRoot, {
+      auto_triggered: state.auto_triggered === "yes" ? "yes" : "no",
+      regeneration_count: state.regeneration_count,
+      max_regenerations: state.max_regenerations || 3,
+      preference_feedback: state.preference_feedback,
+      recovery_path: (state.recovery_path || "none") as
+        | "guided_improvement"
+        | "manual_refinement"
+        | "partial_redesign"
+        | "none",
+      final_status: "failed",
+      user_visible_stage: state.user_visible_stage,
+      page_key: state.page_name,
+      updated_at: nowIso(),
+    });
+  } catch {
+    /* ignore */
+  }
   const contextPath = writeContextFile(workspaceRoot, state);
-  return { ok: false, status, contextPath, context: state, error: reason };
+  return {
+    ok: false,
+    status,
+    contextPath,
+    context: state,
+    error: reason,
+    regeneration_count: state.regeneration_count,
+    max_regenerations: state.max_regenerations,
+    user_visible_stage: state.user_visible_stage,
+  };
 }
 
 function defaultStyle() {
@@ -360,6 +427,98 @@ export async function runUiGenerationCycle(
 ): Promise<RunUiGenerationResult> {
   const workspaceRoot = input.workspaceRoot;
   const state = emptyContextState();
+  const prevPolicy = readCyclePolicy(workspaceRoot);
+  const pageKey = (input.pageName || prevPolicy.page_key || "").trim();
+  const preferenceFeedback = (input.preferenceFeedback || "").trim();
+  const guidedImprovement = Boolean(input.guidedImprovement && preferenceFeedback);
+
+  const stage = (label: string) => {
+    state.user_visible_stage = label;
+    setUserVisibleStage(workspaceRoot, label, {
+      page_key: state.page_name || pageKey,
+      regeneration_count: state.regeneration_count,
+      max_regenerations: state.max_regenerations,
+      auto_triggered: state.auto_triggered === "yes" ? "yes" : "no",
+      preference_feedback: state.preference_feedback,
+      recovery_path: (state.recovery_path || "none") as
+        | "guided_improvement"
+        | "manual_refinement"
+        | "partial_redesign"
+        | "none",
+    });
+  };
+
+  // -------- Regen / preference recovery gate (manual §§ C–D) --------
+  state.max_regenerations = 3;
+  state.auto_triggered = input.autoTriggered ? "yes" : "no";
+  state.preference_feedback = preferenceFeedback;
+  state.recovery_path = guidedImprovement ? "guided_improvement" : "none";
+
+  if (input.regenerate && !guidedImprovement) {
+    if (prevPolicy.regeneration_count >= prevPolicy.max_regenerations) {
+      state.context_id = prevPolicy.page_key ? `uig-blocked-${Date.now().toString(36)}` : newContextId();
+      state.project_name = (input.projectName || "").trim() || "Untitled project";
+      state.page_name = pageKey;
+      state.created_at = nowIso();
+      state.status = "failed";
+      state.regeneration_count = prevPolicy.regeneration_count;
+      state.recovery_path = "none";
+      state.failure_reason = "Regeneration limit reached (max 3). Preference recovery required.";
+      appendStepLog(state, "BLOCKED — regeneration limit; preference recovery required");
+      stage("Preference recovery");
+      writeCyclePolicy(workspaceRoot, {
+        ...prevPolicy,
+        user_visible_stage: "Preference recovery",
+        final_status: "rejected",
+      });
+      const contextPath = writeContextFile(workspaceRoot, state);
+      return {
+        ok: false,
+        status: "failed",
+        contextPath,
+        context: state,
+        error: state.failure_reason,
+        preference_recovery: true,
+        preference_recovery_question: PREFERENCE_RECOVERY_QUESTION,
+        regeneration_count: prevPolicy.regeneration_count,
+        max_regenerations: 3,
+        user_visible_stage: "Preference recovery",
+      };
+    }
+    state.regeneration_count = prevPolicy.regeneration_count + 1;
+  } else if (guidedImprovement) {
+    state.regeneration_count = prevPolicy.regeneration_count;
+    state.recovery_path = "guided_improvement";
+  } else if (input.autoTriggered) {
+    if (prevPolicy.regeneration_count >= prevPolicy.max_regenerations) {
+      state.context_id = newContextId();
+      state.project_name = (input.projectName || "").trim() || "Untitled project";
+      state.created_at = nowIso();
+      state.status = "failed";
+      state.regeneration_count = prevPolicy.regeneration_count;
+      state.failure_reason =
+        "UI generation already reached the regeneration limit for this cycle — not auto-starting.";
+      appendStepLog(state, "BLOCKED — auto-trigger skipped (regen limit)");
+      stage("Blocked — regeneration limit");
+      const contextPath = writeContextFile(workspaceRoot, state);
+      return {
+        ok: false,
+        status: "failed",
+        contextPath,
+        context: state,
+        error: state.failure_reason,
+        preference_recovery: true,
+        preference_recovery_question: PREFERENCE_RECOVERY_QUESTION,
+        regeneration_count: prevPolicy.regeneration_count,
+        max_regenerations: 3,
+        user_visible_stage: "Blocked — regeneration limit",
+      };
+    }
+    state.regeneration_count = 1;
+  } else {
+    // Manual first Generate UI from Beta toolbar
+    state.regeneration_count = Math.max(1, prevPolicy.regeneration_count || 1);
+  }
 
   // -------- PHASE 1 — START THE CYCLE --------
   state.context_id = newContextId();
@@ -368,7 +527,11 @@ export async function runUiGenerationCycle(
   state.created_at = nowIso();
   state.status = "in_progress";
   state.current_step = 1;
-  appendStepLog(state, "Phase 1 start — cycle identity written cleanly");
+  appendStepLog(
+    state,
+    `Phase 1 start — cycle identity written (auto=${state.auto_triggered}, regen=${state.regeneration_count}/${state.max_regenerations})`,
+  );
+  stage("Reading Master Plan");
   persist(workspaceRoot, state);
 
   // -------- PHASE 2 — VERIFY --------
@@ -405,6 +568,7 @@ export async function runUiGenerationCycle(
   persist(workspaceRoot, state);
 
   // -------- PHASE 3 — GATHER MASTER PLAN FACTS --------
+  stage("Reading Master Plan");
   state.product_goal = firstLines(goal, 6) || "(not found)";
   const userMatch = goal.match(/target user[s]?:\s*(.+)/i) || tech.match(/target user[s]?:\s*(.+)/i);
   state.target_user = userMatch ? userMatch[1].trim().slice(0, 200) : firstLines(goal, 2) || "(not found)";
@@ -457,7 +621,30 @@ export async function runUiGenerationCycle(
   state.current_step = 3;
   persist(workspaceRoot, state);
 
+  // -------- PHASE 3b — READ GENERATED FILES (After File Creation §3) --------
+  stage("Reading generated files");
+  const fileFacts = collectWorkspaceFileFacts(workspaceRoot, input.writtenPaths);
+  state.file_scanned = fileFacts.scanned_files;
+  state.file_routes = fileFacts.routes;
+  state.file_button_labels = [...fileFacts.button_labels, ...fileFacts.link_labels];
+  state.file_headings = fileFacts.headings;
+  if (fileFacts.button_labels[0] && !state.primary_actions.length) {
+    state.primary_actions = [fileFacts.button_labels[0]];
+  }
+  if (fileFacts.button_labels.length > 1) {
+    state.secondary_actions = uniqMerge(state.secondary_actions, fileFacts.button_labels.slice(1, 4));
+  }
+  if (fileFacts.headings.length) {
+    state.required_sections = uniqMerge(state.required_sections, fileFacts.headings.slice(0, 6));
+  }
+  appendStepLog(
+    state,
+    `Step 2b files — scanned ${fileFacts.scanned_files.length}; routes=${fileFacts.routes.length}; buttons=${fileFacts.button_labels.length}`,
+  );
+  persist(workspaceRoot, state);
+
   // -------- PHASE 4 — CLASSIFY --------
+  stage("Preparing brief");
   const device: DeviceClass =
     state.project_type === "Mobile App"
       ? "mobile"
@@ -477,17 +664,19 @@ export async function runUiGenerationCycle(
       : goal.length > 40
         ? "medium"
         : "low";
-  state.classification_notes = `Conservative classify from Master Plan: device=${state.device}, page_type=${state.page_type}, function=${state.function}, nav=${state.navigation_type}. Confidence ${state.confidence}.`;
+  state.classification_notes = `Conservative classify from Master Plan + files: device=${state.device}, page_type=${state.page_type}, function=${state.function}, nav=${state.navigation_type}. Confidence ${state.confidence}.`;
   appendStepLog(state, "Step 3 classify — classification decisions written");
   state.current_step = 4;
   persist(workspaceRoot, state);
 
   // -------- PHASE 5 — BRIEF --------
+  stage("Preparing brief");
   state.page_goal = `Help the ${state.target_user || "user"} accomplish: ${state.page_purpose}`;
   state.audience = state.target_user || "(not found)";
   state.layout_navigation = `${state.navigation_type} navigation for a ${state.device} ${state.page_type}`;
   state.section_order = [...state.required_sections];
-  state.primary_cta = state.primary_actions[0] || "Get started";
+  state.primary_cta =
+    state.primary_actions[0] || fileFacts.button_labels[0] || "Get started";
   state.secondary_ctas = state.secondary_actions.slice(0, 3);
   state.metrics = /metric|kpi|stat|dashboard/i.test(chosen.body + state.page_type)
     ? ["Key metric cards"]
@@ -504,7 +693,8 @@ export async function runUiGenerationCycle(
   state.hierarchy_rules = "One clear page title; primary CTA visible; sections in brief order; no decorative clutter.";
   state.spacing_rules = `Density ${state.density}: consistent padding, clear section gaps, readable line length.`;
   state.component_limits =
-    "No random gradients, weak contrast, or unrelated marketing chrome. Prefer Tailwind utility layout.";
+    "No random gradients, weak contrast, or unrelated marketing chrome. Prefer Tailwind utility layout. Do not invent new major product behavior beyond Master Plan + generated files.";
+  const fileBrief = formatFileFactsForBrief(fileFacts);
   state.final_brief_text = [
     `Product: ${state.product_goal}`,
     `Project type: ${state.project_type}`,
@@ -520,12 +710,18 @@ export async function runUiGenerationCycle(
     `Spacing: ${state.spacing_rules}`,
     `Limits: ${state.component_limits}`,
     `Function/industry: ${state.function} / ${state.industry_class}`,
-  ].join("\n");
-  appendStepLog(state, "Step 4 brief — generation brief written");
+    preferenceFeedback ? `User preference feedback: ${preferenceFeedback}` : "",
+    "",
+    fileBrief,
+  ]
+    .filter(Boolean)
+    .join("\n");
+  appendStepLog(state, "Step 4 brief — generation brief written (Master Plan + file facts)");
   state.current_step = 5;
   persist(workspaceRoot, state);
 
   // -------- PHASE 6 — REFERENCE NEEDS --------
+  stage("Selecting references");
   state.criteria_device = state.device;
   state.criteria_page_type = state.page_type;
   state.criteria_function = state.function;
@@ -557,6 +753,7 @@ export async function runUiGenerationCycle(
   persist(workspaceRoot, state);
 
   // -------- PHASE 7 — RETRIEVE REFERENCES --------
+  stage("Selecting references");
   const figma = await tryFigmaCandidates(state);
   const seeds = rankSeedPatterns(state);
   const topSeeds = seeds.slice(0, 3);
@@ -623,10 +820,11 @@ export async function runUiGenerationCycle(
     "- React function component + Tailwind utility classes only",
     "- Clear hierarchy, accessible contrast, no clutter",
     "- Do not invent a different product",
+    "- Master Plan = product truth; generated files = concrete labels/actions/routes",
     "",
     "QUALITY RULES:",
     "- Required sections must appear",
-    "- Primary CTA must appear",
+    "- Primary CTA must appear — prefer real labels from generated files when valid",
     "- No random decorative noise",
     "",
     "ADAPTED STRUCTURE:",
@@ -646,6 +844,7 @@ export async function runUiGenerationCycle(
   persist(workspaceRoot, state);
 
   // -------- PHASE 10 — GENERATE --------
+  stage("Generating UI");
   const gen = await runAiChatCompletion({
     preferredProvider: "xai",
     apiKeyOverride: input.apiKeyOverride,
@@ -654,14 +853,15 @@ export async function runUiGenerationCycle(
       {
         role: "system",
         content:
-          "You are Grok Code generating UI for Nebulla UI Studio Beta. Obey the package only. Output React+Tailwind. Do not invent a different product.",
+          "You are Grok Code generating UI for Nebulla UI Studio Beta. Obey the package only. Output React+Tailwind. Do not invent a different product. Preserve real button/route labels from generated files when they match the Master Plan.",
       },
       { role: "user", content: state.generation_package },
     ],
   });
 
   if (!gen.ok) {
-    return fail(workspaceRoot, state, `Generation failed: ${gen.error}`);
+    const errMsg = "error" in gen ? String(gen.error) : "unknown";
+    return fail(workspaceRoot, state, `Generation failed: ${errMsg}`);
   }
 
   let code = extractCodeBlock(gen.content);
@@ -672,6 +872,7 @@ export async function runUiGenerationCycle(
   persist(workspaceRoot, state);
 
   // -------- PHASE 11 — VALIDATE (+ one repair) --------
+  stage("Validating");
   let gate = validateAgainstBrief(code, state);
   state.missing_required_sections = gate.missing;
   state.quality_gate_result = gate.gate;
@@ -696,7 +897,7 @@ export async function runUiGenerationCycle(
     });
     state.repair_pass_used = "yes";
     if (!repair.ok) {
-      state.generation_warnings.push(`Repair pass failed: ${repair.error}`);
+      state.generation_warnings.push(`Repair pass failed: ${"error" in repair ? repair.error : "unknown"}`);
       state.quality_gate_result = "weak";
     } else {
       code = extractCodeBlock(repair.content);
@@ -719,6 +920,7 @@ export async function runUiGenerationCycle(
   persist(workspaceRoot, state);
 
   // -------- PHASE 12 — DELIVER TO UI STUDIO BETA --------
+  stage("Ready in preview");
   let editorModel: unknown;
   try {
     editorModel = JSON.parse(state.editor_model_json);
@@ -744,13 +946,13 @@ export async function runUiGenerationCycle(
   state.export_available = "yes";
   state.output_type = "react_tailwind_page";
   state.status = "generated";
+  state.final_status = "pending";
   appendStepLog(state, "Step 9 deliver — preview model + code delivered to UI Studio Beta paths");
   state.current_step = 12;
   persist(workspaceRoot, state);
 
   // -------- PHASE 13 — REFINEMENT SUPPORT (metadata ready) --------
   state.refined_by_user = "no";
-  state.final_status = "pending";
   appendStepLog(
     state,
     "Step 10 refine — Properties panel is the primary refinement surface (awaiting user)",
@@ -761,6 +963,22 @@ export async function runUiGenerationCycle(
   // -------- PHASE 14 — CLOSE --------
   appendStepLog(state, "Step 11 metadata — cycle closed with generated status");
   state.current_step = 14;
+  stage("Ready in preview");
+  writeCyclePolicy(workspaceRoot, {
+    auto_triggered: state.auto_triggered === "yes" ? "yes" : "no",
+    regeneration_count: state.regeneration_count,
+    max_regenerations: state.max_regenerations,
+    preference_feedback: state.preference_feedback,
+    recovery_path: (state.recovery_path || "none") as
+      | "guided_improvement"
+      | "manual_refinement"
+      | "partial_redesign"
+      | "none",
+    final_status: "generated",
+    user_visible_stage: "Ready in preview",
+    page_key: state.page_name,
+    updated_at: nowIso(),
+  });
   const contextPath = writeContextFile(workspaceRoot, state);
 
   return {
@@ -770,5 +988,8 @@ export async function runUiGenerationCycle(
     context: state,
     editorModel,
     generatedCode: state.generated_code,
+    regeneration_count: state.regeneration_count,
+    max_regenerations: state.max_regenerations,
+    user_visible_stage: "Ready in preview",
   };
 }

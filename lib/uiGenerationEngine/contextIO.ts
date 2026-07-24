@@ -53,7 +53,26 @@ This file is the source of truth for one UI generation cycle.
 - created_at: ${s.created_at}
 - status: ${s.status}
 - current_step: ${s.current_step}
+- auto_triggered: ${s.auto_triggered || "no"}
+- regeneration_count: ${s.regeneration_count}
+- max_regenerations: ${s.max_regenerations}
+- preference_feedback: ${s.preference_feedback || "(none)"}
+- recovery_path: ${s.recovery_path || "none"}
+- user_visible_stage: ${s.user_visible_stage || "(none)"}
 ${s.failure_reason ? `- failure_reason: ${s.failure_reason}\n` : ""}
+---
+
+## 0.5 Generated file grounding
+
+- scanned_files:
+${bullets(s.file_scanned)}
+- routes:
+${bullets(s.file_routes)}
+- button_labels:
+${bullets(s.file_button_labels)}
+- headings:
+${bullets(s.file_headings)}
+
 ---
 
 ## 1. Master Plan extracts

@@ -153,7 +153,7 @@ export function MasterPlan({
       const projectName = getBrowserProjectName().trim() || 'Untitled Project';
       const pipeline = await runMasterPlanUiPipelineWithV0({
         projectName,
-        autoV0: true,
+        autoV0: false,
       });
       window.dispatchEvent(new CustomEvent('nebula-master-plan-updated'));
       if (pipeline.v0Ok) {

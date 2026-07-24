@@ -4,24 +4,24 @@
 @custom-variant dark (&:is(.dark *));
 
 /*
- * Nebulla IDE — black theme (colors / type weight only; layout unchanged).
- * Background #000000 · Elevated cards #212121 · Borders light grey 0.5px
- * Text #FFFFFF · Titles #5750CC · Subtitles #679BD1 · Misc #C6937C
- * CodeMirror token colors preserved from original Cosmic Night theme.
+ * Nebulla IDE — black theme (COLORS ONLY; layout / buttons / resize unchanged).
+ * All backgrounds #000000 · Borders light grey (color only) · Text #FFFFFF
+ * Titles #5750CC · Subtitles #679BD1 · Misc #C6937C
+ * CodeMirror token colors preserved.
  * Rollback: src/theme-backups/original-ui-2026-07-24/
  */
 :root,
 .dark {
   --surface: #000000;
-  --surface-container: #212121;
-  --surface-bright: #212121;
-  --surface-container-highest: #212121;
+  --surface-container: #000000;
+  --surface-bright: #000000;
+  --surface-container-highest: #000000;
   --on-surface-variant: #679bd1;
   --outline-variant: #bdbdbd;
   --primary: #5750cc;
   --primary-container: #5750cc;
   --on-primary-container: #ffffff;
-  --secondary-container: #212121;
+  --secondary-container: #000000;
   --success: #22c55e;
 
   --title: #5750cc;
@@ -30,21 +30,21 @@
 
   --background: #000000;
   --foreground: #ffffff;
-  --card: #212121;
+  --card: #000000;
   --card-foreground: #ffffff;
-  --popover: #212121;
+  --popover: #000000;
   --popover-foreground: #ffffff;
   --primary-foreground: #ffffff;
-  --secondary: #212121;
+  --secondary: #000000;
   --secondary-foreground: #ffffff;
-  --muted: #212121;
-  --muted-foreground: #ffffff;
+  --muted: #000000;
+  --muted-foreground: #c6937c;
   --accent: var(--misc);
   --accent-foreground: #ffffff;
   --destructive: #ef4444;
   --destructive-foreground: #ffffff;
   --border: #bdbdbd;
-  --input: #212121;
+  --input: #000000;
   --ring: color-mix(in srgb, var(--primary) 40%, transparent);
   --chart-1: var(--primary);
   --chart-2: var(--subtitle);
@@ -56,7 +56,7 @@
   --sidebar-foreground: #ffffff;
   --sidebar-primary: var(--primary);
   --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #212121;
+  --sidebar-accent: #000000;
   --sidebar-accent-foreground: #ffffff;
   --sidebar-border: var(--border);
   --sidebar-ring: var(--ring);
@@ -118,8 +118,6 @@
   --color-subtitle: var(--subtitle);
   --color-misc: var(--misc);
 
-  --default-border-width: 0.5px;
-
   --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   --font-body: var(--font-sans);
   --font-headline: var(--font-sans);
@@ -131,26 +129,16 @@
     @apply border-border;
   }
 
-  *,
-  ::before,
-  ::after {
-    border-color: var(--border);
-  }
-
   html {
     font-family: var(--font-sans);
     font-weight: 400;
     -webkit-font-smoothing: antialiased;
   }
 
+  /* No bold — weight only; does not change button size/layout */
   b,
-  strong,
-  .font-medium,
-  .font-semibold,
-  .font-bold,
-  .font-extrabold,
-  .font-black {
-    font-weight: 400 !important;
+  strong {
+    font-weight: 400;
   }
 
   body {
@@ -161,35 +149,22 @@
     overflow: hidden;
     height: 100vh;
   }
+
+  /* Page titles use accent; keep layout classes untouched */
+  h1,
+  h2 {
+    color: var(--title);
+    font-weight: 400;
+  }
+
+  h3,
+  h4 {
+    color: var(--subtitle);
+    font-weight: 400;
+  }
 }
 
 @layer utilities {
-  /* Chrome borders / lines — light grey already via --border; width 0.5px */
-  .border {
-    border-width: 0.5px !important;
-  }
-  .border-t {
-    border-top-width: 0.5px !important;
-  }
-  .border-b {
-    border-bottom-width: 0.5px !important;
-  }
-  .border-l {
-    border-left-width: 0.5px !important;
-  }
-  .border-r {
-    border-right-width: 0.5px !important;
-  }
-  .border-x {
-    border-left-width: 0.5px !important;
-    border-right-width: 0.5px !important;
-  }
-  .border-y {
-    border-top-width: 0.5px !important;
-    border-bottom-width: 0.5px !important;
-  }
-
-  /* Typography — hierarchy via size / color / tracking only (no bold) */
   .type-body-md {
     font-size: 0.875rem;
     line-height: 1.5;
@@ -231,7 +206,6 @@
     color: var(--title);
   }
 
-  /* Surfaces */
   .surface-base {
     background-color: var(--surface);
   }
@@ -241,7 +215,7 @@
   }
 
   .surface-float {
-    background-color: color-mix(in srgb, var(--surface-bright) 88%, transparent);
+    background-color: color-mix(in srgb, #000000 92%, transparent);
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
   }
@@ -252,19 +226,19 @@
   }
 
   .tonal-seam-b {
-    box-shadow: inset 0 -0.5px 0 0 var(--border);
+    box-shadow: inset 0 -1px 0 0 var(--border);
   }
 
   .tonal-seam-t {
-    box-shadow: inset 0 0.5px 0 0 var(--border);
+    box-shadow: inset 0 1px 0 0 var(--border);
   }
 
   .tonal-seam-r {
-    box-shadow: inset -0.5px 0 0 0 var(--border);
+    box-shadow: inset -1px 0 0 0 var(--border);
   }
 
   .tonal-seam-l {
-    box-shadow: inset 0.5px 0 0 0 var(--border);
+    box-shadow: inset 1px 0 0 0 var(--border);
   }
 
   .active-tab-sheen {
@@ -296,12 +270,12 @@
   }
 
   .btn-secondary-surface:hover {
-    background-color: color-mix(in srgb, var(--surface-bright) 70%, transparent);
+    background-color: color-mix(in srgb, #ffffff 6%, transparent);
   }
 
   .input-ghost-focus:focus,
   .input-ghost-focus:focus-visible {
-    outline: 0.5px solid var(--border);
+    outline: 1px solid var(--border);
     outline-offset: 0;
     border-color: var(--border);
   }
@@ -333,7 +307,7 @@
   }
 
   .glass-panel {
-    background: color-mix(in srgb, var(--surface-bright) 70%, transparent);
+    background: color-mix(in srgb, #000000 80%, transparent);
     backdrop-filter: blur(20px);
   }
 
@@ -362,12 +336,12 @@
 
   .nebulla-codemirror {
     height: 100%;
-    background: var(--surface-bright);
+    background: #000000;
   }
 
   .nebulla-codemirror .cm-editor {
     height: 100%;
-    background: var(--surface-bright) !important;
+    background: #000000 !important;
     color: var(--foreground);
   }
 
@@ -381,13 +355,13 @@
   }
 
   .nebulla-codemirror .cm-gutters {
-    background: var(--surface-container) !important;
-    border-right: 0.5px solid var(--outline-variant);
+    background: #000000 !important;
+    border-right: 1px solid var(--outline-variant);
     color: var(--on-surface-variant);
   }
 
   .nebulla-codemirror .cm-activeLineGutter {
-    background: color-mix(in srgb, var(--primary) 12%, var(--surface-bright));
+    background: color-mix(in srgb, var(--primary) 12%, #000000);
   }
 
   .nebulla-codemirror .cm-activeLine {
@@ -401,7 +375,7 @@
 
   .nebulla-codemirror .cm-matchingBracket {
     background: color-mix(in srgb, var(--primary) 28%, transparent);
-    outline: 0.5px solid var(--primary);
+    outline: 1px solid var(--primary);
   }
 
   /* Code token colors — unchanged from original theme */

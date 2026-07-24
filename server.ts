@@ -80,7 +80,7 @@ import {
   writeV0PromptMarkdown,
 } from "./lib/nebulaUiStudioPipeline";
 import { seedPreviewModelFromMasterPlan } from "./lib/visualUiEditorPreview";
-import { runUiGenerationCycle } from "./lib/uiGenerationEngine";
+import { runUiGenerationCycle, readCyclePolicy } from "./lib/uiGenerationEngine";
 import {
   masterPlanKeyForTabIndex,
   normalizeMasterPlanRecord,
@@ -3243,6 +3243,11 @@ ${modelJson}`;
       const body = (req.body || {}) as {
         projectName?: string;
         pageName?: string;
+        autoTriggered?: boolean;
+        regenerate?: boolean;
+        preferenceFeedback?: string;
+        guidedImprovement?: boolean;
+        writtenPaths?: string[];
       };
       const apiKey = await resolveMainGrokApiKey(req);
       if (!apiKey) {
@@ -3256,18 +3261,34 @@ ${modelJson}`;
         projectName: typeof body.projectName === "string" ? body.projectName : undefined,
         pageName: typeof body.pageName === "string" ? body.pageName : undefined,
         apiKeyOverride: apiKey,
+        autoTriggered: body.autoTriggered === true,
+        regenerate: body.regenerate === true,
+        preferenceFeedback:
+          typeof body.preferenceFeedback === "string" ? body.preferenceFeedback : undefined,
+        guidedImprovement: body.guidedImprovement === true,
+        writtenPaths: Array.isArray(body.writtenPaths)
+          ? body.writtenPaths.filter((p): p is string => typeof p === "string")
+          : undefined,
       });
       if (!result.ok) {
-        return res.status(result.status === "pending_discovery" ? 409 : 422).json({
+        return res.status(result.preference_recovery ? 409 : result.status === "pending_discovery" ? 409 : 422).json({
           ok: false,
           status: result.status,
           error: result.error,
           contextPath: result.contextPath,
+          preference_recovery: result.preference_recovery === true,
+          preference_recovery_question: result.preference_recovery_question,
+          regeneration_count: result.regeneration_count,
+          max_regenerations: result.max_regenerations,
+          user_visible_stage: result.user_visible_stage,
           context: {
             context_id: result.context.context_id,
             current_step: result.context.current_step,
             failure_reason: result.context.failure_reason,
             step_log: result.context.step_log,
+            regeneration_count: result.context.regeneration_count,
+            max_regenerations: result.context.max_regenerations,
+            user_visible_stage: result.context.user_visible_stage,
           },
         });
       }
@@ -3277,6 +3298,9 @@ ${modelJson}`;
         contextPath: result.contextPath,
         editorModel: result.editorModel,
         generatedCode: result.generatedCode,
+        regeneration_count: result.regeneration_count,
+        max_regenerations: result.max_regenerations,
+        user_visible_stage: result.user_visible_stage,
         context: {
           context_id: result.context.context_id,
           page_name: result.context.page_name,
@@ -3287,6 +3311,10 @@ ${modelJson}`;
           reference_source: result.context.reference_source,
           model_used: result.context.model_used,
           repair_pass_used: result.context.repair_pass_used,
+          regeneration_count: result.context.regeneration_count,
+          max_regenerations: result.context.max_regenerations,
+          auto_triggered: result.context.auto_triggered,
+          user_visible_stage: result.context.user_visible_stage,
           step_log: result.context.step_log,
         },
       });
@@ -3296,6 +3324,27 @@ ${modelJson}`;
         ok: false,
         error: e instanceof Error ? e.message : "UI generation engine failed",
       });
+    }
+  });
+
+  app.get("/api/ui-studio-beta/status", (req, res) => {
+    try {
+      const { workspaceRoot } = projectPathsFor(req);
+      const policy = readCyclePolicy(workspaceRoot);
+      return res.json({
+        ok: true,
+        user_visible_stage: policy.user_visible_stage,
+        regeneration_count: policy.regeneration_count,
+        max_regenerations: policy.max_regenerations,
+        auto_triggered: policy.auto_triggered,
+        preference_feedback: policy.preference_feedback,
+        recovery_path: policy.recovery_path,
+        final_status: policy.final_status,
+        page_key: policy.page_key,
+        updated_at: policy.updated_at,
+      });
+    } catch (e) {
+      return res.status(500).json({ error: e instanceof Error ? e.message : "failed" });
     }
   });
 

@@ -301,10 +301,10 @@ export function MyProjectsHome() {
       <div className="mx-auto flex w-full max-w-3xl flex-col gap-12 px-6 py-12 sm:px-10 sm:py-16">
         <section className="space-y-6">
           <div className="space-y-2">
-            <h2 className="font-headline text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
+            <h2 className="font-headline text-2xl font-normal tracking-tight text-[color:var(--title)] sm:text-3xl">
               New Project
             </h2>
-            <p className="max-w-xl text-sm leading-relaxed text-muted-foreground">
+            <p className="max-w-xl text-sm leading-relaxed text-[color:var(--misc)]">
               Choose what you are building. Grok will skip the type question and ask for your main goal next.
             </p>
           </div>
@@ -319,9 +319,9 @@ export function MyProjectsHome() {
                   type="button"
                   disabled={Boolean(startingType)}
                   onClick={() => void onStartTypedProject(action.id)}
-                  className="flex min-h-[11.5rem] flex-col items-start gap-4 rounded-2xl border border-white/10 bg-white/[0.03] p-5 text-left transition hover:border-cyan-500/35 hover:bg-cyan-500/5 disabled:cursor-wait disabled:opacity-60"
+                  className="flex min-h-[11.5rem] flex-col items-start gap-4 rounded-2xl border border-border bg-black p-5 text-left transition hover:border-[color:var(--subtitle)] hover:bg-black disabled:cursor-wait disabled:opacity-60"
                 >
-                  <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-cyan-500/10 text-cyan-300">
+                  <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-black text-[color:var(--subtitle)]">
                     {busy ? (
                       <Loader2 className="h-5 w-5 animate-spin" />
                     ) : (
@@ -329,10 +329,10 @@ export function MyProjectsHome() {
                     )}
                   </span>
                   <span className="space-y-1.5">
-                    <span className="block text-sm font-semibold text-foreground">
+                    <span className="block text-sm font-normal text-[color:var(--subtitle)]">
                       {action.title}
                     </span>
-                    <span className="block text-xs leading-relaxed text-muted-foreground">
+                    <span className="block text-xs leading-relaxed text-[color:var(--misc)]">
                       {action.blurb}
                     </span>
                   </span>
@@ -344,8 +344,8 @@ export function MyProjectsHome() {
 
         <section className="space-y-6">
           <div className="space-y-2">
-            <h2 className="text-base font-semibold text-foreground">Or continue</h2>
-            <p className="max-w-xl text-sm leading-relaxed text-muted-foreground">
+            <h2 className="text-base font-normal text-[color:var(--title)]">Or continue</h2>
+            <p className="max-w-xl text-sm leading-relaxed text-[color:var(--misc)]">
               Open a file, pull from GitHub, or chat freely without starting a new build.
             </p>
           </div>
@@ -358,16 +358,16 @@ export function MyProjectsHome() {
                   key={action.id}
                   type="button"
                   onClick={action.onClick}
-                  className="flex min-h-[10rem] flex-col items-start gap-4 rounded-2xl border border-white/10 bg-white/[0.02] p-5 text-left transition hover:border-white/20 hover:bg-white/[0.04]"
+                  className="flex min-h-[10rem] flex-col items-start gap-4 rounded-2xl border border-border bg-black p-5 text-left transition hover:border-[color:var(--subtitle)] hover:bg-black"
                 >
-                  <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/5 text-muted-foreground">
+                  <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-black text-[color:var(--subtitle)]">
                     <Icon className="h-5 w-5" />
                   </span>
                   <span className="space-y-1.5">
-                    <span className="block text-sm font-semibold text-foreground">
+                    <span className="block text-sm font-normal text-[color:var(--subtitle)]">
                       {action.title}
                     </span>
-                    <span className="block text-xs leading-relaxed text-muted-foreground">
+                    <span className="block text-xs leading-relaxed text-[color:var(--misc)]">
                       {action.blurb}
                     </span>
                   </span>
@@ -379,7 +379,7 @@ export function MyProjectsHome() {
 
         <section className="space-y-4">
           <div className="flex items-center justify-between gap-2">
-            <h2 className="text-base font-semibold text-foreground">Your projects</h2>
+            <h2 className="text-base font-normal text-[color:var(--title)]">Your projects</h2>
             {loadingList ? (
               <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
             ) : (
