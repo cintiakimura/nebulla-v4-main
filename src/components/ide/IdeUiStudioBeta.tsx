@@ -738,6 +738,15 @@ export function IdeUiStudioBeta({
         );
         return;
       }
+      const gate = data.context?.quality_gate_result || '';
+      const deliveredStage =
+        data.user_visible_stage ||
+        (gate === 'weak'
+          ? 'Weak quality — try Generate again'
+          : gate === 'repair'
+            ? 'Preview ready — quality repair applied'
+            : 'Ready in preview');
+      const qualityOk = gate !== 'weak';
       if (data.editorModel?.pages && !isNebullaIdePlaceholderShell(data.editorModel)) {
         applyEditorModel(
           data.editorModel,
@@ -748,24 +757,30 @@ export function IdeUiStudioBeta({
         );
         clearSelection();
         setPreviewSurface('visual-model');
-        setHasEnginePreview(true);
-        setEngineStage('Ready in preview');
+        setHasEnginePreview(qualityOk);
+        setEngineStage(deliveredStage);
+        if (gate === 'weak') {
+          setError('Quality gate: weak skeleton — labels/structure/§5 did not meet the bar. Try Generate again.');
+        }
         // Persist the NEW model — never the stale Cosmic Night / waiting shell from closure.
         await persistModelRemote(data.editorModel);
       } else {
-        setEngineStage(data.user_visible_stage || 'Ready in preview');
+        setEngineStage(deliveredStage);
         await loadEnginePreview();
       }
       window.dispatchEvent(
         new CustomEvent('nebula-ui-studio-beta-complete', {
           detail: {
-            ok: true,
+            ok: qualityOk,
+            error: qualityOk
+              ? undefined
+              : 'Quality gate: weak — not marked as successful generation',
             editorModel: data.editorModel,
             generatedCode: data.generatedCode,
             context: data.context,
             regeneration_count: data.regeneration_count,
             max_regenerations: data.max_regenerations,
-            user_visible_stage: 'Ready in preview',
+            user_visible_stage: deliveredStage,
           },
         }),
       );

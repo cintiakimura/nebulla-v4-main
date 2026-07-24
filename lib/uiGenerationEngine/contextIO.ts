@@ -206,9 +206,12 @@ ${sel}
 - model_used: ${s.model_used}
 - design_system_rules_applied: ${s.design_system_rules_applied}
 - quality_rules_applied: ${s.quality_rules_applied}
-- figma_used: ${s.figma_used}
-- fallback_used: ${s.fallback_used}
+- figma_used: ${s.figma_used || "no"}
+- figma_status: ${s.figma_status || "missing_key"}
+- fallback_used: ${s.fallback_used || "no"}
 - repair_pass_used: ${s.repair_pass_used}
+- selected_references:
+${s.selected_refs.length ? s.selected_refs.map((r, i) => `  ${i + 1}. ${r.id} — ${r.why}`).join("\n") + "\n" : "  1. (none)\n"}
 - generation_warnings:
 ${bullets(s.generation_warnings)}
 

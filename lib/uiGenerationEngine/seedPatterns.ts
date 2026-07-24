@@ -125,15 +125,23 @@ export function rankSeedPatterns(state: UiGenContextState): SeedPattern[] {
   return scored.map((x) => x.p);
 }
 
+export type FigmaProbeStatus = "success" | "failed" | "missing_key" | "weak_matches";
+
 /** Optional Figma: only when FIGMA_API_KEY is present. Never blocks the engine. */
 export async function tryFigmaCandidates(state: UiGenContextState): Promise<{
   ok: boolean;
+  status: FigmaProbeStatus;
   reason: string;
   candidates: { id: string; reason: string }[];
 }> {
   const key = (process.env.FIGMA_API_KEY || "").trim();
   if (!key) {
-    return { ok: false, reason: "FIGMA_API_KEY not set", candidates: [] };
+    return {
+      ok: false,
+      status: "missing_key",
+      reason: "FIGMA_API_KEY not set — seed patterns will be used",
+      candidates: [],
+    };
   }
   // Soft probe — do not hard-depend on Figma REST shape for this cycle.
   try {
@@ -143,12 +151,15 @@ export async function tryFigmaCandidates(state: UiGenContextState): Promise<{
     if (!res.ok) {
       return {
         ok: false,
+        status: "failed",
         reason: `Figma API probe failed (${res.status})`,
         candidates: [],
       };
     }
+    // Key works but we do not yet map a curated library into page templates.
     return {
       ok: false,
+      status: "weak_matches",
       reason:
         "Figma key valid but curated library mapping is not configured — using seed fallback",
       candidates: [
@@ -161,6 +172,7 @@ export async function tryFigmaCandidates(state: UiGenContextState): Promise<{
   } catch (e) {
     return {
       ok: false,
+      status: "failed",
       reason: e instanceof Error ? e.message : "Figma request failed",
       candidates: [],
     };

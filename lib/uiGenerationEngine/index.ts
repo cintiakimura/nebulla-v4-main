@@ -15,3 +15,9 @@ export {
   sanitizeEditorModelColors,
   writeEnginePreviewModel,
 } from "./previewModelIO";
+export {
+  buildRichEditorModelFromBrief,
+  cleanHumanTitle,
+  cleanHumanSubtitle,
+  validateEditorModelQuality,
+} from "./buildPreviewEditorModel";

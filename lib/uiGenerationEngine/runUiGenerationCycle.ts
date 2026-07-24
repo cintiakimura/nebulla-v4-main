@@ -15,6 +15,13 @@ import { readCyclePolicy, setUserVisibleStage, writeCyclePolicy } from "./cycleP
 import { writeEnginePreviewModel } from "./previewModelIO";
 import { rankSeedPatterns, tryFigmaCandidates } from "./seedPatterns";
 import {
+  buildRichEditorModelFromBrief,
+  cleanHumanSubtitle,
+  cleanHumanTitle,
+  pickPrimaryCta,
+  validateEditorModelQuality,
+} from "./buildPreviewEditorModel";
+import {
   collectWorkspaceFileFacts,
   formatFileFactsForBrief,
   hasMeaningfulUiFileGrounding,
@@ -192,10 +199,17 @@ function pagesFromFileFacts(facts: WorkspaceFileFacts): PageDef[] {
       facts.routes.find((r) => r.toLowerCase().includes(name.toLowerCase().replace(/\s+/g, "-"))) ||
       facts.routes[i] ||
       `/${name.toLowerCase().replace(/\s+/g, "-")}`;
+    // Body is for brief inference only — never dump routes into visible UI copy.
     out.push({
       name,
       route,
-      body: `Generated page ${name} at ${route}. Labels: ${facts.button_labels.slice(0, 4).join(", ") || "n/a"}`,
+      body: [
+        `- **${name}**`,
+        facts.headings[0] ? `- ${facts.headings[0]}` : "",
+        ...facts.button_labels.slice(0, 3).map((b) => `- ${b}`),
+      ]
+        .filter(Boolean)
+        .join("\n"),
     });
   }
   if (!out.length && facts.routes.length) {
@@ -209,7 +223,11 @@ function pagesFromFileFacts(facts: WorkspaceFileFacts): PageDef[] {
               .filter(Boolean)
               .map((s) => s.charAt(0).toUpperCase() + s.slice(1))
               .join(" ") || "Home";
-      out.push({ name, route, body: `Route ${route} from generated files` });
+      out.push({
+        name,
+        route,
+        body: [`- **${name}**`, ...facts.button_labels.slice(0, 2).map((b) => `- ${b}`)].join("\n"),
+      });
     }
   }
   return out;
@@ -445,118 +463,9 @@ function fail(
   };
 }
 
-function defaultStyle() {
-  return {
-    backgroundColor: "#FFFFFF",
-    color: "#171717",
-    paddingTop: 16,
-    paddingRight: 16,
-    paddingBottom: 16,
-    paddingLeft: 16,
-    marginTop: 0,
-    marginRight: 0,
-    marginBottom: 0,
-    marginLeft: 0,
-    width: "100%",
-    height: "auto",
-    borderRadius: 8,
-    borderWidth: 0,
-    borderColor: "#E5E5E5",
-    boxShadow: "none",
-    opacity: 1,
-  };
-}
-
-/** Build a selectable EditorModel from brief sections (Properties-compatible). */
+/** Structured preview model — never dumps Master Plan prose or routes into titles. */
 function buildEditorModelFromBrief(state: UiGenContextState): Record<string, unknown> {
-  const pageName = state.page_name || "Home";
-  const root = "root-page";
-  const header = "header-1";
-  const title = "title-1";
-  const sub = "sub-1";
-  const cta = "cta-1";
-  const nodes: Record<string, unknown> = {
-    [root]: {
-      id: root,
-      role: "page-root",
-      type: "container",
-      children: [header],
-      style: { ...defaultStyle(), backgroundColor: "#FAFAF9", paddingTop: 24, paddingLeft: 24, paddingRight: 24 },
-    },
-    [header]: {
-      id: header,
-      role: "page-header",
-      type: "container",
-      children: [title, sub, cta],
-      style: { ...defaultStyle(), backgroundColor: "#FFFFFF", paddingTop: 20, paddingBottom: 20 },
-    },
-    [title]: {
-      id: title,
-      role: "hero-title",
-      type: "text",
-      text: state.page_name || "Page",
-      style: { ...defaultStyle(), backgroundColor: "#FFFFFF", color: "#171717", paddingTop: 0, paddingBottom: 8 },
-    },
-    [sub]: {
-      id: sub,
-      role: "hero-sub",
-      type: "text",
-      text: state.page_purpose || state.page_goal || "Generated page",
-      style: { ...defaultStyle(), backgroundColor: "#FFFFFF", color: "#525252", paddingTop: 0, paddingBottom: 12 },
-    },
-    [cta]: {
-      id: cta,
-      role: "cta-primary",
-      type: "button",
-      text: state.primary_cta || "Continue",
-      style: {
-        ...defaultStyle(),
-        backgroundColor: "#171717",
-        color: "#FFFFFF",
-        width: "auto",
-        paddingLeft: 20,
-        paddingRight: 20,
-      },
-    },
-  };
-
-  const sectionIds: string[] = [];
-  const sections = state.section_order.length ? state.section_order : state.required_sections;
-  sections.slice(0, 8).forEach((label, i) => {
-    const sid = `section-${i + 1}`;
-    const tid = `section-title-${i + 1}`;
-    const bid = `section-body-${i + 1}`;
-    sectionIds.push(sid);
-    nodes[sid] = {
-      id: sid,
-      role: `section-${label.toLowerCase().replace(/[^a-z0-9]+/g, "-").slice(0, 24) || i + 1}`,
-      type: "container",
-      children: [tid, bid],
-      style: { ...defaultStyle(), backgroundColor: "#FFFFFF", marginTop: 12 },
-    };
-    nodes[tid] = {
-      id: tid,
-      role: "section-title",
-      type: "text",
-      text: label,
-      style: { ...defaultStyle(), backgroundColor: "#FFFFFF", color: "#171717", paddingBottom: 8 },
-    };
-    nodes[bid] = {
-      id: bid,
-      role: "section-body",
-      type: "text",
-      text: `Content for ${label}`,
-      style: { ...defaultStyle(), backgroundColor: "#FFFFFF", color: "#525252" },
-    };
-  });
-
-  (nodes[root] as { children: string[] }).children = [header, ...sectionIds];
-
-  return {
-    pages: {
-      [pageName]: { rootId: root, nodes },
-    },
-  };
+  return buildRichEditorModelFromBrief(state) as Record<string, unknown>;
 }
 
 function extractCodeBlock(text: string): string {
@@ -594,6 +503,21 @@ function validateAgainstBrief(code: string, state: UiGenContextState): {
   }
   if (!/class(name)?=/.test(code) && !/tailwind/i.test(code)) {
     missing.push("Tailwind class usage");
+  }
+  // Skeleton / metadata anti-patterns in generated code
+  if (/get started/i.test(code) && state.file_button_labels.length > 0) {
+    missing.push("Generic Get started despite real file labels");
+  }
+  if (/\/[a-z0-9-]{8,}/i.test(code) && /<(h1|h2|title)/i.test(code)) {
+    // Soft: routes appearing near headings often means slug dump
+    if (/['"`]\/[a-z0-9/_-]{6,}['"`]\s*<\/(h1|h2|p|span)/i.test(code)) {
+      missing.push("Route/slug appears as visible heading copy");
+    }
+  }
+  const buttonMatches = code.match(/<(button|Button)\b/gi) || [];
+  const sectionish = (code.match(/<(section|ul|ol|form|nav)\b/gi) || []).length;
+  if (buttonMatches.length <= 1 && sectionish < 1) {
+    missing.push("Insufficient structure (need sections/list/form + CTA)");
   }
   if (missing.length === 0) return { gate: "pass", missing };
   if (missing.length <= 2) return { gate: "repair", missing };
@@ -818,24 +742,43 @@ export async function runUiGenerationCycle(
       "pending_discovery",
     );
   }
-  state.page_name = chosen.name;
+  // Clean human page label — prefer short file page names over Master Plan prose dumps.
+  const filePageFallback =
+    fileFacts.page_names.find((n) => n.trim().length >= 2 && n.trim().length <= 28 && !n.includes("/")) ||
+    fileFacts.page_names[0] ||
+    "Home";
+  const cleanedChosen = cleanHumanTitle(chosen.name, filePageFallback);
+  // If Master Plan "name" was a purpose paragraph, cleaned result may still be weak — prefer file label.
+  const chosenLooksLikeProse =
+    chosen.name.trim().split(/\s+/).length > 5 || chosen.name.trim().length > 36;
+  state.page_name =
+    chosenLooksLikeProse && filePageFallback !== "Home"
+      ? cleanHumanTitle(filePageFallback, cleanedChosen)
+      : cleanedChosen;
+  const rawPurpose = firstLines(chosen.body.replace(chosen.name, ""), 4);
+  // Keep full purpose for the brief only; visible subtitle is cleaned separately later.
   state.page_purpose =
-    firstLines(chosen.body.replace(chosen.name, ""), 4) ||
-    fileFacts.headings[0] ||
-    `Page: ${chosen.name}`;
-  const actions = extractBullets(chosen.body, 6);
+    rawPurpose && !/^generated page\b/i.test(rawPurpose) && !rawPurpose.includes("/")
+      ? rawPurpose
+      : fileFacts.headings.find((h) => h.length <= 48 && !h.includes("/")) ||
+        `Help users use ${state.page_name}`;
+  const actions = extractBullets(chosen.body, 6).filter(
+    (a) => a.length <= 40 && !a.includes("/") && !/^generated/i.test(a),
+  );
   state.primary_actions = actions.slice(0, 2);
   state.secondary_actions = actions.slice(2, 5);
-  state.required_sections = extractBullets(chosen.body, 8);
+  state.required_sections = extractBullets(chosen.body, 8)
+    .map((s) => cleanHumanTitle(s, ""))
+    .filter((s) => s && !/^(header|main content|primary action)$/i.test(s));
   if (!state.required_sections.length) {
     state.required_sections = uniqMerge(
-      ["Header", "Main content", "Primary action"],
-      fileFacts.headings.slice(0, 4),
+      fileFacts.headings.map((h) => cleanHumanTitle(h, "")).filter(Boolean).slice(0, 4),
+      [],
     );
   }
   state.navigation_role =
     pages.length > 1
-      ? `One of ${pages.length} app routes (${chosen.route || chosen.name})`
+      ? `One of ${pages.length} app screens`
       : "Primary page";
 
   state.visual_tone = firstLines(uiux, 3) || "(not found)";
@@ -905,41 +848,63 @@ export async function runUiGenerationCycle(
 
   // -------- PHASE 5 — BRIEF --------
   stage("Preparing brief");
-  state.page_goal = `Help the ${state.target_user || "user"} accomplish: ${state.page_purpose}`;
+  const visibleSubtitle = cleanHumanSubtitle(
+    state.page_purpose,
+    state.page_type,
+    state.function,
+    fileFacts.headings,
+  );
+  state.page_goal = `On ${state.page_name}, help the user: ${visibleSubtitle}`;
   state.audience = state.target_user || "(not found)";
   state.layout_navigation = `${state.navigation_type} navigation for a ${state.device} ${state.page_type}`;
-  state.section_order = [...state.required_sections];
-  state.primary_cta =
-    state.primary_actions[0] || fileFacts.button_labels[0] || "Get started";
-  state.secondary_ctas = state.secondary_actions.slice(0, 3);
+  state.section_order = state.required_sections.length
+    ? [...state.required_sections]
+    : [];
+  // Prefer real file labels; never default to "Get started" when better labels exist.
+  state.primary_cta = pickPrimaryCta(state);
+  state.secondary_ctas = uniqMerge(state.secondary_actions, fileFacts.button_labels, 4)
+    .filter((c) => c !== state.primary_cta && !/^get started$/i.test(c))
+    .slice(0, 3);
   state.metrics = /metric|kpi|stat|dashboard/i.test(chosen.body + state.page_type)
     ? ["Key metric cards"]
     : [];
-  state.tables_or_lists = /list|table|feed|catalog/i.test(chosen.body + state.page_type)
-    ? ["Primary list or table"]
-    : [];
+  state.tables_or_lists =
+    /list|table|feed|catalog|task|todo|practice/i.test(
+      `${chosen.body} ${state.page_type} ${state.page_name} ${state.function}`,
+    )
+      ? ["Primary list or cards"]
+      : [];
   state.forms = /form|settings|auth|sign|input/i.test(chosen.body + state.page_type)
     ? ["Primary form"]
     : [];
   state.cards_or_panels = ["Content cards or panels for required sections"];
   state.other_components = state.navigation_type !== "none" ? [`${state.navigation_type} navigation`] : [];
-  state.color_direction = state.palette !== "(not found)" ? state.palette : state.visual_tone;
-  state.hierarchy_rules = "One clear page title; primary CTA visible; sections in brief order; no decorative clutter.";
-  state.spacing_rules = `Density ${state.density}: consistent padding, clear section gaps, readable line length.`;
+  state.color_direction =
+    state.palette !== "(not found)"
+      ? state.palette
+      : uiux
+        ? firstLines(uiux, 4)
+        : state.visual_tone;
+  state.hierarchy_rules =
+    "Visible title must be a short human label (e.g. Tasks). Subtitle must be short (e.g. Today’s micro-tasks). NEVER put routes, Master Plan paragraphs, or page-purpose dumps in the canvas.";
+  state.spacing_rules = `Density ${state.density}: consistent padding, clear section gaps, readable line length. Apply §5 palette/radius/tone when present.`;
   state.component_limits =
-    "No random gradients, weak contrast, or unrelated marketing chrome. Prefer Tailwind utility layout. Do not invent new major product behavior beyond Master Plan + generated files.";
+    "Real screen structure required: header + ≥2 content sections + primary CTA (+ secondary when available). Match product function (tasks→list/cards, learning→lesson/practice, settings→rows). No title+one-button skeletons. Prefer file labels over generic CTAs.";
   const fileBrief = formatFileFactsForBrief(fileFacts);
   state.final_brief_text = [
     `Product: ${state.product_goal}`,
     `Project type: ${state.project_type}`,
-    `Page: ${state.page_name} (${state.page_type}, ${state.device})`,
+    `Page title (VISIBLE): ${state.page_name}`,
+    `Page subtitle (VISIBLE): ${visibleSubtitle}`,
+    `Page type/device: ${state.page_type} / ${state.device}`,
     `Audience: ${state.audience}`,
     `Goal: ${state.page_goal}`,
     `Navigation: ${state.layout_navigation}`,
-    `Sections in order: ${state.section_order.join(" → ")}`,
-    `Primary CTA: ${state.primary_cta}`,
+    `Sections in order: ${state.section_order.join(" → ") || "(infer from product function)"}`,
+    `Primary CTA (VISIBLE): ${state.primary_cta}`,
     `Secondary CTAs: ${state.secondary_ctas.join(", ") || "(none)"}`,
-    `Visual: ${state.color_direction}`,
+    `Visual contract (§5): ${state.color_direction}`,
+    `Tone: ${state.visual_tone}`,
     `Hierarchy: ${state.hierarchy_rules}`,
     `Spacing: ${state.spacing_rules}`,
     `Limits: ${state.component_limits}`,
@@ -991,10 +956,11 @@ export async function runUiGenerationCycle(
   const figma = await tryFigmaCandidates(state);
   const seeds = rankSeedPatterns(state);
   const topSeeds = seeds.slice(0, 3);
-  if (figma.ok && figma.candidates.length) {
+  state.figma_status = figma.status;
+  if (figma.ok && figma.status === "success" && figma.candidates.length) {
     state.reference_source = "mixed";
     state.figma_used = "yes";
-    state.fallback_used = "yes";
+    state.fallback_used = topSeeds.length ? "yes" : "no";
     state.candidates = [
       ...figma.candidates,
       ...topSeeds.map((s) => ({ id: s.id, reason: s.reason })),
@@ -1007,15 +973,15 @@ export async function runUiGenerationCycle(
       id: s.id,
       reason: `${s.reason} — ${s.structure}`,
     }));
-    if (!figma.ok) {
-      state.generation_warnings.push(`Figma unavailable/weak: ${figma.reason}`);
-    }
+    state.generation_warnings.push(
+      `Figma status=${figma.status}: ${figma.reason} — continuing with seed patterns`,
+    );
   }
   const best = topSeeds[0] || seeds[0];
   state.selected_refs = [
     {
       id: best.id,
-      why: `Best match for device=${state.device} page_type=${state.page_type}: ${best.structure}`,
+      why: `Best match for device=${state.device} page_type=${state.page_type} function=${state.function}: ${best.structure}`,
     },
   ];
   if (topSeeds[1]) {
@@ -1024,13 +990,19 @@ export async function runUiGenerationCycle(
       why: `Secondary structural guidance: ${topSeeds[1].structure}`,
     });
   }
+  if (figma.candidates[0] && state.figma_status === "weak_matches") {
+    state.selected_refs.push({
+      id: figma.candidates[0].id,
+      why: `Figma probe only (${state.figma_status}) — not used as layout authority: ${figma.reason}`,
+    });
+  }
   state.rejected_notes = topSeeds
     .slice(2)
     .map((s) => `${s.id} weaker match`)
     .join("; ");
   appendStepLog(
     state,
-    `Step 6 retrieve — source=${state.reference_source}; selected=${state.selected_refs.map((r) => r.id).join(",")}`,
+    `Step 6 retrieve — source=${state.reference_source}; figma_used=${state.figma_used}; figma_status=${state.figma_status}; fallback=${state.fallback_used}; selected=${state.selected_refs.map((r) => r.id).join(",")}`,
   );
   state.current_step = 7;
   persist(workspaceRoot, state);
@@ -1055,11 +1027,15 @@ export async function runUiGenerationCycle(
     "- Clear hierarchy, accessible contrast, no clutter",
     "- Do not invent a different product",
     "- Master Plan = product truth; generated files = concrete labels/actions/routes",
+    "- Apply §5 visual contract (palette, density, radius, tone) when provided",
     "",
-    "QUALITY RULES:",
-    "- Required sections must appear",
-    "- Primary CTA must appear — prefer real labels from generated files when valid",
-    "- No random decorative noise",
+    "QUALITY RULES (HARD):",
+    "- Visible title MUST be a short human label (e.g. Tasks) — NEVER a paragraph or route",
+    "- Visible subtitle MUST be short (e.g. Today’s micro-tasks) — NEVER a path or Master Plan dump",
+    "- Build real structure: header + content sections (list/cards/form/rows) + primary CTA",
+    "- A page with only title + one generic button is a FAILURE",
+    "- Prefer real button/heading labels from generated files over Get started",
+    "- Match product function (tasks→list, learning→lesson/practice, settings→grouped rows)",
     "",
     "ADAPTED STRUCTURE:",
     state.adapt_kept,
@@ -1070,8 +1046,9 @@ export async function runUiGenerationCycle(
     "",
     "OUTPUT CONTRACT:",
     "1) Emit one ```tsx``` block with a complete React + Tailwind page component.",
-    "2) Optionally emit one ```json``` block with an EditorModel { pages: { [pageName]: { rootId, nodes } } } for visual editing.",
-    "3) Nodes types: container | text | button | box. Include role, style, text when relevant.",
+    "2) Emit one ```json``` EditorModel { pages: { [PageTitle]: { rootId, nodes } } } with REAL structure (≥8 nodes, ≥2 sections, themed colors).",
+    "3) Node types: container | text | button | box. Include role, style (#rrggbb only), text when relevant.",
+    "4) Do not put routes or long descriptions in text nodes.",
   ].join("\n");
   appendStepLog(state, "Step 8 package — generation package assembled (pre-model-call)");
   state.current_step = 9;
@@ -1087,7 +1064,7 @@ export async function runUiGenerationCycle(
       {
         role: "system",
         content:
-          "You are Grok Code generating UI for Nebulla UI Studio Beta. Obey the package only. Output React+Tailwind. Do not invent a different product. Preserve real button/route labels from generated files when they match the Master Plan.",
+          "You are Grok Code generating UI for Nebulla UI Studio Beta. Obey the package only. Output React+Tailwind AND a structured EditorModel JSON. Never dump Master Plan paragraphs or routes into visible titles/subtitles. Prefer real file labels. Apply §5 colors when present. Title+one-button skeletons are forbidden.",
       },
       { role: "user", content: state.generation_package },
     ],
@@ -1121,11 +1098,11 @@ export async function runUiGenerationCycle(
         {
           role: "system",
           content:
-            "Repair pass only. Fix missing required sections/CTA. Keep React+Tailwind. Do not redesign from scratch.",
+            "Repair pass only. Fix structure + clean labels + apply §5 visual direction. Keep React+Tailwind. Replace description-dump titles and route subtitles. Ensure list/cards/sections exist — not title+one button.",
         },
         {
           role: "user",
-          content: `Missing: ${gate.missing.join("; ")}\n\nBrief:\n${state.final_brief_text}\n\nCurrent code:\n${code.slice(0, 12000)}`,
+          content: `Issues: ${gate.missing.join("; ")}\n\nBrief:\n${state.final_brief_text}\n\nCurrent code:\n${code.slice(0, 12000)}`,
         },
       ],
     });
@@ -1142,26 +1119,78 @@ export async function runUiGenerationCycle(
     }
   }
 
+  // Prefer structured engine builder; only keep AI EditorModel if it passes quality.
+  const richModel = buildEditorModelFromBrief(state);
+  let editorModel: unknown = richModel;
   const modelJson = extractEditorModelJson(gen.content);
-  if (modelJson) state.editor_model_json = modelJson;
-  else state.editor_model_json = JSON.stringify(buildEditorModelFromBrief(state));
+  if (modelJson) {
+    try {
+      const aiModel = JSON.parse(modelJson) as Parameters<typeof validateEditorModelQuality>[0];
+      const aiQ = validateEditorModelQuality(aiModel, state);
+      if (aiQ.gate === "pass") {
+        editorModel = aiModel;
+        appendStepLog(state, "Step 8 validate — accepted AI EditorModel (passed quality)");
+      } else {
+        appendStepLog(
+          state,
+          `Step 8 validate — rejected AI EditorModel (${aiQ.issues.join("; ")}) — using structured builder`,
+        );
+        state.generation_warnings.push(`AI EditorModel weak: ${aiQ.issues.join("; ")}`);
+      }
+    } catch {
+      /* use rich builder */
+    }
+  }
+  state.editor_model_json = JSON.stringify(editorModel);
+
+  // Controlled repair: rebuild from brief if preview model is still a skeleton.
+  let modelGate = validateEditorModelQuality(
+    editorModel as Parameters<typeof validateEditorModelQuality>[0],
+    state,
+  );
+  if (modelGate.gate !== "pass") {
+    editorModel = buildEditorModelFromBrief(state);
+    state.editor_model_json = JSON.stringify(editorModel);
+    state.repair_pass_used = "yes";
+    modelGate = validateEditorModelQuality(
+      editorModel as Parameters<typeof validateEditorModelQuality>[0],
+      state,
+    );
+    appendStepLog(
+      state,
+      `Step 8 validate — structured repair applied; model_gate=${modelGate.gate}; issues=${modelGate.issues.join("; ") || "none"}`,
+    );
+  }
+
+  // Combine code gate + model gate — skeleton cannot be "pass".
+  if (modelGate.gate === "weak" || gate.gate === "weak") {
+    state.quality_gate_result = "weak";
+    state.missing_required_sections = uniqMerge(
+      state.missing_required_sections,
+      modelGate.issues,
+      12,
+    );
+  } else if (modelGate.gate === "repair" || gate.gate === "repair") {
+    state.quality_gate_result = state.quality_gate_result === "weak" ? "weak" : "repair";
+  } else {
+    state.quality_gate_result = "pass";
+  }
 
   appendStepLog(
     state,
-    `Step 8 validate — quality_gate=${state.quality_gate_result}; repair=${state.repair_pass_used}`,
+    `Step 8 validate — quality_gate=${state.quality_gate_result}; repair=${state.repair_pass_used}; figma_status=${state.figma_status}`,
   );
   state.current_step = 11;
   persist(workspaceRoot, state);
 
   // -------- PHASE 12 — DELIVER TO UI STUDIO BETA --------
-  stage("Ready in preview");
-  let editorModel: unknown;
-  try {
-    editorModel = JSON.parse(state.editor_model_json);
-  } catch {
-    editorModel = buildEditorModelFromBrief(state);
-    state.editor_model_json = JSON.stringify(editorModel);
-  }
+  const deliveredStage =
+    state.quality_gate_result === "pass"
+      ? "Ready in preview"
+      : state.quality_gate_result === "repair"
+        ? "Preview ready — quality repair applied"
+        : "Weak quality — try Generate again";
+  stage(deliveredStage);
 
   try {
     writeEnginePreviewModel(workspaceRoot, editorModel as Parameters<typeof writeEnginePreviewModel>[1]);
@@ -1178,11 +1207,15 @@ export async function runUiGenerationCycle(
   fs.writeFileSync(codePath, state.generated_code || "// empty", "utf8");
 
   state.preview_delivered = "yes";
-  state.export_available = "yes";
+  state.export_available = state.quality_gate_result === "weak" ? "no" : "yes";
   state.output_type = "react_tailwind_page";
-  state.status = "generated";
-  state.final_status = "pending";
-  appendStepLog(state, "Step 9 deliver — preview model + code delivered to UI Studio Beta paths");
+  // Weak skeletons are not a successful generation — keep honest status.
+  state.status = state.quality_gate_result === "weak" ? "failed" : "generated";
+  state.final_status = state.quality_gate_result === "weak" ? "rejected" : "pending";
+  appendStepLog(
+    state,
+    `Step 9 deliver — preview delivered (quality_gate=${state.quality_gate_result}; stage=${deliveredStage}; status=${state.status})`,
+  );
   state.current_step = 12;
   persist(workspaceRoot, state);
 
@@ -1198,7 +1231,7 @@ export async function runUiGenerationCycle(
   // -------- PHASE 14 — CLOSE --------
   appendStepLog(state, "Step 11 metadata — cycle closed with generated status");
   state.current_step = 14;
-  stage("Ready in preview");
+  stage(deliveredStage);
   writeCyclePolicy(workspaceRoot, {
     auto_triggered: state.auto_triggered === "yes" ? "yes" : "no",
     regeneration_count: state.regeneration_count,
@@ -1209,8 +1242,8 @@ export async function runUiGenerationCycle(
       | "manual_refinement"
       | "partial_redesign"
       | "none",
-    final_status: "generated",
-    user_visible_stage: "Ready in preview",
+    final_status: state.quality_gate_result === "weak" ? "rejected" : "generated",
+    user_visible_stage: deliveredStage,
     page_key: state.page_name,
     updated_at: nowIso(),
   });
@@ -1225,6 +1258,6 @@ export async function runUiGenerationCycle(
     generatedCode: state.generated_code,
     regeneration_count: state.regeneration_count,
     max_regenerations: state.max_regenerations,
-    user_visible_stage: "Ready in preview",
+    user_visible_stage: deliveredStage,
   };
 }

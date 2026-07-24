@@ -155,8 +155,11 @@ Do not rely on chat memory for decisions already written here.
 - design_system_rules_applied: `yes | no`
 - quality_rules_applied: `yes | no`
 - figma_used: `yes | no`
+- figma_status: `success | failed | missing_key | weak_matches`
 - fallback_used: `yes | no`
 - repair_pass_used: `yes | no`
+- selected_references:
+  - id — why selected
 - generation_warnings:
   - 
 

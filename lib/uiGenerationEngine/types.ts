@@ -127,6 +127,8 @@ export type UiGenContextState = {
   design_system_rules_applied: "yes" | "no" | "";
   quality_rules_applied: "yes" | "no" | "";
   figma_used: "yes" | "no" | "";
+  /** Explicit Figma outcome — never imply success when unavailable. */
+  figma_status: "success" | "failed" | "missing_key" | "weak_matches" | "";
   fallback_used: "yes" | "no" | "";
   repair_pass_used: "yes" | "no" | "";
   generation_warnings: string[];
@@ -239,6 +241,7 @@ export function emptyContextState(): UiGenContextState {
     design_system_rules_applied: "",
     quality_rules_applied: "",
     figma_used: "",
+    figma_status: "",
     fallback_used: "",
     repair_pass_used: "",
     generation_warnings: [],
