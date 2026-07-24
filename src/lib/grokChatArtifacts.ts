@@ -209,7 +209,7 @@ export function buildModeSystemAppendix(): string {
 BUILD_MODE is active for this turn. Do not explain code in chat — emit file artifacts. Required when implementing:
 1) Optional \`<START_MASTERPLAN>…</END_MASTERPLAN>\` if the plan changed — use all five section headers (see MASTER PLAN SECTION SEPARATION).
 2) \`START_CODING\` on its own line when ready.
-3) One or more \`\`\`file:relative/path\` … \`\`\` blocks (paths under src/, app/, pages/, components/, public/).
+3) One or more \`\`\`file:relative/path\` … \`\`\` blocks for the **current slice only** (Build → Debug → Next). Prefer foundation/auth/core feature slices over the entire §4 route map in one turn.
 4) Optional \`\`\`file:nebula-ui-studio/v0-prompt.md\` … \`\`\` — **concise v0 brief only (800–1200 chars max)**. Bullet summary: app one-liner, up to 8 \`/routes\`, palette/fonts/layout, shadcn+Tailwind output. **Never paste full Master Plan §4 or §5** (server also caps length; long prompts fail and waste v0 credits).
 `.trim();
 }
@@ -228,12 +228,14 @@ Do not jump to a fix before Verify → Analyze → Trace. Prefer silent auto-fix
 
 /** Compact coding quality reminder when Smart Chat detects coding mode. */
 export const CODING_QUALITY_APPENDIX = `
-ACTIVE MODE: CODING — Architecture-first quality contract:
+ACTIVE MODE: CODING — Architecture-first + Incremental Development (Build → Debug → Next):
 1) Mentally scan nebulla-project/code-review-checklist.md before every file block.
 2) Follow Master Plan §1–§5 + Project Type; do not invent contradicting routes/features.
-3) Smallest safe change; no drive-by refactors.
-4) No hallucinated APIs/packages/env/paths — create them explicitly if needed in the same response.
-5) Output only START_CODING and/or \`\`\`file:relative/path\` … \`\`\` — never casual code fences in chat.
+3) Implement **one slice only** this turn (foundation → auth → data/API → primary feature → secondary → polish). Do not dump the whole app.
+4) Smallest safe change; no drive-by refactors; no temporary hacks.
+5) No hallucinated APIs/packages/env/paths — create them explicitly if needed in the same response.
+6) After the slice: remind to Validate (NDM happy path) before the next Go / slice.
+7) Output only START_CODING and/or \`\`\`file:relative/path\` … \`\`\` — never casual code fences in chat.
 `.trim();
 
 /**

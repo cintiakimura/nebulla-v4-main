@@ -299,15 +299,6 @@ export function MyProjectsHome() {
   return (
     <div className="min-h-0 flex-1 overflow-auto bg-background">
       <div className="mx-auto flex w-full max-w-3xl flex-col gap-12 px-6 py-12 sm:px-10 sm:py-16">
-        <header className="space-y-3">
-          <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-cyan-400/80">
-            Nebulla
-          </p>
-          <p className="max-w-xl text-base leading-relaxed text-muted-foreground">
-            Welcome back. Pick a project type to start Discovery, or open something you already started.
-          </p>
-        </header>
-
         <section className="space-y-6">
           <div className="space-y-2">
             <h2 className="font-headline text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">

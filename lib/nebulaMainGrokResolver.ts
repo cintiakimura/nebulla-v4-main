@@ -41,7 +41,10 @@ function sanitizeEnvSecret(raw: string): string {
   return s.replace(/[\r\n]+/g, "");
 }
 
-export type MainGrokKeySource = "env";
+/** Browser BYOK header (same pattern as v0's x-nebula-v0-api-key). */
+export const NEBULLA_XAI_HEADER = "x-nebula-xai-api-key";
+
+export type MainGrokKeySource = "env" | "client";
 
 export type MainGrokResolveOk = { ok: true; apiKey: string; source: MainGrokKeySource };
 
@@ -92,17 +95,41 @@ function resolveEnvMainAiKey(): MainGrokResolveResult {
   return { ok: true, apiKey: env, source: "env" };
 }
 
+function readClientXaiApiKey(req: express.Request): string {
+  const raw = req.headers[NEBULLA_XAI_HEADER];
+  const value = Array.isArray(raw) ? raw[0] : raw;
+  return sanitizeEnvSecret(typeof value === "string" ? value : "");
+}
+
+function resolveMainAiKeyWithClient(req: express.Request): MainGrokResolveResult {
+  // Prefer the user's own key from onboarding / Secrets (BYOK).
+  const client = readClientXaiApiKey(req);
+  if (client.length >= MIN_KEY_LEN) {
+    return { ok: true, apiKey: client, source: "client" };
+  }
+  if (client && client.length > 0) {
+    return {
+      ok: false,
+      code: "INVALID_LENGTH",
+      message: "Your Grok API key looks too short. Paste the full key from the xAI console.",
+      hint: "Open Onboarding or Settings, paste your xAI API key, then try again.",
+    };
+  }
+  return resolveEnvMainAiKey();
+}
+
 /**
  * Resolves the **main** AI key for chat, UI tools, and code paths.
- * Uses server env only (`MAIN_API_KEY_GROK` preferred; no header, body, or per-user DB overrides).
+ * Prefers browser BYOK header `X-Nebula-Xai-Api-Key`, then server `MAIN_API_KEY_GROK`.
  */
 export function createResolveMainGrokApiKey(_readSessionUid: (req: express.Request) => string | null) {
   void _readSessionUid;
   return async function resolveMainGrokApiKey(
-    _req: express.Request,
+    req: express.Request,
     _bodyGrokOverride?: string
   ): Promise<string> {
-    const r = resolveEnvMainAiKey();
+    void _bodyGrokOverride;
+    const r = resolveMainAiKeyWithClient(req);
     return r.ok ? r.apiKey : "";
   };
 }
@@ -111,9 +138,10 @@ export function createResolveMainGrokApiKey(_readSessionUid: (req: express.Reque
 export function createResolveMainGrokApiKeyDetailed(_readSessionUid: (req: express.Request) => string | null) {
   void _readSessionUid;
   return async function resolveMainGrokApiKeyDetailed(
-    _req: express.Request,
+    req: express.Request,
     _bodyGrokOverride?: string
   ): Promise<MainGrokResolveResult> {
-    return resolveEnvMainAiKey();
+    void _bodyGrokOverride;
+    return resolveMainAiKeyWithClient(req);
   };
 }

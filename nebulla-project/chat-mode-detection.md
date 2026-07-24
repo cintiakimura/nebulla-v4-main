@@ -69,7 +69,7 @@ Store project type and use it for page structure, navigation, UI/UX, and technic
 ## C. CODING
 
 - **Triggers:** Write/implement/Go — **only** when Master Plan is complete **or** user explicitly requests a tiny fix after acknowledging incomplete plan (prefer Discovery first)
-- **Behavior:** `code-review-checklist.md`; `file:` blocks and/or `START_CODING` / **Go**. Never casual code fences in chat.
+- **Behavior:** `code-review-checklist.md` + `incremental-development.md` (one slice per Go: Build → Debug → Next); `file:` blocks and/or `START_CODING` / **Go**. Never casual code fences in chat. Never dump the full app when it can be sliced.
 
 ## D. DEBUGGING
 

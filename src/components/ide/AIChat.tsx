@@ -1604,9 +1604,9 @@ export function AIChat() {
     stickToBottomRef.current = true;
     setSending(true);
     setSendError(null);
-    beginCodingActivity('Go — full coding pass', GO_WORK_STEPS, {
-      subhead: 'One Go — Grok Code writes the full app (auto-continues if needed). Wait for the finished message.',
-      initialLog: userNote ? `Go started — focus: ${userNote.slice(0, 120)}` : 'Go started — full implementation pass',
+    beginCodingActivity('Go — one slice', GO_WORK_STEPS, {
+      subhead: 'One Go — one coherent slice (Build → Debug → Next). Validate before the next Go.',
+      initialLog: userNote ? `Go started — slice focus: ${userNote.slice(0, 120)}` : 'Go started — next incomplete slice',
     });
     void refreshChatV0Status();
 

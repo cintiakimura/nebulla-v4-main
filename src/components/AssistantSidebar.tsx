@@ -538,7 +538,7 @@ export function AssistantSidebar({
           {
             role: 'user' as const,
             content:
-              'START_CODING — begin implementation now. Output file artifacts only (paths + file bodies), no conversational text.',
+              'START_CODING — implement ONE coherent slice only (Build → Debug → Next). Output file artifacts only (paths + file bodies), no conversational text.',
           },
         ];
         try {

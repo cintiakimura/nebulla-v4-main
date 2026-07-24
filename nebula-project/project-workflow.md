@@ -102,7 +102,7 @@ Grok reads: `project-workflow.md` → `master-plan.json` → `environment-setup.
 Database + auth from Master Plan. UI baseline from steps 3–4 if present.
 
 ### 8. Core development (Phase 1)
-Features from Master Plan; **Go** / **START_CODING** + `\`\`\`file:…\`\`\`` — **MUST NOT** code dumps in chat.
+Features from Master Plan via **Incremental Development** (`project-execution-rules.md`: Build → Debug → Next). Each **Go** / `START_CODING` = **one slice** + `\`\`\`file:…\`\`\`` — **MUST NOT** dump the full app or code in chat. Validate (NDM) before the next slice.
 
 ### 9. UI development (Phase 2)
 First UI: steps 3–7. Later UI: UI Studio → Apply (warning) → Grok; **MUST NOT** full v0 unless redesign.

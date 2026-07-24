@@ -4,6 +4,7 @@ import {
   chatModeSystemAppendix,
   IDE_CHAT_EXECUTION_APPENDIX,
 } from './grokChatArtifacts';
+import { getGrokRequestHeaders } from './grokUserKey';
 import { withProjectBody, withProjectQuery } from './nebulaProjectApi';
 import {
   detectBuildModeIntent,
@@ -126,7 +127,7 @@ export async function sendIdeAssistantGrokTurn(options: {
     claudeFallbackNotice?: string;
   }>(withProjectQuery('/api/grok/chat'), {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...getGrokRequestHeaders() },
     credentials: 'include',
     signal,
     body: JSON.stringify(

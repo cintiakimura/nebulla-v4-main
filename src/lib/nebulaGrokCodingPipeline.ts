@@ -4,6 +4,7 @@ import { runPostCodingWorkspaceSync } from './ideArtifactSync';
 import { cancelProjectBackgroundJobs } from './ideProjectReset';
 import type { GrokActivityProgressFn } from './ideGrokActivityStatus';
 import { startGrokActivityWaitTicker } from './ideGrokActivityStatus';
+import { getGrokRequestHeaders } from './grokUserKey';
 import { withProjectBody, withProjectQuery } from './nebulaProjectApi';
 
 const START_CODING_RE = /<\s*START_CODING\s*>|\bSTART_CODING\b/i;
@@ -67,7 +68,7 @@ function buildGoCompleteMessage(
     appFiles.length > 0
       ? ` App routes: ${appFiles.slice(0, 6).join(', ')}${appFiles.length > 6 ? '…' : ''}.`
       : '';
-  return `All done${passNote}. Applied ${totalWritten} file(s) to your workspace.${routeHint} Master Plan and v0 prompt synced. Open UI Studio → Generate v0 when you want visual UI.`;
+  return `Slice complete${passNote}. Applied ${totalWritten} file(s).${routeHint} Validate this slice (NDM happy path) before the next Go. Master Plan / v0 prompt synced — Generate v0 in UI Studio when ready.`;
 }
 
 function stripNonFileArtifacts(text: string): string {
@@ -214,7 +215,7 @@ async function pollGoCodeUntilDoneInner(
     try {
       const response = await fetch(withProjectQuery('/api/grok/go-code/poll'), {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getGrokRequestHeaders() },
         credentials: 'include',
         body: JSON.stringify(withProjectBody({ projectName })),
       });
@@ -275,7 +276,7 @@ async function kickGoCodeJob(options: {
     try {
       const preRes = await fetch(withProjectQuery('/api/grok/go-code/poll'), {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getGrokRequestHeaders() },
         credentials: 'include',
         body: JSON.stringify(withProjectBody({ projectName })),
       });
@@ -308,7 +309,7 @@ async function kickGoCodeJob(options: {
 
     const data = await fetchJson<GoCodePayload>(withProjectQuery('/api/grok/go-code'), {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...getGrokRequestHeaders() },
       credentials: 'include',
       body: JSON.stringify(
         withProjectBody({
@@ -324,8 +325,8 @@ async function kickGoCodeJob(options: {
     if (data.pending && data.coding) {
       onProgress?.(
         continuation
-          ? 'Continuing Grok Code — implementing all app files…'
-          : 'Pre-coding summary saved — Grok Code generating full app (1–3 min)',
+          ? 'Continuing Grok Code — Foundation slice (shell)…'
+          : 'Pre-coding summary saved — Grok Code generating current slice (1–3 min)',
         'info',
       );
       return await pollGoCodeUntilDone(projectName, onProgress);
@@ -355,13 +356,13 @@ export async function runGoCodeAndApply(options: {
             role: 'user' as const,
             content:
               userNote && userNote.trim()
-                ? `START_CODING — implement the FULL app in one response. Session focus: ${userNote.trim()}. Output ALL app/ route pages, layout, globals, components, and lib files as file blocks — not master-plan.json only.`
-                : 'START_CODING — implement the FULL app in one response per master-plan.json and project-execution-rules.md. Output ALL app/ files in one pass as file blocks only.',
+                ? `START_CODING — implement ONE coherent slice only (Build → Debug → Next; see incremental-development.md). Session focus: ${userNote.trim()}. Prefer Foundation first if no shell exists; do not dump every §4 route. File blocks only — not master-plan.json only.`
+                : 'START_CODING — implement ONE coherent slice only per master-plan.json, project-execution-rules.md, and incremental-development.md. Foundation → Auth → Data/API → Primary → Secondary → Polish. File blocks for this slice only.',
           },
         ];
 
   try {
-    onProgress?.('Go — Grok Code will generate the full app in one pass (auto-continues if needed)', 'info');
+    onProgress?.('Go — Grok Code will generate one slice (auto-continues only if Master Plan-only)', 'info');
 
     let totalWritten = 0;
     const allWrittenPaths: string[] = [];
@@ -378,14 +379,14 @@ export async function runGoCodeAndApply(options: {
             {
               role: 'user' as const,
               content:
-                'CONTINUATION — master-plan.json is updated. Output the COMPLETE app now: every route under app/, layout.tsx, globals.css, shared components, and lib/ — minimum 8 file blocks. Do NOT stop at master-plan.json only.',
+                'CONTINUATION — master-plan.json is updated. Output the Foundation slice only: layout.tsx, globals.css, root page, minimal routing shell. Do NOT implement every §4 route. Do NOT stop at master-plan.json only.',
             },
           ]
         : baseMessages;
 
       if (continuation) {
         onProgress?.(
-          'Only Master Plan was updated — auto-continuing Grok Code for full app (do not press Go again)',
+          'Only Master Plan was updated — auto-continuing Foundation slice (do not press Go again)',
           'warn',
         );
       }
@@ -460,7 +461,7 @@ export async function runGoCodeAndApply(options: {
         try {
           await fetch(withProjectQuery('/api/grok/go-code/poll'), {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json', ...getGrokRequestHeaders() },
             credentials: 'include',
             body: JSON.stringify(withProjectBody({ projectName, consume: true })),
           });
@@ -550,7 +551,7 @@ export async function handlePostGrokCodingTurn(options: {
       {
         role: 'user',
         content:
-          'START_CODING — implement the FULL app in one response. Output ALL app/ files as file blocks only.',
+          'START_CODING — implement ONE coherent slice only (Build → Debug → Next). File blocks for this slice only — not the full §4 app.',
       },
     ],
   });

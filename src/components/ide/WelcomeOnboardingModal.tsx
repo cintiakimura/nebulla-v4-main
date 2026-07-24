@@ -1,52 +1,37 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
   CheckCircle2,
+  ChevronRight,
   ExternalLink,
-  Github,
   KeyRound,
   Loader2,
   Sparkles,
   X,
-  Zap,
 } from 'lucide-react';
 import { Logo } from '@/components/Logo';
 import { cn } from '@/lib/utils';
 import { fetchSessionUser, type NebulaSessionUser } from '../../lib/nebulaCloud';
-import { fetchNebulaPublicConfig } from '../../lib/nebulaPublicConfig';
-import { getBrowserProjectKey } from '../../lib/nebulaProjectApi';
-import { upsertProjectSecret } from '../../lib/nebulaSecretHelpers';
-import { formatGithubConnectionStatus } from '../../lib/githubDisplay';
-import { setStoredV0ApiKey } from '../../lib/v0Key';
 import {
-  aiProviderKeysUrl,
-  aiProviderLabel,
-  aiProviderSecretName,
+  GROK_CONSOLE_URL,
+  hasLocalGrokApiKey,
+  isPlausibleGrokApiKey,
+  setStoredGrokApiKey,
+} from '../../lib/grokUserKey';
+import {
   markWelcomeOnboardingDone,
   markWelcomeOnboardingSeen,
   markWelcomeOnboardingSessionSkip,
   setPreferredAiProvider,
-  type WelcomeAiProvider,
 } from '../../lib/nebulaWelcomeOnboarding';
+import { getBrowserProjectKey } from '../../lib/nebulaProjectApi';
+import { getProjectSecretValue, upsertProjectSecret } from '../../lib/nebulaSecretHelpers';
+import { getStoredV0ApiKey, setStoredV0ApiKey } from '../../lib/v0Key';
 import { dispatchOpenCenterPanel } from './IdeCenterTabsContext';
 
-const QUICK_SETUP: {
-  id: WelcomeAiProvider;
-  label: string;
-  recommended?: boolean;
-  href: string;
-  hint?: string;
-}[] = [
-  { id: 'grok', label: 'Grok / xAI', recommended: true, href: 'https://console.x.ai/' },
-  { id: 'claude', label: 'Claude', href: 'https://console.anthropic.com/settings/keys' },
-  { id: 'openai', label: 'OpenAI', href: 'https://platform.openai.com/api-keys' },
-  { id: 'gemini', label: 'Google Gemini', href: 'https://aistudio.google.com/app/apikey' },
-  {
-    id: 'v0',
-    label: 'V0 API Key',
-    href: 'https://v0.dev/settings/api-keys',
-    hint: 'UI generation',
-  },
-];
+const V0_ENV_NAME = 'V0_API_KEY';
+const V0_KEYS_URL = 'https://v0.dev/chat/settings/keys';
+
+type Step = 1 | 2 | 3 | 4;
 
 type Props = {
   open: boolean;
@@ -55,127 +40,104 @@ type Props = {
 };
 
 /**
- * Friendly first-time setup after login — own API key (Grok recommended), GitHub optional, or skip.
- * Lands on My Projects when finished; does not start Master Plan.
+ * Low-friction first-time setup: Welcome → Grok (required) → V0 (optional) → Done.
+ * Keys reuse project Secrets + browser storage (same system as Settings).
  */
 export function WelcomeOnboardingModal({ open, user, onClose }: Props) {
-  const [sessionUser, setSessionUser] = useState<NebulaSessionUser | null>(user);
-  const [githubReady, setGithubReady] = useState(false);
-  const [githubIdConfigured, setGithubIdConfigured] = useState(false);
-  const [githubSecretConfigured, setGithubSecretConfigured] = useState(false);
-  const [provider, setProvider] = useState<WelcomeAiProvider>('grok');
-  const [apiKey, setApiKey] = useState('');
-  const [keyMsg, setKeyMsg] = useState<string | null>(null);
-  const [keySaved, setKeySaved] = useState(false);
-  const [keyBusy, setKeyBusy] = useState(false);
-  const [dontShowAgain, setDontShowAgain] = useState(false);
-  const [stayLoggedIn, setStayLoggedIn] = useState(true);
+  const [step, setStep] = useState<Step>(1);
+  const [grokInput, setGrokInput] = useState('');
+  const [v0Input, setV0Input] = useState('');
+  const [grokBusy, setGrokBusy] = useState(false);
+  const [v0Busy, setV0Busy] = useState(false);
+  const [grokMsg, setGrokMsg] = useState<string | null>(null);
+  const [v0Msg, setV0Msg] = useState<string | null>(null);
+  const [v0Saved, setV0Saved] = useState(false);
 
   useEffect(() => {
     if (!open) return;
     markWelcomeOnboardingSeen();
-    setSessionUser(user);
-    void (async () => {
-      const [cfg, u] = await Promise.all([fetchNebulaPublicConfig(), fetchSessionUser()]);
-      setGithubReady(Boolean(cfg.githubOAuthReady));
-      setGithubIdConfigured(Boolean(cfg.githubClientIdConfigured));
-      setGithubSecretConfigured(Boolean(cfg.githubClientSecretConfigured));
-      if (u) setSessionUser(u);
-    })();
+    setStep(1);
+    setGrokInput('');
+    setV0Input('');
+    setGrokMsg(null);
+    setV0Msg(null);
+    setV0Saved(Boolean(getStoredV0ApiKey() || getProjectSecretValue(getBrowserProjectKey(), V0_ENV_NAME)));
+    void fetchSessionUser();
   }, [open, user]);
 
-  useEffect(() => {
-    if (!open) return;
-    const onOAuth = (ev: MessageEvent) => {
-      if (ev.data?.type !== 'OAUTH_AUTH_SUCCESS') return;
-      void fetchSessionUser().then((u) => {
-        if (u) setSessionUser(u);
-      });
-    };
-    window.addEventListener('message', onOAuth);
-    return () => window.removeEventListener('message', onOAuth);
-  }, [open]);
+  const finish = useCallback(() => {
+    markWelcomeOnboardingDone();
+    dispatchOpenCenterPanel('projects');
+    onClose();
+  }, [onClose]);
 
-  const githubConnected = sessionUser?.provider === 'github';
-  const githubStatus = formatGithubConnectionStatus(sessionUser);
+  const skipSession = useCallback(() => {
+    markWelcomeOnboardingSessionSkip();
+    dispatchOpenCenterPanel('projects');
+    onClose();
+  }, [onClose]);
 
-  const finishToMyProjects = useCallback(
-    (permanent: boolean) => {
-      if (permanent) {
-        markWelcomeOnboardingDone();
-      } else {
-        markWelcomeOnboardingSessionSkip();
-      }
-      dispatchOpenCenterPanel('projects');
-      onClose();
-    },
-    [onClose],
-  );
+  const saveGrokAndContinue = useCallback(() => {
+    setGrokMsg(null);
+    const value = grokInput.trim();
+    if (!isPlausibleGrokApiKey(value)) {
+      setGrokMsg(
+        value
+          ? 'That key looks too short or incomplete. Paste the full key from the xAI console.'
+          : 'Paste your Grok API key to continue — it powers conversation, architecture, and coding.',
+      );
+      return;
+    }
+    setGrokBusy(true);
+    try {
+      setStoredGrokApiKey(value);
+      setPreferredAiProvider('grok');
+      setGrokInput('');
+      window.dispatchEvent(new CustomEvent('nebula-secrets-updated'));
+      setStep(3);
+    } catch {
+      setGrokMsg('Could not save. Check that browser storage is allowed.');
+    } finally {
+      setGrokBusy(false);
+    }
+  }, [grokInput]);
 
-  const openGitHubOAuth = useCallback(() => {
-    const q = stayLoggedIn ? 'remember=1' : 'remember=0';
-    window.open(`/api/auth/github?${q}`, 'nebulla_github_oauth', 'width=520,height=720,scrollbars=yes');
-  }, [stayLoggedIn]);
-
-  const saveApiKey = useCallback(() => {
-    setKeyMsg(null);
-    const value = apiKey.trim();
+  const saveV0AndContinue = useCallback(() => {
+    setV0Msg(null);
+    const value = v0Input.trim();
     if (!value) {
-      setKeyMsg('Paste your API key first — you can always add it later in Settings.');
+      setV0Msg('Paste your V0 API key, or choose Skip for now.');
       return;
     }
     if (value.length < 8) {
-      setKeyMsg('That looks too short. Double-check you copied the full key.');
+      setV0Msg('That looks too short. Double-check you copied the full key.');
       return;
     }
-    setKeyBusy(true);
+    setV0Busy(true);
     try {
       const projectKey = getBrowserProjectKey();
-      const secretName = aiProviderSecretName(provider);
-      upsertProjectSecret(projectKey, secretName, value, 'api_key');
-      if (provider === 'v0') {
-        setStoredV0ApiKey(value);
-        window.dispatchEvent(new CustomEvent('nebula-v0-key-updated'));
-      } else {
-        setPreferredAiProvider(provider);
-      }
-      setApiKey('');
-      setKeySaved(true);
-      setKeyMsg(
-        provider === 'v0'
-          ? 'Saved! V0 is ready for UI generation in this project.'
-          : `Saved! ${aiProviderLabel(provider)} is ready for this project.`,
-      );
+      upsertProjectSecret(projectKey, V0_ENV_NAME, value, 'api_key');
+      setStoredV0ApiKey(value);
+      setV0Input('');
+      setV0Saved(true);
+      window.dispatchEvent(new CustomEvent('nebula-v0-key-updated'));
       window.dispatchEvent(new CustomEvent('nebula-secrets-updated'));
+      setStep(4);
     } catch {
-      setKeyMsg('Could not save. Check that browser storage is allowed.');
+      setV0Msg('Could not save. Check that browser storage is allowed.');
     } finally {
-      setKeyBusy(false);
+      setV0Busy(false);
     }
-  }, [apiKey, provider]);
+  }, [v0Input]);
 
-  const onSkip = useCallback(() => {
-    // Skip: permanent only if "Don't show again" is checked; otherwise this session only.
-    finishToMyProjects(dontShowAgain);
-  }, [dontShowAgain, finishToMyProjects]);
-
-  const onContinue = useCallback(() => {
-    // Primary CTA always completes onboarding (and honors Don't show again).
-    finishToMyProjects(true);
-  }, [finishToMyProjects]);
-
-  const openMyServices = useCallback(() => {
-    finishToMyProjects(dontShowAgain);
-    try {
-      window.dispatchEvent(new CustomEvent('nebula-open-my-services'));
-    } catch {
-      /* ignore */
-    }
-  }, [dontShowAgain, finishToMyProjects]);
+  const skipV0 = useCallback(() => {
+    setStep(4);
+  }, []);
 
   if (!open) return null;
 
-  const keysUrl = aiProviderKeysUrl(provider);
+  const progressLabel =
+    step === 1 ? 'Welcome' : step === 2 ? 'Step 1 of 3' : step === 3 ? 'Step 2 of 3' : 'Step 3 of 3';
 
   return (
     <div
@@ -184,276 +146,300 @@ export function WelcomeOnboardingModal({ open, user, onClose }: Props) {
       aria-modal="true"
       aria-labelledby="welcome-onboarding-title"
     >
-      <div className="relative flex max-h-[min(92vh,880px)] w-full max-w-xl flex-col overflow-hidden rounded-2xl border border-white/10 bg-[#0a0e14] shadow-2xl shadow-black/50">
+      <div className="relative flex max-h-[min(92vh,720px)] w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-border bg-[var(--surface-bright)] shadow-2xl shadow-black/50">
         <div
-          className="pointer-events-none absolute inset-0 opacity-45"
+          className="pointer-events-none absolute inset-0 opacity-40"
           aria-hidden
           style={{
             background:
-              'radial-gradient(ellipse 90% 55% at 50% -15%, rgba(34,211,238,0.2), transparent 55%), radial-gradient(ellipse 50% 40% at 100% 0%, rgba(167,139,250,0.08), transparent)',
+              'radial-gradient(ellipse 90% 55% at 50% -15%, rgba(108,99,255,0.22), transparent 55%)',
           }}
         />
 
-        <button
-          type="button"
-          onClick={onSkip}
-          className="absolute right-3 top-3 z-10 rounded-lg p-1.5 text-slate-500 transition hover:bg-white/5 hover:text-slate-200"
-          aria-label="Close welcome"
-        >
-          <X className="h-4 w-4" />
-        </button>
+        {step > 1 && step < 4 ? (
+          <button
+            type="button"
+            onClick={skipSession}
+            className="absolute right-3 top-3 z-10 rounded-lg p-1.5 text-muted-foreground transition hover:bg-white/5 hover:text-foreground"
+            aria-label="Close for now"
+            title="You can finish setup later in Onboarding"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        ) : null}
 
-        <div className="relative min-h-0 flex-1 overflow-y-auto px-6 py-7 sm:px-8">
-          <div className="space-y-6">
-            <header className="flex items-start gap-3 pr-6">
-              <Logo className="h-11 w-11 shrink-0" />
-              <div className="min-w-0 space-y-2">
-                <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-cyan-400/85">
-                  Getting started
-                </p>
-                <h2
-                  id="welcome-onboarding-title"
-                  className="font-headline text-2xl font-semibold tracking-tight text-slate-50 sm:text-[1.7rem]"
-                >
-                  Welcome to Nebulla!
-                </h2>
-              </div>
-            </header>
-
-            <section className="space-y-3 rounded-xl border border-white/10 bg-white/[0.03] p-4 sm:p-5">
-              <p className="text-sm leading-relaxed text-slate-300">
-                To give you full control, Nebulla uses{' '}
-                <strong className="font-semibold text-slate-100">your own AI and V0 API keys</strong>.
-              </p>
-              <ul className="space-y-1.5 text-sm text-slate-400">
-                <li className="flex gap-2">
-                  <span className="text-cyan-400/90" aria-hidden>
-                    •
-                  </span>
-                  <span>You only pay for what you use</span>
-                </li>
-                <li className="flex gap-2">
-                  <span className="text-cyan-400/90" aria-hidden>
-                    •
-                  </span>
-                  <span>No usage limits from us</span>
-                </li>
-                <li className="flex gap-2">
-                  <span className="text-cyan-400/90" aria-hidden>
-                    •
-                  </span>
-                  <span>Best performance with your preferred models</span>
-                </li>
-              </ul>
-              <div className="flex gap-2.5 rounded-lg border border-cyan-500/25 bg-cyan-500/10 px-3 py-2.5">
-                <Zap className="mt-0.5 h-4 w-4 shrink-0 text-cyan-300" aria-hidden />
-                <p className="text-xs leading-relaxed text-cyan-50/95 sm:text-[13px]">
-                  We strongly recommend <strong className="font-semibold text-white">Grok (xAI)</strong> for
-                  coding, but you can use Claude, OpenAI, or others. Add a{' '}
-                  <strong className="font-semibold text-white">V0</strong> key for the best UI generation.
-                </p>
-              </div>
-            </section>
-
-            {/* Quick setup links */}
-            <section className="space-y-3">
-              <div className="flex items-center gap-2">
-                <KeyRound className="h-4 w-4 text-cyan-300/90" aria-hidden />
-                <h3 className="text-sm font-semibold text-slate-100">Quick setup</h3>
-              </div>
-              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                {QUICK_SETUP.map((item) => (
-                  <a
-                    key={item.id}
-                    href={item.href}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    onClick={() => {
-                      setProvider(item.id);
-                      setKeyMsg(null);
-                    }}
+        <div className="relative shrink-0 border-b border-border px-6 py-3 sm:px-8">
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-primary/90">
+              {progressLabel}
+            </p>
+            {step >= 2 && step <= 4 ? (
+              <div className="flex items-center gap-1.5" aria-hidden>
+                {[2, 3, 4].map((n) => (
+                  <span
+                    key={n}
                     className={cn(
-                      'group inline-flex items-center justify-between gap-2 rounded-xl border px-3.5 py-3 text-left text-sm transition',
-                      item.recommended
-                        ? 'border-cyan-500/40 bg-cyan-500/10 text-cyan-50 hover:bg-cyan-500/15'
-                        : item.id === 'v0'
-                          ? 'border-violet-400/30 bg-violet-500/10 text-slate-100 hover:bg-violet-500/15'
-                          : 'border-white/10 bg-white/[0.03] text-slate-200 hover:border-white/20 hover:bg-white/[0.05]',
+                      'h-1.5 w-6 rounded-full transition-colors',
+                      step >= n ? 'bg-primary' : 'bg-white/10',
                     )}
-                  >
-                    <span className="min-w-0">
-                      <span className="block font-medium">{item.label}</span>
-                      {item.recommended ? (
-                        <span className="mt-0.5 block text-[10px] font-medium uppercase tracking-wide text-cyan-300/90">
-                          Recommended
-                        </span>
-                      ) : item.hint ? (
-                        <span className="mt-0.5 block text-[10px] font-medium uppercase tracking-wide text-violet-300/90">
-                          {item.hint}
-                        </span>
-                      ) : null}
-                    </span>
-                    <ExternalLink className="h-3.5 w-3.5 shrink-0 opacity-60 group-hover:opacity-100" />
-                  </a>
+                  />
                 ))}
               </div>
-
-              <div className="space-y-2 rounded-xl border border-white/10 bg-black/25 p-3.5">
-                <p className="text-xs text-slate-500">
-                  Then paste your key below (saved in Secrets for this project
-                  {provider === 'v0' ? ', and used for UI Studio / v0' : ''}). Selected:{' '}
-                  <span className="text-slate-300">{aiProviderLabel(provider)}</span>
-                  {keysUrl ? (
-                    <>
-                      {' · '}
-                      <a
-                        href={keysUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-cyan-400/90 underline-offset-2 hover:underline"
-                      >
-                        Open key page
-                      </a>
-                    </>
-                  ) : null}
-                </p>
-                <div className="flex flex-col gap-2 sm:flex-row">
-                  <input
-                    type="password"
-                    autoComplete="off"
-                    value={apiKey}
-                    onChange={(e) => {
-                      setApiKey(e.target.value);
-                      setKeyMsg(null);
-                    }}
-                    placeholder={`Paste ${aiProviderSecretName(provider)}…`}
-                    className="min-w-0 flex-1 rounded-lg border border-white/10 bg-black/40 px-3 py-2.5 text-sm text-slate-100 outline-none ring-cyan-500/30 placeholder:text-slate-600 focus:ring"
-                  />
-                  <button
-                    type="button"
-                    disabled={keyBusy}
-                    onClick={saveApiKey}
-                    className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-lg border border-white/15 bg-transparent px-4 py-2.5 text-sm font-medium text-slate-100 transition hover:border-cyan-500/40 hover:text-cyan-100 disabled:opacity-50"
-                  >
-                    {keyBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
-                    Save key
-                  </button>
-                </div>
-                {keyMsg ? (
-                  <p className={cn('text-xs', keySaved ? 'text-emerald-400/90' : 'text-amber-200/90')}>
-                    {keyMsg}
-                  </p>
-                ) : null}
-              </div>
-            </section>
-
-            {/* GitHub optional */}
-            <section className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
-              <div className="flex items-start gap-3">
-                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/10 text-slate-100">
-                  <Github className="h-5 w-5" />
-                </span>
-                <div className="min-w-0 flex-1 space-y-2.5">
-                  <div>
-                    <h3 className="text-sm font-semibold text-slate-100">Connect GitHub</h3>
-                    <p className="mt-0.5 text-xs leading-relaxed text-slate-500">
-                      Optional — helpful for projects, import, and staying signed in smoothly.
-                    </p>
-                  </div>
-                  {githubConnected ? (
-                    <p className="inline-flex items-center gap-1.5 text-xs text-emerald-400/90">
-                      <CheckCircle2 className="h-3.5 w-3.5" />
-                      {githubStatus || 'GitHub connected'}
-                    </p>
-                  ) : (
-                    <div className="flex flex-wrap items-center gap-2">
-                      <button
-                        type="button"
-                        disabled={!githubReady}
-                        onClick={openGitHubOAuth}
-                        className="inline-flex items-center gap-2 rounded-lg border border-white/15 bg-transparent px-3.5 py-2 text-xs font-medium text-slate-100 transition hover:border-white/30 disabled:opacity-45"
-                      >
-                        <Github className="h-3.5 w-3.5" />
-                        Connect GitHub
-                      </button>
-                      {!githubReady ? (
-                        <span className="text-[11px] leading-snug text-amber-400/90">
-                          {githubIdConfigured && !githubSecretConfigured
-                            ? 'Add GITHUB_CLIENT_SECRET to your .env (CLIENT_ID alone is not enough), then restart the server.'
-                            : 'GitHub OAuth isn’t fully configured yet — set GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET.'}
-                        </span>
-                      ) : null}
-                    </div>
-                  )}
-                  {!githubConnected ? (
-                    <label className="flex items-center gap-2 text-[11px] text-slate-500">
-                      <input
-                        type="checkbox"
-                        checked={stayLoggedIn}
-                        onChange={(e) => setStayLoggedIn(e.target.checked)}
-                        className="rounded border-white/20"
-                      />
-                      Stay signed in after connecting
-                    </label>
-                  ) : null}
-                </div>
-              </div>
-            </section>
-
-            {/* Skip */}
-            <section className="rounded-xl border border-dashed border-white/10 px-4 py-3.5">
-              <div className="flex items-start gap-3">
-                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white/[0.04] text-slate-400">
-                  <Sparkles className="h-4 w-4" />
-                </span>
-                <div className="min-w-0 flex-1 space-y-2">
-                  <p className="text-xs leading-relaxed text-slate-500">
-                    <button
-                      type="button"
-                      onClick={onSkip}
-                      className="font-medium text-slate-300 underline-offset-2 hover:text-white hover:underline"
-                    >
-                      Skip for now
-                    </button>
-                    {' — '}
-                    you can set your API key later in{' '}
-                    <button
-                      type="button"
-                      onClick={openMyServices}
-                      className="text-cyan-400/90 underline-offset-2 hover:underline"
-                    >
-                      Settings
-                    </button>
-                    .
-                  </p>
-                  <label className="flex items-center gap-2 text-xs text-slate-500">
-                    <input
-                      type="checkbox"
-                      checked={dontShowAgain}
-                      onChange={(e) => setDontShowAgain(e.target.checked)}
-                      className="rounded border-white/20"
-                    />
-                    Don&apos;t show again
-                  </label>
-                </div>
-              </div>
-            </section>
+            ) : null}
           </div>
+          <p className="mt-1 text-[11px] text-muted-foreground">One-time setup · about 2 minutes</p>
         </div>
 
-        <div className="relative shrink-0 border-t border-white/10 bg-[#0a0e14]/95 px-6 py-4 sm:px-8">
-          <div className="flex flex-col-reverse items-stretch justify-between gap-3 sm:flex-row sm:items-center">
-            <p className="text-[11px] leading-snug text-slate-600">
-              Ready when you are — My Projects is next. New Project still starts the guided Master Plan.
-            </p>
+        <div className="relative min-h-0 flex-1 overflow-y-auto px-6 py-6 sm:px-8">
+          {step === 1 ? (
+            <div className="space-y-5">
+              <header className="flex items-start gap-3">
+                <Logo className="h-11 w-11 shrink-0" />
+                <div className="min-w-0 space-y-2">
+                  <h2
+                    id="welcome-onboarding-title"
+                    className="font-headline text-2xl font-semibold tracking-tight text-foreground"
+                  >
+                    Welcome to Nebulla
+                  </h2>
+                  <p className="text-sm leading-relaxed text-muted-foreground">
+                    Nebulla runs on <strong className="font-medium text-foreground">your own AI keys</strong> —
+                    full power, no hidden usage caps from us.
+                  </p>
+                </div>
+              </header>
+
+              <section className="space-y-3 rounded-xl border border-border bg-[var(--surface)]/60 p-4">
+                <p className="text-sm text-foreground">You will need:</p>
+                <ul className="space-y-2 text-sm text-muted-foreground">
+                  <li className="flex gap-2">
+                    <KeyRound className="mt-0.5 h-4 w-4 shrink-0 text-primary" aria-hidden />
+                    <span>
+                      <strong className="font-medium text-foreground">Grok API key</strong> (required) — conversation,
+                      architecture, and coding
+                    </span>
+                  </li>
+                  <li className="flex gap-2">
+                    <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-primary/80" aria-hidden />
+                    <span>
+                      <strong className="font-medium text-foreground">V0 API key</strong> (optional) — high-quality UI
+                      generation
+                    </span>
+                  </li>
+                </ul>
+                <p className="text-xs leading-relaxed text-muted-foreground border-t border-border pt-3">
+                  Billing stays transparent: Nebulla (if on a paid plan) + Grok/xAI + V0 (only if you use it). You
+                  control each account.
+                </p>
+              </section>
+            </div>
+          ) : null}
+
+          {step === 2 ? (
+            <div className="space-y-5">
+              <header className="space-y-2 pr-8">
+                <h2 id="welcome-onboarding-title" className="font-headline text-xl font-semibold text-foreground">
+                  Connect Grok (Required)
+                </h2>
+                <p className="text-sm leading-relaxed text-muted-foreground">
+                  Grok is the brain of Nebulla — chat, Master Plan architecture, and coding.
+                </p>
+              </header>
+
+              <ol className="list-decimal space-y-2 pl-5 text-sm text-muted-foreground">
+                <li>
+                  Open the{' '}
+                  <a
+                    href={GROK_CONSOLE_URL}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 font-medium text-primary underline-offset-2 hover:underline"
+                  >
+                    xAI / Grok console
+                    <ExternalLink className="h-3 w-3" aria-hidden />
+                  </a>
+                </li>
+                <li>Create an API key</li>
+                <li>Paste it below</li>
+              </ol>
+
+              <div className="space-y-2">
+                <label className="block text-[11px] uppercase tracking-wider text-muted-foreground" htmlFor="welcome-grok-key">
+                  Grok API key
+                </label>
+                <input
+                  id="welcome-grok-key"
+                  type="password"
+                  autoComplete="off"
+                  value={grokInput}
+                  onChange={(e) => {
+                    setGrokInput(e.target.value);
+                    setGrokMsg(null);
+                  }}
+                  placeholder="Paste your xAI API key…"
+                  className="w-full rounded-xl border border-border bg-[var(--surface)] px-3 py-3 text-sm text-foreground outline-none ring-primary/30 placeholder:text-muted-foreground/60 focus:ring"
+                />
+                {hasLocalGrokApiKey() && !grokInput ? (
+                  <p className="flex items-center gap-1.5 text-xs text-[var(--success)]">
+                    <CheckCircle2 className="h-3.5 w-3.5" aria-hidden />A Grok key is already saved — paste a new one
+                    to replace it, or continue.
+                  </p>
+                ) : null}
+                {grokMsg ? <p className="text-xs text-amber-200/90">{grokMsg}</p> : null}
+              </div>
+            </div>
+          ) : null}
+
+          {step === 3 ? (
+            <div className="space-y-5">
+              <header className="space-y-2 pr-8">
+                <h2 id="welcome-onboarding-title" className="font-headline text-xl font-semibold text-foreground">
+                  Connect V0 (Optional)
+                </h2>
+                <p className="text-sm leading-relaxed text-muted-foreground">
+                  V0 generates high-quality UI. You can skip this and use Nebulla normally — add V0 later anytime.
+                </p>
+              </header>
+
+              <ol className="list-decimal space-y-2 pl-5 text-sm text-muted-foreground">
+                <li>
+                  Open{' '}
+                  <a
+                    href={V0_KEYS_URL}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 font-medium text-primary underline-offset-2 hover:underline"
+                  >
+                    v0 API keys
+                    <ExternalLink className="h-3 w-3" aria-hidden />
+                  </a>
+                </li>
+                <li>Create a key and paste it below — or skip</li>
+              </ol>
+
+              <div className="space-y-2">
+                <label className="block text-[11px] uppercase tracking-wider text-muted-foreground" htmlFor="welcome-v0-key">
+                  V0 API key
+                </label>
+                <input
+                  id="welcome-v0-key"
+                  type="password"
+                  autoComplete="off"
+                  value={v0Input}
+                  onChange={(e) => {
+                    setV0Input(e.target.value);
+                    setV0Msg(null);
+                  }}
+                  placeholder="Paste your V0 API key…"
+                  className="w-full rounded-xl border border-border bg-[var(--surface)] px-3 py-3 text-sm text-foreground outline-none ring-primary/30 placeholder:text-muted-foreground/60 focus:ring"
+                />
+                {v0Saved && !v0Input ? (
+                  <p className="flex items-center gap-1.5 text-xs text-[var(--success)]">
+                    <CheckCircle2 className="h-3.5 w-3.5" aria-hidden />A V0 key is already saved.
+                  </p>
+                ) : null}
+                {v0Msg ? <p className="text-xs text-amber-200/90">{v0Msg}</p> : null}
+              </div>
+            </div>
+          ) : null}
+
+          {step === 4 ? (
+            <div className="space-y-5">
+              <header className="flex items-start gap-3">
+                <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-primary/15 text-primary">
+                  <CheckCircle2 className="h-6 w-6" aria-hidden />
+                </span>
+                <div className="space-y-2">
+                  <h2 id="welcome-onboarding-title" className="font-headline text-xl font-semibold text-foreground">
+                    You&apos;re ready
+                  </h2>
+                  <p className="text-sm leading-relaxed text-muted-foreground">
+                    Setup is done. Grok is connected
+                    {v0Saved || getStoredV0ApiKey() ? ' and V0 is ready for UI generation' : ''}. You can change keys
+                    later in <strong className="font-medium text-foreground">Onboarding</strong> or{' '}
+                    <strong className="font-medium text-foreground">My Projects → Secrets</strong>.
+                  </p>
+                </div>
+              </header>
+              <p className="rounded-xl border border-border bg-[var(--surface)]/60 px-4 py-3 text-xs text-muted-foreground">
+                Reminder: xAI and V0 bill separately from Nebulla. You only pay for what you use on each service.
+              </p>
+            </div>
+          ) : null}
+        </div>
+
+        <div className="relative shrink-0 border-t border-border bg-[var(--surface-bright)]/95 px-6 py-4 sm:px-8">
+          {step === 1 ? (
             <button
               type="button"
-              onClick={onContinue}
-              className="inline-flex shrink-0 items-center justify-center rounded-xl border border-white/15 bg-transparent px-5 py-2.5 text-sm font-semibold text-slate-100 transition hover:border-cyan-500/40 hover:text-cyan-100"
+              onClick={() => setStep(2)}
+              className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-5 py-3 text-sm font-semibold text-primary-foreground transition hover:brightness-110"
             >
-              {keySaved || githubConnected ? 'Continue to My Projects' : 'Go to My Projects'}
+              Continue
+              <ChevronRight className="h-4 w-4" aria-hidden />
             </button>
-          </div>
+          ) : null}
+
+          {step === 2 ? (
+            <div className="flex flex-col gap-2">
+              <button
+                type="button"
+                disabled={grokBusy || (!grokInput.trim() && !hasLocalGrokApiKey())}
+                onClick={() => {
+                  if (!grokInput.trim() && hasLocalGrokApiKey()) {
+                    setPreferredAiProvider('grok');
+                    setStep(3);
+                    return;
+                  }
+                  saveGrokAndContinue();
+                }}
+                className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-5 py-3 text-sm font-semibold text-primary-foreground transition hover:brightness-110 disabled:opacity-45"
+              >
+                {grokBusy ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : null}
+                Save &amp; Continue
+              </button>
+              <a
+                href={GROK_CONSOLE_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-center text-xs text-primary underline-offset-2 hover:underline"
+              >
+                Open xAI console to create a key
+              </a>
+            </div>
+          ) : null}
+
+          {step === 3 ? (
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <button
+                type="button"
+                disabled={v0Busy || !v0Input.trim()}
+                onClick={saveV0AndContinue}
+                className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl bg-primary px-5 py-3 text-sm font-semibold text-primary-foreground transition hover:brightness-110 disabled:opacity-45"
+              >
+                {v0Busy ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : null}
+                Add V0 key
+              </button>
+              <button
+                type="button"
+                onClick={skipV0}
+                className="inline-flex flex-1 items-center justify-center rounded-xl border border-border px-5 py-3 text-sm font-medium text-foreground transition hover:bg-white/5"
+              >
+                Skip for now
+              </button>
+            </div>
+          ) : null}
+
+          {step === 4 ? (
+            <button
+              type="button"
+              onClick={finish}
+              className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-5 py-3 text-sm font-semibold text-primary-foreground transition hover:brightness-110"
+            >
+              Start building
+              <ChevronRight className="h-4 w-4" aria-hidden />
+            </button>
+          ) : null}
         </div>
       </div>
     </div>

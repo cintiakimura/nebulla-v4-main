@@ -291,6 +291,8 @@ export async function runAiChatCompletion(options: {
   preferredProvider?: MainAiProvider | string | null;
   /** Client catalog hint (`grok-4.1`, `claude-3-5-sonnet`, `gpt-4o`, …). */
   clientChatModel?: string | null;
+  /** BYOK from onboarding / Secrets (e.g. X-Nebula-Xai-Api-Key). */
+  apiKeyOverride?: string | null;
 }): Promise<AiChatCompletionResult> {
   const preferredRaw = String(options.preferredProvider || "").trim().toLowerCase();
   const preferred: MainAiProvider =
@@ -298,12 +300,20 @@ export async function runAiChatCompletion(options: {
       ? preferredRaw
       : "xai";
 
-  const resolved = resolveApiKeyForProvider(preferred);
+  const override = String(options.apiKeyOverride || "").trim();
+  const resolved =
+    override.length >= 20
+      ? {
+          apiKey: override,
+          provider: preferred,
+          usedFallback: false,
+        }
+      : resolveApiKeyForProvider(preferred);
   if (!resolved) {
     return {
       ok: false,
       status: 401,
-      error: "No AI API key available for the selected provider (set MAIN_API_KEY_GROK, CLAUDE_API_KEY, or OPENAI_API_KEY).",
+      error: "No AI API key available. Add your Grok key in Onboarding, or set MAIN_API_KEY_GROK on the server.",
       provider: preferred,
     };
   }

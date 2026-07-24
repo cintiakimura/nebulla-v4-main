@@ -241,7 +241,7 @@ function ProjectsTab({
             </div>
             <div>
               <h4 className="text-slate-200 font-headline mb-1">Quick generate</h4>
-              <p className="text-xs text-slate-500">Have a short conversation with Nebula, then we auto-generate the full app</p>
+              <p className="text-xs text-slate-500">Have a short conversation with Nebula, then build slice by slice with Go</p>
             </div>
           </button>
 

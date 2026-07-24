@@ -3410,8 +3410,8 @@ Your ONLY output for this turn: a **short** pre-coding summary for the Master Pl
 
 Strict rules:
 - Emit EXACTLY one block: <PRE_CODING_SUMMARY>...</PRE_CODING_SUMMARY>
-- Inside: maximum 1200 characters. Use bullets or tight prose: scope from Master Plan §3/§4, Project Type, assumptions, first files/routes to implement, risks.
-- Architecture-first: prioritize clean structure and smallest safe first slice over speculative extras.
+- Inside: maximum 1200 characters. Use bullets or tight prose: **name the current slice** (Foundation / Auth / Data+API / Primary feature / Secondary / Polish), Project Type, assumptions, files for THIS slice only, risks, and what to validate before the next Go.
+- Architecture-first + Incremental Development (nebulla-project/incremental-development.md): one coherent slice — never plan dumping the entire §4 route map in one Go.
 - Do NOT paste project-execution-rules.md or long policy text.
 - Do NOT replace full Master Plan sections; this is a session brief only.
 - Do NOT emit START_CODING, ANSWER_Qn, or <START_MASTERPLAN> here.`;
@@ -3495,24 +3495,28 @@ Strict rules:
 
       const workflowContext = buildProjectWorkflowExecutionContext(req);
       const codeModel = process.env.GROK_CODE_MODEL?.trim() || "grok-code-fast-1";
-      const codeQualityContract = `ARCHITECTURE-FIRST CODING QUALITY (mandatory):
+      const codeQualityContract = `ARCHITECTURE-FIRST + INCREMENTAL DEVELOPMENT (mandatory):
 - Nebulla wins on pure logic + clean architecture — not agent count. Prefer maintainable, typed, smallest-safe code.
 - Mentally apply nebulla-project/code-review-checklist.md before every file (imports, nulls, env, HTTP, security, boundaries, hydration, loops).
-- Implement ONLY routes/features from Master Plan §3/§4; respect Project Type in §1 (Web App / Mobile App / Landing Page) for nav density and layout.
+- Follow nebulla-project/incremental-development.md: Build one slice → Debug/Validate (NDM) → Next. Never dump the entire app when it can be sliced.
+- Typical slice order: Foundation (shell/routes/layout) → Auth (if needed) → Core data/API → Primary feature → Secondary (one at a time) → Polish.
+- Implement ONLY routes/features from Master Plan §3/§4 that belong to the **current slice**; respect Project Type in §1.
 - No hallucinated packages, APIs, env vars, or paths — create them explicitly in this response if needed.
-- Prefer smallest safe change over clever refactors. Explicit error handling on I/O.
-- UI: §2 research patterns + §5 visuals + Project Type — NEVER Nebulla IDE chrome (#080A14 / #00D4D4).`;
+- Prefer smallest safe change over clever refactors. No temporary hacks. Explicit error handling on I/O.
+- UI: §2 research patterns + §5 visuals + Project Type — NEVER Nebulla IDE chrome (#080A14 / #00D4D4).
+- Larger generation only if the slice is naturally tiny, the user explicitly asks for a broader pass, or risk is clearly low.`;
 
       const codeSystemPrompt = continuation
-        ? `You are Grok Code (CONTINUATION pass). master-plan.json is ready but app files are missing.
+        ? `You are Grok Code (CONTINUATION pass). master-plan.json was updated but the **Foundation slice** (runnable shell) is still missing.
 
 ${codeQualityContract}
 
-Output the COMPLETE application in THIS single response:
-- Every route page under \`app/\` from Master Plan §4
+Output the Foundation slice in THIS response (not the entire §4 app):
 - \`app/layout.tsx\`, \`app/globals.css\`, root \`app/page.tsx\`
-- Shared \`components/\` and \`lib/\` as needed
-- Minimum 8 file blocks; do NOT return only master-plan.json
+- Minimal routing shell for the primary entry route(s) only
+- Shared scaffolding \`components/\` / \`lib/\` only if required for that shell
+- Do NOT implement every §4 route yet — leave Auth / Data / Primary feature for later Go presses
+- Do NOT return only master-plan.json
 
 File blocks only: \`\`\`file:relative/path\` … \`\`\` — no chat prose.
 
@@ -3521,19 +3525,19 @@ ${workflowContext}`
 
 A short pre-coding summary was just saved to master-plan.json under the key "${PRE_CODING_SUMMARY_KEY}" (it appears again inside the master-plan snapshot below).
 
-Follow project-execution-rules.md strictly. Use the workflow context in order.
+Follow project-execution-rules.md and nebulla-project/incremental-development.md strictly. Use the workflow context in order.
 
 ${codeQualityContract}
 
 Master Plan (project-execution-rules § A — MUST be complete before code):
 - master-plan.json below MUST have all five sections populated before you output app files.
-- If ANY of §2–§5 are still thin, emit \`\`\`file:master-plan.json\`\`\` FIRST with the full JSON object (preserve existing keys, fill empty sections from discovery — real competitors in §2, routes in §4, concrete palette in §5).
+- If ANY of §2–§5 are still thin, emit \`\`\`file:master-plan.json\`\`\` FIRST with the full JSON object (preserve existing keys, fill empty sections from discovery — real competitors in §2, routes in §4, concrete palette in §5), then still emit the current slice's app files in the SAME response when possible.
 - §4: routes as \`- **Name** (\`/route\`)\`; §5: 15–25 lines max (palette, typography, nav — no §4 copy).
 
-Implementation (single pass — do NOT stop after 1–2 files):
-- Emit ALL required app files in ONE response: layout, globals, every route page under \`app/\`, shared components, lib/, package.json if missing.
-- Match every route in §4. Prefer 8–20 file blocks in one pass rather than incremental partial output.
-- Include master-plan.json updates IN THE SAME response if needed — never as the only file.
+Implementation (ONE SLICE per Go — Build → Debug → Next):
+- Implement only the slice named in "${PRE_CODING_SUMMARY_KEY}" (or infer next incomplete slice: Foundation first if no app shell exists).
+- Prefer the smallest coherent file set for that slice (often 3–8 file blocks). Do NOT emit every §4 route in one pass.
+- Include master-plan.json updates IN THE SAME response if needed — never as the only file when app code is due.
 - Then sync \`nebula-ui-studio/v0-prompt.md\` if §4/§5 changed (800–1200 chars).
 
 Master Plan UI / v0:
@@ -3547,7 +3551,7 @@ CRITICAL OUTPUT CONTRACT (no deviation):
 - Do NOT output plain-language planning, recap, policy restatement, or narrative explanation.
 - If a file must be created/updated, include explicit path + full content or patch for that file.
 - Prefer one or more clear file blocks over prose.
-- If information is missing, make minimal safe assumptions and proceed with best-effort code.
+- If information is missing, make minimal safe assumptions and proceed with best-effort code for THIS slice.
 
 ${workflowContext}`;
 
@@ -3558,8 +3562,8 @@ ${workflowContext}`;
       }));
       const withMem = injectMemoryIntoMessages(normalized, memory);
       const codeUserContent = continuation
-        ? `CONTINUATION — output the full app now (all app/ routes + layout + components). Master plan is ready. Focus: ${note || "(implement every §4 route)"}`
-        : `Run the coding pass now. Output the FULL app in one response — all app/ files, not master-plan.json only. Respect "${PRE_CODING_SUMMARY_KEY}" and Master Plan §4 routes. Session focus: ${note || "(none)"}`;
+        ? `CONTINUATION — master-plan.json is ready; emit the Foundation slice now (layout, globals, root page, minimal shell). Do NOT implement every §4 route. Focus: ${note || "(foundation shell)"}`
+        : `Run the coding pass now. Output ONE coherent slice only (Build → Debug → Next) — not the full app. Respect "${PRE_CODING_SUMMARY_KEY}" and Master Plan §4 for that slice's scope. Session focus: ${note || "(next incomplete slice)"}`;
       const codeMessages = [
         { role: "system", content: codeSystemPrompt },
         ...withMem.slice(-16),
@@ -3598,7 +3602,7 @@ ${workflowContext}`;
         if (!continuation) {
           appendConversationTurn(convScopeGo, "user", `[Go] ${note || "start coding"}`);
         } else {
-          appendConversationTurn(convScopeGo, "user", `[Go continuation] full app implementation`);
+          appendConversationTurn(convScopeGo, "user", `[Go continuation] foundation slice`);
         }
       } catch (logErr) {
         console.error("go-code memory append failed:", logErr);
@@ -3879,20 +3883,22 @@ ${workflowContext}`;
             ? "openai"
             : "xai";
 
-    const keyProbe = resolveApiKeyForProvider(preferredProvider);
-    if (!keyProbe) {
-      const keyRes = await resolveMainGrokApiKeyDetailed(req);
-      if (keyRes.ok === false) {
-        const status = keyRes.code === "INVALID_LENGTH" ? 400 : 401;
-        console.error(`[grok/chat] ${keyRes.code}: ${keyRes.message}`);
-        return res.status(status).json({
-          error: keyRes.message,
-          code: keyRes.code,
-          hint: keyRes.hint,
-        });
-      }
+    const keyRes = await resolveMainGrokApiKeyDetailed(req);
+    if (keyRes.ok === false) {
+      const status = keyRes.code === "INVALID_LENGTH" ? 400 : 401;
+      console.error(`[grok/chat] ${keyRes.code}: ${keyRes.message}`);
+      return res.status(status).json({
+        error: keyRes.message,
+        code: keyRes.code,
+        hint: keyRes.hint,
+      });
     }
-    const mainAiProvider = keyProbe?.provider ?? "xai";
+    const keyProbe = resolveApiKeyForProvider(preferredProvider);
+    const mainAiProvider =
+      keyRes.source === "client"
+        ? "xai"
+        : keyProbe?.provider ?? "xai";
+    const chatApiKeyOverride = keyRes.apiKey;
     const convUserId =
       typeof userId === "string" && userId.trim() ? userId.trim() : "anonymous";
     const convProject =
@@ -4023,8 +4029,9 @@ ${answer.slice(0, 8000)}`;
     try {
       const completion = await runAiChatCompletion({
         messages: messagesForApi,
-        preferredProvider,
+        preferredProvider: mainAiProvider === "xai" ? "xai" : preferredProvider,
         clientChatModel,
+        apiKeyOverride: chatApiKeyOverride,
       });
 
       if (completion.ok === false) {

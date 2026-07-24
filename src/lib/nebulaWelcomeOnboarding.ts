@@ -3,6 +3,7 @@
  * Non-blocking, skippable; permanent dismiss via localStorage.
  */
 
+import { hasLocalGrokApiKey } from './grokUserKey';
 import { getProjectSecretValue } from './nebulaSecretHelpers';
 import { getStoredV0ApiKey } from './v0Key';
 
@@ -143,6 +144,7 @@ export function getPreferredAiProvider(): WelcomeAiProvider | null {
 }
 
 export function hasLocalAiApiKeys(projectKey: string): boolean {
+  if (hasLocalGrokApiKey()) return true;
   if (getStoredV0ApiKey()?.trim()) return true;
   const names = [
     'XAI_API_KEY',
@@ -160,7 +162,7 @@ export function hasLocalAiApiKeys(projectKey: string): boolean {
  * Show after workspace is ready when:
  * - not permanently dismissed, and
  * - not skipped for this browser session, and
- * - first visit OR no API keys (server main AI + local secrets).
+ * - first visit OR no Grok key yet (BYOK local or server main AI).
  */
 export function shouldShowWelcomeOnboarding(opts: {
   projectKey: string;
@@ -169,6 +171,6 @@ export function shouldShowWelcomeOnboarding(opts: {
   if (isWelcomeOnboardingDone()) return false;
   if (isWelcomeOnboardingSessionSkipped()) return false;
   const first = isWelcomeOnboardingFirstVisit();
-  const hasKeys = opts.hasServerMainAiKey || hasLocalAiApiKeys(opts.projectKey);
-  return first || !hasKeys;
+  const hasGrok = opts.hasServerMainAiKey || hasLocalGrokApiKey();
+  return first || !hasGrok;
 }
