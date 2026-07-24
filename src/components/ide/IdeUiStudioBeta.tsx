@@ -21,6 +21,7 @@ import {
   RotateCcw,
   Save,
   Smartphone,
+  Trash2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { getBrowserProjectName, withProjectBody, withProjectQuery } from '../../lib/nebulaProjectApi';
@@ -385,6 +386,13 @@ function normalizeHexOnCommit(raw: string, fallback: string): string {
   return toPickerHex(s, fallback);
 }
 
+/** Background color: keep `transparent`, otherwise normalize to `#rrggbb`. */
+function normalizeBgColorOnCommit(raw: string, fallback: string): string {
+  const s = raw.trim();
+  if (s.toLowerCase() === 'transparent') return 'transparent';
+  return normalizeHexOnCommit(s, fallback);
+}
+
 export function IdeUiStudioBeta({
   onLock: _onLock,
   projectDisplayName,
@@ -680,6 +688,31 @@ export function IdeUiStudioBeta({
       p.children = ch;
       return next;
     });
+  };
+
+  const collectSubtreeIds = (pg: PageModel, rootId: string, acc: Set<string>) => {
+    acc.add(rootId);
+    const n = pg.nodes[rootId];
+    if (!n?.children) return;
+    for (const c of n.children) collectSubtreeIds(pg, c, acc);
+  };
+
+  const deleteSelectedNode = () => {
+    if (!selectedId || !page || selectedId === page.rootId) return;
+    pushUndo();
+    setModel((m) => {
+      const next = cloneModel(m);
+      const pg = next.pages[activePage];
+      const toRemove = new Set<string>();
+      collectSubtreeIds(pg, selectedId, toRemove);
+      const parent = Object.values(pg.nodes).find((n) => n.children?.includes(selectedId));
+      if (parent?.children) {
+        parent.children = parent.children.filter((id) => id !== selectedId);
+      }
+      for (const rid of toRemove) delete pg.nodes[rid];
+      return next;
+    });
+    clearSelection();
   };
 
   const onPreviewClick = (e: React.MouseEvent, id: string) => {
@@ -1489,304 +1522,374 @@ export function IdeUiStudioBeta({
 
         {/* Right Properties Panel — single source of truth for edits */}
         {previewSurface === 'visual-model' ? (
-          <aside className="w-72 shrink-0 overflow-y-auto border-l border-white/10 bg-[#050a14]">
-            <div className="sticky top-0 z-10 border-b border-white/10 bg-[#050a14] px-3 py-2 text-[11px] font-medium text-muted-foreground">
-              {selected ? `Properties · ${selected.role}` : 'Properties'}
+          <aside className="flex w-72 shrink-0 flex-col overflow-hidden border-l border-white/10 bg-[#050a14]">
+            <div className="shrink-0 border-b border-white/10 px-3 py-2">
+              <div className="text-[11px] font-medium text-foreground">Properties</div>
+              {selected ? (
+                <div className="mt-0.5 truncate font-mono text-[10px] text-muted-foreground">
+                  {selected.role || selected.id}
+                </div>
+              ) : null}
             </div>
-            {!selected ? (
-              <p className="p-3 text-[11px] leading-relaxed text-slate-500">
-                Click an element in the preview to edit text, color, size, spacing, border, and order here.
-              </p>
-            ) : (
-              <div className="space-y-4 p-3 text-[11px]">
-                {(selected.type === 'text' || selected.type === 'button') && (
-                  <div>
-                    <div className="mb-1.5 text-[10px] uppercase tracking-wider text-slate-500">Text</div>
-                    <input
-                      type="text"
-                      value={selected.text || ''}
-                      onChange={(e) => updateSelectedText(e.target.value)}
-                      className="w-full rounded border border-white/10 bg-black/40 px-2 py-1 text-foreground"
-                      placeholder="Label"
-                    />
-                    <label className="mt-2 flex flex-col gap-0.5">
-                      <span className="text-[10px] text-slate-500">Text color</span>
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="color"
-                          value={toPickerHex(selected.style.color, '#e2e8f0')}
-                          onChange={(e) => updateSelectedStyle({ color: e.target.value })}
-                          className="h-8 w-12 rounded border border-white/10 bg-black/40"
-                        />
-                        <input
-                          type="text"
-                          value={selected.style.color || ''}
-                          onChange={(e) => updateSelectedStyle({ color: e.target.value })}
-                          onBlur={(e) =>
-                            updateSelectedStyle({
-                              color: normalizeHexOnCommit(e.target.value, '#e2e8f0'),
-                            })
-                          }
-                          className="flex-1 rounded border border-white/10 bg-black/40 px-2 py-1 font-mono text-[10px] text-foreground"
-                          placeholder="#e2e8f0"
-                        />
-                      </div>
-                    </label>
-                  </div>
-                )}
+            <div className="min-h-0 flex-1 overflow-y-auto">
+              {!selected ? (
+                <p className="p-3 text-[11px] leading-relaxed text-slate-500">
+                  Click an element in the preview to edit text, color, size, spacing, border, and order.
+                </p>
+              ) : (
+                <div className="space-y-4 p-3 text-[11px]">
+                  {(() => {
+                    const st = { ...defaultStyle(), ...selected.style };
+                    const hasText = selected.type === 'text' || selected.type === 'button';
+                    const opacityPct = Math.round((st.opacity ?? 1) * 100);
+                    const canDelete = Boolean(page && selectedId !== page.rootId);
+                    return (
+                      <>
+                        {/* B. TEXT */}
+                        {hasText ? (
+                          <div>
+                            <div className="mb-1.5 text-[10px] uppercase tracking-wider text-slate-500">
+                              Text
+                            </div>
+                            <label className="flex flex-col gap-0.5">
+                              <span className="text-[10px] text-slate-500">Text</span>
+                              <textarea
+                                rows={3}
+                                value={selected.text || ''}
+                                onChange={(e) => updateSelectedText(e.target.value)}
+                                className="w-full resize-y rounded border border-white/10 bg-black/40 px-2 py-1 text-foreground"
+                                placeholder="Label"
+                              />
+                            </label>
+                            <label className="mt-2 flex flex-col gap-0.5">
+                              <span className="text-[10px] text-slate-500">Color</span>
+                              <div className="flex items-center gap-2">
+                                <input
+                                  type="color"
+                                  value={toPickerHex(st.color, '#e2e8f0')}
+                                  onChange={(e) => updateSelectedStyle({ color: e.target.value })}
+                                  className="h-8 w-12 rounded border border-white/10 bg-black/40"
+                                />
+                                <input
+                                  type="text"
+                                  value={st.color || ''}
+                                  onChange={(e) => updateSelectedStyle({ color: e.target.value })}
+                                  onBlur={(e) =>
+                                    updateSelectedStyle({
+                                      color: normalizeHexOnCommit(e.target.value, '#e2e8f0'),
+                                    })
+                                  }
+                                  className="flex-1 rounded border border-white/10 bg-black/40 px-2 py-1 font-mono text-[10px] text-foreground"
+                                  placeholder="#RRGGBB"
+                                />
+                              </div>
+                            </label>
+                            <label className="mt-2 flex flex-col gap-0.5">
+                              <span className="text-[10px] text-slate-500">Opacity</span>
+                              <input
+                                type="range"
+                                min={0}
+                                max={100}
+                                step={1}
+                                value={opacityPct}
+                                onChange={(e) =>
+                                  updateSelectedStyle({
+                                    opacity: (parseInt(e.target.value, 10) || 0) / 100,
+                                  })
+                                }
+                                className="w-full accent-cyan-400"
+                              />
+                              <span className="font-mono text-[10px] text-slate-400">{opacityPct}%</span>
+                            </label>
+                          </div>
+                        ) : null}
 
-                <div>
-                  <div className="mb-1.5 text-[10px] uppercase tracking-wider text-slate-500">Background</div>
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="color"
-                      value={toPickerHex(selected.style.backgroundColor, '#0f172a')}
-                      onChange={(e) => updateSelectedStyle({ backgroundColor: e.target.value })}
-                      className="h-8 w-12 rounded border border-white/10 bg-black/40"
-                    />
-                    <input
-                      type="text"
-                      value={selected.style.backgroundColor || ''}
-                      onChange={(e) => updateSelectedStyle({ backgroundColor: e.target.value })}
-                      onBlur={(e) =>
-                        updateSelectedStyle({
-                          backgroundColor: normalizeHexOnCommit(e.target.value, '#0f172a'),
-                        })
-                      }
-                      className="flex-1 rounded border border-white/10 bg-black/40 px-2 py-1 font-mono text-[10px] text-foreground"
-                      placeholder="#0f172a"
-                    />
-                  </div>
-                </div>
+                        {/* C. BACKGROUND */}
+                        <div>
+                          <div className="mb-1.5 text-[10px] uppercase tracking-wider text-slate-500">
+                            Background
+                          </div>
+                          <label className="flex flex-col gap-0.5">
+                            <span className="text-[10px] text-slate-500">Background</span>
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="color"
+                                value={toPickerHex(
+                                  st.backgroundColor === 'transparent' ? undefined : st.backgroundColor,
+                                  '#0f172a',
+                                )}
+                                onChange={(e) =>
+                                  updateSelectedStyle({ backgroundColor: e.target.value })
+                                }
+                                className="h-8 w-12 rounded border border-white/10 bg-black/40"
+                              />
+                              <input
+                                type="text"
+                                value={st.backgroundColor || ''}
+                                onChange={(e) =>
+                                  updateSelectedStyle({ backgroundColor: e.target.value })
+                                }
+                                onBlur={(e) =>
+                                  updateSelectedStyle({
+                                    backgroundColor: normalizeBgColorOnCommit(
+                                      e.target.value,
+                                      '#0f172a',
+                                    ),
+                                  })
+                                }
+                                className="flex-1 rounded border border-white/10 bg-black/40 px-2 py-1 font-mono text-[10px] text-foreground"
+                                placeholder="#RRGGBB or transparent"
+                              />
+                            </div>
+                          </label>
+                        </div>
 
-                <div>
-                  <div className="mb-1.5 text-[10px] uppercase tracking-wider text-slate-500">Opacity</div>
-                  <input
-                    type="range"
-                    min={0}
-                    max={1}
-                    step={0.05}
-                    value={selected.style.opacity ?? 1}
-                    onChange={(e) => updateSelectedStyle({ opacity: parseFloat(e.target.value) })}
-                    className="w-full accent-cyan-400"
-                  />
-                  <span className="font-mono text-[10px] text-slate-400">
-                    {Math.round((selected.style.opacity ?? 1) * 100)}%
-                  </span>
-                </div>
+                        {/* D. SIZE */}
+                        <div>
+                          <div className="mb-1.5 text-[10px] uppercase tracking-wider text-slate-500">
+                            Size
+                          </div>
+                          <div className="grid grid-cols-2 gap-2">
+                            <label className="flex flex-col gap-0.5">
+                              <span className="text-[10px] text-slate-500">Width</span>
+                              <input
+                                type="text"
+                                value={st.width || 'auto'}
+                                onChange={(e) => updateSelectedStyle({ width: e.target.value })}
+                                className="rounded border border-white/10 bg-black/40 px-2 py-1 font-mono text-[10px]"
+                                placeholder="auto / 100% / 240px"
+                              />
+                            </label>
+                            <label className="flex flex-col gap-0.5">
+                              <span className="text-[10px] text-slate-500">Height</span>
+                              <input
+                                type="text"
+                                value={st.height || 'auto'}
+                                onChange={(e) => updateSelectedStyle({ height: e.target.value })}
+                                className="rounded border border-white/10 bg-black/40 px-2 py-1 font-mono text-[10px]"
+                                placeholder="auto / 200px"
+                              />
+                            </label>
+                          </div>
+                          <label className="mt-2 flex flex-col gap-0.5">
+                            <span className="text-[10px] text-slate-500">Border Radius</span>
+                            <input
+                              type="range"
+                              min={0}
+                              max={64}
+                              step={1}
+                              value={st.borderRadius ?? 8}
+                              onChange={(e) =>
+                                updateSelectedStyle({
+                                  borderRadius: parseInt(e.target.value, 10) || 0,
+                                })
+                              }
+                              className="accent-cyan-400"
+                            />
+                            <span className="font-mono text-[10px] text-slate-400">
+                              {st.borderRadius ?? 8}px
+                            </span>
+                          </label>
+                        </div>
 
-                <div>
-                  <div className="mb-1.5 text-[10px] uppercase tracking-wider text-slate-500">Size</div>
-                  <div className="grid grid-cols-2 gap-2">
-                    <label className="flex flex-col gap-0.5">
-                      <span className="text-[10px] text-slate-500">Width</span>
-                      <input
-                        type="text"
-                        value={selected.style.width || 'auto'}
-                        onChange={(e) => updateSelectedStyle({ width: e.target.value })}
-                        className="rounded border border-white/10 bg-black/40 px-2 py-1 font-mono text-[10px]"
-                        placeholder="auto / 100% / 320px"
-                      />
-                    </label>
-                    <label className="flex flex-col gap-0.5">
-                      <span className="text-[10px] text-slate-500">Height</span>
-                      <input
-                        type="text"
-                        value={selected.style.height || 'auto'}
-                        onChange={(e) => updateSelectedStyle({ height: e.target.value })}
-                        className="rounded border border-white/10 bg-black/40 px-2 py-1 font-mono text-[10px]"
-                        placeholder="auto / 200px"
-                      />
-                    </label>
-                  </div>
-                  <label className="mt-2 flex flex-col gap-0.5">
-                    <span className="text-[10px] text-slate-500">Border radius</span>
-                    <input
-                      type="range"
-                      min={0}
-                      max={32}
-                      step={1}
-                      value={selected.style.borderRadius ?? 8}
-                      onChange={(e) => updateSelectedStyle({ borderRadius: parseInt(e.target.value, 10) })}
-                      className="accent-cyan-400"
-                    />
-                    <span className="font-mono text-[10px] text-slate-400">
-                      {selected.style.borderRadius ?? 8}px
-                    </span>
-                  </label>
-                </div>
+                        {/* E. SPACING */}
+                        <div>
+                          <div className="mb-1.5 flex items-center justify-between text-[10px] uppercase tracking-wider text-slate-500">
+                            <span>Padding</span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const p = st.paddingTop ?? 16;
+                                updateSelectedStyle({
+                                  paddingTop: p,
+                                  paddingRight: p,
+                                  paddingBottom: p,
+                                  paddingLeft: p,
+                                });
+                              }}
+                              className="text-[9px] text-cyan-400 hover:underline"
+                            >
+                              Equal
+                            </button>
+                          </div>
+                          <div className="grid grid-cols-2 gap-2">
+                            {(
+                              [
+                                { k: 'paddingTop' as const, l: 'Top' },
+                                { k: 'paddingRight' as const, l: 'Right' },
+                                { k: 'paddingBottom' as const, l: 'Bottom' },
+                                { k: 'paddingLeft' as const, l: 'Left' },
+                              ] as const
+                            ).map(({ k, l }) => (
+                              <label key={k} className="flex flex-col gap-0.5">
+                                <span className="text-[10px] text-slate-500">{l} (px)</span>
+                                <input
+                                  type="number"
+                                  min={0}
+                                  max={128}
+                                  value={st[k] ?? 0}
+                                  onChange={(e) =>
+                                    updateSelectedStyle({
+                                      [k]: parseInt(e.target.value, 10) || 0,
+                                    })
+                                  }
+                                  className="rounded border border-white/10 bg-black/40 px-2 py-1 font-mono text-[10px]"
+                                />
+                              </label>
+                            ))}
+                          </div>
+                          <div className="mb-1.5 mt-3 flex items-center justify-between text-[10px] uppercase tracking-wider text-slate-500">
+                            <span>Margin</span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const m = st.marginTop ?? 0;
+                                updateSelectedStyle({
+                                  marginTop: m,
+                                  marginRight: m,
+                                  marginBottom: m,
+                                  marginLeft: m,
+                                });
+                              }}
+                              className="text-[9px] text-cyan-400 hover:underline"
+                            >
+                              Equal
+                            </button>
+                          </div>
+                          <div className="grid grid-cols-2 gap-2">
+                            {(
+                              [
+                                { k: 'marginTop' as const, l: 'Top' },
+                                { k: 'marginRight' as const, l: 'Right' },
+                                { k: 'marginBottom' as const, l: 'Bottom' },
+                                { k: 'marginLeft' as const, l: 'Left' },
+                              ] as const
+                            ).map(({ k, l }) => (
+                              <label key={k} className="flex flex-col gap-0.5">
+                                <span className="text-[10px] text-slate-500">{l} (px)</span>
+                                <input
+                                  type="number"
+                                  min={-64}
+                                  max={128}
+                                  value={st[k] ?? 0}
+                                  onChange={(e) =>
+                                    updateSelectedStyle({
+                                      [k]: parseInt(e.target.value, 10) || 0,
+                                    })
+                                  }
+                                  className="rounded border border-white/10 bg-black/40 px-2 py-1 font-mono text-[10px]"
+                                />
+                              </label>
+                            ))}
+                          </div>
+                        </div>
 
-                <div>
-                  <div className="mb-1.5 flex items-center justify-between text-[10px] uppercase tracking-wider text-slate-500">
-                    <span>Padding</span>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const p = selected.style.paddingTop ?? 16;
-                        updateSelectedStyle({
-                          paddingTop: p,
-                          paddingRight: p,
-                          paddingBottom: p,
-                          paddingLeft: p,
-                        });
-                      }}
-                      className="text-[9px] text-cyan-400 hover:underline"
-                    >
-                      Equal
-                    </button>
-                  </div>
-                  <div className="grid grid-cols-2 gap-2">
-                    {(
-                      [
-                        { k: 'paddingTop' as const, l: 'Top' },
-                        { k: 'paddingRight' as const, l: 'Right' },
-                        { k: 'paddingBottom' as const, l: 'Bottom' },
-                        { k: 'paddingLeft' as const, l: 'Left' },
-                      ] as const
-                    ).map(({ k, l }) => (
-                      <label key={k} className="flex flex-col gap-0.5">
-                        <span className="text-[10px] text-slate-500">{l}</span>
-                        <input
-                          type="number"
-                          min={0}
-                          max={128}
-                          value={selected.style[k] ?? 0}
-                          onChange={(e) =>
-                            updateSelectedStyle({ [k]: parseInt(e.target.value, 10) || 0 })
-                          }
-                          className="rounded border border-white/10 bg-black/40 px-2 py-1 font-mono text-[10px]"
-                        />
-                      </label>
-                    ))}
-                  </div>
-                </div>
+                        {/* F. BORDER */}
+                        <div>
+                          <div className="mb-1.5 text-[10px] uppercase tracking-wider text-slate-500">
+                            Border
+                          </div>
+                          <label className="mb-2 flex flex-col gap-0.5">
+                            <span className="text-[10px] text-slate-500">Border width (px)</span>
+                            <input
+                              type="number"
+                              min={0}
+                              max={24}
+                              value={st.borderWidth ?? 0}
+                              onChange={(e) =>
+                                updateSelectedStyle({
+                                  borderWidth: parseInt(e.target.value, 10) || 0,
+                                })
+                              }
+                              className="rounded border border-white/10 bg-black/40 px-2 py-1 font-mono text-[10px]"
+                            />
+                          </label>
+                          <label className="flex flex-col gap-0.5">
+                            <span className="text-[10px] text-slate-500">Border color</span>
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="color"
+                                value={toPickerHex(st.borderColor, '#334155')}
+                                onChange={(e) =>
+                                  updateSelectedStyle({ borderColor: e.target.value })
+                                }
+                                className="h-8 w-12 rounded border border-white/10 bg-black/40"
+                              />
+                              <input
+                                type="text"
+                                value={st.borderColor || ''}
+                                onChange={(e) =>
+                                  updateSelectedStyle({ borderColor: e.target.value })
+                                }
+                                onBlur={(e) =>
+                                  updateSelectedStyle({
+                                    borderColor: normalizeHexOnCommit(e.target.value, '#334155'),
+                                  })
+                                }
+                                className="flex-1 rounded border border-white/10 bg-black/40 px-2 py-1 font-mono text-[10px]"
+                                placeholder="#RRGGBB"
+                              />
+                            </div>
+                          </label>
+                        </div>
 
-                <div>
-                  <div className="mb-1.5 flex items-center justify-between text-[10px] uppercase tracking-wider text-slate-500">
-                    <span>Margin</span>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const m = selected.style.marginTop ?? 0;
-                        updateSelectedStyle({
-                          marginTop: m,
-                          marginRight: m,
-                          marginBottom: m,
-                          marginLeft: m,
-                        });
-                      }}
-                      className="text-[9px] text-cyan-400 hover:underline"
-                    >
-                      Equal
-                    </button>
-                  </div>
-                  <div className="grid grid-cols-2 gap-2">
-                    {(
-                      [
-                        { k: 'marginTop' as const, l: 'Top' },
-                        { k: 'marginRight' as const, l: 'Right' },
-                        { k: 'marginBottom' as const, l: 'Bottom' },
-                        { k: 'marginLeft' as const, l: 'Left' },
-                      ] as const
-                    ).map(({ k, l }) => (
-                      <label key={k} className="flex flex-col gap-0.5">
-                        <span className="text-[10px] text-slate-500">{l}</span>
-                        <input
-                          type="number"
-                          min={-64}
-                          max={128}
-                          value={selected.style[k] ?? 0}
-                          onChange={(e) =>
-                            updateSelectedStyle({ [k]: parseInt(e.target.value, 10) || 0 })
-                          }
-                          className="rounded border border-white/10 bg-black/40 px-2 py-1 font-mono text-[10px]"
-                        />
-                      </label>
-                    ))}
-                  </div>
-                </div>
+                        {/* G. SHADOW */}
+                        <div>
+                          <div className="mb-1.5 text-[10px] uppercase tracking-wider text-slate-500">
+                            Shadow
+                          </div>
+                          <label className="flex flex-col gap-0.5">
+                            <span className="text-[10px] text-slate-500">Box shadow</span>
+                            <input
+                              type="text"
+                              value={st.boxShadow || ''}
+                              onChange={(e) => updateSelectedStyle({ boxShadow: e.target.value })}
+                              className="rounded border border-white/10 bg-black/40 px-2 py-1 font-mono text-[10px]"
+                              placeholder="0 1px 3px rgba(0,0,0,0.35)"
+                            />
+                          </label>
+                        </div>
 
-                <div>
-                  <div className="mb-1.5 text-[10px] uppercase tracking-wider text-slate-500">Border</div>
-                  <label className="mb-2 flex flex-col gap-0.5">
-                    <span className="text-[10px] text-slate-500">Width</span>
-                    <input
-                      type="number"
-                      min={0}
-                      max={24}
-                      value={selected.style.borderWidth ?? 0}
-                      onChange={(e) =>
-                        updateSelectedStyle({ borderWidth: parseInt(e.target.value, 10) || 0 })
-                      }
-                      className="rounded border border-white/10 bg-black/40 px-2 py-1 font-mono text-[10px]"
-                    />
-                  </label>
-                  <label className="mb-2 flex flex-col gap-0.5">
-                    <span className="text-[10px] text-slate-500">Color</span>
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="color"
-                        value={toPickerHex(selected.style.borderColor, '#334155')}
-                        onChange={(e) => updateSelectedStyle({ borderColor: e.target.value })}
-                        className="h-8 w-12 rounded border border-white/10 bg-black/40"
-                      />
-                      <input
-                        type="text"
-                        value={selected.style.borderColor || ''}
-                        onChange={(e) => updateSelectedStyle({ borderColor: e.target.value })}
-                        onBlur={(e) =>
-                          updateSelectedStyle({
-                            borderColor: normalizeHexOnCommit(e.target.value, '#334155'),
-                          })
-                        }
-                        className="flex-1 rounded border border-white/10 bg-black/40 px-2 py-1 font-mono text-[10px]"
-                        placeholder="#334155"
-                      />
-                    </div>
-                  </label>
-                  <label className="flex flex-col gap-0.5">
-                    <span className="text-[10px] text-slate-500">Shadow</span>
-                    <input
-                      type="text"
-                      value={selected.style.boxShadow || ''}
-                      onChange={(e) => updateSelectedStyle({ boxShadow: e.target.value })}
-                      className="rounded border border-white/10 bg-black/40 px-2 py-1 font-mono text-[10px]"
-                      placeholder="0 1px 3px rgba(0,0,0,0.35)"
-                    />
-                  </label>
+                        {/* H. ORDER / ACTIONS */}
+                        <div className="space-y-2 border-t border-white/10 pt-3">
+                          <div className="flex gap-2">
+                            <button
+                              type="button"
+                              onClick={() => moveSelectedInParent(-1)}
+                              className="flex flex-1 items-center justify-center gap-1 rounded-lg border border-white/15 py-2 text-[11px] text-slate-200 hover:bg-white/5"
+                            >
+                              <ArrowUp className="h-3 w-3" /> Move up
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => moveSelectedInParent(1)}
+                              className="flex flex-1 items-center justify-center gap-1 rounded-lg border border-white/15 py-2 text-[11px] text-slate-200 hover:bg-white/5"
+                            >
+                              <ArrowDown className="h-3 w-3" /> Move down
+                            </button>
+                          </div>
+                          <button
+                            type="button"
+                            disabled={!canDelete}
+                            onClick={() => deleteSelectedNode()}
+                            className="flex w-full items-center justify-center gap-1 rounded-lg border border-rose-500/30 py-2 text-[11px] text-rose-200 hover:bg-rose-500/10 disabled:cursor-not-allowed disabled:opacity-40"
+                          >
+                            <Trash2 className="h-3 w-3" /> Delete
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setApplyAllPagesConfirmOpen(true)}
+                            className="w-full rounded-lg border border-white/15 py-2 text-[11px] text-cyan-300 hover:bg-white/5"
+                          >
+                            Apply to all pages
+                          </button>
+                        </div>
+                      </>
+                    );
+                  })()}
                 </div>
-
-                <div className="flex gap-2 border-t border-white/10 pt-3">
-                  <button
-                    type="button"
-                    onClick={() => moveSelectedInParent(-1)}
-                    className="flex flex-1 items-center justify-center gap-1 rounded-lg border border-white/15 py-2 text-[11px] text-slate-200 hover:bg-white/5"
-                  >
-                    <ArrowUp className="h-3 w-3" /> Move up
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => moveSelectedInParent(1)}
-                    className="flex flex-1 items-center justify-center gap-1 rounded-lg border border-white/15 py-2 text-[11px] text-slate-200 hover:bg-white/5"
-                  >
-                    <ArrowDown className="h-3 w-3" /> Move down
-                  </button>
-                </div>
-
-                <div className="border-t border-white/10 pt-2">
-                  <button
-                    type="button"
-                    onClick={() => setApplyAllPagesConfirmOpen(true)}
-                    className="w-full rounded-lg border border-white/15 py-2 text-[11px] text-cyan-300 hover:bg-white/5"
-                  >
-                    Apply to all pages
-                  </button>
-                  <p className="mt-1 text-center text-[9px] text-slate-500">
-                    Changes the style of matching roles across pages.
-                  </p>
-                </div>
-              </div>
-            )}
+              )}
+            </div>
           </aside>
         ) : null}
       </div>
