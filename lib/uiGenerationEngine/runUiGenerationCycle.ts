@@ -12,6 +12,7 @@ import { MASTER_PLAN_SECTION_KEYS } from "../masterPlanSections";
 import { writePreviewModel } from "../visualUiEditorPreview";
 import { appendStepLog, writeContextFile } from "./contextIO";
 import { readCyclePolicy, setUserVisibleStage, writeCyclePolicy } from "./cyclePolicy";
+import { writeEnginePreviewModel } from "./previewModelIO";
 import { rankSeedPatterns, tryFigmaCandidates } from "./seedPatterns";
 import {
   collectWorkspaceFileFacts,
@@ -266,8 +267,8 @@ function fail(
 
 function defaultStyle() {
   return {
-    backgroundColor: "#0f172a",
-    color: "#e2e8f0",
+    backgroundColor: "#FFFFFF",
+    color: "#171717",
     paddingTop: 16,
     paddingRight: 16,
     paddingBottom: 16,
@@ -280,8 +281,8 @@ function defaultStyle() {
     height: "auto",
     borderRadius: 8,
     borderWidth: 0,
-    borderColor: "#334155",
-    boxShadow: "0 1px 3px rgba(0,0,0,0.35)",
+    borderColor: "#E5E5E5",
+    boxShadow: "none",
     opacity: 1,
   };
 }
@@ -300,28 +301,28 @@ function buildEditorModelFromBrief(state: UiGenContextState): Record<string, unk
       role: "page-root",
       type: "container",
       children: [header],
-      style: { ...defaultStyle(), backgroundColor: "#080A14", paddingTop: 24, paddingLeft: 24, paddingRight: 24 },
+      style: { ...defaultStyle(), backgroundColor: "#FAFAF9", paddingTop: 24, paddingLeft: 24, paddingRight: 24 },
     },
     [header]: {
       id: header,
       role: "page-header",
       type: "container",
       children: [title, sub, cta],
-      style: { ...defaultStyle(), backgroundColor: "#0D1117", paddingTop: 20, paddingBottom: 20 },
+      style: { ...defaultStyle(), backgroundColor: "#FFFFFF", paddingTop: 20, paddingBottom: 20 },
     },
     [title]: {
       id: title,
       role: "hero-title",
       type: "text",
       text: state.page_name || "Page",
-      style: { ...defaultStyle(), backgroundColor: "transparent", color: "#F8FAFC", paddingTop: 0, paddingBottom: 8 },
+      style: { ...defaultStyle(), backgroundColor: "transparent", color: "#171717", paddingTop: 0, paddingBottom: 8 },
     },
     [sub]: {
       id: sub,
       role: "hero-sub",
       type: "text",
       text: state.page_purpose || state.page_goal || "Generated page",
-      style: { ...defaultStyle(), backgroundColor: "transparent", color: "#94A3B8", paddingTop: 0, paddingBottom: 12 },
+      style: { ...defaultStyle(), backgroundColor: "transparent", color: "#525252", paddingTop: 0, paddingBottom: 12 },
     },
     [cta]: {
       id: cta,
@@ -330,7 +331,7 @@ function buildEditorModelFromBrief(state: UiGenContextState): Record<string, unk
       text: state.primary_cta || "Continue",
       style: {
         ...defaultStyle(),
-        backgroundColor: "#6C63FF",
+        backgroundColor: "#171717",
         color: "#FFFFFF",
         width: "auto",
         paddingLeft: 20,
@@ -351,21 +352,21 @@ function buildEditorModelFromBrief(state: UiGenContextState): Record<string, unk
       role: `section-${label.toLowerCase().replace(/[^a-z0-9]+/g, "-").slice(0, 24) || i + 1}`,
       type: "container",
       children: [tid, bid],
-      style: { ...defaultStyle(), backgroundColor: "#0D1117", marginTop: 12 },
+      style: { ...defaultStyle(), backgroundColor: "#FFFFFF", marginTop: 12 },
     };
     nodes[tid] = {
       id: tid,
       role: "section-title",
       type: "text",
       text: label,
-      style: { ...defaultStyle(), backgroundColor: "transparent", color: "#E2E8F0", paddingBottom: 8 },
+      style: { ...defaultStyle(), backgroundColor: "transparent", color: "#171717", paddingBottom: 8 },
     };
     nodes[bid] = {
       id: bid,
       role: "section-body",
       type: "text",
       text: `Content for ${label}`,
-      style: { ...defaultStyle(), backgroundColor: "transparent", color: "#94A3B8" },
+      style: { ...defaultStyle(), backgroundColor: "transparent", color: "#525252" },
     };
   });
 
@@ -930,6 +931,7 @@ export async function runUiGenerationCycle(
   }
 
   try {
+    writeEnginePreviewModel(workspaceRoot, editorModel as Parameters<typeof writeEnginePreviewModel>[1]);
     writePreviewModel(workspaceRoot, editorModel as Parameters<typeof writePreviewModel>[1]);
   } catch (e) {
     state.generation_warnings.push(

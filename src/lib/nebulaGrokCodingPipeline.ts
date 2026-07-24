@@ -415,12 +415,8 @@ export async function runGoCodeAndApply(options: {
             : 'Pre-coding summary saved to Master Plan',
           'success',
         );
-        if (data.v0PromptWritten) {
-          onProgress?.(
-            `v0 prompt ready (${data.v0PromptLength ?? 0} chars) — Generate v0 in UI Studio after Go finishes`,
-            'success',
-          );
-        }
+        // Legacy v0-prompt.md may still be written server-side; do not surface as auto-V0 status.
+
         try {
           window.dispatchEvent(new CustomEvent('nebula-master-plan-updated'));
         } catch {

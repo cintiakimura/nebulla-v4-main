@@ -80,7 +80,11 @@ import {
   writeV0PromptMarkdown,
 } from "./lib/nebulaUiStudioPipeline";
 import { seedPreviewModelFromMasterPlan } from "./lib/visualUiEditorPreview";
-import { runUiGenerationCycle, readCyclePolicy } from "./lib/uiGenerationEngine";
+import {
+  runUiGenerationCycle,
+  readCyclePolicy,
+  readEnginePreviewModel,
+} from "./lib/uiGenerationEngine";
 import {
   masterPlanKeyForTabIndex,
   normalizeMasterPlanRecord,
@@ -1533,7 +1537,8 @@ No approved UI code yet.
         typeof body.projectName === "string" && body.projectName.trim()
           ? String(body.projectName).trim()
           : "Untitled Project";
-      const autoV0 = body.autoV0 !== false;
+      // Auto-V0 is off unless the client explicitly opts in (manual path only).
+      const autoV0 = body.autoV0 === true;
 
       const plan = hydrateAndPersistMasterPlan(pp.workspaceRoot, pp.masterPlanPath);
       const v0Prompt = writeV0PromptMarkdown(pp.workspaceRoot, plan);
@@ -3342,6 +3347,30 @@ ${modelJson}`;
         final_status: policy.final_status,
         page_key: policy.page_key,
         updated_at: policy.updated_at,
+      });
+    } catch (e) {
+      return res.status(500).json({ error: e instanceof Error ? e.message : "failed" });
+    }
+  });
+
+  /** Latest engine preview model for UI Studio Beta (never Cosmic Night placeholder). */
+  app.get("/api/ui-studio-beta/preview", (req, res) => {
+    try {
+      const { workspaceRoot } = projectPathsFor(req);
+      const policy = readCyclePolicy(workspaceRoot);
+      const { model, source } = readEnginePreviewModel(workspaceRoot);
+      const codePath = path.join(workspaceRoot, "nebulla-project", "ui-generation-output.tsx");
+      const hasGeneratedCode = fs.existsSync(codePath) && fs.statSync(codePath).size > 0;
+      return res.json({
+        ok: true,
+        model,
+        source,
+        hasGeneratedCode,
+        user_visible_stage: policy.user_visible_stage,
+        regeneration_count: policy.regeneration_count,
+        max_regenerations: policy.max_regenerations,
+        final_status: policy.final_status,
+        page_key: policy.page_key,
       });
     } catch (e) {
       return res.status(500).json({ error: e instanceof Error ? e.message : "failed" });

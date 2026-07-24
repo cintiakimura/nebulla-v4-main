@@ -108,8 +108,8 @@ export type EditorModel = {
 };
 
 const defaultStyle = (): VisualStyle => ({
-  backgroundColor: '#0f172a',
-  color: '#e2e8f0',
+  backgroundColor: '#FAFAF9',
+  color: '#171717',
   paddingTop: 16,
   paddingRight: 16,
   paddingBottom: 16,
@@ -122,18 +122,16 @@ const defaultStyle = (): VisualStyle => ({
   height: 'auto',
   borderRadius: 8,
   borderWidth: 0,
-  borderColor: '#334155',
-  boxShadow: '0 1px 3px rgba(0,0,0,0.35)',
+  borderColor: '#E5E5E5',
+  boxShadow: 'none',
   opacity: 1,
 });
 
-function buildDefaultModel(): EditorModel {
-  const root = 'root-home';
-  const side = 'sidebar-1';
-  const hero = 'hero-1';
-  const title = 'hero-title';
-  const sub = 'hero-sub';
-  const btn = 'btn-1';
+/** Waiting shell — never Cosmic Night / Nebulla Workspace (that is IDE chrome, not app UI). */
+function buildWaitingModel(stageHint?: string): EditorModel {
+  const root = 'root-waiting';
+  const title = 'waiting-title';
+  const sub = 'waiting-sub';
   return {
     pages: {
       Home: {
@@ -143,60 +141,27 @@ function buildDefaultModel(): EditorModel {
             id: root,
             role: 'page-root',
             type: 'container',
-            children: [side, hero],
+            children: [title, sub],
             style: {
               ...defaultStyle(),
-              backgroundColor: '#080A14',
-              paddingTop: 0,
-              paddingLeft: 0,
-              paddingRight: 0,
-              paddingBottom: 0,
-            },
-          },
-          [side]: {
-            id: side,
-            role: 'nav-sidebar',
-            type: 'container',
-            children: [],
-            style: {
-              ...defaultStyle(),
-              width: '200px',
-              height: '100%',
-              backgroundColor: '#0D1117',
-              borderRadius: 0,
-              paddingTop: 20,
-              boxShadow: 'inset -1px 0 0 #21262D',
-            },
-          },
-          [hero]: {
-            id: hero,
-            role: 'hero',
-            type: 'container',
-            children: [title, sub, btn],
-            style: {
-              ...defaultStyle(),
-              backgroundColor: '#0D1117',
-              width: '100%',
-              height: '320px',
-              paddingTop: 28,
+              backgroundColor: '#FAFAF9',
+              paddingTop: 40,
               paddingLeft: 28,
               paddingRight: 28,
-              paddingBottom: 24,
+              paddingBottom: 40,
             },
           },
           [title]: {
             id: title,
             role: 'hero-title',
             type: 'text',
-            text: 'Nebulla Workspace',
+            text: 'Waiting for UI generation',
             style: {
               ...defaultStyle(),
               backgroundColor: 'transparent',
-              color: '#E8EAED',
+              color: '#171717',
               paddingTop: 0,
               paddingBottom: 8,
-              width: '100%',
-              height: 'auto',
               borderRadius: 0,
               boxShadow: 'none',
             },
@@ -205,150 +170,16 @@ function buildDefaultModel(): EditorModel {
             id: sub,
             role: 'hero-sub',
             type: 'text',
-            text: 'Live preview · Cosmic Night (#080A14 / #00D4D4) — inspired by 0vgenerated-v2 shell',
+            text:
+              stageHint?.trim() ||
+              'Press Generate UI after coding, or wait for the engine after file apply. Preview shows engine output — not the Nebulla IDE shell.',
             style: {
               ...defaultStyle(),
               backgroundColor: 'transparent',
-              color: '#6E7681',
-              paddingTop: 0,
-              paddingBottom: 20,
-              width: '100%',
-              height: 'auto',
-              borderRadius: 0,
-              boxShadow: 'none',
-            },
-          },
-          [btn]: {
-            id: btn,
-            role: 'cta-primary',
-            type: 'button',
-            text: 'Open Explorer',
-            style: {
-              ...defaultStyle(),
-              backgroundColor: '#00D4D4',
-              color: '#080A14',
-              width: 'auto',
-              height: 'auto',
-              paddingTop: 10,
-              paddingBottom: 10,
-              paddingLeft: 20,
-              paddingRight: 20,
-              borderRadius: 8,
-              boxShadow: '0 0 24px rgba(0,212,212,0.25)',
-            },
-          },
-        },
-      },
-      Dashboard: {
-        rootId: 'root-dash',
-        nodes: {
-          'root-dash': {
-            id: 'root-dash',
-            role: 'page-root',
-            type: 'container',
-            children: ['dash-head', 'dash-grid'],
-            style: { ...defaultStyle(), backgroundColor: '#080A14', paddingTop: 20, paddingLeft: 20, paddingRight: 20 },
-          },
-          'dash-head': {
-            id: 'dash-head',
-            role: 'section-title',
-            type: 'text',
-            text: 'Dashboard',
-            style: {
-              ...defaultStyle(),
-              backgroundColor: 'transparent',
-              color: '#E8EAED',
-              paddingBottom: 16,
-              borderRadius: 0,
-              boxShadow: 'none',
-            },
-          },
-          'dash-grid': {
-            id: 'dash-grid',
-            role: 'metrics-row',
-            type: 'container',
-            children: ['m1', 'm2', 'm3'],
-            style: {
-              ...defaultStyle(),
-              backgroundColor: 'transparent',
+              color: '#525252',
               paddingTop: 0,
               borderRadius: 0,
               boxShadow: 'none',
-            },
-          },
-          m1: {
-            id: 'm1',
-            role: 'metric-card',
-            type: 'box',
-            style: { ...defaultStyle(), backgroundColor: '#0D1117', width: '32%', height: '100px', borderRadius: 10 },
-          },
-          m2: {
-            id: 'm2',
-            role: 'metric-card',
-            type: 'box',
-            style: { ...defaultStyle(), backgroundColor: '#0D1117', width: '32%', height: '100px', borderRadius: 10 },
-          },
-          m3: {
-            id: 'm3',
-            role: 'metric-card',
-            type: 'box',
-            style: { ...defaultStyle(), backgroundColor: '#0D1117', width: '32%', height: '100px', borderRadius: 10 },
-          },
-        },
-      },
-      Settings: {
-        rootId: 'root-set',
-        nodes: {
-          'root-set': {
-            id: 'root-set',
-            role: 'page-root',
-            type: 'container',
-            children: ['set-title', 'set-row-a', 'set-row-b'],
-            style: { ...defaultStyle(), backgroundColor: '#080A14', paddingTop: 20, paddingLeft: 20, paddingRight: 20 },
-          },
-          'set-title': {
-            id: 'set-title',
-            role: 'section-title',
-            type: 'text',
-            text: 'Settings',
-            style: {
-              ...defaultStyle(),
-              backgroundColor: 'transparent',
-              color: '#E8EAED',
-              paddingBottom: 16,
-              borderRadius: 0,
-              boxShadow: 'none',
-            },
-          },
-          'set-row-a': {
-            id: 'set-row-a',
-            role: 'settings-row',
-            type: 'text',
-            text: 'API keys · Grok & v0',
-            style: {
-              ...defaultStyle(),
-              backgroundColor: '#0D1117',
-              color: '#B8BCC2',
-              paddingTop: 12,
-              paddingBottom: 12,
-              paddingLeft: 16,
-              marginBottom: 8,
-              borderRadius: 8,
-            },
-          },
-          'set-row-b': {
-            id: 'set-row-b',
-            role: 'settings-row',
-            type: 'text',
-            text: 'Theme · Cosmic Night (default)',
-            style: {
-              ...defaultStyle(),
-              backgroundColor: '#0D1117',
-              color: '#B8BCC2',
-              paddingTop: 12,
-              paddingBottom: 12,
-              paddingLeft: 16,
-              borderRadius: 8,
             },
           },
         },
@@ -357,6 +188,26 @@ function buildDefaultModel(): EditorModel {
   };
 }
 
+function isNebullaIdePlaceholderShell(model: EditorModel | null | undefined): boolean {
+  if (!model?.pages) return false;
+  const text = JSON.stringify(model);
+  return /Nebulla Workspace|Cosmic Night|0vgenerated-v2|inspired by 0vgenerated/i.test(text);
+}
+
+function applyEditorModel(
+  next: EditorModel,
+  setModel: React.Dispatch<React.SetStateAction<EditorModel>>,
+  setActivePage: React.Dispatch<React.SetStateAction<string>>,
+  baselineRef: React.MutableRefObject<EditorModel | null>,
+  preferredPage?: string,
+): void {
+  if (!next?.pages || isNebullaIdePlaceholderShell(next)) return;
+  setModel(next);
+  baselineRef.current = cloneModel(next);
+  const pages = Object.keys(next.pages);
+  if (preferredPage && pages.includes(preferredPage)) setActivePage(preferredPage);
+  else if (pages[0]) setActivePage(pages[0]);
+}
 function cloneModel(m: EditorModel): EditorModel {
   return JSON.parse(JSON.stringify(m)) as EditorModel;
 }
@@ -406,7 +257,8 @@ export function IdeUiStudioBeta({
   const [eligible, setEligible] = useState<boolean | null>(null);
   const [eligibilityReason, setEligibilityReason] = useState<string | undefined>();
   const [activePage, setActivePage] = useState('Home');
-  const [model, setModel] = useState<EditorModel>(() => buildDefaultModel());
+  const [model, setModel] = useState<EditorModel>(() => buildWaitingModel());
+  const [hasEnginePreview, setHasEnginePreview] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [undoStack, setUndoStack] = useState<EditorModel[]>([]);
   const [applyConfirmOpen, setApplyConfirmOpen] = useState(false);
@@ -554,25 +406,11 @@ export function IdeUiStudioBeta({
 
   // Beta does not subscribe to product auto-run / cancel / clear v0 events — original UI Studio owns those.
 
+  // Beta preview is engine-driven — do not auto-switch to legacy v0-live iframe.
   useEffect(() => {
     const demo = studioStatus?.v0DemoUrl?.trim();
     if (demo) setV0DemoUrl(demo);
-    if (demo && studioStatus?.hasRealV0) {
-      setPreviewSurface('v0-live');
-    }
-  }, [studioStatus?.v0DemoUrl, studioStatus?.hasRealV0]);
-
-  useEffect(() => {
-    const onDemo = (ev: Event) => {
-      const url = (ev as CustomEvent<{ demoUrl?: string }>).detail?.demoUrl?.trim();
-      if (url) {
-        setV0DemoUrl(url);
-        setPreviewSurface('v0-live');
-      }
-    };
-    window.addEventListener('nebula-v0-demo-ready', onDemo);
-    return () => window.removeEventListener('nebula-v0-demo-ready', onDemo);
-  }, []);
+  }, [studioStatus?.v0DemoUrl]);
 
   const refreshV0KeyState = useCallback(async () => {
     try {
@@ -603,31 +441,63 @@ export function IdeUiStudioBeta({
     };
   }, [refreshV0KeyState]);
 
+  const loadEnginePreview = useCallback(async () => {
+    try {
+      const r = await fetch(withProjectQuery('/api/ui-studio-beta/preview'), {
+        credentials: 'include',
+        headers: getGrokRequestHeaders(),
+      });
+      if (!r.ok) return;
+      const d = (await r.json()) as {
+        model?: EditorModel | null;
+        source?: string;
+        user_visible_stage?: string;
+        regeneration_count?: number;
+        max_regenerations?: number;
+        final_status?: string;
+      };
+      if (typeof d.regeneration_count === 'number') setRegenCount(d.regeneration_count);
+      if (typeof d.max_regenerations === 'number') setMaxRegens(d.max_regenerations);
+      if (d.user_visible_stage) setEngineStage(d.user_visible_stage);
+      if (d.model?.pages && !isNebullaIdePlaceholderShell(d.model)) {
+        applyEditorModel(
+          d.model,
+          setModel,
+          setActivePage,
+          baselineRef,
+          Object.keys(d.model.pages)[0],
+        );
+        setHasEnginePreview(true);
+        setPreviewSurface('visual-model');
+        if (!d.user_visible_stage) setEngineStage('Ready in preview');
+        return;
+      }
+      setHasEnginePreview(false);
+      if (d.user_visible_stage && /Reading|Preparing|Selecting|Generating|Validating/i.test(d.user_visible_stage)) {
+        const waiting = buildWaitingModel(d.user_visible_stage);
+        setModel(waiting);
+        baselineRef.current = cloneModel(waiting);
+        setEngineStage(d.user_visible_stage);
+      } else {
+        const waiting = buildWaitingModel();
+        setModel(waiting);
+        baselineRef.current = cloneModel(waiting);
+      }
+    } catch {
+      /* keep current model */
+    }
+  }, []);
+
   useEffect(() => {
     if (eligible === null) return;
-    if (!eligible) {
-      baselineRef.current = cloneModel(model);
-      return;
-    }
-    void (async () => {
-      try {
-        const r = await fetch(withProjectQuery('/api/visual-ui-editor/preview-model'));
-        if (!r.ok) {
-          baselineRef.current = cloneModel(model);
-          return;
-        }
-        const d = (await r.json()) as { model?: EditorModel | null };
-        if (d.model && typeof d.model === 'object' && d.model.pages) {
-          setModel(d.model);
-          baselineRef.current = cloneModel(d.model);
-        } else {
-          baselineRef.current = cloneModel(model);
-        }
-      } catch {
-        baselineRef.current = cloneModel(model);
-      }
-    })();
-  }, [eligible]);
+    void loadEnginePreview();
+  }, [eligible, loadEnginePreview]);
+
+  useEffect(() => {
+    const onRefresh = () => void loadEnginePreview();
+    window.addEventListener('nebula-files-applied', onRefresh);
+    return () => window.removeEventListener('nebula-files-applied', onRefresh);
+  }, [loadEnginePreview]);
 
   const updateSelectedStyle = (patch: Partial<VisualStyle>) => {
     if (!selectedId || !page) return;
@@ -826,18 +696,24 @@ export function IdeUiStudioBeta({
         );
         return;
       }
-      if (data.editorModel?.pages) {
-        setModel(data.editorModel);
-        baselineRef.current = cloneModel(data.editorModel);
-        const pages = Object.keys(data.editorModel.pages);
-        const preferred = data.context?.page_name;
-        if (preferred && pages.includes(preferred)) setActivePage(preferred);
-        else if (pages[0]) setActivePage(pages[0]);
+      if (data.editorModel?.pages && !isNebullaIdePlaceholderShell(data.editorModel)) {
+        applyEditorModel(
+          data.editorModel,
+          setModel,
+          setActivePage,
+          baselineRef,
+          data.context?.page_name,
+        );
         clearSelection();
         setPreviewSurface('visual-model');
+        setHasEnginePreview(true);
+        setEngineStage('Ready in preview');
+        // Persist the NEW model — never the stale Cosmic Night / waiting shell from closure.
+        await persistModelRemote(data.editorModel);
+      } else {
+        setEngineStage(data.user_visible_stage || 'Ready in preview');
+        await loadEnginePreview();
       }
-      setEngineStage('Ready in preview');
-      await persistModelRemote();
       window.dispatchEvent(
         new CustomEvent('nebula-ui-studio-beta-complete', {
           detail: {
@@ -886,15 +762,17 @@ export function IdeUiStudioBeta({
     };
     const onComplete = (ev: Event) => {
       const detail = (ev as CustomEvent<{ editorModel?: EditorModel; context?: { page_name?: string } }>).detail;
-      if (detail?.editorModel?.pages) {
-        setModel(detail.editorModel);
-        baselineRef.current = cloneModel(detail.editorModel);
-        const pages = Object.keys(detail.editorModel.pages);
-        const preferred = detail.context?.page_name;
-        if (preferred && pages.includes(preferred)) setActivePage(preferred);
-        else if (pages[0]) setActivePage(pages[0]);
+      if (detail?.editorModel?.pages && !isNebullaIdePlaceholderShell(detail.editorModel)) {
+        applyEditorModel(
+          detail.editorModel,
+          setModel,
+          setActivePage,
+          baselineRef,
+          detail.context?.page_name,
+        );
         clearSelection();
         setPreviewSurface('visual-model');
+        setHasEnginePreview(true);
         setEngineStage('Ready in preview');
       }
     };
@@ -931,11 +809,13 @@ export function IdeUiStudioBeta({
     }
   };
 
-  const persistModelRemote = async () => {
+  const persistModelRemote = async (modelToSave?: EditorModel) => {
+    const payload = modelToSave ?? model;
+    if (isNebullaIdePlaceholderShell(payload)) return;
     await fetch(withProjectQuery('/api/visual-ui-editor/preview-model'), {
       method: 'PUT',
       headers: persistHeaders(),
-      body: JSON.stringify(withProjectBody({ model })),
+      body: JSON.stringify(withProjectBody({ model: payload })),
     });
   };
 
@@ -1023,14 +903,7 @@ export function IdeUiStudioBeta({
       setRevertConfirmOpen(false);
       setError('');
       try {
-        const r = await fetch(withProjectQuery('/api/visual-ui-editor/preview-model'));
-        if (r.ok) {
-          const d = (await r.json()) as { model?: EditorModel | null };
-          if (d.model && typeof d.model === 'object' && d.model.pages) {
-            setModel(d.model);
-            baselineRef.current = cloneModel(d.model);
-          }
-        }
+        await loadEnginePreview();
       } catch {
         /* keep local model */
       }
@@ -1055,14 +928,7 @@ export function IdeUiStudioBeta({
       setRestoreOriginalConfirmOpen(false);
       setError('');
       try {
-        const r = await fetch(withProjectQuery('/api/visual-ui-editor/preview-model'));
-        if (r.ok) {
-          const d = (await r.json()) as { model?: EditorModel | null };
-          if (d.model && typeof d.model === 'object' && d.model.pages) {
-            setModel(d.model);
-            baselineRef.current = cloneModel(d.model);
-          }
-        }
+        await loadEnginePreview();
       } catch {
         /* keep local model */
       }
@@ -1489,7 +1355,7 @@ export function IdeUiStudioBeta({
                   : 'bg-secondary text-muted-foreground',
               )}
             >
-              {eligible ? 'v0 unlocked' : 'preview mode'}
+              {hasEnginePreview ? 'engine preview' : busy ? 'generating…' : 'waiting for engine'}
             </span>
           </div>
 

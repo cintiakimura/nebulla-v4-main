@@ -47,7 +47,7 @@ function formatV0StatusLine(
       : 'v0 not ready — add API key and save Master Plan §4+§5';
   }
   const promptLen = studio.v0PromptLength ?? 0;
-  return `v0 ready — prompt ${promptLen} chars; runs automatically after Master Plan / Go`;
+  return `v0 ready — prompt ${promptLen} chars; manual Generate in original UI Studio only (Beta is auto path)`;
 }
 
 function formatV0StatusDetail(studio: ChatV0StudioStatus, readiness: V0ReadinessResult): string {

@@ -36,18 +36,29 @@ export type MasterPlanUiPipelineResult = {
   hasRealV0?: boolean;
 };
 
-/** After Master Plan save: v0-prompt.md, mind map (§4), optional auto v0. */
+/** After Master Plan save: mind map (§4); optional prompt file; auto v0 only when autoV0===true. */
 export async function runMasterPlanUiPipeline(options?: {
   projectName?: string;
   autoV0?: boolean;
+  /** When true, skip legacy V0 / “UI Studio pipeline” status lines (post-coding / Beta path). */
+  quietV0Status?: boolean;
   onProgress?: GrokActivityProgressFn;
 }): Promise<MasterPlanUiPipelineResult> {
   const onProgress = options?.onProgress;
+  const quiet = options?.quietV0Status === true || options?.autoV0 !== true;
   try {
-    onProgress?.('Syncing Master Plan, v0 prompt, and mind map…', 'info');
-    const stopWait = startGrokActivityWaitTicker('UI Studio pipeline on server', (msg, kind, options) =>
-      onProgress?.(msg, kind, options),
-    );
+    if (!quiet) {
+      onProgress?.('Syncing Master Plan, v0 prompt, and mind map…', 'info');
+    } else {
+      onProgress?.('Syncing mind map from Master Plan…', 'info');
+    }
+    const stopWait = quiet
+      ? startGrokActivityWaitTicker('Syncing mind map on server', (msg, kind, opts) =>
+          onProgress?.(msg, kind, opts),
+        )
+      : startGrokActivityWaitTicker('UI Studio pipeline on server', (msg, kind, opts) =>
+          onProgress?.(msg, kind, opts),
+        );
     let result: MasterPlanUiPipelineResult;
     try {
       result = await fetchJson<MasterPlanUiPipelineResult>(
@@ -67,27 +78,28 @@ export async function runMasterPlanUiPipeline(options?: {
     } finally {
       stopWait();
     }
-    if (result.v0PromptWritten) {
+    if (!quiet && result.v0PromptWritten) {
       onProgress?.('Wrote nebula-ui-studio/v0-prompt.md from Master Plan §4+§5', 'success');
     }
     if ((result.mindMapPageCount ?? 0) > 0) {
       onProgress?.(`Mind map synced — ${result.mindMapPageCount} page node(s)`, 'success');
     }
-    if (result.v0Triggered && result.v0Ok) {
+    // Only report V0 outcomes when explicitly auto-running V0 (manual / legacy).
+    if (!quiet && result.v0Triggered && result.v0Ok) {
       onProgress?.(`v0 UI generated — ${result.v0Written?.length ?? 0} file(s)`, 'success');
-    } else if (result.v0Triggered && result.v0Error) {
+    } else if (!quiet && result.v0Triggered && result.v0Error) {
       onProgress?.(`v0 skipped: ${String(result.v0Error).slice(0, 140)}`, 'warn');
-    } else if (result.v0Triggered) {
+    } else if (!quiet && result.v0Triggered) {
       onProgress?.('v0 generation attempted', 'info');
     }
     return result;
   } catch (e) {
     console.warn('[ideArtifactSync] master-plan-ui-pipeline:', e);
-    const msg = e instanceof Error ? e.message : 'UI Studio pipeline failed';
+    const msg = e instanceof Error ? e.message : 'Mind map sync failed';
     onProgress?.(
       msg.includes('fetch failed') || msg.includes('Failed to fetch')
-        ? 'UI Studio pipeline timed out on Render — retry Generate UI with v0'
-        : 'UI Studio pipeline request failed',
+        ? 'Mind map sync timed out — retry from Master Plan'
+        : 'Mind map sync request failed',
       'error',
     );
     return {};
@@ -171,8 +183,13 @@ export async function runMasterPlanUiPipelineWithV0(options?: {
   autoV0?: boolean;
   onProgress?: GrokActivityProgressFn;
 }): Promise<MasterPlanUiPipelineResult> {
-  const base = await runMasterPlanUiPipeline({ ...options, autoV0: false });
-  if (options?.autoV0 === false || base.hasRealV0) return base;
+  // Default: never auto-run V0. Only run when caller explicitly sets autoV0: true.
+  const base = await runMasterPlanUiPipeline({
+    ...options,
+    autoV0: false,
+    quietV0Status: options?.autoV0 !== true,
+  });
+  if (options?.autoV0 !== true || base.hasRealV0) return base;
   const v0 = await runV0UiGeneration({
     projectName: options?.projectName,
     onProgress: options?.onProgress,
@@ -208,14 +225,12 @@ export async function syncIdeProjectArtifacts(options?: {
     if ((sync.masterPlanTabs ?? 0) > 0) {
       onProgress?.(`Bootstrapped ${sync.masterPlanTabs} empty Master Plan tab(s) from workspace`, 'success');
     }
-    if (sync.v0PromptWritten) {
-      onProgress?.('Updated v0 prompt from Master Plan', 'success');
-    }
+    // Do not report legacy V0 prompt / old UI Studio unlock — Beta is the active generator.
     if ((sync.mindMapPageCount ?? 0) > 0) {
       onProgress?.(`Mind map: ${sync.mindMapPageCount} page(s)`, 'success');
     }
     if (sync.uiStudioUnlocked) {
-      onProgress?.('UI Studio unlocked for visual editing', 'success');
+      onProgress?.('Opening UI Studio Beta for engine preview', 'info');
     }
     return sync;
   } catch (e) {

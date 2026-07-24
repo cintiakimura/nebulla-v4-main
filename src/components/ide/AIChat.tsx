@@ -103,7 +103,7 @@ const CHAT_WORK_STEPS = [
   { label: 'Send your message to Grok' },
   { label: 'Grok reads Master Plan, file index, and workspace context' },
   { label: 'Save Master Plan sections to project tabs' },
-  { label: 'Update mind map & UI Studio pipeline (when plan changes)' },
+  { label: 'Update mind map from Master Plan (when plan changes)' },
   { label: 'Run Grok Code and apply files (when building)' },
   { label: 'Sync explorer, mind map, and preview' },
 ];
@@ -113,7 +113,7 @@ const GO_WORK_STEPS = [
   { label: 'Grok writes pre-coding summary to Master Plan' },
   { label: 'Grok Code generates implementation files' },
   { label: 'Write files to your cloud project folder' },
-  { label: 'Refresh mind map & run v0 UI when configured' },
+  { label: 'Refresh mind map & open UI Studio Beta engine' },
 ];
 
 /** WebKit speech types (not always present in TS `lib` for this project). */
@@ -253,12 +253,10 @@ export function AIChat() {
     }
   }, []);
 
+  /** Manual V0 watch only — do not inject V0 readiness into Live Activity after Go / file apply. */
   const refreshChatV0Status = useCallback(async () => {
     try {
       const snap = await fetchChatV0StatusSnapshot();
-      setGrokActivity((prev) => patchGrokActivityV0Status(prev, snap.line, snap.detail));
-      setV0Live(Boolean(snap.live));
-      if (snap.live) setV0WatchActive(true);
       return snap;
     } catch {
       return null;
@@ -269,6 +267,7 @@ export function AIChat() {
     const onProgress = (ev: Event) => {
       const d = (ev as CustomEvent<{ line?: string; detail?: string }>).detail;
       if (!d?.line) return;
+      // Only surface when user explicitly started a manual V0 watch (original studio).
       setV0Live(true);
       setV0WatchActive(true);
       setGrokActivity((prev) => {
@@ -285,14 +284,10 @@ export function AIChat() {
       const active = Boolean((ev as CustomEvent<{ active?: boolean }>).detail?.active);
       setV0WatchActive(active);
       setV0Live(active);
-      if (active) {
-        void refreshChatV0Status();
-      }
     };
     const onV0Done = () => {
       setV0WatchActive(false);
       setV0Live(false);
-      void refreshChatV0Status();
     };
     window.addEventListener('nebula-chat-v0-progress', onProgress);
     window.addEventListener('nebula-chat-v0-watch', onWatch);
@@ -304,18 +299,24 @@ export function AIChat() {
       window.removeEventListener('nebula-ui-studio-v0-complete', onV0Done);
       window.removeEventListener('nebula-v0-demo-ready', onV0Done);
     };
-  }, [refreshChatV0Status]);
+  }, []);
 
   useEffect(() => {
-    void refreshChatV0Status();
-  }, [refreshChatV0Status]);
-
-  useEffect(() => {
-    if (!v0WatchActive && grokActivity.tone !== 'work') return;
-    void refreshChatV0Status();
-    const id = window.setInterval(() => void refreshChatV0Status(), 4000);
+    if (!v0WatchActive) return;
+    void refreshChatV0Status().then((snap) => {
+      if (!snap) return;
+      setGrokActivity((prev) => patchGrokActivityV0Status(prev, snap.line, snap.detail));
+      setV0Live(Boolean(snap.live));
+    });
+    const id = window.setInterval(() => {
+      void refreshChatV0Status().then((snap) => {
+        if (!snap) return;
+        setGrokActivity((prev) => patchGrokActivityV0Status(prev, snap.line, snap.detail));
+        setV0Live(Boolean(snap.live));
+      });
+    }, 4000);
     return () => window.clearInterval(id);
-  }, [v0WatchActive, grokActivity.tone, refreshChatV0Status]);
+  }, [v0WatchActive, refreshChatV0Status]);
 
   // Fallback cancel/clear when UI Studio editor is not mounted.
   useEffect(() => {
@@ -342,7 +343,7 @@ export function AIChat() {
         } catch {
           /* ignore */
         }
-        emitChatV0Progress('v0 session cleared — auto v0 will start again when ready.');
+        emitChatV0Progress('v0 session cleared — use original UI Studio to generate manually if needed.');
         void refreshChatV0Status();
       })();
     };
@@ -1220,7 +1221,7 @@ export function AIChat() {
             advanceGrokActivity(prev, 3, {
               currentAction: willCode
                 ? 'UI pipeline — mind map & prompt (UI Studio Beta after files)…'
-                : 'UI pipeline — mind map & v0 prompt (V0 auto disabled; Beta after coding)…',
+                : 'Syncing mind map from Master Plan…',
               stepDetail: {
                 index: 2,
                 detail: `Saved ${mpSaved} Master Plan section(s). Building mind map from §4…`,
@@ -1235,6 +1236,7 @@ export function AIChat() {
         masterPlanPipeline = await runMasterPlanUiPipeline({
           projectName,
           autoV0: false,
+          quietV0Status: true,
           onProgress: showWorkActivity ? pushActivity : undefined,
         });
         if ((masterPlanPipeline.mindMapPageCount ?? 0) > 0) {
@@ -1307,10 +1309,11 @@ export function AIChat() {
               }),
             );
           }
-          // Sync prompt/mind map only — do not auto-run V0 (Beta is the active generator).
+          // Mind map only — do not auto-run V0 (Beta already triggered from file apply).
           masterPlanPipeline = await runMasterPlanUiPipeline({
             projectName,
             autoV0: false,
+            quietV0Status: true,
             onProgress: pushActivity,
           });
           dispatchOpenUiStudioBeta();
@@ -1589,7 +1592,6 @@ export function AIChat() {
       subhead: 'One Go — one coherent slice (Build → Debug → Next). Validate before the next Go.',
       initialLog: userNote ? `Go started — slice focus: ${userNote.slice(0, 120)}` : 'Go started — next incomplete slice',
     });
-    void refreshChatV0Status();
 
     void cancelProjectBackgroundJobs();
 
@@ -1627,7 +1629,6 @@ export function AIChat() {
         messages: history,
         onProgress: pushActivity,
       });
-      await refreshChatV0Status();
       if (go.ok) {
         window.dispatchEvent(new CustomEvent('nebula-master-plan-updated'));
       }
@@ -1675,27 +1676,21 @@ export function AIChat() {
           log: { message: 'UI Studio Beta engine (Master Plan + applied files)', kind: 'info' },
         }),
       );
-      // Mind map / prompt sync only — V0 auto disabled; Beta already triggered from file apply.
+      // Mind map sync only — V0 auto disabled; Beta already triggered from file apply.
       await runMasterPlanUiPipeline({
         projectName,
         autoV0: false,
+        quietV0Status: true,
         onProgress: pushActivity,
       });
       dispatchOpenUiStudioBeta();
-      const v0Snap = await refreshChatV0Status();
       pushActivity('Go pipeline finished — UI Studio Beta is the active generator', 'success');
       codingActivityRef.current = false;
       setGrokCodingActive(false);
-      setGrokActivity((prev) => {
-        const finished = finishGrokActivity(
-          prev,
-          'Go finished',
-          GO_WORK_STEPS,
-          go.statusMessage,
-        );
-        return v0Snap ? patchGrokActivityV0Status(finished, v0Snap.line, v0Snap.detail) : finished;
-      });
-      setV0Live(Boolean(v0Snap?.live));
+      setGrokActivity((prev) =>
+        finishGrokActivity(prev, 'Go finished', GO_WORK_STEPS, go.statusMessage),
+      );
+      setV0Live(false);
     } catch (e) {
       setSendError(e instanceof Error ? e.message : 'Go failed');
       resetCodingActivity();
