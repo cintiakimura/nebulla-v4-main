@@ -1,3 +1,4 @@
+file:///Users/cintiakimura/Downloads/nebulla-v4-main/nebulla-project/ui-generation-engine-manual.md {"mtime":1784882561039,"ctime":1784878835410,"size":15071,"etag":"3gdk3ab2hfl5","orphaned":false,"typeId":""}
 **Nebulla UI Generation Engine — Absolute-Control Task Manual**
 
 This is the strict script for UI generation.  
@@ -701,3 +702,180 @@ Never do this:
 - regenerate endlessly
 
 Your job is to execute this manual exactly.
+
+# UI Generation Trigger, Regeneration, and Preference Recovery
+
+This section extends the UI Generation Engine Manual and Sequence.
+It defines when generation starts, how regeneration is limited, and what happens when the user rejects the results.
+
+---
+
+## A. Automatic start trigger
+
+### A.1
+UI generation may start automatically when the Master Plan is complete enough for UI work.
+
+### A.2
+“Complete enough” means at least:
+- product goal is known
+- project type is known
+- at least one meaningful page definition exists
+- enough UI/UX direction exists to avoid pure invention
+
+### A.3
+When those conditions are met, the system may auto-trigger UI generation for the primary page or primary set of pages, using the same product timing pattern as the existing V0 trigger after Master Plan completion.
+
+### A.4
+Auto-trigger does not bypass the engine sequence.
+Even when automatic, the engine must still follow:
+verify → gather → classify → brief → references → generate → validate → deliver.
+
+### A.5
+Auto-trigger must write the cycle start into `nebulla-project/ui-generation-context.md`.
+
+### A.6
+If Master Plan is too weak, do not auto-generate rich UI.
+Either continue discovery or produce only a clearly limited skeleton marked incomplete.
+
+---
+
+## B. Delivery target
+
+### B.1
+All generated UI from this engine is delivered to **UI Studio Beta**.
+
+### B.2
+The original UI Studio / V0 page remains untouched by this engine path.
+
+### B.3
+After delivery, the user can inspect the preview and refine with the Properties panel.
+
+---
+
+## C. Regeneration policy
+
+### C.1
+The user may request regeneration with a **Generate again** action.
+
+### C.2
+Maximum regenerations per page per generation cycle: **3**.
+
+### C.3
+Count only full generation attempts after the first delivered result.
+Example:
+- first automatic generation = attempt 1
+- generate again = attempt 2
+- generate again = attempt 3
+- no further free regeneration after attempt 3
+
+### C.4
+Each regeneration must still run through the engine sequence.
+Do not improvise a shortcut that skips brief/context updates.
+
+### C.5
+Before each regeneration, update `ui-generation-context.md` with:
+- regeneration_count
+- reason for regeneration if known
+- previous quality_gate_result
+
+### C.6
+If regeneration is requested after the limit, do not generate again automatically.
+
+---
+
+## D. After 3 rejected or disliked generations
+
+### D.1
+When the user still dislikes the result after 3 generation attempts, stop blind regeneration.
+
+### D.2
+Switch to preference recovery mode.
+
+### D.3
+Ask one clear question to identify the problem.
+Preferred wording:
+
+“I can see this still isn’t right.  
+What bothers you most — layout, colors, spacing, missing sections, or overall style?”
+
+### D.4
+Ask only one main question at a time.
+
+### D.5
+Write the user’s preference feedback into `ui-generation-context.md`.
+
+### D.6
+Based on the answer, choose one path only:
+
+Path 1 — Guided improvement pass  
+If the complaint is specific and actionable, run one controlled improvement generation using that feedback.
+
+Path 2 — Manual refinement  
+If the structure is mostly acceptable, direct the user to adjust text, color, spacing, border, shadow, order, or deletion in the Properties panel.
+
+Path 3 — Partial redesign of one area  
+If only one section is wrong, regenerate or restyle that section only when technically practical. Do not rebuild everything by default.
+
+### D.7
+Do not enter an unlimited generation loop after the recovery question.
+
+---
+
+## E. What must never happen
+
+### E.1
+Do not regenerate endlessly because the user is unhappy.
+
+### E.2
+Do not abandon Master Plan product truth just to chase visual preference.
+
+### E.3
+Do not invent a new product direction during regeneration.
+
+### E.4
+Do not silently consume extra generations beyond the max of 3 without user awareness.
+
+### E.5
+Do not send the user into a dead end with no next step after the limit.
+
+---
+
+## F. User-visible status
+
+### F.1
+While generation runs, show simple stage status to the user, such as:
+- Reading Master Plan
+- Preparing page brief
+- Selecting references
+- Generating UI
+- Validating
+- Ready in preview
+
+### F.2
+Internal detailed status continues to live in `ui-generation-context.md`.
+
+### F.3
+User-facing status should be short and non-technical.
+
+---
+
+## G. Context file requirements for this policy
+
+Write and maintain at least these fields during the cycle:
+- auto_triggered: yes/no
+- regeneration_count: 0–3
+- max_regenerations: 3
+- preference_feedback:
+- recovery_path: guided_improvement | manual_refinement | partial_redesign | none
+- final_status: generated | refined | accepted | rejected | failed
+
+---
+
+## H. Operating rule
+
+Automatic generation is allowed.  
+Blind repetition is not.  
+
+After 3 attempts, the system must stop guessing and either:
+1. improve from explicit user preference, or
+2. help the user refine manually.

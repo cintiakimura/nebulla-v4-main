@@ -4,64 +4,58 @@
 @custom-variant dark (&:is(.dark *));
 
 /*
- * Nebulla IDE — black theme (colors / type weight only; layout unchanged).
- * Background #000000 · Elevated cards #212121 · Borders light grey 0.5px
- * Text #FFFFFF · Titles #5750CC · Subtitles #679BD1 · Misc #C6937C
- * CodeMirror token colors preserved from original Cosmic Night theme.
- * Rollback: src/theme-backups/original-ui-2026-07-24/
+ * Nebulla IDE — premium dark palette (colors only; layout unchanged).
+ * Main #020024 · Panel #0A0A2E · Elevated #12123A · Border #1E1E4A
+ * Text #E8E8F0 / #A0A0C0 · Accent #6C63FF · Success #22C55E · Danger #EF4444
  */
 :root,
 .dark {
-  --surface: #000000;
-  --surface-container: #212121;
-  --surface-bright: #212121;
-  --surface-container-highest: #212121;
-  --on-surface-variant: #679bd1;
-  --outline-variant: #bdbdbd;
-  --primary: #5750cc;
-  --primary-container: #5750cc;
-  --on-primary-container: #ffffff;
-  --secondary-container: #212121;
+  --surface: #020024;
+  --surface-container: #0a0a2e;
+  --surface-bright: #12123a;
+  --surface-container-highest: #12123a;
+  --on-surface-variant: #a0a0c0;
+  --outline-variant: #1e1e4a;
+  --primary: #6c63ff;
+  --primary-container: #4a42c8;
+  --on-primary-container: #e8e8f0;
+  --secondary-container: #1e1e4a;
   --success: #22c55e;
 
-  --title: #5750cc;
-  --subtitle: #679bd1;
-  --misc: #c6937c;
-
-  --background: #000000;
-  --foreground: #ffffff;
-  --card: #212121;
-  --card-foreground: #ffffff;
-  --popover: #212121;
-  --popover-foreground: #ffffff;
-  --primary-foreground: #ffffff;
-  --secondary: #212121;
-  --secondary-foreground: #ffffff;
-  --muted: #212121;
-  --muted-foreground: #ffffff;
-  --accent: var(--misc);
-  --accent-foreground: #ffffff;
+  --background: var(--surface);
+  --foreground: #e8e8f0;
+  --card: var(--surface-container);
+  --card-foreground: var(--foreground);
+  --popover: var(--surface-bright);
+  --popover-foreground: var(--foreground);
+  --primary-foreground: #e8e8f0;
+  --secondary: color-mix(in srgb, var(--surface-bright) 55%, var(--surface-container));
+  --secondary-foreground: var(--foreground);
+  --muted: color-mix(in srgb, var(--surface-container) 88%, #000);
+  --muted-foreground: var(--on-surface-variant);
+  --accent: var(--primary);
+  --accent-foreground: var(--primary-foreground);
   --destructive: #ef4444;
-  --destructive-foreground: #ffffff;
-  --border: #bdbdbd;
-  --input: #212121;
+  --destructive-foreground: #e8e8f0;
+  --border: var(--outline-variant);
+  --input: var(--surface-bright);
   --ring: color-mix(in srgb, var(--primary) 40%, transparent);
   --chart-1: var(--primary);
-  --chart-2: var(--subtitle);
-  --chart-3: var(--misc);
-  --chart-4: #5750cc;
-  --chart-5: #c6937c;
+  --chart-2: #8b84ff;
+  --chart-3: #a0a0c0;
+  --chart-4: #4a42c8;
+  --chart-5: #c4c4e0;
   --radius: 0.5rem;
-  --sidebar: #000000;
-  --sidebar-foreground: #ffffff;
+  --sidebar: var(--surface-container);
+  --sidebar-foreground: var(--foreground);
   --sidebar-primary: var(--primary);
-  --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #212121;
-  --sidebar-accent-foreground: #ffffff;
+  --sidebar-primary-foreground: var(--primary-foreground);
+  --sidebar-accent: color-mix(in srgb, var(--primary) 14%, transparent);
+  --sidebar-accent-foreground: var(--foreground);
   --sidebar-border: var(--border);
   --sidebar-ring: var(--ring);
 
-  --shadow-ambient-popover: 0px 8px 32px rgba(0, 0, 0, 0.55);
+  --shadow-ambient-popover: 0px 8px 32px rgba(0, 0, 0, 0.45), 0 0 40px -8px rgba(108, 99, 255, 0.18);
   --gradient-active-tab: linear-gradient(90deg, color-mix(in srgb, var(--primary) 12%, transparent) 0%, transparent 72%);
   --gradient-primary-cta: linear-gradient(135deg, var(--primary-container) 0%, var(--primary) 100%);
 }
@@ -114,11 +108,6 @@
   --color-on-primary-container: var(--on-primary-container);
   --color-secondary-container: var(--secondary-container);
   --color-success: var(--success);
-  --color-title: var(--title);
-  --color-subtitle: var(--subtitle);
-  --color-misc: var(--misc);
-
-  --default-border-width: 0.5px;
 
   --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   --font-body: var(--font-sans);
@@ -131,12 +120,6 @@
     @apply border-border;
   }
 
-  *,
-  ::before,
-  ::after {
-    border-color: var(--border);
-  }
-
   html {
     font-family: var(--font-sans);
     font-weight: 400;
@@ -144,13 +127,8 @@
   }
 
   b,
-  strong,
-  .font-medium,
-  .font-semibold,
-  .font-bold,
-  .font-extrabold,
-  .font-black {
-    font-weight: 400 !important;
+  strong {
+    font-weight: 500;
   }
 
   body {
@@ -164,37 +142,11 @@
 }
 
 @layer utilities {
-  /* Chrome borders / lines — light grey already via --border; width 0.5px */
-  .border {
-    border-width: 0.5px !important;
-  }
-  .border-t {
-    border-top-width: 0.5px !important;
-  }
-  .border-b {
-    border-bottom-width: 0.5px !important;
-  }
-  .border-l {
-    border-left-width: 0.5px !important;
-  }
-  .border-r {
-    border-right-width: 0.5px !important;
-  }
-  .border-x {
-    border-left-width: 0.5px !important;
-    border-right-width: 0.5px !important;
-  }
-  .border-y {
-    border-top-width: 0.5px !important;
-    border-bottom-width: 0.5px !important;
-  }
-
   /* Typography — hierarchy via size / color / tracking only (no bold) */
   .type-body-md {
     font-size: 0.875rem;
     line-height: 1.5;
     font-weight: 400;
-    color: var(--foreground);
   }
 
   .type-label-sm {
@@ -202,7 +154,7 @@
     line-height: 1.35;
     font-weight: 400;
     letter-spacing: 0.02em;
-    color: var(--subtitle);
+    color: var(--on-surface-variant);
   }
 
   .type-title-sm {
@@ -210,25 +162,22 @@
     line-height: 1.4;
     font-weight: 400;
     letter-spacing: 0.01em;
-    color: var(--title);
   }
 
   .kyn-logotype {
     font-size: 0.8125rem;
     line-height: 1.25;
-    font-weight: 400;
+    font-weight: 500;
     letter-spacing: 0.05rem;
     text-transform: lowercase;
-    color: var(--title);
   }
 
   .app-logotype {
     font-size: 0.8125rem;
     line-height: 1.25;
-    font-weight: 400;
+    font-weight: 500;
     letter-spacing: 0.04rem;
     text-transform: none;
-    color: var(--title);
   }
 
   /* Surfaces */
@@ -241,7 +190,7 @@
   }
 
   .surface-float {
-    background-color: color-mix(in srgb, var(--surface-bright) 88%, transparent);
+    background-color: color-mix(in srgb, var(--surface-bright) 60%, transparent);
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
   }
@@ -252,19 +201,19 @@
   }
 
   .tonal-seam-b {
-    box-shadow: inset 0 -0.5px 0 0 var(--border);
+    box-shadow: inset 0 -1px 0 0 color-mix(in srgb, var(--primary) 8%, transparent);
   }
 
   .tonal-seam-t {
-    box-shadow: inset 0 0.5px 0 0 var(--border);
+    box-shadow: inset 0 1px 0 0 color-mix(in srgb, var(--outline-variant) 12%, transparent);
   }
 
   .tonal-seam-r {
-    box-shadow: inset -0.5px 0 0 0 var(--border);
+    box-shadow: inset -1px 0 0 0 color-mix(in srgb, var(--outline-variant) 12%, transparent);
   }
 
   .tonal-seam-l {
-    box-shadow: inset 0.5px 0 0 0 var(--border);
+    box-shadow: inset 1px 0 0 0 color-mix(in srgb, var(--outline-variant) 12%, transparent);
   }
 
   .active-tab-sheen {
@@ -276,7 +225,7 @@
     color: var(--on-primary-container);
     border: none;
     transition: background-color 0.3s ease, filter 0.3s ease, opacity 0.3s ease;
-    font-weight: 400;
+    font-weight: 500;
   }
 
   .btn-primary-cta:hover:not(:disabled) {
@@ -296,14 +245,14 @@
   }
 
   .btn-secondary-surface:hover {
-    background-color: color-mix(in srgb, var(--surface-bright) 70%, transparent);
+    background-color: color-mix(in srgb, var(--surface-bright) 38%, transparent);
   }
 
   .input-ghost-focus:focus,
   .input-ghost-focus:focus-visible {
-    outline: 0.5px solid var(--border);
+    outline: 1px solid color-mix(in srgb, var(--outline-variant) 15%, transparent);
     outline-offset: 0;
-    border-color: var(--border);
+    border-color: color-mix(in srgb, var(--outline-variant) 15%, transparent);
   }
 
   .ide-resize-hit {
@@ -333,7 +282,7 @@
   }
 
   .glass-panel {
-    background: color-mix(in srgb, var(--surface-bright) 70%, transparent);
+    background: color-mix(in srgb, var(--surface-bright) 40%, transparent);
     backdrop-filter: blur(20px);
   }
 
@@ -382,7 +331,7 @@
 
   .nebulla-codemirror .cm-gutters {
     background: var(--surface-container) !important;
-    border-right: 0.5px solid var(--outline-variant);
+    border-right: 1px solid var(--outline-variant);
     color: var(--on-surface-variant);
   }
 
@@ -401,10 +350,9 @@
 
   .nebulla-codemirror .cm-matchingBracket {
     background: color-mix(in srgb, var(--primary) 28%, transparent);
-    outline: 0.5px solid var(--primary);
+    outline: 1px solid var(--primary);
   }
 
-  /* Code token colors — unchanged from original theme */
   .nebulla-codemirror .tok-keyword {
     color: #a89bff;
   }
@@ -434,6 +382,6 @@
     font-weight: 600;
   }
   .nebulla-codemirror .tok-link {
-    color: #6c63ff;
+    color: var(--primary);
   }
 }
