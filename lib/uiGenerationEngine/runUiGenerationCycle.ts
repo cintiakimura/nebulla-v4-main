@@ -286,7 +286,7 @@ function buildBlockedWaitingModel(message: string): Record<string, unknown> {
             type: "text",
             text: "UI generation blocked",
             style: {
-              backgroundColor: "transparent",
+              backgroundColor: "#FFFFFF",
               color: "#171717",
               paddingTop: 0,
               paddingRight: 0,
@@ -311,7 +311,7 @@ function buildBlockedWaitingModel(message: string): Record<string, unknown> {
             type: "text",
             text: message,
             style: {
-              backgroundColor: "transparent",
+              backgroundColor: "#FFFFFF",
               color: "#525252",
               paddingTop: 0,
               paddingRight: 0,
@@ -495,14 +495,14 @@ function buildEditorModelFromBrief(state: UiGenContextState): Record<string, unk
       role: "hero-title",
       type: "text",
       text: state.page_name || "Page",
-      style: { ...defaultStyle(), backgroundColor: "transparent", color: "#171717", paddingTop: 0, paddingBottom: 8 },
+      style: { ...defaultStyle(), backgroundColor: "#FFFFFF", color: "#171717", paddingTop: 0, paddingBottom: 8 },
     },
     [sub]: {
       id: sub,
       role: "hero-sub",
       type: "text",
       text: state.page_purpose || state.page_goal || "Generated page",
-      style: { ...defaultStyle(), backgroundColor: "transparent", color: "#525252", paddingTop: 0, paddingBottom: 12 },
+      style: { ...defaultStyle(), backgroundColor: "#FFFFFF", color: "#525252", paddingTop: 0, paddingBottom: 12 },
     },
     [cta]: {
       id: cta,
@@ -539,14 +539,14 @@ function buildEditorModelFromBrief(state: UiGenContextState): Record<string, unk
       role: "section-title",
       type: "text",
       text: label,
-      style: { ...defaultStyle(), backgroundColor: "transparent", color: "#171717", paddingBottom: 8 },
+      style: { ...defaultStyle(), backgroundColor: "#FFFFFF", color: "#171717", paddingBottom: 8 },
     };
     nodes[bid] = {
       id: bid,
       role: "section-body",
       type: "text",
       text: `Content for ${label}`,
-      style: { ...defaultStyle(), backgroundColor: "transparent", color: "#525252" },
+      style: { ...defaultStyle(), backgroundColor: "#FFFFFF", color: "#525252" },
     };
   });
 

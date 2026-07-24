@@ -158,7 +158,7 @@ function buildWaitingModel(stageHint?: string): EditorModel {
             text: 'Waiting for UI generation',
             style: {
               ...defaultStyle(),
-              backgroundColor: 'transparent',
+              backgroundColor: '#FAFAF9',
               color: '#171717',
               paddingTop: 0,
               paddingBottom: 8,
@@ -175,7 +175,7 @@ function buildWaitingModel(stageHint?: string): EditorModel {
               'Press Generate UI after coding, or wait for the engine after file apply. Preview shows engine output — not the Nebulla IDE shell.',
             style: {
               ...defaultStyle(),
-              backgroundColor: 'transparent',
+              backgroundColor: '#FAFAF9',
               color: '#525252',
               paddingTop: 0,
               borderRadius: 0,
@@ -207,9 +207,10 @@ function applyEditorModel(
   preferredPage?: string,
 ): void {
   if (!next?.pages || isNebullaIdePlaceholderShell(next)) return;
-  setModel(next);
-  baselineRef.current = cloneModel(next);
-  const pages = Object.keys(next.pages);
+  const clean = sanitizeModelColors(next);
+  setModel(clean);
+  baselineRef.current = cloneModel(clean);
+  const pages = Object.keys(clean.pages);
   if (preferredPage && pages.includes(preferredPage)) setActivePage(preferredPage);
   else if (pages[0]) setActivePage(pages[0]);
 }
@@ -217,10 +218,13 @@ function cloneModel(m: EditorModel): EditorModel {
   return JSON.parse(JSON.stringify(m)) as EditorModel;
 }
 
-/** Normalize to `#rrggbb` for `<input type="color">` and readable hex fields. */
+/** Normalize to `#rrggbb` for `<input type="color">` — never returns `transparent`. */
 function toPickerHex(raw: string | undefined, fallback: string): string {
+  const fb = /^#[0-9a-fA-F]{6}$/.test(fallback) ? fallback.toLowerCase() : '#ffffff';
   const s = (raw || '').trim();
+  if (!s || /^transparent$/i.test(s) || /^none$/i.test(s)) return fb;
   if (/^#[0-9a-fA-F]{6}$/.test(s)) return s.toLowerCase();
+  if (/^#[0-9a-fA-F]{8}$/.test(s)) return `#${s.slice(1, 7)}`.toLowerCase();
   if (/^#[0-9a-fA-F]{3}$/.test(s)) {
     const a = s[1];
     const b = s[2];
@@ -232,22 +236,35 @@ function toPickerHex(raw: string | undefined, fallback: string): string {
     const h = (n: string) => Number(n).toString(16).padStart(2, '0');
     return `#${h(m[1])}${h(m[2])}${h(m[3])}`;
   }
-  return fallback;
+  return fb;
 }
 
 function normalizeHexOnCommit(raw: string, fallback: string): string {
   const s = raw.trim();
+  if (/^transparent$/i.test(s) || /^none$/i.test(s)) return toPickerHex(undefined, fallback);
   if (/^#[0-9a-fA-F]{6}$/i.test(s) || /^#[0-9a-fA-F]{3}$/i.test(s)) return toPickerHex(s, fallback);
   if (/^[0-9a-fA-F]{6}$/i.test(s)) return `#${s.toLowerCase()}`;
   if (/^[0-9a-fA-F]{3}$/i.test(s)) return toPickerHex(`#${s}`, fallback);
   return toPickerHex(s, fallback);
 }
 
-/** Background color: keep `transparent`, otherwise normalize to `#rrggbb`. */
+/** Background: always persist `#rrggbb` (no `transparent` — breaks color inputs). */
 function normalizeBgColorOnCommit(raw: string, fallback: string): string {
-  const s = raw.trim();
-  if (s.toLowerCase() === 'transparent') return 'transparent';
-  return normalizeHexOnCommit(s, fallback);
+  return normalizeHexOnCommit(raw, fallback);
+}
+
+/** Strip invalid color tokens from a loaded/generated editor model. */
+function sanitizeModelColors(m: EditorModel): EditorModel {
+  const next = cloneModel(m);
+  for (const page of Object.values(next.pages)) {
+    for (const node of Object.values(page.nodes)) {
+      if (!node?.style) continue;
+      node.style.backgroundColor = toPickerHex(node.style.backgroundColor, '#ffffff');
+      node.style.color = toPickerHex(node.style.color, '#171717');
+      node.style.borderColor = toPickerHex(node.style.borderColor, '#e5e5e5');
+    }
+  }
+  return next;
 }
 
 export function IdeUiStudioBeta({
@@ -493,15 +510,19 @@ export function IdeUiStudioBeta({
     }
   }, []);
 
+  // Load engine preview immediately — do not wait on visual-ui-editor eligibility (v0 gate).
   useEffect(() => {
-    if (eligible === null) return;
     void loadEnginePreview();
-  }, [eligible, loadEnginePreview]);
+  }, [loadEnginePreview]);
 
   useEffect(() => {
     const onRefresh = () => void loadEnginePreview();
     window.addEventListener('nebula-files-applied', onRefresh);
-    return () => window.removeEventListener('nebula-files-applied', onRefresh);
+    window.addEventListener('nebula-ui-studio-beta-complete', onRefresh);
+    return () => {
+      window.removeEventListener('nebula-files-applied', onRefresh);
+      window.removeEventListener('nebula-ui-studio-beta-complete', onRefresh);
+    };
   }, [loadEnginePreview]);
 
   const updateSelectedStyle = (patch: Partial<VisualStyle>) => {
@@ -833,10 +854,16 @@ export function IdeUiStudioBeta({
   const persistModelRemote = async (modelToSave?: EditorModel) => {
     const payload = modelToSave ?? model;
     if (isNebullaIdePlaceholderShell(payload)) return;
-    await fetch(withProjectQuery('/api/visual-ui-editor/preview-model'), {
+    const clean = sanitizeModelColors(payload);
+    // Beta authority path — no v0 eligibility / no visual-ui-editor 403.
+    await fetch(withProjectQuery('/api/ui-studio-beta/preview'), {
       method: 'PUT',
-      headers: persistHeaders(),
-      body: JSON.stringify(withProjectBody({ model: payload })),
+      headers: {
+        'Content-Type': 'application/json',
+        ...getGrokRequestHeaders(),
+      },
+      credentials: 'include',
+      body: JSON.stringify(withProjectBody({ model: clean })),
     });
   };
 
@@ -1226,7 +1253,7 @@ export function IdeUiStudioBeta({
       position: 'relative',
       borderWidth: borderW,
       borderStyle: borderW > 0 ? 'solid' : 'none',
-      borderColor: st.borderColor || 'transparent',
+      borderColor: st.borderColor && !/^transparent$/i.test(st.borderColor) ? st.borderColor : '#e5e5e5',
       boxShadow: st.boxShadow || undefined,
       outline: isSelected ? '2px solid #3b82f6' : 'none',
       outlineOffset: isSelected ? 2 : undefined,
@@ -1753,10 +1780,7 @@ export function IdeUiStudioBeta({
                             <div className="flex items-center gap-2">
                               <input
                                 type="color"
-                                value={toPickerHex(
-                                  st.backgroundColor === 'transparent' ? undefined : st.backgroundColor,
-                                  '#0f172a',
-                                )}
+                                value={toPickerHex(st.backgroundColor, '#ffffff')}
                                 onChange={(e) =>
                                   updateSelectedStyle({ backgroundColor: e.target.value })
                                 }
@@ -1764,7 +1788,7 @@ export function IdeUiStudioBeta({
                               />
                               <input
                                 type="text"
-                                value={st.backgroundColor || ''}
+                                value={toPickerHex(st.backgroundColor, '#ffffff')}
                                 onChange={(e) =>
                                   updateSelectedStyle({ backgroundColor: e.target.value })
                                 }
@@ -1772,12 +1796,12 @@ export function IdeUiStudioBeta({
                                   updateSelectedStyle({
                                     backgroundColor: normalizeBgColorOnCommit(
                                       e.target.value,
-                                      '#0f172a',
+                                      '#ffffff',
                                     ),
                                   })
                                 }
                                 className="flex-1 rounded border border-border bg-black/40 px-2 py-1 font-mono text-[10px] text-foreground"
-                                placeholder="#RRGGBB or transparent"
+                                placeholder="#RRGGBB"
                               />
                             </div>
                           </label>

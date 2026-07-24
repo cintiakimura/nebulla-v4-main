@@ -12,5 +12,6 @@ export {
   ENGINE_PREVIEW_MODEL_REL,
   isNebullaIdePlaceholderShell,
   readEnginePreviewModel,
+  sanitizeEditorModelColors,
   writeEnginePreviewModel,
 } from "./previewModelIO";

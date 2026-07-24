@@ -261,6 +261,37 @@ export function isVisualEditorEligible(workspaceRoot: string): { eligible: boole
   }
 }
 
+/** True when the workspace has an app shell from Grok Code (no v0 required). */
+export function hasWorkspaceCodingShell(workspaceRoot: string): boolean {
+  const st = readEditorState(workspaceRoot);
+  if (st.workspaceCodingDetected) return true;
+  return (
+    fs.existsSync(path.join(workspaceRoot, "app")) ||
+    fs.existsSync(path.join(workspaceRoot, "src")) ||
+    fs.existsSync(path.join(workspaceRoot, "pages")) ||
+    fs.existsSync(path.join(workspaceRoot, "components"))
+  );
+}
+
+/**
+ * Preview-model persist gate for visual-ui-editor PUT.
+ * Allows v0-eligible projects OR Grok-coded app shells (UI Studio Beta / post-Go).
+ * Does not unlock restore-original-v0 (still requires real v0).
+ */
+export function canPersistVisualPreviewModel(workspaceRoot: string): {
+  ok: boolean;
+  reason?: string;
+} {
+  if (process.env.NEBULA_VISUAL_EDITOR_DEV_UNLOCK === "true") return { ok: true };
+  if (isVisualEditorEligible(workspaceRoot).eligible) return { ok: true };
+  if (hasWorkspaceCodingShell(workspaceRoot)) return { ok: true };
+  return {
+    ok: false,
+    reason:
+      "Preview save needs a first v0 generation or Grok-coded app/src/pages/components files in the project.",
+  };
+}
+
 const isAllowedWorkspaceUiRel = (rel: string): boolean => {
   const n = rel.replace(/\\/g, "/").replace(/^\/+/, "");
   if (!n || n.includes("..")) return false;

@@ -84,6 +84,8 @@ import {
   runUiGenerationCycle,
   readCyclePolicy,
   readEnginePreviewModel,
+  writeEnginePreviewModel,
+  sanitizeEditorModelColors,
 } from "./lib/uiGenerationEngine";
 import {
   masterPlanKeyForTabIndex,
@@ -124,6 +126,8 @@ import { ensureCloudProjectWorkspace } from "./lib/nebulaCloudProjectRoot";
 import { getProjectKeyFromRequest, sanitizeProjectKey } from "./lib/nebulaProjectKey";
 import {
   isVisualEditorEligible,
+  canPersistVisualPreviewModel,
+  hasWorkspaceCodingShell,
   markV0FirstGenerationComplete,
   persistV0SessionMeta,
   readEditorState,
@@ -1383,7 +1387,14 @@ No approved UI code yet.
           : "Untitled Project";
       const unlocked = unlockVisualEditorFromWorkspaceCoding(pp.workspaceRoot, projectName);
       const gate = isVisualEditorEligible(pp.workspaceRoot);
-      return res.json({ ok: true, unlocked, eligible: gate.eligible, reason: gate.reason });
+      const persist = canPersistVisualPreviewModel(pp.workspaceRoot);
+      return res.json({
+        ok: true,
+        unlocked,
+        eligible: gate.eligible || persist.ok,
+        reason: gate.eligible ? gate.reason : persist.reason,
+        canPersistPreview: persist.ok,
+      });
     } catch (e) {
       return res.status(500).json({ error: e instanceof Error ? e.message : "unlock failed" });
     }
@@ -2979,13 +2990,20 @@ No approved UI code yet.
           eligible: true,
           reason: "dev_unlock_env",
           dev: true,
+          canPersistPreview: true,
+          workspaceCodingShell: hasWorkspaceCodingShell(workspaceRoot),
           originalV0FolderRel: resolveOriginalV0FolderRel(workspaceRoot),
         });
       }
       const r = isVisualEditorEligible(workspaceRoot);
+      const persist = canPersistVisualPreviewModel(workspaceRoot);
+      // UI Studio Beta / post-Go: treat coding shell as preview-eligible even without v0.
+      const eligible = r.eligible || persist.ok;
       return res.json({
-        eligible: r.eligible,
-        reason: r.reason,
+        eligible,
+        reason: eligible ? r.reason || "workspace_coding_shell" : r.reason || persist.reason,
+        canPersistPreview: persist.ok,
+        workspaceCodingShell: hasWorkspaceCodingShell(workspaceRoot),
         originalV0FolderRel: resolveOriginalV0FolderRel(workspaceRoot),
       });
     } catch (e) {
@@ -3222,15 +3240,16 @@ ${modelJson}`;
   app.put("/api/visual-ui-editor/preview-model", (req, res) => {
     try {
       const { workspaceRoot } = projectPathsFor(req);
-      const gate = isVisualEditorEligible(workspaceRoot);
-      if (!gate.eligible && process.env.NEBULA_VISUAL_EDITOR_DEV_UNLOCK !== "true") {
+      const gate = canPersistVisualPreviewModel(workspaceRoot);
+      if (!gate.ok) {
         return res.status(403).json({ error: gate.reason || "not eligible" });
       }
       const m = (req.body as { model?: unknown })?.model;
       if (m === undefined) return res.status(400).json({ error: "model required" });
+      const clean = sanitizeEditorModelColors(m);
       const dir = path.dirname(visualEditorPreviewAbs(workspaceRoot));
       fs.mkdirSync(dir, { recursive: true });
-      fs.writeFileSync(visualEditorPreviewAbs(workspaceRoot), JSON.stringify(m, null, 2), "utf8");
+      fs.writeFileSync(visualEditorPreviewAbs(workspaceRoot), JSON.stringify(clean, null, 2), "utf8");
       return res.json({ ok: true });
     } catch (e) {
       return res.status(500).json({ error: e instanceof Error ? e.message : "failed" });
@@ -3304,7 +3323,7 @@ ${modelJson}`;
         ok: true,
         status: result.status,
         contextPath: result.contextPath,
-        editorModel: result.editorModel,
+        editorModel: sanitizeEditorModelColors(result.editorModel),
         generatedCode: result.generatedCode,
         regeneration_count: result.regeneration_count,
         max_regenerations: result.max_regenerations,
@@ -3375,6 +3394,37 @@ ${modelJson}`;
         final_status: policy.final_status,
         page_key: policy.page_key,
       });
+    } catch (e) {
+      return res.status(500).json({ error: e instanceof Error ? e.message : "failed" });
+    }
+  });
+
+  /**
+   * Persist Beta preview without v0 eligibility.
+   * Writes nebulla-project/ui-generation-preview-model.json (authority) and mirrors
+   * to visual-editor preview-model when the workspace allows it.
+   */
+  app.put("/api/ui-studio-beta/preview", (req, res) => {
+    try {
+      const { workspaceRoot } = projectPathsFor(req);
+      const m = (req.body as { model?: unknown })?.model;
+      if (m === undefined) return res.status(400).json({ error: "model required" });
+      const clean = sanitizeEditorModelColors(m) as { pages: Record<string, unknown> };
+      if (!clean || typeof clean !== "object" || !clean.pages) {
+        return res.status(400).json({ error: "model.pages required" });
+      }
+      writeEnginePreviewModel(workspaceRoot, clean);
+      // Soft mirror for tools that still read visual-editor path — never 403 Beta on this.
+      try {
+        if (canPersistVisualPreviewModel(workspaceRoot).ok) {
+          const dir = path.dirname(visualEditorPreviewAbs(workspaceRoot));
+          fs.mkdirSync(dir, { recursive: true });
+          fs.writeFileSync(visualEditorPreviewAbs(workspaceRoot), JSON.stringify(clean, null, 2), "utf8");
+        }
+      } catch {
+        /* ignore mirror failures */
+      }
+      return res.json({ ok: true, source: "engine" });
     } catch (e) {
       return res.status(500).json({ error: e instanceof Error ? e.message : "failed" });
     }
