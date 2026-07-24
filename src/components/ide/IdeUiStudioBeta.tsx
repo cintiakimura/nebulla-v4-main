@@ -25,6 +25,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { getBrowserProjectName, withProjectBody, withProjectQuery } from '../../lib/nebulaProjectApi';
+import { getGrokRequestHeaders } from '../../lib/grokUserKey';
 import { getStoredV0ApiKey, getV0RequestHeaders, hasLocalV0ApiKey, NEBULLA_V0_KEY_STORAGE } from '../../lib/v0Key';
 import { formatV0UiError } from '../../lib/v0ErrorMessage';
 import { computeV0Readiness } from '../../lib/v0Readiness';
@@ -725,6 +726,53 @@ export function IdeUiStudioBeta({
     setSelectedId(null);
   };
 
+  const runEngineGenerate = async () => {
+    setBusy(true);
+    setError('');
+    try {
+      const r = await fetch(withProjectQuery('/api/ui-studio-beta/generate'), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...getGrokRequestHeaders(),
+        },
+        credentials: 'include',
+        body: JSON.stringify(
+          withProjectBody({
+            projectName: projectLabel,
+            pageName: activePage !== 'Home' ? activePage : undefined,
+          }),
+        ),
+      });
+      const data = (await r.json()) as {
+        ok?: boolean;
+        error?: string;
+        editorModel?: EditorModel;
+        generatedCode?: string;
+        context?: { page_name?: string; quality_gate_result?: string };
+      };
+      if (!r.ok || !data.ok) {
+        setError(data.error || 'UI Generation Engine failed');
+        return;
+      }
+      if (data.editorModel?.pages) {
+        setModel(data.editorModel);
+        baselineRef.current = cloneModel(data.editorModel);
+        const pages = Object.keys(data.editorModel.pages);
+        const preferred = data.context?.page_name;
+        if (preferred && pages.includes(preferred)) setActivePage(preferred);
+        else if (pages[0]) setActivePage(pages[0]);
+        clearSelection();
+        setPreviewSurface('visual-model');
+      }
+      await persistModelRemote();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'UI Generation Engine request failed');
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const revertVisualToBaseline = () => {
     if (!baselineRef.current) return;
     pushUndo();
@@ -1270,6 +1318,16 @@ export function IdeUiStudioBeta({
           </div>
 
           <div className="flex shrink-0 items-center gap-1">
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => void runEngineGenerate()}
+              className="rounded-md border border-primary/40 bg-primary/15 px-2.5 py-1 text-[11px] font-medium text-primary hover:bg-primary/25 disabled:opacity-40 sm:px-3"
+              title="Run Nebulla UI Generation Engine from Master Plan (UI Studio Beta only)"
+            >
+              {busy ? <Loader2 className="mr-1 inline h-3 w-3 animate-spin" /> : null}
+              Generate UI
+            </button>
             {hasV0ApiKey && eligible && v0ChatId ? (
               <button
                 type="button"

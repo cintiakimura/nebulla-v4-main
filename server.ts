@@ -80,6 +80,7 @@ import {
   writeV0PromptMarkdown,
 } from "./lib/nebulaUiStudioPipeline";
 import { seedPreviewModelFromMasterPlan } from "./lib/visualUiEditorPreview";
+import { runUiGenerationCycle } from "./lib/uiGenerationEngine";
 import {
   masterPlanKeyForTabIndex,
   normalizeMasterPlanRecord,
@@ -3226,6 +3227,84 @@ ${modelJson}`;
       fs.mkdirSync(dir, { recursive: true });
       fs.writeFileSync(visualEditorPreviewAbs(workspaceRoot), JSON.stringify(m, null, 2), "utf8");
       return res.json({ ok: true });
+    } catch (e) {
+      return res.status(500).json({ error: e instanceof Error ? e.message : "failed" });
+    }
+  });
+
+  /**
+   * UI Studio Beta only — Nebulla UI Generation Engine
+   * (Master Plan → classify → brief → refs → Grok → Beta preview).
+   * Does not touch the original UI Studio / V0 path.
+   */
+  app.post("/api/ui-studio-beta/generate", async (req, res) => {
+    try {
+      const pp = projectPathsFor(req);
+      const body = (req.body || {}) as {
+        projectName?: string;
+        pageName?: string;
+      };
+      const apiKey = await resolveMainGrokApiKey(req);
+      if (!apiKey) {
+        return res.status(401).json({
+          error: "No Grok API key available. Add your key in Onboarding or set MAIN_API_KEY_GROK.",
+        });
+      }
+      const result = await runUiGenerationCycle({
+        workspaceRoot: pp.workspaceRoot,
+        masterPlanPath: pp.masterPlanPath,
+        projectName: typeof body.projectName === "string" ? body.projectName : undefined,
+        pageName: typeof body.pageName === "string" ? body.pageName : undefined,
+        apiKeyOverride: apiKey,
+      });
+      if (!result.ok) {
+        return res.status(result.status === "pending_discovery" ? 409 : 422).json({
+          ok: false,
+          status: result.status,
+          error: result.error,
+          contextPath: result.contextPath,
+          context: {
+            context_id: result.context.context_id,
+            current_step: result.context.current_step,
+            failure_reason: result.context.failure_reason,
+            step_log: result.context.step_log,
+          },
+        });
+      }
+      return res.json({
+        ok: true,
+        status: result.status,
+        contextPath: result.contextPath,
+        editorModel: result.editorModel,
+        generatedCode: result.generatedCode,
+        context: {
+          context_id: result.context.context_id,
+          page_name: result.context.page_name,
+          current_step: result.context.current_step,
+          quality_gate_result: result.context.quality_gate_result,
+          preview_delivered: result.context.preview_delivered,
+          export_available: result.context.export_available,
+          reference_source: result.context.reference_source,
+          model_used: result.context.model_used,
+          repair_pass_used: result.context.repair_pass_used,
+          step_log: result.context.step_log,
+        },
+      });
+    } catch (e) {
+      console.error("[ui-studio-beta/generate]", e);
+      return res.status(500).json({
+        ok: false,
+        error: e instanceof Error ? e.message : "UI generation engine failed",
+      });
+    }
+  });
+
+  app.get("/api/ui-studio-beta/context", (req, res) => {
+    try {
+      const { workspaceRoot } = projectPathsFor(req);
+      const p = path.join(workspaceRoot, "nebulla-project", "ui-generation-context.md");
+      if (!fs.existsSync(p)) return res.json({ ok: true, exists: false, content: "" });
+      return res.json({ ok: true, exists: true, content: fs.readFileSync(p, "utf8") });
     } catch (e) {
       return res.status(500).json({ error: e instanceof Error ? e.message : "failed" });
     }

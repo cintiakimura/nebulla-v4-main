@@ -128,6 +128,9 @@ export function resolveUpstreamChatModel(
     if (hint === "grok-3" || hint === "grok3") {
       return process.env.GROK_CHAT_MODEL_GROK3?.trim() || "grok-3";
     }
+    if (hint.includes("code") || hint === "grok-code-fast-1") {
+      return process.env.GROK_CODE_MODEL?.trim() || "grok-code-fast-1";
+    }
     if (hint === "grok-4" || hint === "grok-4.1" || hint === "grok") {
       return process.env.GROK_CHAT_MODEL_GROK41?.trim() || "grok-4";
     }
