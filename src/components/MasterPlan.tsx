@@ -5,7 +5,6 @@ import { readResponseJson } from '../lib/apiFetch';
 import { PRE_CODING_SUMMARY_KEY } from '../lib/masterPlanSections';
 import { getBrowserProjectName, withProjectQuery } from '../lib/nebulaProjectApi';
 import { runMasterPlanUiPipelineWithV0 } from '../lib/ideArtifactSync';
-import { dispatchOpenUiStudio } from '../lib/nebulaUiStudioEvents';
 
 export function MasterPlan({
   onClose,
@@ -151,18 +150,13 @@ export function MasterPlan({
     setIsSaved(true);
     try {
       const projectName = getBrowserProjectName().trim() || 'Untitled Project';
-      const pipeline = await runMasterPlanUiPipelineWithV0({
+      await runMasterPlanUiPipelineWithV0({
         projectName,
         autoV0: false,
       });
       window.dispatchEvent(new CustomEvent('nebula-master-plan-updated'));
-      if (pipeline.v0Ok) {
-        window.dispatchEvent(new CustomEvent('nebula-ui-studio-v0-complete'));
-        window.dispatchEvent(new CustomEvent('nebula-files-applied'));
-        dispatchOpenUiStudio({ tab: 'design' });
-      } else if (pipeline.v0PromptWritten) {
-        dispatchOpenUiStudio({ tab: 'design' });
-      }
+      window.dispatchEvent(new CustomEvent('nebula-mind-map-updated'));
+      // Do not auto-open legacy V0 studio or emit V0 status — Beta generates after coding.
     } catch (err) {
       console.warn('Master Plan save pipeline failed:', err);
     }

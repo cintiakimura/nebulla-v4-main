@@ -32,32 +32,94 @@ const SKIP_DIR = new Set([
 
 const SOURCE_EXT = /\.(tsx|jsx|ts|js|vue|html|mdx)$/i;
 
-function walkSourceFiles(root: string, limit = 80): string[] {
+function titleCaseSegment(seg: string): string {
+  const s = seg.replace(/[-_]+/g, " ").trim();
+  if (!s) return "";
+  return s
+    .split(/\s+/)
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+    .join(" ");
+}
+
+/** Prefer app / pages / components UI trees before misc source. */
+function walkSourceFiles(root: string, limit = 100): string[] {
+  const preferredRoots = ["app", "src/app", "pages", "src/pages", "components", "src/components"];
   const out: string[] = [];
-  const stack = [root];
-  while (stack.length && out.length < limit) {
-    const dir = stack.pop()!;
-    let entries: fs.Dirent[];
-    try {
-      entries = fs.readdirSync(dir, { withFileTypes: true });
-    } catch {
-      continue;
-    }
-    for (const ent of entries) {
-      if (ent.name.startsWith(".")) continue;
-      const abs = path.join(dir, ent.name);
-      if (ent.isDirectory()) {
-        if (SKIP_DIR.has(ent.name)) continue;
-        stack.push(abs);
+  const seen = new Set<string>();
+
+  const walk = (startAbs: string) => {
+    const stack = [startAbs];
+    while (stack.length && out.length < limit) {
+      const dir = stack.pop()!;
+      let entries: fs.Dirent[];
+      try {
+        entries = fs.readdirSync(dir, { withFileTypes: true });
+      } catch {
         continue;
       }
-      if (!SOURCE_EXT.test(ent.name)) continue;
-      const rel = path.relative(root, abs).replace(/\\/g, "/");
-      if (rel.startsWith("nebulla-project/")) continue;
-      out.push(rel);
+      for (const ent of entries) {
+        if (ent.name.startsWith(".")) continue;
+        const abs = path.join(dir, ent.name);
+        if (ent.isDirectory()) {
+          if (SKIP_DIR.has(ent.name)) continue;
+          stack.push(abs);
+          continue;
+        }
+        if (!SOURCE_EXT.test(ent.name)) continue;
+        const rel = path.relative(root, abs).replace(/\\/g, "/");
+        if (rel.startsWith("nebulla-project/") || rel.startsWith("generated-ui/")) continue;
+        if (seen.has(rel)) continue;
+        seen.add(rel);
+        out.push(rel);
+      }
+    }
+  };
+
+  for (const pref of preferredRoots) {
+    const abs = path.join(root, pref);
+    if (fs.existsSync(abs)) walk(abs);
+  }
+  if (out.length < limit) walk(root);
+  return out;
+}
+
+/** Derive human page names from Expo/Next-style routes and component files. */
+export function pageNamesFromRelPath(rel: string): string[] {
+  const n = rel.replace(/\\/g, "/");
+  const names: string[] = [];
+  const pageDir = n.match(/(?:^|\/)(?:app|pages|src\/app|src\/pages)\/(.+)\/page\.(t|j)sx?$/i);
+  if (pageDir?.[1]) {
+    const parts = pageDir[1].split("/").filter((p) => p && !p.startsWith("(") && !p.startsWith("_") && p !== "index");
+    const leaf = parts[parts.length - 1];
+    if (leaf) names.push(titleCaseSegment(leaf));
+    else names.push("Home");
+  } else if (/(?:^|\/)(?:app|pages)\/(?:index|page)\.(t|j)sx?$/i.test(n)) {
+    names.push("Home");
+  } else {
+    const base = path.basename(n).replace(/\.(tsx|jsx|ts|js)$/i, "");
+    if (/^(page|index|layout|_layout)$/i.test(base)) {
+      const parent = path.basename(path.dirname(n));
+      if (parent && !/^(app|pages|src|components)$/i.test(parent)) {
+        names.push(titleCaseSegment(parent));
+      }
+    } else if (!/^(layout|_layout|globals|theme)$/i.test(base)) {
+      if (/Nav|Screen|Page|View/i.test(base) || /components\//i.test(n)) {
+        names.push(titleCaseSegment(base.replace(/(Screen|Page|View)$/i, "")));
+      }
     }
   }
-  return out;
+  return names.filter(Boolean);
+}
+
+/** True when workspace has enough UI files to ground generation without a perfect Master Plan. */
+export function hasMeaningfulUiFileGrounding(facts: WorkspaceFileFacts): boolean {
+  if (facts.page_names.length >= 1) return true;
+  if (facts.routes.length >= 1) return true;
+  const uiFiles = facts.scanned_files.filter((p) =>
+    /(?:^|\/)(app|pages|components|src\/app|src\/pages|src\/components)\//i.test(p) ||
+    /page\.(t|j)sx?$/i.test(p),
+  );
+  return uiFiles.length >= 2;
 }
 
 function uniq(items: string[], max = 40): string[] {
@@ -159,15 +221,26 @@ export function collectWorkspaceFileFacts(
     if (text.length > 200_000) text = text.slice(0, 200_000);
     facts.scanned_files.push(rel);
     extractFromText(text, facts);
+    facts.page_names.push(...pageNamesFromRelPath(rel));
 
-    const base = path.basename(rel).replace(/\.(tsx|jsx|ts|js)$/i, "");
-    if (/page|screen|view|layout|app/i.test(base) || /\/page\.(t|j)sx?$/i.test(rel)) {
-      facts.page_names.push(base);
+    // Infer route from app/practice/page.tsx → /practice
+    const routeFromFile = rel.match(
+      /(?:^|\/)(?:app|pages|src\/app|src\/pages)\/(.+)\/page\.(t|j)sx?$/i,
+    );
+    if (routeFromFile?.[1]) {
+      const segs = routeFromFile[1]
+        .split("/")
+        .filter((p) => p && !p.startsWith("(") && !p.startsWith("_") && p !== "index");
+      if (segs.length) facts.routes.push(`/${segs.join("/")}`);
+      else facts.routes.push("/");
     }
   }
 
   facts.routes = uniq(facts.routes, 24);
-  facts.page_names = uniq(facts.page_names, 20);
+  facts.page_names = uniq(
+    facts.page_names.filter((n) => !/^(page|index|layout|_layout)$/i.test(n)),
+    20,
+  );
   facts.button_labels = uniq(facts.button_labels, 30);
   facts.link_labels = uniq(facts.link_labels, 24);
   facts.headings = uniq(facts.headings, 24);

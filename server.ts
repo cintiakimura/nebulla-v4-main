@@ -3281,6 +3281,7 @@ ${modelJson}`;
           status: result.status,
           error: result.error,
           contextPath: result.contextPath,
+          editorModel: result.editorModel,
           preference_recovery: result.preference_recovery === true,
           preference_recovery_question: result.preference_recovery_question,
           regeneration_count: result.regeneration_count,
@@ -3294,6 +3295,8 @@ ${modelJson}`;
             regeneration_count: result.context.regeneration_count,
             max_regenerations: result.context.max_regenerations,
             user_visible_stage: result.context.user_visible_stage,
+            file_scanned: result.context.file_scanned,
+            file_routes: result.context.file_routes,
           },
         });
       }

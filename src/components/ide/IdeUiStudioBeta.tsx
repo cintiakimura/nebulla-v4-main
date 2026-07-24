@@ -191,7 +191,12 @@ function buildWaitingModel(stageHint?: string): EditorModel {
 function isNebullaIdePlaceholderShell(model: EditorModel | null | undefined): boolean {
   if (!model?.pages) return false;
   const text = JSON.stringify(model);
-  return /Nebulla Workspace|Cosmic Night|0vgenerated-v2|inspired by 0vgenerated/i.test(text);
+  if (/Nebulla Workspace|Cosmic Night|0vgenerated-v2|inspired by 0vgenerated|Open Explorer/i.test(text)) {
+    return true;
+  }
+  // Classic Cosmic Night chrome tokens used only by the old IDE demo shell
+  if (/#080A14/i.test(text) && /#00D4D4/i.test(text)) return true;
+  return false;
 }
 
 function applyEditorModel(
@@ -673,6 +678,10 @@ export function IdeUiStudioBeta({
             'I can see this still isn’t right. What bothers you most — layout, colors, spacing, missing sections, or overall style?',
         );
         setError(data.error || 'Regeneration limit reached — preference recovery');
+        const waiting = buildWaitingModel(data.error || 'Preference recovery needed');
+        setModel(waiting);
+        baselineRef.current = cloneModel(waiting);
+        setHasEnginePreview(false);
         window.dispatchEvent(
           new CustomEvent('nebula-ui-studio-beta-complete', {
             detail: {
@@ -688,10 +697,22 @@ export function IdeUiStudioBeta({
         return;
       }
       if (!r.ok || !data.ok) {
-        setError(data.error || 'UI Generation Engine failed');
+        const errMsg = data.error || 'UI Generation Engine failed';
+        setError(errMsg);
+        setEngineStage(data.user_visible_stage || 'Needs discovery');
+        setHasEnginePreview(false);
+        setPreviewSurface('visual-model');
+        if (data.editorModel?.pages && !isNebullaIdePlaceholderShell(data.editorModel)) {
+          applyEditorModel(data.editorModel, setModel, setActivePage, baselineRef);
+        } else {
+          const waiting = buildWaitingModel(errMsg);
+          setModel(waiting);
+          baselineRef.current = cloneModel(waiting);
+          await loadEnginePreview();
+        }
         window.dispatchEvent(
           new CustomEvent('nebula-ui-studio-beta-complete', {
-            detail: { ok: false, error: data.error || 'UI Generation Engine failed' },
+            detail: { ok: false, error: errMsg, user_visible_stage: data.user_visible_stage },
           }),
         );
         return;

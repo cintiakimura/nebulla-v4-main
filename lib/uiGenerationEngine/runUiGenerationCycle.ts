@@ -7,7 +7,7 @@
 import fs from "fs";
 import path from "path";
 import { runAiChatCompletion } from "../aiChatCompletion";
-import { hydrateAndPersistMasterPlan } from "../nebulaIdeWorkspaceArtifacts";
+import { hydrateAndPersistMasterPlan, mindMapPagesFromMasterPlan } from "../nebulaIdeWorkspaceArtifacts";
 import { MASTER_PLAN_SECTION_KEYS } from "../masterPlanSections";
 import { writePreviewModel } from "../visualUiEditorPreview";
 import { appendStepLog, writeContextFile } from "./contextIO";
@@ -17,6 +17,8 @@ import { rankSeedPatterns, tryFigmaCandidates } from "./seedPatterns";
 import {
   collectWorkspaceFileFacts,
   formatFileFactsForBrief,
+  hasMeaningfulUiFileGrounding,
+  type WorkspaceFileFacts,
 } from "./workspaceFileFacts";
 import {
   emptyContextState,
@@ -143,8 +145,10 @@ function inferIndustry(goal: string, tech: string): Industry {
   return "general";
 }
 
-function parsePages(pagesText: string): { name: string; route: string; body: string }[] {
-  const pages: { name: string; route: string; body: string }[] = [];
+type PageDef = { name: string; route: string; body: string };
+
+function parsePages(pagesText: string): PageDef[] {
+  const pages: PageDef[] = [];
   const chunks = pagesText.split(/\n(?=-\s+\*\*)/);
   for (const chunk of chunks) {
     const m = chunk.match(/-\s+\*\*([^*]+)\*\*\s*\(`([^`]+)`\)/);
@@ -163,6 +167,173 @@ function parsePages(pagesText: string): { name: string; route: string; body: str
     }
   }
   return pages;
+}
+
+/** Prefer mind-map parser (tolerant) then legacy parsePages. */
+function pagesFromMasterPlan(plan: Record<string, string>, projectName: string, pagesText: string): PageDef[] {
+  const fromMind = mindMapPagesFromMasterPlan(plan, projectName).map((s) => ({
+    name: s.label,
+    route: s.route || "",
+    body: `${s.label}${s.route ? ` (${s.route})` : ""}`,
+  }));
+  if (fromMind.length) return fromMind;
+  return parsePages(pagesText);
+}
+
+function pagesFromFileFacts(facts: WorkspaceFileFacts): PageDef[] {
+  const out: PageDef[] = [];
+  const seen = new Set<string>();
+  for (let i = 0; i < facts.page_names.length; i++) {
+    const name = facts.page_names[i];
+    const key = name.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const route =
+      facts.routes.find((r) => r.toLowerCase().includes(name.toLowerCase().replace(/\s+/g, "-"))) ||
+      facts.routes[i] ||
+      `/${name.toLowerCase().replace(/\s+/g, "-")}`;
+    out.push({
+      name,
+      route,
+      body: `Generated page ${name} at ${route}. Labels: ${facts.button_labels.slice(0, 4).join(", ") || "n/a"}`,
+    });
+  }
+  if (!out.length && facts.routes.length) {
+    for (const route of facts.routes.slice(0, 8)) {
+      const name =
+        route === "/"
+          ? "Home"
+          : route
+              .replace(/^\//, "")
+              .split("/")
+              .filter(Boolean)
+              .map((s) => s.charAt(0).toUpperCase() + s.slice(1))
+              .join(" ") || "Home";
+      out.push({ name, route, body: `Route ${route} from generated files` });
+    }
+  }
+  return out;
+}
+
+function mergePageDefs(a: PageDef[], b: PageDef[]): PageDef[] {
+  const seen = new Set<string>();
+  const out: PageDef[] = [];
+  for (const p of [...a, ...b]) {
+    const key = (p.route || p.name).toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(p);
+  }
+  return out;
+}
+
+/** Soft goal check — meaning over formatting. */
+function hasUsableProductGoal(
+  goal: string,
+  tech: string,
+  features: string,
+  projectName: string,
+  fileFacts: WorkspaceFileFacts,
+): boolean {
+  if (goal.trim().length >= 16) return true;
+  const blob = `${goal}\n${tech}\n${features}`.trim();
+  if (blob.length >= 40 && /(app|product|user|learn|practice|goal|help|for |build|create)/i.test(blob)) {
+    return true;
+  }
+  const named = projectName.trim() && !/^untitled/i.test(projectName.trim());
+  if (named && (fileFacts.page_names.length >= 1 || fileFacts.routes.length >= 1)) return true;
+  if (fileFacts.headings.length >= 1 && fileFacts.page_names.length >= 1) return true;
+  return false;
+}
+
+function buildBlockedWaitingModel(message: string): Record<string, unknown> {
+  const root = "root-blocked";
+  const title = "blocked-title";
+  const sub = "blocked-sub";
+  return {
+    pages: {
+      Home: {
+        rootId: root,
+        nodes: {
+          [root]: {
+            id: root,
+            role: "page-root",
+            type: "container",
+            children: [title, sub],
+            style: {
+              backgroundColor: "#FAFAF9",
+              color: "#171717",
+              paddingTop: 40,
+              paddingRight: 28,
+              paddingBottom: 40,
+              paddingLeft: 28,
+              marginTop: 0,
+              marginRight: 0,
+              marginBottom: 0,
+              marginLeft: 0,
+              width: "100%",
+              height: "auto",
+              borderRadius: 8,
+              borderWidth: 0,
+              borderColor: "#E5E5E5",
+              boxShadow: "none",
+              opacity: 1,
+            },
+          },
+          [title]: {
+            id: title,
+            role: "hero-title",
+            type: "text",
+            text: "UI generation blocked",
+            style: {
+              backgroundColor: "transparent",
+              color: "#171717",
+              paddingTop: 0,
+              paddingRight: 0,
+              paddingBottom: 8,
+              paddingLeft: 0,
+              marginTop: 0,
+              marginRight: 0,
+              marginBottom: 0,
+              marginLeft: 0,
+              width: "100%",
+              height: "auto",
+              borderRadius: 0,
+              borderWidth: 0,
+              borderColor: "#E5E5E5",
+              boxShadow: "none",
+              opacity: 1,
+            },
+          },
+          [sub]: {
+            id: sub,
+            role: "hero-sub",
+            type: "text",
+            text: message,
+            style: {
+              backgroundColor: "transparent",
+              color: "#525252",
+              paddingTop: 0,
+              paddingRight: 0,
+              paddingBottom: 0,
+              paddingLeft: 0,
+              marginTop: 0,
+              marginRight: 0,
+              marginBottom: 0,
+              marginLeft: 0,
+              width: "100%",
+              height: "auto",
+              borderRadius: 0,
+              borderWidth: 0,
+              borderColor: "#E5E5E5",
+              boxShadow: "none",
+              opacity: 1,
+            },
+          },
+        },
+      },
+    },
+  };
 }
 
 function pickPage(
@@ -252,6 +423,14 @@ function fail(
   } catch {
     /* ignore */
   }
+  let waitingModel: unknown;
+  try {
+    waitingModel = buildBlockedWaitingModel(reason);
+    writeEnginePreviewModel(workspaceRoot, waitingModel as Parameters<typeof writeEnginePreviewModel>[1]);
+    writePreviewModel(workspaceRoot, waitingModel as Parameters<typeof writePreviewModel>[1]);
+  } catch {
+    waitingModel = undefined;
+  }
   const contextPath = writeContextFile(workspaceRoot, state);
   return {
     ok: false,
@@ -259,6 +438,7 @@ function fail(
     contextPath,
     context: state,
     error: reason,
+    editorModel: waitingModel,
     regeneration_count: state.regeneration_count,
     max_regenerations: state.max_regenerations,
     user_visible_stage: state.user_visible_stage,
@@ -535,67 +715,128 @@ export async function runUiGenerationCycle(
   stage("Reading Master Plan");
   persist(workspaceRoot, state);
 
-  // -------- PHASE 2 — VERIFY --------
+  // -------- PHASE 2 — VERIFY (Master Plan + file grounding) --------
   if (!workspaceRoot || !fs.existsSync(workspaceRoot)) {
     return fail(workspaceRoot || process.cwd(), state, "No active project workspace");
   }
-  if (!fs.existsSync(input.masterPlanPath)) {
-    return fail(workspaceRoot, state, "No Master Plan exists for the active project");
-  }
-  const plan = hydrateAndPersistMasterPlan(workspaceRoot, input.masterPlanPath);
+  // Master Plan file may be missing; still allow generation if UI files exist.
+  const planExists = Boolean(input.masterPlanPath && fs.existsSync(input.masterPlanPath));
+  const plan = planExists
+    ? hydrateAndPersistMasterPlan(workspaceRoot, input.masterPlanPath)
+    : ({} as Record<string, string>);
   const goal = section(plan, 1);
   const tech = section(plan, 2);
   const features = section(plan, 3);
   const pagesText = section(plan, 4);
   const uiux = section(plan, 5);
-  const pages = parsePages(pagesText);
-  const hasMin =
-    goal.length >= 20 &&
-    (detectProjectType(goal, tech).length > 0 || /web|mobile|landing/i.test(goal + tech)) &&
-    pages.length >= 1;
 
-  if (!hasMin) {
+  stage("Reading generated files");
+  const fileFacts = collectWorkspaceFileFacts(workspaceRoot, input.writtenPaths);
+  state.file_scanned = fileFacts.scanned_files;
+  state.file_routes = fileFacts.routes;
+  state.file_button_labels = [...fileFacts.button_labels, ...fileFacts.link_labels];
+  state.file_headings = fileFacts.headings;
+
+  const mpPages = pagesFromMasterPlan(plan, state.project_name, pagesText);
+  const filePages = pagesFromFileFacts(fileFacts);
+  const pages = mergePageDefs(mpPages, filePages);
+
+  const hasGoal = hasUsableProductGoal(goal, tech, features, state.project_name, fileFacts);
+  const hasType =
+    detectProjectType(goal, tech).length > 0 ||
+    /web|mobile|landing|ios|android|expo|react/i.test(`${goal}\n${tech}`) ||
+    fileFacts.scanned_files.some((p) => /app\/|pages\//i.test(p));
+  const hasPage = pages.length >= 1;
+  const fileGrounded = hasMeaningfulUiFileGrounding(fileFacts);
+  const hasMinFromPlan = hasGoal && hasType && hasPage;
+  // Allow generation when plan is partial but concrete UI files exist (e.g. practice/page.tsx).
+  const allowGeneration = hasMinFromPlan || (fileGrounded && (hasPage || filePages.length >= 1));
+
+  if (!allowGeneration) {
     state.current_step = 2;
-    appendStepLog(state, "Step 1 verify — Master Plan too weak for generation");
+    appendStepLog(
+      state,
+      `Step 1 verify — blocked (goal=${hasGoal}, type=${hasType}, page=${hasPage}, files=${fileGrounded}, scanned=${fileFacts.scanned_files.length})`,
+    );
     return fail(
       workspaceRoot,
       state,
-      "Master Plan lacks minimum product truth (goal, type, meaningful page)",
+      !planExists && !fileGrounded
+        ? "No Master Plan and no generated UI files — complete discovery or generate app files first"
+        : "Needs more product truth: add a goal/type/page in Master Plan, or generate UI app files first",
       "pending_discovery",
     );
   }
-  appendStepLog(state, "Step 1 verify — generation allowed (minimum product truth present)");
+
+  appendStepLog(
+    state,
+    hasMinFromPlan
+      ? "Step 1 verify — generation allowed (minimum product truth present)"
+      : `Step 1 verify — generation allowed via file grounding (pages=${pages.length}, scanned=${fileFacts.scanned_files.length})`,
+  );
   state.current_step = 2;
   persist(workspaceRoot, state);
 
-  // -------- PHASE 3 — GATHER MASTER PLAN FACTS --------
+  // -------- PHASE 3 — GATHER MASTER PLAN + FILE FACTS --------
   stage("Reading Master Plan");
-  state.product_goal = firstLines(goal, 6) || "(not found)";
+  state.product_goal =
+    firstLines(goal, 6) ||
+    (state.project_name && !/^untitled/i.test(state.project_name)
+      ? `Build ${state.project_name} using generated routes: ${fileFacts.routes.slice(0, 6).join(", ") || pages.map((p) => p.name).join(", ")}`
+      : firstLines(features, 3) ||
+        `App with pages: ${pages.map((p) => p.name).slice(0, 6).join(", ")}`);
   const userMatch = goal.match(/target user[s]?:\s*(.+)/i) || tech.match(/target user[s]?:\s*(.+)/i);
-  state.target_user = userMatch ? userMatch[1].trim().slice(0, 200) : firstLines(goal, 2) || "(not found)";
-  state.project_type = detectProjectType(goal, tech);
+  state.target_user = userMatch
+    ? userMatch[1].trim().slice(0, 200)
+    : firstLines(goal, 2) || "Primary app user";
+  state.project_type = detectProjectType(
+    `${goal}\n${tech}`,
+    fileFacts.scanned_files.some((p) => /app\//i.test(p)) ? "mobile app expo" : tech,
+  );
+  if (
+    /BottomNav|tab bar|expo/i.test(fileFacts.scanned_files.join(" ")) ||
+    fileFacts.scanned_files.some((p) => /components\/.*Nav/i.test(p))
+  ) {
+    if (state.project_type === "Web App") state.project_type = "Mobile App";
+  }
   state.priority_features = extractBullets(features, 8);
   if (!state.priority_features.length && features) {
     state.priority_features = [firstLines(features, 3)];
   }
-  state.product_function = inferFunction(goal, features);
-  state.industry = inferIndustry(goal, tech);
+  if (!state.priority_features.length && fileFacts.page_names.length) {
+    state.priority_features = fileFacts.page_names.slice(0, 6).map((n) => `${n} screen`);
+  }
+  state.product_function = inferFunction(goal || state.product_goal, features || fileFacts.headings.join("\n"));
+  state.industry = inferIndustry(goal || state.product_goal, tech);
 
-  const chosen = pickPage(pages, input.pageName || undefined);
+  const chosen = pickPage(pages, input.pageName || undefined) || pages[0];
   if (!chosen) {
-    return fail(workspaceRoot, state, "No page definition found in Pages and navigation");
+    return fail(
+      workspaceRoot,
+      state,
+      "No meaningful page found in Master Plan or generated files",
+      "pending_discovery",
+    );
   }
   state.page_name = chosen.name;
-  state.page_purpose = firstLines(chosen.body.replace(chosen.name, ""), 4) || `Page: ${chosen.name}`;
+  state.page_purpose =
+    firstLines(chosen.body.replace(chosen.name, ""), 4) ||
+    fileFacts.headings[0] ||
+    `Page: ${chosen.name}`;
   const actions = extractBullets(chosen.body, 6);
   state.primary_actions = actions.slice(0, 2);
   state.secondary_actions = actions.slice(2, 5);
   state.required_sections = extractBullets(chosen.body, 8);
   if (!state.required_sections.length) {
-    state.required_sections = ["Header", "Main content", "Primary action"];
+    state.required_sections = uniqMerge(
+      ["Header", "Main content", "Primary action"],
+      fileFacts.headings.slice(0, 4),
+    );
   }
   state.navigation_role =
-    pages.length > 1 ? `One of ${pages.length} app routes (${chosen.route || chosen.name})` : "Primary page";
+    pages.length > 1
+      ? `One of ${pages.length} app routes (${chosen.route || chosen.name})`
+      : "Primary page";
 
   state.visual_tone = firstLines(uiux, 3) || "(not found)";
   const paletteMatch = uiux.match(/palette[:\s]+([^\n]+)/i) || uiux.match(/#[0-9a-fA-F]{3,8}/);
@@ -618,17 +859,6 @@ export async function runUiGenerationCycle(
     state.palette = "(not found)";
   }
 
-  appendStepLog(state, "Step 2 gather — Master Plan extracts written");
-  state.current_step = 3;
-  persist(workspaceRoot, state);
-
-  // -------- PHASE 3b — READ GENERATED FILES (After File Creation §3) --------
-  stage("Reading generated files");
-  const fileFacts = collectWorkspaceFileFacts(workspaceRoot, input.writtenPaths);
-  state.file_scanned = fileFacts.scanned_files;
-  state.file_routes = fileFacts.routes;
-  state.file_button_labels = [...fileFacts.button_labels, ...fileFacts.link_labels];
-  state.file_headings = fileFacts.headings;
   if (fileFacts.button_labels[0] && !state.primary_actions.length) {
     state.primary_actions = [fileFacts.button_labels[0]];
   }
@@ -638,10 +868,13 @@ export async function runUiGenerationCycle(
   if (fileFacts.headings.length) {
     state.required_sections = uniqMerge(state.required_sections, fileFacts.headings.slice(0, 6));
   }
+
+  appendStepLog(state, "Step 2 gather — Master Plan extracts written");
   appendStepLog(
     state,
-    `Step 2b files — scanned ${fileFacts.scanned_files.length}; routes=${fileFacts.routes.length}; buttons=${fileFacts.button_labels.length}`,
+    `Step 2b files — scanned ${fileFacts.scanned_files.length}; routes=${fileFacts.routes.length}; pages=${fileFacts.page_names.length}; buttons=${fileFacts.button_labels.length}`,
   );
+  state.current_step = 3;
   persist(workspaceRoot, state);
 
   // -------- PHASE 4 — CLASSIFY --------

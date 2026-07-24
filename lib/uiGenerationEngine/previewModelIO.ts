@@ -24,7 +24,11 @@ export type EnginePreviewPages = {
 export function isNebullaIdePlaceholderShell(model: unknown): boolean {
   if (!model || typeof model !== "object") return false;
   const text = JSON.stringify(model);
-  return /Nebulla Workspace|Cosmic Night|0vgenerated-v2|inspired by 0vgenerated/i.test(text);
+  if (/Nebulla Workspace|Cosmic Night|0vgenerated-v2|inspired by 0vgenerated|Open Explorer/i.test(text)) {
+    return true;
+  }
+  if (/#080A14/i.test(text) && /#00D4D4/i.test(text)) return true;
+  return false;
 }
 
 function readJsonModel(abs: string): EnginePreviewPages | null {
