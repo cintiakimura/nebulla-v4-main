@@ -8,6 +8,7 @@ import {
   Network,
   Palette,
   Settings,
+  Sparkles,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Logo } from '@/components/Logo';
@@ -25,6 +26,7 @@ const items: NavItem[] = [
   { id: 'master-plan', icon: <BookMarked className="h-5 w-5" />, label: 'Master Plan' },
   { id: 'mind-map', icon: <Network className="h-5 w-5" />, label: 'Mind Map' },
   { id: 'visual-ui-editor', icon: <Palette className="h-5 w-5" />, label: 'Nebula UI Studio' },
+  { id: 'ui-studio-beta', icon: <Sparkles className="h-5 w-5" />, label: 'UI Studio Beta' },
   { id: 'secrets', icon: <KeyRound className="h-5 w-5" />, label: 'Secrets' },
   /** Opens workspace onboarding (GitHub + API keys). Profile / logout is NB in the top bar. */
   { id: 'project-settings', icon: <Settings className="h-5 w-5" />, label: 'Onboarding' },

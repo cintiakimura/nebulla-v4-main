@@ -5,6 +5,7 @@ export type IdeCenterPane =
   | 'master-plan'
   | 'mind-map'
   | 'ui-studio'
+  | 'ui-studio-beta'
   | 'source-control'
   | 'projects'
   | 'secrets'
@@ -18,6 +19,7 @@ export const IDE_CENTER_PRIMARY_TABS: { id: IdeCenterPane; label: string }[] = [
   { id: 'master-plan', label: 'Master Plan' },
   { id: 'mind-map', label: 'Mind map' },
   { id: 'ui-studio', label: 'UI Studio' },
+  { id: 'ui-studio-beta', label: 'UI Studio Beta' },
 ];
 
 /** Open from the left nav only. DNS is a tab inside Secrets dashboard, not a side-nav page. */

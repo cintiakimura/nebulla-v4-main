@@ -18,6 +18,7 @@ import { dispatchOpenLeftSidebar } from '../../lib/ideLeftSidebar';
 import { IdeDashboardEmbed } from './IdeDashboardEmbed';
 import { MyProjectsHome } from './MyProjectsHome';
 import { IdeVisualEditor } from './IdeVisualEditor';
+import { IdeUiStudioBeta } from './IdeUiStudioBeta';
 import { UiStudioMockupPanel } from './UiStudioMockupPanel';
 import { MindMapIdeRoute } from './MindMapIdeRoute';
 import { IdeFileEditor } from './IdeFileEditor';
@@ -32,6 +33,7 @@ const PANEL_ICONS: Partial<Record<IdeCenterPane, React.ReactNode>> = {
   'master-plan': <BookMarked className="h-3 w-3 shrink-0 opacity-70" aria-hidden />,
   'mind-map': <Network className="h-3 w-3 shrink-0 opacity-70" aria-hidden />,
   'ui-studio': <Palette className="h-3 w-3 shrink-0 opacity-70" aria-hidden />,
+  'ui-studio-beta': <Palette className="h-3 w-3 shrink-0 opacity-70" aria-hidden />,
   projects: <LayoutGrid className="h-3 w-3 shrink-0 opacity-70" aria-hidden />,
   secrets: <KeyRound className="h-3 w-3 shrink-0 opacity-70" aria-hidden />,
 };
@@ -169,6 +171,15 @@ export function IdeCenterWorkspace() {
                   projectDisplayName={projectName}
                 />
               )}
+            </PaneLayer>
+            <PaneLayer visible={activePane === 'ui-studio-beta'}>
+              {/* Mount only while active so beta never races original product v0 event handlers. */}
+              {activePane === 'ui-studio-beta' ? (
+                <IdeUiStudioBeta
+                  onLock={() => activeTabId && closeTab(activeTabId)}
+                  projectDisplayName={projectName}
+                />
+              ) : null}
             </PaneLayer>
             <PaneLayer visible={activePane === 'projects'}>
               <MyProjectsHome />
