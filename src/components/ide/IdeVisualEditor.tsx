@@ -1275,7 +1275,7 @@ export function IdeVisualEditor({
           {node.text || 'Button'}
         </button>
       ) : node.type === 'box' ? (
-        <div className="h-full min-h-[48px] w-full rounded-md border border-white/10 bg-gradient-to-br from-cyan-500/10 to-transparent" aria-hidden />
+        <div className="h-full min-h-[48px] w-full rounded-md border border-border bg-[#111111]" aria-hidden />
       ) : null;
 
     const isRoot = node.id === page.rootId;
@@ -1312,7 +1312,7 @@ export function IdeVisualEditor({
         role="presentation"
         style={css}
         onClick={(e) => onPreviewClick(e, id)}
-        className={`border border-white/5 ${isRoot && node.type === 'container' ? 'flex min-h-[280px] w-full flex-col' : ''}`}
+        className={`border border-border ${isRoot && node.type === 'container' ? 'flex min-h-[280px] w-full flex-col' : ''}`}
       >
         {inner}
         {kids}
@@ -1322,8 +1322,8 @@ export function IdeVisualEditor({
 
   if (eligible === null) {
     return (
-      <div className="flex h-full items-center justify-center bg-[#050a14] text-slate-400">
-        <Loader2 className="h-8 w-8 animate-spin text-cyan-400" />
+      <div className="flex h-full items-center justify-center bg-black text-muted-foreground">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
       </div>
     );
   }
@@ -1452,7 +1452,7 @@ export function IdeVisualEditor({
       <div className="flex min-h-0 flex-1">
         <main
           ref={previewRef}
-          className="relative min-w-0 flex-1 overflow-auto bg-[#030712] p-3 sm:p-5"
+          className="relative min-w-0 flex-1 overflow-auto bg-black p-3 sm:p-5"
           style={{
             backgroundImage:
               'radial-gradient(circle at 1px 1px, rgba(255,255,255,0.06) 1px, transparent 0)',
@@ -1472,11 +1472,11 @@ export function IdeVisualEditor({
                   Preview
                 </span>
                 {projectType ? (
-                  <span className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] text-slate-300">
+                  <span className="rounded-full border border-border bg-white/5 px-2 py-0.5 text-[10px] text-muted-foreground">
                     {projectType}
                   </span>
                 ) : null}
-                <div className="flex rounded-md border border-white/10 p-0.5">
+                <div className="flex rounded-md border border-border p-0.5">
                   <button
                     type="button"
                     title="Desktop frame"
@@ -1507,7 +1507,7 @@ export function IdeVisualEditor({
                   </button>
                 </div>
                 {v0DemoUrl ? (
-                  <div className="flex rounded-md border border-white/10 p-0.5">
+                  <div className="flex rounded-md border border-border p-0.5">
                     <button
                       type="button"
                       onClick={() => setPreviewSurface('v0-live')}
@@ -1541,7 +1541,7 @@ export function IdeVisualEditor({
                       setActivePage(e.target.value);
                       clearSelection();
                     }}
-                    className="max-w-[140px] truncate rounded border border-white/10 bg-secondary/40 px-2 py-0.5 text-[10px] text-foreground"
+                    className="max-w-[140px] truncate rounded border border-border bg-secondary/40 px-2 py-0.5 text-[10px] text-foreground"
                   >
                     {pageIds.map((pid) => (
                       <option key={pid} value={pid}>
@@ -1573,8 +1573,8 @@ export function IdeVisualEditor({
 
             {deviceMode === 'mobile' ? (
               <div className="mx-auto w-full max-w-[390px]">
-                <div className="overflow-hidden rounded-[2rem] border-[6px] border-[#1a1f2e] bg-[#0a1628] shadow-[0_12px_40px_rgba(0,0,0,0.55)] ring-1 ring-white/10">
-                  <div className="relative flex h-7 items-center justify-center border-b border-white/5 bg-black/40">
+                <div className="overflow-hidden rounded-[2rem] border-[6px] border-[#222222] bg-black">
+                  <div className="relative flex h-7 items-center justify-center border-b border-border bg-black/40">
                     <span className="absolute left-1/2 top-1.5 h-3.5 w-20 -translate-x-1/2 rounded-full bg-black/80" />
                     <span className="sr-only">Mobile device frame</span>
                   </div>
@@ -1590,7 +1590,7 @@ export function IdeVisualEditor({
                       {page ? renderNode(page.rootId) : null}
                     </div>
                   )}
-                  <div className="flex h-5 items-center justify-center border-t border-white/5 bg-black/30">
+                  <div className="flex h-5 items-center justify-center border-t border-border bg-black/30">
                     <span className="h-1 w-16 rounded-full bg-white/25" />
                   </div>
                 </div>
@@ -1601,8 +1601,8 @@ export function IdeVisualEditor({
                 </p>
               </div>
             ) : (
-              <div className="overflow-hidden rounded-xl border border-white/10 bg-[#0a1628] shadow-[0_8px_32px_rgba(0,0,0,0.45)] ring-1 ring-white/5">
-                <div className="border-b border-white/5 bg-black/20 px-3 py-1.5">
+              <div className="overflow-hidden rounded-xl border border-border bg-black">
+                <div className="border-b border-border bg-black/20 px-3 py-1.5">
                   <div className="flex items-center gap-1.5">
                     <span className="h-2 w-2 rounded-full bg-red-500/80" />
                     <span className="h-2 w-2 rounded-full bg-amber-500/80" />
@@ -1630,11 +1630,11 @@ export function IdeVisualEditor({
           </div>
           {selectedId && previewSurface === 'visual-model' ? (
             <div
-              className="pointer-events-auto absolute z-20 flex min-w-[180px] flex-col overflow-hidden rounded-lg border border-blue-500/50 bg-[#0c1a2e] py-1 text-[11px] shadow-xl"
+              className="pointer-events-auto absolute z-20 flex min-w-[180px] flex-col overflow-hidden rounded-lg border border-border bg-[#0a0a0a] py-1 text-[11px] shadow-xl"
               style={{ top: menuPos ? menuPos.top : 80, left: menuPos ? menuPos.left : 24 }}
               onClick={(e) => e.stopPropagation()}
             >
-              <span className="px-2 py-1 text-[10px] text-slate-500">Element</span>
+              <span className="px-2 py-1 text-[10px] text-muted-foreground">Element</span>
               <button
                 type="button"
                 className="px-3 py-1.5 text-left hover:bg-white/10"
@@ -1675,7 +1675,7 @@ export function IdeVisualEditor({
               >
                 <Trash2 className="mr-1 inline h-3 w-3" /> Delete
               </button>
-              <div className="my-1 border-t border-white/10" />
+              <div className="my-1 border-t border-border" />
               <button type="button" className="px-3 py-1.5 text-left hover:bg-white/10" onClick={() => moveSelectedInParent(-1)}>
                 <ArrowUp className="mr-1 inline h-3 w-3" /> Move up
               </button>
@@ -1691,34 +1691,34 @@ export function IdeVisualEditor({
 
         {/* Right Properties Panel (Design mode) */}
         {previewSurface === 'visual-model' && selected ? (
-          <aside className="w-72 shrink-0 border-l border-white/10 bg-[#050a14] overflow-y-auto">
-            <div className="sticky top-0 z-10 border-b border-white/10 bg-[#050a14] px-3 py-2 text-[11px] font-medium text-muted-foreground">
+          <aside className="w-72 shrink-0 border-l border-border bg-black overflow-y-auto">
+            <div className="sticky top-0 z-10 border-b border-border bg-black px-3 py-2 text-[11px] font-medium text-muted-foreground">
               Properties · {selected.role}
             </div>
             <div className="p-3 space-y-4 text-[11px]">
               {/* Text */}
               {(selected.type === 'text' || selected.type === 'button') && (
                 <div>
-                  <div className="mb-1.5 text-[10px] uppercase tracking-wider text-slate-500">Text</div>
+                  <div className="mb-1.5 text-[10px] uppercase tracking-wider text-muted-foreground">Text</div>
                   <input
                     type="text"
                     value={selected.text || ''}
                     onChange={(e) => updateNodeText(selectedId!, e.target.value)}
-                    className="w-full rounded border border-white/10 bg-black/40 px-2 py-1 text-foreground"
+                    className="w-full rounded border border-border bg-black/40 px-2 py-1 text-foreground"
                     placeholder="Label"
                   />
                   <div className="mt-2 grid grid-cols-2 gap-2">
                     <label className="flex flex-col gap-0.5">
-                      <span className="text-[10px] text-slate-500">Color</span>
+                      <span className="text-[10px] text-muted-foreground">Color</span>
                       <input
                         type="color"
                         value={selected.style.color || '#e2e8f0'}
                         onChange={(e) => updateSelectedStyle({ color: e.target.value })}
-                        className="h-8 w-full rounded border border-white/10 bg-black/40"
+                        className="h-8 w-full rounded border border-border bg-black/40"
                       />
                     </label>
                     <label className="flex flex-col gap-0.5">
-                      <span className="text-[10px] text-slate-500">Opacity</span>
+                      <span className="text-[10px] text-muted-foreground">Opacity</span>
                       <input
                         type="range"
                         min={0}
@@ -1726,7 +1726,7 @@ export function IdeVisualEditor({
                         step={0.05}
                         value={selected.style.opacity ?? 1}
                         onChange={(e) => updateSelectedStyle({ opacity: parseFloat(e.target.value) })}
-                        className="accent-cyan-400"
+                        className="accent-[color:var(--primary)]"
                       />
                     </label>
                   </div>
@@ -1735,19 +1735,19 @@ export function IdeVisualEditor({
 
               {/* Background */}
               <div>
-                <div className="mb-1.5 text-[10px] uppercase tracking-wider text-slate-500">Background</div>
+                <div className="mb-1.5 text-[10px] uppercase tracking-wider text-muted-foreground">Background</div>
                 <div className="flex items-center gap-2">
                   <input
                     type="color"
                     value={selected.style.backgroundColor || '#0f172a'}
                     onChange={(e) => updateSelectedStyle({ backgroundColor: e.target.value })}
-                    className="h-8 w-12 rounded border border-white/10 bg-black/40"
+                    className="h-8 w-12 rounded border border-border bg-black/40"
                   />
                   <input
                     type="text"
                     value={selected.style.backgroundColor || ''}
                     onChange={(e) => updateSelectedStyle({ backgroundColor: e.target.value })}
-                    className="flex-1 rounded border border-white/10 bg-black/40 px-2 py-1 font-mono text-[10px] text-foreground"
+                    className="flex-1 rounded border border-border bg-black/40 px-2 py-1 font-mono text-[10px] text-foreground"
                     placeholder="#0f172a"
                   />
                 </div>
@@ -1755,32 +1755,32 @@ export function IdeVisualEditor({
 
               {/* Size */}
               <div>
-                <div className="mb-1.5 text-[10px] uppercase tracking-wider text-slate-500">Size</div>
+                <div className="mb-1.5 text-[10px] uppercase tracking-wider text-muted-foreground">Size</div>
                 <div className="grid grid-cols-2 gap-2">
                   <label className="flex flex-col gap-0.5">
-                    <span className="text-[10px] text-slate-500">Width</span>
+                    <span className="text-[10px] text-muted-foreground">Width</span>
                     <input
                       type="text"
                       value={selected.style.width || 'auto'}
                       onChange={(e) => updateSelectedStyle({ width: e.target.value })}
-                      className="rounded border border-white/10 bg-black/40 px-2 py-1 font-mono text-[10px]"
+                      className="rounded border border-border bg-black/40 px-2 py-1 font-mono text-[10px]"
                       placeholder="auto / 100% / 320px"
                     />
                   </label>
                   <label className="flex flex-col gap-0.5">
-                    <span className="text-[10px] text-slate-500">Height</span>
+                    <span className="text-[10px] text-muted-foreground">Height</span>
                     <input
                       type="text"
                       value={selected.style.height || 'auto'}
                       onChange={(e) => updateSelectedStyle({ height: e.target.value })}
-                      className="rounded border border-white/10 bg-black/40 px-2 py-1 font-mono text-[10px]"
+                      className="rounded border border-border bg-black/40 px-2 py-1 font-mono text-[10px]"
                       placeholder="auto / 200px"
                     />
                   </label>
                 </div>
                 <div className="mt-2">
                   <label className="flex flex-col gap-0.5">
-                    <span className="text-[10px] text-slate-500">Border Radius</span>
+                    <span className="text-[10px] text-muted-foreground">Border Radius</span>
                     <input
                       type="range"
                       min={0}
@@ -1788,16 +1788,16 @@ export function IdeVisualEditor({
                       step={1}
                       value={selected.style.borderRadius ?? 8}
                       onChange={(e) => updateSelectedStyle({ borderRadius: parseInt(e.target.value, 10) })}
-                      className="accent-cyan-400"
+                      className="accent-[color:var(--primary)]"
                     />
-                    <span className="font-mono text-[10px] text-slate-400">{selected.style.borderRadius ?? 8}px</span>
+                    <span className="font-mono text-[10px] text-muted-foreground">{selected.style.borderRadius ?? 8}px</span>
                   </label>
                 </div>
               </div>
 
               {/* Padding */}
               <div>
-                <div className="mb-1.5 flex items-center justify-between text-[10px] uppercase tracking-wider text-slate-500">
+                <div className="mb-1.5 flex items-center justify-between text-[10px] uppercase tracking-wider text-muted-foreground">
                   <span>Padding</span>
                   <button
                     type="button"
@@ -1805,7 +1805,7 @@ export function IdeVisualEditor({
                       const p = selected.style.paddingTop ?? 16;
                       updateSelectedStyle({ paddingTop: p, paddingRight: p, paddingBottom: p, paddingLeft: p });
                     }}
-                    className="text-[9px] text-cyan-400 hover:underline"
+                    className="text-[9px] text-primary hover:underline"
                   >
                     Equal
                   </button>
@@ -1818,14 +1818,14 @@ export function IdeVisualEditor({
                     { k: 'paddingLeft' as const, l: 'Left' },
                   ].map(({ k, l }) => (
                     <label key={k} className="flex flex-col gap-0.5">
-                      <span className="text-[10px] text-slate-500">{l}</span>
+                      <span className="text-[10px] text-muted-foreground">{l}</span>
                       <input
                         type="number"
                         min={0}
                         max={128}
                         value={selected.style[k] ?? 0}
                         onChange={(e) => updateSelectedStyle({ [k]: parseInt(e.target.value, 10) || 0 })}
-                        className="rounded border border-white/10 bg-black/40 px-2 py-1 font-mono text-[10px]"
+                        className="rounded border border-border bg-black/40 px-2 py-1 font-mono text-[10px]"
                       />
                     </label>
                   ))}
@@ -1834,7 +1834,7 @@ export function IdeVisualEditor({
 
               {/* Margin */}
               <div>
-                <div className="mb-1.5 flex items-center justify-between text-[10px] uppercase tracking-wider text-slate-500">
+                <div className="mb-1.5 flex items-center justify-between text-[10px] uppercase tracking-wider text-muted-foreground">
                   <span>Margin</span>
                   <button
                     type="button"
@@ -1842,7 +1842,7 @@ export function IdeVisualEditor({
                       const m = selected.style.marginTop ?? 0;
                       updateSelectedStyle({ marginTop: m, marginRight: m, marginBottom: m, marginLeft: m });
                     }}
-                    className="text-[9px] text-cyan-400 hover:underline"
+                    className="text-[9px] text-primary hover:underline"
                   >
                     Equal
                   </button>
@@ -1855,14 +1855,14 @@ export function IdeVisualEditor({
                     { k: 'marginLeft' as const, l: 'Left' },
                   ].map(({ k, l }) => (
                     <label key={k} className="flex flex-col gap-0.5">
-                      <span className="text-[10px] text-slate-500">{l}</span>
+                      <span className="text-[10px] text-muted-foreground">{l}</span>
                       <input
                         type="number"
                         min={-64}
                         max={128}
                         value={selected.style[k] ?? 0}
                         onChange={(e) => updateSelectedStyle({ [k]: parseInt(e.target.value, 10) || 0 })}
-                        className="rounded border border-white/10 bg-black/40 px-2 py-1 font-mono text-[10px]"
+                        className="rounded border border-border bg-black/40 px-2 py-1 font-mono text-[10px]"
                       />
                     </label>
                   ))}
@@ -1871,28 +1871,28 @@ export function IdeVisualEditor({
 
               {/* Border */}
               <div>
-                <div className="mb-1.5 text-[10px] uppercase tracking-wider text-slate-500">Border</div>
+                <div className="mb-1.5 text-[10px] uppercase tracking-wider text-muted-foreground">Border</div>
                 <label className="flex flex-col gap-0.5">
-                  <span className="text-[10px] text-slate-500">Box Shadow</span>
+                  <span className="text-[10px] text-muted-foreground">Box Shadow</span>
                   <input
                     type="text"
                     value={selected.style.boxShadow || ''}
                     onChange={(e) => updateSelectedStyle({ boxShadow: e.target.value })}
-                    className="rounded border border-white/10 bg-black/40 px-2 py-1 font-mono text-[10px]"
+                    className="rounded border border-border bg-black/40 px-2 py-1 font-mono text-[10px]"
                     placeholder="0 1px 3px rgba(0,0,0,0.35)"
                   />
                 </label>
               </div>
 
-              <div className="pt-2 border-t border-white/10">
+              <div className="pt-2 border-t border-border">
                 <button
                   type="button"
                   onClick={() => setApplyAllPagesConfirmOpen(true)}
-                  className="w-full rounded-lg border border-white/15 py-2 text-[11px] text-cyan-300 hover:bg-white/5"
+                  className="w-full rounded-lg border border-border py-2 text-[11px] text-foreground/80 hover:bg-[#111111]"
                 >
                   Apply to all pages
                 </button>
-                <p className="mt-1 text-[9px] text-center text-slate-500">Changes the style of matching roles across pages.</p>
+                <p className="mt-1 text-[9px] text-center text-muted-foreground">Changes the style of matching roles across pages.</p>
               </div>
             </div>
           </aside>
@@ -1919,15 +1919,15 @@ export function IdeVisualEditor({
 
       {applyConfirmOpen ? (
         <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-md rounded-xl border border-cyan-500/30 bg-[#071422] p-6 shadow-2xl">
+          <div className="w-full max-w-md rounded-xl border border-border bg-[#0a0a0a] p-6 shadow-2xl">
             <div className="mb-3 flex items-start gap-2">
               <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-400" />
               <div>
-                <h3 className="font-headline text-sm text-cyan-50">Apply changes to code?</h3>
-                <p className="mt-2 text-xs leading-relaxed text-slate-400">
+                <h3 className="font-headline text-sm text-foreground">Apply changes to code?</h3>
+                <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
                   Are you sure you want to apply/code these changes? The server will copy the current contents of every file Grok is
-                  about to change into <code className="text-cyan-300/90">generated-ui/versions/&lt;timestamp&gt;/</code>, then write
-                  updates under <code className="text-cyan-300/90">src/</code> (and other allowed paths). Your immutable v0 folder is
+                  about to change into <code className="text-foreground/80">generated-ui/versions/&lt;timestamp&gt;/</code>, then write
+                  updates under <code className="text-foreground/80">src/</code> (and other allowed paths). Your immutable v0 folder is
                   never modified. Grok produces the file contents.
                 </p>
               </div>
@@ -1935,7 +1935,7 @@ export function IdeVisualEditor({
             <div className="mt-4 flex justify-end gap-2">
               <button
                 type="button"
-                className="rounded-lg border border-white/15 px-4 py-2 text-xs text-slate-300"
+                className="rounded-lg border border-border px-4 py-2 text-xs text-muted-foreground"
                 onClick={() => setApplyConfirmOpen(false)}
               >
                 Continue editing
@@ -1944,7 +1944,7 @@ export function IdeVisualEditor({
                 type="button"
                 disabled={busy}
                 onClick={() => void runApplyToCode()}
-                className="rounded-lg bg-cyan-500 px-4 py-2 text-xs font-headline text-black disabled:opacity-40"
+                className="rounded-lg bg-primary px-4 py-2 text-xs font-headline text-black disabled:opacity-40"
               >
                 {busy ? <Loader2 className="inline h-4 w-4 animate-spin" /> : <Check className="inline h-4 w-4" />} Confirm
               </button>
@@ -1955,16 +1955,16 @@ export function IdeVisualEditor({
 
       {revertConfirmOpen ? (
         <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-md rounded-xl border border-rose-500/30 bg-[#071422] p-6 shadow-2xl">
+          <div className="w-full max-w-md rounded-xl border border-rose-500/30 bg-[#0a0a0a] p-6 shadow-2xl">
             <h3 className="font-headline text-sm text-rose-100">Undo last code apply?</h3>
-            <p className="mt-2 text-xs leading-relaxed text-slate-400">
-              Restores only the files that were backed up in <code className="text-cyan-300/90">generated-ui/versions/&lt;timestamp&gt;/</code>{' '}
+            <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+              Restores only the files that were backed up in <code className="text-foreground/80">generated-ui/versions/&lt;timestamp&gt;/</code>{' '}
               during your last confirmed apply. This does not reset the whole project.
             </p>
             <div className="mt-4 flex justify-end gap-2">
               <button
                 type="button"
-                className="rounded-lg border border-white/15 px-4 py-2 text-xs text-slate-300"
+                className="rounded-lg border border-border px-4 py-2 text-xs text-muted-foreground"
                 onClick={() => setRevertConfirmOpen(false)}
               >
                 Cancel
@@ -1984,16 +1984,16 @@ export function IdeVisualEditor({
 
       {restoreOriginalConfirmOpen ? (
         <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-md rounded-xl border border-cyan-500/30 bg-[#071422] p-6 shadow-2xl">
+          <div className="w-full max-w-md rounded-xl border border-border bg-[#0a0a0a] p-6 shadow-2xl">
             <div className="mb-3 flex items-start gap-2">
               <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-400" />
               <div>
-                <h3 className="font-headline text-sm text-cyan-50">Restore original v0 generation?</h3>
-                <p className="mt-2 text-xs leading-relaxed text-slate-400">
-                  This replaces current UI files under <code className="text-cyan-300/90">src/</code>, <code className="text-cyan-300/90">app/</code>,{' '}
-                  <code className="text-cyan-300/90">pages/</code>, <code className="text-cyan-300/90">components/</code>, and{' '}
-                  <code className="text-cyan-300/90">public/</code> with the immutable copy from{' '}
-                  <code className="text-cyan-300/90">generated-ui/v0-original-…</code>. Your visual editor session model is unchanged until
+                <h3 className="font-headline text-sm text-foreground">Restore original v0 generation?</h3>
+                <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+                  This replaces current UI files under <code className="text-foreground/80">src/</code>, <code className="text-foreground/80">app/</code>,{' '}
+                  <code className="text-foreground/80">pages/</code>, <code className="text-foreground/80">components/</code>, and{' '}
+                  <code className="text-foreground/80">public/</code> with the immutable copy from{' '}
+                  <code className="text-foreground/80">generated-ui/v0-original-…</code>. Your visual editor session model is unchanged until
                   you reload preview from disk.
                 </p>
               </div>
@@ -2001,7 +2001,7 @@ export function IdeVisualEditor({
             <div className="mt-4 flex justify-end gap-2">
               <button
                 type="button"
-                className="rounded-lg border border-white/15 px-4 py-2 text-xs text-slate-300"
+                className="rounded-lg border border-border px-4 py-2 text-xs text-muted-foreground"
                 onClick={() => setRestoreOriginalConfirmOpen(false)}
               >
                 Cancel
@@ -2010,7 +2010,7 @@ export function IdeVisualEditor({
                 type="button"
                 disabled={busy}
                 onClick={() => void runRestoreOriginal()}
-                className="rounded-lg bg-cyan-600 px-4 py-2 text-xs font-headline text-white disabled:opacity-40"
+                className="rounded-lg bg-primary px-4 py-2 text-xs font-headline text-white disabled:opacity-40"
               >
                 {busy ? <Loader2 className="inline h-4 w-4 animate-spin" /> : <History className="inline h-4 w-4" />} Confirm restore
               </button>
@@ -2022,12 +2022,12 @@ export function IdeVisualEditor({
       {/* Apply to All Pages Confirmation */}
       {applyAllPagesConfirmOpen ? (
         <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-md rounded-xl border border-amber-500/30 bg-[#071422] p-6 shadow-2xl">
+          <div className="w-full max-w-md rounded-xl border border-amber-500/30 bg-[#0a0a0a] p-6 shadow-2xl">
             <div className="mb-3 flex items-start gap-2">
               <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-400" />
               <div>
                 <h3 className="font-headline text-sm text-amber-100">Apply style to all pages?</h3>
-                <p className="mt-2 text-xs leading-relaxed text-slate-400">
+                <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
                   This will overwrite the style of every element with the same role (<code className="text-amber-300/90">{selected?.role}</code>) across <strong>all pages</strong> in this visual model.
                   This cannot be undone automatically. Consider using "Match style (page)" first to preview.
                 </p>
@@ -2036,7 +2036,7 @@ export function IdeVisualEditor({
             <div className="mt-4 flex justify-end gap-2">
               <button
                 type="button"
-                className="rounded-lg border border-white/15 px-4 py-2 text-xs text-slate-300"
+                className="rounded-lg border border-border px-4 py-2 text-xs text-muted-foreground"
                 onClick={() => setApplyAllPagesConfirmOpen(false)}
               >
                 Cancel
