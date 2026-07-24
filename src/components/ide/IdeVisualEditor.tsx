@@ -1335,7 +1335,7 @@ export function IdeVisualEditor({
       ref={shellRef}
       className="flex h-full min-h-0 w-full flex-col overflow-hidden bg-background text-foreground"
     >
-      <header className="surface-active shrink-0 border-b border-white/5">
+      <header className="surface-active shrink-0 border-b border-border">
         {error ? (
           <p className="border-b border-rose-500/25 bg-rose-500/10 px-3 py-1.5 text-[11px] text-rose-100" role="alert">
             {error}
@@ -1397,7 +1397,7 @@ export function IdeVisualEditor({
           </div>
         </div>
 
-        <div className="tonal-seam-t flex flex-wrap items-center gap-1 border-t border-white/5 px-2 py-1.5 sm:px-3">
+        <div className="flex flex-wrap items-center gap-1 border-t border-border px-2 py-1.5 sm:px-3">
           {(
             [
               { id: 'select' as const, Icon: MousePointer2, label: 'Select' },
@@ -1899,7 +1899,7 @@ export function IdeVisualEditor({
         ) : null}
       </div>
 
-      <footer className="surface-active flex shrink-0 items-center justify-between gap-2 border-t border-white/5 px-3 py-1.5 text-[10px] text-muted-foreground">
+      <footer className="surface-active flex shrink-0 items-center justify-between gap-2 border-t border-border px-3 py-1.5 text-[10px] text-muted-foreground">
         <span>
           {activePage} · {layerCount} layer{layerCount === 1 ? '' : 's'} · {studioTool} tool
         </span>

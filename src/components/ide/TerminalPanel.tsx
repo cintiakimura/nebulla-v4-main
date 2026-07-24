@@ -112,7 +112,7 @@ export function TerminalPanel({ collapsed = false, onToggleCollapse }: TerminalP
   };
 
   const header = (
-    <div className="tonal-seam-b flex h-8 shrink-0 items-center gap-1.5 px-2">
+    <div className="flex h-8 shrink-0 items-center gap-1.5 border-b border-border px-2">
       <div className="surface-base type-label-sm flex items-center gap-1.5 rounded px-2 py-0.5 text-foreground">
         <Terminal className="h-3 w-3 shrink-0" />
         Terminal
@@ -144,12 +144,12 @@ export function TerminalPanel({ collapsed = false, onToggleCollapse }: TerminalP
 
   if (collapsed) {
     return (
-      <div className="surface-active tonal-seam-t flex h-full min-h-8 flex-col">{header}</div>
+      <div className="surface-active flex h-full min-h-8 flex-col border-t border-border">{header}</div>
     );
   }
 
   return (
-    <div className="surface-active tonal-seam-t flex h-full min-h-0 flex-col">
+    <div className="surface-active flex h-full min-h-0 flex-col border-t border-border">
       {header}
 
       <div

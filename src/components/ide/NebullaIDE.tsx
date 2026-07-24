@@ -448,7 +448,7 @@ function NebullaIDEShell() {
         {leftSidebarOpen ? (
           <>
             <div
-              className="surface-active tonal-seam-r hidden shrink-0 overflow-hidden md:block"
+              className="surface-active hidden shrink-0 overflow-hidden border-r border-border md:block"
               style={{ width: explorer.size }}
             >
               {leftSidebarView === 'source-control' ? (
@@ -489,7 +489,7 @@ function NebullaIDEShell() {
         <ResizeHandle onMouseDown={chat.onMouseDown} orientation="horizontal" />
 
         <div
-          className="surface-active tonal-seam-l flex h-full min-h-0 shrink-0 flex-col overflow-hidden"
+          className="surface-active flex h-full min-h-0 shrink-0 flex-col overflow-hidden border-l border-border"
           style={{ width: chat.size, minWidth: 280, maxWidth: 420 }}
         >
           <AIChat />

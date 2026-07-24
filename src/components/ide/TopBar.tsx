@@ -127,7 +127,7 @@ export function TopBar({
   }, [draftName, onProjectNameCommit, workspaceLabel]);
 
   return (
-    <div className="surface-active tonal-seam-b flex h-12 flex-col">
+    <div className="surface-active flex h-12 flex-col border-b border-border">
       <div className="flex h-12 items-center justify-between px-3">
         <div className="flex min-w-0 items-center gap-3">
           <div className="flex h-full max-h-12 shrink-0 items-center gap-2.5">

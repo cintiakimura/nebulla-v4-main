@@ -57,7 +57,7 @@ export function IdeAppPreviewDock({
 
   if (!open) {
     return (
-      <div className="surface-active tonal-seam-l flex w-10 shrink-0 flex-col items-center border-l border-white/5 py-3">
+      <div className="surface-active flex w-10 shrink-0 flex-col items-center border-l border-border py-3">
         <button
           type="button"
           title="Open app preview"
@@ -72,7 +72,7 @@ export function IdeAppPreviewDock({
 
   return (
     <div
-      className="surface-active tonal-seam-l relative hidden min-w-0 shrink-0 overflow-hidden border-l border-white/5 md:flex"
+      className="surface-active relative hidden min-w-0 shrink-0 overflow-hidden border-l border-border md:flex"
       style={{ width: PREVIEW_WIDTH_PX }}
     >
       <AppPreviewPanel

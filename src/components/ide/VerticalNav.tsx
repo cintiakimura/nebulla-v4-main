@@ -47,7 +47,7 @@ export function VerticalNav({
   };
 
   return (
-    <div className="surface-base tonal-seam-r flex h-full w-12 shrink-0 flex-col items-center py-3">
+    <div className="surface-base flex h-full w-12 shrink-0 flex-col items-center border-r border-border py-3">
       <nav
         className="flex min-h-0 w-full flex-1 flex-col items-center gap-0.5 overflow-y-auto px-0.5"
         aria-label="Primary"

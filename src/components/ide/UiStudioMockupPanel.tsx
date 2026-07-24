@@ -245,7 +245,7 @@ export function UiStudioMockupPanel() {
 
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden bg-background text-foreground">
-      <header className="surface-active shrink-0 border-b border-white/5 px-3 py-2.5">
+      <header className="surface-active shrink-0 border-b border-border px-3 py-2.5">
         <h2 className="text-xs font-medium text-foreground">SVG mockups</h2>
         <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
           Generate directions, edit SVG, then Analyze → Adapt → Approve. Saved to{' '}

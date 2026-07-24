@@ -64,10 +64,10 @@ export function CodeEditor({ hidePreviewButton = false }: { hidePreviewButton?: 
 
   return (
     <div className="flex h-full flex-col bg-[var(--surface-bright)]">
-      <div className="surface-active tonal-seam-b flex h-9 items-center justify-between gap-2 pr-2">
-        <div className="flex min-w-0 flex-1 items-center overflow-x-auto">
+      <div className="surface-active flex h-9 items-stretch justify-between gap-2 border-b border-border pr-2">
+        <div className="flex min-w-0 flex-1 items-stretch overflow-x-auto border-l border-border">
           {tabs.length === 0 ? (
-            <span className="type-label-sm truncate px-3 text-muted-foreground">No open files</span>
+            <span className="type-label-sm truncate px-3 text-muted-foreground self-center">No open files</span>
           ) : (
             tabs.map((tab) => (
               <button
@@ -75,15 +75,15 @@ export function CodeEditor({ hidePreviewButton = false }: { hidePreviewButton?: 
                 type="button"
                 onClick={() => setActivePath(tab.path)}
                 className={cn(
-                  'group flex h-9 shrink-0 items-center gap-2 px-3 transition-colors duration-300 ease-out',
+                  'group flex h-9 shrink-0 items-center gap-2 border-r border-border px-3 font-normal transition-colors duration-300 ease-out',
                   activePath === tab.path
-                    ? 'active-tab-sheen type-title-sm text-primary'
-                    : 'type-title-sm text-muted-foreground hover:text-foreground',
+                    ? 'bg-background text-foreground shadow-[inset_0_2px_0_0_var(--primary)]'
+                    : 'bg-black text-muted-foreground hover:bg-[#111111] hover:text-foreground',
                 )}
               >
                 {tab.dirty && <Circle className="h-1.5 w-1.5 fill-primary text-primary" />}
                 {tab.loading && <Loader2 className="h-3 w-3 shrink-0 animate-spin text-muted-foreground" />}
-                <span className="max-w-[180px] truncate">{tab.path.split('/').pop() || tab.path}</span>
+                <span className="max-w-[180px] truncate text-xs">{tab.path.split('/').pop() || tab.path}</span>
                 <X
                   className="h-3 w-3 opacity-0 transition-opacity group-hover:opacity-100 hover:text-foreground"
                   onClick={(e) => closeTabClick(tab.path, e)}
@@ -118,7 +118,7 @@ export function CodeEditor({ hidePreviewButton = false }: { hidePreviewButton?: 
         </div>
       </div>
 
-      <div className="surface-active flex h-7 min-h-7 items-center gap-1 overflow-x-auto px-3">
+      <div className="surface-active flex h-7 min-h-7 items-center gap-1 overflow-x-auto border-b border-border px-3">
         {crumbs.length === 0 ? (
           <span className="type-label-sm text-muted-foreground">Select a file in the explorer</span>
         ) : (

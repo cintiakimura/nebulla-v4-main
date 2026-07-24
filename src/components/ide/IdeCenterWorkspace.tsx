@@ -74,8 +74,8 @@ export function IdeCenterWorkspace() {
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background">
       {openTabs.length > 0 ? (
-        <div className="surface-active tonal-seam-b flex h-9 shrink-0 items-center overflow-hidden border-b border-white/5">
-          <div className="flex min-w-0 flex-1 items-stretch overflow-x-auto">
+        <div className="surface-active flex h-9 shrink-0 items-stretch overflow-hidden border-b border-border">
+          <div className="flex min-w-0 flex-1 items-stretch overflow-x-auto border-l border-border">
             {openTabs.map((tab) => {
               const active = tab.id === activeTabId;
               const isFile = tab.kind === 'file';
@@ -85,16 +85,16 @@ export function IdeCenterWorkspace() {
                 <div
                   key={tab.id}
                   className={cn(
-                    'group flex h-9 max-w-[220px] shrink-0 items-center gap-1 border-r border-white/5 px-2.5',
+                    'group flex h-9 max-w-[220px] shrink-0 items-center gap-1 border-r border-border px-2.5',
                     active
-                      ? 'bg-background text-foreground shadow-[inset_0_2px_0_0_hsl(var(--primary))]'
-                      : 'text-muted-foreground hover:bg-secondary/60 hover:text-foreground',
+                      ? 'bg-background text-foreground shadow-[inset_0_2px_0_0_var(--primary)]'
+                      : 'bg-black text-muted-foreground hover:bg-[#111111] hover:text-foreground',
                   )}
                 >
                   <button
                     type="button"
                     onClick={() => activateTab(tab.id)}
-                    className="flex min-w-0 flex-1 items-center gap-1.5 truncate text-left text-xs"
+                    className="flex min-w-0 flex-1 items-center gap-1.5 truncate text-left text-xs font-normal"
                     title={isFile ? tab.path : tab.label}
                   >
                     {!isFile ? PANEL_ICONS[tab.pane!] : null}
@@ -108,7 +108,7 @@ export function IdeCenterWorkspace() {
                     type="button"
                     aria-label={`Close ${tab.label}`}
                     onClick={() => closeTab(tab.id)}
-                    className="rounded p-0.5 opacity-0 transition-opacity hover:bg-white/10 group-hover:opacity-100"
+                    className="rounded p-0.5 opacity-0 transition-opacity hover:bg-[#111111] group-hover:opacity-100"
                   >
                     <X className="h-3 w-3" />
                   </button>

@@ -1709,7 +1709,7 @@ export function AIChat() {
   }, [micInputBlocked, sending, serverHasGrokKey, stopVoiceRecognition, refreshWorkspaceMeta, resumeOpenTalkIfWanted, pushActivity, beginCodingActivity, resetCodingActivity, refreshChatV0Status, workspacePaths.length]);
 
   return (
-    <div className="surface-active tonal-seam-l flex h-full min-h-0 flex-col overflow-hidden">
+    <div className="surface-active flex h-full min-h-0 flex-col overflow-hidden">
       {showActivityPanel ? (
         <IdeGrokActivityPanel activity={grokActivity} v0Live={v0Live || v0WatchActive} />
       ) : null}
@@ -1830,7 +1830,7 @@ export function AIChat() {
         <div ref={messagesEndRef} className="h-px shrink-0" aria-hidden />
       </div>
 
-      <div className="tonal-seam-t shrink-0 p-3">
+      <div className="shrink-0 border-t border-border p-3">
         <div className="surface-float rounded-lg border border-transparent p-2 ring-1 ring-[color-mix(in_srgb,var(--outline-variant)_12%,transparent)] transition-[box-shadow,background-color] duration-300 ease-out focus-within:ring-[color-mix(in_srgb,var(--outline-variant)_22%,transparent)]">
           <textarea
             value={input}

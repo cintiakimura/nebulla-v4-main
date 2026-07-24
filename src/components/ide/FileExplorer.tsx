@@ -128,8 +128,8 @@ export function FileExplorer() {
 
   return (
     <div className="surface-active flex h-full flex-col">
-      <div className="tonal-seam-b flex h-8 items-center justify-between px-3">
-        <span className="text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground/80">
+      <div className="flex h-8 items-center justify-between border-b border-border px-3">
+        <span className="text-[10px] font-normal uppercase tracking-[0.12em] text-muted-foreground/80">
           Explorer
         </span>
         <div className="flex items-center gap-0.5">
