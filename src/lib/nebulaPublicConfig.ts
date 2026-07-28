@@ -33,6 +33,9 @@ export type NebulaPublicConfig = {
   r2StorageHint?: string;
   /** True when CLOUDFLARE_API_TOKEN + account id are set for per-project D1 provisioning. */
   d1ProvisioningReady?: boolean;
+  /** True when CLOUDFLARE_API_TOKEN is set for Zone DNS management. */
+  cloudflareDnsReady?: boolean;
+  cloudflareDnsHint?: string;
 };
 
 export async function fetchNebulaPublicConfig(): Promise<NebulaPublicConfig> {

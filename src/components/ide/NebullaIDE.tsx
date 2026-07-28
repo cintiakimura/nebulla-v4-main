@@ -317,6 +317,8 @@ function NebullaIDEShell() {
     setMyServicesUser(null);
     setWorkspaceCtx(null);
     welcomeCheckedRef.current = false;
+    // Public marketing home (not the IDE gate).
+    window.location.assign('/');
   }, []);
 
   const handleAccountProjectNameChange = useCallback(

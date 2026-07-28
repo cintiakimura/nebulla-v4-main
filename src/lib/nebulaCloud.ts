@@ -224,6 +224,8 @@ export async function upsertCloudProject(payload: {
   name: string;
   pages: unknown;
   edges: unknown;
+  /** When renaming, pass the previous project name so free-tier limit allows the swap. */
+  replaceName?: string;
 }): Promise<boolean> {
   const res = await fetch('/api/projects', {
     method: 'POST',
@@ -231,7 +233,16 @@ export async function upsertCloudProject(payload: {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
   });
-  if (!res.ok) return false;
+  if (!res.ok) {
+    const data = await readResponseJson<{ error?: string; code?: string }>(res);
+    const msg =
+      typeof data.error === 'string'
+        ? data.error
+        : data.code === 'FREE_PROJECT_LIMIT'
+          ? 'Free plan allows 1 project. Delete it or upgrade on the Pricing page.'
+          : 'Failed to save project';
+    throw new Error(msg);
+  }
   void fireSilentProjectManager({ projectName: payload.name });
   return true;
 }
@@ -279,13 +290,22 @@ export async function renameActiveProjectDisplayName(
   const existing = (previous && (await getCloudProject(previous))) || (await getCloudProject(trimmed));
   const pages = existing?.pages ?? [];
   const edges = existing?.edges ?? [];
-  const ok = await upsertCloudProject({ name: trimmed, pages, edges });
-  if (ok) {
-    if (previous && previous !== trimmed) {
-      await deleteCloudProject(previous);
+  try {
+    const ok = await upsertCloudProject({
+      name: trimmed,
+      pages,
+      edges,
+      replaceName: previous && previous !== trimmed ? previous : undefined,
+    });
+    if (ok) {
+      if (previous && previous !== trimmed) {
+        await deleteCloudProject(previous);
+      }
+      persistActiveCloudSelection(trimmed, key);
+      dispatchWorkspaceSynced(trimmed, key);
     }
-    persistActiveCloudSelection(trimmed, key);
-    dispatchWorkspaceSynced(trimmed, key);
+  } catch {
+    /* keep previous name on failure */
   }
   return { projectName: getBrowserProjectName().trim() || trimmed, projectKey: key };
 }
@@ -378,14 +398,14 @@ export async function createAndSelectCloudProject(name: string): Promise<boolean
   const trimmed = name.trim() || 'Untitled Project';
   const existing = await getCloudProject(trimmed);
   if (existing) return selectCloudProjectByName(trimmed);
-  const ok = await upsertCloudProject({ name: trimmed, pages: [], edges: [] });
-  if (!ok) return false;
+  await upsertCloudProject({ name: trimmed, pages: [], edges: [] });
   return selectCloudProjectByName(trimmed);
 }
 
 /**
  * Create a project for the current session: cloud (PostgreSQL) when signed in,
  * otherwise guest localStorage. Returns the active name/key.
+ * Throws when free-tier project limit is reached.
  */
 export async function createProjectForCurrentSession(name: string): Promise<{
   projectName: string;
@@ -403,6 +423,7 @@ export async function createProjectForCurrentSession(name: string): Promise<{
         mode: 'cloud',
       };
     }
+    throw new Error('Could not create project. Try again or open Pricing to upgrade.');
   }
   const entry = createGuestProject({
     pages: [],

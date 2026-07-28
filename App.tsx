@@ -1,7 +1,2 @@
-import { LandingPage } from './src/components/LandingPage.tsx';
-
-function App() {
-  return <LandingPage onEnter={() => {}} />;
-}
-
-export default App;
+/** Legacy entry unused — Vite loads `src/main.tsx` → `src/App.tsx`. */
+export { default } from './src/App';

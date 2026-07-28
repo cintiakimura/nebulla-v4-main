@@ -135,7 +135,16 @@ export function migrateLegacyGuestProject(
   return { index: [entry], activeId: id };
 }
 
+/** Free / guest: one active project. Delete an existing guest project to create another. */
+export const GUEST_FREE_PROJECT_LIMIT = 1;
+
 export function createGuestProject(initialPayload: ProjectPayload): ProjectIndexEntry {
+  const idx = readGuestIndex();
+  if (idx.length >= GUEST_FREE_PROJECT_LIMIT) {
+    throw new Error(
+      'Free plan allows 1 project. Delete your existing project, or sign in and upgrade for more.',
+    );
+  }
   const id =
     typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
       ? crypto.randomUUID()
@@ -146,7 +155,6 @@ export function createGuestProject(initialPayload: ProjectPayload): ProjectIndex
     name: initialPayload.projectName,
     updatedAt: new Date().toISOString(),
   };
-  const idx = readGuestIndex();
   writeGuestIndex([entry, ...idx]);
   writeActiveGuestProjectId(id);
   return entry;

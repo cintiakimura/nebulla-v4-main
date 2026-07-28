@@ -1472,24 +1472,60 @@ export async function mountRenderStack(app: Express) {
     const uid = readSession(req);
     if (!uid) return res.status(401).json({ error: "Unauthorized" });
     if (!hasDb()) return res.status(503).json({ error: "Database not configured" });
-    const { name, pages, edges } = req.body || {};
+    const { name, pages, edges, replaceName } = req.body || {};
     if (typeof name !== "string" || !name.trim()) {
       return res.status(400).json({ error: "name is required" });
     }
     try {
       const db = requireDbPool();
       const trimmed = name.trim();
+      const renamingFrom =
+        typeof replaceName === "string" && replaceName.trim() && replaceName.trim() !== trimmed
+          ? replaceName.trim()
+          : "";
       const existing = await db.query(
         `SELECT workspace_id, d1_database_id, d1_database_name, pages, edges FROM public.nebula_projects WHERE user_id = $1::uuid AND name = $2`,
         [uid, trimmed]
       );
+      const hasExisting = Boolean(existing.rows[0]);
+      if (!hasExisting) {
+        const tierRow = await db.query(
+          `SELECT billing_tier FROM public.nebula_users WHERE id = $1::uuid`,
+          [uid],
+        );
+        const tier = String(tierRow.rows[0]?.billing_tier || "free")
+          .trim()
+          .toLowerCase();
+        if (tier === "free" || !tier) {
+          const countRow = await db.query(
+            `SELECT COUNT(*)::int AS n FROM public.nebula_projects WHERE user_id = $1::uuid`,
+            [uid],
+          );
+          const n = Number(countRow.rows[0]?.n || 0);
+          let renameOk = false;
+          if (renamingFrom && n >= 1) {
+            const owns = await db.query(
+              `SELECT 1 FROM public.nebula_projects WHERE user_id = $1::uuid AND name = $2 LIMIT 1`,
+              [uid, renamingFrom],
+            );
+            renameOk = Boolean(owns.rows[0]);
+          }
+          if (n >= 1 && !renameOk) {
+            return res.status(403).json({
+              ok: false,
+              code: "FREE_PROJECT_LIMIT",
+              error:
+                "Free plan allows 1 project. Delete your existing project, or upgrade on the Pricing page for more.",
+            });
+          }
+        }
+      }
       let workspaceId = existing.rows[0]?.workspace_id as string | undefined;
       if (!workspaceId || !String(workspaceId).trim()) {
         const rw = await provisionRenderWorkspaceForNewProject(uid, trimmed);
         workspaceId = rw.id;
       }
       // Avoid wiping existing mind-map JSON when callers upsert with empty arrays on "create".
-      const hasExisting = Boolean(existing.rows[0]);
       const pagesJson =
         pages !== undefined && !(hasExisting && Array.isArray(pages) && pages.length === 0)
           ? JSON.stringify(pages)

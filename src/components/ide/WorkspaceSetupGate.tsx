@@ -95,7 +95,9 @@ export function WorkspaceSetupGate({ onReady }: { onReady: (ctx: WorkspaceContex
           });
           return;
         }
-        // Show sign-in UI (Stay signed in checkbox applies on next login).
+        // Dedicated login page (keeps /app for authenticated / guest-only sessions).
+        window.location.assign('/login?next=/app');
+        return;
       }
       if (result.status === 'error') {
         setError(result.message);
@@ -216,6 +218,9 @@ export function WorkspaceSetupGate({ onReady }: { onReady: (ctx: WorkspaceContex
           mode: 'cloud',
         });
       }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Could not create project.';
+      setError(msg);
     } finally {
       setBusy(false);
     }

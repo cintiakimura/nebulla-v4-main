@@ -285,8 +285,14 @@ export function UserProfilePage({
                   Current plan: <span className="text-cyan-200 font-medium">{billingLabel(user.billingTier)}</span>
                 </p>
                 <p className="text-sm text-slate-400 leading-relaxed">
-                  Stripe billing portal is not enabled yet. When it is, you will manage invoices and payment method here.
+                  Free includes one active project. Upgrade for more projects and higher AI limits.
                 </p>
+                <a
+                  href="/pricing"
+                  className="inline-flex text-sm text-cyan-300/90 hover:text-cyan-200 underline-offset-2 hover:underline"
+                >
+                  View pricing &amp; upgrade →
+                </a>
               </section>
 
               <AccountProjectSettings

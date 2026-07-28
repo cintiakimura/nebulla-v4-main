@@ -7,7 +7,6 @@ import {
   Users,
   FileText,
   Upload,
-  Globe,
   Plus,
   MoreHorizontal,
   Copy,
@@ -34,6 +33,7 @@ import {
 } from '../lib/byokClient';
 import { clearLocalGrokApiKeyCache } from '../lib/grokUserKey';
 import { SecretsKeysConnections } from '@/components/secrets/SecretsKeysConnections';
+import { CloudflareDnsPanel } from '@/components/dns/CloudflareDnsPanel';
 import type { NebulaSessionUser } from '../lib/nebulaCloud';
 import type { NebulaPublicConfig } from '../lib/nebulaPublicConfig';
 
@@ -116,7 +116,7 @@ export function Dashboard({
               publicConfig={publicConfig}
             />
           )}
-          {activeTab === 'dns' && <DnsTab activeProjectKey={activeProjectKey} />}
+          {activeTab === 'dns' && <CloudflareDnsPanel activeProjectKey={activeProjectKey} />}
         </div>
       </div>
       <VersionHistoryModal open={versionHistoryOpen} onClose={() => setVersionHistoryOpen(false)} />
@@ -307,246 +307,6 @@ function ProjectsTab({
             </div>
           </button>
         </div>
-      </div>
-    </div>
-  );
-}
-
-type DnsRecordType = 'A' | 'AAAA' | 'CNAME' | 'MX' | 'TXT' | 'NS' | 'SRV';
-
-type DnsRecordRow = {
-  id: string;
-  type: DnsRecordType;
-  name: string;
-  value: string;
-  ttl: string;
-  priority: string;
-};
-
-const DNS_TYPES: DnsRecordType[] = ['A', 'AAAA', 'CNAME', 'MX', 'TXT', 'NS', 'SRV'];
-
-function dnsStorageKey(projectKey: string) {
-  return `nebula_dns_planning_${projectKey || 'default'}`;
-}
-
-function loadDnsPlanning(projectKey: string): { domain: string; records: DnsRecordRow[] } {
-  try {
-    const raw = localStorage.getItem(dnsStorageKey(projectKey));
-    if (!raw) return { domain: '', records: [] };
-    const parsed = JSON.parse(raw) as { domain?: string; records?: DnsRecordRow[] };
-    return {
-      domain: typeof parsed.domain === 'string' ? parsed.domain : '',
-      records: Array.isArray(parsed.records) ? parsed.records : [],
-    };
-  } catch {
-    return { domain: '', records: [] };
-  }
-}
-
-function saveDnsPlanning(projectKey: string, domain: string, records: DnsRecordRow[]) {
-  try {
-    localStorage.setItem(dnsStorageKey(projectKey), JSON.stringify({ domain, records }));
-  } catch {
-    /* ignore */
-  }
-}
-
-function newDnsRecordId() {
-  return `dns_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
-}
-
-function DnsTab({ activeProjectKey }: { activeProjectKey: string }) {
-  const initial = loadDnsPlanning(activeProjectKey);
-  const [customDomain, setCustomDomain] = useState(initial.domain);
-  const [records, setRecords] = useState<DnsRecordRow[]>(initial.records);
-
-  useEffect(() => {
-    const next = loadDnsPlanning(activeProjectKey);
-    setCustomDomain(next.domain);
-    setRecords(next.records);
-  }, [activeProjectKey]);
-
-  useEffect(() => {
-    saveDnsPlanning(activeProjectKey, customDomain, records);
-  }, [activeProjectKey, customDomain, records]);
-
-  const updateRecord = (id: string, patch: Partial<DnsRecordRow>) => {
-    setRecords((prev) => prev.map((r) => (r.id === id ? { ...r, ...patch } : r)));
-  };
-
-  return (
-    <div className="space-y-8 animate-in slide-in-from-right-4 duration-300">
-      <div>
-        <h3 className="text-xl font-headline text-cyan-300 mb-1 flex items-center gap-2">
-          <Globe className="w-6 h-6" />
-          DNS & domain
-        </h3>
-        <p className="text-sm text-slate-500 mb-6">
-          Point your domain at the deployed Render service. Values here are for planning only until your control plane
-          syncs them to Render.
-        </p>
-      </div>
-
-      <div className="space-y-4 rounded-xl border border-white/10 bg-white/5 p-6">
-        <label className="block text-[10px] uppercase tracking-wider text-slate-500 font-headline">Custom domain</label>
-        <input
-          type="text"
-          value={customDomain}
-          onChange={(e) => setCustomDomain(e.target.value)}
-          placeholder="app.example.com"
-          className="mt-1 w-full max-w-md bg-black/30 border border-white/10 rounded-lg px-3 py-2 text-sm text-slate-200 focus:border-cyan-500/40 outline-none"
-        />
-      </div>
-
-      <div className="space-y-4 rounded-xl border border-white/10 bg-white/5 p-6">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <h4 className="text-sm font-headline text-slate-200">DNS records</h4>
-          <button
-            type="button"
-            onClick={() =>
-              setRecords((prev) => [
-                ...prev,
-                {
-                  id: newDnsRecordId(),
-                  type: 'CNAME',
-                  name: '',
-                  value: '',
-                  ttl: '3600',
-                  priority: '',
-                },
-              ])
-            }
-            className="inline-flex items-center gap-1.5 rounded-lg border border-cyan-500/30 bg-cyan-500/10 px-3 py-1.5 text-xs text-cyan-100 hover:bg-cyan-500/20"
-          >
-            <Plus className="w-3.5 h-3.5" aria-hidden />
-            Add record
-          </button>
-        </div>
-
-        {records.length === 0 ? (
-          <p className="text-sm text-slate-500 py-4 text-center border border-dashed border-white/10 rounded-lg">
-            No records yet. Add A, CNAME, MX, TXT, and other records for planning.
-          </p>
-        ) : (
-          <ul className="space-y-4">
-            {records.map((row) => {
-              const needsPriority = row.type === 'MX' || row.type === 'SRV';
-              return (
-                <li
-                  key={row.id}
-                  className="grid grid-cols-1 gap-3 rounded-lg border border-white/10 bg-black/20 p-4 sm:grid-cols-2 lg:grid-cols-6"
-                >
-                  <div>
-                    <label className="block text-[10px] uppercase tracking-wider text-slate-500 font-headline mb-1">
-                      Type
-                    </label>
-                    <select
-                      value={row.type}
-                      onChange={(e) => updateRecord(row.id, { type: e.target.value as DnsRecordType })}
-                      className="w-full bg-black/30 border border-white/10 rounded-lg px-2 py-2 text-sm text-slate-200 focus:border-cyan-500/40 outline-none"
-                    >
-                      {DNS_TYPES.map((t) => (
-                        <option key={t} value={t}>
-                          {t}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-[10px] uppercase tracking-wider text-slate-500 font-headline mb-1">
-                      Name / Host
-                    </label>
-                    <input
-                      type="text"
-                      value={row.name}
-                      onChange={(e) => updateRecord(row.id, { name: e.target.value })}
-                      placeholder="@ or www"
-                      className="w-full bg-black/30 border border-white/10 rounded-lg px-2 py-2 text-sm text-slate-200 focus:border-cyan-500/40 outline-none"
-                    />
-                  </div>
-                  <div className="sm:col-span-2 lg:col-span-2">
-                    <label className="block text-[10px] uppercase tracking-wider text-slate-500 font-headline mb-1">
-                      Value / Target
-                    </label>
-                    <input
-                      type="text"
-                      value={row.value}
-                      onChange={(e) => updateRecord(row.id, { value: e.target.value })}
-                      placeholder="IP or hostname"
-                      className="w-full bg-black/30 border border-white/10 rounded-lg px-2 py-2 text-sm text-slate-200 font-mono focus:border-cyan-500/40 outline-none"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[10px] uppercase tracking-wider text-slate-500 font-headline mb-1">
-                      TTL
-                    </label>
-                    <input
-                      type="text"
-                      value={row.ttl}
-                      onChange={(e) => updateRecord(row.id, { ttl: e.target.value })}
-                      placeholder="3600"
-                      className="w-full bg-black/30 border border-white/10 rounded-lg px-2 py-2 text-sm text-slate-200 focus:border-cyan-500/40 outline-none"
-                    />
-                  </div>
-                  {needsPriority ? (
-                    <div>
-                      <label className="block text-[10px] uppercase tracking-wider text-slate-500 font-headline mb-1">
-                        Priority
-                      </label>
-                      <div className="flex gap-2">
-                        <input
-                          type="text"
-                          value={row.priority}
-                          onChange={(e) => updateRecord(row.id, { priority: e.target.value })}
-                          placeholder="10"
-                          className="w-full bg-black/30 border border-white/10 rounded-lg px-2 py-2 text-sm text-slate-200 focus:border-cyan-500/40 outline-none"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => setRecords((prev) => prev.filter((r) => r.id !== row.id))}
-                          className="shrink-0 rounded-lg border border-red-500/30 px-2 text-red-300 hover:bg-red-500/10"
-                          aria-label="Delete record"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="flex items-end">
-                      <button
-                        type="button"
-                        onClick={() => setRecords((prev) => prev.filter((r) => r.id !== row.id))}
-                        className="inline-flex items-center gap-1.5 rounded-lg border border-red-500/30 px-3 py-2 text-xs text-red-300 hover:bg-red-500/10"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                        Delete
-                      </button>
-                    </div>
-                  )}
-                </li>
-              );
-            })}
-          </ul>
-        )}
-      </div>
-
-      <div className="rounded-xl border border-cyan-500/20 bg-cyan-500/5 p-6 text-sm text-slate-300 space-y-3">
-        <p className="font-headline text-cyan-200">Typical setup</p>
-        <ul className="list-disc pl-5 space-y-2 text-slate-400">
-          <li>
-            <strong className="text-slate-300">Apex / root domain:</strong> use Render’s recommended ALIAS/ANAME or
-            flattened CNAME to your service hostname (see Render dashboard for the exact target).
-          </li>
-          <li>
-            <strong className="text-slate-300">Subdomain:</strong> add a{' '}
-            <code className="text-cyan-300/90">CNAME</code> from your subdomain to the Render service hostname shown for
-            this project.
-          </li>
-          <li>
-            After DNS propagates, set <code className="text-cyan-300/90">PUBLIC_SITE_URL</code> on the Web Service to the
-            final HTTPS origin and redeploy.
-          </li>
-        </ul>
       </div>
     </div>
   );

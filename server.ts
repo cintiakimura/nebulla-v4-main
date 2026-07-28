@@ -128,6 +128,8 @@ import {
 import { getNebullaPersistRoot, getNebulaProjectDocsRoot } from "./lib/nebulaWorkspaceRoot";
 import { ensureCloudProjectWorkspace } from "./lib/nebulaCloudProjectRoot";
 import { registerSecurityScanRoutes } from "./lib/securityScan/registerSecurityScanRoutes";
+import { registerCloudflareDnsRoutes } from "./lib/nebulaCloudflareDnsRoutes";
+import { getCloudflareDnsStatus } from "./lib/nebulaCloudflareDns";
 import { getProjectKeyFromRequest, sanitizeProjectKey } from "./lib/nebulaProjectKey";
 import {
   emptyPreviewHtmlWithBridge,
@@ -513,6 +515,8 @@ async function startServer() {
           ? `Set ${r2MissingOnBoot.join(", ")} in .env for Cloudflare R2 uploads.`
           : undefined,
       d1ProvisioningReady: Boolean(render.d1ProvisioningReady),
+      cloudflareDnsReady: getCloudflareDnsStatus().ready,
+      cloudflareDnsHint: getCloudflareDnsStatus().hint,
       pencilMockupsReady: Boolean(pencilKey),
       nebulaUiStudioDemo: Boolean(!pencilKey && useBundledDemoMockupWithoutKey()),
       workspaceMode: "cloud",
@@ -561,6 +565,13 @@ async function startServer() {
       const fromQuery =
         typeof req.query.projectName === "string" ? String(req.query.projectName).trim() : "";
       return fromBody || fromQuery || undefined;
+    },
+  });
+
+  registerCloudflareDnsRoutes(app, {
+    projectPathsFor: (req) => {
+      const pp = projectPathsFor(req);
+      return { workspaceRoot: pp.workspaceRoot, projectKey: pp.projectKey };
     },
   });
 
@@ -2483,12 +2494,62 @@ No approved UI code yet.
     res.json({ success: true });
   });
 
-  // Stripe Integration (DISABLED until further notice)
-  app.post("/api/create-checkout-session", (req, res) => {
-    res.status(503).json({ 
-      error: "Payments are currently disabled", 
-      message: "Stripe integration is kept in the codebase but inactive per project settings." 
-    });
+  /** Stripe Checkout — requires STRIPE_SECRET_KEY (+ STRIPE_PRICE_PRO / STRIPE_PRICE_POWER). */
+  app.post("/api/create-checkout-session", async (req, res) => {
+    try {
+      const secret =
+        process.env.STRIPE_SECRET_KEY?.trim() ||
+        process.env.STRIPE_SECRET_KEY_LIVE?.trim() ||
+        process.env.STRIPE_SECRET_KEY_TEST?.trim() ||
+        "";
+      if (!secret) {
+        return res.status(503).json({
+          error: "Payments are not configured",
+          message:
+            "Stripe is not configured on this server yet. Set STRIPE_SECRET_KEY and STRIPE_PRICE_PRO (or STRIPE_PRICE_POWER), then redeploy.",
+        });
+      }
+
+      const uid = readNebulaSessionUserId(req);
+      if (!uid) return res.status(401).json({ error: "Sign in to upgrade." });
+
+      const plan = String(req.body?.plan || "pro").trim().toLowerCase();
+      const priceId =
+        plan === "power"
+          ? process.env.STRIPE_PRICE_POWER?.trim() || process.env.STRIPE_PRICE_PRO?.trim() || ""
+          : process.env.STRIPE_PRICE_PRO?.trim() || "";
+      if (!priceId) {
+        return res.status(503).json({
+          error: "Price not configured",
+          message: `No Stripe price id for plan "${plan}". Set STRIPE_PRICE_PRO / STRIPE_PRICE_POWER in the environment.`,
+        });
+      }
+
+      const site =
+        process.env.PUBLIC_SITE_URL?.trim().replace(/\/$/, "") ||
+        `${req.protocol}://${req.get("host")}`;
+
+      const Stripe = (await import("stripe")).default;
+      const stripe = new Stripe(secret);
+      const session = await stripe.checkout.sessions.create({
+        mode: "subscription",
+        line_items: [{ price: priceId, quantity: 1 }],
+        success_url: `${site}/app?checkout=success`,
+        cancel_url: `${site}/pricing?canceled=1`,
+        client_reference_id: uid,
+        metadata: { nebula_user_id: uid, nebula_plan: plan === "power" ? "power" : "pro" },
+      });
+      if (!session.url) {
+        return res.status(500).json({ error: "Stripe did not return a checkout URL" });
+      }
+      return res.json({ ok: true, url: session.url });
+    } catch (e) {
+      console.error("[stripe/checkout]", e);
+      return res.status(500).json({
+        error: e instanceof Error ? e.message : "Checkout failed",
+        message: "Could not start Stripe Checkout. Check API keys and price IDs.",
+      });
+    }
   });
 
   app.post("/api/nebula-ui-studio/prompt", (req, res) => {

@@ -224,6 +224,11 @@ export function MyProjectsHome() {
       } catch (err) {
         console.error('[MyProjectsHome] start typed project failed', err);
         setStartingType(null);
+        const msg = err instanceof Error ? err.message : 'Could not start the project.';
+        window.alert(msg);
+        if (/upgrade|Pricing|1 project/i.test(msg)) {
+          window.location.assign('/pricing');
+        }
       }
     },
     [busyStarting],
@@ -249,7 +254,11 @@ export function MyProjectsHome() {
     } catch (err) {
       console.error('[MyProjectsHome] start from idea failed', err);
       setStartingIdea(false);
-      setIdeaError('Could not start the project. Try again.');
+      const msg = err instanceof Error ? err.message : 'Could not start the project. Try again.';
+      setIdeaError(msg);
+      if (/upgrade|Pricing|1 project/i.test(msg)) {
+        window.setTimeout(() => window.location.assign('/pricing'), 1200);
+      }
     }
   }, [busyStarting, ideaInput, ideaType]);
 

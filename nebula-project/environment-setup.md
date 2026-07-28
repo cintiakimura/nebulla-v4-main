@@ -65,6 +65,10 @@ When a Nebulla project is created, the control plane **auto-provisions one Cloud
 | `CLOUDFLARE_ACCOUNT_ID` | Cloudflare account id (same as R2 when using `R2_ACCOUNT_ID`) |
 | `CLOUDFLARE_D1_DATABASE_ID` | D1 database UUID — use as `database_id` in Workers `wrangler.toml` binding |
 | `CLOUDFLARE_D1_DATABASE_NAME` | Human-readable D1 name |
+| `CLOUDFLARE_API_TOKEN` | Also powers **DNS tab** when the token includes Zone:Read + DNS:Edit |
+| `CLOUDFLARE_ZONE_ID` | Optional default zone id for DNS connect |
+
+**DNS (Secrets → DNS):** With a token that can read zones and edit DNS, Nebulla can create/list/delete Cloudflare records for a project’s custom domain (CNAME to Render, etc.). Preference is stored in the project workspace as `nebula-dns.json`.
 
 **Do not** put the platform `CLOUDFLARE_API_TOKEN` into the generated app env (account-wide). Apps should use a Workers D1 binding with `CLOUDFLARE_D1_DATABASE_ID`.
 
