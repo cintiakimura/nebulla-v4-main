@@ -11,6 +11,7 @@ import { withProjectBody, withProjectQuery } from './nebulaProjectApi';
 import { buildLanguagePromptAppendix } from './i18n/languagePromptAppendix';
 import type { IdeLocaleCode } from './i18n/locales';
 import type { ContentLanguageMode } from './i18n/userLanguagePreferences';
+import { matchBugDatabaseSnippets } from './bugDatabaseSnippet';
 
 export const MASTER_PLAN_TAB_NAMES = [...MASTER_PLAN_SECTION_KEYS] as const;
 
@@ -234,13 +235,13 @@ BUILD_MODE is active for this turn. Do not explain code in chat — emit file ar
 /** Compact NDM reminder injected when Smart Chat detects debugging mode. */
 export const NDM_DEBUG_APPENDIX = `
 ACTIVE MODE: DEBUGGING — Nebula Debugging Method (NDM) is mandatory this turn:
-1) Verify — expected vs actual; exact error/stack/UI symptom.
-2) Analyze — imports/paths, null/undefined, env, API mismatches, async, deps (check full-bug-database.md patterns). List 2–5 causes; pick one root cause.
+1) Verify — use [APP_STATUS_DEBUG] when present (do not ask what error they see); else expected vs actual + exact symptom.
+2) Analyze — imports/paths, null/undefined, env, API mismatches, async, deps (check full-bug-database.md / BUG_DATABASE_HINTS). List 2–5 causes; pick one root cause.
 3) Trace — follow call stack / data flow; use code-review-checklist.md mentally. Explain briefly before coding.
 4) Fix — smallest safe change only via \`\`\`file:relative/path\` … \`\`\` (no large refactors; no casual \`\`\`typescript fences).
-5) Validate — confirm the original bug is fixed; note remaining risks in one short sentence.
-Output contract: 1–3 sentences (Verify→Analyze→Trace) → file: Fix blocks → one Validate line.
-Do not jump to a fix before Verify → Analyze → Trace. Prefer silent auto-fix language ("we fixed…").
+5) Validate — tell them to reload Preview; App Status should go green if fingerprints do not reappear. Note remaining risks in one short sentence.
+Output contract: 1–3 sentences (Verify→Analyze→Trace) → file: Fix blocks → one Validate line (reload Preview / App Status).
+Chat language = CONTENT_LOCALE (device prefs + Grok detection). Do not jump to a fix before Verify → Analyze → Trace.
 `.trim();
 
 /** Compact coding quality reminder when Smart Chat detects coding mode. */
@@ -279,6 +280,8 @@ export function chatModeSystemAppendix(options: {
   interactionMode?: 'chat' | 'agent';
   /** Message includes [APP_STATUS_DEBUG] from preview runtime health. */
   hasAppStatusPayload?: boolean;
+  /** Technical lines from App Status for bug-db pattern hints. */
+  appStatusTechnicalMessages?: string[];
   /** IDE chrome locale (static catalogs). */
   ideLocale?: IdeLocaleCode;
   /** User-visible chat / Master Plan / UI copy locale. */
@@ -331,6 +334,7 @@ export function chatModeSystemAppendix(options: {
         '- NDM Step 1 Verify MUST use that payload (friendly + technical). Do NOT ask “what error do you see?”',
         '- Ask only if expected behavior is still unclear.',
         '- Follow Verify → Analyze → Trace → Fix → Validate.',
+        '- After Fix: tell the user to reload Preview; App Status should go green when the bug is gone.',
         '- Chat-facing copy stays beginner-friendly (user-communication-rules.md); never dump raw stacks in chat unless they expand Technical details themselves.',
         interactionMode === 'chat'
           ? '- Chat lock: discuss the issue only; tell them to use Fix with Agent / switch to Agent to apply a fix.'
@@ -339,6 +343,11 @@ export function chatModeSystemAppendix(options: {
     );
     if (interactionMode === 'agent') {
       parts.push(NDM_DEBUG_APPENDIX);
+    }
+    const techMsgs = options.appStatusTechnicalMessages || [];
+    if (techMsgs.length > 0) {
+      const hints = matchBugDatabaseSnippets(techMsgs);
+      if (hints) parts.push(hints);
     }
   }
 

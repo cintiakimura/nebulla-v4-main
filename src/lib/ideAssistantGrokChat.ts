@@ -76,6 +76,8 @@ export async function sendIdeAssistantGrokTurn(options: {
   interactionMode?: 'chat' | 'agent';
   /** When true, message includes [APP_STATUS_DEBUG] — force NDM Verify from App Status. */
   hasAppStatusPayload?: boolean;
+  /** Technical lines from App Status for bug-db pattern hints. */
+  appStatusTechnicalMessages?: string[];
   /** Language contract — see nebulla-project/language-system.md */
   ideLocale?: IdeLocaleCode;
   contentLocale?: IdeLocaleCode;
@@ -111,6 +113,7 @@ export async function sendIdeAssistantGrokTurn(options: {
     discoveryRequired: options.discoveryRequired,
     interactionMode,
     hasAppStatusPayload,
+    appStatusTechnicalMessages: options.appStatusTechnicalMessages,
     ideLocale: options.ideLocale,
     contentLocale: options.contentLocale,
     contentMode: options.contentMode,

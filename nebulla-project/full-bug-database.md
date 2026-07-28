@@ -11,6 +11,8 @@ Use this file **only** when a specific error occurs during validation, testing, 
 
 **App Status:** Preview runtime fingerprints (`[APP_STATUS_DEBUG]`) often map to **Runtime Errors**, **React / Frontend** (hydration), **API route mismatch**, or **HTTP 4xx / 5xx**. Prefer matching those categories when the technical message looks like `Cannot read properties of undefined`, hydration warnings, `Module not found`, or failed fetch — see `app-status-runtime.md`.
 
+When App Status / debugging turns are active, the IDE may inject a short **`BUG_DATABASE_HINTS`** appendix (pattern match only). This file remains the full reference — do not expect the entire table in every prompt.
+
 ---
 
 | Bug Category | Description / Examples | Prevention / Fix Tips | Common Error Codes / Messages | Real Code Example (Faulty) |

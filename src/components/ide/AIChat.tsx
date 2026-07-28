@@ -98,10 +98,17 @@ import { playTtsText } from '../../lib/ttsPlayback';
 import { IdeGrokActivityPanel } from './IdeGrokActivityPanel';
 import { IdeAppStatusMenuButton } from './IdeAppStatusMenu';
 import {
-  formatAppStatusDebugMessage,
-  getLatestAppRuntimeIssue,
+  APP_STATUS_EVENTS,
+  assistantSkippedNdmVerify,
+  formatLatestAppStatusDebugMessage,
+  getAppRuntimeSnapshot,
+  getAppStatusDebugIssues,
   looksLikeBrokenAppComplaint,
+  markAppRuntimePendingValidation,
+  reportAppRuntimeIssue,
+  requestAppPreviewReload,
   resetAppRuntimeForProject,
+  shouldMarkAppStatusValidation,
 } from '../../lib/ideAppRuntimeStatus';
 import { useLanguage } from '@/components/i18n/LanguageProvider';
 import { bcp47ForLocale } from '../../lib/i18n/locales';
@@ -265,6 +272,15 @@ export function AIChat() {
         : { ...prev, subhead: interactionModeIdleSubhead(assistantInteractionMode) },
     );
   }, [assistantInteractionMode, t]);
+
+  useEffect(() => {
+    const onLooksFixed = () => {
+      setAccessoryHint(t('appStatus.looksFixed'));
+      window.setTimeout(() => setAccessoryHint(null), 4000);
+    };
+    window.addEventListener(APP_STATUS_EVENTS.looksFixed, onLooksFixed);
+    return () => window.removeEventListener(APP_STATUS_EVENTS.looksFixed, onLooksFixed);
+  }, [t]);
 
   const modeStatusChip = useMemo(
     () => interactionModeStatusLabel(assistantInteractionMode),
@@ -1041,11 +1057,25 @@ export function AIChat() {
     // Attach App Status Verify evidence when user says "it's broken" (or payload already present).
     let text = rawText;
     const alreadyHasAppStatus = /\[APP_STATUS_DEBUG\]/i.test(rawText);
-    const latestIssue = getLatestAppRuntimeIssue();
-    if (!alreadyHasAppStatus && latestIssue && looksLikeBrokenAppComplaint(rawText)) {
-      text = `${rawText}\n\n${formatAppStatusDebugMessage(latestIssue)}`;
+    if (!alreadyHasAppStatus && looksLikeBrokenAppComplaint(rawText)) {
+      const payload = formatLatestAppStatusDebugMessage({
+        openFilePath: activePath || undefined,
+      });
+      if (payload) {
+        text = `${rawText}\n\n${payload}`;
+      }
+    } else if (alreadyHasAppStatus && activePath && !/ide_open_file:/i.test(text)) {
+      text = `${text.trimEnd()}\nide_open_file: ${activePath}`;
     }
     const hasAppStatusPayload = /\[APP_STATUS_DEBUG\]/i.test(text);
+    const appStatusTechnicalMessages = hasAppStatusPayload
+      ? (() => {
+          const { primary, related } = getAppStatusDebugIssues(3);
+          return [primary, ...related]
+            .filter(Boolean)
+            .map((i) => i!.technicalMessage);
+        })()
+      : [];
 
     // Smart Chat Handler — File mode short-circuits; other modes pass hints into Grok.
     // Never intercept hidden bootstrap, Master Plan discovery replies, or Go Code turns.
@@ -1306,6 +1336,7 @@ export function AIChat() {
           discoveryRequired,
           interactionMode: interactionModeRef.current,
           hasAppStatusPayload,
+          appStatusTechnicalMessages,
           ideLocale: resolvedIdeLocale,
           contentLocale: contentLocaleRef.current,
           contentMode: prefs.contentMode,
@@ -1464,39 +1495,77 @@ export function AIChat() {
               ...(coding.statusMessage
                 ? {
                     stepDetail: { index: showWorkActivity ? 4 : 2, detail: coding.statusMessage },
-                    log: { message: coding.statusMessage, kind: 'success' },
+                    log: {
+                      message: coding.statusMessage,
+                      kind: coding.ok === false ? 'error' : 'success',
+                    },
                   }
                 : {}),
             }),
           );
-          const artifactSync = await runPostCodingWorkspaceSync({
-            userNote: text,
-            projectName,
-            seedBasicUi: false,
-            openMindMap: true,
-            onProgress: pushActivity,
-          });
-          if (mpSaved > 0 || (artifactSync.masterPlanTabs ?? 0) > 0) {
-            window.dispatchEvent(new CustomEvent('nebula-open-master-plan'));
+          if (coding.ok === false && coding.statusMessage) {
+            reportAppRuntimeIssue({
+              technicalMessage: coding.statusMessage.slice(0, 800),
+              source: 'build',
+            });
           }
-          if (showWorkActivity) {
-            setGrokActivity((prev) =>
-              advanceGrokActivity(prev, showWorkActivity ? 6 : 4, {
-                currentAction: 'Grok Code finished — UI Studio Beta generation…',
-                log: { message: 'UI Studio Beta engine after Grok Code', kind: 'info' },
-              }),
-            );
+          // Validate loop only after a successful apply (device IDE locale + Grok CONTENT_LOCALE unchanged).
+          if (hasAppStatusPayload && shouldMarkAppStatusValidation(coding)) {
+            const fps = getAppRuntimeSnapshot()
+              .issues.filter((i) => i.severity !== 'info')
+              .map((i) => i.fingerprint);
+            markAppRuntimePendingValidation(fps);
+            setAccessoryHint(t('appStatus.validateReloadHint'));
+            window.setTimeout(() => {
+              requestAppPreviewReload();
+            }, 400);
+            window.setTimeout(() => setAccessoryHint(null), 8000);
           }
-          // Mind map only — do not auto-run V0 (Beta already triggered from file apply).
-          masterPlanPipeline = await runMasterPlanUiPipeline({
-            projectName,
-            autoV0: false,
-            quietV0Status: true,
-            onProgress: pushActivity,
-          });
-          dispatchOpenUiStudioBeta();
-          pushActivity('Coding pass finished — UI Studio Beta is the active generator', 'success');
-          resetCodingActivity();
+          if (
+            hasAppStatusPayload &&
+            shouldMarkAppStatusValidation(coding) &&
+            assistantSkippedNdmVerify(raw)
+          ) {
+            window.setTimeout(() => {
+              setAccessoryHint(t('appStatus.ndmNudge'));
+              window.setTimeout(() => setAccessoryHint(null), 4500);
+            }, 8500);
+          }
+          if (coding.ok === false) {
+            resetCodingActivity();
+          } else {
+            const artifactSync = await runPostCodingWorkspaceSync({
+              userNote: text,
+              projectName,
+              seedBasicUi: false,
+              openMindMap: true,
+              onProgress: pushActivity,
+            });
+            if (mpSaved > 0 || (artifactSync.masterPlanTabs ?? 0) > 0) {
+              window.dispatchEvent(new CustomEvent('nebula-open-master-plan'));
+            }
+            if (showWorkActivity) {
+              setGrokActivity((prev) =>
+                advanceGrokActivity(prev, showWorkActivity ? 6 : 4, {
+                  currentAction: 'Grok Code finished — UI Studio Beta generation…',
+                  log: { message: 'UI Studio Beta engine after Grok Code', kind: 'info' },
+                }),
+              );
+            }
+            // Mind map only — do not auto-run V0 (Beta already triggered from file apply).
+            masterPlanPipeline = await runMasterPlanUiPipeline({
+              projectName,
+              autoV0: false,
+              quietV0Status: true,
+              onProgress: pushActivity,
+            });
+            dispatchOpenUiStudioBeta();
+            pushActivity('Coding pass finished — UI Studio Beta is the active generator', 'success');
+            resetCodingActivity();
+          }
+        } else if (hasAppStatusPayload && agentAllowed && assistantSkippedNdmVerify(raw)) {
+          setAccessoryHint(t('appStatus.ndmNudge'));
+          window.setTimeout(() => setAccessoryHint(null), 4500);
         }
       } catch (codingErr) {
         console.warn('[AIChat] coding apply:', codingErr);
@@ -1975,13 +2044,17 @@ export function AIChat() {
 
   const handleFixWithAgent = useCallback(
     (debugMessage: string) => {
+      let msg = debugMessage;
+      if (activePath && /\[APP_STATUS_DEBUG\]/i.test(msg) && !/ide_open_file:/i.test(msg)) {
+        msg = `${msg.trimEnd()}\nide_open_file: ${activePath}`;
+      }
       if (interactionModeRef.current === 'chat') {
-        void applyInteractionMode('agent', { pendingText: debugMessage });
+        void applyInteractionMode('agent', { pendingText: msg });
         return;
       }
-      void sendChatRef.current(debugMessage);
+      void sendChatRef.current(msg);
     },
-    [applyInteractionMode],
+    [applyInteractionMode, activePath],
   );
 
   const handleFileAttachClick = useCallback(() => {
@@ -2104,12 +2177,21 @@ export function AIChat() {
       ) : null}
 
       {accessoryHint ? (
-        <p
-          className="type-label-sm shrink-0 border-b border-border/70 bg-muted/25 px-3 py-1.5 text-muted-foreground"
+        <div
+          className="type-label-sm flex shrink-0 items-center justify-between gap-2 border-b border-border/70 bg-muted/25 px-3 py-1.5 text-muted-foreground"
           role="status"
         >
-          {accessoryHint}
-        </p>
+          <span className="min-w-0 flex-1">{accessoryHint}</span>
+          {accessoryHint === t('appStatus.validateReloadHint') ? (
+            <button
+              type="button"
+              className="shrink-0 rounded-md px-2 py-0.5 font-medium text-primary hover:bg-primary/10"
+              onClick={() => requestAppPreviewReload()}
+            >
+              {t('appStatus.validateReloadCta')}
+            </button>
+          ) : null}
+        </div>
       ) : null}
 
       {sendError ? (

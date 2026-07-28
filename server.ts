@@ -127,6 +127,10 @@ import { getNebullaPersistRoot, getNebulaProjectDocsRoot } from "./lib/nebulaWor
 import { ensureCloudProjectWorkspace } from "./lib/nebulaCloudProjectRoot";
 import { getProjectKeyFromRequest, sanitizeProjectKey } from "./lib/nebulaProjectKey";
 import {
+  emptyPreviewHtmlWithBridge,
+  wrapHtmlWithPreviewRuntimeBridge,
+} from "./src/lib/previewRuntimeBridgeScript";
+import {
   isVisualEditorEligible,
   canPersistVisualPreviewModel,
   hasWorkspaceCodingShell,
@@ -1671,7 +1675,7 @@ No approved UI code yet.
     }
   });
 
-  /** Preview metadata: prefer v0.dev live URL when available, else workspace HTML bootstrap. */
+  /** Preview metadata. IDE App Preview always uses workspace bootstrap (preferV0 is always false). */
   app.get("/api/app-preview/meta", (req, res) => {
     try {
       const pp = projectPathsFor(req);
@@ -1680,8 +1684,9 @@ No approved UI code yet.
       res.json({
         ok: true,
         v0DemoUrl: demoUrl,
-        preferV0: Boolean(demoUrl && hasReal),
+        preferV0: false,
         hasRealV0: hasReal,
+        previewSource: "workspace",
       });
     } catch (err: unknown) {
       res.status(500).json({ error: err instanceof Error ? err.message : "preview meta failed" });
@@ -1702,12 +1707,7 @@ No approved UI code yet.
         ensurePreviewIndexHtml(pp.workspaceRoot, displayName);
       }
       if (!fs.existsSync(idx)) {
-        return res
-          .status(200)
-          .type("html")
-          .send(
-            `<!DOCTYPE html><html><head><meta charset="utf-8"/><title>No preview</title></head><body style="background:#0a1628;color:#94a3b8;font-family:system-ui;padding:2rem">No <code>index.html</code> in this workspace yet. Use <strong>Go</strong> to generate the app, then open Preview again.</body></html>`,
-          );
+        return res.status(200).type("html").send(emptyPreviewHtmlWithBridge());
       }
       let html = fs.readFileSync(idx, "utf8");
       const xfProto = (req.headers["x-forwarded-proto"] as string | undefined)?.split(",")[0]?.trim();
@@ -1718,6 +1718,8 @@ No approved UI code yet.
         html = html.replace(/<head([^>]*)>/i, `<head$1><base href="${baseHref}">`);
       }
       html = html.replace(/(src|href)=(["'])\/(?!\/)/gi, "$1=$2");
+      // Early App Status capture — before parent onload inject (idempotent with client inject).
+      html = wrapHtmlWithPreviewRuntimeBridge(html);
       res.type("html").send(html);
     } catch (err: unknown) {
       res.status(500).type("text/plain").send(err instanceof Error ? err.message : "bootstrap failed");

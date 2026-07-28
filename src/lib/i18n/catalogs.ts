@@ -108,6 +108,14 @@ const enAppStatus: Catalog = {
     'The preview hit a problem. Open Technical details if you want the exact message.',
   'appStatus.friendly.genericBodyWhere':
     'The preview hit a problem{{where}}. Open Technical details if you want the exact message.',
+  'appStatus.validateReloadHint': 'Reload the preview to validate the fix.',
+  'appStatus.validateReloadCta': 'Reload preview',
+  'appStatus.looksFixed': 'Looks fixed.',
+  'appStatus.ndmNudge': 'Tip: start with Verify next time.',
+  'appStatus.time.justNow': 'just now',
+  'appStatus.time.secondsAgo': '{{count}}s ago',
+  'appStatus.time.minutesAgo': '{{count}}m ago',
+  'appStatus.time.hoursAgo': '{{count}}h ago',
 };
 
 const enSettings: Catalog = {
@@ -222,6 +230,14 @@ const frAppStatus: Catalog = {
     'L’aperçu a rencontré un problème. Ouvre Détails techniques pour le message exact.',
   'appStatus.friendly.genericBodyWhere':
     'L’aperçu a rencontré un problème{{where}}. Ouvre Détails techniques pour le message exact.',
+  'appStatus.validateReloadHint': 'Recharge l’aperçu pour valider la correction.',
+  'appStatus.validateReloadCta': 'Recharger l’aperçu',
+  'appStatus.looksFixed': 'Ça a l’air corrigé.',
+  'appStatus.ndmNudge': 'Astuce : commence par Vérifier la prochaine fois.',
+  'appStatus.time.justNow': 'à l’instant',
+  'appStatus.time.secondsAgo': 'il y a {{count}} s',
+  'appStatus.time.minutesAgo': 'il y a {{count}} min',
+  'appStatus.time.hoursAgo': 'il y a {{count}} h',
 };
 
 const frSettings: Catalog = {
@@ -336,6 +352,14 @@ const itAppStatus: Catalog = {
     'L’anteprima ha avuto un problema. Apri Dettagli tecnici per il messaggio esatto.',
   'appStatus.friendly.genericBodyWhere':
     'L’anteprima ha avuto un problema{{where}}. Apri Dettagli tecnici per il messaggio esatto.',
+  'appStatus.validateReloadHint': 'Ricarica l’anteprima per validare la correzione.',
+  'appStatus.validateReloadCta': 'Ricarica anteprima',
+  'appStatus.looksFixed': 'Sembra sistemato.',
+  'appStatus.ndmNudge': 'Suggerimento: la prossima volta inizia da Verify.',
+  'appStatus.time.justNow': 'adesso',
+  'appStatus.time.secondsAgo': '{{count}}s fa',
+  'appStatus.time.minutesAgo': '{{count}}m fa',
+  'appStatus.time.hoursAgo': '{{count}}h fa',
 };
 
 const itSettings: Catalog = {
@@ -450,6 +474,14 @@ const esAppStatus: Catalog = {
     'La vista previa tuvo un problema. Abre Detalles técnicos para el mensaje exacto.',
   'appStatus.friendly.genericBodyWhere':
     'La vista previa tuvo un problema{{where}}. Abre Detalles técnicos para el mensaje exacto.',
+  'appStatus.validateReloadHint': 'Recarga la vista previa para validar la corrección.',
+  'appStatus.validateReloadCta': 'Recargar vista previa',
+  'appStatus.looksFixed': 'Parece corregido.',
+  'appStatus.ndmNudge': 'Consejo: la próxima vez empieza por Verify.',
+  'appStatus.time.justNow': 'ahora',
+  'appStatus.time.secondsAgo': 'hace {{count}} s',
+  'appStatus.time.minutesAgo': 'hace {{count}} min',
+  'appStatus.time.hoursAgo': 'hace {{count}} h',
 };
 
 const esSettings: Catalog = {
@@ -564,6 +596,14 @@ const deAppStatus: Catalog = {
     'Die Vorschau hatte ein Problem. Öffne Technische Details für die genaue Meldung.',
   'appStatus.friendly.genericBodyWhere':
     'Die Vorschau hatte ein Problem{{where}}. Öffne Technische Details für die genaue Meldung.',
+  'appStatus.validateReloadHint': 'Lade die Vorschau neu, um den Fix zu validieren.',
+  'appStatus.validateReloadCta': 'Vorschau neu laden',
+  'appStatus.looksFixed': 'Sieht behoben aus.',
+  'appStatus.ndmNudge': 'Tipp: beginne nächstes Mal mit Verify.',
+  'appStatus.time.justNow': 'gerade eben',
+  'appStatus.time.secondsAgo': 'vor {{count}} s',
+  'appStatus.time.minutesAgo': 'vor {{count}} Min.',
+  'appStatus.time.hoursAgo': 'vor {{count}} Std.',
 };
 
 const deSettings: Catalog = {

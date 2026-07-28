@@ -5,8 +5,10 @@ import {
   APP_STATUS_EVENTS,
   clearAppRuntimeIssues,
   formatAppStatusDebugMessage,
+  formatLatestAppStatusDebugMessage,
   getAppRuntimeErrorCount,
   getAppRuntimeSnapshot,
+  getAppStatusDebugIssues,
   mapRuntimeToFriendly,
   markAppRuntimeSeen,
   openAppStatusMenu,
@@ -128,7 +130,18 @@ export function IdeAppStatusMenuButton({
   const handleFix = useCallback(
     (issue: AppRuntimeIssue) => {
       setOpen(false);
-      onFixWithAgent(formatAppStatusDebugMessage(issue));
+      const { primary, related } = getAppStatusDebugIssues(3);
+      // Prefer multi-issue payload; fall back to the clicked card as primary.
+      const payload = primary
+        ? formatAppStatusDebugMessage({
+            primary: primary.id === issue.id ? primary : issue,
+            related:
+              primary.id === issue.id
+                ? related
+                : [primary, ...related.filter((r) => r.id !== issue.id)].slice(0, 2),
+          })
+        : formatAppStatusDebugMessage(issue);
+      onFixWithAgent(payload || formatLatestAppStatusDebugMessage() || formatAppStatusDebugMessage(issue));
     },
     [onFixWithAgent],
   );

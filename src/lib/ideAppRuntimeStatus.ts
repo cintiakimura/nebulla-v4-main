@@ -27,21 +27,29 @@ export type AppRuntimeSnapshot = {
   issues: AppRuntimeIssue[];
   unreadCount: number;
   lastSeenId: string | null;
+  pendingValidation: boolean;
 };
 
 const MAX_ISSUES = 20;
 const STACK_MAX = 2500;
 const MSG_MAX = 800;
+const DEBUG_PAYLOAD_MAX = 5500;
+const HEALTHY_QUIET_DEFAULT_MS = 4000;
 
 const ISSUE_EVENT = 'nebula-app-runtime-issue';
 const CLEARED_EVENT = 'nebula-app-runtime-cleared';
 const OPEN_MENU_EVENT = 'nebula-open-app-status';
+const LOOKS_FIXED_EVENT = 'nebula-app-runtime-looks-fixed';
+const RELOAD_PREVIEW_EVENT = 'nebula-reload-app-preview';
 const LAST_SEEN_LS = 'nebula-app-status-last-seen-id';
 
 type Listener = () => void;
 
 let issues: AppRuntimeIssue[] = [];
 let lastSeenId: string | null = readLastSeen();
+let pendingValidationFingerprints: string[] | null = null;
+let pendingValidationStartedAt = 0;
+let healthyTimer: ReturnType<typeof setTimeout> | null = null;
 const listeners = new Set<Listener>();
 
 function readLastSeen(): string | null {
@@ -80,13 +88,18 @@ function notify(): void {
 }
 
 function truncate(s: string, max: number): string {
-  const t = String(s || '').trim();
-  if (t.length <= max) return t;
-  return `${t.slice(0, max)}…`;
+  const text = String(s || '').trim();
+  if (text.length <= max) return text;
+  return `${text.slice(0, max)}…`;
 }
 
 function fingerprintOf(message: string, route?: string): string {
   return `${truncate(message, 200)}|${(route || '').trim()}`.toLowerCase();
+}
+
+function fingerprintFamily(fp: string): string {
+  const msg = (fp.split('|')[0] || '').replace(/\d+/g, '#').slice(0, 80);
+  return msg;
 }
 
 /** Map raw runtime text → beginner-friendly copy (user-communication-rules Tier 1). */
@@ -157,7 +170,12 @@ export function getAppRuntimeSnapshot(): AppRuntimeSnapshot {
     const newer = idx === -1 ? issues : issues.slice(0, idx);
     unreadCount = newer.filter((i) => i.severity !== 'info').length;
   }
-  return { issues: [...issues], unreadCount, lastSeenId };
+  return {
+    issues: [...issues],
+    unreadCount,
+    lastSeenId,
+    pendingValidation: Boolean(pendingValidationFingerprints?.length),
+  };
 }
 
 export function getAppRuntimeErrorCount(): number {
@@ -182,6 +200,8 @@ export function markAppRuntimeSeen(): void {
 export function clearAppRuntimeIssues(): void {
   issues = [];
   lastSeenId = null;
+  pendingValidationFingerprints = null;
+  clearHealthyTimer();
   writeLastSeen(null);
   emit(CLEARED_EVENT);
   notify();
@@ -193,9 +213,96 @@ export function clearAppRuntimeIssue(id: string): void {
   emit(CLEARED_EVENT, { id });
 }
 
+export function clearAppRuntimeByFingerprints(fingerprints: string[]): void {
+  const set = new Set(fingerprints.map((f) => f.toLowerCase()));
+  if (set.size === 0) return;
+  const before = issues.length;
+  issues = issues.filter((i) => !set.has(i.fingerprint.toLowerCase()));
+  if (issues.length === before) return;
+  notify();
+  emit(CLEARED_EVENT, { fingerprints: [...set] });
+}
+
 /** Clear when switching projects. */
 export function resetAppRuntimeForProject(): void {
   clearAppRuntimeIssues();
+}
+
+function clearHealthyTimer(): void {
+  if (healthyTimer != null) {
+    clearTimeout(healthyTimer);
+    healthyTimer = null;
+  }
+}
+
+/**
+ * After a successful Agent apply from an App Status turn — watch for a quiet reload.
+ * Does not clear issues yet; healthy check only treats re-reports after each load window.
+ */
+export function markAppRuntimePendingValidation(fingerprints?: string[]): void {
+  const fps =
+    fingerprints && fingerprints.length > 0
+      ? fingerprints
+      : issues.filter((i) => i.severity !== 'info').map((i) => i.fingerprint);
+  pendingValidationFingerprints = fps.length ? fps : null;
+  pendingValidationStartedAt = Date.now();
+  clearHealthyTimer();
+  notify();
+}
+
+export function requestAppPreviewReload(): void {
+  emit(RELOAD_PREVIEW_EVENT);
+}
+
+/**
+ * Call when same-origin preview loads / bridge injects.
+ * Fresh quiet window each load: only watched fingerprints re-reported during the window block resolve.
+ * Stale issues left in the store from before this window do NOT block (fixes false “still red”).
+ */
+export function scheduleAppRuntimeHealthyCheck(options?: { quietMs?: number }): void {
+  if (!pendingValidationFingerprints?.length) return;
+  const quietMs = options?.quietMs ?? HEALTHY_QUIET_DEFAULT_MS;
+  clearHealthyTimer();
+  // Reset window on every preview load so a prior reappear does not poison later reloads.
+  pendingValidationStartedAt = Date.now();
+  const started = pendingValidationStartedAt;
+  const watched = [...pendingValidationFingerprints];
+  healthyTimer = setTimeout(() => {
+    healthyTimer = null;
+    if (!pendingValidationFingerprints?.length) return;
+    if (pendingValidationStartedAt !== started) return;
+    const reappeared = issues.filter(
+      (i) =>
+        i.severity !== 'info' &&
+        watched.includes(i.fingerprint) &&
+        i.at > started, // strict: same-ms leftovers from before this window must not block
+    );
+    if (reappeared.length > 0) return;
+    clearAppRuntimeByFingerprints(watched);
+    if (getAppRuntimeErrorCount() === 0) {
+      issues = [];
+      lastSeenId = null;
+      writeLastSeen(null);
+    }
+    pendingValidationFingerprints = null;
+    notify();
+    emit(CLEARED_EVENT, { reason: 'validated' });
+    emit(LOOKS_FIXED_EVENT);
+  }, quietMs);
+}
+
+export function resolveAppRuntimeIfHealthy(options?: { quietMs?: number }): boolean {
+  if (!pendingValidationFingerprints?.length) return false;
+  scheduleAppRuntimeHealthyCheck(options);
+  return true;
+}
+
+/** True when an App Status Agent turn should start the Validate/reload loop. */
+export function shouldMarkAppStatusValidation(coding: {
+  ran?: boolean;
+  ok?: boolean;
+}): boolean {
+  return Boolean(coding.ran) && coding.ok !== false;
 }
 
 export function reportAppRuntimeIssue(input: {
@@ -214,7 +321,14 @@ export function reportAppRuntimeIssue(input: {
   const existing = issues.find((i) => i.fingerprint === fp);
   if (existing) {
     // Bump to front with fresh timestamp
-    issues = [{ ...existing, at: Date.now(), stack: truncate(input.stack || existing.stack || '', STACK_MAX) || existing.stack }, ...issues.filter((i) => i.id !== existing.id)].slice(0, MAX_ISSUES);
+    issues = [
+      {
+        ...existing,
+        at: Date.now(),
+        stack: truncate(input.stack || existing.stack || '', STACK_MAX) || existing.stack,
+      },
+      ...issues.filter((i) => i.id !== existing.id),
+    ].slice(0, MAX_ISSUES);
     notify();
     emit(ISSUE_EVENT, { issue: issues[0], deduped: true });
     return issues[0];
@@ -245,10 +359,9 @@ export function reportAppRuntimeIssue(input: {
   return issue;
 }
 
-/** Structured payload for Agent / NDM Verify (visible or send as user turn). */
-export function formatAppStatusDebugMessage(issue: AppRuntimeIssue): string {
-  const lines = [
-    '[APP_STATUS_DEBUG]',
+function formatOneIssueBlock(issue: AppRuntimeIssue, label: string): string {
+  return [
+    `--- ${label} ---`,
     `friendly: ${issue.friendlyTitle} — ${issue.friendlyBody}`,
     `technical: ${issue.technicalMessage}`,
     issue.route ? `route: ${issue.route}` : null,
@@ -256,16 +369,128 @@ export function formatAppStatusDebugMessage(issue: AppRuntimeIssue): string {
     `source: ${issue.source}`,
     `at: ${new Date(issue.at).toISOString()}`,
     issue.stack ? `stack:\n${issue.stack}` : null,
-    '',
-    'Please follow NDM (Verify → Analyze → Trace → Fix → Validate). Do not ask what error I see — App Status already provided it. Ask only if you need the expected behavior.',
-  ];
-  return lines.filter((l) => l != null).join('\n');
+  ]
+    .filter((l) => l != null)
+    .join('\n');
 }
 
+/**
+ * Pick primary (latest) + up to `limit-1` related issues (same route / fingerprint family / source).
+ */
+export function getAppStatusDebugIssues(limit = 3): {
+  primary: AppRuntimeIssue | null;
+  related: AppRuntimeIssue[];
+} {
+  const primary = issues[0] ?? null;
+  if (!primary) return { primary: null, related: [] };
+  const maxRelated = Math.max(0, limit - 1);
+  const related: AppRuntimeIssue[] = [];
+  const primaryFamily = fingerprintFamily(primary.fingerprint);
+  for (const issue of issues.slice(1)) {
+    if (related.length >= maxRelated) break;
+    const sameRoute = Boolean(primary.route && issue.route && primary.route === issue.route);
+    const sameFamily = fingerprintFamily(issue.fingerprint) === primaryFamily;
+    const sameSource = issue.source === primary.source;
+    if (sameRoute || sameFamily || sameSource) {
+      related.push(issue);
+    }
+  }
+  // If no related by affinity, still include next newest for context
+  if (related.length === 0 && issues.length > 1 && maxRelated > 0) {
+    related.push(issues[1]);
+  }
+  return { primary, related };
+}
+
+export type FormatAppStatusDebugInput =
+  | AppRuntimeIssue
+  | { primary: AppRuntimeIssue; related?: AppRuntimeIssue[]; openFilePath?: string };
+
+/** Structured payload for Agent / NDM Verify (visible or send as user turn). */
+export function formatAppStatusDebugMessage(input: FormatAppStatusDebugInput): string {
+  const primary = 'primary' in input && input.primary ? input.primary : (input as AppRuntimeIssue);
+  const related =
+    'primary' in input && Array.isArray(input.related) ? input.related : ([] as AppRuntimeIssue[]);
+  const openFilePath =
+    'primary' in input && typeof input.openFilePath === 'string' ? input.openFilePath.trim() : '';
+
+  const blocks = [formatOneIssueBlock(primary, 'primary')];
+  related.forEach((issue, idx) => {
+    blocks.push(formatOneIssueBlock(issue, `related ${idx + 1}`));
+  });
+
+  let body = [
+    '[APP_STATUS_DEBUG]',
+    ...blocks,
+    openFilePath ? `ide_open_file: ${openFilePath}` : null,
+    '',
+    'Please follow NDM (Verify → Analyze → Trace → Fix → Validate). Do not ask what error I see — App Status already provided it. Ask only if you need the expected behavior.',
+  ]
+    .filter((l) => l != null)
+    .join('\n');
+
+  if (body.length > DEBUG_PAYLOAD_MAX) {
+    body = `${body.slice(0, DEBUG_PAYLOAD_MAX)}…`;
+  }
+  return body;
+}
+
+/** Convenience: format from current store (primary + related). */
+export function formatLatestAppStatusDebugMessage(options?: { openFilePath?: string }): string | null {
+  const { primary, related } = getAppStatusDebugIssues(3);
+  if (!primary) return null;
+  return formatAppStatusDebugMessage({
+    primary,
+    related,
+    openFilePath: options?.openFilePath,
+  });
+}
+
+/**
+ * Multilingual “it’s broken” / blank screen phrases (en/fr/it/es/de).
+ * Still requires a latest issue before auto-attach.
+ */
 export function looksLikeBrokenAppComplaint(text: string): boolean {
-  return /\b(it('?s| is)?\s+(broken|not working)|doesn'?t work|does not work|nothing works|blank screen|white screen|preview (is )?(broken|blank)|something('?s| is) wrong)\b/i.test(
-    String(text || ''),
+  const s = String(text || '');
+  return (
+    /\b(it('?s| is)?\s+(broken|not working)|doesn'?t work|does not work|nothing works|blank screen|white screen|preview (is )?(broken|blank)|something('?s| is) wrong)\b/i.test(
+      s,
+    ) ||
+    // FR (accented letters — avoid \b which is ASCII-only without /u)
+    /(c('?est|a)\s+(cass[eé]|cassé)|ça\s+marche\s+pas|ca\s+marche\s+pas|ne\s+fonctionne\s+pas|écran\s+blanc|ecran\s+blanc|ça\s+ne\s+marche\s+pas)/i.test(
+      s,
+    ) ||
+    // IT
+    /(non\s+funziona|è\s+rotto|e\s+rotto|schermo\s+bianco|non\s+va\b|qualcosa\s+non\s+va|si\s+è\s+rotto)/i.test(
+      s,
+    ) ||
+    // ES
+    /(no\s+funciona|est[aá]\s+roto|pantalla\s+en\s+blanco|algo\s+est[aá]\s+mal|no\s+va\b)/i.test(s) ||
+    // DE
+    /(funktioniert\s+nicht|kaputt|wei(ß|ss)er?\s+bildschirm|geht\s+nicht|etwas\s+stimmt\s+nicht)/i.test(s)
   );
+}
+
+/**
+ * Soft check: Agent applied file: but skipped Verify/Analyze/Trace language.
+ * Multilingual (CONTENT_LOCALE via device prefs + Grok detection) — do not EN-only gate.
+ */
+export function assistantSkippedNdmVerify(assistantText: string): boolean {
+  const raw = String(assistantText || '');
+  const hasFile = /```file:|^\s*file:/im.test(raw);
+  if (!hasFile) return false;
+  const hasNdm =
+    // EN
+    /\b(verify|analy[sz]e|trace|ndm|root cause|reproduc)/i.test(raw) ||
+    // FR
+    /\b(v[eé]rif(ier|ication)?|analyser|analyse|tracer|cause|reproduire)\b/i.test(raw) ||
+    // IT
+    /\b(verifica(re)?|analizza(re)?|analisi|traccia(re)?|causa|riprodurre)\b/i.test(raw) ||
+    // ES
+    /\b(verifica(r)?|analiza(r)?|an[aá]lisis|rastrear|causa|reproducir)\b/i.test(raw) ||
+    // DE
+    /\b(pr[uü]fen|verifizier|analysier|nachvollzieh|ursache|reproduz)/i.test(raw);
+  return !hasNdm;
 }
 
 export function openAppStatusMenu(): void {
@@ -276,14 +501,25 @@ export const APP_STATUS_EVENTS = {
   issue: ISSUE_EVENT,
   cleared: CLEARED_EVENT,
   openMenu: OPEN_MENU_EVENT,
+  looksFixed: LOOKS_FIXED_EVENT,
+  reloadPreview: RELOAD_PREVIEW_EVENT,
 } as const;
 
 export function relativeAppStatusTime(at: number, now = Date.now()): string {
   const s = Math.max(0, Math.floor((now - at) / 1000));
-  if (s < 10) return 'just now';
-  if (s < 60) return `${s}s ago`;
+  if (s < 10) return t('appStatus.time.justNow');
+  if (s < 60) return t('appStatus.time.secondsAgo', { count: s });
   const m = Math.floor(s / 60);
-  if (m < 60) return `${m}m ago`;
+  if (m < 60) return t('appStatus.time.minutesAgo', { count: m });
   const h = Math.floor(m / 60);
-  return `${h}h ago`;
+  return t('appStatus.time.hoursAgo', { count: h });
+}
+
+/** Test-only: reset in-memory store (no DOM required). */
+export function __resetAppRuntimeStoreForTests(): void {
+  issues = [];
+  lastSeenId = null;
+  pendingValidationFingerprints = null;
+  pendingValidationStartedAt = 0;
+  clearHealthyTimer();
 }

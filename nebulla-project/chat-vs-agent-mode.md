@@ -30,7 +30,9 @@ User-controlled lock in the IDE chat header. Orthogonal to automatic detector mo
 
 - Chat-header / preview **App Status** “Fix with Agent” switches to **Agent** when needed (same Discovery guard as the toggle).
 - Do **not** silently write files while still in Chat.
-- Sends a turn with `[APP_STATUS_DEBUG]` so NDM Verify has evidence — see `nebulla-project/app-status-runtime.md`.
+- Sends a turn with `[APP_STATUS_DEBUG]` (primary + related issues, optional `ide_open_file`) so NDM Verify has evidence — see `nebulla-project/app-status-runtime.md`.
+- Agent turns still include IDE/workspace appendix (`IDE_EDITOR_SURFACE`) like any normal Agent send.
+- After a successful file apply: accessory nudges **Reload preview**; App Status auto-clears when the quiet window stays healthy.
 
 ## Related
 

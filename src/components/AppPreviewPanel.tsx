@@ -20,8 +20,13 @@ import { resolveProjectType, studioDeviceModeForType } from '../lib/nebulaProjec
 import {
   injectPreviewRuntimeBridge,
   installPreviewRuntimeMessageListener,
+  reportPreviewBootstrapFailure,
   reportPreviewLoadFailure,
 } from '../lib/previewRuntimeBridge';
+import {
+  APP_STATUS_EVENTS,
+  scheduleAppRuntimeHealthyCheck,
+} from '../lib/ideAppRuntimeStatus';
 import { IdeAppStatusPreviewBadge } from './ide/IdeAppStatusMenu';
 
 const PREVIEW_WIDTH_LS = 'nebulla_app_preview_width_px';
@@ -90,27 +95,27 @@ export function AppPreviewPanel({
   >([]);
   const [filesError, setFilesError] = useState<string | null>(null);
   const [previewRev, setPreviewRev] = useState(0);
-  const [v0DemoUrl, setV0DemoUrl] = useState<string | null>(null);
-  const [preferV0Preview, setPreferV0Preview] = useState(false);
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
 
+  /** Health-check meta only — preview iframe is always workspace bootstrap (Phase 5). */
   const loadPreviewMeta = useCallback(async () => {
     try {
       const res = await fetch(withProjectQuery('/api/app-preview/meta'), { credentials: 'include' });
-      const data = await readResponseJson<{ v0DemoUrl?: string; preferV0?: boolean }>(res);
-      if (res.ok) {
-        const url = typeof data.v0DemoUrl === 'string' ? data.v0DemoUrl.trim() : '';
-        setV0DemoUrl(url || null);
-        setPreferV0Preview(Boolean(data.preferV0 && url));
+      const data = await readResponseJson<{ error?: string }>(res);
+      if (!res.ok) {
+        reportPreviewBootstrapFailure(
+          typeof data.error === 'string' ? data.error : `Preview meta failed (${res.status})`,
+        );
       }
-    } catch {
-      /* ignore */
+    } catch (e) {
+      reportPreviewBootstrapFailure(
+        e instanceof Error ? e.message : 'Preview meta request failed',
+      );
     }
   }, []);
 
-  const workspacePreviewUrl = useMemo(() => buildPreviewUrl(previewRev), [previewRev]);
-  const previewUrl = preferV0Preview && v0DemoUrl ? v0DemoUrl : workspacePreviewUrl;
+  const previewUrl = useMemo(() => buildPreviewUrl(previewRev), [previewRev]);
 
   useEffect(() => {
     const onOpen = () => setPanelOpen(true);
@@ -143,22 +148,13 @@ export function AppPreviewPanel({
       void loadPreviewMeta();
       setPreviewRev((n) => n + 1);
     };
-    const onDemo = (ev: Event) => {
-      const url = (ev as CustomEvent<{ demoUrl?: string }>).detail?.demoUrl?.trim();
-      if (url) {
-        setV0DemoUrl(url);
-        setPreferV0Preview(true);
-        setPreviewRev((n) => n + 1);
-      } else {
-        onRefresh();
-      }
-    };
+    // v0 may write files — refresh workspace preview; never switch iframe to cross-origin v0 live.
     window.addEventListener('nebula-files-applied', onRefresh);
-    window.addEventListener('nebula-v0-demo-ready', onDemo);
+    window.addEventListener('nebula-v0-demo-ready', onRefresh);
     window.addEventListener('nebula-ui-studio-v0-complete', onRefresh);
     return () => {
       window.removeEventListener('nebula-files-applied', onRefresh);
-      window.removeEventListener('nebula-v0-demo-ready', onDemo);
+      window.removeEventListener('nebula-v0-demo-ready', onRefresh);
       window.removeEventListener('nebula-ui-studio-v0-complete', onRefresh);
     };
   }, [loadPreviewMeta]);
@@ -222,6 +218,16 @@ export function AppPreviewPanel({
   useEffect(() => {
     if (embeddedInDock || panelOpen) void loadWorkspaceSourceFiles();
   }, [embeddedInDock, panelOpen, loadWorkspaceSourceFiles, previewRev]);
+
+  useEffect(() => {
+    const onReload = () => {
+      void loadPreviewMeta();
+      void loadWorkspaceSourceFiles();
+      setPreviewRev((n) => n + 1);
+    };
+    window.addEventListener(APP_STATUS_EVENTS.reloadPreview, onReload);
+    return () => window.removeEventListener(APP_STATUS_EVENTS.reloadPreview, onReload);
+  }, [loadPreviewMeta, loadWorkspaceSourceFiles]);
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -290,10 +296,10 @@ export function AppPreviewPanel({
     connectPreviewWindow(w);
     applyPageHash(w, selectedPageLabel);
     const injected = injectPreviewRuntimeBridge(w);
-    if (!injected && preferV0Preview && v0DemoUrl) {
-      // Cross-origin live preview — cannot read console; parent load succeeded.
+    if (injected) {
+      scheduleAppRuntimeHealthyCheck({ quietMs: 4000 });
     }
-  }, [connectPreviewWindow, applyPageHash, selectedPageLabel, preferV0Preview, v0DemoUrl]);
+  }, [connectPreviewWindow, applyPageHash, selectedPageLabel]);
 
   useEffect(() => installPreviewRuntimeMessageListener(), []);
 
@@ -344,53 +350,12 @@ export function AppPreviewPanel({
             onClick={() => setMenuOpen((o) => !o)}
           >
             <span className="truncate font-mono text-[11px] text-slate-400">
-              {preferV0Preview && v0DemoUrl ? 'v0 live' : pathDisplay}
+              {pathDisplay}
             </span>
             <ChevronDown className={`ml-auto h-3.5 w-3.5 shrink-0 text-slate-500 ${menuOpen ? 'rotate-180' : ''}`} />
           </button>
           {menuOpen ? (
             <div className="absolute left-0 right-0 top-full z-[60] mt-1 max-h-64 overflow-y-auto rounded-lg border border-white/10 bg-[#0a0f18] py-2 text-[11px] shadow-xl">
-              {v0DemoUrl ? (
-                <>
-                  <p className="px-3 py-1 text-[9px] font-headline uppercase tracking-wider text-slate-500">
-                    Preview source
-                  </p>
-                  <div className="flex flex-col gap-0.5 px-2 pb-2">
-                    <button
-                      type="button"
-                      className={`rounded px-2 py-1.5 text-left text-[10px] ${
-                        preferV0Preview ? 'bg-cyan-500/15 text-cyan-100' : 'text-slate-400 hover:bg-white/5'
-                      }`}
-                      onClick={() => {
-                        setPreferV0Preview(true);
-                        setPreviewRev((n) => n + 1);
-                      }}
-                    >
-                      v0 live (recommended)
-                    </button>
-                    <button
-                      type="button"
-                      className={`rounded px-2 py-1.5 text-left text-[10px] ${
-                        !preferV0Preview ? 'bg-cyan-500/15 text-cyan-100' : 'text-slate-400 hover:bg-white/5'
-                      }`}
-                      onClick={() => {
-                        setPreferV0Preview(false);
-                        setPreviewRev((n) => n + 1);
-                      }}
-                    >
-                      Workspace HTML
-                    </button>
-                    <a
-                      href={v0DemoUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="rounded px-2 py-1.5 text-[10px] text-cyan-300 hover:bg-white/5"
-                    >
-                      Open v0.dev ↗
-                    </a>
-                  </div>
-                </>
-              ) : null}
               <p className="px-3 py-1 text-[9px] font-headline uppercase tracking-wider text-slate-500">Viewport</p>
               <div className="flex gap-1 px-2 pb-2">
                 <button
