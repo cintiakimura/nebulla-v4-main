@@ -6,6 +6,7 @@ import {
   LayoutTemplate,
   Loader2,
   MessageCircle,
+  Sparkles,
   Smartphone,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -30,6 +31,7 @@ import {
   dispatchChatOpenFile,
   dispatchStartFreeChat,
   markGuidedStartOnReady,
+  setPendingProjectIdea,
   setPendingProjectType,
   type NebulaProjectType,
 } from '../../lib/ideHomeEvents';
@@ -59,6 +61,17 @@ function formatWhen(iso: string): string {
   } catch {
     return 'Recently';
   }
+}
+
+function shortNameFromIdea(idea: string): string {
+  return (
+    idea
+      .split(/\s+/)
+      .slice(0, 4)
+      .join(' ')
+      .replace(/[^a-z0-9 ]/gi, '')
+      .trim() || 'New Project'
+  );
 }
 
 type FileModalMode = 'local' | 'github' | null;
@@ -102,6 +115,12 @@ export function MyProjectsHome() {
   const [fileError, setFileError] = useState('');
   const [preview, setPreview] = useState<SmartChatFilePreview | null>(null);
   const [startingType, setStartingType] = useState<NebulaProjectType | null>(null);
+  const [ideaInput, setIdeaInput] = useState('');
+  const [ideaType, setIdeaType] = useState<NebulaProjectType | null>(null);
+  const [ideaError, setIdeaError] = useState('');
+  const [startingIdea, setStartingIdea] = useState(false);
+
+  const busyStarting = Boolean(startingType) || startingIdea;
 
   const refreshList = useCallback(async () => {
     setLoadingList(true);
@@ -191,21 +210,48 @@ export function MyProjectsHome() {
     window.location.reload();
   }, []);
 
-  const onStartTypedProject = useCallback(async (type: NebulaProjectType) => {
-    if (startingType) return;
-    setStartingType(type);
+  const onStartTypedProject = useCallback(
+    async (type: NebulaProjectType) => {
+      if (busyStarting) return;
+      setStartingType(type);
+      try {
+        markGuidedStartOnReady();
+        await resetProjectFromScratch(type);
+        await createProjectForCurrentSession(type);
+        // Persist after reset/create so projectKey is current (UI Studio device framing).
+        setPendingProjectType(type);
+        window.location.reload();
+      } catch (err) {
+        console.error('[MyProjectsHome] start typed project failed', err);
+        setStartingType(null);
+      }
+    },
+    [busyStarting],
+  );
+
+  const onStartFromIdea = useCallback(async () => {
+    if (busyStarting) return;
+    const idea = ideaInput.trim();
+    if (idea.length < 8) {
+      setIdeaError('Describe your idea in a sentence or two (at least a few words).');
+      return;
+    }
+    setIdeaError('');
+    setStartingIdea(true);
     try {
+      const label = shortNameFromIdea(idea);
       markGuidedStartOnReady();
-      await resetProjectFromScratch(type);
-      await createProjectForCurrentSession(type);
-      // Persist after reset/create so projectKey is current (UI Studio device framing).
-      setPendingProjectType(type);
+      await resetProjectFromScratch(label);
+      await createProjectForCurrentSession(label);
+      setPendingProjectIdea(idea);
+      if (ideaType) setPendingProjectType(ideaType);
       window.location.reload();
     } catch (err) {
-      console.error('[MyProjectsHome] start typed project failed', err);
-      setStartingType(null);
+      console.error('[MyProjectsHome] start from idea failed', err);
+      setStartingIdea(false);
+      setIdeaError('Could not start the project. Try again.');
     }
-  }, [startingType]);
+  }, [busyStarting, ideaInput, ideaType]);
 
   const onJustChat = useCallback(() => {
     dispatchStartFreeChat();
@@ -254,6 +300,8 @@ export function MyProjectsHome() {
           content: opened.content,
         });
       }
+    } catch (err) {
+      setFileError(err instanceof Error ? err.message : 'Could not open that file.');
     } finally {
       setFileBusy(false);
     }
@@ -264,7 +312,7 @@ export function MyProjectsHome() {
       {
         id: 'local' as const,
         title: 'Open existing file',
-        blurb: 'Look at a file already in your project — great when you know where to start.',
+        blurb: 'Jump into a path already in this workspace.',
         icon: FolderOpen,
         onClick: () => {
           setFileModal('local');
@@ -299,13 +347,76 @@ export function MyProjectsHome() {
   return (
     <div className="min-h-0 flex-1 overflow-auto bg-background">
       <div className="mx-auto flex w-full max-w-3xl flex-col gap-12 px-6 py-12 sm:px-10 sm:py-16">
-        <section className="space-y-6">
+        <section className="space-y-5">
           <div className="space-y-2">
             <h2 className="font-headline text-2xl font-normal tracking-tight text-foreground sm:text-3xl">
               New Project
             </h2>
             <p className="max-w-xl text-sm leading-relaxed text-muted-foreground">
-              Choose what you are building. Grok will skip the type question and ask for your main goal next.
+              Describe what you want to build. Grok will summarize what it understood, then ask the
+              required Master Plan questions one at a time.
+            </p>
+          </div>
+
+          <div className="rounded-2xl border border-border bg-black p-5">
+            <label htmlFor="nebula-project-idea" className="flex items-center gap-2 text-sm text-foreground">
+              <Sparkles className="h-4 w-4 text-foreground/60" aria-hidden />
+              Start with a prompt
+            </label>
+            <textarea
+              id="nebula-project-idea"
+              value={ideaInput}
+              onChange={(e) => {
+                setIdeaInput(e.target.value);
+                if (ideaError) setIdeaError('');
+              }}
+              rows={4}
+              disabled={busyStarting}
+              placeholder="e.g. A mobile app for freelancers to track invoices and get paid reminders…"
+              className="mt-3 w-full resize-y rounded-xl border border-border bg-[#0a0a0a] px-3 py-2.5 text-sm leading-relaxed text-foreground outline-none ring-primary/25 placeholder:text-muted-foreground/70 focus:ring disabled:opacity-60"
+            />
+            <p className="mt-3 text-xs text-muted-foreground">
+              Optional — pick a type now so we skip that question later:
+            </p>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {PROJECT_TYPES.map((t) => (
+                <button
+                  key={t.id}
+                  type="button"
+                  disabled={busyStarting}
+                  onClick={() => setIdeaType((prev) => (prev === t.id ? null : t.id))}
+                  className={cn(
+                    'rounded-full border px-3 py-1.5 text-xs transition',
+                    ideaType === t.id
+                      ? 'border-foreground/40 bg-[#111111] text-foreground'
+                      : 'border-border text-muted-foreground hover:bg-[#111111] hover:text-foreground',
+                  )}
+                >
+                  {t.title}
+                </button>
+              ))}
+            </div>
+            {ideaError ? <p className="mt-2 text-xs text-rose-300">{ideaError}</p> : null}
+            <div className="mt-4 flex justify-end">
+              <button
+                type="button"
+                disabled={busyStarting || ideaInput.trim().length < 8}
+                onClick={() => void onStartFromIdea()}
+                className="inline-flex items-center gap-1.5 rounded-full bg-primary px-4 py-2 text-xs font-normal text-primary-foreground hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {startingIdea ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+                Continue
+              </button>
+            </div>
+          </div>
+        </section>
+
+        <section className="space-y-6">
+          <div className="space-y-2">
+            <h2 className="text-base font-normal text-foreground">Or choose a type</h2>
+            <p className="max-w-xl text-sm leading-relaxed text-muted-foreground">
+              Skip the idea box — Grok will tell you it needs a few answers for the Master Plan, then
+              ask for your main goal (type already set).
             </p>
           </div>
 
@@ -317,7 +428,7 @@ export function MyProjectsHome() {
                 <button
                   key={action.id}
                   type="button"
-                  disabled={Boolean(startingType)}
+                  disabled={busyStarting}
                   onClick={() => void onStartTypedProject(action.id)}
                   className="flex min-h-[11.5rem] flex-col items-start gap-4 rounded-2xl border border-border bg-black p-5 text-left transition hover:bg-[#111111] disabled:cursor-wait disabled:opacity-60"
                 >
@@ -396,9 +507,10 @@ export function MyProjectsHome() {
           {projects.length === 0 && !loadingList ? (
             <div className="rounded-2xl border border-dashed border-border px-6 py-12 text-center">
               <p className="text-sm leading-relaxed text-muted-foreground">
-                No projects yet. Pick <span className="text-foreground">Web App</span>,{' '}
+                No projects yet. Start with a prompt above, or pick{' '}
+                <span className="text-foreground">Web App</span>,{' '}
                 <span className="text-foreground">Mobile App</span>, or{' '}
-                <span className="text-foreground">Landing Page</span> above to get started.
+                <span className="text-foreground">Landing Page</span>.
               </p>
             </div>
           ) : (

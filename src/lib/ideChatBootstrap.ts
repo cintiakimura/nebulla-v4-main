@@ -7,25 +7,57 @@ export const IDE_CHAT_DISCOVERY_BOOTSTRAP =
   "I'm ready. Follow project-execution-rules.md INITIAL ONBOARDING: ask only your first single discovery question about my app (exact wording from the rules, one question in your reply).";
 
 /**
- * Fast / Prompt-first project creation bootstrap.
- * Tells Grok to do a very short interview (max 3-4 questions) then produce the Master Plan.
+ * Legacy / chat "Create a new project: …" path.
+ * Prefer buildIdeaDiscoveryBootstrap for New Project → Start with a prompt.
  */
 export const IDE_CHAT_FAST_PROJECT_BOOTSTRAP =
-  "FAST PROJECT MODE. The user gave a short description for a new app. Respect project-execution-rules.md and create a proper Master Plan, but keep the discovery extremely short — ask at most 3-4 essential follow-up questions total (include Project Type if unknown), then move quickly to writing the full Master Plan with the five canonical sections (§1 Goal, §2 Tech and Research, §3 Features and KPIs, §4 Pages and navigation, §5 UI/UX design). Start by acknowledging the prompt and asking the first 1–2 questions only.";
+  "FAST PROJECT MODE. The user gave a short description for a new app. Follow project-execution-rules.md Discovery. First reply MUST: (1) a short \"Here's what I understood\" summary in bullets — only what the prompt clearly implies; note gaps if vague. (2) then ask exactly ONE missing required discovery question (include Project Type if unknown). Do NOT write Master Plan tags, code, or multiple questions. Do NOT rush to <START_MASTERPLAN>.";
 
 const BOOTSTRAP_PREFIX = "I'm ready. Follow project-execution-rules.md INITIAL ONBOARDING:";
+
+/** Prefix for idea-prompt guided start (hidden from chat transcript). */
+export const IDEA_DISCOVERY_BOOTSTRAP_PREFIX = 'IDEA PROMPT DISCOVERY.';
 
 /**
  * Bootstrap for guided discovery. When project type was chosen on My Projects,
  * instruct Grok to skip the project-type question and ask only the main goal first.
  */
 export function buildDiscoveryBootstrap(projectType?: NebulaProjectType | null): string {
-  if (!projectType) return IDE_CHAT_DISCOVERY_BOOTSTRAP;
+  if (!projectType) {
+    return (
+      `${BOOTSTRAP_PREFIX} Briefly tell the user you'll ask a few required questions to build the Master Plan, ` +
+      `then ask only your first single discovery question about my app (exact wording from the rules, one question in your reply). ` +
+      `Do NOT write Master Plan tags or code yet.`
+    );
+  }
   return (
     `${BOOTSTRAP_PREFIX} The user already chose project type **${projectType}** on My Projects. ` +
     `Store that as Project Type (do NOT ask the project-type question). ` +
-    `Ask only your first single discovery question — the main goal — using the exact wording from the rules ` +
-    `(one question in your reply). Use ${projectType} for later pages, navigation, UI/UX, and tech recommendations.`
+    `Briefly tell them you'll ask a few required questions to build the Master Plan, then ask only your first single discovery question — the main goal — ` +
+    `using the exact wording from the rules (one question in your reply). ` +
+    `Use ${projectType} for later pages, navigation, UI/UX, and tech recommendations. Do NOT write Master Plan tags or code yet.`
+  );
+}
+
+/**
+ * Idea-first New Project path: summarize understanding, then one missing discovery question.
+ */
+export function buildIdeaDiscoveryBootstrap(
+  idea: string,
+  projectType?: NebulaProjectType | null,
+): string {
+  const trimmed = idea.trim().slice(0, 4000);
+  const typeClause = projectType
+    ? `Project type already chosen: **${projectType}**. Do NOT ask the project-type question. Use it for later recommendations.`
+    : `Project type is unknown — when it is the next missing required item, ask exactly: Web App / Mobile App / Landing Page / Other (please specify).`;
+
+  return (
+    `${IDEA_DISCOVERY_BOOTSTRAP_PREFIX} Follow project-execution-rules.md Discovery (architecture-first). ${typeClause}\n\n` +
+    `User's idea prompt:\n"""\n${trimmed}\n"""\n\n` +
+    `Your first reply MUST:\n` +
+    `1) A short "Here's what I understood" summary in bullets (goal, users, main features, constraints) — only what the prompt clearly implies; say briefly if something is vague or missing.\n` +
+    `2) Then ask exactly ONE missing required discovery question (Discovery order: main goal if still unclear → project type if unknown → remaining necessary info one at a time → research pillars later).\n` +
+    `Skip anything the prompt already answered clearly. Do NOT write Master Plan tags, code fences, or multiple questions. Do NOT emit <START_MASTERPLAN> or <START_CODING> until Discovery is complete.`
   );
 }
 
@@ -63,5 +95,8 @@ export function isHiddenBootstrapUserMessage(text: string): boolean {
   const t = text.trim();
   if (t === IDE_CHAT_DISCOVERY_BOOTSTRAP) return true;
   if (t === IDE_CHAT_FAST_PROJECT_BOOTSTRAP) return true;
-  return t.startsWith(BOOTSTRAP_PREFIX);
+  if (t.startsWith(BOOTSTRAP_PREFIX)) return true;
+  if (t.startsWith(IDEA_DISCOVERY_BOOTSTRAP_PREFIX)) return true;
+  if (t.startsWith('FAST PROJECT MODE.')) return true;
+  return false;
 }

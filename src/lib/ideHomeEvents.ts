@@ -18,8 +18,13 @@ export const NEBULA_START_GUIDED_ON_READY_KEY = 'nebula_start_guided_on_ready';
 /** Discovery project type chosen on My Projects (Web / Mobile / Landing). */
 export const NEBULA_PENDING_PROJECT_TYPE_KEY = 'nebula_pending_project_type_v1';
 
+/** Optional idea prompt from "Start with a prompt" — survives reload into guided chat. */
+export const NEBULA_PENDING_PROJECT_IDEA_KEY = 'nebula_pending_project_idea_v1';
+
 export type StartGuidedChatDetail = {
   projectType?: NebulaProjectType;
+  /** When set, chat summarizes understanding then asks the next discovery question. */
+  ideaPrompt?: string;
 };
 
 export function dispatchStartGuidedChat(detail?: StartGuidedChatDetail): void {
@@ -94,6 +99,37 @@ export function consumePendingProjectType(): NebulaProjectType | null {
   setStoredProjectType(v);
   try {
     localStorage.removeItem(NEBULA_PENDING_PROJECT_TYPE_KEY);
+  } catch {
+    /* ignore */
+  }
+  return v;
+}
+
+export function setPendingProjectIdea(idea: string): void {
+  const trimmed = idea.trim();
+  if (!trimmed) return;
+  try {
+    localStorage.setItem(NEBULA_PENDING_PROJECT_IDEA_KEY, trimmed.slice(0, 4000));
+  } catch {
+    /* ignore */
+  }
+}
+
+export function peekPendingProjectIdea(): string | null {
+  try {
+    const v = localStorage.getItem(NEBULA_PENDING_PROJECT_IDEA_KEY)?.trim();
+    return v || null;
+  } catch {
+    return null;
+  }
+}
+
+/** Read and clear pending idea prompt (once per guided start). */
+export function consumePendingProjectIdea(): string | null {
+  const v = peekPendingProjectIdea();
+  if (!v) return null;
+  try {
+    localStorage.removeItem(NEBULA_PENDING_PROJECT_IDEA_KEY);
   } catch {
     /* ignore */
   }

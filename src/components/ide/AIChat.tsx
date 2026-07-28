@@ -23,8 +23,8 @@ import {
 import { sendIdeAssistantGrokTurn } from '../../lib/ideAssistantGrokChat';
 import {
   conversationEntriesToIdeMessages,
-  IDE_CHAT_FAST_PROJECT_BOOTSTRAP,
   buildDiscoveryBootstrap,
+  buildIdeaDiscoveryBootstrap,
   isHiddenBootstrapUserMessage,
 } from '../../lib/ideChatBootstrap';
 import { fetchConversationLogEntries } from '../../lib/conversationLogClient';
@@ -56,6 +56,7 @@ import { handleSmartChatMessage, type SmartChatFilePreview } from '../../lib/sma
 import { isMasterPlanCompleteForDiscovery } from '../../lib/masterPlanSections';
 import {
   consumeGuidedStartOnReady,
+  consumePendingProjectIdea,
   consumePendingProjectType,
   NEBULA_CHAT_OPEN_FILE,
   NEBULA_START_FREE_CHAT,
@@ -793,7 +794,21 @@ export function AIChat() {
   }, [diskProjectKey]);
 
   const startGuidedDiscovery = useCallback(() => {
+    const ideaPrompt = consumePendingProjectIdea();
     const projectType = consumePendingProjectType();
+    if (ideaPrompt) {
+      const stamp = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+      const visibleIdea: Message = {
+        id: `u-idea-${Date.now()}`,
+        role: 'user',
+        content: ideaPrompt,
+        timestamp: stamp,
+      };
+      setMessages([visibleIdea]);
+      messagesRef.current = [visibleIdea];
+      void sendChatRef.current(buildIdeaDiscoveryBootstrap(ideaPrompt, projectType));
+      return;
+    }
     void sendChatRef.current(buildDiscoveryBootstrap(projectType));
   }, []);
 
@@ -834,10 +849,26 @@ export function AIChat() {
       if (messagesRef.current.length > 0) return;
       bootstrapStartedRef.current = true;
       const detail = (ev as CustomEvent<StartGuidedChatDetail>).detail;
-      const fromEvent = detail?.projectType;
+      const fromEventType = detail?.projectType;
+      const fromEventIdea = detail?.ideaPrompt?.trim();
       // Prefer event detail; always clear any pending storage so reload does not re-ask.
-      const projectType = fromEvent ?? consumePendingProjectType();
-      if (fromEvent) consumePendingProjectType();
+      const projectType = fromEventType ?? consumePendingProjectType();
+      if (fromEventType) consumePendingProjectType();
+      const ideaPrompt = fromEventIdea || consumePendingProjectIdea();
+      if (fromEventIdea) consumePendingProjectIdea();
+      if (ideaPrompt) {
+        const stamp = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+        const visibleIdea: Message = {
+          id: `u-idea-${Date.now()}`,
+          role: 'user',
+          content: ideaPrompt,
+          timestamp: stamp,
+        };
+        setMessages([visibleIdea]);
+        messagesRef.current = [visibleIdea];
+        void sendChatRef.current(buildIdeaDiscoveryBootstrap(ideaPrompt, projectType));
+        return;
+      }
       void sendChatRef.current(buildDiscoveryBootstrap(projectType));
     };
 
@@ -1002,15 +1033,23 @@ export function AIChat() {
       setInput('');
       inputRef.current = '';
 
-      // Send the hidden fast bootstrap first (Grok will start the short interview)
-      setTimeout(() => {
-        void sendChatRef.current(IDE_CHAT_FAST_PROJECT_BOOTSTRAP);
-      }, 10);
+      const stamp = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+      const visibleIdea: Message = {
+        id: `u-idea-${Date.now()}`,
+        role: 'user',
+        content: projectCreation.description,
+        timestamp: stamp,
+      };
+      setMessages((p) => {
+        const next = [...p, visibleIdea];
+        messagesRef.current = next;
+        return next;
+      });
 
-      // Then send the user's description as the visible follow-up
+      // Hidden idea bootstrap: summarize understanding, then one discovery question
       setTimeout(() => {
-        void sendChatRef.current(projectCreation.description);
-      }, 80);
+        void sendChatRef.current(buildIdeaDiscoveryBootstrap(projectCreation.description));
+      }, 10);
 
       return;
     }
@@ -1742,8 +1781,8 @@ export function AIChat() {
       >
         {messages.length === 0 && !sending ? (
           <p className="type-body-md px-1 text-center text-muted-foreground">
-            Grok will ask your first discovery question here — follow{' '}
-            <span className="text-foreground/80">project-execution-rules.md</span> (one question per turn).
+            Start a project from My Projects with a prompt or a type — Grok will summarize what it
+            understood (when you gave an idea), then ask one discovery question at a time.
           </p>
         ) : null}
         {messages.map((message) =>
