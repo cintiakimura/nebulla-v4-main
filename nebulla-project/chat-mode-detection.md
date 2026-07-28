@@ -2,6 +2,8 @@
 
 Nebulla is architecture-first. Analyze the user's input **and project state** (especially whether a complete Master Plan exists), then pick **exactly one** mode. Do not mix modes in the same response when it creates confusion.
 
+**Also see:** `nebulla-project/chat-vs-agent-mode.md` — user-locked **Chat** (brainstorm) vs **Agent** (coding). That product toggle overrides coding/debug/UI execution while Chat is selected; detector modes still run for routing hints.
+
 ## Mode sequence (strict)
 
 1. **Chat / Discovery**

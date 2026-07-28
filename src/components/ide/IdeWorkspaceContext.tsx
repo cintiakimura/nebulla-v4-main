@@ -26,6 +26,12 @@ import {
   normalizeAiChatModelId,
   type AiChatModelId,
 } from '../../lib/aiProvider';
+import {
+  normalizeInteractionMode,
+  readStoredInteractionMode,
+  writeStoredInteractionMode,
+  type IdeAssistantInteractionMode,
+} from '../../lib/ideAssistantInteractionMode';
 
 export type EditorTab = {
   path: string;
@@ -37,6 +43,7 @@ export type EditorTab = {
 /** IDE chat model catalog (Grok default; Claude / OpenAI via ModelSelector + TopBar). */
 export const IDE_CHAT_MODELS = AI_CHAT_MODELS.map((m) => m.id);
 export type IdeChatModelId = AiChatModelId;
+export type { IdeAssistantInteractionMode };
 
 type IdeWorkspaceValue = {
   /** Browser/server disk scope for APIs (guest UUID, `default`, etc.) — bumps after `refreshTree`. */
@@ -51,6 +58,12 @@ type IdeWorkspaceValue = {
   activePath: string | null;
   chatModel: IdeChatModelId;
   setChatModel: (id: IdeChatModelId) => void;
+  /**
+   * User-locked Chat (brainstorm) vs Agent (coding). Default Chat.
+   * Persisted per project key — independent of detector modes.
+   */
+  assistantInteractionMode: IdeAssistantInteractionMode;
+  setAssistantInteractionMode: (mode: IdeAssistantInteractionMode) => void;
   openFile: (relativePath: string) => Promise<void>;
   setActivePath: (path: string | null) => void;
   updateActiveContent: (text: string) => void;
@@ -86,6 +99,10 @@ export function IdeWorkspaceProvider({ children }: { children: ReactNode }) {
       return DEFAULT_AI_CHAT_MODEL;
     }
   });
+  const [assistantInteractionMode, setAssistantInteractionModeState] =
+    useState<IdeAssistantInteractionMode>(() =>
+      readStoredInteractionMode(getBrowserProjectKey()),
+    );
   const [saveError, setSaveError] = useState<string | null>(null);
   const tabsRef = useRef(tabs);
   tabsRef.current = tabs;
@@ -107,6 +124,29 @@ export function IdeWorkspaceProvider({ children }: { children: ReactNode }) {
       /* ignore */
     }
   }, []);
+
+  const setAssistantInteractionMode = useCallback(
+    (mode: IdeAssistantInteractionMode) => {
+      const next = normalizeInteractionMode(mode);
+      setAssistantInteractionModeState(next);
+      writeStoredInteractionMode(getBrowserProjectKey(), next);
+      try {
+        window.dispatchEvent(
+          new CustomEvent('nebula-assistant-interaction-mode-changed', {
+            detail: { mode: next, projectKey: getBrowserProjectKey() },
+          }),
+        );
+      } catch {
+        /* ignore */
+      }
+    },
+    [],
+  );
+
+  /** Reload Chat/Agent preference when the active project key changes. */
+  useEffect(() => {
+    setAssistantInteractionModeState(readStoredInteractionMode(diskProjectKey));
+  }, [diskProjectKey]);
 
   const refreshTree = useCallback(async () => {
     setOverviewLoading(true);
@@ -263,6 +303,8 @@ export function IdeWorkspaceProvider({ children }: { children: ReactNode }) {
       activePath,
       chatModel,
       setChatModel,
+      assistantInteractionMode,
+      setAssistantInteractionMode,
       openFile,
       setActivePath,
       updateActiveContent,
@@ -283,6 +325,8 @@ export function IdeWorkspaceProvider({ children }: { children: ReactNode }) {
       activePath,
       chatModel,
       setChatModel,
+      assistantInteractionMode,
+      setAssistantInteractionMode,
       openFile,
       updateActiveContent,
       saveTab,

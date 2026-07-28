@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { Bot, Hand, Loader2, Mic, Rocket, Send, User } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Bot, Hand, Loader2, Mic, MessageSquare, Rocket, Send, User, Wrench } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { fetchSessionUser, syncActiveCloudProjectFromSession, upsertCloudProject } from '../../lib/nebulaCloud';
 import {
@@ -55,6 +55,11 @@ import { createProjectForCurrentSession } from '../../lib/nebulaCloud';
 import { handleSmartChatMessage, type SmartChatFilePreview } from '../../lib/smartChatHandler';
 import { isMasterPlanCompleteForDiscovery } from '../../lib/masterPlanSections';
 import {
+  interactionModeIdleSubhead,
+  interactionModeStatusLabel,
+  type IdeAssistantInteractionMode,
+} from '../../lib/ideAssistantInteractionMode';
+import {
   consumeGuidedStartOnReady,
   consumePendingProjectIdea,
   consumePendingProjectType,
@@ -91,15 +96,21 @@ import {
 import { playTtsText } from '../../lib/ttsPlayback';
 import { IdeGrokActivityPanel } from './IdeGrokActivityPanel';
 
-const IDLE_GROK_ACTIVITY: GrokActivityStatus = {
+const IDLE_GROK_ACTIVITY_BASE: Omit<GrokActivityStatus, 'subhead'> = {
   headline: 'Ready',
-  subhead: 'Chat for discovery and planning · Go runs Grok Code and writes files to your workspace.',
   liveLog: [],
   steps: [],
   activeStepIndex: 0,
   footer: 'Live activity appears here while Grok is thinking or coding — like Cursor’s agent status.',
   tone: 'ready',
 };
+
+function idleGrokActivity(mode: IdeAssistantInteractionMode): GrokActivityStatus {
+  return {
+    ...IDLE_GROK_ACTIVITY_BASE,
+    subhead: interactionModeIdleSubhead(mode),
+  };
+}
 
 const CHAT_WORK_STEPS = [
   { label: 'Send your message to Grok' },
@@ -144,6 +155,10 @@ type Message = {
   /** Short "Press Go" style reply — show prominent Go CTA */
   showGoCta?: boolean;
   goSummary?: string;
+  /** Chat mode blocked coding — show Switch to Agent CTA */
+  showSwitchToAgentCta?: boolean;
+  /** Pending user text to re-send after switching to Agent */
+  pendingAgentText?: string;
   /** Live thinking / action step — shown in-chat, not sent to the model API */
   variant?: 'status';
   statusKind?: GrokActivityLogKind;
@@ -201,26 +216,47 @@ export function AIChat() {
     tabs,
     workspacePaths,
     chatModel,
+    assistantInteractionMode,
+    setAssistantInteractionMode,
   } = useIdeWorkspace();
+  const interactionModeRef = useRef(assistantInteractionMode);
+  interactionModeRef.current = assistantInteractionMode;
   const [workspaceRootLabel, setWorkspaceRootLabel] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [accessoryHint, setAccessoryHint] = useState<string | null>(null);
-  const [grokActivity, setGrokActivity] = useState<GrokActivityStatus>(IDLE_GROK_ACTIVITY);
+  const [grokActivity, setGrokActivity] = useState<GrokActivityStatus>(() =>
+    idleGrokActivity(assistantInteractionMode),
+  );
   const [v0WatchActive, setV0WatchActive] = useState(false);
   const [v0Live, setV0Live] = useState(false);
+  const [masterPlanCompleteHint, setMasterPlanCompleteHint] = useState(false);
   const codingActivityRef = useRef(false);
   const syncedStatusLogIdsRef = useRef<Set<string>>(new Set());
   const stickToBottomRef = useRef(true);
   const lastV0StatusRef = useRef<string>('');
+  const pendingAgentResendRef = useRef<string | null>(null);
 
   const resetCodingActivity = useCallback(() => {
     codingActivityRef.current = false;
     setGrokCodingActive(false);
     setV0WatchActive(false);
     setV0Live(false);
-    setGrokActivity(IDLE_GROK_ACTIVITY);
+    setGrokActivity(idleGrokActivity(interactionModeRef.current));
   }, []);
+
+  useEffect(() => {
+    setGrokActivity((prev) =>
+      prev.tone === 'ready'
+        ? idleGrokActivity(assistantInteractionMode)
+        : { ...prev, subhead: interactionModeIdleSubhead(assistantInteractionMode) },
+    );
+  }, [assistantInteractionMode]);
+
+  const modeStatusChip = useMemo(
+    () => interactionModeStatusLabel(assistantInteractionMode),
+    [assistantInteractionMode],
+  );
 
   const beginCodingActivity = useCallback(
     (headline: string, steps: GrokActivityStep[], options?: Parameters<typeof createGrokActivity>[2]) => {
@@ -984,11 +1020,15 @@ export function AIChat() {
         } catch {
           masterPlanComplete = false;
         }
-        const smart = await handleSmartChatMessage(text, { masterPlanComplete });
+        const smart = await handleSmartChatMessage(text, {
+          masterPlanComplete,
+          interactionMode: interactionModeRef.current,
+        });
         chatMode = smart.mode;
         codingHint = smart.codingHint;
         discoveryRequired = smart.modeMeta?.discoveryRequired ?? !masterPlanComplete;
-        if (smart.mode === 'file' && smart.handledLocally) {
+        setMasterPlanCompleteHint(masterPlanComplete);
+        if (smart.handledLocally && (smart.mode === 'file' || smart.switchToAgentSuggested)) {
           const stamp = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
           const userMsg: Message = {
             id: `u-${Date.now()}`,
@@ -1002,6 +1042,8 @@ export function AIChat() {
             content: smart.assistantMessage,
             timestamp: stamp,
             filePreview: smart.filePreview,
+            showSwitchToAgentCta: Boolean(smart.switchToAgentSuggested),
+            pendingAgentText: smart.switchToAgentSuggested ? text : undefined,
           };
           setMessages((p) => {
             const next = [...p, userMsg, assistantMsg];
@@ -1010,6 +1052,16 @@ export function AIChat() {
           });
           setInput('');
           inputRef.current = '';
+          if (smart.switchToAgentSuggested) {
+            try {
+              console.info('[AIChat] interaction_mode=chat blocked agent intent', {
+                detector_mode: smart.mode,
+                interaction_mode: 'chat',
+              });
+            } catch {
+              /* ignore */
+            }
+          }
           return;
         }
       } catch {
@@ -1097,9 +1149,19 @@ export function AIChat() {
     stickToBottomRef.current = true;
     setSending(true);
     setSendError(null);
-    const buildMode = detectBuildModeIntent(text);
-    const onboardingBuildStart = detectOnboardingBuildStart(text, prior);
+    const lockedChat = interactionModeRef.current === 'chat';
+    const buildMode = !lockedChat && detectBuildModeIntent(text);
+    const onboardingBuildStart = !lockedChat && detectOnboardingBuildStart(text, prior);
     const showWorkActivity = buildMode || onboardingBuildStart;
+    try {
+      console.info('[AIChat] turn', {
+        interaction_mode: interactionModeRef.current,
+        detector_mode: chatMode,
+        build_mode: buildMode,
+      });
+    } catch {
+      /* ignore */
+    }
     if (buildMode) {
       beginCodingActivity(
         'Build mode — Grok is implementing your request',
@@ -1183,6 +1245,7 @@ export function AIChat() {
           chatMode,
           codingHint,
           discoveryRequired,
+          interactionMode: interactionModeRef.current,
         }));
       } finally {
         stopGrokWait();
@@ -1209,9 +1272,11 @@ export function AIChat() {
       }
 
       const { displayText, hadCodingTag } = formatAssistantForIdeChatDisplay(raw);
+      const agentAllowed = interactionModeRef.current === 'agent';
       const willCode =
-        hadCodingTag || hasGrokFileBlocks(raw) || isCodingIntent(masterPlanSource);
-      const userWantsCode = isCodingIntent(text) || willCode;
+        agentAllowed &&
+        (hadCodingTag || hasGrokFileBlocks(raw) || isCodingIntent(masterPlanSource));
+      const userWantsCode = agentAllowed && (isCodingIntent(text) || willCode);
       const shortGoNudge =
         userWantsCode &&
         !hasGrokFileBlocks(raw) &&
@@ -1311,14 +1376,24 @@ export function AIChat() {
           });
         }
 
-        const coding = await handlePostGrokCodingTurn({
-          assistantContent: masterPlanSource,
-          planningPhase,
-          userId,
-          projectName,
-          userNote: text,
-          onProgress: codingActivityRef.current ? pushActivity : undefined,
-        });
+        const coding = agentAllowed
+          ? await handlePostGrokCodingTurn({
+              assistantContent: masterPlanSource,
+              planningPhase,
+              userId,
+              projectName,
+              userNote: text,
+              onProgress: codingActivityRef.current ? pushActivity : undefined,
+            })
+          : { ran: false };
+        if (!agentAllowed && (hadCodingTag || hasGrokFileBlocks(raw))) {
+          // Chat lock: strip accidental coding artifacts from applying.
+          try {
+            console.info('[AIChat] interaction_mode=chat suppressed file apply');
+          } catch {
+            /* ignore */
+          }
+        }
         if (coding.ran) {
           setGrokActivity((prev) =>
             advanceGrokActivity(prev, showWorkActivity ? 5 : 3, {
@@ -1598,6 +1673,27 @@ export function AIChat() {
     const userNote = inputRef.current.trim();
     if (sending || micInputBlocked) return;
 
+    if (interactionModeRef.current === 'chat') {
+      const stamp = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+      setMessages((p) => {
+        const next = [
+          ...p,
+          {
+            id: `go-block-${Date.now()}`,
+            role: 'assistant' as const,
+            content:
+              "Go writes code to your workspace — that's **Agent** mode.\n\nSwitch to Agent to run Go?",
+            timestamp: stamp,
+            showSwitchToAgentCta: true,
+            pendingAgentText: userNote ? `Go — ${userNote}` : 'Go — implement project',
+          },
+        ];
+        messagesRef.current = next;
+        return next;
+      });
+      return;
+    }
+
     if (serverHasGrokKey === null) {
       try {
         const r = await fetch(withProjectQuery('/api/config'), { credentials: 'include' });
@@ -1743,8 +1839,118 @@ export function AIChat() {
     }
   }, [micInputBlocked, sending, serverHasGrokKey, stopVoiceRecognition, refreshWorkspaceMeta, resumeOpenTalkIfWanted, pushActivity, beginCodingActivity, resetCodingActivity, refreshChatV0Status, workspacePaths.length]);
 
+  const applyInteractionMode = useCallback(
+    async (mode: IdeAssistantInteractionMode, options?: { pendingText?: string }) => {
+      interactionModeRef.current = mode;
+      setAssistantInteractionMode(mode);
+
+      if (mode === 'chat') {
+        setAccessoryHint('Chat on — brainstorm & plan; files stay unchanged.');
+        window.setTimeout(() => setAccessoryHint(null), 3200);
+        return;
+      }
+
+      let complete = masterPlanCompleteHint;
+      try {
+        const mpRes = await fetch(withProjectQuery('/api/master-plan/read'), {
+          credentials: 'include',
+          cache: 'no-store',
+        });
+        if (mpRes.ok) {
+          const mp = (await readResponseJson(mpRes)) as Record<string, unknown>;
+          complete = isMasterPlanCompleteForDiscovery(mp);
+          setMasterPlanCompleteHint(complete);
+        }
+      } catch {
+        /* keep prior hint */
+      }
+
+      setAccessoryHint(
+        complete
+          ? 'Agent on — Go and coding apply are enabled.'
+          : 'Agent on — Discovery still required before a full build (architecture-first).',
+      );
+      window.setTimeout(() => setAccessoryHint(null), 4500);
+
+      const pending = (options?.pendingText || pendingAgentResendRef.current || '').trim();
+      pendingAgentResendRef.current = null;
+      if (!pending || sending) return;
+
+      if (/^go(\s|[—-]|$)/i.test(pending)) {
+        const note = pending.replace(/^go\s*[—-]?\s*/i, '').trim();
+        if (note && !/^implement project$/i.test(note)) {
+          setInput(note);
+          inputRef.current = note;
+        } else {
+          setInput('');
+          inputRef.current = '';
+        }
+        window.setTimeout(() => {
+          void handleGo();
+        }, 0);
+        return;
+      }
+
+      window.setTimeout(() => {
+        void sendChatRef.current(pending);
+      }, 0);
+    },
+    [masterPlanCompleteHint, sending, setAssistantInteractionMode, handleGo],
+  );
+
   return (
     <div className="surface-active flex h-full min-h-0 flex-col overflow-hidden">
+      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border/70 px-3 py-2">
+        <div
+          className="inline-flex rounded-full p-0.5 ring-1 ring-[color-mix(in_srgb,var(--outline-variant)_18%,transparent)]"
+          role="group"
+          aria-label="Assistant mode"
+        >
+          <button
+            type="button"
+            aria-pressed={assistantInteractionMode === 'chat'}
+            title="Chat — brainstorm & plan (no file writes)"
+            onClick={() => void applyInteractionMode('chat')}
+            className={cn(
+              'inline-flex h-8 items-center gap-1.5 rounded-full px-3 text-[0.75rem] font-medium transition',
+              assistantInteractionMode === 'chat'
+                ? 'bg-foreground/10 text-foreground'
+                : 'text-muted-foreground hover:text-foreground',
+            )}
+          >
+            <MessageSquare className="h-3.5 w-3.5" aria-hidden />
+            Chat
+          </button>
+          <button
+            type="button"
+            aria-pressed={assistantInteractionMode === 'agent'}
+            title="Agent — build & edit code"
+            onClick={() => void applyInteractionMode('agent')}
+            className={cn(
+              'inline-flex h-8 items-center gap-1.5 rounded-full px-3 text-[0.75rem] font-medium transition',
+              assistantInteractionMode === 'agent'
+                ? 'bg-primary/20 text-primary'
+                : 'text-muted-foreground hover:text-foreground',
+            )}
+          >
+            <Wrench className="h-3.5 w-3.5" aria-hidden />
+            Agent
+          </button>
+        </div>
+        <span
+          className={cn(
+            'type-label-sm rounded-full px-2.5 py-1 ring-1',
+            assistantInteractionMode === 'agent'
+              ? 'text-primary ring-primary/30'
+              : 'text-muted-foreground ring-[color-mix(in_srgb,var(--outline-variant)_18%,transparent)]',
+            sending ? 'opacity-100' : 'opacity-80',
+          )}
+          role="status"
+        >
+          {sending ? modeStatusChip : modeStatusChip}
+        </span>
+      </div>
+
       {showActivityPanel ? (
         <IdeGrokActivityPanel activity={grokActivity} v0Live={v0Live || v0WatchActive} />
       ) : null}
@@ -1855,6 +2061,34 @@ export function AIChat() {
                     Go — write code to workspace
                   </button>
                 ) : null}
+                {message.showSwitchToAgentCta ? (
+                  <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+                    <button
+                      type="button"
+                      disabled={sending}
+                      onClick={() =>
+                        void applyInteractionMode('agent', {
+                          pendingText: message.pendingAgentText,
+                        })
+                      }
+                      className="inline-flex flex-1 items-center justify-center gap-2 rounded-lg border border-primary/40 bg-primary/15 px-3 py-2.5 text-sm font-semibold text-primary transition hover:bg-primary/25 disabled:opacity-45"
+                    >
+                      <Wrench className="h-4 w-4 shrink-0" aria-hidden />
+                      Switch to Agent
+                    </button>
+                    <button
+                      type="button"
+                      disabled={sending}
+                      onClick={() => {
+                        setAccessoryHint('Staying in Chat — keep brainstorming.');
+                        window.setTimeout(() => setAccessoryHint(null), 2800);
+                      }}
+                      className="inline-flex flex-1 items-center justify-center gap-2 rounded-lg border border-border/80 bg-transparent px-3 py-2.5 text-sm font-medium text-muted-foreground transition hover:text-foreground disabled:opacity-45"
+                    >
+                      Stay in Chat
+                    </button>
+                  </div>
+                ) : null}
                 {message.filePreview ? <ChatFilePreview preview={message.filePreview} /> : null}
               </div>
               <p className="type-label-sm mt-0.5 opacity-80">{message.timestamp}</p>
@@ -1886,7 +2120,11 @@ export function AIChat() {
                 void sendChat();
               }
             }}
-            placeholder="Message Grok…"
+            placeholder={
+              assistantInteractionMode === 'agent'
+                ? 'Message Agent — build & edit code…'
+                : 'Message Chat — brainstorm & plan…'
+            }
             rows={3}
             disabled={sending}
             className="type-body-md min-h-[4.5rem] w-full resize-y bg-transparent text-foreground outline-none placeholder:text-muted-foreground disabled:opacity-50"
@@ -1923,8 +2161,15 @@ export function AIChat() {
                 type="button"
                 onClick={() => void handleGo()}
                 disabled={sending}
-                title="Go: Grok Code writes files to your workspace"
-                className="btn-primary-cta flex h-9 shrink-0 items-center gap-1.5 rounded-full px-4 text-[0.8125rem] disabled:opacity-40"
+                title={
+                  assistantInteractionMode === 'chat'
+                    ? 'Go needs Agent mode — click to switch or use the Agent toggle'
+                    : 'Go: Grok Code writes files to your workspace'
+                }
+                className={cn(
+                  'btn-primary-cta flex h-9 shrink-0 items-center gap-1.5 rounded-full px-4 text-[0.8125rem] disabled:opacity-40',
+                  assistantInteractionMode === 'chat' && 'opacity-70',
+                )}
               >
                 <Rocket className="h-3.5 w-3.5" />
                 Go

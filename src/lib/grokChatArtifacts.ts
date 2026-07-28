@@ -260,18 +260,49 @@ export function chatModeSystemAppendix(options: {
   mode?: string;
   codingHint?: string;
   discoveryRequired?: boolean;
+  /** User-locked Chat vs Agent (orthogonal to detector mode). */
+  interactionMode?: 'chat' | 'agent';
 }): string {
   const mode = (options.mode || '').trim();
   const hint = (options.codingHint || '').trim();
   const discoveryRequired = Boolean(options.discoveryRequired);
+  const interactionMode = options.interactionMode === 'agent' ? 'agent' : 'chat';
   const parts: string[] = [];
+
+  if (interactionMode === 'chat') {
+    parts.push(
+      [
+        'USER_INTERACTION_MODE: chat (brainstorm & plan — LOCKED)',
+        '- Collaborate, discover, and plan. Prefer short conversational replies (BYOK-friendly).',
+        '- Do NOT emit START_CODING, ```file: blocks, or ask the user to press Go.',
+        '- Do NOT dump implementation code. Architecture discussion OK; Master Plan only inside <START_MASTERPLAN> tags when appropriate.',
+        '- If the user clearly wants to build/edit code / debug apply / generate UI files: tell them to switch to Agent mode — do not implement.',
+        '- Voice/Open talk: keep replies speakable; one clear question when discovering.',
+      ].join('\n'),
+    );
+  } else {
+    parts.push(
+      [
+        'USER_INTERACTION_MODE: agent (coding — LOCKED)',
+        '- Implement the next coherent slice when appropriate; use START_CODING and/or ```file:relative/path``` blocks.',
+        '- Still respect Discovery / Master Plan gates when the plan is incomplete.',
+        '- Prefer smallest safe change; activity footer may show coding progress.',
+      ].join('\n'),
+    );
+  }
 
   if (mode) {
     parts.push(`DETECTED_CHAT_MODE: ${mode}${discoveryRequired ? ' (Master Plan incomplete — Discovery still required before full build)' : ''}`);
   }
 
   if (mode === 'debugging' || /NDM:/i.test(hint)) {
-    parts.push(NDM_DEBUG_APPENDIX);
+    if (interactionMode === 'agent') {
+      parts.push(NDM_DEBUG_APPENDIX);
+    } else {
+      parts.push(
+        'ACTIVE MODE: DEBUG DISCUSSION (Chat lock) — Talk through Verify → Analyze → Trace. Do not emit file fixes; ask user to switch to Agent to apply.',
+      );
+    }
   } else if (hint === 'guided-onboarding' || hint === 'discovery-required' || hint === 'discovery-required-after-file') {
     parts.push(
       'ACTIVE MODE: DISCOVERY — Ask exactly one clear question. Follow INITIAL ONBOARDING order (goal → Project Type unless My Projects already set it → remaining info → Research Pillars → closing questions). Do not emit START_CODING until the final-check reply. Do not run Tab 2–6 interview loops yet.',
@@ -280,11 +311,11 @@ export function chatModeSystemAppendix(options: {
     parts.push(`MODE_GUIDANCE: ${hint}`);
   }
 
-  if (mode === 'coding' && !discoveryRequired) {
+  if (mode === 'coding' && !discoveryRequired && interactionMode === 'agent') {
     parts.push(CODING_QUALITY_APPENDIX);
   }
 
-  if (mode === 'ui' && !discoveryRequired) {
+  if (mode === 'ui' && !discoveryRequired && interactionMode === 'agent') {
     parts.push(
       'ACTIVE MODE: UI GENERATION — Ground v0 / UI Studio in §2 research (real competitors + UI patterns) + Project Type + §4 routes + §5 visuals. No vague "modern/clean" alone. Keep v0-prompt.md 800–1200 chars.',
     );

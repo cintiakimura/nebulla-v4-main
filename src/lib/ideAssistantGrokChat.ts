@@ -70,10 +70,15 @@ export async function sendIdeAssistantGrokTurn(options: {
   chatMode?: string;
   codingHint?: string;
   discoveryRequired?: boolean;
+  /** User-locked Chat vs Agent (voice-safe brainstorm vs coding). */
+  interactionMode?: 'chat' | 'agent';
   signal?: AbortSignal;
 }): Promise<{ assistantContent: string; planningPhase: string; claudeFallbackNotice?: string }> {
   const { textToSend, history, userId, projectName, ideAppendix, signal } = options;
-  const buildMode = options.buildMode ?? detectBuildModeIntent(textToSend);
+  const interactionMode = options.interactionMode === 'agent' ? 'agent' : 'chat';
+  // Chat lock never enters build/coding system appendix even if text looks like "build it".
+  const buildMode =
+    interactionMode === 'agent' && (options.buildMode ?? detectBuildModeIntent(textToSend));
   const selection = resolveAiChatSelection(options.chatModel ?? DEFAULT_AI_CHAT_MODEL);
 
   const [wsMeta, planCtx, overview] = await Promise.all([
@@ -92,6 +97,7 @@ export async function sendIdeAssistantGrokTurn(options: {
     mode: options.chatMode,
     codingHint: options.codingHint,
     discoveryRequired: options.discoveryRequired,
+    interactionMode,
   });
 
   let systemPrompt =

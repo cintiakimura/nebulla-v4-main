@@ -14,6 +14,11 @@ import {
   type ChatModeResult,
 } from './chatModeDetector';
 import {
+  buildSwitchToAgentPrompt,
+  isAgentLockedDetectorMode,
+  type IdeAssistantInteractionMode,
+} from './ideAssistantInteractionMode';
+import {
   extractGitHubUrl,
   extractLocalFilePath,
   openGitHubFile,
@@ -41,11 +46,21 @@ export type SmartChatHandlerResult = {
   filePreview?: SmartChatFilePreview;
   /** Hint for coding pipeline (caller may still invoke Go / Grok) */
   codingHint?: string;
+  /**
+   * Chat interaction mode blocked a coding/debug/UI intent —
+   * show Switch to Agent CTA (do not apply files).
+   */
+  switchToAgentSuggested?: boolean;
 };
 
 export type SmartChatHandlerOptions = {
   /** When true, Master Plan has research pillars + all sections — Discovery may be skipped. */
   masterPlanComplete?: boolean;
+  /**
+   * User-locked Chat vs Agent. When `chat`, coding/debug/UI intents are intercepted
+   * with a Switch-to-Agent CTA instead of entering the coding pipeline.
+   */
+  interactionMode?: IdeAssistantInteractionMode;
 };
 
 function previewFromOpened(opened: OpenedFile): SmartChatFilePreview {
@@ -77,6 +92,7 @@ export async function handleSmartChatMessage(
   opts?: SmartChatHandlerOptions,
 ): Promise<SmartChatHandlerResult> {
   const masterPlanComplete = opts?.masterPlanComplete === true;
+  const interactionMode = opts?.interactionMode === 'agent' ? 'agent' : 'chat';
   const modeMeta = detectChatMode(userText, { masterPlanComplete });
   const { mode, discoveryRequired } = modeMeta;
 
@@ -134,6 +150,21 @@ export async function handleSmartChatMessage(
       ]
         .filter(Boolean)
         .join('\n'),
+    };
+  }
+
+  // Chat lock: never silently enter coding / debug-apply / UI-generate pipelines.
+  if (interactionMode === 'chat' && isAgentLockedDetectorMode(mode)) {
+    return {
+      mode,
+      modeMeta,
+      handledLocally: true,
+      switchToAgentSuggested: true,
+      assistantMessage: buildSwitchToAgentPrompt({
+        detectorMode: mode,
+        discoveryRequired,
+      }),
+      codingHint: undefined,
     };
   }
 
