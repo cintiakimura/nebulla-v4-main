@@ -23,6 +23,7 @@ export const PANEL_LABELS: Record<IdeCenterPane, string> = {
   'source-control': 'Source Control',
   projects: 'My Projects',
   secrets: 'Secrets',
+  security: 'Security',
   dns: 'DNS',
   search: 'Search',
 };

@@ -9,6 +9,7 @@ export type IdeCenterPane =
   | 'source-control'
   | 'projects'
   | 'secrets'
+  | 'security'
   | 'dns'
   | 'search'; // legacy pane id — redirected away; find/replace lives in TopBar icon only
 
@@ -23,11 +24,12 @@ export const IDE_CENTER_PRIMARY_TABS: { id: IdeCenterPane; label: string }[] = [
 ];
 
 /** Open from the left nav only. DNS is a tab inside Secrets dashboard, not a side-nav page. */
-export const IDE_CENTER_NAV_ONLY_PANES: IdeCenterPane[] = ['projects', 'secrets'];
+export const IDE_CENTER_NAV_ONLY_PANES = ['projects', 'secrets', 'security'] as const satisfies readonly IdeCenterPane[];
 
 const NAV_ONLY_LABELS: Record<(typeof IDE_CENTER_NAV_ONLY_PANES)[number], string> = {
   projects: 'My Projects',
   secrets: 'Secrets',
+  security: 'Security',
 };
 
 export const IDE_CENTER_PANE_TABS: { id: IdeCenterPane; label: string }[] = [

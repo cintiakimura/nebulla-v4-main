@@ -8,6 +8,7 @@ import {
   Network,
   Palette,
   Settings,
+  Shield,
   Sparkles,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -22,6 +23,7 @@ type NavItemId =
   | 'visual-ui-editor'
   | 'ui-studio-beta'
   | 'secrets'
+  | 'security'
   | 'project-settings';
 
 const NAV_IDS: { id: NavItemId; icon: React.ReactNode }[] = [
@@ -33,15 +35,19 @@ const NAV_IDS: { id: NavItemId; icon: React.ReactNode }[] = [
   { id: 'visual-ui-editor', icon: <Palette className="h-5 w-5" /> },
   { id: 'ui-studio-beta', icon: <Sparkles className="h-5 w-5" /> },
   { id: 'secrets', icon: <KeyRound className="h-5 w-5" /> },
+  { id: 'security', icon: <Shield className="h-5 w-5" /> },
   { id: 'project-settings', icon: <Settings className="h-5 w-5" /> },
 ];
 
 export function VerticalNav({
   activeItem: activeItemProp,
   onSelectItem,
+  securityAlertCount = 0,
 }: {
   activeItem?: string;
   onSelectItem?: (id: string) => void;
+  /** Unresolved critical/high findings from last Security Scan (nav badge). */
+  securityAlertCount?: number;
 }) {
   const { t } = useLanguage();
   const [activeItemUncontrolled, setActiveItemUncontrolled] = useState('explorer');
@@ -82,6 +88,13 @@ export function VerticalNav({
             )}
           >
             {item.icon}
+            {item.id === 'security' && securityAlertCount > 0 ? (
+              <span
+                className="absolute right-1 top-1 h-2 w-2 rounded-full bg-orange-400"
+                title={`${securityAlertCount} high-severity findings`}
+                aria-label={`${securityAlertCount} high-severity findings`}
+              />
+            ) : null}
             {activeItem === item.id && (
               <span
                 className="absolute left-0 top-1/2 h-6 w-px -translate-y-1/2 rounded-r bg-primary/50"

@@ -9,6 +9,7 @@ import {
   MonitorPlay,
   Network,
   Palette,
+  Shield,
   X,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -22,6 +23,7 @@ import { IdeUiStudioBeta } from './IdeUiStudioBeta';
 import { UiStudioMockupPanel } from './UiStudioMockupPanel';
 import { MindMapIdeRoute } from './MindMapIdeRoute';
 import { IdeFileEditor } from './IdeFileEditor';
+import { IdeSecurityScan } from './IdeSecurityScan';
 import { useIdeCenterTabs } from './IdeCenterTabsContext';
 import { useIdeWorkspace } from './IdeWorkspaceContext';
 import type { IdeCenterPane } from '../../lib/ideCenterPanes';
@@ -36,6 +38,7 @@ const PANEL_ICONS: Partial<Record<IdeCenterPane, React.ReactNode>> = {
   'ui-studio-beta': <Palette className="h-3 w-3 shrink-0 opacity-70" aria-hidden />,
   projects: <LayoutGrid className="h-3 w-3 shrink-0 opacity-70" aria-hidden />,
   secrets: <KeyRound className="h-3 w-3 shrink-0 opacity-70" aria-hidden />,
+  security: <Shield className="h-3 w-3 shrink-0 opacity-70" aria-hidden />,
 };
 
 export function IdeCenterWorkspace() {
@@ -186,6 +189,9 @@ export function IdeCenterWorkspace() {
             </PaneLayer>
             <PaneLayer visible={activePane === 'secrets'}>
               <IdeDashboardEmbed initialTab="secrets" />
+            </PaneLayer>
+            <PaneLayer visible={activePane === 'security'}>
+              <IdeSecurityScan />
             </PaneLayer>
           </>
         )}

@@ -143,6 +143,42 @@ function NebullaIDEShell() {
   const chat = useDragResize(CHAT_DEFAULT, CHAT_MIN, CHAT_MAX, 'horizontal-left');
   const terminal = useDragResize(TERMINAL_DEFAULT, TERMINAL_MIN, TERMINAL_MAX, 'vertical');
   const [terminalCollapsed, setTerminalCollapsed] = useState(false);
+  const [securityAlertCount, setSecurityAlertCount] = useState(0);
+
+  useEffect(() => {
+    const refreshBadge = async () => {
+      try {
+        const res = await fetch(withProjectQuery('/api/security-scan/latest'));
+        if (!res.ok) {
+          setSecurityAlertCount(0);
+          return;
+        }
+        const data = await res.json();
+        const findings = Array.isArray(data?.findings) ? data.findings : [];
+        let dismissed = new Set<string>();
+        try {
+          const raw = localStorage.getItem('nebulla_security_scan_dismissed_v1');
+          const map = raw ? (JSON.parse(raw) as Record<string, string[]>) : {};
+          dismissed = new Set(map[String(data.projectKey || '')] || []);
+        } catch {
+          /* ignore */
+        }
+        const n = findings.filter(
+          (f: { id?: string; severity?: string }) =>
+            f?.id &&
+            !dismissed.has(f.id) &&
+            (f.severity === 'critical' || f.severity === 'high'),
+        ).length;
+        setSecurityAlertCount(n);
+      } catch {
+        setSecurityAlertCount(0);
+      }
+    };
+    void refreshBadge();
+    const onUpdate = () => void refreshBadge();
+    window.addEventListener('nebula-security-scan-updated', onUpdate);
+    return () => window.removeEventListener('nebula-security-scan-updated', onUpdate);
+  }, []);
 
   /** Same view again collapses; different view switches content and stays open. */
   const toggleLeftSidebar = useCallback(
@@ -436,7 +472,11 @@ function NebullaIDEShell() {
       ) : null}
 
       <div className="flex flex-1 overflow-hidden">
-        <VerticalNav activeItem={navActiveItem} onSelectItem={selectNavItem} />
+        <VerticalNav
+          activeItem={navActiveItem}
+          onSelectItem={selectNavItem}
+          securityAlertCount={securityAlertCount}
+        />
 
         {leftSidebarOpen ? (
           <>

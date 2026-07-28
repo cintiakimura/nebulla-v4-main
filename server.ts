@@ -127,6 +127,7 @@ import {
 } from "./lib/nebulaUiStudioGrok";
 import { getNebullaPersistRoot, getNebulaProjectDocsRoot } from "./lib/nebulaWorkspaceRoot";
 import { ensureCloudProjectWorkspace } from "./lib/nebulaCloudProjectRoot";
+import { registerSecurityScanRoutes } from "./lib/securityScan/registerSecurityScanRoutes";
 import { getProjectKeyFromRequest, sanitizeProjectKey } from "./lib/nebulaProjectKey";
 import {
   emptyPreviewHtmlWithBridge,
@@ -549,6 +550,19 @@ async function startServer() {
 
   const projectPathsFor = (req: express.Request) =>
     ensureCloudProjectWorkspace(REPO_ROOT, NEBULA_PROJECT_ROOT, projectDiskKey(req));
+
+  registerSecurityScanRoutes(app, {
+    projectPathsFor: (req) => {
+      const pp = projectPathsFor(req);
+      return { workspaceRoot: pp.workspaceRoot, projectKey: pp.projectKey };
+    },
+    projectNameFromReq: (req) => {
+      const fromBody = typeof req.body?.projectName === "string" ? req.body.projectName.trim() : "";
+      const fromQuery =
+        typeof req.query.projectName === "string" ? String(req.query.projectName).trim() : "";
+      return fromBody || fromQuery || undefined;
+    },
+  });
 
   /** Optional: download active cloud project as a tar.gz archive. */
   app.get("/api/cloud-project/download", (req, res) => {
