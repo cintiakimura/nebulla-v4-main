@@ -8,6 +8,9 @@ import {
 } from './masterPlanSections';
 import { fetchJson } from './apiFetch';
 import { withProjectBody, withProjectQuery } from './nebulaProjectApi';
+import { buildLanguagePromptAppendix } from './i18n/languagePromptAppendix';
+import type { IdeLocaleCode } from './i18n/locales';
+import type { ContentLanguageMode } from './i18n/userLanguagePreferences';
 
 export const MASTER_PLAN_TAB_NAMES = [...MASTER_PLAN_SECTION_KEYS] as const;
 
@@ -276,6 +279,11 @@ export function chatModeSystemAppendix(options: {
   interactionMode?: 'chat' | 'agent';
   /** Message includes [APP_STATUS_DEBUG] from preview runtime health. */
   hasAppStatusPayload?: boolean;
+  /** IDE chrome locale (static catalogs). */
+  ideLocale?: IdeLocaleCode;
+  /** User-visible chat / Master Plan / UI copy locale. */
+  contentLocale?: IdeLocaleCode;
+  contentMode?: ContentLanguageMode;
 }): string {
   const mode = (options.mode || '').trim();
   const hint = (options.codingHint || '').trim();
@@ -283,6 +291,13 @@ export function chatModeSystemAppendix(options: {
   const interactionMode = options.interactionMode === 'agent' ? 'agent' : 'chat';
   const hasAppStatusPayload = Boolean(options.hasAppStatusPayload);
   const parts: string[] = [];
+
+  const ideLocale = options.ideLocale || 'en';
+  const contentLocale = options.contentLocale || ideLocale;
+  const contentMode = options.contentMode === 'match_ide' ? 'match_ide' : 'mirror';
+  parts.push(
+    buildLanguagePromptAppendix({ ideLocale, contentLocale, contentMode }),
+  );
 
   if (interactionMode === 'chat') {
     parts.push(
@@ -353,7 +368,7 @@ export function chatModeSystemAppendix(options: {
 
   if (mode === 'ui' && !discoveryRequired && interactionMode === 'agent') {
     parts.push(
-      'ACTIVE MODE: UI GENERATION — Ground v0 / UI Studio in §2 research (real competitors + UI patterns) + Project Type + §4 routes + §5 visuals. No vague "modern/clean" alone. Keep v0-prompt.md 800–1200 chars.',
+      `ACTIVE MODE: UI GENERATION — Ground v0 / UI Studio in §2 research (real competitors + UI patterns) + Project Type + §4 routes + §5 visuals. No vague "modern/clean" alone. Keep v0-prompt.md 800–1200 chars. User-facing UI copy language = CONTENT_LOCALE (${contentLocale}).`,
     );
   }
 

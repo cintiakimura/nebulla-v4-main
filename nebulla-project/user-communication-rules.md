@@ -39,5 +39,6 @@ Goal: Keep users confident and moving forward. Never overwhelm them with technic
 - Always end with a clear next step or question.
 - Never blame the user or make them feel they did something wrong.
 - **Chat mode** also obeys `nebulla-project/chat-personality.md` (**unbreakable** brainstorming + greeting rules).
+- **Language:** IDE chrome strings use `t()` / `resolvedIdeLocale`; chat & Master Plan prose follow `CONTENT_LOCALE` (`nebulla-project/language-system.md`).
 
 **Grok MUST follow these rules in all user-facing messages.**

@@ -19,6 +19,7 @@ Beginner-friendly **App Status** shows whether the live preview is healthy — w
 | Preview chrome badge | Green OK / red count — click opens the **same** chat menu (`nebula-open-app-status`) |
 
 Default copy follows **user-communication-rules** Tier 1. Technical details are opt-in.
+Menu chrome titles/actions use IDE `t()` (`nebulla-project/language-system.md`); runtime issue bodies may still be English until migrated.
 
 ## Events / store
 Module: `src/lib/ideAppRuntimeStatus.ts`

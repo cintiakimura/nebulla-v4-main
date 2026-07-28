@@ -34,6 +34,7 @@ User-controlled lock in the IDE chat header. Orthogonal to automatic detector mo
 
 ## Related
 
+- `nebulla-project/language-system.md` — IDE chrome `t()` + Chat/Plan `CONTENT_LOCALE` (applies to both Chat and Agent; personality stays Chat-only)
 - `nebulla-project/chat-personality.md` — **UNBREAKABLE** Chat brainstorming personality + greeting
 - `nebulla-project/chat-mode-detection.md` — detector sequence (Discovery → Architecture → Coding …)
 - `nebulla-project/app-status-runtime.md` — preview health → NDM Verify

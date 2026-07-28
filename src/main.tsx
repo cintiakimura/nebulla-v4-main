@@ -4,6 +4,7 @@ import App from './App';
 import './index.css';
 import { SwarmProvider } from './components/swarm/SwarmProvider';
 import { ModelSettingsProvider } from './components/settings/ModelSettingsContext';
+import { LanguageProvider } from './components/i18n/LanguageProvider';
 import { setBrowserProjectKey, setBrowserProjectName } from './lib/nebulaProjectApi';
 import {
   getWorkspaceModePreference,
@@ -41,9 +42,11 @@ if (
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <ModelSettingsProvider billingTier="free">
-      <SwarmProvider>
-        <App />
-      </SwarmProvider>
+      <LanguageProvider>
+        <SwarmProvider>
+          <App />
+        </SwarmProvider>
+      </LanguageProvider>
     </ModelSettingsProvider>
   </React.StrictMode>,
 );

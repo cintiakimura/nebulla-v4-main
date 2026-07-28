@@ -4405,10 +4405,15 @@ ${answer.slice(0, 8000)}`;
     const textFromBody = typeof req.body?.text === "string" ? req.body.text : "";
     const text = (textFromBody || textFromQuery || "").trim();
     if (!text) return res.status(400).json({ error: "Text is required" });
+    const languageRaw =
+      (typeof req.body?.language === "string" && req.body.language) ||
+      (typeof req.query.language === "string" && req.query.language) ||
+      "en";
+    const language = String(languageRaw).trim().toLowerCase().slice(0, 2) || "en";
 
     try {
       const t0 = Date.now();
-      const upstream = await speakUpstream(text);
+      const upstream = await speakUpstream(text, language);
       if (!upstream.body) {
         const audio = Buffer.from(await upstream.arrayBuffer());
         res.set({
@@ -4546,8 +4551,9 @@ startServer().catch((err) => {
 });
 
 /** Open upstream Grok TTS and return the Response (body streamed — do not buffer). */
-async function speakUpstream(text: string): Promise<Response> {
+async function speakUpstream(text: string, language = "en"): Promise<Response> {
   const apiKey = process.env.GROK_TTS_NEW_API_KEY;
+  const lang = ["en", "fr", "it", "es", "de"].includes(language) ? language : "en";
 
   if (!apiKey) {
     throw new Error("GROK_TTS_NEW_API_KEY is not set. Please check your environment variables.");
@@ -4564,6 +4570,8 @@ async function speakUpstream(text: string): Promise<Response> {
       input: text,
       voice: "Eve",
       response_format: "mp3",
+      // Best-effort; ignored if upstream does not support it yet.
+      language: lang,
     }),
   });
 
@@ -4588,7 +4596,7 @@ async function speakUpstream(text: string): Promise<Response> {
         sample_rate: 44100,
         bit_rate: 128000,
       },
-      language: "en",
+      language: lang,
     }),
   });
 

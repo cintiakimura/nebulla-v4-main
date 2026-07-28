@@ -6,6 +6,7 @@ import {
   logoutNebula,
   type NebulaSessionUser,
 } from '../lib/nebulaCloud';
+import { LanguageSettingsPanel } from '@/components/settings/LanguageSettingsPanel';
 
 function formatIso(iso: string | null | undefined): string {
   if (!iso) return '—';
@@ -207,6 +208,8 @@ export function UserProfilePage({
                   </dl>
                 </div>
               </section>
+
+              <LanguageSettingsPanel />
 
               <section className="rounded-xl border border-white/10 bg-white/5 p-6 space-y-4">
                 <h3 className="text-sm font-headline text-slate-200 flex items-center gap-2 border-b border-white/10 pb-2">

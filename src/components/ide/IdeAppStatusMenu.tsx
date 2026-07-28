@@ -13,6 +13,7 @@ import {
   subscribeAppRuntime,
   type AppRuntimeIssue,
 } from '../../lib/ideAppRuntimeStatus';
+import { useLanguage } from '@/components/i18n/LanguageProvider';
 
 function useAppRuntimeSnapshot() {
   const [snap, setSnap] = useState(getAppRuntimeSnapshot);
@@ -23,9 +24,11 @@ function useAppRuntimeSnapshot() {
 function IssueCard({
   issue,
   onFix,
+  t,
 }: {
   issue: AppRuntimeIssue;
   onFix: (issue: AppRuntimeIssue) => void;
+  t: (key: string, vars?: Record<string, string | number>) => string;
 }) {
   const [techOpen, setTechOpen] = useState(false);
   return (
@@ -52,7 +55,7 @@ function IssueCard({
               className="inline-flex items-center gap-1 rounded-md border border-primary/40 bg-primary/15 px-2 py-1 text-[11px] font-semibold text-primary hover:bg-primary/25"
             >
               <Wrench className="h-3 w-3" aria-hidden />
-              Fix with Agent
+              {t('appStatus.fixWithAgent')}
             </button>
             <button
               type="button"
@@ -64,7 +67,7 @@ function IssueCard({
               ) : (
                 <ChevronRight className="h-3 w-3" aria-hidden />
               )}
-              Technical details
+              {t('appStatus.technicalDetails')}
             </button>
           </div>
           {techOpen ? (
@@ -88,6 +91,7 @@ export function IdeAppStatusMenuButton({
   /** Optional debounced TTS when a new issue arrives (parent gates Open talk). */
   onVoiceNudge?: (text: string) => void;
 }) {
+  const { t } = useLanguage();
   const snap = useAppRuntimeSnapshot();
   const [open, setOpen] = useState(false);
   const errorCount = snap.issues.filter((i) => i.severity !== 'info').length;
@@ -108,11 +112,11 @@ export function IdeAppStatusMenuButton({
       const detail = (ev as CustomEvent).detail as { issue?: AppRuntimeIssue; deduped?: boolean } | undefined;
       if (!detail?.issue || detail.deduped) return;
       if (detail.issue.severity === 'info') return;
-      onVoiceNudge?.('Something broke in the preview. Want me to fix it?');
+      onVoiceNudge?.(t('appStatus.voiceNudge'));
     };
     window.addEventListener(APP_STATUS_EVENTS.issue, onIssue);
     return () => window.removeEventListener(APP_STATUS_EVENTS.issue, onIssue);
-  }, [onVoiceNudge]);
+  }, [onVoiceNudge, t]);
 
   const handleFix = useCallback(
     (issue: AppRuntimeIssue) => {
@@ -123,17 +127,17 @@ export function IdeAppStatusMenuButton({
   );
 
   const statusLabel = healthy
-    ? 'App looks OK'
+    ? t('appStatus.looksOk')
     : errorCount === 1
-      ? 'Something broke'
-      : `${errorCount} issues`;
+      ? t('appStatus.somethingBroke')
+      : t('appStatus.nIssues', { count: errorCount });
 
   return (
     <div className="relative">
       <button
         type="button"
-        title="App status — preview health"
-        aria-label="App status"
+        title={t('appStatus.titleAttr')}
+        aria-label={t('appStatus.title')}
         aria-expanded={open}
         onClick={() => {
           setOpen((o) => !o);
@@ -163,13 +167,13 @@ export function IdeAppStatusMenuButton({
           <button
             type="button"
             className="fixed inset-0 z-[70] cursor-default"
-            aria-label="Close app status"
+            aria-label={t('common.close')}
             onClick={() => setOpen(false)}
           />
           <div
             className="absolute right-0 top-full z-[80] mt-1.5 w-[min(100vw-1.5rem,20rem)] rounded-xl border border-border bg-[#0a0a0a] p-2.5 shadow-xl ring-1 ring-[color-mix(in_srgb,var(--outline-variant)_14%,transparent)]"
             role="dialog"
-            aria-label="App status"
+            aria-label={t('appStatus.title')}
           >
             <div className="mb-2 flex items-center justify-between gap-2 px-0.5">
               <div className="flex min-w-0 items-center gap-1.5">
@@ -183,7 +187,7 @@ export function IdeAppStatusMenuButton({
               <button
                 type="button"
                 className="rounded p-0.5 text-muted-foreground hover:text-foreground"
-                aria-label="Close"
+                aria-label={t('common.close')}
                 onClick={() => setOpen(false)}
               >
                 <X className="h-3.5 w-3.5" />
@@ -191,14 +195,12 @@ export function IdeAppStatusMenuButton({
             </div>
 
             <p className="type-label-sm mb-2 px-0.5 text-muted-foreground">
-              {healthy
-                ? 'Live preview looks fine. You don’t need DevTools for this.'
-                : 'We caught a problem in the preview — no need to Inspect the page.'}
+              {healthy ? t('appStatus.healthyDetail') : t('appStatus.issuesDetail')}
             </p>
 
             <div className="max-h-[min(40vh,16rem)] space-y-2 overflow-y-auto">
               {snap.issues.slice(0, 3).map((issue) => (
-                <IssueCard key={issue.id} issue={issue} onFix={handleFix} />
+                <IssueCard key={issue.id} issue={issue} onFix={handleFix} t={t} />
               ))}
             </div>
 
@@ -212,7 +214,7 @@ export function IdeAppStatusMenuButton({
                 }}
                 className="type-label-sm rounded-md px-2 py-1 font-medium text-primary disabled:opacity-40"
               >
-                Ask Agent to fix
+                {t('appStatus.askAgentFix')}
               </button>
               <button
                 type="button"
@@ -220,7 +222,7 @@ export function IdeAppStatusMenuButton({
                 onClick={() => clearAppRuntimeIssues()}
                 className="type-label-sm rounded-md px-2 py-1 text-muted-foreground hover:text-foreground disabled:opacity-40"
               >
-                Clear
+                {t('appStatus.clear')}
               </button>
             </div>
           </div>
@@ -232,13 +234,18 @@ export function IdeAppStatusMenuButton({
 
 /** Compact status dot for the preview dock chrome. */
 export function IdeAppStatusPreviewBadge() {
+  const { t } = useLanguage();
   const snap = useAppRuntimeSnapshot();
   const count = getAppRuntimeErrorCount();
   const healthy = count === 0;
   return (
     <button
       type="button"
-      title={healthy ? 'App status: OK — open in chat' : `App status: ${count} issue(s) — open in chat`}
+      title={
+        healthy
+          ? t('appStatus.previewOk')
+          : t('appStatus.previewIssues', { count })
+      }
       onClick={() => openAppStatusMenu()}
       className="inline-flex items-center gap-1.5 rounded-md px-1.5 py-0.5 hover:bg-white/5"
     >

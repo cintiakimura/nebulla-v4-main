@@ -19,6 +19,8 @@ import {
   resolveAiChatSelection,
   type AiChatModelId,
 } from './aiProvider';
+import type { IdeLocaleCode } from './i18n/locales';
+import type { ContentLanguageMode } from './i18n/userLanguagePreferences';
 
 export type IdeChatTurnMessage = { role: 'user' | 'assistant' | 'system'; content: string };
 
@@ -74,6 +76,10 @@ export async function sendIdeAssistantGrokTurn(options: {
   interactionMode?: 'chat' | 'agent';
   /** When true, message includes [APP_STATUS_DEBUG] — force NDM Verify from App Status. */
   hasAppStatusPayload?: boolean;
+  /** Language contract — see nebulla-project/language-system.md */
+  ideLocale?: IdeLocaleCode;
+  contentLocale?: IdeLocaleCode;
+  contentMode?: ContentLanguageMode;
   signal?: AbortSignal;
 }): Promise<{ assistantContent: string; planningPhase: string; claudeFallbackNotice?: string }> {
   const { textToSend, history, userId, projectName, ideAppendix, signal } = options;
@@ -105,6 +111,9 @@ export async function sendIdeAssistantGrokTurn(options: {
     discoveryRequired: options.discoveryRequired,
     interactionMode,
     hasAppStatusPayload,
+    ideLocale: options.ideLocale,
+    contentLocale: options.contentLocale,
+    contentMode: options.contentMode,
   });
 
   let systemPrompt =

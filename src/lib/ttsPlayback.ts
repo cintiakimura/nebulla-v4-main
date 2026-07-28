@@ -17,6 +17,8 @@ export type TtsPlaybackOptions = {
   /** Optional credentials for IDE speak route. */
   credentials?: RequestCredentials;
   headers?: Record<string, string>;
+  /** Content locale code (en|fr|it|es|de) — passed to /api/speak. */
+  language?: string;
 };
 
 function mseMpegSupported(): boolean {
@@ -221,13 +223,14 @@ async function fetchSpeakChunk(
   signal: AbortSignal | undefined,
   credentials: RequestCredentials | undefined,
   headers: Record<string, string> | undefined,
+  language?: string,
 ): Promise<Response> {
   const t0 = performance.now();
   const res = await fetch(speakUrl, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...(headers || {}) },
     credentials,
-    body: JSON.stringify({ text }),
+    body: JSON.stringify({ text, language: language || 'en' }),
     signal,
   });
   console.debug(`[TTS] /api/speak TTFB ${Math.round(performance.now() - t0)}ms status=${res.status}`);
@@ -272,6 +275,7 @@ export async function playTtsText(options: TtsPlaybackOptions): Promise<void> {
       signal,
       options.credentials,
       options.headers,
+      options.language,
     );
   };
 
@@ -288,6 +292,7 @@ export async function playTtsText(options: TtsPlaybackOptions): Promise<void> {
         signal,
         options.credentials,
         options.headers,
+        options.language,
       );
       prefetch = null;
       // Prefetch the next chunk while this one downloads/plays.

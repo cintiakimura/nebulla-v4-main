@@ -103,10 +103,9 @@ import {
   looksLikeBrokenAppComplaint,
   resetAppRuntimeForProject,
 } from '../../lib/ideAppRuntimeStatus';
+import { useLanguage } from '@/components/i18n/LanguageProvider';
+import { bcp47ForLocale } from '../../lib/i18n/locales';
 
-const CHAT_EMPTY_GREETING = "What's up? What would you like to create today?";
-const CHAT_EMPTY_SUBLINE =
-  'App, landing page, site, or something else — we can brainstorm here. Switch to Agent when you’re ready to build.';
 const MAX_CHAT_ATTACH_BYTES = 12 * 1024 * 1024;
 const IDLE_GROK_ACTIVITY_BASE: Omit<GrokActivityStatus, 'subhead'> = {
   headline: 'Ready',
@@ -231,6 +230,17 @@ export function AIChat() {
     assistantInteractionMode,
     setAssistantInteractionMode,
   } = useIdeWorkspace();
+  const {
+    t,
+    resolvedIdeLocale,
+    resolvedContentLocale,
+    prefs,
+    noteUserMessageForMirror,
+    localeLabels,
+  } = useLanguage();
+  const contentLocaleRef = useRef(resolvedContentLocale);
+  contentLocaleRef.current = resolvedContentLocale;
+  const voiceLocaleFallbackNotifiedRef = useRef(false);
   const interactionModeRef = useRef(assistantInteractionMode);
   interactionModeRef.current = assistantInteractionMode;
   const [workspaceRootLabel, setWorkspaceRootLabel] = useState<string | null>(null);
@@ -277,12 +287,13 @@ export function AIChat() {
   }, [diskProjectKey]);
 
   const appStatusVoiceNudgeRef = useRef(0);
+  const playTtsForTextRef = useRef<(plain: string) => Promise<void>>(async () => {});
   const onAppStatusVoiceNudge = useCallback((spoken: string) => {
     const now = Date.now();
     if (now - appStatusVoiceNudgeRef.current < 15000) return;
     if (!openTalkDesiredRef.current) return;
     appStatusVoiceNudgeRef.current = now;
-    void playTtsText(spoken).catch(() => {});
+    void playTtsForTextRef.current(spoken).catch(() => {});
   }, []);
 
   const beginCodingActivity = useCallback(
@@ -721,7 +732,7 @@ export function AIChat() {
     const recognition = new SR();
     recognition.continuous = true;
     recognition.interimResults = true;
-    recognition.lang = 'en-US';
+    recognition.lang = bcp47ForLocale(contentLocaleRef.current);
 
     recognition.onresult = (event: IdeSpeechRecognitionEvent) => {
       if (!isHandsFreeRef.current || micInputBlockedRef.current || sendingRef.current) return;
@@ -941,8 +952,7 @@ export function AIChat() {
       const welcome: Message = {
         id: `a-free-${Date.now()}`,
         role: 'assistant',
-        content:
-          "What's up? What would you like to create today?",
+        content: t('chat.greeting'),
         timestamp: stamp(),
       };
       setMessages([welcome]);
@@ -968,7 +978,7 @@ export function AIChat() {
       window.removeEventListener(NEBULA_START_FREE_CHAT, onFree);
       window.removeEventListener(NEBULA_CHAT_OPEN_FILE, onOpenFile as EventListener);
     };
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     const onSync = () => {
@@ -1026,6 +1036,18 @@ export function AIChat() {
     if (!rawText || sending) return;
 
     if (micInputBlocked) return;
+
+    // Mirror sticky content locale (hysteresis) — skip hidden bootstraps.
+    if (!isHiddenBootstrapUserMessage(rawText)) {
+      const before = contentLocaleRef.current;
+      const after = noteUserMessageForMirror(rawText) || before;
+      if (prefs.contentMode === 'mirror' && after !== before) {
+        setAccessoryHint(
+          t('chat.replyingIn', { lang: localeLabels[after] || after }),
+        );
+        window.setTimeout(() => setAccessoryHint(null), 3200);
+      }
+    }
 
     // Attach App Status Verify evidence when user says "it's broken" (or payload already present).
     let text = rawText;
@@ -1295,6 +1317,9 @@ export function AIChat() {
           discoveryRequired,
           interactionMode: interactionModeRef.current,
           hasAppStatusPayload,
+          ideLocale: resolvedIdeLocale,
+          contentLocale: contentLocaleRef.current,
+          contentMode: prefs.contentMode,
         }));
       } finally {
         stopGrokWait();
@@ -1529,7 +1554,7 @@ export function AIChat() {
         resumeOpenTalkIfWanted();
       }
     }
-  }, [sending, activePath, activeTab?.content, serverHasGrokKey, micInputBlocked, workspaceRootLabel, gitBranch, tabs, pauseHandsFreeListening, resumeOpenTalkIfWanted, beginCodingActivity, pushActivity, resetCodingActivity, workspacePaths.length]);
+  }, [sending, activePath, activeTab?.content, serverHasGrokKey, micInputBlocked, workspaceRootLabel, gitBranch, tabs, pauseHandsFreeListening, resumeOpenTalkIfWanted, beginCodingActivity, pushActivity, resetCodingActivity, workspacePaths.length, noteUserMessageForMirror, prefs.contentMode, resolvedIdeLocale, t, localeLabels]);
 
   sendChatRef.current = sendChat;
 
@@ -1587,6 +1612,7 @@ export function AIChat() {
         speakUrl: withProjectQuery('/api/speak'),
         signal: controller.signal,
         credentials: 'include',
+        language: contentLocaleRef.current,
         onAudio: (audio) => {
           const w = window as unknown as { nebula_ide_currentAudio?: HTMLAudioElement | null };
           w.nebula_ide_currentAudio = audio;
@@ -1614,6 +1640,7 @@ export function AIChat() {
       if (runId === ttsRunIdRef.current) finishPlayback();
     }
   };
+  playTtsForTextRef.current = playTtsForText;
 
   const toggleVoiceMic = () => {
     if (sending) return;
@@ -1648,7 +1675,7 @@ export function AIChat() {
     const recognition = new SR();
     recognition.continuous = true;
     recognition.interimResults = true;
-    recognition.lang = 'en-US';
+    recognition.lang = bcp47ForLocale(contentLocaleRef.current);
 
     const baseText = inputRef.current.trim();
     voiceDraftRef.current = baseText;
@@ -1672,9 +1699,19 @@ export function AIChat() {
     recognition.onerror = (ev: IdeSpeechRecognitionErrorEvent) => {
       if (ev.error === 'aborted') return;
       console.warn('[AIChat] speech recognition:', ev.error);
-      setAccessoryHint(
-        `Voice input: ${ev.error === 'not-allowed' ? 'allow the microphone for this site.' : ev.error}`,
-      );
+      if (
+        (ev.error === 'language-not-supported' || ev.error === 'service-not-allowed') &&
+        contentLocaleRef.current !== 'en' &&
+        !voiceLocaleFallbackNotifiedRef.current
+      ) {
+        voiceLocaleFallbackNotifiedRef.current = true;
+        recognition.lang = bcp47ForLocale('en');
+        setAccessoryHint(t('chat.voiceUnsupported'));
+      } else {
+        setAccessoryHint(
+          `Voice input: ${ev.error === 'not-allowed' ? 'allow the microphone for this site.' : ev.error}`,
+        );
+      }
       window.setTimeout(() => setAccessoryHint(null), 4500);
       setIsRecordingVoice(false);
       if (voiceRecognitionRef.current === recognition) {
@@ -1978,10 +2015,8 @@ export function AIChat() {
       try {
         const result = await uploadFileToR2(file, { projectKey: getBrowserProjectKey() });
         if (!result.ok) {
-          const hint =
-            result.hint ||
-            result.error ||
-            'Upload didn’t work. Check storage setup, or try again in a moment.';
+          const fail = result as { hint?: string; error?: string };
+          const hint = fail.hint || fail.error || t('chat.uploadFailed');
           setAccessoryHint(hint);
           window.setTimeout(() => setAccessoryHint(null), 5500);
           return;
@@ -1994,16 +2029,16 @@ export function AIChat() {
           inputRef.current = next;
           return next;
         });
-        setAccessoryHint('Attached.');
+        setAccessoryHint(t('chat.attached'));
         window.setTimeout(() => setAccessoryHint(null), 2800);
       } catch {
-        setAccessoryHint('Upload didn’t work. Please try again.');
+        setAccessoryHint(t('chat.uploadFailed'));
         window.setTimeout(() => setAccessoryHint(null), 4500);
       } finally {
         setUploadBusy(false);
       }
     },
-    [sending],
+    [sending, t],
   );
 
   return (
@@ -2017,7 +2052,7 @@ export function AIChat() {
           <button
             type="button"
             aria-pressed={assistantInteractionMode === 'chat'}
-            title="Chat — brainstorm & plan (no file writes)"
+            title={t('chat.mode.chatHint')}
             onClick={() => void applyInteractionMode('chat')}
             className={cn(
               'inline-flex h-8 items-center gap-1.5 rounded-full px-3 text-[0.75rem] font-medium transition',
@@ -2027,12 +2062,12 @@ export function AIChat() {
             )}
           >
             <MessageSquare className="h-3.5 w-3.5" aria-hidden />
-            Chat
+            {t('chat.mode.chat')}
           </button>
           <button
             type="button"
             aria-pressed={assistantInteractionMode === 'agent'}
-            title="Agent — build & edit code"
+            title={t('chat.mode.agentHint')}
             onClick={() => void applyInteractionMode('agent')}
             className={cn(
               'inline-flex h-8 items-center gap-1.5 rounded-full px-3 text-[0.75rem] font-medium transition',
@@ -2042,7 +2077,7 @@ export function AIChat() {
             )}
           >
             <Wrench className="h-3.5 w-3.5" aria-hidden />
-            Agent
+            {t('chat.mode.agent')}
           </button>
         </div>
         <div className="flex items-center gap-1.5">
@@ -2074,7 +2109,7 @@ export function AIChat() {
           className="shrink-0 border-b border-amber-500/40 bg-gradient-to-r from-amber-500/20 via-amber-500/12 to-transparent px-3 py-3"
           role="status"
         >
-          <p className="type-label-sm font-headline text-amber-100">Grok is not configured on the server</p>
+          <p className="type-label-sm font-headline text-amber-100">{t('chat.grokMissing')}</p>
           <p className="type-body-md mt-1 leading-relaxed text-amber-50/95">{MAIN_AI_CHAT_SETUP_HINT}</p>
         </div>
       ) : null}
@@ -2101,8 +2136,8 @@ export function AIChat() {
       >
         {messages.length === 0 && !sending ? (
           <div className="px-1 py-6 text-center">
-            <p className="type-body-md text-foreground/90">{CHAT_EMPTY_GREETING}</p>
-            <p className="type-label-sm mt-2 text-muted-foreground">{CHAT_EMPTY_SUBLINE}</p>
+            <p className="type-body-md text-foreground/90">{t('chat.greeting')}</p>
+            <p className="type-label-sm mt-2 text-muted-foreground">{t('chat.greetingSub')}</p>
           </div>
         ) : null}
         {messages.map((message) =>
@@ -2172,7 +2207,7 @@ export function AIChat() {
                     className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-lg border border-primary/40 bg-primary/15 px-3 py-2.5 text-sm font-semibold text-primary transition hover:bg-primary/25 disabled:opacity-45"
                   >
                     <Rocket className="h-4 w-4 shrink-0" aria-hidden />
-                    Go — write code to workspace
+                    {t('chat.goCta')}
                   </button>
                 ) : null}
                 {message.showSwitchToAgentCta ? (
@@ -2188,7 +2223,7 @@ export function AIChat() {
                       className="inline-flex flex-1 items-center justify-center gap-2 rounded-lg border border-primary/40 bg-primary/15 px-3 py-2.5 text-sm font-semibold text-primary transition hover:bg-primary/25 disabled:opacity-45"
                     >
                       <Wrench className="h-4 w-4 shrink-0" aria-hidden />
-                      Switch to Agent
+                      {t('chat.switchToAgent')}
                     </button>
                     <button
                       type="button"
@@ -2199,7 +2234,7 @@ export function AIChat() {
                       }}
                       className="inline-flex flex-1 items-center justify-center gap-2 rounded-lg border border-border/80 bg-transparent px-3 py-2.5 text-sm font-medium text-muted-foreground transition hover:text-foreground disabled:opacity-45"
                     >
-                      Stay in Chat
+                      {t('chat.stayInChat')}
                     </button>
                   </div>
                 ) : null}
@@ -2245,8 +2280,8 @@ export function AIChat() {
             }}
             placeholder={
               assistantInteractionMode === 'agent'
-                ? 'Message Agent — build & edit code…'
-                : 'Brainstorm anything — app, site, landing…'
+                ? t('chat.placeholder.agent')
+                : t('chat.placeholder.chat')
             }
             rows={3}
             disabled={sending || uploadBusy}
@@ -2256,7 +2291,7 @@ export function AIChat() {
           <div className="mt-2 flex items-center justify-between gap-3">
             <div className="flex items-center gap-1.5">
               <ChatRoundButton
-                label={uploadBusy ? 'Uploading…' : 'Attach file'}
+                label={uploadBusy ? t('chat.uploading') : t('chat.attach')}
                 onClick={handleFileAttachClick}
                 disabled={sending || uploadBusy || micInputBlocked}
               >
@@ -2277,7 +2312,7 @@ export function AIChat() {
                 <Hand className="h-[18px] w-[18px]" />
               </ChatRoundButton>
               <ChatRoundButton
-                label={isRecordingVoice ? 'Stop microphone' : 'Start microphone'}
+                label={isRecordingVoice ? t('chat.micStop') : t('chat.mic')}
                 onClick={() => toggleVoiceMic()}
                 disabled={sending || uploadBusy}
               >
@@ -2309,7 +2344,7 @@ export function AIChat() {
                 Go
               </button>
               <ChatRoundButton
-                label="Send message"
+                label={t('chat.sendMessage')}
                 onClick={() => {
                   stopVoiceRecognition();
                   setIsRecordingVoice(false);
