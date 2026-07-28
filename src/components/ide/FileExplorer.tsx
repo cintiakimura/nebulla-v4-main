@@ -19,6 +19,7 @@ import { useIdeWorkspace } from '@/components/ide/IdeWorkspaceContext';
 import { useIdeCenterTabs } from '@/components/ide/IdeCenterTabsContext';
 import { IdeCollapsibleSection } from '@/components/ide/IdeCollapsibleSection';
 import { fileTabLabel } from '../../lib/ideCenterTabs';
+import { useLanguage } from '@/components/i18n/LanguageProvider';
 
 function getFileIcon(name: string) {
   const ext = name.split('.').pop()?.toLowerCase();
@@ -120,28 +121,29 @@ export function FileExplorer() {
   const { workspacePaths, overviewLoading, overviewError, refreshTree, activePath, tabs } =
     useIdeWorkspace();
   const { focusFile } = useIdeCenterTabs();
+  const { t } = useLanguage();
   const [explorerHint, setExplorerHint] = useState<string | null>(null);
   const [editorsOpen, setEditorsOpen] = useState(true);
   const [projectOpen, setProjectOpen] = useState(true);
   const tree = useMemo(() => buildWorkspaceFileTree(workspacePaths), [workspacePaths]);
-  const projectLabel = getBrowserProjectName().trim() || 'Project';
+  const projectLabel = getBrowserProjectName().trim() || t('ide.explorer.projectFallback');
 
   return (
     <div className="surface-active flex h-full flex-col">
       <div className="flex h-8 items-center justify-between border-b border-border px-3">
         <span className="text-[10px] font-normal uppercase tracking-[0.12em] text-muted-foreground/80">
-          Explorer
+          {t('ide.explorer.title')}
         </span>
         <div className="flex items-center gap-0.5">
           <button
             type="button"
-            title="Refresh file tree"
-            aria-label="Refresh file tree"
+            title={t('ide.explorer.refresh')}
+            aria-label={t('ide.explorer.refresh')}
             className="btn-secondary-surface rounded p-0.5 text-muted-foreground disabled:opacity-40"
             disabled={overviewLoading}
             onClick={() => {
               void refreshTree();
-              setExplorerHint('Refreshing workspace…');
+              setExplorerHint(t('ide.explorer.refreshing'));
               window.setTimeout(() => setExplorerHint(null), 1600);
             }}
           >
@@ -149,11 +151,11 @@ export function FileExplorer() {
           </button>
           <button
             type="button"
-            title="Explorer actions"
-            aria-label="Explorer actions"
+            title={t('ide.explorer.actions')}
+            aria-label={t('ide.explorer.actions')}
             className="btn-secondary-surface rounded p-0.5 text-muted-foreground"
             onClick={() => {
-              setExplorerHint('Project files from your workspace (src/, app/, public/, etc.).');
+              setExplorerHint(t('ide.explorer.hint'));
               window.setTimeout(() => setExplorerHint(null), 3200);
             }}
           >
@@ -180,27 +182,30 @@ export function FileExplorer() {
       <div className="flex-1 overflow-auto px-1 py-1">
         {tabs.length > 0 ? (
           <IdeCollapsibleSection
-            title="Open Editors"
+            title={t('ide.explorer.openEditors')}
             open={editorsOpen}
             onToggle={() => setEditorsOpen((v) => !v)}
             count={tabs.length}
             className="mb-1"
           >
             <ul className="space-y-0.5 pb-1">
-              {tabs.map((t) => (
-                <li key={t.path}>
+              {tabs.map((tab) => (
+                <li key={tab.path}>
                   <button
                     type="button"
-                    onClick={() => void focusFile(t.path)}
+                    onClick={() => void focusFile(tab.path)}
                     className={cn(
                       'flex w-full items-center gap-1 rounded px-1.5 py-0.5 text-left text-[11px] leading-tight hover:bg-secondary/50',
-                      activePath === t.path && 'active-tab-sheen text-primary',
+                      activePath === tab.path && 'active-tab-sheen text-primary',
                     )}
                   >
-                    {getFileIcon(t.path.split('/').pop() ?? t.path)}
-                    <span className="min-w-0 flex-1 truncate">{fileTabLabel(t.path)}</span>
-                    {t.dirty ? (
-                      <Circle className="h-1.5 w-1.5 shrink-0 fill-primary text-primary" aria-label="Unsaved" />
+                    {getFileIcon(tab.path.split('/').pop() ?? tab.path)}
+                    <span className="min-w-0 flex-1 truncate">{fileTabLabel(tab.path)}</span>
+                    {tab.dirty ? (
+                      <Circle
+                        className="h-1.5 w-1.5 shrink-0 fill-primary text-primary"
+                        aria-label={t('ide.explorer.unsaved')}
+                      />
                     ) : null}
                   </button>
                 </li>
@@ -216,9 +221,9 @@ export function FileExplorer() {
           count={workspacePaths.length}
         >
           {overviewLoading && tree.length === 0 ? (
-            <p className="type-label-sm px-2 py-2 text-muted-foreground">Loading workspace…</p>
+            <p className="type-label-sm px-2 py-2 text-muted-foreground">{t('ide.explorer.loading')}</p>
           ) : tree.length === 0 ? (
-            <p className="type-label-sm px-2 py-2 text-muted-foreground">No project files yet.</p>
+            <p className="type-label-sm px-2 py-2 text-muted-foreground">{t('ide.explorer.empty')}</p>
           ) : (
             tree.map((node) => (
               <FileTreeNode

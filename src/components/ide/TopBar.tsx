@@ -6,6 +6,7 @@ import { getBrowserProjectName } from '../../lib/nebulaProjectApi';
 import { useClickOutside } from '../../lib/useClickOutside';
 import { type IdeChatModelId, useIdeWorkspace } from '@/components/ide/IdeWorkspaceContext';
 import { AI_CHAT_MODELS, AI_PROVIDER_LABELS } from '../../lib/aiProvider';
+import { useLanguage } from '@/components/i18n/LanguageProvider';
 
 const models: { id: IdeChatModelId; name: string; badge: string | null }[] = AI_CHAT_MODELS.map(
   (m) => ({
@@ -32,6 +33,7 @@ export function TopBar({
 }) {
   const { chatModel, setChatModel, activePath, activeTab, updateActiveContent, saveTab } =
     useIdeWorkspace();
+  const { t } = useLanguage();
   const [isModelOpen, setIsModelOpen] = useState(false);
   const [findOpen, setFindOpen] = useState(false);
   const [findQuery, setFindQuery] = useState('');
@@ -174,12 +176,12 @@ export function TopBar({
         <div className="flex shrink-0 items-center gap-2 sm:gap-3">
           <button
             type="button"
-            title="Open live app preview"
+            title={t('ide.topbar.previewTitle')}
             onClick={() => window.dispatchEvent(new CustomEvent('nebula-open-app-preview'))}
             className="btn-secondary-surface type-label-sm hidden h-9 items-center gap-1.5 rounded-md px-2.5 text-muted-foreground hover:text-foreground sm:inline-flex"
           >
             <MonitorPlay className="h-4 w-4" aria-hidden />
-            Preview
+            {t('ide.topbar.preview')}
           </button>
 
           <div className="relative" ref={findWrapRef}>
@@ -189,8 +191,8 @@ export function TopBar({
                 setFindOpen((v) => !v);
                 setReplaceMsg(null);
               }}
-              title="Find & replace in open file"
-              aria-label="Find and replace"
+              title={t('ide.topbar.openFind')}
+              aria-label={t('ide.topbar.find')}
               aria-expanded={findOpen}
               className={cn(
                 'btn-secondary-surface flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:text-foreground',
@@ -203,12 +205,12 @@ export function TopBar({
             {findOpen ? (
               <div className="elevation-popover absolute right-0 top-full z-50 mt-1 w-[260px] rounded-lg border border-border bg-[var(--surface-bright)] p-2.5 shadow-xl">
                 <div className="mb-2 flex items-center justify-between gap-2">
-                  <p className="text-[11px] font-medium text-slate-200">Find & replace</p>
+                  <p className="text-[11px] font-medium text-slate-200">{t('ide.topbar.findReplace')}</p>
                   <button
                     type="button"
                     onClick={closeFind}
                     className="rounded p-0.5 text-slate-500 hover:text-slate-200"
-                    aria-label="Close find"
+                    aria-label={t('ide.topbar.closeFind')}
                   >
                     <X className="h-3.5 w-3.5" />
                   </button>
@@ -221,9 +223,9 @@ export function TopBar({
                     setFindQuery(e.target.value);
                     setReplaceMsg(null);
                   }}
-                  placeholder="Find in open file…"
+                  placeholder={t('ide.topbar.findPlaceholder')}
                   className="mb-1.5 w-full rounded-md border border-border bg-[var(--surface)] px-2 py-1.5 text-xs text-foreground outline-none ring-primary/30 placeholder:text-muted-foreground focus:ring"
-                  aria-label="Find"
+                  aria-label={t('ide.topbar.find')}
                 />
                 <input
                   type="text"
@@ -232,27 +234,29 @@ export function TopBar({
                     setReplaceQuery(e.target.value);
                     setReplaceMsg(null);
                   }}
-                  placeholder="Replace with…"
+                  placeholder={t('ide.topbar.replacePlaceholder')}
                   className="mb-2 w-full rounded-md border border-border bg-[var(--surface)] px-2 py-1.5 text-xs text-foreground outline-none ring-primary/30 placeholder:text-muted-foreground focus:ring"
-                  aria-label="Replace"
+                  aria-label={t('ide.topbar.replace')}
                 />
                 <div className="flex items-center justify-between gap-2">
                   <span className="truncate text-[10px] text-slate-500">
                     {activePath
                       ? findQuery
-                        ? `${matchCount} match${matchCount === 1 ? '' : 'es'}`
+                        ? matchCount === 1
+                          ? t('ide.topbar.matchOne')
+                          : t('ide.topbar.matches', { count: matchCount })
                         : activePath.split('/').pop()
-                      : 'No file open'}
+                      : t('ide.topbar.noFile')}
                   </span>
                   <button
                     type="button"
                     onClick={() => void applyReplace()}
                     disabled={!findQuery || !activePath || matchCount === 0}
                     className="inline-flex items-center gap-1 rounded-md bg-primary px-2 py-1 text-[11px] font-medium text-primary-foreground hover:brightness-110 disabled:opacity-40"
-                    title="Apply replacement in the open file"
+                    title={t('ide.topbar.replaceTitle')}
                   >
                     <Check className="h-3 w-3" aria-hidden />
-                    Replace
+                    {t('ide.topbar.replaceBtn')}
                   </button>
                 </div>
                 {replaceMsg ? (
@@ -303,8 +307,8 @@ export function TopBar({
           <button
             type="button"
             onClick={onOpenAccount}
-            title="User profile — account details and log out"
-            aria-label="Open user profile"
+            title={t('ide.topbar.profile')}
+            aria-label={t('ide.topbar.profileAria')}
             className="surface-float flex h-7 w-7 items-center justify-center rounded-full transition-opacity hover:opacity-90 disabled:opacity-40"
             disabled={!onOpenAccount}
           >

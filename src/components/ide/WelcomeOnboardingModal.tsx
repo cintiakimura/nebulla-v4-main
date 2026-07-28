@@ -27,6 +27,7 @@ import { getBrowserProjectKey } from '../../lib/nebulaProjectApi';
 import { getProjectSecretValue, upsertProjectSecret } from '../../lib/nebulaSecretHelpers';
 import { getStoredV0ApiKey, setStoredV0ApiKey } from '../../lib/v0Key';
 import { dispatchOpenCenterPanel } from './IdeCenterTabsContext';
+import { useLanguage } from '@/components/i18n/LanguageProvider';
 
 const V0_ENV_NAME = 'V0_API_KEY';
 const V0_KEYS_URL = 'https://v0.dev/chat/settings/keys';
@@ -44,6 +45,7 @@ type Props = {
  * Keys reuse project Secrets + browser storage (same system as Settings).
  */
 export function WelcomeOnboardingModal({ open, user, onClose }: Props) {
+  const { t } = useLanguage();
   const [step, setStep] = useState<Step>(1);
   const [grokInput, setGrokInput] = useState('');
   const [v0Input, setV0Input] = useState('');
@@ -84,7 +86,7 @@ export function WelcomeOnboardingModal({ open, user, onClose }: Props) {
       setGrokMsg(
         value
           ? 'That key looks too short or incomplete. Paste the full key from the xAI console.'
-          : 'Paste your Grok API key to continue — it powers conversation, architecture, and coding.',
+          : t('ide.welcome.grokRequiredHint'),
       );
       return;
     }
@@ -107,13 +109,13 @@ export function WelcomeOnboardingModal({ open, user, onClose }: Props) {
     } finally {
       setGrokBusy(false);
     }
-  }, [grokInput]);
+  }, [grokInput, t]);
 
   const saveV0AndContinue = useCallback(() => {
     setV0Msg(null);
     const value = v0Input.trim();
     if (!value) {
-      setV0Msg('Paste your V0 API key, or choose Skip for now.');
+      setV0Msg(t('ide.welcome.v0SkipHint'));
       return;
     }
     if (value.length < 8) {
@@ -135,7 +137,7 @@ export function WelcomeOnboardingModal({ open, user, onClose }: Props) {
     } finally {
       setV0Busy(false);
     }
-  }, [v0Input]);
+  }, [v0Input, t]);
 
   const skipV0 = useCallback(() => {
     setStep(4);
@@ -144,7 +146,13 @@ export function WelcomeOnboardingModal({ open, user, onClose }: Props) {
   if (!open) return null;
 
   const progressLabel =
-    step === 1 ? 'Welcome' : step === 2 ? 'Step 1 of 3' : step === 3 ? 'Step 2 of 3' : 'Step 3 of 3';
+    step === 1
+      ? t('ide.welcome.stepWelcome')
+      : step === 2
+        ? t('ide.welcome.step1')
+        : step === 3
+          ? t('ide.welcome.step2')
+          : t('ide.welcome.step3');
 
   return (
     <div
@@ -168,8 +176,8 @@ export function WelcomeOnboardingModal({ open, user, onClose }: Props) {
             type="button"
             onClick={skipSession}
             className="absolute right-3 top-3 z-10 rounded-lg p-1.5 text-muted-foreground transition hover:bg-white/5 hover:text-foreground"
-            aria-label="Close for now"
-            title="You can finish setup later in Onboarding"
+            aria-label={t('ide.welcome.close')}
+            title={t('ide.welcome.closeTitle')}
           >
             <X className="h-4 w-4" />
           </button>
@@ -207,7 +215,7 @@ export function WelcomeOnboardingModal({ open, user, onClose }: Props) {
                     id="welcome-onboarding-title"
                     className="font-headline text-2xl font-semibold tracking-tight text-foreground"
                   >
-                    Welcome to Nebulla
+                    {t('ide.welcome.heading')}
                   </h2>
                   <p className="text-sm leading-relaxed text-muted-foreground">
                     Nebulla runs on <strong className="font-medium text-foreground">your own AI keys</strong> —
@@ -222,14 +230,14 @@ export function WelcomeOnboardingModal({ open, user, onClose }: Props) {
                   <li className="flex gap-2">
                     <KeyRound className="mt-0.5 h-4 w-4 shrink-0 text-primary" aria-hidden />
                     <span>
-                      <strong className="font-medium text-foreground">Grok API key</strong> (required) — conversation,
+                      <strong className="font-medium text-foreground">{t('ide.welcome.grokLabel')}</strong> (required) — conversation,
                       architecture, and coding
                     </span>
                   </li>
                   <li className="flex gap-2">
                     <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-primary/80" aria-hidden />
                     <span>
-                      <strong className="font-medium text-foreground">V0 API key</strong> (optional) — high-quality UI
+                      <strong className="font-medium text-foreground">{t('ide.welcome.v0Label')}</strong> (optional) — high-quality UI
                       generation
                     </span>
                   </li>
@@ -272,7 +280,7 @@ export function WelcomeOnboardingModal({ open, user, onClose }: Props) {
 
               <div className="space-y-2">
                 <label className="block text-[11px] uppercase tracking-wider text-muted-foreground" htmlFor="welcome-grok-key">
-                  Grok API key
+                  {t('ide.welcome.grokLabel')}
                 </label>
                 <input
                   id="welcome-grok-key"
@@ -283,7 +291,7 @@ export function WelcomeOnboardingModal({ open, user, onClose }: Props) {
                     setGrokInput(e.target.value);
                     setGrokMsg(null);
                   }}
-                  placeholder="Paste your xAI API key…"
+                  placeholder={t('ide.welcome.grokPlaceholder')}
                   className="w-full rounded-xl border border-border bg-[var(--surface)] px-3 py-3 text-sm text-foreground outline-none ring-primary/30 placeholder:text-muted-foreground/60 focus:ring"
                 />
                 {hasLocalGrokApiKey() && !grokInput ? (
@@ -326,7 +334,7 @@ export function WelcomeOnboardingModal({ open, user, onClose }: Props) {
 
               <div className="space-y-2">
                 <label className="block text-[11px] uppercase tracking-wider text-muted-foreground" htmlFor="welcome-v0-key">
-                  V0 API key
+                  {t('ide.welcome.v0Label')}
                 </label>
                 <input
                   id="welcome-v0-key"
@@ -337,7 +345,7 @@ export function WelcomeOnboardingModal({ open, user, onClose }: Props) {
                     setV0Input(e.target.value);
                     setV0Msg(null);
                   }}
-                  placeholder="Paste your V0 API key…"
+                  placeholder={t('ide.welcome.v0Placeholder')}
                   className="w-full rounded-xl border border-border bg-[var(--surface)] px-3 py-3 text-sm text-foreground outline-none ring-primary/30 placeholder:text-muted-foreground/60 focus:ring"
                 />
                 {v0Saved && !v0Input ? (
@@ -382,7 +390,7 @@ export function WelcomeOnboardingModal({ open, user, onClose }: Props) {
               onClick={() => setStep(2)}
               className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-5 py-3 text-sm font-semibold text-primary-foreground transition hover:brightness-110"
             >
-              Continue
+              {t('ide.welcome.continue')}
               <ChevronRight className="h-4 w-4" aria-hidden />
             </button>
           ) : null}
@@ -403,7 +411,7 @@ export function WelcomeOnboardingModal({ open, user, onClose }: Props) {
                 className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-5 py-3 text-sm font-semibold text-primary-foreground transition hover:brightness-110 disabled:opacity-45"
               >
                 {grokBusy ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : null}
-                Save &amp; Continue
+                {t('ide.welcome.saveContinue')}
               </button>
               <a
                 href={GROK_CONSOLE_URL}
@@ -432,7 +440,7 @@ export function WelcomeOnboardingModal({ open, user, onClose }: Props) {
                 onClick={skipV0}
                 className="inline-flex flex-1 items-center justify-center rounded-xl border border-border px-5 py-3 text-sm font-medium text-foreground transition hover:bg-white/5"
               >
-                Skip for now
+                {t('ide.welcome.skip')}
               </button>
             </div>
           ) : null}

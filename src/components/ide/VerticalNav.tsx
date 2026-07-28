@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import {
   BookMarked,
   FolderTree,
@@ -11,34 +11,39 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useLanguage } from '@/components/i18n/LanguageProvider';
 
-type NavItem = {
-  id: string;
-  icon: React.ReactNode;
-  label: string;
-};
+type NavItemId =
+  | 'explorer'
+  | 'source-control'
+  | 'projects'
+  | 'master-plan'
+  | 'mind-map'
+  | 'visual-ui-editor'
+  | 'ui-studio-beta'
+  | 'secrets'
+  | 'project-settings';
 
-const items: NavItem[] = [
-  { id: 'explorer', icon: <FolderTree className="h-5 w-5" />, label: 'Explorer' },
-  { id: 'source-control', icon: <GitBranch className="h-5 w-5" />, label: 'Source Control' },
-  { id: 'projects', icon: <LayoutGrid className="h-5 w-5" />, label: 'My Projects' },
-  { id: 'master-plan', icon: <BookMarked className="h-5 w-5" />, label: 'Master Plan' },
-  { id: 'mind-map', icon: <Network className="h-5 w-5" />, label: 'Mind Map' },
-  { id: 'visual-ui-editor', icon: <Palette className="h-5 w-5" />, label: 'Nebula UI Studio' },
-  { id: 'ui-studio-beta', icon: <Sparkles className="h-5 w-5" />, label: 'UI Studio Beta' },
-  { id: 'secrets', icon: <KeyRound className="h-5 w-5" />, label: 'Secrets' },
-  /** Opens workspace onboarding (GitHub + API keys). Profile / logout is NB in the top bar. */
-  { id: 'project-settings', icon: <Settings className="h-5 w-5" />, label: 'Onboarding' },
+const NAV_IDS: { id: NavItemId; icon: React.ReactNode }[] = [
+  { id: 'explorer', icon: <FolderTree className="h-5 w-5" /> },
+  { id: 'source-control', icon: <GitBranch className="h-5 w-5" /> },
+  { id: 'projects', icon: <LayoutGrid className="h-5 w-5" /> },
+  { id: 'master-plan', icon: <BookMarked className="h-5 w-5" /> },
+  { id: 'mind-map', icon: <Network className="h-5 w-5" /> },
+  { id: 'visual-ui-editor', icon: <Palette className="h-5 w-5" /> },
+  { id: 'ui-studio-beta', icon: <Sparkles className="h-5 w-5" /> },
+  { id: 'secrets', icon: <KeyRound className="h-5 w-5" /> },
+  { id: 'project-settings', icon: <Settings className="h-5 w-5" /> },
 ];
 
 export function VerticalNav({
   activeItem: activeItemProp,
   onSelectItem,
 }: {
-  /** When set, nav selection is controlled by the parent (e.g. IDE shell). */
   activeItem?: string;
   onSelectItem?: (id: string) => void;
 }) {
+  const { t } = useLanguage();
   const [activeItemUncontrolled, setActiveItemUncontrolled] = useState('explorer');
   const activeItem = activeItemProp ?? activeItemUncontrolled;
   const setActiveItem = (id: string) => {
@@ -46,11 +51,20 @@ export function VerticalNav({
     if (activeItemProp === undefined) setActiveItemUncontrolled(id);
   };
 
+  const items = useMemo(
+    () =>
+      NAV_IDS.map((item) => ({
+        ...item,
+        label: t(`ide.nav.${item.id}`),
+      })),
+    [t],
+  );
+
   return (
     <div className="surface-base flex h-full w-12 shrink-0 flex-col items-center border-r border-border py-3">
       <nav
         className="flex min-h-0 w-full flex-1 flex-col items-center gap-0.5 overflow-y-auto px-0.5"
-        aria-label="Primary"
+        aria-label={t('ide.nav.primary')}
       >
         {items.map((item) => (
           <button

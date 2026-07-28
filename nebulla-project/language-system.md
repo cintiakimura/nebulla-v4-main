@@ -93,16 +93,22 @@ Default main AI for language-sensitive Chat remains **Grok**; BYOK models get th
 
 ## TODO(i18n): migrate remaining chrome
 
-Architecture + critical surfaces shipped. Remaining (not blocking):
+Phase 1–2 done (Chat leftovers, App Status friendly bodies, `html[lang]`, v0 CONTENT_LOCALE line, hysteresis tests).
+Phase 3–4 done (AssistantSidebar language appendix + TTS locale; VerticalNav; Explorer; TopBar find/preview/profile; center pane labels; Grok activity ready/steps; Welcome CTAs).
 
-- TopBar / VerticalNav / Explorer labels
-- IdeGrokActivityPanel step strings
-- Full Onboarding / Welcome copy
-- All App Status issue.friendly* generators (runtime messages)
-- AssistantSidebar legacy strings
-- Error toasts outside Chat banner / upload
+Still remaining (lower priority):
 
-Mark machine translations in catalogs with native review when shipping EU fundraising builds.
+- Full Welcome body copy (billing paragraphs, list steps)
+- IdeGrokActivityPanel dynamic English action strings during work
+- UI Studio Beta chrome / Terminal / misc toasts
+- Native review of FR/IT/ES/DE catalogs
+
+### Phase 2–4 notes
+
+- `document.documentElement.lang` follows `resolvedIdeLocale`
+- Workspace file `nebulla-ide/content-locale.json` synced from LanguageProvider; `buildV0PromptMarkdown` injects CONTENT_LOCALE
+- Tests: `npm run test:i18n` → `scripts/test-i18n-language.ts`
+- IDE chrome keys live in `src/lib/i18n/ideCatalog.ts` (merged into `catalogs.ts`)
 
 ## Related docs (pointers only)
 

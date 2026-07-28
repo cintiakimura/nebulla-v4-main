@@ -7,6 +7,7 @@ import {
   formatAppStatusDebugMessage,
   getAppRuntimeErrorCount,
   getAppRuntimeSnapshot,
+  mapRuntimeToFriendly,
   markAppRuntimeSeen,
   openAppStatusMenu,
   relativeAppStatusTime,
@@ -31,6 +32,12 @@ function IssueCard({
   t: (key: string, vars?: Record<string, string | number>) => string;
 }) {
   const [techOpen, setTechOpen] = useState(false);
+  // Re-map so IDE locale changes refresh friendly copy without clearing issues.
+  const friendly = mapRuntimeToFriendly({
+    technicalMessage: issue.technicalMessage,
+    source: issue.source,
+    route: issue.route,
+  });
   return (
     <div className="rounded-lg border border-border/80 bg-black/40 px-2.5 py-2">
       <div className="flex items-start gap-2">
@@ -42,8 +49,8 @@ function IssueCard({
           aria-hidden
         />
         <div className="min-w-0 flex-1">
-          <p className="type-label-sm font-medium text-foreground">{issue.friendlyTitle}</p>
-          <p className="type-label-sm mt-0.5 text-muted-foreground">{issue.friendlyBody}</p>
+          <p className="type-label-sm font-medium text-foreground">{friendly.friendlyTitle}</p>
+          <p className="type-label-sm mt-0.5 text-muted-foreground">{friendly.friendlyBody}</p>
           <p className="type-label-sm mt-1 text-muted-foreground/70">
             {relativeAppStatusTime(issue.at)}
             {issue.route ? ` · ${issue.route}` : ''}

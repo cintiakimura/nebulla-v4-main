@@ -15,18 +15,21 @@ import {
   fileTabId,
   fileTabLabel,
   panelTabId,
-  PANEL_LABELS,
+  panelLabel,
   type CenterTab,
 } from '../../lib/ideCenterTabs';
 import type { UiStudioTab } from '../../lib/nebulaUiStudioEvents';
 import { useIdeWorkspace } from './IdeWorkspaceContext';
+import { useLanguage } from '@/components/i18n/LanguageProvider';
 
-const DEFAULT_HOME_TAB: CenterTab = {
-  id: panelTabId('projects'),
-  kind: 'panel',
-  pane: 'projects',
-  label: PANEL_LABELS.projects,
-};
+function makeHomeTab(): CenterTab {
+  return {
+    id: panelTabId('projects'),
+    kind: 'panel',
+    pane: 'projects',
+    label: panelLabel('projects'),
+  };
+}
 
 type IdeCenterTabsValue = {
   openTabs: CenterTab[];
@@ -51,10 +54,20 @@ export function useIdeCenterTabs(): IdeCenterTabsValue {
 
 export function IdeCenterTabsProvider({ children }: { children: ReactNode }) {
   const { tabs, activePath, setActivePath, openFile, closeTab: closeFileTab } = useIdeWorkspace();
+  const { resolvedIdeLocale } = useLanguage();
   /** Default post-login view: My Projects (not empty editors / auto chat). */
-  const [panelTabs, setPanelTabs] = useState<CenterTab[]>(() => [DEFAULT_HOME_TAB]);
-  const [activeTabId, setActiveTabId] = useState<string | null>(() => DEFAULT_HOME_TAB.id);
+  const [panelTabs, setPanelTabs] = useState<CenterTab[]>(() => [makeHomeTab()]);
+  const [activeTabId, setActiveTabId] = useState<string | null>(() => makeHomeTab().id);
   const [uiStudioTab, setUiStudioTab] = useState<UiStudioTab>('design');
+
+  // Refresh panel labels when IDE locale changes.
+  useEffect(() => {
+    setPanelTabs((prev) =>
+      prev.map((tab) =>
+        tab.pane ? { ...tab, label: panelLabel(tab.pane) } : tab,
+      ),
+    );
+  }, [resolvedIdeLocale]);
 
   // Drop legacy full-screen Source Control / Search / DNS center tabs.
   useEffect(() => {
@@ -69,14 +82,14 @@ export function IdeCenterTabsProvider({ children }: { children: ReactNode }) {
           id: panelTabId('secrets'),
           kind: 'panel',
           pane: 'secrets',
-          label: PANEL_LABELS.secrets,
+          label: panelLabel('secrets'),
         });
       }
       return next;
     });
     setActiveTabId((id) => {
       if (id === panelTabId('dns')) return panelTabId('secrets');
-      return id && drop.has(id) ? DEFAULT_HOME_TAB.id : id;
+      return id && drop.has(id) ? makeHomeTab().id : id;
     });
   }, []);
 
@@ -135,7 +148,7 @@ export function IdeCenterTabsProvider({ children }: { children: ReactNode }) {
         if (prev.some((t) => t.id === id)) return prev;
         return [
           ...prev,
-          { id, kind: 'panel', pane: targetPane, label: PANEL_LABELS[targetPane] ?? targetPane },
+          { id, kind: 'panel', pane: targetPane, label: panelLabel(targetPane) },
         ];
       });
       setActiveTabId(id);

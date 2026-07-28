@@ -21,6 +21,11 @@ import {
 import { runGoCodeAndApply } from '../lib/nebulaGrokCodingPipeline';
 import { runMasterPlanUiPipelineWithV0 } from '../lib/ideArtifactSync';
 import { buildNebulaAssistantSystemPrompt } from '../lib/nebulaAssistantSystemPrompt';
+import { buildLanguagePromptAppendix } from '../lib/i18n/languagePromptAppendix';
+import {
+  readLanguagePreferences,
+  resolveLanguageState,
+} from '../lib/i18n/userLanguagePreferences';
 import { fetchConversationLogEntries } from '../lib/conversationLogClient';
 import { uploadFileToR2 } from '../lib/nebulaStorageClient';
 import {
@@ -193,7 +198,8 @@ export function AssistantSidebar({
       try {
         const result = await uploadFileToR2(file, { projectKey: activeProjectKey });
         if (!result.ok) {
-          const hint = result.hint ?? result.error;
+          const fail = result as { hint?: string; error?: string };
+          const hint = fail.hint ?? fail.error ?? 'Upload failed';
           setMessages((prev) => [...prev, { role: 'model', text: hint, fullText: hint }]);
           return;
         }
@@ -408,6 +414,12 @@ export function AssistantSidebar({
         uiStudioApprovedCode = uiWrap;
 
         systemPrompt = buildNebulaAssistantSystemPrompt(latestMP, uiStudioApprovedCode);
+        const lang = resolveLanguageState(readLanguagePreferences());
+        systemPrompt += `\n\n${buildLanguagePromptAppendix({
+          ideLocale: lang.resolvedIdeLocale,
+          contentLocale: lang.resolvedContentLocale,
+          contentMode: lang.prefs.contentMode,
+        })}`;
       }
 
       // Connect to GROK via Backend Proxy (single body read via fetchJson)
@@ -733,6 +745,7 @@ export function AssistantSidebar({
           void playTtsText({
             text: cleanText,
             speakUrl: '/api/speak',
+            language: resolveLanguageState(readLanguagePreferences()).resolvedContentLocale,
             signal: controller.signal,
             onAudio: (audio) => {
               (window as any).nebula_currentAudio = audio;

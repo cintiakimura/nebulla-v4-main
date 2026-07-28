@@ -9,6 +9,8 @@
  * must not accidentally trigger coding.
  */
 
+import { t } from './i18n/t';
+
 export type IdeAssistantInteractionMode = 'chat' | 'agent';
 
 const STORAGE_PREFIX = 'nebula-assistant-interaction-mode:';
@@ -57,15 +59,13 @@ export function isAgentLockedDetectorMode(mode: string | undefined): boolean {
 export function interactionModeStatusLabel(
   mode: IdeAssistantInteractionMode,
 ): string {
-  return mode === 'agent' ? 'Agent · coding' : 'Chat · brainstorming';
+  return mode === 'agent' ? t('chat.status.agent') : t('chat.status.chat');
 }
 
 export function interactionModeIdleSubhead(
   mode: IdeAssistantInteractionMode,
 ): string {
-  return mode === 'agent'
-    ? 'Agent mode — Go runs Grok Code and writes files. Switch to Chat to brainstorm without spending agent tokens.'
-    : 'Chat mode — brainstorm & plan. Switch to Agent when you are ready to build or edit code.';
+  return mode === 'agent' ? t('chat.idle.agent') : t('chat.idle.chat');
 }
 
 /** Local reply when Chat mode blocks a coding / debug / UI intent. */
@@ -73,17 +73,12 @@ export function buildSwitchToAgentPrompt(options: {
   detectorMode: string;
   discoveryRequired?: boolean;
 }): string {
-  const kind =
+  const kindKey =
     options.detectorMode === 'debugging'
-      ? 'debug'
+      ? 'chat.switchKind.debug'
       : options.detectorMode === 'ui'
-        ? 'generate UI'
-        : 'implement';
-  const discovery = options.discoveryRequired
-    ? ' Discovery is still open on this project — Agent will keep those gates.'
-    : '';
-  return (
-    `You're in **Chat** (brainstorm & plan) — I won't write files or run the coding agent while we talk.${discovery}\n\n` +
-    `Switch to **Agent** to ${kind}?`
-  );
+        ? 'chat.switchKind.ui'
+        : 'chat.switchKind.implement';
+  const discovery = options.discoveryRequired ? t('chat.switchDiscovery') : '';
+  return t('chat.switchPrompt', { discovery, kind: t(kindKey) });
 }

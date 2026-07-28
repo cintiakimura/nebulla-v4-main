@@ -19,6 +19,8 @@ import {
   type ContentLanguageMode,
   type UserLanguagePreferences,
 } from '../../lib/i18n/userLanguagePreferences';
+import { fetchJson } from '../../lib/apiFetch';
+import { withProjectBody, withProjectQuery } from '../../lib/nebulaProjectApi';
 
 export type LanguageContextValue = {
   prefs: UserLanguagePreferences;
@@ -35,6 +37,30 @@ export type LanguageContextValue = {
 
 const LanguageContext = createContext<LanguageContextValue | null>(null);
 
+const CONTENT_LOCALE_PATH = 'nebulla-ide/content-locale.json';
+
+async function syncContentLocaleToWorkspace(contentLocale: IdeLocaleCode): Promise<void> {
+  try {
+    await fetchJson(withProjectQuery('/api/files/content'), {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify(
+        withProjectBody({
+          path: CONTENT_LOCALE_PATH,
+          content: JSON.stringify(
+            { contentLocale, updatedAt: new Date().toISOString() },
+            null,
+            2,
+          ),
+        }),
+      ),
+    });
+  } catch {
+    /* workspace may not be ready yet — v0 builder falls back to en */
+  }
+}
+
 export function LanguageProvider({ children }: { children: ReactNode }) {
   const [prefs, setPrefs] = useState<UserLanguagePreferences>(() => readLanguagePreferences());
 
@@ -42,7 +68,16 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     setActiveIdeLocale(resolved.resolvedIdeLocale);
+    try {
+      document.documentElement.lang = resolved.resolvedIdeLocale;
+    } catch {
+      /* ignore */
+    }
   }, [resolved.resolvedIdeLocale]);
+
+  useEffect(() => {
+    void syncContentLocaleToWorkspace(resolved.resolvedContentLocale);
+  }, [resolved.resolvedContentLocale]);
 
   useEffect(() => {
     const onExternal = () => setPrefs(readLanguagePreferences());
@@ -84,9 +119,7 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
   );
 
   const t = useCallback(
-    (key: string, vars?: Record<string, string | number>) =>
-      translate(key, vars),
-    // Rebind when IDE locale changes so consumers re-render with fresh strings
+    (key: string, vars?: Record<string, string | number>) => translate(key, vars),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [resolved.resolvedIdeLocale],
   );

@@ -7,6 +7,7 @@ import {
   type V0BaseManifest,
 } from "./visualUiEditorWorkspace";
 import { summarizeDesignReferencesForPrompt } from "./nebulaDesignReferences";
+import { readWorkspaceContentLocale } from "./contentLocaleWorkspace";
 
 export const V0_PROMPT_REL = "nebula-ui-studio/v0-prompt.md";
 export const V0_ORIGINAL_CANONICAL_ROOT = "nebula-ui-studio/v0-original";
@@ -148,6 +149,7 @@ function summarizeFeaturesForV0(features: string): string {
 export function buildV0PromptMarkdown(
   plan: Record<string, string>,
   workspaceRoot?: string,
+  contentLocale?: string,
 ): string {
   const pagesNav = String(plan["4. Pages and navigation"] ?? "").trim();
   const uiUx = String(plan["5. UI/UX design"] ?? "").trim();
@@ -174,6 +176,10 @@ export function buildV0PromptMarkdown(
   const researchLines = summarizeResearchForV0(research);
   const featureLines = summarizeFeaturesForV0(features);
 
+  const localeFromDisk =
+    workspaceRoot?.trim() ? readWorkspaceContentLocale(workspaceRoot) : undefined;
+  const copyLocale = (contentLocale || localeFromDisk || "en").trim().toLowerCase() || "en";
+
   let text = [
     "# v0 UI pass (concise)",
     "",
@@ -197,6 +203,7 @@ export function buildV0PromptMarkdown(
     "",
     "## Output",
     deviceLine,
+    `- User-facing UI copy language (CONTENT_LOCALE): **${copyLocale}** — labels, buttons, empty states, and marketing strings in that language`,
     "- React + Tailwind + shadcn/ui under `app/` or `src/`",
     "- Working nav between routes above; production spacing/typography",
     "- Match §5 palette and competitor UI patterns — **never** Nebulla IDE chrome (#080A14 / #00D4D4)",

@@ -105,40 +105,29 @@ import {
 } from '../../lib/ideAppRuntimeStatus';
 import { useLanguage } from '@/components/i18n/LanguageProvider';
 import { bcp47ForLocale } from '../../lib/i18n/locales';
+import { t as translateStatic } from '../../lib/i18n/t';
 
 const MAX_CHAT_ATTACH_BYTES = 12 * 1024 * 1024;
-const IDLE_GROK_ACTIVITY_BASE: Omit<GrokActivityStatus, 'subhead'> = {
-  headline: 'Ready',
-  liveLog: [],
-  steps: [],
-  activeStepIndex: 0,
-  footer: 'Live activity appears here while Grok is thinking or coding — like Cursor’s agent status.',
-  tone: 'ready',
-};
 
 function idleGrokActivity(mode: IdeAssistantInteractionMode): GrokActivityStatus {
   return {
-    ...IDLE_GROK_ACTIVITY_BASE,
+    headline: translateStatic('ide.activity.ready'),
+    liveLog: [],
+    steps: [],
+    activeStepIndex: 0,
+    footer: translateStatic('ide.activity.readyFooter'),
+    tone: 'ready',
     subhead: interactionModeIdleSubhead(mode),
   };
 }
 
-const CHAT_WORK_STEPS = [
-  { label: 'Send your message to Grok' },
-  { label: 'Grok reads Master Plan, file index, and workspace context' },
-  { label: 'Save Master Plan sections to project tabs' },
-  { label: 'Update mind map from Master Plan (when plan changes)' },
-  { label: 'Run Grok Code and apply files (when building)' },
-  { label: 'Sync explorer, mind map, and preview' },
-];
+function chatWorkSteps(): { label: string }[] {
+  return [1, 2, 3, 4, 5, 6].map((n) => ({ label: translateStatic(`ide.activity.chat.${n}`) }));
+}
 
-const GO_WORK_STEPS = [
-  { label: 'Load workspace & Master Plan context' },
-  { label: 'Grok writes pre-coding summary to Master Plan' },
-  { label: 'Grok Code generates implementation files' },
-  { label: 'Write files to your cloud project folder' },
-  { label: 'Refresh mind map & open UI Studio Beta engine' },
-];
+function goWorkSteps(): { label: string }[] {
+  return [1, 2, 3, 4, 5].map((n) => ({ label: translateStatic(`ide.activity.go.${n}`) }));
+}
 
 /** WebKit speech types (not always present in TS `lib` for this project). */
 type IdeSpeechRecognitionResult = { isFinal: boolean; 0: { transcript: string } };
@@ -275,11 +264,11 @@ export function AIChat() {
         ? idleGrokActivity(assistantInteractionMode)
         : { ...prev, subhead: interactionModeIdleSubhead(assistantInteractionMode) },
     );
-  }, [assistantInteractionMode]);
+  }, [assistantInteractionMode, t]);
 
   const modeStatusChip = useMemo(
     () => interactionModeStatusLabel(assistantInteractionMode),
-    [assistantInteractionMode],
+    [assistantInteractionMode, t],
   );
 
   useEffect(() => {
@@ -703,7 +692,7 @@ export function AIChat() {
 
   const startHandsFree = useCallback((opts?: { resumeOnly?: boolean }) => {
     if (!('webkitSpeechRecognition' in window)) {
-      setAccessoryHint('Speech recognition is not supported in this browser.');
+      setAccessoryHint(t('chat.speechUnsupported'));
       window.setTimeout(() => setAccessoryHint(null), 4000);
       return;
     }
@@ -760,7 +749,9 @@ export function AIChat() {
       if (ev.error === 'aborted') return;
       console.warn('[AIChat] hands-free speech:', ev.error);
       setAccessoryHint(
-        `Open talk: ${ev.error === 'not-allowed' ? 'allow the microphone for this site.' : ev.error}`,
+        ev.error === 'not-allowed'
+          ? t('chat.openTalkMicDenied')
+          : t('chat.openTalkError', { error: ev.error }),
       );
       window.setTimeout(() => setAccessoryHint(null), 4500);
       stopHandsFree();
@@ -783,17 +774,15 @@ export function AIChat() {
       setIsHandsFree(true);
       if (!opts?.resumeOnly) {
         resetHandsFreeSpeechTurn();
-        setAccessoryHint(
-          'Open talk is on — speak naturally. I wait at least 10s while you talk, then 3s after you pause, then send.',
-        );
+        setAccessoryHint(t('chat.openTalkOn'));
         window.setTimeout(() => setAccessoryHint(null), 5200);
       }
     } catch (err) {
       console.warn('[AIChat] hands-free start', err);
-      setAccessoryHint('Could not start open talk — check browser permissions.');
+      setAccessoryHint(t('chat.openTalkStartFailed'));
       window.setTimeout(() => setAccessoryHint(null), 4500);
     }
-  }, [stopHandsFree, scheduleHandsFreeAutoSend, noteHandsFreeSpeechActivity]);
+  }, [stopHandsFree, scheduleHandsFreeAutoSend, noteHandsFreeSpeechActivity, t]);
 
   const resumeOpenTalkIfWanted = useCallback(() => {
     if (!openTalkDesiredRef.current) return;
@@ -1235,7 +1224,7 @@ export function AIChat() {
     if (buildMode) {
       beginCodingActivity(
         'Build mode — Grok is implementing your request',
-        CHAT_WORK_STEPS,
+        chatWorkSteps(),
         {
           subhead: 'Master Plan → Grok Code → files on disk.',
           initialLog: `Build mode — "${rawText.slice(0, 80)}${rawText.length > 80 ? '…' : ''}"`,
@@ -1245,7 +1234,7 @@ export function AIChat() {
     } else if (onboardingBuildStart) {
       beginCodingActivity(
         'Discovery complete — saving Master Plan and starting code',
-        CHAT_WORK_STEPS,
+        chatWorkSteps(),
         {
           subhead:
             'Your reply means nothing else to add. Grok will write the Master Plan, then Grok Code builds files.',
@@ -1430,7 +1419,7 @@ export function AIChat() {
 
       try {
         if (willCode && !codingActivityRef.current) {
-          beginCodingActivity('Grok Code — writing files to workspace', GO_WORK_STEPS, {
+          beginCodingActivity('Grok Code — writing files to workspace', goWorkSteps(), {
             subhead: 'Grok Code first, then UI Studio Beta generation from Master Plan + files.',
             initialLog: 'Coding intent detected — starting file apply',
           });
@@ -1665,7 +1654,7 @@ export function AIChat() {
     };
     const SR = w.SpeechRecognition || w.webkitSpeechRecognition;
     if (!SR) {
-      setAccessoryHint('Speech recognition is not supported in this browser.');
+      setAccessoryHint(t('chat.speechUnsupported'));
       window.setTimeout(() => setAccessoryHint(null), 4000);
       return;
     }
@@ -1810,7 +1799,7 @@ export function AIChat() {
     stickToBottomRef.current = true;
     setSending(true);
     setSendError(null);
-    beginCodingActivity('Go — one slice', GO_WORK_STEPS, {
+    beginCodingActivity('Go — one slice', goWorkSteps(), {
       subhead: 'One Go — one coherent slice (Build → Debug → Next). Validate before the next Go.',
       initialLog: userNote ? `Go started — slice focus: ${userNote.slice(0, 120)}` : 'Go started — next incomplete slice',
     });
@@ -1910,7 +1899,7 @@ export function AIChat() {
       codingActivityRef.current = false;
       setGrokCodingActive(false);
       setGrokActivity((prev) =>
-        finishGrokActivity(prev, 'Go finished', GO_WORK_STEPS, go.statusMessage),
+        finishGrokActivity(prev, 'Go finished', goWorkSteps(), go.statusMessage),
       );
       setV0Live(false);
     } catch (e) {
@@ -2229,7 +2218,7 @@ export function AIChat() {
                       type="button"
                       disabled={sending}
                       onClick={() => {
-                        setAccessoryHint('Staying in Chat — keep brainstorming.');
+                        setAccessoryHint(t('chat.stayHint'));
                         window.setTimeout(() => setAccessoryHint(null), 2800);
                       }}
                       className="inline-flex flex-1 items-center justify-center gap-2 rounded-lg border border-border/80 bg-transparent px-3 py-2.5 text-sm font-medium text-muted-foreground transition hover:text-foreground disabled:opacity-45"
@@ -2249,7 +2238,7 @@ export function AIChat() {
         {sending && grokActivity.tone !== 'work' ? (
           <div className="flex gap-2 pl-1" role="status">
             <Loader2 className="mt-0.5 h-3 w-3 animate-spin text-muted-foreground/70" aria-hidden />
-            <p className="type-label-sm text-muted-foreground">Thinking…</p>
+            <p className="type-label-sm text-muted-foreground">{t('chat.thinking')}</p>
           </div>
         ) : null}
         <div ref={messagesEndRef} className="h-px shrink-0" aria-hidden />
@@ -2302,10 +2291,10 @@ export function AIChat() {
                 )}
               </ChatRoundButton>
               <ChatRoundButton
-                label="Interrupt Grok voice"
+                label={t('chat.interruptVoice')}
                 onClick={() => {
                   interruptVoiceAndTts();
-                  setAccessoryHint('Stopped voice playback and any pending dictation send.');
+                  setAccessoryHint(t('chat.voiceStopped'));
                   window.setTimeout(() => setAccessoryHint(null), 3200);
                 }}
               >
@@ -2332,8 +2321,8 @@ export function AIChat() {
                 disabled={sending}
                 title={
                   assistantInteractionMode === 'chat'
-                    ? 'Go needs Agent mode — click to switch or use the Agent toggle'
-                    : 'Go: Grok Code writes files to your workspace'
+                    ? t('chat.goNeedsAgent')
+                    : t('chat.goAgentTitle')
                 }
                 className={cn(
                   'btn-primary-cta flex h-9 shrink-0 items-center gap-1.5 rounded-full px-4 text-[0.8125rem] disabled:opacity-40',

@@ -10,7 +10,8 @@
     "preview": "npm run build && NODE_ENV=production tsx server.ts",
     "clean": "rm -rf dist",
     "lint": "tsc --noEmit",
-    "test": "npm run lint",
+    "test": "npm run lint && npm run test:i18n",
+    "test:i18n": "tsx scripts/test-i18n-language.ts",
     "test:grok": "node scripts/test-grok-chat.mjs",
     "smoke:prod": "node scripts/smoke-remote.mjs"
   },

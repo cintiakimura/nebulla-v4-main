@@ -1,4 +1,6 @@
 import type { IdeCenterPane } from './ideCenterPanes';
+import { t } from './i18n/t';
+import { withProjectQuery } from './nebulaProjectApi';
 
 export type CenterTabKind = 'file' | 'panel';
 
@@ -10,6 +12,7 @@ export type CenterTab = {
   pane?: IdeCenterPane;
 };
 
+/** @deprecated Prefer panelLabel() so IDE locale applies. */
 export const PANEL_LABELS: Record<IdeCenterPane, string> = {
   code: 'Code',
   preview: 'App Preview',
@@ -21,8 +24,12 @@ export const PANEL_LABELS: Record<IdeCenterPane, string> = {
   projects: 'My Projects',
   secrets: 'Secrets',
   dns: 'DNS',
-  search: 'Search', // unused center pane; TopBar find icon only
+  search: 'Search',
 };
+
+export function panelLabel(pane: IdeCenterPane): string {
+  return t(`ide.pane.${pane}`);
+}
 
 export function fileTabId(path: string): string {
   return `file:${path.replace(/\\/g, '/')}`;
@@ -36,8 +43,6 @@ export function fileTabLabel(path: string): string {
   const p = path.replace(/\\/g, '/');
   return p.split('/').pop() || p;
 }
-
-import { withProjectQuery } from './nebulaProjectApi';
 
 /** Full URL for opening live app preview in the system browser. */
 export function getAppPreviewBrowserUrl(rev = Date.now()): string {

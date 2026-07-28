@@ -3,6 +3,8 @@
  * Single source of truth for chat popover + preview badge + NDM Verify input.
  */
 
+import { t } from './i18n/t';
+
 export type AppRuntimeIssueSource = 'preview' | 'build' | 'network';
 
 export type AppRuntimeSeverity = 'error' | 'warn' | 'info';
@@ -100,49 +102,49 @@ export function mapRuntimeToFriendly(input: {
   if (input.source === 'build' || /failed to load|preview couldn't load|net::|err_connection/i.test(msg)) {
     return {
       severity: 'error',
-      friendlyTitle: 'Preview couldn’t load',
-      friendlyBody: 'The live preview didn’t open. Try reload — or ask Agent to check the project setup.',
+      friendlyTitle: t('appStatus.friendly.previewLoadTitle'),
+      friendlyBody: t('appStatus.friendly.previewLoadBody'),
     };
   }
 
   if (/cannot read propert|undefined is not|null is not|is not a function/i.test(lower)) {
     return {
       severity: 'error',
-      friendlyTitle: 'Something broke on this screen',
-      friendlyBody: `A piece of the page was missing when the app tried to use it${where}. Agent can usually fix this quickly.`,
+      friendlyTitle: t('appStatus.friendly.brokeTitle'),
+      friendlyBody: t('appStatus.friendly.missingPropBody', { where }),
     };
   }
 
   if (/module not found|cannot find module|failed to resolve|404/i.test(lower)) {
     return {
       severity: 'error',
-      friendlyTitle: 'Something broke on this screen',
-      friendlyBody: `The app looked for a file or piece that wasn’t there${where}.`,
+      friendlyTitle: t('appStatus.friendly.brokeTitle'),
+      friendlyBody: t('appStatus.friendly.moduleBody', { where }),
     };
   }
 
   if (/hydrat|minified react error|react error/i.test(lower)) {
     return {
       severity: 'error',
-      friendlyTitle: 'Something broke on this screen',
-      friendlyBody: `The page didn’t match what React expected when it loaded${where}.`,
+      friendlyTitle: t('appStatus.friendly.brokeTitle'),
+      friendlyBody: t('appStatus.friendly.hydratBody', { where }),
     };
   }
 
   if (input.source === 'network' || /\b(4\d\d|5\d\d)\b|failed to fetch|networkerror/i.test(lower)) {
     return {
       severity: 'warn',
-      friendlyTitle: 'The app couldn’t reach the server',
-      friendlyBody: 'A request from the preview failed. This can be a missing API or a temporary network issue.',
+      friendlyTitle: t('appStatus.friendly.networkTitle'),
+      friendlyBody: t('appStatus.friendly.networkBody'),
     };
   }
 
   return {
     severity: 'error',
-    friendlyTitle: 'Something broke on this screen',
+    friendlyTitle: t('appStatus.friendly.brokeTitle'),
     friendlyBody: where
-      ? `The preview hit a problem${where}. Open Technical details if you want the exact message.`
-      : 'The preview hit a problem. Open Technical details if you want the exact message.',
+      ? t('appStatus.friendly.genericBodyWhere', { where })
+      : t('appStatus.friendly.genericBody'),
   };
 }
 
