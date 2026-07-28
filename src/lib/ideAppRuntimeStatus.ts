@@ -237,7 +237,7 @@ function clearHealthyTimer(): void {
 
 /**
  * After a successful Agent apply from an App Status turn — watch for a quiet reload.
- * Does not clear issues yet; healthy check only treats re-reports after this mark time.
+ * Does not clear issues yet; healthy check treats re-reports after the mark/reload anchor.
  */
 export function markAppRuntimePendingValidation(fingerprints?: string[]): void {
   const fps =
@@ -245,46 +245,53 @@ export function markAppRuntimePendingValidation(fingerprints?: string[]): void {
       ? fingerprints
       : issues.filter((i) => i.severity !== 'info').map((i) => i.fingerprint);
   pendingValidationFingerprints = fps.length ? fps : null;
-  // Anchor for “reappeared”: must stay at mark time so load-time errors
-  // (reported before iframe onLoad → schedule) still count as reappears.
+  // Anchor for “reappeared”: load-time errors (before iframe onLoad) must still count.
   pendingValidationStartedAt = Date.now();
   clearHealthyTimer();
   notify();
 }
 
+/**
+ * Call when a preview reload begins while Validate is pending (before navigation).
+ * Advances the anchor so a prior failed window’s reappear does not poison this attempt,
+ * while errors during the upcoming page load still land after the anchor.
+ */
+export function noteAppRuntimeValidationReload(): void {
+  if (!pendingValidationFingerprints?.length) return;
+  pendingValidationStartedAt = Date.now();
+  clearHealthyTimer();
+}
+
 export function requestAppPreviewReload(): void {
+  noteAppRuntimeValidationReload();
   emit(RELOAD_PREVIEW_EVENT);
 }
 
 /**
  * Call when same-origin preview loads / bridge injects.
- * Restarts the quiet timer but does NOT move the mark-time anchor forward —
+ * Restarts the quiet timer but does NOT move the mark/reload anchor forward —
  * errors during page load arrive before this call and must still block clear.
- * If a prior window already saw a reappear, that timeout advances the anchor
- * so leftovers from a failed validate do not poison a later clean reload.
  */
 export function scheduleAppRuntimeHealthyCheck(options?: { quietMs?: number }): void {
   if (!pendingValidationFingerprints?.length) return;
   const quietMs = options?.quietMs ?? HEALTHY_QUIET_DEFAULT_MS;
   clearHealthyTimer();
-  // Capture mark-time at schedule; do not reset to Date.now() (that skipped load-time bugs).
   const windowStart = pendingValidationStartedAt;
   const watched = [...pendingValidationFingerprints];
-  const scheduledAt = Date.now();
   healthyTimer = setTimeout(() => {
     healthyTimer = null;
     if (!pendingValidationFingerprints?.length) return;
-    // Superseded by a newer mark or a later schedule that advanced the anchor.
+    // Superseded by a newer mark / reload note.
     if (pendingValidationStartedAt !== windowStart) return;
     const reappeared = issues.filter(
       (i) =>
         i.severity !== 'info' &&
         watched.includes(i.fingerprint) &&
-        i.at > windowStart, // after mark (includes load-time before iframe onLoad)
+        i.at > windowStart, // after mark/reload note (includes load-time before onLoad)
     );
     if (reappeared.length > 0) {
-      // Advance anchor past this failed window so the next clean reload can clear.
-      pendingValidationStartedAt = Math.max(Date.now(), scheduledAt + 1);
+      // Advance so the next clean reload (even without note) can clear.
+      pendingValidationStartedAt = Date.now();
       return;
     }
     clearAppRuntimeByFingerprints(watched);

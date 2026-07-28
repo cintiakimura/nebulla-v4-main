@@ -62,11 +62,12 @@ Issue shape (conceptual):
 
 ## Validate loop (post-fix)
 1. Successful Agent file apply on an App Status turn (`shouldMarkAppStatusValidation`) → mark fingerprints pending + accessory “Reload preview to validate”
-2. Same-origin preview load / bridge ready → **fresh** quiet window (~4s) per load
-3. Only watched fingerprints **re-reported during that window** block resolve (stale store entries do not)
-4. If none reappear → clear watched issues + “Looks fixed.”
-5. Failed apply does **not** start Validate; surfaces as App Status `build` instead
-6. Manual **Clear** remains for power users
+2. Reload begins → validation **anchor** set (mark or `noteAppRuntimeValidationReload`) **before** navigation
+3. Same-origin preview load / bridge ready → quiet timer (~4s); anchor is **not** moved to onLoad (so boot-time errors still count)
+4. Only watched fingerprints with `at` after the anchor block resolve (pre-mark leftovers do not)
+5. If none reappear → clear watched issues + “Looks fixed.”; if they reappear → keep pending and advance anchor for the next attempt
+6. Failed apply does **not** start Validate; surfaces as App Status `build` instead
+7. Manual **Clear** remains for power users
 
 ## NDM + bug hints
 When `[APP_STATUS_DEBUG]` is present, NDM **Verify** must use it — do not ask “what error do you see?”  

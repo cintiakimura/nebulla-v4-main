@@ -25,6 +25,7 @@ import {
 } from '../lib/previewRuntimeBridge';
 import {
   APP_STATUS_EVENTS,
+  noteAppRuntimeValidationReload,
   scheduleAppRuntimeHealthyCheck,
 } from '../lib/ideAppRuntimeStatus';
 import { IdeAppStatusPreviewBadge } from './ide/IdeAppStatusMenu';
@@ -145,6 +146,7 @@ export function AppPreviewPanel({
   useEffect(() => {
     void loadPreviewMeta();
     const onRefresh = () => {
+      noteAppRuntimeValidationReload();
       void loadPreviewMeta();
       setPreviewRev((n) => n + 1);
     };
@@ -221,6 +223,7 @@ export function AppPreviewPanel({
 
   useEffect(() => {
     const onReload = () => {
+      noteAppRuntimeValidationReload();
       void loadPreviewMeta();
       void loadWorkspaceSourceFiles();
       setPreviewRev((n) => n + 1);
@@ -334,6 +337,7 @@ export function AppPreviewPanel({
             title="Reload preview"
             aria-label="Reload preview"
             onClick={() => {
+              noteAppRuntimeValidationReload();
               void loadPreviewMeta();
               void loadWorkspaceSourceFiles();
               setPreviewRev((n) => n + 1);

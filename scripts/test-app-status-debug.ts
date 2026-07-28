@@ -231,6 +231,7 @@ section('Validate healthy check — after blocked window, clean reload can clear
   });
   assert.ok(first);
   markAppRuntimePendingValidation([first!.fingerprint]);
+  await new Promise((r) => setTimeout(r, 5));
   reportAppRuntimeIssue({
     technicalMessage: 'RangeError: invalid',
     route: '/x',
