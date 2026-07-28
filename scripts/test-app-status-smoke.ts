@@ -132,4 +132,29 @@ section('smoke Validate: reappear keeps pending');
   assert.equal(getAppRuntimeSnapshot().pendingValidation, true);
 }
 
+section('smoke Validate: load-time reappear before schedule keeps pending');
+{
+  __resetAppRuntimeStoreForTests();
+  ingestPreviewRuntimeMessage({
+    source: PREVIEW_RUNTIME_MSG_SOURCE,
+    type: 'runtime-error',
+    message: 'Smoke bug load',
+    route: '/load',
+  });
+  const fp = getAppRuntimeSnapshot().issues[0]!.fingerprint;
+  markAppRuntimePendingValidation([fp]);
+  await sleep(5);
+  // Error during page boot, before iframe onLoad schedules the check
+  ingestPreviewRuntimeMessage({
+    source: PREVIEW_RUNTIME_MSG_SOURCE,
+    type: 'runtime-error',
+    message: 'Smoke bug load',
+    route: '/load',
+  });
+  scheduleAppRuntimeHealthyCheck({ quietMs: 30 });
+  await sleep(50);
+  assert.ok(getAppRuntimeSnapshot().issues.length >= 1);
+  assert.equal(getAppRuntimeSnapshot().pendingValidation, true);
+}
+
 console.log('\nAll app-status smoke checks passed.\n');

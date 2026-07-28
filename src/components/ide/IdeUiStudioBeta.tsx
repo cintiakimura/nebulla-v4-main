@@ -24,6 +24,7 @@ import {
   Trash2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useLanguage } from '@/components/i18n/LanguageProvider';
 import { getBrowserProjectName, withProjectBody, withProjectQuery } from '../../lib/nebulaProjectApi';
 import { getGrokRequestHeaders } from '../../lib/grokUserKey';
 import { getStoredV0ApiKey, getV0RequestHeaders, hasLocalV0ApiKey, NEBULLA_V0_KEY_STORAGE } from '../../lib/v0Key';
@@ -276,6 +277,7 @@ export function IdeUiStudioBeta({
 }) {
   const projectLabel = projectDisplayName?.trim() || getBrowserProjectName() || 'project';
 
+  const { t } = useLanguage();
   const [eligible, setEligible] = useState<boolean | null>(null);
   const [eligibilityReason, setEligibilityReason] = useState<string | undefined>();
   const [activePage, setActivePage] = useState('Home');
@@ -297,6 +299,16 @@ export function IdeUiStudioBeta({
     'I can see this still isn’t right. What bothers you most — layout, colors, spacing, missing sections, or overall style?',
   );
   const [preferenceDraft, setPreferenceDraft] = useState('');
+  const [preferenceHints, setPreferenceHints] = useState<{
+    denser?: boolean;
+    looser?: boolean;
+    moreSections?: boolean;
+    strongerCta?: boolean;
+    moreContrast?: boolean;
+  }>({});
+  const [lastGate, setLastGate] = useState<string>('');
+  const [patternMode, setPatternMode] = useState<'seed' | 'figma' | ''>('');
+  const [previewSynced, setPreviewSynced] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const shellRef = useRef<HTMLDivElement>(null);
   const previewRef = useRef<HTMLDivElement>(null);
@@ -636,10 +648,18 @@ export function IdeUiStudioBeta({
     guidedImprovement?: boolean;
     autoTriggered?: boolean;
     writtenPaths?: string[];
+    preferenceHints?: {
+      denser?: boolean;
+      looser?: boolean;
+      moreSections?: boolean;
+      strongerCta?: boolean;
+      moreContrast?: boolean;
+    };
   }) => {
     setBusy(true);
     setError('');
     setPreferenceRecovery(false);
+    setPreviewSynced(false);
     setEngineStage(
       opts?.regenerate
         ? 'Generate again…'
@@ -674,6 +694,7 @@ export function IdeUiStudioBeta({
             preferenceFeedback: opts?.preferenceFeedback,
             guidedImprovement: opts?.guidedImprovement === true,
             writtenPaths: opts?.writtenPaths,
+            preferenceHints: opts?.preferenceHints || undefined,
           }),
         ),
       });
@@ -687,11 +708,19 @@ export function IdeUiStudioBeta({
         regeneration_count?: number;
         max_regenerations?: number;
         user_visible_stage?: string;
+        previewApplied?: boolean;
+        patternMode?: 'seed' | 'figma';
+        quality_gate_result?: string;
+        figma_fallback_used?: boolean;
         context?: { page_name?: string; quality_gate_result?: string };
       };
       if (typeof data.regeneration_count === 'number') setRegenCount(data.regeneration_count);
       if (typeof data.max_regenerations === 'number') setMaxRegens(data.max_regenerations);
       if (data.user_visible_stage) setEngineStage(data.user_visible_stage);
+      if (data.patternMode) setPatternMode(data.patternMode);
+      else if (data.figma_fallback_used) setPatternMode('seed');
+      const gate = data.quality_gate_result || data.context?.quality_gate_result || '';
+      if (gate) setLastGate(gate);
       if (data.preference_recovery) {
         setPreferenceRecovery(true);
         setPreferenceQuestion(
@@ -718,10 +747,18 @@ export function IdeUiStudioBeta({
         return;
       }
       if (!r.ok || !data.ok) {
-        const errMsg = data.error || 'UI Generation Engine failed';
+        const errMsg =
+          gate === 'weak'
+            ? data.error ||
+              'Quality gate: weak skeleton — structure/labels did not meet the bar. Try Generate again.'
+            : data.error || 'UI Generation Engine failed';
         setError(errMsg);
-        setEngineStage(data.user_visible_stage || 'Needs discovery');
+        setEngineStage(
+          data.user_visible_stage ||
+            (gate === 'weak' ? 'Weak quality — try Generate again' : 'Needs discovery'),
+        );
         setHasEnginePreview(false);
+        setPreviewSynced(false);
         setPreviewSurface('visual-model');
         if (data.editorModel?.pages && !isNebullaIdePlaceholderShell(data.editorModel)) {
           applyEditorModel(data.editorModel, setModel, setActivePage, baselineRef);
@@ -733,12 +770,17 @@ export function IdeUiStudioBeta({
         }
         window.dispatchEvent(
           new CustomEvent('nebula-ui-studio-beta-complete', {
-            detail: { ok: false, error: errMsg, user_visible_stage: data.user_visible_stage },
+            detail: {
+              ok: false,
+              error: errMsg,
+              user_visible_stage: data.user_visible_stage,
+              quality_gate_result: gate || undefined,
+              patternMode: data.patternMode,
+            },
           }),
         );
         return;
       }
-      const gate = data.context?.quality_gate_result || '';
       const deliveredStage =
         data.user_visible_stage ||
         (gate === 'weak'
@@ -746,7 +788,7 @@ export function IdeUiStudioBeta({
           : gate === 'repair'
             ? 'Preview ready — quality repair applied'
             : 'Ready in preview');
-      const qualityOk = gate !== 'weak';
+      const qualityOk = gate === 'pass' || gate === 'repair' || (!gate && data.ok);
       if (data.editorModel?.pages && !isNebullaIdePlaceholderShell(data.editorModel)) {
         applyEditorModel(
           data.editorModel,
@@ -760,14 +802,26 @@ export function IdeUiStudioBeta({
         setHasEnginePreview(qualityOk);
         setEngineStage(deliveredStage);
         if (gate === 'weak') {
-          setError('Quality gate: weak skeleton — labels/structure/§5 did not meet the bar. Try Generate again.');
+          setError(
+            'Quality gate: weak skeleton — labels/structure/§5 did not meet the bar. Try Generate again.',
+          );
         }
-        // Persist the NEW model — never the stale Cosmic Night / waiting shell from closure.
         await persistModelRemote(data.editorModel);
       } else {
         setEngineStage(deliveredStage);
         await loadEnginePreview();
+        setHasEnginePreview(qualityOk);
       }
+      if (data.previewApplied && qualityOk) {
+        setPreviewSynced(true);
+        try {
+          window.dispatchEvent(new CustomEvent('nebula-files-applied'));
+          window.dispatchEvent(new CustomEvent('nebula-reload-app-preview'));
+        } catch {
+          /* ignore */
+        }
+      }
+      setPreferenceHints({});
       window.dispatchEvent(
         new CustomEvent('nebula-ui-studio-beta-complete', {
           detail: {
@@ -781,6 +835,9 @@ export function IdeUiStudioBeta({
             regeneration_count: data.regeneration_count,
             max_regenerations: data.max_regenerations,
             user_visible_stage: deliveredStage,
+            previewApplied: data.previewApplied,
+            patternMode: data.patternMode,
+            quality_gate_result: gate || undefined,
           },
         }),
       );
@@ -796,6 +853,41 @@ export function IdeUiStudioBeta({
       );
     } finally {
       window.clearInterval(poll);
+      setBusy(false);
+    }
+  };
+
+  const applyLastGenerationToPreview = async () => {
+    setBusy(true);
+    setError('');
+    try {
+      const r = await fetch(withProjectQuery('/api/ui-studio-beta/apply-preview'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...getGrokRequestHeaders() },
+        credentials: 'include',
+        body: JSON.stringify(withProjectBody({})),
+      });
+      const data = (await r.json()) as {
+        ok?: boolean;
+        error?: string;
+        written?: string[];
+        quality_gate_result?: string;
+      };
+      if (!r.ok || !data.ok) {
+        setError(data.error || t('uiStudio.applyPreviewFailed'));
+        return;
+      }
+      setPreviewSynced(true);
+      setLastGate(data.quality_gate_result || lastGate || 'pass');
+      try {
+        window.dispatchEvent(new CustomEvent('nebula-files-applied'));
+        window.dispatchEvent(new CustomEvent('nebula-reload-app-preview'));
+      } catch {
+        /* ignore */
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : t('uiStudio.applyPreviewFailed'));
+    } finally {
       setBusy(false);
     }
   };
@@ -1390,47 +1482,87 @@ export function IdeUiStudioBeta({
         {preferenceRecovery ? (
           <div className="border-b border-border bg-card px-3 py-2">
             <p className="text-[11px] text-foreground whitespace-pre-wrap">{preferenceQuestion}</p>
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {(
+                [
+                  { key: 'denser' as const, label: t('uiStudio.hint.denser') },
+                  { key: 'looser' as const, label: t('uiStudio.hint.looser') },
+                  { key: 'moreSections' as const, label: t('uiStudio.hint.moreSections') },
+                  { key: 'strongerCta' as const, label: t('uiStudio.hint.strongerCta') },
+                  { key: 'moreContrast' as const, label: t('uiStudio.hint.moreContrast') },
+                ] as const
+              ).map((chip) => {
+                const on = Boolean(preferenceHints[chip.key]);
+                return (
+                  <button
+                    key={chip.key}
+                    type="button"
+                    disabled={busy}
+                    onClick={() =>
+                      setPreferenceHints((prev) => ({
+                        ...prev,
+                        [chip.key]: !prev[chip.key],
+                      }))
+                    }
+                    className={cn(
+                      'rounded-md border px-2 py-0.5 text-[10px]',
+                      on
+                        ? 'border-primary/50 bg-primary/15 text-primary'
+                        : 'border-border text-muted-foreground hover:bg-secondary/50',
+                    )}
+                  >
+                    {chip.label}
+                  </button>
+                );
+              })}
+            </div>
             <div className="mt-2 flex flex-wrap items-center gap-2">
               <input
                 type="text"
                 value={preferenceDraft}
                 onChange={(e) => setPreferenceDraft(e.target.value)}
-                placeholder="e.g. spacing and colors"
+                placeholder={t('uiStudio.preferencePlaceholder')}
                 className="min-w-[180px] flex-1 rounded-md border border-border bg-background px-2 py-1 text-[11px] text-foreground"
               />
               <button
                 type="button"
-                disabled={busy || !preferenceDraft.trim()}
+                disabled={
+                  busy ||
+                  (!preferenceDraft.trim() && !Object.values(preferenceHints).some(Boolean))
+                }
                 onClick={() => {
                   const feedback = preferenceDraft.trim();
                   setPreferenceDraft('');
                   void runEngineGenerate({
-                    preferenceFeedback: feedback,
+                    preferenceFeedback: feedback || 'Structured preference chips',
                     guidedImprovement: true,
+                    preferenceHints,
                   });
                 }}
                 className="rounded-md bg-primary px-2 py-1 text-[10px] text-primary-foreground disabled:opacity-40"
               >
-                Guided improvement
+                {t('uiStudio.guidedImprovement')}
               </button>
               <button
                 type="button"
                 disabled={busy}
                 onClick={() => {
                   setPreferenceRecovery(false);
-                  setError('Use the Properties panel to refine text, color, spacing, border, shadow, order, or delete.');
+                  setError(t('uiStudio.manualRefineHint'));
                   setEngineStage('Manual refinement');
                 }}
                 className="rounded-md border border-border px-2 py-1 text-[10px] text-foreground"
               >
-                Manual Properties
+                {t('uiStudio.manualProperties')}
               </button>
             </div>
           </div>
         ) : null}
         <div className="flex h-9 items-center justify-between gap-2 px-2 sm:px-3">
           <div className="flex min-w-0 items-center gap-2">
-            <span className="truncate text-xs font-medium tracking-wide text-foreground">UI Studio Beta</span>
+            <span className="truncate text-xs font-medium tracking-wide text-foreground">
+              {t('ide.pane.ui-studio-beta')}
+            </span>
             <span
               className={cn(
                 'hidden rounded-full px-2 py-0.5 text-[10px] font-medium sm:inline',
@@ -1439,13 +1571,48 @@ export function IdeUiStudioBeta({
                   : 'bg-secondary text-muted-foreground',
               )}
             >
-              {hasEnginePreview ? 'engine preview' : busy ? 'generating…' : 'waiting for engine'}
+              {hasEnginePreview
+                ? t('uiStudio.enginePreview')
+                : busy
+                  ? t('uiStudio.generating')
+                  : t('uiStudio.waiting')}
             </span>
+            {patternMode === 'seed' || (!patternMode && hasEnginePreview) ? (
+              <span
+                className="hidden max-w-[140px] truncate rounded-full bg-secondary px-2 py-0.5 text-[10px] text-muted-foreground md:inline"
+                title={t('uiStudio.usingBuiltInPatterns')}
+              >
+                {t('uiStudio.usingBuiltInPatterns')}
+              </span>
+            ) : patternMode === 'figma' ? (
+              <span className="hidden rounded-full bg-secondary px-2 py-0.5 text-[10px] text-muted-foreground md:inline">
+                {t('uiStudio.usingFigmaRefs')}
+              </span>
+            ) : null}
+            {lastGate ? (
+              <span
+                className={cn(
+                  'hidden rounded-full px-2 py-0.5 text-[10px] font-medium sm:inline',
+                  lastGate === 'pass'
+                    ? 'bg-emerald-500/15 text-emerald-200'
+                    : lastGate === 'repair'
+                      ? 'bg-amber-500/15 text-amber-100'
+                      : 'bg-rose-500/15 text-rose-100',
+                )}
+                title={`${t('uiStudio.gate')}: ${lastGate}`}
+              >
+                {t('uiStudio.gate')}: {lastGate}
+              </span>
+            ) : null}
           </div>
 
           <div className="flex shrink-0 items-center gap-1">
             {engineStage ? (
-              <span className="hidden max-w-[160px] truncate text-[10px] md:max-w-[220px] sm:inline" style={{ color: 'var(--subtitle)' }} title={engineStage}>
+              <span
+                className="hidden max-w-[160px] truncate text-[10px] md:max-w-[220px] sm:inline"
+                style={{ color: 'var(--subtitle)' }}
+                title={engineStage}
+              >
                 {busy ? <Loader2 className="mr-1 inline h-3 w-3 animate-spin" /> : null}
                 {engineStage}
               </span>
@@ -1456,22 +1623,33 @@ export function IdeUiStudioBeta({
             <button
               type="button"
               disabled={busy}
-              onClick={() => void runEngineGenerate()}
+              onClick={() => void runEngineGenerate({ preferenceHints })}
               className="rounded-md border border-primary/40 bg-primary/15 px-2.5 py-1 text-[11px] text-primary hover:bg-primary/25 disabled:opacity-40 sm:px-3"
-              title="Run Nebulla UI Generation Engine from Master Plan + files (UI Studio Beta only)"
+              title={t('uiStudio.generateTitle')}
             >
               {busy ? <Loader2 className="mr-1 inline h-3 w-3 animate-spin" /> : null}
-              Generate UI
+              {t('uiStudio.generate')}
             </button>
             <button
               type="button"
               disabled={busy || preferenceRecovery || regenCount >= maxRegens}
-              onClick={() => void runEngineGenerate({ regenerate: true })}
+              onClick={() => void runEngineGenerate({ regenerate: true, preferenceHints })}
               className="rounded-md border border-border px-2 py-1 text-[10px] text-foreground hover:bg-secondary disabled:opacity-40"
-              title="Generate again (max 3 attempts)"
+              title={t('uiStudio.generateAgainTitle')}
             >
-              Generate again
+              {t('uiStudio.generateAgain')}
             </button>
+            {(lastGate === 'pass' || lastGate === 'repair') && hasEnginePreview ? (
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => void applyLastGenerationToPreview()}
+                className="hidden rounded-md border border-border px-2 py-1 text-[10px] text-foreground hover:bg-secondary disabled:opacity-40 md:inline"
+                title={t('uiStudio.applyToPreviewTitle')}
+              >
+                {previewSynced ? t('uiStudio.previewSynced') : t('uiStudio.applyToPreview')}
+              </button>
+            ) : null}
             {hasV0ApiKey && eligible && v0ChatId ? (
               <button
                 type="button"

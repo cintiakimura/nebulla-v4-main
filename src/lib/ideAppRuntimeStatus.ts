@@ -237,7 +237,7 @@ function clearHealthyTimer(): void {
 
 /**
  * After a successful Agent apply from an App Status turn — watch for a quiet reload.
- * Does not clear issues yet; healthy check only treats re-reports after each load window.
+ * Does not clear issues yet; healthy check only treats re-reports after this mark time.
  */
 export function markAppRuntimePendingValidation(fingerprints?: string[]): void {
   const fps =
@@ -245,6 +245,8 @@ export function markAppRuntimePendingValidation(fingerprints?: string[]): void {
       ? fingerprints
       : issues.filter((i) => i.severity !== 'info').map((i) => i.fingerprint);
   pendingValidationFingerprints = fps.length ? fps : null;
+  // Anchor for “reappeared”: must stay at mark time so load-time errors
+  // (reported before iframe onLoad → schedule) still count as reappears.
   pendingValidationStartedAt = Date.now();
   clearHealthyTimer();
   notify();
@@ -256,28 +258,35 @@ export function requestAppPreviewReload(): void {
 
 /**
  * Call when same-origin preview loads / bridge injects.
- * Fresh quiet window each load: only watched fingerprints re-reported during the window block resolve.
- * Stale issues left in the store from before this window do NOT block (fixes false “still red”).
+ * Restarts the quiet timer but does NOT move the mark-time anchor forward —
+ * errors during page load arrive before this call and must still block clear.
+ * If a prior window already saw a reappear, that timeout advances the anchor
+ * so leftovers from a failed validate do not poison a later clean reload.
  */
 export function scheduleAppRuntimeHealthyCheck(options?: { quietMs?: number }): void {
   if (!pendingValidationFingerprints?.length) return;
   const quietMs = options?.quietMs ?? HEALTHY_QUIET_DEFAULT_MS;
   clearHealthyTimer();
-  // Reset window on every preview load so a prior reappear does not poison later reloads.
-  pendingValidationStartedAt = Date.now();
-  const started = pendingValidationStartedAt;
+  // Capture mark-time at schedule; do not reset to Date.now() (that skipped load-time bugs).
+  const windowStart = pendingValidationStartedAt;
   const watched = [...pendingValidationFingerprints];
+  const scheduledAt = Date.now();
   healthyTimer = setTimeout(() => {
     healthyTimer = null;
     if (!pendingValidationFingerprints?.length) return;
-    if (pendingValidationStartedAt !== started) return;
+    // Superseded by a newer mark or a later schedule that advanced the anchor.
+    if (pendingValidationStartedAt !== windowStart) return;
     const reappeared = issues.filter(
       (i) =>
         i.severity !== 'info' &&
         watched.includes(i.fingerprint) &&
-        i.at > started, // strict: same-ms leftovers from before this window must not block
+        i.at > windowStart, // after mark (includes load-time before iframe onLoad)
     );
-    if (reappeared.length > 0) return;
+    if (reappeared.length > 0) {
+      // Advance anchor past this failed window so the next clean reload can clear.
+      pendingValidationStartedAt = Math.max(Date.now(), scheduledAt + 1);
+      return;
+    }
     clearAppRuntimeByFingerprints(watched);
     if (getAppRuntimeErrorCount() === 0) {
       issues = [];

@@ -23,6 +23,36 @@ export type SeedPattern = {
 
 export const SEED_PATTERNS: SeedPattern[] = [
   {
+    id: "seed-mobile-home-hero",
+    device: ["mobile"],
+    page_types: ["home", "other"],
+    functions: ["general", "community", "course"],
+    navigation: ["tabs"],
+    structure:
+      "Top bar → hero title/subtitle → primary+secondary CTA row → 3 feature cards → bottom tabs. Spacious padding, clear hierarchy.",
+    reason: "Mobile home with hero + cards (built-in patterns)",
+  },
+  {
+    id: "seed-mobile-tasks-list",
+    device: ["mobile"],
+    page_types: ["list", "home"],
+    functions: ["tasks", "course"],
+    navigation: ["tabs"],
+    structure:
+      "Top bar → short hero → vertical action list (4 rows with meta) → sticky primary CTA → bottom tabs.",
+    reason: "Task/list pattern distinct from card home",
+  },
+  {
+    id: "seed-mobile-ecommerce-cards",
+    device: ["mobile"],
+    page_types: ["home", "list", "checkout"],
+    functions: ["ecommerce", "booking", "marketplace"],
+    navigation: ["tabs", "topnav"],
+    structure:
+      "Top bar → promo hero → product/service cards (image-like value + title) → Shop/Book CTA → bottom tabs.",
+    reason: "Commerce-oriented card grid",
+  },
+  {
     id: "seed-web-dashboard-sidebar",
     device: ["web"],
     page_types: ["dashboard"],
@@ -67,6 +97,26 @@ export const SEED_PATTERNS: SeedPattern[] = [
     navigation: ["none"],
     structure: "Centered card with logo, form fields, primary submit, secondary link.",
     reason: "Auth form pattern",
+  },
+  {
+    id: "seed-mobile-settings",
+    device: ["mobile"],
+    page_types: ["settings"],
+    functions: ["general", "saas_admin", "tasks"],
+    navigation: ["tabs"],
+    structure:
+      "Top bar → settings hero → grouped preference rows (4) with meta → bottom tabs. Dense but clear separators.",
+    reason: "Mobile settings groups (built-in)",
+  },
+  {
+    id: "seed-mobile-detail",
+    device: ["mobile"],
+    page_types: ["detail"],
+    functions: ["general", "course", "ecommerce", "booking"],
+    navigation: ["tabs"],
+    structure:
+      "Top bar → detail hero → 3 stacked section blocks (title + body) → primary CTA → bottom tabs.",
+    reason: "Mobile detail sections (built-in)",
   },
   {
     id: "seed-landing",

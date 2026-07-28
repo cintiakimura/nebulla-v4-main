@@ -552,3 +552,26 @@ Do not leave the current freeform model builder as the main success path.
 ## 16. One-line doctrine
 
 **Template first. Figma forced. Tokens mandatory. Content mapped into slots. No freeform chaos.**
+
+---
+
+## 17. Seed-first product mode (addendum)
+
+**Default delivery path does not require Figma.**
+
+| Mode | When | Behavior |
+|------|------|----------|
+| **Seed (built-in patterns)** | `FIGMA_API_KEY` and/or `FIGMA_REFERENCE_FILE_KEYS` unset, or Figma probe fails | Constrained templates + seed structure hints; `pattern_mode: seed`; never fake `figma_status: success` |
+| **Figma (optional)** | Both env vars set and retrieval succeeds | Structure hints from reference files; `pattern_mode: figma` only on real success |
+
+Product rules:
+
+1. **Primary Generate UI surface** = **UI Studio Beta** (Legacy v0 Studio is advanced / optional only).
+2. **Delivered** means: quality gate is `pass` or `repair` **and** workspace App Preview is synced (`index.html` / preview shell) so IDE Preview matches Beta.
+3. Gate `weak` → clear warning, **no** Preview overwrite, not “Ready”.
+4. Grok API key is **optional** for structured seed generate; used for CONTENT_LOCALE microcopy polish and guided preference rewrite when present.
+5. Locale polish rewrites **slot strings only** — never layout/template/nodes.
+
+Manual 10-min check (no Figma): Master Plan present → Generate UI in Beta → status shows built-in patterns + gate → open App Preview → structure/labels match → optional CONTENT_LOCALE polish when Grok key set.
+
+Smoke: `npm run test:ui-gen`.

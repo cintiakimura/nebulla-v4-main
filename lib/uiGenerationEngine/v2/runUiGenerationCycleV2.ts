@@ -27,9 +27,23 @@ import { repairSlots, validateV2Quality } from "./qualityGate";
 import { renderTemplateCode, renderTemplateModel } from "./renderTemplateModel";
 import { selectTemplate } from "./selectTemplate";
 import type { V2TemplateId } from "./types";
+import {
+  applyUiGenerationToPreviewShell,
+  shouldApplyUiToPreview,
+} from "../applyPreviewShell";
+import { polishSlotsForContentLocale } from "../polishSlotsLocale";
+import { readWorkspaceContentLocale } from "../../contentLocaleWorkspace";
 
 const PREFERENCE_RECOVERY_QUESTION =
   "I can see this still isn’t right. What bothers you most — layout, colors, spacing, missing sections, or overall style?";
+
+export type UiPreferenceHints = {
+  denser?: boolean;
+  looser?: boolean;
+  moreSections?: boolean;
+  strongerCta?: boolean;
+  moreContrast?: boolean;
+};
 
 export type RunUiGenerationInput = {
   workspaceRoot: string;
@@ -42,6 +56,8 @@ export type RunUiGenerationInput = {
   preferenceFeedback?: string;
   guidedImprovement?: boolean;
   writtenPaths?: string[];
+  /** Structured preference recovery (WP7). */
+  preferenceHints?: UiPreferenceHints;
 };
 
 export type RunUiGenerationResult = {
@@ -57,6 +73,13 @@ export type RunUiGenerationResult = {
   regeneration_count?: number;
   max_regenerations?: number;
   user_visible_stage?: string;
+  /** Workspace App Preview files written (pass/repair only). */
+  previewApplied?: boolean;
+  previewWritten?: string[];
+  /** Seed vs figma pattern mode for UI chrome. */
+  patternMode?: "seed" | "figma";
+  quality_gate_result?: string;
+  figma_fallback_used?: boolean;
 };
 
 type PageDef = { name: string; route: string; body: string };
@@ -465,9 +488,10 @@ export async function runUiGenerationCycleV2(
   // -------- Phase B — Template --------
   stage("Choosing layout");
   const preferAlternate =
-    Boolean(input.regenerate) &&
-    prevPolicy.final_status === "rejected" &&
-    state.regeneration_count > 1;
+    (Boolean(input.regenerate) &&
+      prevPolicy.final_status === "rejected" &&
+      state.regeneration_count > 1) ||
+    Boolean(input.preferenceHints?.moreSections);
   const previousTemplate = (prevPolicy as { template_id?: string }).template_id as
     | V2TemplateId
     | undefined;
@@ -533,6 +557,20 @@ export async function runUiGenerationCycleV2(
     const rad = h.match(/corner radius ≈ (\d+)/i);
     if (rad) tokens.radius = Math.min(24, Math.max(4, Number(rad[1])));
   }
+  const hints = input.preferenceHints || {};
+  if (hints.denser) {
+    tokens.gap = Math.max(6, tokens.gap - 4);
+    tokens.pad = Math.max(8, tokens.pad - 4);
+  }
+  if (hints.looser) {
+    tokens.gap = Math.min(28, tokens.gap + 4);
+    tokens.pad = Math.min(28, tokens.pad + 4);
+  }
+  if (hints.moreContrast) {
+    tokens.text = "#0C0A09";
+    tokens.mutedText = "#57534E";
+    tokens.primary = tokens.primary === "#0F766E" ? "#0D9488" : tokens.primary;
+  }
   state.design_tokens_json = JSON.stringify(tokens);
   state.design_system_rules_applied = "yes";
   appendStepLog(
@@ -557,6 +595,34 @@ export async function runUiGenerationCycleV2(
     features: state.priority_features,
     preferenceFeedback,
   });
+  if (hints.strongerCta && slots.primary_cta) {
+    const c = slots.primary_cta.trim();
+    if (c && !/[!]$/.test(c) && c.length < 24) slots.primary_cta = `${c}`;
+    if (/^(continue|next|ok|submit)$/i.test(c)) {
+      slots.primary_cta =
+        classification.product_function === "ecommerce"
+          ? "Shop now"
+          : classification.product_function === "booking"
+            ? "Book now"
+            : "Get started free";
+    }
+  }
+  // CONTENT_LOCALE microcopy (optional Grok) — layout unchanged
+  const contentLocale = readWorkspaceContentLocale(workspaceRoot) || "en";
+  if (input.apiKeyOverride?.trim()) {
+    stage("Polishing labels");
+    const polished = await polishSlotsForContentLocale({
+      slots,
+      contentLocale,
+      apiKey: input.apiKeyOverride,
+    });
+    slots = polished.slots;
+    if (polished.polished) {
+      appendStepLog(state, `Phase E locale polish — CONTENT_LOCALE=${contentLocale}`);
+    } else if (polished.skippedReason && polished.skippedReason !== "locale_en") {
+      state.generation_warnings.push(`Locale polish skipped: ${polished.skippedReason}`);
+    }
+  }
   state.primary_cta = slots.primary_cta || "";
   state.secondary_ctas = slots.secondary_cta ? [slots.secondary_cta] : [];
   state.slot_content_json = JSON.stringify(slots);
@@ -649,6 +715,31 @@ export async function runUiGenerationCycleV2(
   fs.mkdirSync(outDir, { recursive: true });
   fs.writeFileSync(path.join(outDir, "ui-generation-output.tsx"), code, "utf8");
 
+  const patternMode: "seed" | "figma" =
+    figma.figma_used === "yes" && figma.figma_status === "success" ? "figma" : "seed";
+  let previewWritten: string[] = [];
+  let previewApplied = false;
+  if (shouldApplyUiToPreview(gate.gate)) {
+    try {
+      previewWritten = applyUiGenerationToPreviewShell({
+        workspaceRoot,
+        projectName: state.project_name,
+        templateId: template.id,
+        tokens,
+        slots,
+        patternMode,
+      });
+      previewApplied = previewWritten.length > 0;
+      appendStepLog(state, `Phase H preview sync — wrote ${previewWritten.join(", ")}`);
+    } catch (e) {
+      state.generation_warnings.push(
+        `preview shell write soft-failed: ${e instanceof Error ? e.message : String(e)}`,
+      );
+    }
+  } else {
+    appendStepLog(state, "Phase H preview sync — skipped (weak gate)");
+  }
+
   // Extra cycle memory for tokens/slots/template
   fs.writeFileSync(
     path.join(outDir, "ui-generation-v2-meta.json"),
@@ -659,6 +750,9 @@ export async function runUiGenerationCycleV2(
         classification,
         tokens,
         slots,
+        pattern_mode: patternMode,
+        preview_applied: previewApplied,
+        preview_written: previewWritten,
         figma: {
           figma_used: figma.figma_used,
           figma_status: figma.figma_status,
@@ -673,7 +767,7 @@ export async function runUiGenerationCycleV2(
         quality_gate_result: gate.gate,
         regeneration_count: state.regeneration_count,
         how_to_recheck:
-          "After deploy: Generate UI → open nebulla-project/ui-generation-v2-meta.json → read figma.figma_status / fallback_used / env_guidance",
+          "Generate UI → open nebulla-project/ui-generation-v2-meta.json → read pattern_mode / figma.fallback_used / preview_applied",
       },
       null,
       2,
@@ -681,7 +775,7 @@ export async function runUiGenerationCycleV2(
     "utf8",
   );
 
-  state.preview_delivered = "yes";
+  state.preview_delivered = shouldApplyUiToPreview(gate.gate) ? "yes" : "no";
   state.export_available = gate.gate === "weak" ? "no" : "yes";
   state.output_type = "react_tailwind_page";
   state.status = gate.gate === "weak" ? "failed" : "generated";
@@ -708,15 +802,22 @@ export async function runUiGenerationCycleV2(
   });
 
   const contextPath = writeContextFile(workspaceRoot, state);
+  const deliverOk = gate.gate !== "weak";
   return {
-    ok: true,
+    ok: deliverOk,
     status: state.status,
     contextPath,
     context: state,
     editorModel,
     generatedCode: code,
+    error: deliverOk ? undefined : "Quality gate: weak — try Generate again",
     regeneration_count: state.regeneration_count,
     max_regenerations: state.max_regenerations,
     user_visible_stage: deliveredStage,
+    previewApplied,
+    previewWritten,
+    patternMode,
+    quality_gate_result: gate.gate,
+    figma_fallback_used: figma.fallback_used === "yes",
   };
 }

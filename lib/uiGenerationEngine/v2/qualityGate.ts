@@ -52,6 +52,8 @@ export function validateV2Quality(input: {
   if (template.needsPrimaryCta) {
     const buttons = nodes.filter((n) => n.type === "button");
     if (buttons.length < 1) issues.push("Missing primary action");
+    const cta = (slots.primary_cta || "").trim();
+    if (!cta) issues.push("Primary CTA slot empty");
     if (
       buttons.length === 1 &&
       /^get started$/i.test(buttons[0].text || "") &&
@@ -59,6 +61,14 @@ export function validateV2Quality(input: {
     ) {
       issues.push("Only generic Get started CTA");
     }
+  }
+  // Seed-path: home/list should carry at least one content label (not empty skeleton)
+  if (pageType === "home" || pageType === "list" || pageType === "dashboard") {
+    const hasContent = Object.entries(slots).some(
+      ([k, v]) =>
+        /^(card|item|metric|row|section)_\d/i.test(k) && Boolean(String(v || "").trim()),
+    );
+    if (!hasContent) issues.push("No content region labels mapped");
   }
   if (!model.meta?.template_id) issues.push("Template name not recorded on model");
 

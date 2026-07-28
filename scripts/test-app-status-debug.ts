@@ -195,4 +195,55 @@ section('Validate healthy check — reappear blocks clear');
   assert.equal(getAppRuntimeSnapshot().pendingValidation, true);
 }
 
+section('Validate healthy check — load-time reappear before schedule still blocks');
+{
+  __resetAppRuntimeStoreForTests();
+  const first = reportAppRuntimeIssue({
+    technicalMessage: 'ReferenceError: boom is not defined',
+    route: '/boot',
+    source: 'preview',
+  });
+  assert.ok(first);
+  markAppRuntimePendingValidation([first!.fingerprint]);
+  // Simulate page-load error arriving before iframe onLoad → schedule
+  await new Promise((r) => setTimeout(r, 5));
+  reportAppRuntimeIssue({
+    technicalMessage: 'ReferenceError: boom is not defined',
+    route: '/boot',
+    source: 'preview',
+  });
+  scheduleAppRuntimeHealthyCheck({ quietMs: 40 });
+  await new Promise((r) => setTimeout(r, 70));
+  assert.ok(
+    getAppRuntimeSnapshot().issues.length >= 1,
+    'load-time reappear must not be treated as stale leftover',
+  );
+  assert.equal(getAppRuntimeSnapshot().pendingValidation, true);
+}
+
+section('Validate healthy check — after blocked window, clean reload can clear');
+{
+  __resetAppRuntimeStoreForTests();
+  const first = reportAppRuntimeIssue({
+    technicalMessage: 'RangeError: invalid',
+    route: '/x',
+    source: 'preview',
+  });
+  assert.ok(first);
+  markAppRuntimePendingValidation([first!.fingerprint]);
+  reportAppRuntimeIssue({
+    technicalMessage: 'RangeError: invalid',
+    route: '/x',
+    source: 'preview',
+  });
+  scheduleAppRuntimeHealthyCheck({ quietMs: 25 });
+  await new Promise((r) => setTimeout(r, 50));
+  assert.equal(getAppRuntimeSnapshot().pendingValidation, true);
+  // Failed window advanced the mark anchor — clean schedule with no new report clears
+  scheduleAppRuntimeHealthyCheck({ quietMs: 25 });
+  await new Promise((r) => setTimeout(r, 50));
+  assert.equal(getAppRuntimeSnapshot().issues.length, 0);
+  assert.equal(getAppRuntimeSnapshot().pendingValidation, false);
+}
+
 console.log('\nAll app-status debug contract checks passed.\n');

@@ -88,6 +88,8 @@ import {
   readEnginePreviewModel,
   writeEnginePreviewModel,
   sanitizeEditorModelColors,
+  shouldApplyUiToPreview,
+  applyUiGenerationToPreviewShell,
 } from "./lib/uiGenerationEngine";
 import {
   masterPlanKeyForTabIndex,
@@ -3294,13 +3296,16 @@ ${modelJson}`;
         preferenceFeedback?: string;
         guidedImprovement?: boolean;
         writtenPaths?: string[];
+        preferenceHints?: {
+          denser?: boolean;
+          looser?: boolean;
+          moreSections?: boolean;
+          strongerCta?: boolean;
+          moreContrast?: boolean;
+        };
       };
-      const apiKey = await resolveMainGrokApiKey(req);
-      if (!apiKey) {
-        return res.status(401).json({
-          error: "No Grok API key available. Add your key in Onboarding or set MAIN_API_KEY_GROK.",
-        });
-      }
+      // Grok key optional — seed/template generate works without it; key enables locale polish.
+      const apiKey = (await resolveMainGrokApiKey(req)) || undefined;
       const result = await runUiGenerationCycle({
         workspaceRoot: pp.workspaceRoot,
         masterPlanPath: pp.masterPlanPath,
@@ -3315,6 +3320,10 @@ ${modelJson}`;
         writtenPaths: Array.isArray(body.writtenPaths)
           ? body.writtenPaths.filter((p): p is string => typeof p === "string")
           : undefined,
+        preferenceHints:
+          body.preferenceHints && typeof body.preferenceHints === "object"
+            ? body.preferenceHints
+            : undefined,
       });
       if (!result.ok) {
         return res.status(result.preference_recovery ? 409 : result.status === "pending_discovery" ? 409 : 422).json({
@@ -3328,6 +3337,10 @@ ${modelJson}`;
           regeneration_count: result.regeneration_count,
           max_regenerations: result.max_regenerations,
           user_visible_stage: result.user_visible_stage,
+          patternMode: result.patternMode,
+          quality_gate_result: result.quality_gate_result,
+          figma_fallback_used: result.figma_fallback_used,
+          previewApplied: result.previewApplied === true,
           context: {
             context_id: result.context.context_id,
             current_step: result.context.current_step,
@@ -3336,6 +3349,7 @@ ${modelJson}`;
             regeneration_count: result.context.regeneration_count,
             max_regenerations: result.context.max_regenerations,
             user_visible_stage: result.context.user_visible_stage,
+            quality_gate_result: result.context.quality_gate_result,
             file_scanned: result.context.file_scanned,
             file_routes: result.context.file_routes,
           },
@@ -3350,6 +3364,11 @@ ${modelJson}`;
         regeneration_count: result.regeneration_count,
         max_regenerations: result.max_regenerations,
         user_visible_stage: result.user_visible_stage,
+        previewApplied: result.previewApplied === true,
+        previewWritten: result.previewWritten,
+        patternMode: result.patternMode,
+        quality_gate_result: result.quality_gate_result,
+        figma_fallback_used: result.figma_fallback_used,
         context: {
           context_id: result.context.context_id,
           page_name: result.context.page_name,
@@ -3380,6 +3399,68 @@ ${modelJson}`;
       return res.status(500).json({
         ok: false,
         error: e instanceof Error ? e.message : "UI generation engine failed",
+      });
+    }
+  });
+
+  app.post("/api/ui-studio-beta/apply-preview", async (req, res) => {
+    try {
+      const { workspaceRoot } = projectPathsFor(req);
+      const metaPath = path.join(workspaceRoot, "nebulla-project", "ui-generation-v2-meta.json");
+      if (!fs.existsSync(metaPath)) {
+        return res.status(404).json({
+          ok: false,
+          error: "No generated UI meta yet — run Generate UI first",
+        });
+      }
+      const meta = JSON.parse(fs.readFileSync(metaPath, "utf8")) as {
+        template_id?: string;
+        tokens?: {
+          bg: string;
+          surface: string;
+          primary: string;
+          accent: string;
+          text: string;
+          mutedText: string;
+          border: string;
+          radius: number;
+          gap: number;
+          pad: number;
+          shadow: string;
+          tone: string;
+        };
+        slots?: Record<string, string>;
+        pattern_mode?: "seed" | "figma";
+        quality_gate_result?: string;
+      };
+      if (!shouldApplyUiToPreview(meta.quality_gate_result)) {
+        return res.status(422).json({
+          ok: false,
+          error: "Quality gate is weak — Preview not overwritten. Try Generate again.",
+          quality_gate_result: meta.quality_gate_result,
+        });
+      }
+      if (!meta.tokens || !meta.slots || !meta.template_id) {
+        return res.status(422).json({ ok: false, error: "Incomplete generation meta" });
+      }
+      const written = applyUiGenerationToPreviewShell({
+        workspaceRoot,
+        projectName: "App",
+        templateId: meta.template_id,
+        tokens: meta.tokens,
+        slots: meta.slots,
+        patternMode: meta.pattern_mode === "figma" ? "figma" : "seed",
+      });
+      return res.json({
+        ok: true,
+        written,
+        quality_gate_result: meta.quality_gate_result,
+      });
+    } catch (e) {
+      console.error("[ui-studio-beta/apply-preview]", e instanceof Error ? e.message : "failed");
+      return res.status(500).json({
+        ok: false,
+        error: e instanceof Error ? e.message : "Apply to Preview failed",
       });
     }
   });

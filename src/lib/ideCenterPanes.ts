@@ -18,7 +18,7 @@ export const IDE_CENTER_PRIMARY_TABS: { id: IdeCenterPane; label: string }[] = [
   { id: 'preview', label: 'App preview' },
   { id: 'master-plan', label: 'Master Plan' },
   { id: 'mind-map', label: 'Mind map' },
-  { id: 'ui-studio', label: 'UI Studio' },
+  { id: 'ui-studio', label: 'Legacy v0 Studio' },
   { id: 'ui-studio-beta', label: 'UI Studio Beta' },
 ];
 

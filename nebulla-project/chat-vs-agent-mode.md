@@ -40,5 +40,6 @@ User-controlled lock in the IDE chat header. Orthogonal to automatic detector mo
 - `nebulla-project/chat-personality.md` — **UNBREAKABLE** Chat brainstorming personality + greeting
 - `nebulla-project/chat-mode-detection.md` — detector sequence (Discovery → Architecture → Coding …)
 - `nebulla-project/app-status-runtime.md` — preview health → NDM Verify
+- `nebulla-project/ui-generation-logic-v2.md` §17 — **Generate UI** = UI Studio Beta + seed patterns (Figma optional); Legacy v0 Studio is advanced-only
 - `src/lib/ideAssistantInteractionMode.ts` — types + storage helpers
 - `src/components/ide/AIChat.tsx` — toggle UI + gates

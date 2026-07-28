@@ -10,6 +10,8 @@ You must not merge subtasks.
 You must not jump to code early.  
 You must not invent missing product truth.
 
+**Seed-first (product):** Default mode uses Nebulla built-in layout patterns when Figma is unavailable. Figma is optional enhancement only. See `ui-generation-logic-v2.md` §17. Preview sync to workspace App Preview is part of delivery (`pass`/`repair` only). Generate UI happy path = UI Studio Beta.
+
 Source files:
 - `nebulla-project/ui-generation-sequence.md`
 - `nebulla-project/ui-generation-context.md`
