@@ -371,8 +371,7 @@ export function WelcomeOnboardingModal({ open, user, onClose }: Props) {
                   <p className="text-sm leading-relaxed text-muted-foreground">
                     Setup is done. Grok is connected
                     {v0Saved || getStoredV0ApiKey() ? ' and V0 is ready for UI generation' : ''}. You can change keys
-                    later in <strong className="font-medium text-foreground">Onboarding</strong> or{' '}
-                    <strong className="font-medium text-foreground">My Projects → Secrets</strong>.
+                    later under <strong className="font-medium text-foreground">Secrets</strong> (left nav).
                   </p>
                 </div>
               </header>
@@ -446,14 +445,28 @@ export function WelcomeOnboardingModal({ open, user, onClose }: Props) {
           ) : null}
 
           {step === 4 ? (
-            <button
-              type="button"
-              onClick={finish}
-              className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-5 py-3 text-sm font-semibold text-primary-foreground transition hover:brightness-110"
-            >
-              Start building
-              <ChevronRight className="h-4 w-4" aria-hidden />
-            </button>
+            <div className="flex flex-col gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  markWelcomeOnboardingDone();
+                  dispatchOpenCenterPanel('secrets');
+                  onClose();
+                }}
+                className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-primary/40 bg-primary/15 px-5 py-3 text-sm font-semibold text-primary transition hover:bg-primary/25"
+              >
+                <KeyRound className="h-4 w-4" aria-hidden />
+                Open Secrets
+              </button>
+              <button
+                type="button"
+                onClick={finish}
+                className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-5 py-3 text-sm font-semibold text-primary-foreground transition hover:brightness-110"
+              >
+                Start building
+                <ChevronRight className="h-4 w-4" aria-hidden />
+              </button>
+            </div>
           ) : null}
         </div>
       </div>

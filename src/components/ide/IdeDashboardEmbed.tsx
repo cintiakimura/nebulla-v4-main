@@ -13,27 +13,56 @@ import {
   writeActiveGuestProjectId,
   clearActiveGuestProjectId,
 } from '../../lib/nebulaProjectStore';
-import { createProjectForCurrentSession } from '../../lib/nebulaCloud';
+import { createProjectForCurrentSession, fetchSessionUser, type NebulaSessionUser } from '../../lib/nebulaCloud';
+import { fetchNebulaPublicConfig, type NebulaPublicConfig } from '../../lib/nebulaPublicConfig';
 import { resetProjectFromScratch } from '../../lib/ideProjectReset';
+
+function normalizeTab(tab: DashboardTab | 'project-settings'): DashboardTab {
+  if (tab === 'project-settings') return 'secrets';
+  return tab;
+}
 
 export function IdeDashboardEmbed({
   initialTab,
 }: {
-  initialTab: DashboardTab;
+  initialTab: DashboardTab | 'project-settings';
 }) {
-  const [activeTab, setActiveTab] = useState<DashboardTab>(initialTab);
+  const [activeTab, setActiveTab] = useState<DashboardTab>(() => normalizeTab(initialTab));
   const [projectName, setProjectNameState] = useState(
     () => getBrowserProjectName().trim() || 'Untitled project',
   );
+  const [sessionUser, setSessionUser] = useState<NebulaSessionUser | null>(null);
+  const [publicConfig, setPublicConfig] = useState<NebulaPublicConfig>({});
 
   useEffect(() => {
-    setActiveTab(initialTab);
+    setActiveTab(normalizeTab(initialTab));
   }, [initialTab]);
 
   useEffect(() => {
     const name = getBrowserProjectName().trim();
     if (name) setProjectNameState(name);
   }, [initialTab]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const [cfg, u] = await Promise.all([fetchNebulaPublicConfig(), fetchSessionUser()]);
+      if (cancelled) return;
+      setPublicConfig(cfg);
+      setSessionUser(u);
+    })();
+    const onOAuth = (ev: MessageEvent) => {
+      if (ev.data?.type !== 'OAUTH_AUTH_SUCCESS') return;
+      void fetchSessionUser().then((u) => {
+        if (!cancelled) setSessionUser(u);
+      });
+    };
+    window.addEventListener('message', onOAuth);
+    return () => {
+      cancelled = true;
+      window.removeEventListener('message', onOAuth);
+    };
+  }, [activeTab]);
 
   const projects = useMemo(() => {
     const guest = readGuestIndex().map((e) => ({
@@ -107,6 +136,8 @@ export function IdeDashboardEmbed({
         onOpenProject={onOpenProject}
         onDeleteProject={onDeleteProject}
         onStartFlow={onStartFlow}
+        sessionUser={sessionUser}
+        publicConfig={publicConfig}
       />
     </div>
   );

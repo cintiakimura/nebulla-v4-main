@@ -7,7 +7,6 @@ import {
   Users,
   FileText,
   Upload,
-  Save,
   Globe,
   Plus,
   MoreHorizontal,
@@ -16,7 +15,6 @@ import {
   Eye,
   EyeOff,
   History,
-  Settings,
   Key,
 } from 'lucide-react';
 import { VersionHistoryModal } from './VersionHistoryModal';
@@ -24,14 +22,9 @@ import {
   loadProjectSecrets,
   saveProjectSecrets,
   newSecretId,
-  loadProjectSettings,
-  saveProjectSettings,
   type SecretEntry,
   type SecretCategory,
-  type ProjectSettingsStored,
 } from '../lib/nebulaDashboardStorage';
-import { resetProjectFromScratch } from '../lib/ideProjectReset';
-import { ChatModelSelector } from '@/components/settings/ModelSelector';
 import {
   byokProviderFromSecretName,
   deleteByokKeyOnServer,
@@ -40,13 +33,15 @@ import {
   saveByokKeyToServer,
 } from '../lib/byokClient';
 import { clearLocalGrokApiKeyCache } from '../lib/grokUserKey';
+import { SecretsKeysConnections } from '@/components/secrets/SecretsKeysConnections';
+import type { NebulaSessionUser } from '../lib/nebulaCloud';
+import type { NebulaPublicConfig } from '../lib/nebulaPublicConfig';
 
-export type DashboardTab = 'projects' | 'project-settings' | 'secrets' | 'dns';
+export type DashboardTab = 'projects' | 'secrets' | 'dns';
 
-/** Internal dashboard tabs (DNS stays here — not a side-nav page). */
+/** Internal dashboard tabs (DNS stays here — not a side-nav page). Settings live on Account. */
 const DASH_TABS: { id: DashboardTab; label: string }[] = [
   { id: 'projects', label: 'Projects' },
-  { id: 'project-settings', label: 'Settings' },
   { id: 'secrets', label: 'Secrets' },
   { id: 'dns', label: 'DNS' },
 ];
@@ -61,6 +56,8 @@ interface DashboardProps {
   onOpenProject: (key: string) => void;
   onDeleteProject: (key: string) => void;
   onStartFlow: (kind: 'quick' | 'devpartner' | 'github' | 'prompt' | 'upload') => void;
+  sessionUser?: NebulaSessionUser | null;
+  publicConfig?: NebulaPublicConfig;
 }
 
 export function Dashboard({
@@ -73,6 +70,8 @@ export function Dashboard({
   onOpenProject,
   onDeleteProject,
   onStartFlow,
+  sessionUser = null,
+  publicConfig = {},
 }: DashboardProps) {
   const [versionHistoryOpen, setVersionHistoryOpen] = useState(false);
 
@@ -110,15 +109,14 @@ export function Dashboard({
               onOpenVersionHistory={() => setVersionHistoryOpen(true)}
             />
           )}
-          {activeTab === 'project-settings' && (
-            <ProjectSettingsTab
-              projectName={projectName}
-              onProjectNameChange={onProjectNameChange}
+          {activeTab === 'secrets' && (
+            <SecretsTab
               activeProjectKey={activeProjectKey}
+              sessionUser={sessionUser}
+              publicConfig={publicConfig}
             />
           )}
-          {activeTab === 'secrets' && <SecretsTab activeProjectKey={activeProjectKey} />}
-          {activeTab === 'dns' && <DnsTab />}
+          {activeTab === 'dns' && <DnsTab activeProjectKey={activeProjectKey} />}
         </div>
       </div>
       <VersionHistoryModal open={versionHistoryOpen} onClose={() => setVersionHistoryOpen(false)} />
@@ -314,168 +312,67 @@ function ProjectsTab({
   );
 }
 
-function ProjectSettingsTab({
-  projectName,
-  onProjectNameChange,
-  activeProjectKey,
-}: {
-  projectName: string;
-  onProjectNameChange: (name: string) => void;
-  activeProjectKey: string;
-}) {
-  const [fields, setFields] = useState<ProjectSettingsStored>(() => loadProjectSettings(activeProjectKey));
-  const [savedFlash, setSavedFlash] = useState(false);
-  const [resetBusy, setResetBusy] = useState(false);
-  const [resetMessage, setResetMessage] = useState<string | null>(null);
+type DnsRecordType = 'A' | 'AAAA' | 'CNAME' | 'MX' | 'TXT' | 'NS' | 'SRV';
 
-  useEffect(() => {
-    setFields(loadProjectSettings(activeProjectKey));
-  }, [activeProjectKey]);
+type DnsRecordRow = {
+  id: string;
+  type: DnsRecordType;
+  name: string;
+  value: string;
+  ttl: string;
+  priority: string;
+};
 
-  const setField = <K extends keyof ProjectSettingsStored>(key: K, value: string) => {
-    setFields((prev) => ({ ...prev, [key]: value }));
-  };
+const DNS_TYPES: DnsRecordType[] = ['A', 'AAAA', 'CNAME', 'MX', 'TXT', 'NS', 'SRV'];
 
-  const handleSave = () => {
-    saveProjectSettings(activeProjectKey, fields);
-    setSavedFlash(true);
-    window.setTimeout(() => setSavedFlash(false), 2000);
-  };
-
-  const handleStartFromScratch = async () => {
-    if (
-      !window.confirm(
-        'Start this project from scratch? This cancels all v0/Go jobs, clears generated code, resets Master Plan, and clears chat history for this project.',
-      )
-    ) {
-      return;
-    }
-    setResetBusy(true);
-    setResetMessage(null);
-    const result = await resetProjectFromScratch(projectName);
-    setResetBusy(false);
-    if (result.error) {
-      setResetMessage(result.error);
-      return;
-    }
-    setResetMessage('Project reset — discovery can start fresh. Reloading…');
-    window.setTimeout(() => window.location.reload(), 800);
-  };
-
-  return (
-    <div className="space-y-8 animate-in slide-in-from-right-4 duration-300 max-w-3xl">
-      <div>
-        <h3 className="text-xl font-headline text-cyan-300 mb-1">Project Settings</h3>
-        <p className="text-sm text-slate-500 mb-6">
-          Identity and paths for the active project (<span className="font-mono text-cyan-500/80">{activeProjectKey}</span>
-          ). Stored in this browser only until your control plane syncs to Render or your repo.
-        </p>
-      </div>
-
-      <div className="space-y-5 rounded-xl border border-white/10 bg-white/5 p-6">
-        <div className="rounded-lg border border-cyan-500/20 bg-cyan-950/10 p-4 space-y-4">
-          <h4 className="text-sm font-headline text-cyan-200">Model</h4>
-          <ChatModelSelector />
-        </div>
-        <div>
-          <label className="block text-[10px] uppercase tracking-wider text-slate-500 font-headline mb-1">Project name</label>
-          <input
-            type="text"
-            value={projectName}
-            onChange={(e) => onProjectNameChange(e.target.value)}
-            placeholder="Untitled Project"
-            className="w-full bg-black/30 border border-white/10 rounded-lg px-3 py-2 text-sm text-slate-200 focus:border-cyan-500/40 outline-none"
-          />
-          <p className="text-[11px] text-slate-600 mt-1">Shown in the header and assistant; same as My Projects rename.</p>
-        </div>
-
-        <div>
-          <label className="block text-[10px] uppercase tracking-wider text-slate-500 font-headline mb-1">Local folder path</label>
-          <input
-            type="text"
-            value={fields.localFolderPath}
-            onChange={(e) => setField('localFolderPath', e.target.value)}
-            placeholder="/Users/you/projects/my-app or C:\dev\my-app"
-            className="w-full bg-black/30 border border-white/10 rounded-lg px-3 py-2 text-sm text-slate-200 font-mono focus:border-cyan-500/40 outline-none"
-          />
-        </div>
-
-        <div>
-          <label className="block text-[10px] uppercase tracking-wider text-slate-500 font-headline mb-1">GitHub repository</label>
-          <input
-            type="text"
-            value={fields.githubRepository}
-            onChange={(e) => setField('githubRepository', e.target.value)}
-            placeholder="https://github.com/org/repo or org/repo"
-            className="w-full bg-black/30 border border-white/10 rounded-lg px-3 py-2 text-sm text-slate-200 focus:border-cyan-500/40 outline-none"
-          />
-        </div>
-
-        <div>
-          <label className="block text-[10px] uppercase tracking-wider text-slate-500 font-headline mb-1">
-            Client ID (Render workspace ID)
-          </label>
-          <input
-            type="text"
-            value={fields.renderWorkspaceId}
-            onChange={(e) => setField('renderWorkspaceId', e.target.value)}
-            placeholder="Render workspace_id — server-side only in production"
-            className="w-full bg-black/30 border border-white/10 rounded-lg px-3 py-2 text-sm text-slate-200 font-mono focus:border-cyan-500/40 outline-none"
-          />
-          <p className="text-[11px] text-slate-600 mt-1">Internal Render workspace identifier for this tenant boundary.</p>
-        </div>
-
-        <div>
-          <label className="block text-[10px] uppercase tracking-wider text-slate-500 font-headline mb-1">
-            Project ID (Render project / service ID)
-          </label>
-          <input
-            type="text"
-            value={fields.renderProjectId}
-            onChange={(e) => setField('renderProjectId', e.target.value)}
-            placeholder="Nebulla project id or Render service id"
-            className="w-full bg-black/30 border border-white/10 rounded-lg px-3 py-2 text-sm text-slate-200 font-mono focus:border-cyan-500/40 outline-none"
-          />
-        </div>
-
-        <div className="rounded-lg border border-amber-500/25 bg-amber-950/15 p-4 space-y-3">
-          <h4 className="text-sm font-headline text-amber-100">Start from scratch</h4>
-          <p className="text-xs text-slate-400 leading-relaxed">
-            Cancels all open v0 and Grok Code jobs on the server, clears generated app files, and resets Master Plan
-            to empty. Use this when discovery or Go left stale polling / partial output.
-          </p>
-          {resetMessage ? (
-            <p className="text-xs text-amber-200/90" role="status">
-              {resetMessage}
-            </p>
-          ) : null}
-          <button
-            type="button"
-            onClick={() => void handleStartFromScratch()}
-            disabled={resetBusy}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-headline border border-amber-500/40 bg-amber-500/10 text-amber-100 hover:bg-amber-500/20 disabled:opacity-50"
-          >
-            {resetBusy ? 'Resetting…' : 'Reset project & cancel server jobs'}
-          </button>
-        </div>
-
-        <div className="pt-2 flex justify-end">
-          <button
-            type="button"
-            onClick={handleSave}
-            className="inline-flex items-center gap-2 px-5 py-2 rounded-lg text-sm font-headline bg-cyan-500/15 text-cyan-300 border border-cyan-500/25 hover:bg-cyan-500/25"
-          >
-            <Save className="w-4 h-4" />
-            {savedFlash ? 'Saved' : 'Save project settings'}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
+function dnsStorageKey(projectKey: string) {
+  return `nebula_dns_planning_${projectKey || 'default'}`;
 }
 
-function DnsTab() {
-  const [customDomain, setCustomDomain] = useState('');
+function loadDnsPlanning(projectKey: string): { domain: string; records: DnsRecordRow[] } {
+  try {
+    const raw = localStorage.getItem(dnsStorageKey(projectKey));
+    if (!raw) return { domain: '', records: [] };
+    const parsed = JSON.parse(raw) as { domain?: string; records?: DnsRecordRow[] };
+    return {
+      domain: typeof parsed.domain === 'string' ? parsed.domain : '',
+      records: Array.isArray(parsed.records) ? parsed.records : [],
+    };
+  } catch {
+    return { domain: '', records: [] };
+  }
+}
+
+function saveDnsPlanning(projectKey: string, domain: string, records: DnsRecordRow[]) {
+  try {
+    localStorage.setItem(dnsStorageKey(projectKey), JSON.stringify({ domain, records }));
+  } catch {
+    /* ignore */
+  }
+}
+
+function newDnsRecordId() {
+  return `dns_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function DnsTab({ activeProjectKey }: { activeProjectKey: string }) {
+  const initial = loadDnsPlanning(activeProjectKey);
+  const [customDomain, setCustomDomain] = useState(initial.domain);
+  const [records, setRecords] = useState<DnsRecordRow[]>(initial.records);
+
+  useEffect(() => {
+    const next = loadDnsPlanning(activeProjectKey);
+    setCustomDomain(next.domain);
+    setRecords(next.records);
+  }, [activeProjectKey]);
+
+  useEffect(() => {
+    saveDnsPlanning(activeProjectKey, customDomain, records);
+  }, [activeProjectKey, customDomain, records]);
+
+  const updateRecord = (id: string, patch: Partial<DnsRecordRow>) => {
+    setRecords((prev) => prev.map((r) => (r.id === id ? { ...r, ...patch } : r)));
+  };
 
   return (
     <div className="space-y-8 animate-in slide-in-from-right-4 duration-300">
@@ -485,7 +382,8 @@ function DnsTab() {
           DNS & domain
         </h3>
         <p className="text-sm text-slate-500 mb-6">
-          Point your domain at the deployed Render service. Values here are for planning only until your control plane syncs them to Render.
+          Point your domain at the deployed Render service. Values here are for planning only until your control plane
+          syncs them to Render.
         </p>
       </div>
 
@@ -500,17 +398,153 @@ function DnsTab() {
         />
       </div>
 
+      <div className="space-y-4 rounded-xl border border-white/10 bg-white/5 p-6">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h4 className="text-sm font-headline text-slate-200">DNS records</h4>
+          <button
+            type="button"
+            onClick={() =>
+              setRecords((prev) => [
+                ...prev,
+                {
+                  id: newDnsRecordId(),
+                  type: 'CNAME',
+                  name: '',
+                  value: '',
+                  ttl: '3600',
+                  priority: '',
+                },
+              ])
+            }
+            className="inline-flex items-center gap-1.5 rounded-lg border border-cyan-500/30 bg-cyan-500/10 px-3 py-1.5 text-xs text-cyan-100 hover:bg-cyan-500/20"
+          >
+            <Plus className="w-3.5 h-3.5" aria-hidden />
+            Add record
+          </button>
+        </div>
+
+        {records.length === 0 ? (
+          <p className="text-sm text-slate-500 py-4 text-center border border-dashed border-white/10 rounded-lg">
+            No records yet. Add A, CNAME, MX, TXT, and other records for planning.
+          </p>
+        ) : (
+          <ul className="space-y-4">
+            {records.map((row) => {
+              const needsPriority = row.type === 'MX' || row.type === 'SRV';
+              return (
+                <li
+                  key={row.id}
+                  className="grid grid-cols-1 gap-3 rounded-lg border border-white/10 bg-black/20 p-4 sm:grid-cols-2 lg:grid-cols-6"
+                >
+                  <div>
+                    <label className="block text-[10px] uppercase tracking-wider text-slate-500 font-headline mb-1">
+                      Type
+                    </label>
+                    <select
+                      value={row.type}
+                      onChange={(e) => updateRecord(row.id, { type: e.target.value as DnsRecordType })}
+                      className="w-full bg-black/30 border border-white/10 rounded-lg px-2 py-2 text-sm text-slate-200 focus:border-cyan-500/40 outline-none"
+                    >
+                      {DNS_TYPES.map((t) => (
+                        <option key={t} value={t}>
+                          {t}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] uppercase tracking-wider text-slate-500 font-headline mb-1">
+                      Name / Host
+                    </label>
+                    <input
+                      type="text"
+                      value={row.name}
+                      onChange={(e) => updateRecord(row.id, { name: e.target.value })}
+                      placeholder="@ or www"
+                      className="w-full bg-black/30 border border-white/10 rounded-lg px-2 py-2 text-sm text-slate-200 focus:border-cyan-500/40 outline-none"
+                    />
+                  </div>
+                  <div className="sm:col-span-2 lg:col-span-2">
+                    <label className="block text-[10px] uppercase tracking-wider text-slate-500 font-headline mb-1">
+                      Value / Target
+                    </label>
+                    <input
+                      type="text"
+                      value={row.value}
+                      onChange={(e) => updateRecord(row.id, { value: e.target.value })}
+                      placeholder="IP or hostname"
+                      className="w-full bg-black/30 border border-white/10 rounded-lg px-2 py-2 text-sm text-slate-200 font-mono focus:border-cyan-500/40 outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] uppercase tracking-wider text-slate-500 font-headline mb-1">
+                      TTL
+                    </label>
+                    <input
+                      type="text"
+                      value={row.ttl}
+                      onChange={(e) => updateRecord(row.id, { ttl: e.target.value })}
+                      placeholder="3600"
+                      className="w-full bg-black/30 border border-white/10 rounded-lg px-2 py-2 text-sm text-slate-200 focus:border-cyan-500/40 outline-none"
+                    />
+                  </div>
+                  {needsPriority ? (
+                    <div>
+                      <label className="block text-[10px] uppercase tracking-wider text-slate-500 font-headline mb-1">
+                        Priority
+                      </label>
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          value={row.priority}
+                          onChange={(e) => updateRecord(row.id, { priority: e.target.value })}
+                          placeholder="10"
+                          className="w-full bg-black/30 border border-white/10 rounded-lg px-2 py-2 text-sm text-slate-200 focus:border-cyan-500/40 outline-none"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setRecords((prev) => prev.filter((r) => r.id !== row.id))}
+                          className="shrink-0 rounded-lg border border-red-500/30 px-2 text-red-300 hover:bg-red-500/10"
+                          aria-label="Delete record"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex items-end">
+                      <button
+                        type="button"
+                        onClick={() => setRecords((prev) => prev.filter((r) => r.id !== row.id))}
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-red-500/30 px-3 py-2 text-xs text-red-300 hover:bg-red-500/10"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        Delete
+                      </button>
+                    </div>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </div>
+
       <div className="rounded-xl border border-cyan-500/20 bg-cyan-500/5 p-6 text-sm text-slate-300 space-y-3">
         <p className="font-headline text-cyan-200">Typical setup</p>
         <ul className="list-disc pl-5 space-y-2 text-slate-400">
           <li>
-            <strong className="text-slate-300">Apex / root domain:</strong> use Render’s recommended ALIAS/ANAME or flattened CNAME to your service hostname (see Render dashboard for the exact target).
+            <strong className="text-slate-300">Apex / root domain:</strong> use Render’s recommended ALIAS/ANAME or
+            flattened CNAME to your service hostname (see Render dashboard for the exact target).
           </li>
           <li>
-            <strong className="text-slate-300">Subdomain:</strong> add a <code className="text-cyan-300/90">CNAME</code> from your subdomain to the Render service hostname shown for this project.
+            <strong className="text-slate-300">Subdomain:</strong> add a{' '}
+            <code className="text-cyan-300/90">CNAME</code> from your subdomain to the Render service hostname shown for
+            this project.
           </li>
           <li>
-            After DNS propagates, set <code className="text-cyan-300/90">PUBLIC_SITE_URL</code> on the Web Service to the final HTTPS origin and redeploy.
+            After DNS propagates, set <code className="text-cyan-300/90">PUBLIC_SITE_URL</code> on the Web Service to the
+            final HTTPS origin and redeploy.
           </li>
         </ul>
       </div>
@@ -894,21 +928,32 @@ function ProjectSecretsEditor({ activeProjectKey }: { activeProjectKey: string }
   );
 }
 
-function SecretsTab({ activeProjectKey }: { activeProjectKey: string }) {
+function SecretsTab({
+  activeProjectKey,
+  sessionUser,
+  publicConfig,
+}: {
+  activeProjectKey: string;
+  sessionUser: NebulaSessionUser | null;
+  publicConfig: NebulaPublicConfig;
+}) {
   return (
-    <div className="space-y-6 animate-in slide-in-from-right-4 duration-300">
-      <div>
-        <h3 className="text-xl font-headline text-cyan-300 mb-1 flex items-center gap-2">
-          <Key className="w-6 h-6" aria-hidden />
-          My Secrets
-        </h3>
-        <p className="text-sm text-slate-500 mb-2">
-          Browser-stored keys and variables for{' '}
-          <span className="font-mono text-cyan-500/80">{activeProjectKey}</span>. Reveal, copy, edit, or delete each
-          row.
-        </p>
+    <div className="space-y-10 animate-in slide-in-from-right-4 duration-300">
+      <SecretsKeysConnections user={sessionUser} config={publicConfig} />
+      <div className="space-y-6 border-t border-white/10 pt-8">
+        <div>
+          <h3 className="text-xl font-headline text-cyan-300 mb-1 flex items-center gap-2">
+            <Key className="w-6 h-6" aria-hidden />
+            My Secrets
+          </h3>
+          <p className="text-sm text-slate-500 mb-2">
+            Browser-stored keys and variables for{' '}
+            <span className="font-mono text-cyan-500/80">{activeProjectKey}</span>. Reveal, copy, edit, or delete each
+            row.
+          </p>
+        </div>
+        <ProjectSecretsEditor activeProjectKey={activeProjectKey} />
       </div>
-      <ProjectSecretsEditor activeProjectKey={activeProjectKey} />
     </div>
   );
 }

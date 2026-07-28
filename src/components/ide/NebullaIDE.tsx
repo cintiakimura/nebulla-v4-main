@@ -10,7 +10,6 @@ import {
 import { TerminalPanel } from '@/components/ide/TerminalPanel';
 import { TopBar } from '@/components/ide/TopBar';
 import { VerticalNav } from '@/components/ide/VerticalNav';
-import { MyServicesOnboarding } from '@/components/MyServicesOnboarding';
 import { UserProfilePage } from '@/components/UserProfilePage';
 import { WelcomeOnboardingModal } from '@/components/ide/WelcomeOnboardingModal';
 import { FileExplorer } from '@/components/ide/FileExplorer';
@@ -26,7 +25,7 @@ import {
   renameActiveProjectDisplayName,
   type NebulaSessionUser,
 } from '../../lib/nebulaCloud';
-import { fetchNebulaPublicConfig, type NebulaPublicConfig } from '../../lib/nebulaPublicConfig';
+import { fetchNebulaPublicConfig } from '../../lib/nebulaPublicConfig';
 import { getBrowserProjectKey, getBrowserProjectName, withProjectBody, withProjectQuery } from '../../lib/nebulaProjectApi';
 import {
   WorkspaceSetupGate,
@@ -164,12 +163,13 @@ function NebullaIDEShell() {
     setLeftSidebarOpen(true);
   }, []);
 
-  const [myServicesOpen, setMyServicesOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [myServicesUser, setMyServicesUser] = useState<NebulaSessionUser | null>(null);
-  const [myServicesConfig, setMyServicesConfig] = useState<NebulaPublicConfig>({});
   const [workspaceCtx, setWorkspaceCtx] = useState<WorkspaceContext | null>(null);
   const [workspaceProjectKey, setWorkspaceProjectKey] = useState(() => getBrowserProjectKey());
+  const [accountProjectName, setAccountProjectName] = useState(
+    () => getBrowserProjectName().trim() || 'Untitled project',
+  );
   const [welcomeOpen, setWelcomeOpen] = useState(false);
   const [cloudBanner, setCloudBanner] = useState<string | null>(null);
   const [cloudBannerDismissed, setCloudBannerDismissed] = useState(false);
@@ -177,10 +177,14 @@ function NebullaIDEShell() {
 
   const refreshMyServicesContext = useCallback(async () => {
     const [cfg, u] = await Promise.all([fetchNebulaPublicConfig(), fetchSessionUser()]);
-    setMyServicesConfig(cfg);
     setMyServicesUser(u);
     return { cfg, u };
   }, []);
+
+  useEffect(() => {
+    const name = workspaceCtx?.projectName?.trim() || getBrowserProjectName().trim();
+    if (name) setAccountProjectName(name);
+  }, [workspaceCtx?.projectName, workspaceProjectKey]);
 
   useEffect(() => {
     document.title = 'Nebulla.beta — Workspace';
@@ -252,34 +256,40 @@ function NebullaIDEShell() {
   }, []);
 
   useEffect(() => {
-    if (!myServicesOpen && !profileOpen) return;
+    if (!profileOpen) return;
     void refreshMyServicesContext();
-  }, [myServicesOpen, profileOpen, refreshMyServicesContext]);
+  }, [profileOpen, refreshMyServicesContext]);
 
   useEffect(() => {
-    const openMyServices = () => {
+    const openSecrets = () => {
       setProfileOpen(false);
-      setMyServicesOpen(true);
+      dispatchOpenCenterPanel('secrets');
     };
     const openProfile = () => {
-      setMyServicesOpen(false);
       setProfileOpen(true);
     };
-    window.addEventListener('nebula-open-my-services', openMyServices);
+    window.addEventListener('nebula-open-my-services', openSecrets);
     window.addEventListener('nebula-open-user-profile', openProfile);
     return () => {
-      window.removeEventListener('nebula-open-my-services', openMyServices);
+      window.removeEventListener('nebula-open-my-services', openSecrets);
       window.removeEventListener('nebula-open-user-profile', openProfile);
     };
   }, []);
 
   const handleSessionEnded = useCallback(() => {
     setProfileOpen(false);
-    setMyServicesOpen(false);
     setMyServicesUser(null);
     setWorkspaceCtx(null);
     welcomeCheckedRef.current = false;
   }, []);
+
+  const handleAccountProjectNameChange = useCallback(
+    (name: string) => {
+      setAccountProjectName(name);
+      void handleProjectNameCommit(name);
+    },
+    [handleProjectNameCommit],
+  );
 
   useEffect(() => {
     const onMsg = (ev: MessageEvent) => {
@@ -347,10 +357,9 @@ function NebullaIDEShell() {
 
   const selectNavItem = useCallback(
     (id: string) => {
-      // Settings gear = workspace onboarding (GitHub + API keys). Profile is NB in the top bar.
+      // Settings gear → Account (profile + project settings). Keys live under Secrets.
       if (id === 'project-settings') {
-        setProfileOpen(false);
-        setMyServicesOpen(true);
+        setProfileOpen(true);
         return;
       }
       if (id === 'explorer') {
@@ -367,7 +376,7 @@ function NebullaIDEShell() {
     [openPanel, toggleLeftSidebar],
   );
 
-  const navActiveItem = myServicesOpen
+  const navActiveItem = profileOpen
     ? 'project-settings'
     : leftSidebarOpen && (leftSidebarView === 'explorer' || leftSidebarView === 'source-control')
       ? leftSidebarView
@@ -388,30 +397,16 @@ function NebullaIDEShell() {
           className="fixed inset-0 z-[200] flex flex-col overflow-hidden"
           role="dialog"
           aria-modal="true"
-          aria-label="User profile"
+          aria-label="Account"
         >
           <UserProfilePage
             onClose={() => setProfileOpen(false)}
             onLoggedOut={handleSessionEnded}
             onAccountDeleted={handleSessionEnded}
-            onOpenOnboarding={() => {
-              setProfileOpen(false);
-              setMyServicesOpen(true);
-            }}
-          />
-        </div>
-      ) : null}
-      {myServicesOpen ? (
-        <div
-          className="fixed inset-0 z-[200] flex flex-col overflow-hidden"
-          role="dialog"
-          aria-modal="true"
-          aria-label="Onboarding"
-        >
-          <MyServicesOnboarding
-            user={myServicesUser}
-            config={myServicesConfig}
-            onClose={() => setMyServicesOpen(false)}
+            onRequestSignIn={handleSessionEnded}
+            projectName={accountProjectName}
+            onProjectNameChange={handleAccountProjectNameChange}
+            activeProjectKey={workspaceProjectKey}
           />
         </div>
       ) : null}
@@ -420,10 +415,8 @@ function NebullaIDEShell() {
         workspaceLabel={workspaceCtx?.projectName}
         onProjectNameCommit={handleProjectNameCommit}
         onSwitchWorkspace={() => setWorkspaceCtx(null)}
-        onOpenAccount={() => {
-          setMyServicesOpen(false);
-          setProfileOpen(true);
-        }}
+        onOpenAccount={() => setProfileOpen(true)}
+        onLoggedOut={handleSessionEnded}
       />
 
       {cloudBanner && !cloudBannerDismissed && workspaceCtx ? (

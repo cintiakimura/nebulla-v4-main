@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Check, ChevronDown, MonitorPlay, Search, X } from 'lucide-react';
+import { Check, ChevronDown, LogOut, MonitorPlay, Search, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Logo } from '@/components/Logo';
 import { getBrowserProjectName } from '../../lib/nebulaProjectApi';
@@ -7,6 +7,8 @@ import { useClickOutside } from '../../lib/useClickOutside';
 import { type IdeChatModelId, useIdeWorkspace } from '@/components/ide/IdeWorkspaceContext';
 import { AI_CHAT_MODELS, AI_PROVIDER_LABELS } from '../../lib/aiProvider';
 import { useLanguage } from '@/components/i18n/LanguageProvider';
+import { fetchSessionUser, logoutNebula, type NebulaSessionUser } from '../../lib/nebulaCloud';
+import { sessionInitials } from '../../lib/sessionInitials';
 
 const models: { id: IdeChatModelId; name: string; badge: string | null }[] = AI_CHAT_MODELS.map(
   (m) => ({
@@ -21,6 +23,7 @@ export function TopBar({
   onProjectNameCommit,
   onSwitchWorkspace,
   onOpenAccount,
+  onLoggedOut,
 }: {
   /** Active cloud/local project name from workspace gate. */
   workspaceLabel?: string;
@@ -28,8 +31,10 @@ export function TopBar({
   onProjectNameCommit?: (name: string) => void | Promise<void>;
   /** Re-open project picker (sign-in / switch project). */
   onSwitchWorkspace?: () => void;
-  /** Opens My services (API keys, GitHub, etc.). */
+  /** Opens Account (profile, language, billing, project settings). */
   onOpenAccount?: () => void;
+  /** After TopBar Log out — clear workspace / return to sign-in. */
+  onLoggedOut?: () => void;
 }) {
   const { chatModel, setChatModel, activePath, activeTab, updateActiveContent, saveTab } =
     useIdeWorkspace();
@@ -39,6 +44,8 @@ export function TopBar({
   const [findQuery, setFindQuery] = useState('');
   const [replaceQuery, setReplaceQuery] = useState('');
   const [replaceMsg, setReplaceMsg] = useState<string | null>(null);
+  const [sessionUser, setSessionUser] = useState<NebulaSessionUser | null>(null);
+  const [logoutBusy, setLogoutBusy] = useState(false);
   const [draftName, setDraftName] = useState(
     () => workspaceLabel?.trim() || getBrowserProjectName().trim() || '',
   );
@@ -46,6 +53,24 @@ export function TopBar({
   const findWrapRef = useRef<HTMLDivElement>(null);
   const findInputRef = useRef<HTMLInputElement>(null);
   const nameInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    const load = () => {
+      void fetchSessionUser().then((u) => {
+        if (!cancelled) setSessionUser(u);
+      });
+    };
+    load();
+    const onFocus = () => load();
+    window.addEventListener('focus', onFocus);
+    window.addEventListener('nebula-secrets-updated', onFocus);
+    return () => {
+      cancelled = true;
+      window.removeEventListener('focus', onFocus);
+      window.removeEventListener('nebula-secrets-updated', onFocus);
+    };
+  }, []);
 
   useEffect(() => {
     const next = workspaceLabel?.trim() || getBrowserProjectName().trim() || '';
@@ -304,6 +329,31 @@ export function TopBar({
             )}
           </div>
 
+          {sessionUser && onLoggedOut ? (
+            <button
+              type="button"
+              disabled={logoutBusy}
+              onClick={() => {
+                void (async () => {
+                  setLogoutBusy(true);
+                  try {
+                    await logoutNebula();
+                    setSessionUser(null);
+                    onLoggedOut();
+                  } finally {
+                    setLogoutBusy(false);
+                  }
+                })();
+              }}
+              title="Log out"
+              aria-label="Log out"
+              className="btn-secondary-surface inline-flex h-7 items-center gap-1 rounded-md px-2 text-[11px] text-muted-foreground hover:text-foreground disabled:opacity-40"
+            >
+              <LogOut className="h-3.5 w-3.5" aria-hidden />
+              {logoutBusy ? '…' : 'Log out'}
+            </button>
+          ) : null}
+
           <button
             type="button"
             onClick={onOpenAccount}
@@ -313,7 +363,7 @@ export function TopBar({
             disabled={!onOpenAccount}
           >
             <span className="text-[10px] tracking-wide text-foreground" style={{ fontWeight: 500 }}>
-              NB
+              {sessionInitials(sessionUser)}
             </span>
           </button>
         </div>
