@@ -12,6 +12,15 @@ Before fixing any bug, Grok **MUST** follow this structured process. This method
   - What is **actually** happening
 - Note the exact error message, stack trace, or UI symptom.
 
+### Verify from App Status (preferred when available)
+When the user turn includes **`[APP_STATUS_DEBUG]`** (from Nebulla App Status / preview runtime):
+- Treat that block as the reproduction evidence for Step 1 (friendly summary + technical message + optional stack/route).
+- **Do not** ask “what error do you see?” or tell them to open Inspect → Console.
+- Ask only if **expected** behavior is still unclear.
+- Keep chat-facing language beginner-friendly (`user-communication-rules.md`); do not paste raw stacks into the bubble unless the user already opened Technical details and asks for more.
+
+See also: `nebulla-project/app-status-runtime.md`.
+
 ## Step 2: Analyze
 Check the most common bug categories **first** (in this order):
 

@@ -8,6 +8,11 @@ Goal: Keep users confident and moving forward. Never overwhelm them with technic
 - Prefer silent auto-fixing whenever possible.
 - Inform the user only when necessary, and always with next steps.
 
+### App Status (preview health)
+- Default App Status copy = **Tier 1** friendly (“Something broke on this screen…”).
+- **Technical details** in the App Status menu = opt-in jargon (message/stack) — only when the user expands it.
+- Never make the user open browser DevTools to start debugging when App Status already captured an issue.
+
 ## Communication Tiers
 
 **Tier 0 - Silent Success (most common)**

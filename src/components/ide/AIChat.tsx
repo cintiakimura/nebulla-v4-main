@@ -95,6 +95,13 @@ import {
 } from '../../lib/voiceTtsShared';
 import { playTtsText } from '../../lib/ttsPlayback';
 import { IdeGrokActivityPanel } from './IdeGrokActivityPanel';
+import { IdeAppStatusMenuButton } from './IdeAppStatusMenu';
+import {
+  formatAppStatusDebugMessage,
+  getLatestAppRuntimeIssue,
+  looksLikeBrokenAppComplaint,
+  resetAppRuntimeForProject,
+} from '../../lib/ideAppRuntimeStatus';
 
 const IDLE_GROK_ACTIVITY_BASE: Omit<GrokActivityStatus, 'subhead'> = {
   headline: 'Ready',
@@ -257,6 +264,19 @@ export function AIChat() {
     () => interactionModeStatusLabel(assistantInteractionMode),
     [assistantInteractionMode],
   );
+
+  useEffect(() => {
+    resetAppRuntimeForProject();
+  }, [diskProjectKey]);
+
+  const appStatusVoiceNudgeRef = useRef(0);
+  const onAppStatusVoiceNudge = useCallback((spoken: string) => {
+    const now = Date.now();
+    if (now - appStatusVoiceNudgeRef.current < 15000) return;
+    if (!openTalkDesiredRef.current) return;
+    appStatusVoiceNudgeRef.current = now;
+    void playTtsText(spoken).catch(() => {});
+  }, []);
 
   const beginCodingActivity = useCallback(
     (headline: string, steps: GrokActivityStep[], options?: Parameters<typeof createGrokActivity>[2]) => {
@@ -995,17 +1015,26 @@ export function AIChat() {
   }
 
   const sendChat = useCallback(async (textOverride?: string) => {
-    const text = (textOverride ?? inputRef.current).trim();
-    if (!text || sending) return;
+    const rawText = (textOverride ?? inputRef.current).trim();
+    if (!rawText || sending) return;
 
     if (micInputBlocked) return;
+
+    // Attach App Status Verify evidence when user says "it's broken" (or payload already present).
+    let text = rawText;
+    const alreadyHasAppStatus = /\[APP_STATUS_DEBUG\]/i.test(rawText);
+    const latestIssue = getLatestAppRuntimeIssue();
+    if (!alreadyHasAppStatus && latestIssue && looksLikeBrokenAppComplaint(rawText)) {
+      text = `${rawText}\n\n${formatAppStatusDebugMessage(latestIssue)}`;
+    }
+    const hasAppStatusPayload = /\[APP_STATUS_DEBUG\]/i.test(text);
 
     // Smart Chat Handler — File mode short-circuits; other modes pass hints into Grok.
     // Never intercept hidden bootstrap, Master Plan discovery replies, or Go Code turns.
     let chatMode: string | undefined;
     let codingHint: string | undefined;
     let discoveryRequired: boolean | undefined;
-    if (!isHiddenBootstrapUserMessage(text)) {
+    if (!isHiddenBootstrapUserMessage(rawText)) {
       try {
         let masterPlanComplete = false;
         try {
@@ -1020,7 +1049,7 @@ export function AIChat() {
         } catch {
           masterPlanComplete = false;
         }
-        const smart = await handleSmartChatMessage(text, {
+        const smart = await handleSmartChatMessage(rawText, {
           masterPlanComplete,
           interactionMode: interactionModeRef.current,
         });
@@ -1028,12 +1057,17 @@ export function AIChat() {
         codingHint = smart.codingHint;
         discoveryRequired = smart.modeMeta?.discoveryRequired ?? !masterPlanComplete;
         setMasterPlanCompleteHint(masterPlanComplete);
+        if (hasAppStatusPayload && interactionModeRef.current === 'agent') {
+          chatMode = 'debugging';
+          codingHint =
+            'NDM: Verify from App Status payload (do not ask what error they see). Analyze → Trace → Fix → Validate.';
+        }
         if (smart.handledLocally && (smart.mode === 'file' || smart.switchToAgentSuggested)) {
           const stamp = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
           const userMsg: Message = {
             id: `u-${Date.now()}`,
             role: 'user',
-            content: text,
+            content: rawText,
             timestamp: stamp,
           };
           const assistantMsg: Message = {
@@ -1043,7 +1077,7 @@ export function AIChat() {
             timestamp: stamp,
             filePreview: smart.filePreview,
             showSwitchToAgentCta: Boolean(smart.switchToAgentSuggested),
-            pendingAgentText: smart.switchToAgentSuggested ? text : undefined,
+            pendingAgentText: smart.switchToAgentSuggested ? rawText : undefined,
           };
           setMessages((p) => {
             const next = [...p, userMsg, assistantMsg];
@@ -1070,7 +1104,7 @@ export function AIChat() {
     }
 
     // Fast project creation from chat ("Create a new project: ...")
-    const projectCreation = detectProjectCreationIntent(text);
+    const projectCreation = detectProjectCreationIntent(rawText);
     if (projectCreation) {
       const shortName =
         projectCreation.description
@@ -1124,17 +1158,23 @@ export function AIChat() {
     }
 
     const prior = messagesRef.current;
-    const isBootstrapTrigger = isHiddenBootstrapUserMessage(text);
-    const projectNameAnswer = detectProjectNameAnswer(text, prior);
+    const isBootstrapTrigger = isHiddenBootstrapUserMessage(rawText);
+    const projectNameAnswer = detectProjectNameAnswer(rawText, prior);
     if (projectNameAnswer) {
       setBrowserProjectName(projectNameAnswer);
       clearIdeWorkspaceMetaCache();
       void upsertCloudProject({ name: projectNameAnswer, pages: [], edges: [] }).catch(() => {});
     }
+    const displayContent =
+      alreadyHasAppStatus && latestIssue
+        ? `Fix preview issue: ${latestIssue.friendlyTitle}`
+        : alreadyHasAppStatus
+          ? 'Fix the preview issue from App Status'
+          : rawText;
     const userMsg: Message = {
       id: `u-${Date.now()}`,
       role: 'user',
-      content: text,
+      content: displayContent,
       timestamp: new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }),
     };
     if (!isBootstrapTrigger) {
@@ -1150,14 +1190,15 @@ export function AIChat() {
     setSending(true);
     setSendError(null);
     const lockedChat = interactionModeRef.current === 'chat';
-    const buildMode = !lockedChat && detectBuildModeIntent(text);
-    const onboardingBuildStart = !lockedChat && detectOnboardingBuildStart(text, prior);
+    const buildMode = !lockedChat && !hasAppStatusPayload && detectBuildModeIntent(rawText);
+    const onboardingBuildStart = !lockedChat && detectOnboardingBuildStart(rawText, prior);
     const showWorkActivity = buildMode || onboardingBuildStart;
     try {
       console.info('[AIChat] turn', {
         interaction_mode: interactionModeRef.current,
         detector_mode: chatMode,
         build_mode: buildMode,
+        app_status: hasAppStatusPayload,
       });
     } catch {
       /* ignore */
@@ -1168,7 +1209,7 @@ export function AIChat() {
         CHAT_WORK_STEPS,
         {
           subhead: 'Master Plan → Grok Code → files on disk.',
-          initialLog: `Build mode — "${text.slice(0, 80)}${text.length > 80 ? '…' : ''}"`,
+          initialLog: `Build mode — "${rawText.slice(0, 80)}${rawText.length > 80 ? '…' : ''}"`,
         },
       );
       pushActivity(`Project: ${getBrowserProjectName().trim() || 'Untitled project'}`, 'info');
@@ -1179,7 +1220,7 @@ export function AIChat() {
         {
           subhead:
             'Your reply means nothing else to add. Grok will write the Master Plan, then Grok Code builds files.',
-          initialLog: `Discovery complete — "${text.trim()}"`,
+          initialLog: `Discovery complete — "${rawText.trim()}"`,
         },
       );
       pushActivity('Final discovery question answered — waiting for Grok Master Plan', 'info');
@@ -1203,7 +1244,7 @@ export function AIChat() {
       },
     );
 
-    const historyForApi = [...prior, userMsg]
+    const historyForApi = [...prior, { ...userMsg, content: text }]
       .filter((m) => m.variant !== 'status')
       .map((m) => ({
         role: m.role,
@@ -1246,6 +1287,7 @@ export function AIChat() {
           codingHint,
           discoveryRequired,
           interactionMode: interactionModeRef.current,
+          hasAppStatusPayload,
         }));
       } finally {
         stopGrokWait();
@@ -1898,6 +1940,17 @@ export function AIChat() {
     [masterPlanCompleteHint, sending, setAssistantInteractionMode, handleGo],
   );
 
+  const handleFixWithAgent = useCallback(
+    (debugMessage: string) => {
+      if (interactionModeRef.current === 'chat') {
+        void applyInteractionMode('agent', { pendingText: debugMessage });
+        return;
+      }
+      void sendChatRef.current(debugMessage);
+    },
+    [applyInteractionMode],
+  );
+
   return (
     <div className="surface-active flex h-full min-h-0 flex-col overflow-hidden">
       <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border/70 px-3 py-2">
@@ -1937,18 +1990,24 @@ export function AIChat() {
             Agent
           </button>
         </div>
-        <span
-          className={cn(
-            'type-label-sm rounded-full px-2.5 py-1 ring-1',
-            assistantInteractionMode === 'agent'
-              ? 'text-primary ring-primary/30'
-              : 'text-muted-foreground ring-[color-mix(in_srgb,var(--outline-variant)_18%,transparent)]',
-            sending ? 'opacity-100' : 'opacity-80',
-          )}
-          role="status"
-        >
-          {sending ? modeStatusChip : modeStatusChip}
-        </span>
+        <div className="flex items-center gap-1.5">
+          <IdeAppStatusMenuButton
+            onFixWithAgent={handleFixWithAgent}
+            onVoiceNudge={onAppStatusVoiceNudge}
+          />
+          <span
+            className={cn(
+              'type-label-sm rounded-full px-2.5 py-1 ring-1',
+              assistantInteractionMode === 'agent'
+                ? 'text-primary ring-primary/30'
+                : 'text-muted-foreground ring-[color-mix(in_srgb,var(--outline-variant)_18%,transparent)]',
+              sending ? 'opacity-100' : 'opacity-80',
+            )}
+            role="status"
+          >
+            {modeStatusChip}
+          </span>
+        </div>
       </div>
 
       {showActivityPanel ? (

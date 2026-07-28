@@ -9,6 +9,8 @@ Use this file **only** when a specific error occurs during validation, testing, 
 4. Follow NDM strictly: Verify → Analyze → Trace → Fix (smallest change) → Validate
 5. Output only the minimal fix as file: blocks
 
+**App Status:** Preview runtime fingerprints (`[APP_STATUS_DEBUG]`) often map to **Runtime Errors**, **React / Frontend** (hydration), **API route mismatch**, or **HTTP 4xx / 5xx**. Prefer matching those categories when the technical message looks like `Cannot read properties of undefined`, hydration warnings, `Module not found`, or failed fetch — see `app-status-runtime.md`.
+
 ---
 
 | Bug Category | Description / Examples | Prevention / Fix Tips | Common Error Codes / Messages | Real Code Example (Faulty) |

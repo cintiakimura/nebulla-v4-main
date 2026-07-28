@@ -17,6 +17,12 @@ import {
 import { readResponseJson } from '../lib/apiFetch';
 import { withProjectQuery } from '../lib/nebulaProjectApi';
 import { resolveProjectType, studioDeviceModeForType } from '../lib/nebulaProjectType';
+import {
+  injectPreviewRuntimeBridge,
+  installPreviewRuntimeMessageListener,
+  reportPreviewLoadFailure,
+} from '../lib/previewRuntimeBridge';
+import { IdeAppStatusPreviewBadge } from './ide/IdeAppStatusMenu';
 
 const PREVIEW_WIDTH_LS = 'nebulla_app_preview_width_px';
 
@@ -283,7 +289,23 @@ export function AppPreviewPanel({
     const w = iframeRef.current?.contentWindow ?? null;
     connectPreviewWindow(w);
     applyPageHash(w, selectedPageLabel);
-  }, [connectPreviewWindow, applyPageHash, selectedPageLabel]);
+    const injected = injectPreviewRuntimeBridge(w);
+    if (!injected && preferV0Preview && v0DemoUrl) {
+      // Cross-origin live preview — cannot read console; parent load succeeded.
+    }
+  }, [connectPreviewWindow, applyPageHash, selectedPageLabel, preferV0Preview, v0DemoUrl]);
+
+  useEffect(() => installPreviewRuntimeMessageListener(), []);
+
+  useEffect(() => {
+    const el = iframeRef.current;
+    if (!el) return;
+    const onError = () => {
+      reportPreviewLoadFailure('Preview iframe failed to load');
+    };
+    el.addEventListener('error', onError);
+    return () => el.removeEventListener('error', onError);
+  }, [previewUrl, previewRev]);
 
   useEffect(() => {
     connectPreviewWindow(iframeRef.current?.contentWindow ?? null);
@@ -520,6 +542,7 @@ export function AppPreviewPanel({
         >
           {fullscreen ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
         </button>
+        <IdeAppStatusPreviewBadge />
       </div>
     </div>
   );
@@ -579,7 +602,10 @@ export function AppPreviewPanel({
       <div className="flex h-full min-h-0 w-full flex-col overflow-hidden bg-background">
         {hideChrome ? null : (
           <div className="flex shrink-0 items-center justify-between border-b border-white/10 px-2 py-1">
-            <span className="type-label-sm text-primary">App preview</span>
+            <div className="flex items-center gap-2">
+              <span className="type-label-sm text-primary">App preview</span>
+              <IdeAppStatusPreviewBadge />
+            </div>
             {onCloseDock ? (
               <button
                 type="button"

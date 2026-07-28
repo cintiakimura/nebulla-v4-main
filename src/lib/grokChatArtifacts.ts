@@ -262,11 +262,14 @@ export function chatModeSystemAppendix(options: {
   discoveryRequired?: boolean;
   /** User-locked Chat vs Agent (orthogonal to detector mode). */
   interactionMode?: 'chat' | 'agent';
+  /** Message includes [APP_STATUS_DEBUG] from preview runtime health. */
+  hasAppStatusPayload?: boolean;
 }): string {
   const mode = (options.mode || '').trim();
   const hint = (options.codingHint || '').trim();
   const discoveryRequired = Boolean(options.discoveryRequired);
   const interactionMode = options.interactionMode === 'agent' ? 'agent' : 'chat';
+  const hasAppStatusPayload = Boolean(options.hasAppStatusPayload);
   const parts: string[] = [];
 
   if (interactionMode === 'chat') {
@@ -291,11 +294,30 @@ export function chatModeSystemAppendix(options: {
     );
   }
 
+  if (hasAppStatusPayload) {
+    parts.push(
+      [
+        'APP_STATUS_RUNTIME (Verify evidence present):',
+        '- The user message includes [APP_STATUS_DEBUG] from Nebulla App Status (preview runtime).',
+        '- NDM Step 1 Verify MUST use that payload (friendly + technical). Do NOT ask “what error do you see?”',
+        '- Ask only if expected behavior is still unclear.',
+        '- Follow Verify → Analyze → Trace → Fix → Validate.',
+        '- Chat-facing copy stays beginner-friendly (user-communication-rules.md); never dump raw stacks in chat unless they expand Technical details themselves.',
+        interactionMode === 'chat'
+          ? '- Chat lock: discuss the issue only; tell them to use Fix with Agent / switch to Agent to apply a fix.'
+          : '- Agent: apply the smallest safe fix via ```file:``` blocks after short Verify→Analyze→Trace.',
+      ].join('\n'),
+    );
+    if (interactionMode === 'agent') {
+      parts.push(NDM_DEBUG_APPENDIX);
+    }
+  }
+
   if (mode) {
     parts.push(`DETECTED_CHAT_MODE: ${mode}${discoveryRequired ? ' (Master Plan incomplete — Discovery still required before full build)' : ''}`);
   }
 
-  if (mode === 'debugging' || /NDM:/i.test(hint)) {
+  if (!hasAppStatusPayload && (mode === 'debugging' || /NDM:/i.test(hint))) {
     if (interactionMode === 'agent') {
       parts.push(NDM_DEBUG_APPENDIX);
     } else {
@@ -307,11 +329,11 @@ export function chatModeSystemAppendix(options: {
     parts.push(
       'ACTIVE MODE: DISCOVERY — Ask exactly one clear question. Follow INITIAL ONBOARDING order (goal → Project Type unless My Projects already set it → remaining info → Research Pillars → closing questions). Do not emit START_CODING until the final-check reply. Do not run Tab 2–6 interview loops yet.',
     );
-  } else if (hint) {
+  } else if (hint && !hasAppStatusPayload) {
     parts.push(`MODE_GUIDANCE: ${hint}`);
   }
 
-  if (mode === 'coding' && !discoveryRequired && interactionMode === 'agent') {
+  if (mode === 'coding' && !discoveryRequired && interactionMode === 'agent' && !hasAppStatusPayload) {
     parts.push(CODING_QUALITY_APPENDIX);
   }
 

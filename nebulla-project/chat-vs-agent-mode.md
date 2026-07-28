@@ -26,8 +26,15 @@ User-controlled lock in the IDE chat header. Orthogonal to automatic detector mo
 - **Agent** → existing Go / `START_CODING` / `file:` apply path; Discovery / Master Plan gates still apply.
 - System prompt appendix `USER_INTERACTION_MODE` reinforces the lock for the model.
 
+### Fix with Agent (from App Status)
+
+- Chat-header / preview **App Status** “Fix with Agent” switches to **Agent** when needed (same Discovery guard as the toggle).
+- Do **not** silently write files while still in Chat.
+- Sends a turn with `[APP_STATUS_DEBUG]` so NDM Verify has evidence — see `nebulla-project/app-status-runtime.md`.
+
 ## Related
 
 - `nebulla-project/chat-mode-detection.md` — detector sequence (Discovery → Architecture → Coding …)
+- `nebulla-project/app-status-runtime.md` — preview health → NDM Verify
 - `src/lib/ideAssistantInteractionMode.ts` — types + storage helpers
 - `src/components/ide/AIChat.tsx` — toggle UI + gates

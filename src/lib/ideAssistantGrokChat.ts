@@ -72,13 +72,19 @@ export async function sendIdeAssistantGrokTurn(options: {
   discoveryRequired?: boolean;
   /** User-locked Chat vs Agent (voice-safe brainstorm vs coding). */
   interactionMode?: 'chat' | 'agent';
+  /** When true, message includes [APP_STATUS_DEBUG] — force NDM Verify from App Status. */
+  hasAppStatusPayload?: boolean;
   signal?: AbortSignal;
 }): Promise<{ assistantContent: string; planningPhase: string; claudeFallbackNotice?: string }> {
   const { textToSend, history, userId, projectName, ideAppendix, signal } = options;
   const interactionMode = options.interactionMode === 'agent' ? 'agent' : 'chat';
+  const hasAppStatusPayload =
+    Boolean(options.hasAppStatusPayload) || /\[APP_STATUS_DEBUG\]/i.test(textToSend);
   // Chat lock never enters build/coding system appendix even if text looks like "build it".
   const buildMode =
-    interactionMode === 'agent' && (options.buildMode ?? detectBuildModeIntent(textToSend));
+    interactionMode === 'agent' &&
+    !hasAppStatusPayload &&
+    (options.buildMode ?? detectBuildModeIntent(textToSend));
   const selection = resolveAiChatSelection(options.chatModel ?? DEFAULT_AI_CHAT_MODEL);
 
   const [wsMeta, planCtx, overview] = await Promise.all([
@@ -94,10 +100,11 @@ export async function sendIdeAssistantGrokTurn(options: {
   });
 
   const modeAppendix = chatModeSystemAppendix({
-    mode: options.chatMode,
+    mode: hasAppStatusPayload && interactionMode === 'agent' ? 'debugging' : options.chatMode,
     codingHint: options.codingHint,
     discoveryRequired: options.discoveryRequired,
     interactionMode,
+    hasAppStatusPayload,
   });
 
   let systemPrompt =
