@@ -95,16 +95,22 @@ export async function sendIdeAssistantGrokTurn(options: {
   });
 
   let systemPrompt =
-    buildNebulaAssistantSystemPrompt(latestMP, uiStudioApprovedCode, {
-      providerLabel: selection.providerLabel,
-      modelLabel: selection.label,
-    }) +
+    buildNebulaAssistantSystemPrompt(
+      latestMP,
+      // Never inject full approved CSS/JSX into conversational turns — Grok echoes it into chat.
+      buildMode ? uiStudioApprovedCode : '',
+      {
+        providerLabel: selection.providerLabel,
+        modelLabel: selection.label,
+      },
+    ) +
     `\n\n${IDE_CHAT_EXECUTION_APPENDIX}` +
     (modeAppendix ? `\n\n${modeAppendix}` : '') +
     (buildMode ? `\n\n${buildModeSystemAppendix()}` : '') +
     (ideAppendix.trim()
       ? `\n\nIDE_EDITOR_SURFACE (active workspace file context — user may be editing here):\n${ideAppendix.trim()}`
-      : '');
+      : '') +
+    `\n\nCHAT DISPLAY RULE (HARD): Never paste Master Plan sections, CSS, Tailwind, or multi-line code into the visible chat reply. Use <START_MASTERPLAN> tags and \`\`\`file:path\` blocks only. Chat stays short friendly prose.`;
 
   const tail = history.slice(-10);
   const mapped = tail.map((m, idx, arr) => {

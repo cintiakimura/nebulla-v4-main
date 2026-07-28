@@ -15,6 +15,7 @@ import {
   injectMemoryIntoMessages,
   loadPrunedEntries,
 } from "./conversationLog";
+import { sanitizeAssistantChatText } from "./lib/assistantChatSanitize";
 import {
   initGuardianProcessHandlers,
   registerGuardianRoutes,
@@ -167,23 +168,11 @@ function xaiUsageTotal(usage: unknown): number {
   return typeof t === "number" && Number.isFinite(t) ? t : 0;
 }
 
-/** Strip orchestration tags before persisting assistant text to conversation memory. */
+/** Strip orchestration tags + code/CSS/Master Plan dumps before persisting assistant text. */
 function stripAssistantTagsForMemory(text: string): string {
-  return text
-    .replace(/<REASONING>[\s\S]*?<\/REASONING>/g, "")
-    .replace(/<START_MASTERPLAN>[\s\S]*?<\/?END_MASTERPLAN>/g, "")
-    .replace(/<START_MASTERPLAN>/g, "")
-    .replace(/<END_MASTERPLAN>/g, "")
-    .replace(/<START_CODING>/g, "")
-    .replace(/START_CODING/g, "")
-    .replace(/<START_UIUX>/g, "")
-    .replace(/<FINISH_MASTERPLAN>/g, "")
-    .replace(/<APPROVE_MASTERPLAN>/g, "")
-    .replace(/<APPROVE_MINDMAP>/g, "")
-    .replace(/<APPROVE_UI>/g, "")
-    .replace(/<GROK_B_SUMMARY_Q([1-6])>[\s\S]*?<\/GROK_B_SUMMARY_Q\1>/g, "")
-    .replace(/\bANSWER_Q[1-6]\b/g, "")
-    .trim();
+  return sanitizeAssistantChatText(text, {
+    fallback: "",
+  });
 }
 
 /** TEMPORARY: one-shot Claude response when Grok quota is exceeded (see lib/nebulaClaudeFallback.ts). */

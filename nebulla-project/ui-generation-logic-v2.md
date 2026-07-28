@@ -57,34 +57,230 @@ Never jump from Master Plan text directly to freeform boxes.
 
 ---
 
-## 2–16. Executable modules
+## 2. Inputs
 
-Implementation lives in `lib/uiGenerationEngine/v2/`:
+Required inputs for each generation cycle:
 
-| Phase | Module |
-|-------|--------|
-| A Classify | `classifyPage.ts` |
-| B Template | `selectTemplate.ts` |
-| C Figma | `figmaReferences.ts` |
-| D Tokens | `designTokens.ts` |
-| E Slots | `mapSlots.ts` |
-| F Render | `renderTemplateModel.ts` |
-| G Gate | `qualityGate.ts` |
-| H Cycle | `runUiGenerationCycleV2.ts` |
+### 2.1 Master Plan
+- §1 Goal
+- §2 Tech/research
+- §3 Features/KPIs
+- §4 Pages and navigation
+- §5 UI/UX design
 
-Beta entry: `runUiGenerationCycle` delegates to `runUiGenerationCycleV2`.
+### 2.2 Generated files
+- routes
+- page names
+- headings
+- button labels
+- component names
+- nav structures if present
 
-### Figma status values
-`success | failed | missing_key | unauthorized | rate_limited | weak_matches | skipped`
+### 2.3 Runtime
+- active project workspace
+- page target if selected
+- regeneration count
+- optional preference feedback
 
-### Approved templates
-Mobile: `mobile_home_hero_cards`, `mobile_list_actions`, `mobile_dashboard_metrics`, `mobile_settings_groups`, `mobile_auth_form`, `mobile_detail_sections`, `mobile_empty_state`
+### 2.4 External
+- `FIGMA_API_KEY` when available
+- curated Figma reference library / file keys if configured
+- internal seed pattern library as fallback
 
-Web: `web_dashboard_sidebar`, `web_list_table`, `web_settings_two_column`, `web_detail_header_content`, `web_auth_center_card`
+---
 
-Landing: `landing_hero_features_cta`, `landing_pricing_sections`
+## 3. Cycle memory
 
-### Token object shape
+Every cycle must write to:
+- `nebulla-project/ui-generation-context.md`
+- `nebulla-project/ui-generation-cycle.json`
+- `nebulla-project/ui-generation-preview-model.json`
+- `nebulla-project/ui-generation-output.tsx`
+
+Must record:
+- classification
+- chosen template
+- figma_status
+- selected references
+- tokens
+- slot content
+- quality_gate_result
+- regeneration_count
+
+---
+
+## 4. Phase A — Classify page
+
+### A.1 Determine device
+- mobile
+- web
+- landing
+
+Source priority:
+1. Master Plan project type
+2. generated files (BottomNav, app/, expo, etc.)
+3. conservative default
+
+### A.2 Determine page type
+Allowed values:
+- home
+- dashboard
+- list
+- detail
+- auth
+- settings
+- profile
+- checkout
+- landing
+- empty
+- other
+
+### A.3 Determine product function
+Examples:
+- course
+- tasks
+- saas_admin
+- ecommerce
+- booking
+- community
+- marketing
+- general
+
+### A.4 Determine navigation mode
+- bottom_tabs
+- top_nav
+- sidebar
+- none
+
+### A.5 Write classification
+Do not continue until classification is written to context.
+
+---
+
+## 5. Phase B — Choose layout template family
+
+Generation may only use approved template families.
+
+### B.1 Mobile app templates
+1. `mobile_home_hero_cards`
+2. `mobile_list_actions`
+3. `mobile_dashboard_metrics`
+4. `mobile_settings_groups`
+5. `mobile_auth_form`
+6. `mobile_detail_sections`
+7. `mobile_empty_state`
+
+### B.2 Web app templates
+1. `web_dashboard_sidebar`
+2. `web_list_table`
+3. `web_settings_two_column`
+4. `web_detail_header_content`
+5. `web_auth_center_card`
+
+### B.3 Landing templates
+1. `landing_hero_features_cta`
+2. `landing_pricing_sections`
+
+### B.4 Template selection rules
+- home + mobile + metrics/features → `mobile_home_hero_cards` or `mobile_dashboard_metrics`
+- list/tasks/feed → `mobile_list_actions` or `web_list_table`
+- settings → settings template
+- auth → auth template
+- if uncertain, choose the simplest valid template for device + page type
+
+### B.5 Template means structure, not final art
+A template defines:
+- regions
+- slot names
+- stacking rules
+- spacing rules
+- allowed components
+
+It does not allow free-floating absolute chaos.
+
+---
+
+## 6. Phase C — Forced Figma resource access
+
+### C.1 Always attempt Figma first when key exists
+If `FIGMA_API_KEY` is present, the engine must attempt retrieval before fallback.
+
+### C.2 Required Figma status values
+Exactly one:
+- `success`
+- `failed`
+- `missing_key`
+- `unauthorized`
+- `rate_limited`
+- `weak_matches`
+- `skipped`
+
+### C.3 Retrieval criteria ordered by priority
+1. device
+2. page type
+3. product function
+4. navigation mode
+5. industry if known
+6. density/tone
+
+### C.4 What to extract from Figma
+Prefer structural guidance:
+- section order
+- card patterns
+- nav pattern
+- hierarchy
+- spacing rhythm
+- component grouping
+
+Do not copy decorative noise blindly.
+
+### C.5 If Figma fails
+Continue with internal seed pattern library.
+Never stop the whole generation only because Figma failed.
+But never claim Figma success if fallback was used.
+
+### C.6 Write Figma record before continuing
+Must include:
+- figma_used
+- figma_status
+- figma_error if any
+- candidate refs
+- selected refs
+- fallback_used
+
+---
+
+## 7. Phase D — Design tokens from Master Plan §5
+
+§5 is hard law when present.
+
+### D.1 Extract tokens
+Parse and normalize:
+- background
+- surface/card
+- primary
+- accent
+- text
+- muted text
+- border
+- radius
+- spacing density
+- shadow policy
+- tone keywords
+
+Example from a plan:
+- bg `#0A0B14`
+- card `#11131F`
+- blue `#3B82F6`
+- purple `#7C3AED`
+- pink `#C026D3`
+- radius `12`
+- density spacious
+
+### D.2 Token object shape
+All visual values must live in a token object, never as ad-hoc random strings assigned onto wrong fields.
+
+Example shape:
 ```json
 {
   "bg": "#0A0B14",
@@ -100,9 +296,164 @@ Landing: `landing_hero_features_cta`, `landing_pricing_sections`
 }
 ```
 
-Style safety: never assign a hex string where a style object is required. Always `node.style.backgroundColor = tokens.bg`.
+### D.3 Style safety rule
+Never assign a hex string where a style object is required.
+Never do:
+- `node.style = "#0A0B14"`
+- `backgroundColor = { something wrong }`
 
-### User-visible stages
+Always:
+- `node.style.backgroundColor = tokens.bg`
+
+If a style field is missing, create a valid style object first.
+
+### D.4 If §5 missing
+Use a clean neutral professional default token set.
+Do not invent neon chaos.
+
+---
+
+## 8. Phase E — Content mapping into slots
+
+### E.1 Slot system
+Every template has named slots.
+Examples for `mobile_home_hero_cards`:
+- `nav_title`
+- `hero_title`
+- `hero_subtitle`
+- `primary_cta`
+- `secondary_cta`
+- `card_1_title`
+- `card_1_value`
+- `card_2_title`
+- `card_2_value`
+- `card_3_title`
+- `card_3_value`
+
+### E.2 Content sources
+Fill slots from:
+1. generated file labels/headings/buttons
+2. Master Plan page purpose and features
+3. safe short derived labels
+
+### E.3 Clean label rules
+Visible text must be human and short.
+Forbidden visible text:
+- full page purpose paragraphs
+- route paths
+- raw JSON
+- internal engine notes
+- “Primary” / “Secondary” unless no better label exists
+
+Examples:
+- good: `Home`, `Continue`, `Start Practice`, `Today’s tasks`
+- bad: `Tasks screen () - shows today’s micro-tasks as a vertical list...`
+- bad: `/tasks-screen-shows-today-s-micro-ta`
+
+### E.4 Missing content
+If a slot has no real content:
+- use a minimal honest placeholder
+- or omit optional slot
+Do not fabricate a different product.
+
+---
+
+## 9. Phase F — Constrained render
+
+### F.1 Render only through template regions
+Each region is a vertical/horizontal stack with explicit:
+- direction
+- gap
+- padding
+- alignment
+- width rules
+
+No free-float scattered absolute boxes unless a template explicitly needs one controlled overlay.
+
+### F.2 Component whitelist
+Allowed components:
+- screen
+- nav_bar
+- top_bar
+- bottom_tabs
+- hero
+- section
+- card
+- metric_card
+- list
+- list_item
+- button_primary
+- button_secondary
+- text_title
+- text_body
+- text_muted
+- form_field
+- divider
+- empty_state
+
+Do not invent uncontrolled random shapes.
+
+### F.3 Editor model requirements
+The preview model must:
+- use valid style objects only
+- use parent/child relationships for layout
+- be selectable in Properties
+- preserve tokens in styles
+- remain stable after save/reload
+
+### F.4 Code output requirements
+Also emit React + Tailwind page code that mirrors the same structure.
+Code is secondary to constrained preview model quality, but must remain coherent.
+
+---
+
+## 10. Phase G — Hard quality gate
+
+A generation is successful only if all pass:
+
+### G.1 Structure checks
+- has a clear title slot filled with clean text
+- has at least one real content region
+- has a primary action when page type needs one
+- uses chosen template regions
+- no fragmented overlapping chaos
+
+### G.2 Visual checks
+- tokens applied to background/surface/text/primary
+- radius/spacing consistent
+- contrast readable
+- no style-object corruption
+
+### G.3 Content checks
+- no raw prose dump titles
+- no route-slug subtitles
+- labels are short and human
+- product function recognizable
+
+### G.4 Metadata checks
+- figma_status recorded truthfully
+- template name recorded
+- tokens recorded
+- quality_gate_result recorded
+
+### G.5 Failure handling
+If gate fails:
+1. run one controlled repair pass only
+2. repair structure/labels/tokens
+3. if still fail, mark `quality_gate_result = weak`
+4. still deliver best attempt, but do not claim strong success
+
+---
+
+## 11. Phase H — Delivery to UI Studio Beta
+
+### H.1 Write artifacts
+- preview model JSON
+- output TSX
+- context notebook
+- cycle policy/status
+
+### H.2 User-visible stages
 - Classifying page
 - Choosing layout
 - Fetching Figma references
@@ -112,6 +463,88 @@ Style safety: never assign a hex string where a style object is required. Always
 - Validating
 - Ready in preview
 
-### Doctrine
+### H.3 Regeneration
+- max 3
+- each regeneration may change template only if previous template failed quality
+- after 3, preference recovery question
+
+---
+
+## 12. Explicit anti-patterns
+
+Never do these:
+1. freeform random rectangle soup
+2. assign hex string as a whole style object
+3. ignore §5 when present
+4. mark Figma success without selected refs
+5. use description paragraphs as UI labels
+6. declare success for title + one button only
+7. depend on old V0 eligibility for Beta preview
+8. mutate style fields on non-object values
+
+---
+
+## 13. Minimum valid examples
+
+### Example A — mobile metrics home
+Must include:
+- top title
+- short subtitle
+- 3 metric cards in a clean stack/grid
+- one primary CTA
+- tokenized colors from §5
+
+### Example B — tasks list
+Must include:
+- title `Tasks`
+- list of task rows/cards
+- start/action button labels from files when available
+- optional FAB/secondary action
+- clean spacing
+
+### Example C — settings
+Must include:
+- title `Settings`
+- grouped rows
+- clear labels
+- no marketing hero nonsense
+
+---
+
+## 14. Implementation guidance for Cursor
+
+Implement as a v2 path inside UI generation engine for UI Studio Beta only.
+
+Suggested modules:
+- `classifyPage.ts`
+- `selectTemplate.ts`
+- `figmaReferences.ts`
+- `designTokens.ts`
+- `mapSlots.ts`
+- `renderTemplateModel.ts`
+- `qualityGate.ts`
+- `runUiGenerationCycleV2.ts`
+
+Keep old path inert if needed, but Beta active generator must use v2 logic.
+
+Do not leave the current freeform model builder as the main success path.
+
+---
+
+## 15. Acceptance criteria
+
+1. Generate UI uses a named template family
+2. Figma is attempted and status is truthful
+3. §5 tokens are applied as a token object
+4. visible labels are clean
+5. layout is stacked/structured, not fragmented floating chaos
+6. no `Cannot create property 'backgroundColor' on string` class errors
+7. weak skeleton cannot pass as high quality
+8. UI Studio Beta preview shows the v2 result
+9. build passes
+
+---
+
+## 16. One-line doctrine
 
 **Template first. Figma forced. Tokens mandatory. Content mapped into slots. No freeform chaos.**

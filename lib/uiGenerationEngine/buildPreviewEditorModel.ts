@@ -145,6 +145,14 @@ export function cleanHumanTitle(raw: string, fallback = "Home"): string {
   s = s.replace(/`[^`]+`/g, "").replace(/\*\*/g, "").trim();
   s = s.replace(/^(generated page|page:|route:)\s*/i, "").trim();
 
+  // Split glued camelCase / PascalCase: Completetask → Complete task (best-effort)
+  s = s.replace(/([a-z])([A-Z])/g, "$1 $2");
+  // Split repeated glued words: tasktask → task
+  s = s.replace(/\b([A-Za-z]{3,})\1\b/gi, "$1");
+  // Split glued suffixes: Completetasktask → Complete task task
+  s = s.replace(/([A-Za-z]{4,})(task|list|screen|page|home|start|done)\b/gi, "$1 $2");
+  s = s.replace(/([A-Za-z]{4,})(task|list|screen|page|home|start|done)\b/gi, "$1 $2");
+
   // Whole-string route/slug only (do not treat "listen/speak/write" prose as a path).
   const isPathLike = /^\/[a-z0-9/_-]+$/i.test(s) || /^[a-z0-9]+(?:[-_][a-z0-9]+){2,}$/i.test(s);
   if (isPathLike) {
@@ -157,6 +165,12 @@ export function cleanHumanTitle(raw: string, fallback = "Home"): string {
   // Drop trailing "at /route" crumbs
   s = s.replace(/\s+at\s+\/[a-z0-9/_-]+$/i, "").trim();
   s = s.replace(/\s+/g, " ").trim();
+
+  // Collapse duplicate consecutive words: "Task Task" → "Task"
+  s = s
+    .split(/\s+/)
+    .filter((w, i, arr) => i === 0 || w.toLowerCase() !== arr[i - 1].toLowerCase())
+    .join(" ");
 
   // Reject long description dumps — keep first 2–4 content words (skip helper verbs).
   if (s.length > 36 || s.split(/\s+/).length > 5) {

@@ -506,9 +506,15 @@ export async function runUiGenerationCycleV2(
   if (figma.figma_error) {
     state.generation_warnings.push(`Figma: ${figma.figma_status} — ${figma.figma_error}`);
   }
+  state.adapt_kept = [...figma.selected_refs.map((r) => r.why), ...figma.structure_hints.slice(0, 6)]
+    .filter(Boolean)
+    .join(" | ");
+  state.adapt_discarded =
+    "Decorative Figma chrome, unrelated marketing blobs, absolute-position noise.";
+  state.adapt_replaced = `Template ${template.id} + structure hints (${figma.structure_hints.length}) mapped into slots from Master Plan + files.`;
   appendStepLog(
     state,
-    `Phase C figma — used=${figma.figma_used} status=${figma.figma_status} fallback=${figma.fallback_used}`,
+    `Phase C figma — used=${figma.figma_used} status=${figma.figma_status} fallback=${figma.fallback_used} hints=${figma.structure_hints.length}`,
   );
   state.current_step = 4;
   persist(workspaceRoot, state);
@@ -516,6 +522,17 @@ export async function runUiGenerationCycleV2(
   // -------- Phase D — Tokens --------
   stage("Applying design tokens");
   const tokens = buildDesignTokens(uiux, state.palette, classification.density);
+  // Soft-apply spacing/radius hints from Figma/seed when present
+  for (const h of figma.structure_hints) {
+    const sp = h.match(/spacing rhythm ≈ (\d+)/i);
+    if (sp) {
+      const n = Math.min(24, Math.max(8, Number(sp[1])));
+      tokens.gap = n;
+      tokens.pad = Math.max(tokens.pad, n);
+    }
+    const rad = h.match(/corner radius ≈ (\d+)/i);
+    if (rad) tokens.radius = Math.min(24, Math.max(4, Number(rad[1])));
+  }
   state.design_tokens_json = JSON.stringify(tokens);
   state.design_system_rules_applied = "yes";
   appendStepLog(

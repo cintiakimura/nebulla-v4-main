@@ -32,6 +32,7 @@ import {
   formatAssistantForIdeChatDisplay,
   persistMasterPlanFromAssistantSource,
 } from '../../lib/grokChatArtifacts';
+import { sanitizeAssistantChatText } from '../../../lib/assistantChatSanitize';
 import { dispatchOpenUiStudio, dispatchStartUiUxWorkflow } from '../../lib/nebulaUiStudioEvents';
 import {
   handlePostGrokCodingTurn,
@@ -1793,7 +1794,14 @@ export function AIChat() {
                   message.role === 'user' ? 'bg-[#111111] text-foreground' : 'bg-transparent text-foreground',
                 )}
               >
-                <p className="whitespace-pre-wrap">{message.content}</p>
+                <p className="whitespace-pre-wrap">
+                  {message.role === 'assistant'
+                    ? sanitizeAssistantChatText(message.content, {
+                        fallback:
+                          'I’ve updated the project. Ask me anything in plain language — Master Plan and code stay in their tabs.',
+                      })
+                    : message.content}
+                </p>
                 {message.goSummary && message.showGoCta ? (
                   <p className="mt-1.5 text-[11px] text-muted-foreground">{message.goSummary}</p>
                 ) : null}

@@ -166,18 +166,18 @@ function renderBottomTabs(
   const kids: string[] = [];
   labels.forEach((label, i) => {
     const id = `tab-${i + 1}`;
-    addText(nodes, id, "bottom_tabs", label, tokens, {
+    addText(nodes, id, "nav-tab", label, tokens, {
       backgroundColor: tokens.surface,
       color: i === 0 ? tokens.primary : tokens.mutedText,
-      paddingTop: 4,
-      paddingBottom: 0,
+      paddingTop: 8,
+      paddingBottom: 8,
     });
     kids.push(id);
   });
   stackContainer(nodes, nav, "bottom_tabs", kids, tokens, tokens.surface, {
     borderWidth: 1,
-    marginTop: tokens.gap + 4,
-    pad: 10,
+    marginTop: tokens.gap + 8,
+    pad: 8,
   });
   return nav;
 }
@@ -232,7 +232,7 @@ function renderCommonHero(
       actionKids.push("cta-2");
       addButton(nodes, "cta-2", "button_secondary", slots.secondary_cta, tokens, false);
     }
-    stackContainer(nodes, actions, "section", actionKids, tokens, tokens.surface, { pad: 0 });
+    stackContainer(nodes, actions, "cta-row", actionKids, tokens, tokens.surface, { pad: 0 });
     kids.push(actions);
   }
   stackContainer(nodes, header, "hero", kids, tokens, tokens.surface, {

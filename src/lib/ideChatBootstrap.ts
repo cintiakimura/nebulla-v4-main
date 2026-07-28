@@ -1,5 +1,6 @@
 import type { ConversationLogEntryDTO } from './conversationLogClient';
 import type { NebulaProjectType } from './ideHomeEvents';
+import { sanitizeAssistantChatText } from '../../lib/assistantChatSanitize';
 
 /** Hidden user turn — Grok replies with the first onboarding question only (project-execution-rules §4). */
 export const IDE_CHAT_DISCOVERY_BOOTSTRAP =
@@ -38,12 +39,24 @@ export type IdeChatMessage = {
 export function conversationEntriesToIdeMessages(entries: ConversationLogEntryDTO[]): IdeChatMessage[] {
   return entries
     .filter((e) => e.role === 'user' || e.role === 'assistant')
-    .map((e, i) => ({
-      id: `log-${i}-${e.iso}`,
-      role: e.role === 'assistant' ? ('assistant' as const) : ('user' as const),
-      content: e.body,
-      timestamp: new Date(e.iso).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }),
-    }));
+    .map((e, i) => {
+      const raw = e.body || '';
+      const content =
+        e.role === 'assistant'
+          ? sanitizeAssistantChatText(raw, {
+              fallback:
+                'I’ve updated the project. Ask me anything in plain language — Master Plan and code stay in their tabs.',
+            })
+          : raw;
+      // Drop empty assistant artifacts entirely when sanitizer wiped a pure dump with no fallback needed
+      return {
+        id: `log-${i}-${e.iso}`,
+        role: e.role === 'assistant' ? ('assistant' as const) : ('user' as const),
+        content,
+        timestamp: new Date(e.iso).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }),
+      };
+    })
+    .filter((m) => m.role === 'user' || Boolean(m.content.trim()));
 }
 
 export function isHiddenBootstrapUserMessage(text: string): boolean {

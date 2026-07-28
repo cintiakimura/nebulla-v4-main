@@ -1295,25 +1295,41 @@ export function IdeUiStudioBeta({
       ) : null;
 
     const isRoot = node.id === page.rootId;
-    const rowClass =
-      node.role === 'metrics-row'
-        ? 'flex w-full flex-row flex-wrap items-stretch justify-between gap-3'
-        : isRoot
-          ? 'flex min-h-[200px] w-full flex-1 flex-row items-stretch gap-0'
-          : 'flex w-full flex-col gap-2';
+    const firstChildId = node.children?.[0];
+    const firstChild = firstChildId ? page.nodes[firstChildId] : undefined;
+    // Only use horizontal shell when root truly has a sidebar + main column.
+    const isSidebarShell =
+      isRoot &&
+      Boolean(
+        firstChild &&
+          (firstChild.role === 'nav_bar' ||
+            firstChild.role === 'nav-sidebar' ||
+            firstChild.id === 'sidebar' ||
+            /sidebar/i.test(firstChild.role)),
+      );
+    const isHorizontalRow =
+      node.role === 'metrics-row' ||
+      node.role === 'bottom_tabs' ||
+      node.role === 'cta-row' ||
+      node.role === 'cta-row-actions';
+    const rowClass = isHorizontalRow
+      ? 'flex w-full flex-row flex-wrap items-stretch justify-between gap-2'
+      : isSidebarShell
+        ? 'flex min-h-[200px] w-full flex-1 flex-row items-stretch gap-0'
+        : 'flex w-full flex-col gap-3';
     const kids = node.children?.length ? (
       <div className={rowClass}>
         {node.children.map((cid, i) => (
           <div
             key={cid}
             className={
-              isRoot && node.role !== 'metrics-row'
+              isSidebarShell
                 ? i === 0
-                  ? 'shrink-0 self-stretch'
+                  ? 'w-[200px] shrink-0 self-stretch'
                   : 'min-w-0 flex-1 self-stretch'
-                : node.role === 'metrics-row'
+                : isHorizontalRow
                   ? 'min-w-0 flex-1'
-                  : ''
+                  : 'w-full min-w-0'
             }
           >
             {renderNode(cid)}
@@ -1337,7 +1353,13 @@ export function IdeUiStudioBeta({
             setSelectedId(id);
           }
         }}
-        className={isRoot && node.type === 'container' ? 'flex min-h-[280px] w-full flex-col' : ''}
+        className={
+          isRoot && node.type === 'container'
+            ? 'flex min-h-[420px] w-full flex-col'
+            : node.type === 'container'
+              ? 'flex w-full flex-col'
+              : ''
+        }
       >
         {inner}
         {kids}

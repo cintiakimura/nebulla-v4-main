@@ -1,4 +1,5 @@
 import { extractMasterPlanInner, sourceHasMasterPlanBlock } from '../../lib/masterPlanTags';
+import { sanitizeAssistantChatText } from '../../lib/assistantChatSanitize';
 import {
   MASTER_PLAN_SECTION_KEYS,
   masterPlanKeyForTabIndex,
@@ -160,14 +161,19 @@ export function formatAssistantForIdeChatDisplay(raw: string): IdeChatDisplayRes
     return '';
   });
 
-  text = text.replace(/```[\w.-]*\n[\s\S]*?```/g, '');
-  text = text.replace(/```[\w.-]*[\s\S]*?```/g, '');
-
-  text = text
-    .replace(/\n{3,}/g, '\n\n')
-    .trim();
-
   const uniqPaths = [...new Set(filePaths.map((p) => p.trim()).filter(Boolean))];
+
+  const artifactFallback =
+    buildIdeChatFallbackSummary(uniqPaths, hadMasterPlan) ||
+    (looksLikeResidualDump(normalized) || /var\(--|\.btn-|border-radius\s*:/i.test(normalized)
+      ? "I’ve updated the project quietly. Ask me anything in plain language — Master Plan and code stay in their tabs."
+      : '');
+
+  text = sanitizeAssistantChatText(text, {
+    hadMasterPlan,
+    filePaths: uniqPaths,
+    fallback: artifactFallback,
+  });
 
   if (!text && (uniqPaths.length > 0 || hadMasterPlan)) {
     text = buildIdeChatFallbackSummary(uniqPaths, hadMasterPlan);
@@ -177,12 +183,20 @@ export function formatAssistantForIdeChatDisplay(raw: string): IdeChatDisplayRes
       .replace(/(?:^|\n).*v0-prompt\.md.*(?:\n|$)/gi, '')
       .replace(/\n{3,}/g, '\n\n')
       .trim();
-    if (!text) {
+    if (!text || looksLikeResidualDump(text)) {
       text = buildIdeChatFallbackSummary(uniqPaths, hadMasterPlan);
     }
   }
 
   return { displayText: text, filePaths: uniqPaths, hadMasterPlan, hadCodingTag };
+}
+
+function looksLikeResidualDump(text: string): boolean {
+  return (
+    text.length > 500 &&
+    (/var\(--|border-radius\s*:|\.btn-|1\.\s*Goal of the app/i.test(text) ||
+      (text.match(/\{/g) || []).length >= 3)
+  );
 }
 
 /** Extra rules appended for IDE right-panel chat only. */
