@@ -44,6 +44,15 @@ export type Density = "spacious" | "medium" | "compact";
 export type Confidence = "high" | "medium" | "low";
 export type QualityGate = "pass" | "repair" | "weak";
 export type ReferenceSource = "figma" | "seed" | "mixed";
+export type FigmaStatus =
+  | "success"
+  | "failed"
+  | "missing_key"
+  | "unauthorized"
+  | "rate_limited"
+  | "weak_matches"
+  | "skipped"
+  | "";
 
 export type UiGenContextState = {
   context_id: string;
@@ -128,11 +137,20 @@ export type UiGenContextState = {
   quality_rules_applied: "yes" | "no" | "";
   figma_used: "yes" | "no" | "";
   /** Explicit Figma outcome — never imply success when unavailable. */
-  figma_status: "success" | "failed" | "missing_key" | "weak_matches" | "";
+  figma_status: FigmaStatus;
+  figma_error: string;
   fallback_used: "yes" | "no" | "";
   repair_pass_used: "yes" | "no" | "";
   generation_warnings: string[];
   generation_package: string;
+
+  /** v2 constrained generator fields (ui-generation-logic-v2.md). */
+  engine_version: "v1" | "v2" | "";
+  template_id: string;
+  design_tokens_json: string;
+  slot_content_json: string;
+  v2_page_type: string;
+  v2_navigation_mode: string;
 
   output_type: string;
   preview_delivered: "yes" | "no" | "";
@@ -242,10 +260,17 @@ export function emptyContextState(): UiGenContextState {
     quality_rules_applied: "",
     figma_used: "",
     figma_status: "",
+    figma_error: "",
     fallback_used: "",
     repair_pass_used: "",
     generation_warnings: [],
     generation_package: "",
+    engine_version: "",
+    template_id: "",
+    design_tokens_json: "",
+    slot_content_json: "",
+    v2_page_type: "",
+    v2_navigation_mode: "",
     output_type: "react_tailwind_page",
     preview_delivered: "",
     export_available: "",

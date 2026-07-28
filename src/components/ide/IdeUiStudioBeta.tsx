@@ -495,7 +495,7 @@ export function IdeUiStudioBeta({
         return;
       }
       setHasEnginePreview(false);
-      if (d.user_visible_stage && /Reading|Preparing|Selecting|Generating|Validating/i.test(d.user_visible_stage)) {
+      if (d.user_visible_stage && /Reading|Preparing|Selecting|Generating|Validating|Classifying|Choosing|Fetching|Applying|Mapping|Rendering/i.test(d.user_visible_stage)) {
         const waiting = buildWaitingModel(d.user_visible_stage);
         setModel(waiting);
         baselineRef.current = cloneModel(waiting);

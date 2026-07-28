@@ -1,4 +1,4 @@
-export { runUiGenerationCycle } from "./runUiGenerationCycle";
+export { runUiGenerationCycle, runUiGenerationCycleV2 } from "./runUiGenerationCycle";
 export type { RunUiGenerationInput, RunUiGenerationResult } from "./runUiGenerationCycle";
 export { CONTEXT_REL, contextAbsPath, writeContextFile } from "./contextIO";
 export { readCyclePolicy, writeCyclePolicy, CYCLE_POLICY_REL } from "./cyclePolicy";
@@ -21,3 +21,9 @@ export {
   cleanHumanSubtitle,
   validateEditorModelQuality,
 } from "./buildPreviewEditorModel";
+export { classifyPage } from "./v2/classifyPage";
+export { selectTemplate } from "./v2/selectTemplate";
+export { buildDesignTokens } from "./v2/designTokens";
+export { mapSlots } from "./v2/mapSlots";
+export { renderTemplateModel } from "./v2/renderTemplateModel";
+export { validateV2Quality } from "./v2/qualityGate";

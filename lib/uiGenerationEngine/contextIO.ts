@@ -115,14 +115,16 @@ ${bullets(s.explicit_dont)}
 ## 2. Classification decisions
 
 - device: ${s.device}
-- page_type: ${s.page_type}
+- page_type: ${s.page_type}${s.v2_page_type ? ` (v2: ${s.v2_page_type})` : ""}
 - function: ${s.function}
 - industry: ${s.industry_class}
 - complexity: ${s.complexity}
-- navigation_type: ${s.navigation_type}
+- navigation_type: ${s.navigation_type}${s.v2_navigation_mode ? ` (v2: ${s.v2_navigation_mode})` : ""}
 - density: ${s.density}
 - classification_notes: ${s.classification_notes}
 - confidence: ${s.confidence}
+- engine_version: ${s.engine_version || "v1"}
+- template_id: ${s.template_id || "(none)"}
 
 ---
 
@@ -208,8 +210,13 @@ ${sel}
 - quality_rules_applied: ${s.quality_rules_applied}
 - figma_used: ${s.figma_used || "no"}
 - figma_status: ${s.figma_status || "missing_key"}
+- figma_error: ${s.figma_error || "(none)"}
 - fallback_used: ${s.fallback_used || "no"}
 - repair_pass_used: ${s.repair_pass_used}
+- engine_version: ${s.engine_version || "v1"}
+- template_id: ${s.template_id || "(none)"}
+- design_tokens: ${s.design_tokens_json || "(none)"}
+- slot_content: ${s.slot_content_json || "(none)"}
 - selected_references:
 ${s.selected_refs.length ? s.selected_refs.map((r, i) => `  ${i + 1}. ${r.id} — ${r.why}`).join("\n") + "\n" : "  1. (none)\n"}
 - generation_warnings:

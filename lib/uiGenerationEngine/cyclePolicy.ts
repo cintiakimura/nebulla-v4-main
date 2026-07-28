@@ -22,6 +22,8 @@ export type UiGenCyclePolicy = {
   user_visible_stage: string;
   page_key: string;
   updated_at: string;
+  /** v2 template family used for this cycle (optional). */
+  template_id?: string;
 };
 
 export const CYCLE_POLICY_REL = path.join("nebulla-project", "ui-generation-cycle.json");
