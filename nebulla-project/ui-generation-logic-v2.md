@@ -83,9 +83,12 @@ Required inputs for each generation cycle:
 - optional preference feedback
 
 ### 2.4 External
-- `FIGMA_API_KEY` when available
+- `FIGMA_API_KEY` when available (secret token; local `.env` + Render)
+- `FIGMA_REFERENCE_FILE_KEYS` — comma-separated file keys from `figma.com/file/<KEY>/...` (required together with the API key for real structure extract)
 - curated Figma reference library / file keys if configured
 - internal seed pattern library as fallback
+
+**Render note:** set **both** `FIGMA_API_KEY` and `FIGMA_REFERENCE_FILE_KEYS` on the Web Service env, then redeploy/restart. After Generate UI, read `nebulla-project/ui-generation-v2-meta.json` → `figma.figma_status`, `figma.fallback_used`, `figma.env_guidance`.
 
 ---
 
@@ -203,7 +206,8 @@ It does not allow free-floating absolute chaos.
 ## 6. Phase C — Forced Figma resource access
 
 ### C.1 Always attempt Figma first when key exists
-If `FIGMA_API_KEY` is present, the engine must attempt retrieval before fallback.
+If `FIGMA_API_KEY` is present, the engine must attempt retrieval before fallback.  
+If `FIGMA_REFERENCE_FILE_KEYS` is missing, status must be `weak_matches` (not success) and seed fallback used.
 
 ### C.2 Required Figma status values
 Exactly one:

@@ -2,6 +2,10 @@
  * Phase C — Forced Figma reference retrieval (honest status, seed fallback).
  * Authority: ui-generation-logic-v2.md §6
  *
+ * Env (Render + local .env):
+ * - FIGMA_API_KEY — personal access token (secret)
+ * - FIGMA_REFERENCE_FILE_KEYS — comma-separated file keys from figma.com/file/<KEY>/...
+ *
  * Success requires usable structural guidance extracted from Figma frames —
  * not merely "file opened". Without FIGMA_REFERENCE_FILE_KEYS → weak_matches + seeds.
  */
@@ -82,7 +86,6 @@ function extractStructureHints(
   };
   walk(root, 0);
 
-  // Rank frames that match device/page
   const deviceHint =
     classification.device === "mobile"
       ? frameNames.find((n) => /mobile|iphone|ios|phone/i.test(n))
@@ -100,9 +103,12 @@ function extractStructureHints(
   }
 
   hints.push(`adapt into template slots for ${templateId} — keep section order, discard decorative noise`);
-  // Dedupe + cap
   const uniq = [...new Set(hints)].slice(0, 12);
   return { hints: uniq, frameNames: frameNames.slice(0, 24), score };
+}
+
+function redactSecrets(msg: string): string {
+  return msg.replace(/figd_[A-Za-z0-9_-]+/g, "[redacted-token]");
 }
 
 /** Always attempt Figma when key exists; never claim success without usable structural refs. */
@@ -135,9 +141,24 @@ export async function retrieveFigmaReferences(input: {
     why: `Strong seed fallback for ${input.classification.device}/${input.classification.page_type}: ${s.structure}`,
   }));
   const seedHints = mapSeedToTemplateHints(input.templateId, topSeeds[0]?.structure || "stacked sections");
+  const keysConfigured = FIGMA_LIBRARY_KEYS.length;
+  const envGuidance =
+    !key && keysConfigured === 0
+      ? "Set FIGMA_API_KEY and FIGMA_REFERENCE_FILE_KEYS on Render (and local .env). File key = ID in figma.com/file/<KEY>/..."
+      : !key
+        ? "Set FIGMA_API_KEY (token). FIGMA_REFERENCE_FILE_KEYS alone is not enough."
+        : keysConfigured === 0
+          ? "FIGMA_API_KEY is set, but FIGMA_REFERENCE_FILE_KEYS is missing — add comma-separated Figma file keys or seed fallback stays on."
+          : "Both FIGMA_API_KEY and FIGMA_REFERENCE_FILE_KEYS are configured.";
+
+  const base = {
+    reference_file_keys_configured: keysConfigured,
+    env_guidance: envGuidance,
+  };
 
   if (!key) {
     return {
+      ...base,
       figma_used: "no",
       figma_status: "missing_key",
       figma_error: "FIGMA_API_KEY not set — using polished seed templates",
@@ -154,6 +175,7 @@ export async function retrieveFigmaReferences(input: {
     });
     if (me.status === 401 || me.status === 403) {
       return {
+        ...base,
         figma_used: "no",
         figma_status: "unauthorized",
         figma_error: `Figma unauthorized (${me.status})`,
@@ -165,6 +187,7 @@ export async function retrieveFigmaReferences(input: {
     }
     if (me.status === 429) {
       return {
+        ...base,
         figma_used: "no",
         figma_status: "rate_limited",
         figma_error: "Figma rate limited",
@@ -176,6 +199,7 @@ export async function retrieveFigmaReferences(input: {
     }
     if (!me.ok) {
       return {
+        ...base,
         figma_used: "no",
         figma_status: "failed",
         figma_error: `Figma API probe failed (${me.status})`,
@@ -188,6 +212,7 @@ export async function retrieveFigmaReferences(input: {
 
     if (FIGMA_LIBRARY_KEYS.length === 0) {
       return {
+        ...base,
         figma_used: "no",
         figma_status: "weak_matches",
         figma_error:
@@ -206,13 +231,13 @@ export async function retrieveFigmaReferences(input: {
 
     for (const fileKey of FIGMA_LIBRARY_KEYS.slice(0, 3)) {
       try {
-        // depth=2–3: enough to read frames + auto-layout without huge payloads
         const fr = await fetch(
           `https://api.figma.com/v1/files/${encodeURIComponent(fileKey)}?depth=3`,
           { headers: { "X-Figma-Token": key } },
         );
         if (fr.status === 429) {
           return {
+            ...base,
             figma_used: "no",
             figma_status: "rate_limited",
             figma_error: "Figma rate limited while reading reference files",
@@ -243,9 +268,9 @@ export async function retrieveFigmaReferences(input: {
       }
     }
 
-    // Require meaningful structure score — opening a file alone is NOT success.
     if (figmaCandidates.length === 0 || bestScore < 4) {
       return {
+        ...base,
         figma_used: "no",
         figma_status: "weak_matches",
         figma_error:
@@ -274,6 +299,7 @@ export async function retrieveFigmaReferences(input: {
     }
 
     return {
+      ...base,
       figma_used: "yes",
       figma_status: "success" as FigmaStatusV2,
       figma_error: "",
@@ -288,9 +314,10 @@ export async function retrieveFigmaReferences(input: {
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Figma request failed";
     return {
+      ...base,
       figma_used: "no",
       figma_status: "failed",
-      figma_error: msg,
+      figma_error: redactSecrets(msg),
       candidates: seedCandidates,
       selected_refs: seedSelected,
       fallback_used: "yes",

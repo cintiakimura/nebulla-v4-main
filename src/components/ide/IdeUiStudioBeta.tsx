@@ -1302,8 +1302,7 @@ export function IdeUiStudioBeta({
       isRoot &&
       Boolean(
         firstChild &&
-          (firstChild.role === 'nav_bar' ||
-            firstChild.role === 'nav-sidebar' ||
+          (firstChild.role === 'nav-sidebar' ||
             firstChild.id === 'sidebar' ||
             /sidebar/i.test(firstChild.role)),
       );

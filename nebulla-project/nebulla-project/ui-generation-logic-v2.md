@@ -1,5 +1,7 @@
-# Moved
+# Moved — do not use this nested path
 
-Canonical authority: `nebulla-project/ui-generation-logic-v2.md`
+Canonical UI Generation Logic v2 authority:
 
-Do not nest another `nebulla-project/` folder. This path is a leftover and should not be used.
+→ `nebulla-project/ui-generation-logic-v2.md`
+
+Do not nest another `nebulla-project/` folder. Engine, docs, and cycle artifacts use the single top-level `nebulla-project/` directory in each workspace.

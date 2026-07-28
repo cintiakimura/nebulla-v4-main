@@ -99,6 +99,10 @@ export type FigmaRecord = {
   selected_refs: { id: string; why: string }[];
   fallback_used: "yes" | "no";
   structure_hints: string[];
+  /** Count only — never log the API token. File keys are non-secret IDs. */
+  reference_file_keys_configured: number;
+  /** Operator hint for Render / .env (no secrets). */
+  env_guidance: string;
 };
 
 export type V2NodeStyle = {

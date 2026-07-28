@@ -200,7 +200,7 @@ function renderSidebar(
       color: tokens.mutedText,
     });
   });
-  stackContainer(nodes, side, "nav_bar", kids, tokens, tokens.surface, {
+  stackContainer(nodes, side, "nav-sidebar", kids, tokens, tokens.surface, {
     width: "200px",
     borderWidth: 1,
     pad: 14,

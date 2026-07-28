@@ -22,6 +22,8 @@ These names and **values are shared across every Nebula project**: copy the same
 | `GROK_3_API_KEY` | Grok B — Master Plan writer (separate from the main brain). |
 | `PENCIL_API_KEY` | Nebula UI Studio → Pencil.dev mockups API. |
 | `V0_API_KEY` | v0 by Vercel — Nebula UI Studio first-pass UI generation. **Read from server environment only** (same pattern as `MAIN_API_KEY_GROK`). |
+| `FIGMA_API_KEY` | Optional. Figma personal access token for UI Generation Engine v2 reference retrieval. **Also set on Render.** Alone is not enough — see `FIGMA_REFERENCE_FILE_KEYS`. |
+| `FIGMA_REFERENCE_FILE_KEYS` | Optional but required with the key for real layout extract. Comma-separated Figma **file keys** from `figma.com/file/<KEY>/...`. Without this, status is `weak_matches` and seed templates are used. |
 
 Optional related keys (only if your deployment diverges from defaults): `PENCIL_API_URL`, model overrides such as `GROK_B_MODEL` — see `.env.example` and server code.
 

@@ -1,4 +1,3 @@
-file:///Users/cintiakimura/Downloads/nebulla-v4-main/nebulla-project/ui-generation-engine-manual.md {"mtime":1784882561039,"ctime":1784878835410,"size":15071,"etag":"3gdk3ab2hfl5","orphaned":false,"typeId":""}
 **Nebulla UI Generation Engine — Absolute-Control Task Manual**
 
 This is the strict script for UI generation.  
@@ -380,6 +379,10 @@ Stop and confirm Phase 6 is complete before moving on.
 
 ### 7.1
 Check whether `FIGMA_API_KEY` is available.
+
+### 7.1b
+Check whether `FIGMA_REFERENCE_FILE_KEYS` is configured (comma-separated Figma file keys).  
+Both are required for Figma to drive layout. Token alone → probe only / `weak_matches` + seed fallback.
 
 ### 7.2
 If available, attempt Figma reference retrieval using the criteria from Phase 6.
@@ -879,3 +882,103 @@ Blind repetition is not.
 After 3 attempts, the system must stop guessing and either:
 1. improve from explicit user preference, or
 2. help the user refine manually.
+
+# UI Studio Beta Trigger Rule — After File Creation
+
+## Purpose
+Start Nebulla UI Studio Beta only after Grok has created the relevant project files, so generation is grounded in real texts, buttons, routes, and functionalities.
+
+---
+
+## 1. Trigger condition
+
+UI Studio Beta generation starts automatically when all of the following are true:
+
+1. Master Plan exists and is usable
+2. Coding has produced project files for the current slice or app shell
+3. Files were successfully written/applied to the workspace
+4. UI generation for this page/slice has not already reached the regeneration limit
+
+---
+
+## 2. Preferred signal chain
+
+Use this order:
+
+1. Master Plan completion / readiness
+2. `START_CODING` or equivalent coding start
+3. File creation / apply success
+4. **Then auto-start UI Studio Beta generation**
+
+Do not start UI Beta only because chat said “done.”  
+Start it from successful file creation/application.
+
+---
+
+## 3. What the engine must read at trigger time
+
+When triggered, the engine must use:
+
+1. Master Plan product truth
+2. Actual generated files for:
+   - page names
+   - routes
+   - button labels
+   - existing sections
+   - real functionalities already represented in code
+3. `nebulla-project/ui-generation-engine-manual.md`
+4. `nebulla-project/ui-generation-sequence.md`
+5. `nebulla-project/ui-generation-context.md`
+
+---
+
+## 4. Grounding rule
+
+After file creation, UI generation must:
+
+- visualize and organize what already exists
+- preserve real labels and actions found in files when valid
+- remain loyal to Master Plan product truth
+- not invent new major product behavior
+- not ignore existing important buttons/functionalities
+
+Master Plan = product truth  
+Generated files = concrete implementation details
+
+---
+
+## 5. Delivery
+
+On trigger success:
+
+1. Run the UI generation engine sequence
+2. Deliver result to **UI Studio Beta**
+3. Keep original UI Studio / V0 path disabled/untouched
+4. Write cycle status into `ui-generation-context.md`
+
+---
+
+## 6. Regeneration after trigger
+
+- First automatic post-coding generation counts as attempt 1
+- User may regenerate up to 3 total attempts
+- After 3, stop blind regeneration and enter preference recovery
+
+---
+
+## 7. Failure handling
+
+If coding/files were not successfully created:
+- do not start UI Beta
+- write the blocked reason into context
+- keep user on coding/debug flow
+
+If Master Plan is too weak:
+- do not invent a rich UI
+- mark incomplete or return to discovery
+
+---
+
+## 8. One-line rule
+
+**When files are successfully created from coding, automatically start UI Studio Beta generation using Master Plan + the real generated file details.**
