@@ -24,6 +24,9 @@ export function LegalPageLayout({
           <a href="/terms" className="hover:text-cyan-300 transition-colors no-underline">
             Terms
           </a>
+          <a href="/legal/dpa" className="hover:text-cyan-300 transition-colors no-underline">
+            DPA
+          </a>
         </nav>
       </header>
 

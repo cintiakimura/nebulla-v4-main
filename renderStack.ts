@@ -23,6 +23,10 @@ import {
   type D1ProvisionResult,
 } from "./lib/nebulaD1Provisioning";
 import { getNebullaPersistRoot, getNebulaProjectDocsRoot } from "./lib/nebulaWorkspaceRoot";
+import {
+  deleteConversationLogsForUser,
+  listConversationLogsForUser,
+} from "./conversationLog";
 import cookieParser from "cookie-parser";
 import jwt from "jsonwebtoken";
 import pg from "pg";
@@ -326,7 +330,8 @@ function sessionSecret(): string {
   const s = process.env.SESSION_SECRET?.trim();
   if (s && s.length >= 16) return s;
   if (process.env.NODE_ENV === "production") {
-    console.warn("[nebula] SESSION_SECRET missing or short; set a strong secret in production.");
+    // assertProductionSecretsOrExit() should have already stopped boot.
+    throw new Error("SESSION_SECRET missing or too short in production");
   }
   return process.env.SESSION_SECRET || "dev-only-nebula-session-change-me";
 }
@@ -1029,7 +1034,7 @@ export async function mountRenderStack(app: Express) {
     res.json({ ok: true });
   });
 
-  /** Permanently delete the signed-in user and all related rows (CASCADE). */
+  /** Permanently delete the signed-in user and related rows (CASCADE) + conversation logs. */
   app.post("/api/auth/delete-account", async (req, res) => {
     const uid = readSession(req);
     if (!uid) return res.status(401).json({ error: "Unauthorized" });
@@ -1040,12 +1045,89 @@ export async function mountRenderStack(app: Express) {
     }
     try {
       const db = requireDbPool();
+      // CASCADE removes projects, password resets, token usage, BYOK ciphertext on user row, etc.
       await db.query(`DELETE FROM public.nebula_users WHERE id = $1::uuid`, [uid]);
+      const logs = deleteConversationLogsForUser(uid);
       clearSessionCookie(res);
-      return res.json({ ok: true });
+      return res.json({
+        ok: true,
+        conversation_logs_removed: logs.removed,
+        note:
+          "Account and cloud projects deleted. Browser localStorage/secrets are not cleared by the server — clear site data. Backups and provider logs may retain residual data for a limited time (see Privacy Policy).",
+      });
     } catch (e) {
       console.error("[nebula] delete-account:", e);
       return res.status(500).json({ error: "Could not delete account." });
+    }
+  });
+
+  /** GDPR-oriented account export (profile + projects metadata; never plaintext API keys). */
+  app.get("/api/auth/data-export", async (req, res) => {
+    const uid = readSession(req);
+    if (!uid) return res.status(401).json({ error: "Unauthorized" });
+    if (!hasDb()) return res.status(503).json({ error: "Database not configured" });
+    try {
+      const db = requireDbPool();
+      const userR = await db.query(
+        `SELECT id, provider, provider_user_id, email, display_name, avatar_url, billing_tier,
+                created_at,
+                (grok_api_key_encrypted IS NOT NULL AND length(trim(grok_api_key_encrypted)) > 0) AS has_xai_key,
+                (anthropic_api_key_encrypted IS NOT NULL AND length(trim(anthropic_api_key_encrypted)) > 0) AS has_anthropic_key,
+                (openai_api_key_encrypted IS NOT NULL AND length(trim(openai_api_key_encrypted)) > 0) AS has_openai_key
+         FROM public.nebula_users WHERE id = $1::uuid`,
+        [uid],
+      );
+      const row = userR.rows[0];
+      if (!row) return res.status(404).json({ error: "User not found" });
+
+      const projR = await db.query(
+        `SELECT name, workspace_id, d1_database_id, d1_database_name, updated_at
+         FROM public.nebula_projects WHERE user_id = $1::uuid ORDER BY updated_at DESC`,
+        [uid],
+      );
+
+      const exportBody = {
+        exported_at: new Date().toISOString(),
+        export_version: 1,
+        account: {
+          id: row.id,
+          provider: row.provider,
+          provider_user_id: row.provider_user_id,
+          email: row.email,
+          display_name: row.display_name,
+          avatar_url: row.avatar_url,
+          billing_tier: row.billing_tier,
+          created_at: row.created_at,
+          byok_keys_present: {
+            xai: Boolean(row.has_xai_key),
+            anthropic: Boolean(row.has_anthropic_key),
+            openai: Boolean(row.has_openai_key),
+          },
+        },
+        projects: projR.rows.map((p) => ({
+          name: p.name,
+          workspace_id: p.workspace_id,
+          d1_database_id: p.d1_database_id,
+          d1_database_name: p.d1_database_name,
+          updated_at: p.updated_at,
+        })),
+        conversation_logs: listConversationLogsForUser(uid),
+        notes: [
+          "API key values are never included in this export.",
+          "Workspace source files on disk are not zipped in this version — contact support if you need a full file archive.",
+          "Browser-only secrets (localStorage) are not included.",
+        ],
+      };
+
+      res.setHeader("Content-Type", "application/json; charset=utf-8");
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename="nebulla-data-export-${uid.slice(0, 8)}.json"`,
+      );
+      return res.status(200).send(JSON.stringify(exportBody, null, 2));
+    } catch (e) {
+      console.error("[nebula] data-export:", e);
+      return res.status(500).json({ error: "Could not export account data." });
     }
   });
 

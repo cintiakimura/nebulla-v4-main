@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
-import { CreditCard, KeyRound, LogOut, Trash2, User, X } from 'lucide-react';
+import { CreditCard, Download, KeyRound, LogOut, Trash2, User, X } from 'lucide-react';
 import {
   deleteNebullaAccount,
+  downloadNebullaDataExport,
   fetchSessionUser,
   logoutNebula,
   type NebulaSessionUser,
@@ -61,6 +62,8 @@ export function UserProfilePage({
   const [deleteErr, setDeleteErr] = useState<string | null>(null);
   const [logoutBusy, setLogoutBusy] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [exportBusy, setExportBusy] = useState(false);
+  const [exportMsg, setExportMsg] = useState<string | null>(null);
 
   const reload = useCallback(async () => {
     setLoadErr(null);
@@ -230,6 +233,49 @@ export function UserProfilePage({
 
               <LanguageSettingsPanel />
 
+              <section className="rounded-xl border border-white/10 bg-white/5 p-6 space-y-3">
+                <h3 className="text-sm font-headline text-slate-200 border-b border-white/10 pb-2">
+                  How we use AI providers
+                </h3>
+                <p className="text-sm text-slate-400 leading-relaxed">
+                  Chat, architecture, coding, and optional UI generation may send prompts and project context to
+                  third-party AI providers (for example xAI / Grok, and V0 when you use a V0 key). Do not submit data you
+                  are not allowed to share with those providers. Details:{' '}
+                  <a href="/privacy" target="_blank" rel="noreferrer" className="text-cyan-300 hover:underline">
+                    Privacy Policy
+                  </a>
+                  .
+                </p>
+              </section>
+
+              <section className="rounded-xl border border-white/10 bg-white/5 p-6 space-y-4">
+                <h3 className="text-sm font-headline text-slate-200 flex items-center gap-2 border-b border-white/10 pb-2">
+                  <Download className="w-4 h-4 text-slate-400" aria-hidden />
+                  Download your data
+                </h3>
+                <p className="text-sm text-slate-400 leading-relaxed">
+                  Export a JSON file with your profile and cloud project metadata. API key values are never included.
+                </p>
+                {exportMsg ? <p className="text-sm text-slate-300">{exportMsg}</p> : null}
+                <button
+                  type="button"
+                  disabled={exportBusy}
+                  onClick={() => {
+                    void (async () => {
+                      setExportBusy(true);
+                      setExportMsg(null);
+                      const r = await downloadNebullaDataExport();
+                      setExportBusy(false);
+                      setExportMsg(r.ok ? 'Download started.' : r.error || 'Export failed.');
+                    })();
+                  }}
+                  className="inline-flex items-center gap-2 rounded-lg border border-cyan-500/30 bg-cyan-500/10 px-4 py-2 text-sm text-cyan-100 hover:bg-cyan-500/20 disabled:opacity-40"
+                >
+                  <Download className="h-4 w-4" aria-hidden />
+                  {exportBusy ? 'Preparing…' : 'Download data export'}
+                </button>
+              </section>
+
               <section className="rounded-xl border border-white/10 bg-white/5 p-6 space-y-4">
                 <h3 className="text-sm font-headline text-slate-200 flex items-center gap-2 border-b border-white/10 pb-2">
                   <CreditCard className="w-4 h-4 text-slate-400" aria-hidden />
@@ -258,14 +304,35 @@ export function UserProfilePage({
                 API keys &amp; GitHub → open Secrets
               </button>
 
+              <p className="text-xs text-slate-500">
+                Legal:{' '}
+                <a href="/privacy" target="_blank" rel="noreferrer" className="text-cyan-400/90 hover:underline">
+                  Privacy
+                </a>
+                {' · '}
+                <a href="/terms" target="_blank" rel="noreferrer" className="text-cyan-400/90 hover:underline">
+                  Terms
+                </a>
+                {' · '}
+                <a href="/legal/dpa" target="_blank" rel="noreferrer" className="text-cyan-400/90 hover:underline">
+                  DPA
+                </a>
+                {' · '}
+                <a href="mailto:security@nebulla.dev" className="text-cyan-400/90 hover:underline">
+                  security@nebulla.dev
+                </a>
+              </p>
+
               <section className="rounded-xl border border-red-500/20 bg-red-950/20 p-6 space-y-4">
                 <h3 className="text-sm font-headline text-red-300 flex items-center gap-2">
                   <Trash2 className="w-4 h-4" aria-hidden />
                   Delete account
                 </h3>
                 <p className="text-xs text-slate-400 leading-relaxed">
-                  This removes your user record, all cloud projects, and related data from our database. This cannot be
-                  undone.
+                  Permanently removes your user record, cloud projects, encrypted account API keys, and server
+                  conversation logs for your user id. This cannot be undone. Browser localStorage is not cleared by the
+                  server — clear site data after logout. Backups and third-party provider logs may retain residual data
+                  for a limited time (see Privacy Policy).
                 </p>
                 <div>
                   <label className="block text-[10px] uppercase tracking-wider text-slate-500 font-headline mb-1.5">

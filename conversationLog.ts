@@ -243,3 +243,52 @@ export function appendWriterAuditEvent(params: {
   };
   fs.appendFileSync(WRITER_AUDIT_FILE, `${JSON.stringify(event)}\n`, "utf8");
 }
+
+/** List conversation log files for a user (for data export metadata). */
+export function listConversationLogsForUser(userId: string): { file: string; bytes: number }[] {
+  const dir = path.join(CONVERSATION_LOGS_ROOT, safePathSegment(userId, 80));
+  if (!fs.existsSync(dir)) return [];
+  try {
+    return fs
+      .readdirSync(dir)
+      .filter((n) => n.endsWith(".md"))
+      .map((n) => {
+        const full = path.join(dir, n);
+        let bytes = 0;
+        try {
+          bytes = fs.statSync(full).size;
+        } catch {
+          /* ignore */
+        }
+        return { file: n, bytes };
+      });
+  } catch {
+    return [];
+  }
+}
+
+/** Remove all conversation logs for a user after account deletion. */
+export function deleteConversationLogsForUser(userId: string): { removed: number } {
+  const dir = path.join(CONVERSATION_LOGS_ROOT, safePathSegment(userId, 80));
+  if (!fs.existsSync(dir)) return { removed: 0 };
+  let removed = 0;
+  try {
+    for (const n of fs.readdirSync(dir)) {
+      try {
+        fs.unlinkSync(path.join(dir, n));
+        removed += 1;
+      } catch {
+        /* ignore */
+      }
+    }
+    try {
+      fs.rmdirSync(dir);
+    } catch {
+      /* non-empty or race */
+    }
+  } catch {
+    /* ignore */
+  }
+  return { removed };
+}
+

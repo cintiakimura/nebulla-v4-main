@@ -316,6 +316,12 @@ export function LandingPage({ onEnter }: LandingPageProps) {
         <a href="/terms" className="text-slate-400 hover:text-cyan-300 transition-colors no-underline">
           Terms of Service
         </a>
+        <span className="text-slate-600" aria-hidden>
+          ·
+        </span>
+        <a href="/legal/dpa" className="text-slate-400 hover:text-cyan-300 transition-colors no-underline">
+          DPA
+        </a>
       </footer>
     </div>
   );

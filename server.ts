@@ -330,6 +330,8 @@ const resolveMainGrokApiKeyDetailed = createResolveMainGrokApiKeyDetailed(readNe
 
 async function startServer() {
   initGuardianProcessHandlers();
+  const { assertProductionSecretsOrExit } = await import("./lib/assertProductionSecrets");
+  assertProductionSecretsOrExit();
 
   // Behind Railway / Render / Fly / nginx / Docker — correct client IPs and secure cookies.
   app.set("trust proxy", 1);
@@ -4587,6 +4589,8 @@ ${answer.slice(0, 8000)}`;
     };
     app.get("/privacy", sendSpaIndex);
     app.get("/terms", sendSpaIndex);
+    app.get("/legal/dpa", sendSpaIndex);
+    app.get("/dpa", sendSpaIndex);
     app.get("/reset-password", sendSpaIndex);
     app.use(
       express.static(distPath, {

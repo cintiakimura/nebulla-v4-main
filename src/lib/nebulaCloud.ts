@@ -130,18 +130,43 @@ export async function logoutNebula(): Promise<void> {
 }
 
 /** Permanently deletes the signed-in user; `confirmation` must be exactly `DELETE MY ACCOUNT`. */
-export async function deleteNebullaAccount(confirmation: string): Promise<{ ok: boolean; error?: string }> {
+export async function deleteNebullaAccount(
+  confirmation: string,
+): Promise<{ ok: boolean; error?: string; note?: string }> {
   const res = await fetch('/api/auth/delete-account', {
     method: 'POST',
     credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ confirmation }),
   });
-  const data = await readResponseJson<{ ok?: boolean; error?: string }>(res);
+  const data = await readResponseJson<{ ok?: boolean; error?: string; note?: string }>(res);
   if (!res.ok) {
     return { ok: false, error: typeof data.error === 'string' ? data.error : 'Request failed' };
   }
-  return { ok: Boolean(data.ok) };
+  return { ok: Boolean(data.ok), note: typeof data.note === 'string' ? data.note : undefined };
+}
+
+/** Download GDPR-oriented JSON export (no plaintext API keys). */
+export async function downloadNebullaDataExport(): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const res = await fetch('/api/auth/data-export', { credentials: 'include', cache: 'no-store' });
+    if (!res.ok) {
+      const data = await readResponseJson<{ error?: string }>(res);
+      return { ok: false, error: typeof data.error === 'string' ? data.error : 'Export failed' };
+    }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `nebulla-data-export-${new Date().toISOString().slice(0, 10)}.json`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    return { ok: true };
+  } catch {
+    return { ok: false, error: 'Network error' };
+  }
 }
 
 export type CloudProjectRow = {

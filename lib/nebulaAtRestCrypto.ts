@@ -5,10 +5,15 @@ const IV_LEN = 12;
 const TAG_LEN = 16;
 
 function derivedKey(): Buffer {
-  const raw =
-    process.env.NEBULA_SECRETS_ENCRYPTION_KEY?.trim() ||
-    process.env.SESSION_SECRET?.trim() ||
-    "dev-only-nebula-at-rest-change-me";
+  const raw = process.env.NEBULA_SECRETS_ENCRYPTION_KEY?.trim() || "";
+  if (!raw) {
+    if (process.env.NODE_ENV === "production") {
+      throw new Error("NEBULA_SECRETS_ENCRYPTION_KEY is required in production");
+    }
+    const fallback =
+      process.env.SESSION_SECRET?.trim() || "dev-only-nebula-at-rest-change-me";
+    return crypto.createHash("sha256").update(fallback, "utf8").digest();
+  }
   return crypto.createHash("sha256").update(raw, "utf8").digest();
 }
 
