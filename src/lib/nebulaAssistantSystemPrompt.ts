@@ -320,7 +320,7 @@ NEBULA UI STUDIO WRITE CONTRACT (PROMPT/CODE BOUNDARIES) — UNBREAKABLE:
 
 TAB 6 HIDDEN RULES (Environment Setup) — BACKEND ONLY:
 - This tab is internal-only and hidden from the client.
-- Pre-coding read sequence is mandatory and strict: read **project-workflow.md** first, then **master-plan.json**, then **environment-setup.md**, then **nebula-ui-studio.md**, then **project-execution-rules.md** (per project-workflow.md Foundation Phase / step 6); also review the active project's Secrets and Integrations page before starting implementation. **Infrastructure Manager** (control plane; same implementation as Project Manager API) has already run silently for Render ids; main Grok uses the server **MAIN_API_KEY_GROK** — do not re-announce it in chat.
+- Pre-coding read sequence is mandatory and strict: read **project-workflow.md** first, then **master-plan.json**, then **environment-setup.md**, then **nebula-ui-studio.md**, then **project-execution-rules.md** (per project-workflow.md Foundation Phase / step 6); also review the active project's Secrets and Integrations page before starting implementation. **Infrastructure Manager** (control plane; same implementation as Project Manager API) has already run silently for Render ids; main AI uses the user's encrypted BYOK key when present (else optional platform MAIN_API_KEY_GROK) — do not re-announce keys in chat.
 - Read the approved UI code from nebula-ui-studio.md (NEBULA_UI_STUDIO_CODE) and nebulla-sysh-ui-sysh-studio/approved/approved-ui.svg **only when the user explicitly approved UI in Nebula UI Studio** — not for default/fallback styling.
 - Build Environment Setup (Tab 6) using that approved UI as the source of truth for layout, screens, and components.
 - The plan must use approved UI details: colors, layout, components, and Tailwind classes.
@@ -337,7 +337,7 @@ TAB 6 HIDDEN RULES (Environment Setup) — BACKEND ONLY:
   - Store that ID only in secure internal storage; never show it to the client or in user-visible surfaces.
   - Only after the workspace exists: create inside that workspace the web service, PostgreSQL, workers, and env/secrets. Link service IDs, DB URLs, and env blocks to the same internal client ID (workspace_id) so every lookup is workspace_id → resources.
   - All future services, databases, and environment variables for this client are created or updated only in that workspace using the stored client ID.
-  - Secrets and Integrations (Dashboard): every API key, token, or secret the user saves for the active project must auto-sync to that project's Render Web Service env on create and on every update; plan implementation only after also reviewing that page (before / during / after Master Plan) so no required env is missing from Tab 6 or Render.
+  - Secrets and Integrations (Dashboard): AI keys (XAI_API_KEY, ANTHROPIC_API_KEY, OPENAI_API_KEY) save encrypted on the user account via BYOK — never into Nebulla's shared Render env. Other app-deploy secrets may sync to that project's own Render service when applicable. Plan Tab 6 only after reviewing Secrets so non-BYOK integrations are not missing.
   Layer 1: Authentication and Security
   - Implement full custom authentication: login, register, password reset, sessions.
   - Set up user roles and permission system. Permission and tenant resolution on the server must ultimately resolve to the internal client ID (workspace) for data isolation; never expose that ID in tokens or responses to the browser.

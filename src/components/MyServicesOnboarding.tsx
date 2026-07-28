@@ -15,7 +15,7 @@ import {
   GROK_CONSOLE_URL,
   hasLocalGrokApiKey,
   isPlausibleGrokApiKey,
-  setStoredGrokApiKey,
+  saveGrokApiKeyRobust,
 } from '../lib/grokUserKey';
 import { getProjectSecretValue, upsertProjectSecret } from '../lib/nebulaSecretHelpers';
 import { setPreferredAiProvider } from '../lib/nebulaWelcomeOnboarding';
@@ -81,7 +81,7 @@ export function MyServicesOnboarding({
     window.open(`/api/auth/github?${q}`, 'nebulla_github_oauth', 'width=520,height=720,scrollbars=yes');
   }, [stayLoggedIn]);
 
-  const saveGrok = useCallback(() => {
+  const saveGrok = useCallback(async () => {
     setGrokMsg(null);
     const v = grokInput.trim();
     if (!isPlausibleGrokApiKey(v)) {
@@ -90,13 +90,22 @@ export function MyServicesOnboarding({
     }
     setGrokBusy(true);
     try {
-      setStoredGrokApiKey(v);
+      const result = await saveGrokApiKeyRobust(v);
+      if (!result.ok) {
+        setGrokMsg(result.error || 'Could not save key.');
+        return;
+      }
       setPreferredAiProvider('grok');
       setGrokInput('');
-      setGrokMsg('Saved. Grok is ready for chat, architecture, and coding.');
+      setGrokMsg(
+        result.source === 'server'
+          ? 'Saved on your account (encrypted). Grok is ready for chat, architecture, and coding.'
+          : result.error ||
+              'Saved in this browser only. Sign in so the key syncs across devices.',
+      );
       window.dispatchEvent(new CustomEvent('nebula-secrets-updated'));
     } catch {
-      setGrokMsg('Could not save. Check browser storage permissions.');
+      setGrokMsg('Could not save. Sign in and try again.');
     } finally {
       setGrokBusy(false);
     }

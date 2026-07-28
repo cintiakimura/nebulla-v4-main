@@ -15,7 +15,7 @@ import {
   GROK_CONSOLE_URL,
   hasLocalGrokApiKey,
   isPlausibleGrokApiKey,
-  setStoredGrokApiKey,
+  saveGrokApiKeyRobust,
 } from '../../lib/grokUserKey';
 import {
   markWelcomeOnboardingDone,
@@ -77,7 +77,7 @@ export function WelcomeOnboardingModal({ open, user, onClose }: Props) {
     onClose();
   }, [onClose]);
 
-  const saveGrokAndContinue = useCallback(() => {
+  const saveGrokAndContinue = useCallback(async () => {
     setGrokMsg(null);
     const value = grokInput.trim();
     if (!isPlausibleGrokApiKey(value)) {
@@ -90,13 +90,20 @@ export function WelcomeOnboardingModal({ open, user, onClose }: Props) {
     }
     setGrokBusy(true);
     try {
-      setStoredGrokApiKey(value);
+      const result = await saveGrokApiKeyRobust(value);
+      if (!result.ok) {
+        setGrokMsg(result.error || 'Could not save key.');
+        return;
+      }
       setPreferredAiProvider('grok');
       setGrokInput('');
+      if (result.source === 'local' && result.error) {
+        setGrokMsg(result.error);
+      }
       window.dispatchEvent(new CustomEvent('nebula-secrets-updated'));
       setStep(3);
     } catch {
-      setGrokMsg('Could not save. Check that browser storage is allowed.');
+      setGrokMsg('Could not save. Check that you are signed in and try again.');
     } finally {
       setGrokBusy(false);
     }

@@ -12,9 +12,21 @@ export type NebulaPublicConfig = {
   hasV0ApiKey?: boolean;
   v0KeyHint?: string;
   hasR2Storage?: boolean;
+  /** True when platform env OR user BYOK can power main chat. */
   hasMainAiApiKey?: boolean;
-  /** Last 4 characters of MAIN_API_KEY_GROK (compare local vs Render /api/config). */
+  hasGrokApiKey?: boolean;
+  /** Platform MAIN_API_KEY_GROK only (ops fallback). */
+  hasPlatformMainAiApiKey?: boolean;
+  /** Signed-in user has at least one encrypted BYOK key. */
+  hasUserByok?: boolean;
+  byok?: {
+    xai: { configured: boolean; tail?: string };
+    anthropic: { configured: boolean; tail?: string };
+    openai: { configured: boolean; tail?: string };
+  };
+  /** Last 4 characters of user xAI key or platform key (never full secret). */
   mainAiKeyTail?: string;
+  mainAiKeyHint?: string;
   /** When true, Nebula Free-tier monthly token cap is not enforced. */
   freeTierTokenLimitDisabled?: boolean;
   r2MissingEnv?: string[];

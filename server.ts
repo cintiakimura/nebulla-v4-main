@@ -23,6 +23,8 @@ import {
   captureError,
 } from "./lib/nebulaGuardian";
 import { mountRenderStack, getRenderPublicConfig, resolveNebulaProjectDiskKey, readNebulaSessionUserId } from "./renderStack";
+import { getNebulaPgPool } from "./lib/nebulaPgPool";
+import { getUserByokStatus, hasAnyByokConfigured } from "./lib/nebulaUserGrokStore";
 import {
   resolvePencilApiKey,
   resolvePencilMockupsUrl,
@@ -46,7 +48,6 @@ import {
 } from "./lib/nebulaMainGrokResolver";
 import { callClaudeChatCompletion } from "./lib/nebulaClaudeFallback";
 import {
-  resolveApiKeyForProvider,
   runAiChatCompletion,
   toOpenAiStyleChatResponse,
 } from "./lib/aiChatCompletion";
@@ -436,7 +437,7 @@ async function startServer() {
     }
   );
 
-  app.get("/api/config", (req, res) => {
+  app.get("/api/config", async (req, res) => {
     const grok = readMainAiApiKeyFromEnv();
     const mainAiProvider = grok.length >= 20 ? detectMainAiProvider(grok) : "unknown";
     const mainAiChatModel = grok.length >= 20 ? resolveMainAiChatModel(mainAiProvider) : undefined;
@@ -448,14 +449,44 @@ async function startServer() {
     const pencilKey = resolvePencilApiKey();
     const v0KeyRes = resolveV0ApiKeyFromRequest(req);
     const pp = ensureCloudProjectWorkspace(REPO_ROOT, NEBULA_PROJECT_ROOT, projectDiskKey(req));
+
+    let byok = {
+      xai: { configured: false as boolean, tail: undefined as string | undefined },
+      anthropic: { configured: false as boolean, tail: undefined as string | undefined },
+      openai: { configured: false as boolean, tail: undefined as string | undefined },
+    };
+    let hasUserByok = false;
+    const uid = readNebulaSessionUserId(req);
+    const pool = getNebulaPgPool();
+    if (uid && pool) {
+      try {
+        const status = await getUserByokStatus(pool, uid);
+        byok = {
+          xai: { configured: status.xai.configured, tail: status.xai.tail },
+          anthropic: { configured: status.anthropic.configured, tail: status.anthropic.tail },
+          openai: { configured: status.openai.configured, tail: status.openai.tail },
+        };
+        hasUserByok = hasAnyByokConfigured(status);
+      } catch {
+        /* ignore — config still returns env flags */
+      }
+    }
+
+    const hasPlatformMain = grok.length >= 20;
+    const hasMainAi =
+      hasPlatformMain || byok.xai.configured || byok.anthropic.configured || byok.openai.configured;
+
     res.json({
       ...render,
       publicSiteUrl,
       githubClientId: process.env.GITHUB_CLIENT_ID || process.env.github_client_id,
       builderPublicKey: process.env.BUILDER_PUBLIC_KEY,
-      hasMainAiApiKey: grok.length >= 20,
-      hasGrokApiKey: grok.length >= 20,
-      mainAiKeyTail: mainAiApiKeyTail(),
+      hasMainAiApiKey: hasMainAi,
+      hasGrokApiKey: hasMainAi,
+      hasPlatformMainAiApiKey: hasPlatformMain,
+      hasUserByok,
+      byok,
+      mainAiKeyTail: byok.xai.tail || mainAiApiKeyTail(),
       freeTierTokenLimitDisabled: isFreeTierTokenLimitDisabled(),
       mainAiProvider,
       mainAiChatModel,
@@ -4090,7 +4121,7 @@ ${workflowContext}`;
             ? "openai"
             : "xai";
 
-    const keyRes = await resolveMainGrokApiKeyDetailed(req);
+    const keyRes = await resolveMainGrokApiKeyDetailed(req, preferredProvider);
     if (keyRes.ok === false) {
       const status = keyRes.code === "INVALID_LENGTH" ? 400 : 401;
       console.error(`[grok/chat] ${keyRes.code}: ${keyRes.message}`);
@@ -4100,11 +4131,8 @@ ${workflowContext}`;
         hint: keyRes.hint,
       });
     }
-    const keyProbe = resolveApiKeyForProvider(preferredProvider);
     const mainAiProvider =
-      keyRes.source === "client"
-        ? "xai"
-        : keyProbe?.provider ?? "xai";
+      keyRes.ok === true ? keyRes.provider : preferredProvider;
     const chatApiKeyOverride = keyRes.apiKey;
     const convUserId =
       typeof userId === "string" && userId.trim() ? userId.trim() : "anonymous";

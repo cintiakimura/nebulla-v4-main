@@ -32,6 +32,14 @@ import {
 } from '../lib/nebulaDashboardStorage';
 import { resetProjectFromScratch } from '../lib/ideProjectReset';
 import { ChatModelSelector } from '@/components/settings/ModelSelector';
+import {
+  byokProviderFromSecretName,
+  deleteByokKeyOnServer,
+  dispatchByokUpdated,
+  fetchByokStatus,
+  saveByokKeyToServer,
+} from '../lib/byokClient';
+import { clearLocalGrokApiKeyCache } from '../lib/grokUserKey';
 
 export type DashboardTab = 'projects' | 'project-settings' | 'secrets' | 'dns';
 
@@ -533,6 +541,47 @@ function ProjectSecretsEditor({ activeProjectKey }: { activeProjectKey: string }
   const [revealedId, setRevealedId] = useState<string | null>(null);
   const [rowMenuId, setRowMenuId] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [byokNote, setByokNote] = useState<string | null>(null);
+
+  const syncByokRowToServer = async (name: string, value: string) => {
+    const provider = byokProviderFromSecretName(name);
+    if (!provider) return;
+    const trimmed = value.trim();
+    if (!trimmed) {
+      const del = await deleteByokKeyOnServer(provider);
+      if (provider === 'xai') clearLocalGrokApiKeyCache();
+      setByokNote(
+        del.ok
+          ? `${name} removed from your account.`
+          : del.error || 'Could not remove account key.',
+      );
+      dispatchByokUpdated();
+      return;
+    }
+    const saved = await saveByokKeyToServer(provider, trimmed);
+    if (saved.ok) {
+      if (provider === 'xai') clearLocalGrokApiKeyCache();
+      setByokNote(
+        `${name} saved encrypted on your account${saved.tail ? ` (…${saved.tail})` : ''}. Not written to Render env.`,
+      );
+      // Demote local raw value after successful server save
+      setEntries((prev) => {
+        const next = prev.map((e) =>
+          e.name.trim().toUpperCase() === name.trim().toUpperCase()
+            ? { ...e, value: '', note: e.note || 'Stored on account (encrypted)' }
+            : e,
+        );
+        saveProjectSecrets(activeProjectKey, next);
+        return next;
+      });
+      dispatchByokUpdated();
+    } else {
+      setByokNote(
+        saved.error ||
+          'Could not save to account — kept in this browser only. Sign in and try again.',
+      );
+    }
+  };
 
   const persist = (next: SecretEntry[]) => {
     const cleaned = next.filter((e) => !isServerReservedGrokSecretName(e.name));
@@ -560,6 +609,32 @@ function ProjectSecretsEditor({ activeProjectKey }: { activeProjectKey: string }
     setRevealedId(null);
     setRowMenuId(null);
     setCopiedId(null);
+    setByokNote(null);
+    void (async () => {
+      const status = await fetchByokStatus();
+      if (!status?.ok) return;
+      const ensureRow = (name: string, configured: boolean, tail?: string) => {
+        if (!configured) return;
+        setEntries((prev) => {
+          if (prev.some((e) => e.name.trim().toUpperCase() === name)) return prev;
+          const next = [
+            ...prev,
+            {
+              id: newSecretId(),
+              name,
+              value: '',
+              category: 'api_key' as SecretCategory,
+              note: tail ? `On account (…${tail})` : 'On account (encrypted)',
+            },
+          ];
+          saveProjectSecrets(activeProjectKey, next);
+          return next;
+        });
+      };
+      ensureRow('XAI_API_KEY', status.providers.xai.configured, status.providers.xai.tail);
+      ensureRow('ANTHROPIC_API_KEY', status.providers.anthropic.configured, status.providers.anthropic.tail);
+      ensureRow('OPENAI_API_KEY', status.providers.openai.configured, status.providers.openai.tail);
+    })();
   }, [activeProjectKey]);
 
   useEffect(() => {
@@ -588,10 +663,21 @@ function ProjectSecretsEditor({ activeProjectKey }: { activeProjectKey: string }
     if (revealedId === id) setRevealedId(null);
   };
 
+  const commitByokIfNeeded = (id: string) => {
+    const row = entries.find((x) => x.id === id);
+    if (!row) return;
+    if (!byokProviderFromSecretName(row.name)) return;
+    void syncByokRowToServer(row.name, row.value);
+  };
+
   const removeOne = (id: string) => {
+    const row = entries.find((x) => x.id === id);
     persist(entries.filter((x) => x.id !== id));
     if (revealedId === id) setRevealedId(null);
     setRowMenuId(null);
+    if (row && byokProviderFromSecretName(row.name)) {
+      void syncByokRowToServer(row.name, '');
+    }
   };
 
   const addRow = (category: SecretCategory = 'api_key') => {
@@ -629,11 +715,20 @@ function ProjectSecretsEditor({ activeProjectKey }: { activeProjectKey: string }
   return (
     <div className="space-y-4">
       <p className="text-xs text-slate-500 leading-relaxed rounded-lg border border-white/10 bg-black/20 px-3 py-2">
-        Store API keys and env vars for this project in this browser. Server-only{' '}
-        <code className="text-cyan-300/90">MAIN_API_KEY_GROK</code> cannot be added here — set it in{' '}
-        <code className="text-slate-400">.env</code> / Render. <code className="text-cyan-300/90">V0_API_KEY</code> and
-        other integration keys can be saved below.
+        <strong className="text-slate-400">AI keys</strong> (
+        <code className="text-cyan-300/90">XAI_API_KEY</code>,{' '}
+        <code className="text-cyan-300/90">ANTHROPIC_API_KEY</code>,{' '}
+        <code className="text-cyan-300/90">OPENAI_API_KEY</code>) save{' '}
+        <strong className="text-slate-400">encrypted on your account</strong> — not into Nebulla&apos;s shared
+        Render env. Other project secrets stay in this browser for now. Platform fallback{' '}
+        <code className="text-cyan-300/90">MAIN_API_KEY_GROK</code> is set only by ops in{' '}
+        <code className="text-slate-400">.env</code> / Render.
       </p>
+      {byokNote ? (
+        <p className="text-xs text-cyan-200/90 rounded-lg border border-cyan-500/25 bg-cyan-500/10 px-3 py-2">
+          {byokNote}
+        </p>
+      ) : null}
 
       <div className="flex flex-wrap items-center gap-2">
         <button
@@ -690,7 +785,16 @@ function ProjectSecretsEditor({ activeProjectKey }: { activeProjectKey: string }
                   type={revealedId === e.id ? 'text' : 'password'}
                   value={e.value}
                   onChange={(ev) => patchEntry(e.id, { value: ev.target.value })}
-                  onBlur={() => cleanupEmptyRow(e.id)}
+                  onBlur={() => {
+                    cleanupEmptyRow(e.id);
+                    commitByokIfNeeded(e.id);
+                  }}
+                  onKeyDown={(ev) => {
+                    if (ev.key === 'Enter') {
+                      ev.preventDefault();
+                      commitByokIfNeeded(e.id);
+                    }
+                  }}
                   placeholder="Secret value"
                   autoComplete="off"
                   className="flex-1 min-w-0 bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-sm text-slate-200 font-mono focus:border-cyan-500/40 outline-none"

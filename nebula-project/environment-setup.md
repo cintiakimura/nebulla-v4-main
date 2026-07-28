@@ -9,23 +9,39 @@ This document is the **canonical list** of environment variables Grok and implem
 
 ---
 
+## 0. Bring Your Own Key (BYOK) — Nebulla product default
+
+Nebulla’s **main product model** is that each **signed-in user** supplies their own AI API key(s) (Grok / xAI, Anthropic, OpenAI).
+
+| Where | What |
+|-------|------|
+| **User account (encrypted DB)** | `XAI_API_KEY` / `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` saved via Onboarding or Secrets → `PUT /api/byok/keys`. AES-256-GCM via `NEBULA_SECRETS_ENCRYPTION_KEY` (or `SESSION_SECRET` in dev). |
+| **Resolve order (chat/coding)** | User encrypted key → optional browser header (migration) → optional platform env fallback |
+| **Not allowed** | Writing each user’s AI key into Nebulla’s **shared** Render Web Service env or the repo `.env` |
+
+Status APIs (`GET /api/byok/status`, `/api/config`) return only `configured` + optional last-4 — **never** full keys.
+
+---
+
 ## 1. Platform variables
 
-These names and **values are shared across every Nebula project**: copy the same Nebula-owned vendor keys from the canonical Nebula configuration (for example the nebulla-v3 repo `.env` / vault). Do **not** use placeholders in production.
+These names and **values are shared across the Nebulla deployment** (ops-owned). Copy from the canonical Nebula vault. Do **not** use placeholders in production. These are **optional fallbacks** when a user has not saved BYOK keys.
 
 | Variable | Role |
 |----------|------|
-| `MAIN_API_KEY_GROK` | Main AI brain (chat, coding, orchestration). Default model **grok-4** on xAI when using an xAI key. **Read from server environment only** (no per-user override in the request path). Legacy aliases: `MAIN_AI_API_KEY`, `GROK_API_KEY_LUMEN`. |
+| `MAIN_API_KEY_GROK` | Optional platform main AI brain fallback. Default model **grok-4** on xAI when using an xAI key. Legacy aliases: `MAIN_AI_API_KEY`, `GROK_API_KEY_LUMEN`. **Prefer user BYOK.** |
 | `GROK_SWARM_API_KEY` | Nebula-owned swarm / sidecar Grok usage — **set only in Nebula `.env`**. |
 | `GROK_TTS_NEW_API_KEY` | Grok TTS (new API) — **set only in Nebula `.env`**. |
-| `NEBULA_SECRETS_ENCRYPTION_KEY` | Optional dedicated key for **AES-256-GCM** encryption of secrets at rest (falls back to `SESSION_SECRET` in dev). Reserved for future per-user Grok storage. |
+| `NEBULA_SECRETS_ENCRYPTION_KEY` | Dedicated key for **AES-256-GCM** encryption of per-user BYOK secrets at rest (falls back to `SESSION_SECRET` in dev). **Required in production** if users save keys. |
 | `GROK_3_API_KEY` | Grok B — Master Plan writer (separate from the main brain). |
 | `PENCIL_API_KEY` | Nebula UI Studio → Pencil.dev mockups API. |
-| `V0_API_KEY` | v0 by Vercel — Nebula UI Studio first-pass UI generation. **Read from server environment only** (same pattern as `MAIN_API_KEY_GROK`). |
-| `FIGMA_API_KEY` | Optional. Figma personal access token for UI Generation Engine v2 reference retrieval. **Also set on Render.** Alone is not enough — see `FIGMA_REFERENCE_FILE_KEYS`. |
-| `FIGMA_REFERENCE_FILE_KEYS` | Optional but required with the key for real layout extract. Comma-separated Figma **file keys** from `figma.com/file/<KEY>/...`. Without this, status is `weak_matches` and seed templates are used. |
+| `V0_API_KEY` | Optional platform v0 key. Users may also BYOK `V0_API_KEY` via browser header (separate from AI BYOK). |
+| `ANTHROPIC_API_KEY` / `CLAUDE_API_KEY` | Optional platform Claude fallback (not per-user). |
+| `OPENAI_API_KEY` | Optional platform OpenAI fallback (not per-user). |
+| `FIGMA_API_KEY` | Optional. Figma personal access token for UI Generation Engine v2. Alone is not enough — see `FIGMA_REFERENCE_FILE_KEYS`. |
+| `FIGMA_REFERENCE_FILE_KEYS` | Optional but required with the key for real layout extract. Comma-separated Figma **file keys**. |
 
-Optional related keys (only if your deployment diverges from defaults): `PENCIL_API_URL`, model overrides such as `GROK_B_MODEL` — see `.env.example` and server code.
+Optional related keys: `PENCIL_API_URL`, model overrides such as `GROK_B_MODEL` — see `.env.example` and server code.
 
 ---
 
@@ -35,8 +51,8 @@ These are **created or assigned when** the Render workspace, PostgreSQL instance
 
 | Variable | Source |
 |----------|--------|
-| `DATABASE_URL` | Render PostgreSQL → **Connect** / connection string for **that** instance (internal or external URL as appropriate). Paste verbatim. **Nebulla platform only** (users, sessions, project list) — not the customer's app DB. |
-| `PUBLIC_SITE_URL` | Render Web Service → public **HTTPS** origin (assigned URL or custom domain). Must match OAuth and email link bases for that deployment. |
+| `DATABASE_URL` | Render PostgreSQL → **Connect** / connection string for **that** instance. Required for per-user encrypted BYOK storage. |
+| `PUBLIC_SITE_URL` | Render Web Service → public **HTTPS** origin. Must match OAuth and email link bases. |
 
 ---
 
@@ -54,12 +70,11 @@ When a Nebulla project is created, the control plane **auto-provisions one Cloud
 
 ---
 
-## 3. User additional secrets
+## 3. User additional secrets (generated app deploys — not Nebulla BYOK)
 
-Anything the user adds on the dashboard page **Secrets and Integrations** (API keys, tokens, third-party secrets) must be **mirrored** to that **same project’s** Render Web Service **environment variables** for the running app to see them.
+This section is about secrets for a **customer’s generated app** on **that project’s own** Render Web Service — **not** about stuffing AI BYOK keys into the Nebulla platform service.
 
-- **On create:** after the deploy target exists, perform an initial sync so Render env matches what the user saved.
-- **On update:** every add, edit, or remove on Secrets and Integrations should trigger an **idempotent** sync to Render (names aligned with what the server expects).
-- **Source of truth for production:** the process reads **Render env** for that service; the dashboard is the editor, not a browser-only store.
+- **AI BYOK (Grok / Claude / OpenAI):** stay on the user account via `/api/byok/*` — see §0. Do **not** mirror them into Nebulla’s shared Render env.
+- **Other app secrets** (Stripe for the user’s app, Twilio, etc.): when the user has a **dedicated** project deploy target, those may sync to **that** project’s Render service env so the generated app can read them.
 
-When planning or generating Tab 6 (**Environment Setup**) work, review Secrets and Integrations for the active project so no user-supplied integration is missing from the Render env checklist.
+When planning Tab 6 (**Environment Setup**) for a generated app, review Secrets and Integrations for non-BYOK integration keys that belong on the **app** service — keep Nebulla platform BYOK separate.

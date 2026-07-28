@@ -7,7 +7,16 @@ import type { Express, Request, Response } from "express";
 import { getProjectKeyFromRequest, sanitizeProjectKey } from "./lib/nebulaProjectKey";
 import { registerNebulaPgPool } from "./lib/nebulaPgPool";
 import { getMonthlyUsageSnapshot } from "./lib/token-usage";
-import { saveUserGrokApiKey } from "./lib/nebulaUserGrokStore";
+import {
+  clearUserByokApiKey,
+  getUserByokStatus,
+  hasAnyByokConfigured,
+  isByokProvider,
+  saveUserByokApiKey,
+  saveUserGrokApiKey,
+  type ByokProvider,
+} from "./lib/nebulaUserGrokStore";
+import { byokRateLimitAllow } from "./lib/nebulaByokRateLimit";
 import {
   isD1ProvisioningConfigured,
   provisionD1ForNebulaProject,
@@ -307,6 +316,10 @@ async function ensureTables(p: pg.Pool) {
   );
   await p.query(`ALTER TABLE public.nebula_users ADD COLUMN IF NOT EXISTS grok_api_key_encrypted TEXT;`);
   await p.query(`ALTER TABLE public.nebula_users ADD COLUMN IF NOT EXISTS grok_key_validated_at TIMESTAMPTZ;`);
+  await p.query(`ALTER TABLE public.nebula_users ADD COLUMN IF NOT EXISTS anthropic_api_key_encrypted TEXT;`);
+  await p.query(`ALTER TABLE public.nebula_users ADD COLUMN IF NOT EXISTS anthropic_key_validated_at TIMESTAMPTZ;`);
+  await p.query(`ALTER TABLE public.nebula_users ADD COLUMN IF NOT EXISTS openai_api_key_encrypted TEXT;`);
+  await p.query(`ALTER TABLE public.nebula_users ADD COLUMN IF NOT EXISTS openai_key_validated_at TIMESTAMPTZ;`);
 }
 
 function sessionSecret(): string {
@@ -871,6 +884,109 @@ export async function mountRenderStack(app: Express) {
     } catch (e) {
       console.error("[nebula] /api/auth/session:", e);
       res.status(500).json({ error: "Session lookup failed" });
+    }
+  });
+
+  /** BYOK status — never returns full keys (configured + optional last-4 only). */
+  app.get("/api/byok/status", async (req, res) => {
+    setNoStoreAuthHeaders(res);
+    const uid = readSession(req);
+    if (!uid) {
+      return res.status(401).json({ error: "Sign in to manage AI API keys on your account." });
+    }
+    if (!hasDb()) {
+      return res.status(503).json({
+        error: "Database unavailable — AI keys cannot be loaded from your account right now.",
+        dbUnavailable: true,
+      });
+    }
+    try {
+      const db = requireDbPool();
+      const status = await getUserByokStatus(db, uid);
+      return res.json({
+        ok: true,
+        providers: status,
+        hasAnyKey: hasAnyByokConfigured(status),
+      });
+    } catch (e) {
+      console.error("[nebula] /api/byok/status:", e);
+      return res.status(500).json({ error: "Could not load AI key status." });
+    }
+  });
+
+  /** Save encrypted BYOK key for xai | anthropic | openai. */
+  app.put("/api/byok/keys", async (req, res) => {
+    setNoStoreAuthHeaders(res);
+    const uid = readSession(req);
+    if (!uid) {
+      return res.status(401).json({ error: "Sign in to save AI API keys on your account." });
+    }
+    if (!hasDb()) {
+      return res.status(503).json({
+        error: "Database unavailable — cannot save encrypted keys. Try again shortly.",
+        dbUnavailable: true,
+      });
+    }
+    if (!byokRateLimitAllow(`byok-save:${uid}`)) {
+      return res.status(429).json({ error: "Too many key updates. Wait a minute and try again." });
+    }
+    const body = (req.body || {}) as { provider?: string; apiKey?: string };
+    const providerRaw = String(body.provider || "").trim().toLowerCase();
+    if (!isByokProvider(providerRaw)) {
+      return res.status(400).json({
+        error: "provider must be one of: xai, anthropic, openai",
+      });
+    }
+    const provider = providerRaw as ByokProvider;
+    const apiKey = typeof body.apiKey === "string" ? body.apiKey : "";
+    try {
+      const db = requireDbPool();
+      const saved = await saveUserByokApiKey(db, uid, provider, apiKey);
+      if (!saved.ok) {
+        return res.status(400).json({
+          error: "That API key looks invalid. Paste the full key from the provider console.",
+          code: saved.reason || "invalid_key",
+        });
+      }
+      const status = await getUserByokStatus(db, uid);
+      return res.json({
+        ok: true,
+        provider,
+        configured: true,
+        tail: status[provider].tail,
+        providers: status,
+      });
+    } catch (e) {
+      console.error("[nebula] /api/byok/keys PUT:", e);
+      return res.status(500).json({ error: "Could not save AI API key." });
+    }
+  });
+
+  /** Clear one BYOK provider key from the account. */
+  app.delete("/api/byok/keys/:provider", async (req, res) => {
+    setNoStoreAuthHeaders(res);
+    const uid = readSession(req);
+    if (!uid) {
+      return res.status(401).json({ error: "Sign in to manage AI API keys." });
+    }
+    if (!hasDb()) {
+      return res.status(503).json({ error: "Database unavailable.", dbUnavailable: true });
+    }
+    if (!byokRateLimitAllow(`byok-del:${uid}`, { max: 30, windowMs: 60_000 })) {
+      return res.status(429).json({ error: "Too many key updates. Wait a minute and try again." });
+    }
+    const providerRaw = String(req.params.provider || "").trim().toLowerCase();
+    if (!isByokProvider(providerRaw)) {
+      return res.status(400).json({ error: "provider must be one of: xai, anthropic, openai" });
+    }
+    try {
+      const db = requireDbPool();
+      await clearUserByokApiKey(db, uid, providerRaw);
+      const status = await getUserByokStatus(db, uid);
+      return res.json({ ok: true, provider: providerRaw, providers: status });
+    } catch (e) {
+      console.error("[nebula] /api/byok/keys DELETE:", e);
+      return res.status(500).json({ error: "Could not remove AI API key." });
     }
   });
 
