@@ -1,9 +1,9 @@
 import { useMemo } from 'react';
 import { NebullaIDE } from '@/components/ide/NebullaIDE';
-import { PrivacyPolicyPage } from '@/pages/PrivacyPolicyPage';
-import { TermsOfServicePage } from '@/pages/TermsOfServicePage';
-import { DpaPage } from '@/pages/DpaPage';
-import { ResetPasswordPage } from '@/pages/ResetPasswordPage';
+import { PrivacyPolicyPage } from './pages/PrivacyPolicyPage';
+import { TermsOfServicePage } from './pages/TermsOfServicePage';
+import { DpaPage } from './pages/DpaPage';
+import { ResetPasswordPage } from './pages/ResetPasswordPage';
 
 function usePathname(): string {
   return useMemo(() => {
