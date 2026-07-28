@@ -34,6 +34,7 @@ User-controlled lock in the IDE chat header. Orthogonal to automatic detector mo
 
 ## Related
 
+- `nebulla-project/chat-personality.md` — **UNBREAKABLE** Chat brainstorming personality + greeting
 - `nebulla-project/chat-mode-detection.md` — detector sequence (Discovery → Architecture → Coding …)
 - `nebulla-project/app-status-runtime.md` — preview health → NDM Verify
 - `src/lib/ideAssistantInteractionMode.ts` — types + storage helpers

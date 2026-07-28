@@ -4,14 +4,14 @@ import { sanitizeAssistantChatText } from '../../lib/assistantChatSanitize';
 
 /** Hidden user turn — Grok replies with the first onboarding question only (project-execution-rules §4). */
 export const IDE_CHAT_DISCOVERY_BOOTSTRAP =
-  "I'm ready. Follow project-execution-rules.md INITIAL ONBOARDING: ask only your first single discovery question about my app (exact wording from the rules, one question in your reply).";
+  "I'm ready. Follow project-execution-rules.md INITIAL ONBOARDING: ask only your first single discovery question about what I'm creating (app, landing page, site, or other — exact wording from the rules, one question in your reply).";
 
 /**
  * Legacy / chat "Create a new project: …" path.
  * Prefer buildIdeaDiscoveryBootstrap for New Project → Start with a prompt.
  */
 export const IDE_CHAT_FAST_PROJECT_BOOTSTRAP =
-  "FAST PROJECT MODE. The user gave a short description for a new app. Follow project-execution-rules.md Discovery. First reply MUST: (1) a short \"Here's what I understood\" summary in bullets — only what the prompt clearly implies; note gaps if vague. (2) then ask exactly ONE missing required discovery question (include Project Type if unknown). Do NOT write Master Plan tags, code, or multiple questions. Do NOT rush to <START_MASTERPLAN>.";
+  "FAST PROJECT MODE. The user gave a short description for a new project (app, site, or landing). Follow project-execution-rules.md Discovery. First reply MUST: (1) a short \"Here's what I understood\" summary in bullets — only what the prompt clearly implies; note gaps if vague. (2) then ask exactly ONE missing required discovery question (include Project Type if unknown). Do NOT write Master Plan tags, code, or multiple questions. Do NOT rush to <START_MASTERPLAN>.";
 
 const BOOTSTRAP_PREFIX = "I'm ready. Follow project-execution-rules.md INITIAL ONBOARDING:";
 
@@ -25,15 +25,15 @@ export const IDEA_DISCOVERY_BOOTSTRAP_PREFIX = 'IDEA PROMPT DISCOVERY.';
 export function buildDiscoveryBootstrap(projectType?: NebulaProjectType | null): string {
   if (!projectType) {
     return (
-      `${BOOTSTRAP_PREFIX} Briefly tell the user you'll ask a few required questions to build the Master Plan, ` +
-      `then ask only your first single discovery question about my app (exact wording from the rules, one question in your reply). ` +
+      `${BOOTSTRAP_PREFIX} Briefly greet in the spirit of chat-personality.md, then say you'll ask a few required questions to build the Master Plan, ` +
+      `then ask only your first single discovery question about what they're creating (not app-only — exact wording from the rules, one question in your reply). ` +
       `Do NOT write Master Plan tags or code yet.`
     );
   }
   return (
     `${BOOTSTRAP_PREFIX} The user already chose project type **${projectType}** on My Projects. ` +
     `Store that as Project Type (do NOT ask the project-type question). ` +
-    `Briefly tell them you'll ask a few required questions to build the Master Plan, then ask only your first single discovery question — the main goal — ` +
+    `Briefly greet in the spirit of chat-personality.md, then say you'll ask a few required questions to build the Master Plan, then ask only your first single discovery question — the main goal — ` +
     `using the exact wording from the rules (one question in your reply). ` +
     `Use ${projectType} for later pages, navigation, UI/UX, and tech recommendations. Do NOT write Master Plan tags or code yet.`
   );

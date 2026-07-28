@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Bot, Hand, Loader2, Mic, MessageSquare, Rocket, Send, User, Wrench } from 'lucide-react';
+import { Bot, Hand, Loader2, Mic, MessageSquare, Paperclip, Rocket, Send, User, Wrench } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { fetchSessionUser, syncActiveCloudProjectFromSession, upsertCloudProject } from '../../lib/nebulaCloud';
 import {
@@ -70,6 +70,7 @@ import {
 } from '../../lib/ideHomeEvents';
 import { ideContextSnippetForChat, useIdeWorkspace } from '@/components/ide/IdeWorkspaceContext';
 import { ChatFilePreview } from '@/components/ide/ChatFilePreview';
+import { uploadFileToR2 } from '../../lib/nebulaStorageClient';
 import {
   advanceGrokActivity,
   createGrokActivity,
@@ -103,6 +104,10 @@ import {
   resetAppRuntimeForProject,
 } from '../../lib/ideAppRuntimeStatus';
 
+const CHAT_EMPTY_GREETING = "What's up? What would you like to create today?";
+const CHAT_EMPTY_SUBLINE =
+  'App, landing page, site, or something else — we can brainstorm here. Switch to Agent when you’re ready to build.';
+const MAX_CHAT_ATTACH_BYTES = 12 * 1024 * 1024;
 const IDLE_GROK_ACTIVITY_BASE: Omit<GrokActivityStatus, 'subhead'> = {
   headline: 'Ready',
   liveLog: [],
@@ -231,6 +236,8 @@ export function AIChat() {
   const [workspaceRootLabel, setWorkspaceRootLabel] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
+  const [uploadBusy, setUploadBusy] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [accessoryHint, setAccessoryHint] = useState<string | null>(null);
   const [grokActivity, setGrokActivity] = useState<GrokActivityStatus>(() =>
     idleGrokActivity(assistantInteractionMode),
@@ -935,7 +942,7 @@ export function AIChat() {
         id: `a-free-${Date.now()}`,
         role: 'assistant',
         content:
-          "Hi! I'm here whenever you need me — ask a question, brainstorm, or tell me what you'd like to build. No interview required.",
+          "What's up? What would you like to create today?",
         timestamp: stamp(),
       };
       setMessages([welcome]);
@@ -1951,6 +1958,54 @@ export function AIChat() {
     [applyInteractionMode],
   );
 
+  const handleFileAttachClick = useCallback(() => {
+    if (sending || uploadBusy || micInputBlocked) return;
+    fileInputRef.current?.click();
+  }, [sending, uploadBusy, micInputBlocked]);
+
+  const handleFileSelected = useCallback(
+    async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      e.target.value = '';
+      if (!file || sending) return;
+      if (file.size > MAX_CHAT_ATTACH_BYTES) {
+        setAccessoryHint('That file is a bit large (max about 12MB). Try a smaller image or doc.');
+        window.setTimeout(() => setAccessoryHint(null), 4500);
+        return;
+      }
+      setUploadBusy(true);
+      setAccessoryHint('Uploading…');
+      try {
+        const result = await uploadFileToR2(file, { projectKey: getBrowserProjectKey() });
+        if (!result.ok) {
+          const hint =
+            result.hint ||
+            result.error ||
+            'Upload didn’t work. Check storage setup, or try again in a moment.';
+          setAccessoryHint(hint);
+          window.setTimeout(() => setAccessoryHint(null), 5500);
+          return;
+        }
+        const attachmentLine = result.url
+          ? `[Attached ${file.name}](${result.url})`
+          : `[Attached ${file.name}] (storage key: ${result.key})`;
+        setInput((prev) => {
+          const next = prev.trim() ? `${prev.trim()}\n${attachmentLine}` : attachmentLine;
+          inputRef.current = next;
+          return next;
+        });
+        setAccessoryHint('Attached.');
+        window.setTimeout(() => setAccessoryHint(null), 2800);
+      } catch {
+        setAccessoryHint('Upload didn’t work. Please try again.');
+        window.setTimeout(() => setAccessoryHint(null), 4500);
+      } finally {
+        setUploadBusy(false);
+      }
+    },
+    [sending],
+  );
+
   return (
     <div className="surface-active flex h-full min-h-0 flex-col overflow-hidden">
       <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border/70 px-3 py-2">
@@ -2045,10 +2100,10 @@ export function AIChat() {
         className="min-h-0 flex-1 space-y-3 overflow-auto p-3"
       >
         {messages.length === 0 && !sending ? (
-          <p className="type-body-md px-1 text-center text-muted-foreground">
-            Start a project from My Projects with a prompt or a type — Grok will summarize what it
-            understood (when you gave an idea), then ask one discovery question at a time.
-          </p>
+          <div className="px-1 py-6 text-center">
+            <p className="type-body-md text-foreground/90">{CHAT_EMPTY_GREETING}</p>
+            <p className="type-label-sm mt-2 text-muted-foreground">{CHAT_EMPTY_SUBLINE}</p>
+          </div>
         ) : null}
         {messages.map((message) =>
           message.variant === 'status' ? (
@@ -2166,6 +2221,15 @@ export function AIChat() {
       </div>
 
       <div className="shrink-0 border-t border-border p-3">
+        <input
+          ref={fileInputRef}
+          type="file"
+          className="hidden"
+          accept="image/*,.svg,.pdf,.json,.webp,.png,.jpg,.jpeg,.gif,.txt,.md,.markdown"
+          onChange={(e) => void handleFileSelected(e)}
+          aria-hidden
+          tabIndex={-1}
+        />
         <div className="surface-float rounded-lg border border-transparent p-2 ring-1 ring-[color-mix(in_srgb,var(--outline-variant)_12%,transparent)] transition-[box-shadow,background-color] duration-300 ease-out focus-within:ring-[color-mix(in_srgb,var(--outline-variant)_22%,transparent)]">
           <textarea
             value={input}
@@ -2182,15 +2246,26 @@ export function AIChat() {
             placeholder={
               assistantInteractionMode === 'agent'
                 ? 'Message Agent — build & edit code…'
-                : 'Message Chat — brainstorm & plan…'
+                : 'Brainstorm anything — app, site, landing…'
             }
             rows={3}
-            disabled={sending}
+            disabled={sending || uploadBusy}
             className="type-body-md min-h-[4.5rem] w-full resize-y bg-transparent text-foreground outline-none placeholder:text-muted-foreground disabled:opacity-50"
           />
 
           <div className="mt-2 flex items-center justify-between gap-3">
             <div className="flex items-center gap-1.5">
+              <ChatRoundButton
+                label={uploadBusy ? 'Uploading…' : 'Attach file'}
+                onClick={handleFileAttachClick}
+                disabled={sending || uploadBusy || micInputBlocked}
+              >
+                {uploadBusy ? (
+                  <Loader2 className="h-[18px] w-[18px] animate-spin" aria-hidden />
+                ) : (
+                  <Paperclip className="h-[18px] w-[18px]" aria-hidden />
+                )}
+              </ChatRoundButton>
               <ChatRoundButton
                 label="Interrupt Grok voice"
                 onClick={() => {
@@ -2204,7 +2279,7 @@ export function AIChat() {
               <ChatRoundButton
                 label={isRecordingVoice ? 'Stop microphone' : 'Start microphone'}
                 onClick={() => toggleVoiceMic()}
-                disabled={sending}
+                disabled={sending || uploadBusy}
               >
                 <Mic
                   className={cn(
@@ -2240,7 +2315,7 @@ export function AIChat() {
                   setIsRecordingVoice(false);
                   void sendChat();
                 }}
-                disabled={!input.trim() || sending}
+                disabled={!input.trim() || sending || uploadBusy}
               >
                 <Send className="h-[18px] w-[18px]" />
               </ChatRoundButton>
