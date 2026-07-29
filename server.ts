@@ -1350,7 +1350,13 @@ No approved UI code yet.
       const rel = relRaw.replace(/^\.\/+/, "").replace(/\\/g, "/");
       if (!rel) return res.status(400).json({ error: "path is required" });
       if (content === undefined) return res.status(400).json({ error: "content is required" });
-      if (!isUserAppProductPath(rel)) {
+      // Product app files, plus small IDE workspace metadata under nebulla-ide/ (locale, etc.).
+      const isIdeMeta =
+        rel.startsWith("nebulla-ide/") &&
+        !rel.includes("..") &&
+        !rel.includes("/node_modules/") &&
+        !rel.startsWith("nebulla-ide/node_modules/");
+      if (!isUserAppProductPath(rel) && !isIdeMeta) {
         return res.status(403).json({ error: "Path not allowed for save" });
       }
       const target = resolveWorkspaceRelative(workspaceRoot, rel);

@@ -39,7 +39,15 @@ const LanguageContext = createContext<LanguageContextValue | null>(null);
 
 const CONTENT_LOCALE_PATH = 'nebulla-ide/content-locale.json';
 
+function isIdeAppRoute(): boolean {
+  if (typeof window === 'undefined') return false;
+  const p = window.location.pathname.replace(/\/+$/, '') || '/';
+  return p === '/app' || p === '/ide';
+}
+
 async function syncContentLocaleToWorkspace(contentLocale: IdeLocaleCode): Promise<void> {
+  // Avoid noisy 403s on landing/login while a stale projectKey is still in localStorage.
+  if (!isIdeAppRoute()) return;
   try {
     await fetchJson(withProjectQuery('/api/files/content'), {
       method: 'PUT',
