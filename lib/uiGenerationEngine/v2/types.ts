@@ -91,6 +91,26 @@ export type TemplateDef = {
 
 export type SlotMap = Record<string, string>;
 
+export type FigmaKeyProbeOutcome =
+  | "ok"
+  | "404"
+  | "403"
+  | "401"
+  | "429"
+  | "5xx"
+  | "network"
+  | "other";
+
+/** Per-key probe result (file keys are non-secret; never include the API token). */
+export type FigmaKeyDiagnostic = {
+  key: string;
+  outcome: FigmaKeyProbeOutcome;
+  http_status?: number;
+  score?: number;
+  file_name?: string;
+  bucket?: string;
+};
+
 export type FigmaRecord = {
   figma_used: "yes" | "no";
   figma_status: FigmaStatusV2;
@@ -103,6 +123,8 @@ export type FigmaRecord = {
   reference_file_keys_configured: number;
   /** Operator hint for Render / .env (no secrets). */
   env_guidance: string;
+  /** Per-key HTTP/structure outcomes for debugging. */
+  key_diagnostics: FigmaKeyDiagnostic[];
 };
 
 export type V2NodeStyle = {

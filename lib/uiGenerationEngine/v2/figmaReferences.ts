@@ -8,6 +8,8 @@
  * - FIGMA_REFERENCE_FILE_KEYS — comma-separated file keys from
  *   figma.com/design/<KEY>/... or figma.com/file/<KEY>/...
  *   Community catalog IDs often 404 until you Duplicate into your account.
+ * - FIGMA_REFERENCE_BUCKETS — optional tagged library, e.g.
+ *   mobile=KEY,landing=KEY,dashboard=KEY (unknown buckets ignored)
  * - FIGMA_REFERENCE_MAX_FILES — optional (default 3, max 8) how many keys to probe
  *
  * Success requires usable structural guidance extracted from Figma frames —
@@ -18,7 +20,15 @@
 
 import { rankSeedPatterns } from "../seedPatterns";
 import type { UiGenContextState } from "../types";
-import type { FigmaRecord, FigmaStatusV2, PageClassification, V2TemplateId } from "./types";
+import type {
+  FigmaKeyDiagnostic,
+  FigmaRecord,
+  FigmaStatusV2,
+  PageClassification,
+  V2TemplateId,
+} from "./types";
+
+const KNOWN_BUCKETS = new Set(["mobile", "landing", "dashboard", "auth", "web"]);
 
 function resolveLibraryKeys(): string[] {
   return (process.env.FIGMA_REFERENCE_FILE_KEYS || "")
@@ -27,10 +37,96 @@ function resolveLibraryKeys(): string[] {
     .filter(Boolean);
 }
 
+/** Parse `mobile=KEY,landing=KEY2` — unknown buckets ignored. */
+export function parseReferenceBuckets(
+  raw: string = process.env.FIGMA_REFERENCE_BUCKETS || "",
+): Map<string, string[]> {
+  const map = new Map<string, string[]>();
+  for (const part of raw.split(",")) {
+    const t = part.trim();
+    if (!t) continue;
+    const eq = t.indexOf("=");
+    if (eq <= 0) continue;
+    const bucket = t.slice(0, eq).trim().toLowerCase();
+    const key = t.slice(eq + 1).trim();
+    if (!KNOWN_BUCKETS.has(bucket) || !key) continue;
+    const list = map.get(bucket) || [];
+    if (!list.includes(key)) list.push(key);
+    map.set(bucket, list);
+  }
+  return map;
+}
+
 function resolveMaxFiles(): number {
   const raw = Number(process.env.FIGMA_REFERENCE_MAX_FILES || "3");
   if (!Number.isFinite(raw) || raw < 1) return 3;
   return Math.min(8, Math.floor(raw));
+}
+
+/** Preferred bucket for Stitch-like C.3 (device → page type). */
+export function preferredBucketForClassification(classification: PageClassification): string | null {
+  if (classification.page_type === "auth") return "auth";
+  if (classification.device === "landing" || classification.page_type === "landing") return "landing";
+  if (classification.device === "mobile") return "mobile";
+  if (classification.page_type === "dashboard") return "dashboard";
+  if (classification.device === "web") return "web";
+  return null;
+}
+
+function isLooseClassification(classification: PageClassification): boolean {
+  return classification.confidence === "low" || classification.page_type === "other";
+}
+
+/**
+ * Build ordered probe keys.
+ * - Buckets set + preferred has keys → only those (avoid wrong mobile on landing/dashboard).
+ * - Buckets set + preferred empty → untagged CSV only if classification is loose; else [].
+ * - No buckets → CSV with light mobile prefer.
+ */
+export function resolveProbeKeys(
+  classification: PageClassification,
+  libraryKeys: string[] = resolveLibraryKeys(),
+  buckets: Map<string, string[]> = parseReferenceBuckets(),
+): { keys: string[]; selection_mode: string; preferred_bucket: string | null } {
+  const preferred = preferredBucketForClassification(classification);
+  const hasBuckets = buckets.size > 0;
+
+  if (hasBuckets && preferred) {
+    const tagged = buckets.get(preferred) || [];
+    if (tagged.length > 0) {
+      return {
+        keys: tagged,
+        selection_mode: `bucket:${preferred}`,
+        preferred_bucket: preferred,
+      };
+    }
+    if (isLooseClassification(classification) && libraryKeys.length > 0) {
+      return {
+        keys: orderKeysForClassification(libraryKeys, classification),
+        selection_mode: "untagged_loose",
+        preferred_bucket: preferred,
+      };
+    }
+    return {
+      keys: [],
+      selection_mode: `bucket_miss:${preferred}`,
+      preferred_bucket: preferred,
+    };
+  }
+
+  if (hasBuckets && !preferred && libraryKeys.length > 0) {
+    return {
+      keys: orderKeysForClassification(libraryKeys, classification),
+      selection_mode: "untagged_no_prefer",
+      preferred_bucket: null,
+    };
+  }
+
+  return {
+    keys: orderKeysForClassification(libraryKeys, classification),
+    selection_mode: "csv",
+    preferred_bucket: preferred,
+  };
 }
 
 /** Prefer known mobile design key first on mobile pages when present in the list. */
@@ -135,6 +231,66 @@ function redactSecrets(msg: string): string {
   return msg.replace(/figd_[A-Za-z0-9_-]+/g, "[redacted-token]");
 }
 
+function summarizeDiagnostics(diags: FigmaKeyDiagnostic[]): string {
+  if (!diags.length) return "";
+  return diags
+    .map((d) => {
+      const short = d.key.length > 12 ? `${d.key.slice(0, 10)}…` : d.key;
+      const score = typeof d.score === "number" ? ` score=${d.score}` : "";
+      return `${short}:${d.outcome}${score}`;
+    })
+    .join("; ");
+}
+
+function outcomeFromStatus(status: number): FigmaKeyDiagnostic["outcome"] {
+  if (status === 401) return "401";
+  if (status === 403) return "403";
+  if (status === 404) return "404";
+  if (status === 429) return "429";
+  if (status >= 500) return "5xx";
+  if (status >= 200 && status < 300) return "ok";
+  return "other";
+}
+
+/** One retry on network failure or HTTP 5xx only. */
+async function fetchFigmaFileOnce(
+  fileKey: string,
+  token: string,
+): Promise<{ res: Response | null; networkError?: string; retried: boolean }> {
+  const url = `https://api.figma.com/v1/files/${encodeURIComponent(fileKey)}?depth=3`;
+  const headers = { "X-Figma-Token": token };
+
+  const attempt = async (): Promise<{ res: Response | null; networkError?: string }> => {
+    try {
+      const res = await fetch(url, { headers });
+      return { res };
+    } catch (e) {
+      return { res: null, networkError: e instanceof Error ? e.message : "network error" };
+    }
+  };
+
+  let first = await attempt();
+  if (first.res && first.res.status < 500) {
+    return { res: first.res, retried: false };
+  }
+  if (!first.res || first.res.status >= 500) {
+    const second = await attempt();
+    return {
+      res: second.res,
+      networkError: second.networkError || first.networkError,
+      retried: true,
+    };
+  }
+  return { res: first.res, networkError: first.networkError, retried: false };
+}
+
+function bucketForKey(key: string, buckets: Map<string, string[]>): string | undefined {
+  for (const [bucket, keys] of buckets) {
+    if (keys.includes(key)) return bucket;
+  }
+  return undefined;
+}
+
 /** Always attempt Figma when key exists; never claim success without usable structural refs. */
 export async function retrieveFigmaReferences(input: {
   classification: PageClassification;
@@ -146,6 +302,10 @@ export async function retrieveFigmaReferences(input: {
 }): Promise<FigmaRecord> {
   const key = (process.env.FIGMA_API_KEY || "").trim();
   const libraryKeys = resolveLibraryKeys();
+  const buckets = parseReferenceBuckets();
+  const allConfiguredKeys = [
+    ...new Set([...libraryKeys, ...[...buckets.values()].flat()]),
+  ];
   const seeds = rankSeedPatterns({
     ...({} as UiGenContextState),
     device: input.seedState.device || "web",
@@ -166,19 +326,24 @@ export async function retrieveFigmaReferences(input: {
     why: `Strong seed fallback for ${input.classification.device}/${input.classification.page_type}: ${s.structure}`,
   }));
   const seedHints = mapSeedToTemplateHints(input.templateId, topSeeds[0]?.structure || "stacked sections");
-  const keysConfigured = libraryKeys.length;
+  const keysConfigured = allConfiguredKeys.length;
+  const bucketsConfigured = buckets.size;
   const envGuidance =
     !key && keysConfigured === 0
       ? "Set FIGMA_API_KEY and FIGMA_REFERENCE_FILE_KEYS on Render (and local .env). Use keys from figma.com/design/<KEY>/... — see docs/figma-reference-library.md"
       : !key
         ? "Set FIGMA_API_KEY (token with file read). FIGMA_REFERENCE_FILE_KEYS alone is not enough."
-        : keysConfigured === 0
+        : keysConfigured === 0 && bucketsConfigured === 0
           ? "FIGMA_API_KEY is set, but FIGMA_REFERENCE_FILE_KEYS is missing — add comma-separated design file keys (Community catalog IDs 404 until duplicated). See docs/figma-reference-library.md"
-          : "Both FIGMA_API_KEY and FIGMA_REFERENCE_FILE_KEYS are configured.";
+          : bucketsConfigured > 0
+            ? "FIGMA_API_KEY + optional FIGMA_REFERENCE_BUCKETS configured. Prefer tagged keys per device/page; Duplicate Community files before using catalog IDs."
+            : "Both FIGMA_API_KEY and FIGMA_REFERENCE_FILE_KEYS are configured.";
 
+  const emptyDiags: FigmaKeyDiagnostic[] = [];
   const base = {
     reference_file_keys_configured: keysConfigured,
     env_guidance: envGuidance,
+    key_diagnostics: emptyDiags,
   };
 
   if (!key) {
@@ -226,13 +391,30 @@ export async function retrieveFigmaReferences(input: {
     }
     // 403 on /me (missing current_user:read) → continue to file probes
 
-    if (libraryKeys.length === 0) {
+    const probe = resolveProbeKeys(input.classification, libraryKeys, buckets);
+
+    if (probe.selection_mode.startsWith("bucket_miss:")) {
+      const bucket = probe.preferred_bucket || "unknown";
+      return {
+        ...base,
+        figma_used: "no",
+        figma_status: "weak_matches",
+        figma_error: `No FIGMA_REFERENCE_BUCKETS entry for "${bucket}" — seed fallback (avoids wrong-bucket Figma). Add ${bucket}=<designKey> or set classification-loose untagged keys.`,
+        env_guidance: `${envGuidance} Missing bucket tag: ${bucket}.`,
+        candidates: seedCandidates,
+        selected_refs: seedSelected,
+        fallback_used: "yes",
+        structure_hints: seedHints,
+      };
+    }
+
+    if (probe.keys.length === 0 && allConfiguredKeys.length === 0) {
       return {
         ...base,
         figma_used: "no",
         figma_status: "weak_matches",
         figma_error:
-          "FIGMA_API_KEY present but FIGMA_REFERENCE_FILE_KEYS not set — cannot extract layout; seed fallback",
+          "FIGMA_API_KEY present but FIGMA_REFERENCE_FILE_KEYS / BUCKETS not set — cannot extract layout; seed fallback",
         candidates: seedCandidates,
         selected_refs: seedSelected,
         fallback_used: "yes",
@@ -242,28 +424,39 @@ export async function retrieveFigmaReferences(input: {
 
     const figmaCandidates: { id: string; reason: string }[] = [];
     const allHints: string[] = [];
+    const keyDiagnostics: FigmaKeyDiagnostic[] = [];
     let bestScore = 0;
     let bestKey = "";
     let sawUnauthorizedFile = false;
     let sawNotFound = 0;
 
-    const ordered = orderKeysForClassification(libraryKeys, input.classification).slice(
-      0,
-      resolveMaxFiles(),
-    );
+    const ordered = probe.keys.slice(0, resolveMaxFiles());
 
     for (const fileKey of ordered) {
+      const bucket = bucketForKey(fileKey, buckets);
       try {
-        const fr = await fetch(
-          `https://api.figma.com/v1/files/${encodeURIComponent(fileKey)}?depth=3`,
-          { headers: { "X-Figma-Token": key } },
-        );
+        const { res: fr, networkError } = await fetchFigmaFileOnce(fileKey, key);
+        if (!fr) {
+          keyDiagnostics.push({
+            key: fileKey,
+            outcome: "network",
+            bucket,
+          });
+          continue;
+        }
         if (fr.status === 429) {
+          keyDiagnostics.push({
+            key: fileKey,
+            outcome: "429",
+            http_status: 429,
+            bucket,
+          });
           return {
             ...base,
+            key_diagnostics: keyDiagnostics,
             figma_used: "no",
             figma_status: "rate_limited",
-            figma_error: "Figma rate limited while reading reference files",
+            figma_error: `Figma rate limited while reading reference files (${summarizeDiagnostics(keyDiagnostics)})`,
             candidates: seedCandidates,
             selected_refs: seedSelected,
             fallback_used: "yes",
@@ -272,21 +465,49 @@ export async function retrieveFigmaReferences(input: {
         }
         if (fr.status === 401 || fr.status === 403) {
           sawUnauthorizedFile = true;
+          keyDiagnostics.push({
+            key: fileKey,
+            outcome: outcomeFromStatus(fr.status),
+            http_status: fr.status,
+            bucket,
+          });
           continue;
         }
         if (fr.status === 404) {
           sawNotFound += 1;
+          keyDiagnostics.push({
+            key: fileKey,
+            outcome: "404",
+            http_status: 404,
+            bucket,
+          });
           continue;
         }
-        if (!fr.ok) continue;
+        if (!fr.ok) {
+          keyDiagnostics.push({
+            key: fileKey,
+            outcome: outcomeFromStatus(fr.status),
+            http_status: fr.status,
+            bucket,
+          });
+          continue;
+        }
         const data = (await fr.json()) as {
           name?: string;
           document?: FigmaNode;
         };
         const extracted = extractStructureHints(data.document, input.classification, input.templateId);
+        keyDiagnostics.push({
+          key: fileKey,
+          outcome: "ok",
+          http_status: 200,
+          score: extracted.score,
+          file_name: data.name,
+          bucket,
+        });
         figmaCandidates.push({
           id: `figma:${fileKey}`,
-          reason: `File "${data.name || fileKey}" frames=${extracted.frameNames.slice(0, 5).join(", ") || "(none)"} score=${extracted.score}`,
+          reason: `File "${data.name || fileKey}" frames=${extracted.frameNames.slice(0, 5).join(", ") || "(none)"} score=${extracted.score} mode=${probe.selection_mode}`,
         });
         if (extracted.score > bestScore) {
           bestScore = extracted.score;
@@ -294,10 +515,18 @@ export async function retrieveFigmaReferences(input: {
           allHints.length = 0;
           allHints.push(...extracted.hints);
         }
-      } catch {
-        /* continue */
+        void networkError;
+      } catch (e) {
+        keyDiagnostics.push({
+          key: fileKey,
+          outcome: "network",
+          bucket,
+        });
+        void e;
       }
     }
+
+    const diagSummary = summarizeDiagnostics(keyDiagnostics);
 
     if (figmaCandidates.length === 0 || bestScore < 4) {
       let detail =
@@ -311,11 +540,14 @@ export async function retrieveFigmaReferences(input: {
         detail =
           "Figma file read unauthorized — token needs file_content:read (and access to those files).";
       }
+      if (diagSummary) detail = `${detail} [${diagSummary}]`;
       return {
         ...base,
+        key_diagnostics: keyDiagnostics,
         figma_used: "no",
         figma_status: sawUnauthorizedFile && figmaCandidates.length === 0 ? "unauthorized" : "weak_matches",
         figma_error: detail,
+        env_guidance: diagSummary ? `${envGuidance} Probes: ${diagSummary}` : envGuidance,
         candidates: [...figmaCandidates, ...seedCandidates],
         selected_refs: seedSelected,
         fallback_used: "yes",
@@ -339,6 +571,7 @@ export async function retrieveFigmaReferences(input: {
 
     return {
       ...base,
+      key_diagnostics: keyDiagnostics,
       figma_used: "yes",
       figma_status: "success" as FigmaStatusV2,
       figma_error: "",

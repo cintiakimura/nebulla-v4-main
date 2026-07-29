@@ -729,6 +729,7 @@ export function IdeUiStudioBeta({
         patternMode?: 'seed' | 'figma';
         quality_gate_result?: string;
         figma_fallback_used?: boolean;
+        env_guidance?: string;
         context?: {
           page_name?: string;
           quality_gate_result?: string;
@@ -736,6 +737,7 @@ export function IdeUiStudioBeta({
           figma_status?: string;
           figma_error?: string;
           fallback_used?: string;
+          env_guidance?: string;
         };
       };
       if (typeof data.regeneration_count === 'number') setRegenCount(data.regeneration_count);
@@ -747,6 +749,8 @@ export function IdeUiStudioBeta({
       if (gate) setLastGate(gate);
       if (typeof data.context?.figma_status === 'string') setFigmaStatus(data.context.figma_status);
       if (typeof data.context?.figma_error === 'string') setFigmaError(data.context.figma_error);
+      const guidance = data.env_guidance || data.context?.env_guidance;
+      if (typeof guidance === 'string') setFigmaEnvGuidance(guidance);
       if (data.context?.fallback_used === 'yes' && !data.patternMode) setPatternMode('seed');
       if (data.preference_recovery) {
         setPreferenceRecovery(true);
@@ -1738,6 +1742,18 @@ export function IdeUiStudioBeta({
             </button>
           </div>
         </div>
+
+        {figmaStatus && figmaStatus !== 'success' && (figmaEnvGuidance || figmaError) ? (
+          <div
+            className="border-t border-border/60 px-2 py-1 text-[10px] leading-snug text-muted-foreground sm:px-3"
+            title={[figmaError, figmaEnvGuidance].filter(Boolean).join('\n')}
+          >
+            <span className="font-medium text-amber-100/90">Figma:</span>{' '}
+            <span className="line-clamp-2">
+              {[figmaError, figmaEnvGuidance].filter(Boolean).join(' — ')}
+            </span>
+          </div>
+        ) : null}
 
         <div className="flex flex-wrap items-center gap-1 border-t border-border px-2 py-1.5 sm:px-3">
           <span className="px-1 text-[10px] text-muted-foreground">

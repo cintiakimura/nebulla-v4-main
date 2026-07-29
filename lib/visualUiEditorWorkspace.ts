@@ -252,6 +252,14 @@ export function readUiGenerationV2PublicMeta(workspaceRoot: string): {
   figma_fallback_used?: boolean;
   env_guidance?: string;
   reference_file_keys_configured?: number;
+  key_diagnostics?: Array<{
+    key: string;
+    outcome: string;
+    http_status?: number;
+    score?: number;
+    file_name?: string;
+    bucket?: string;
+  }>;
 } {
   const metaPath = path.join(workspaceRoot, "nebulla-project", "ui-generation-v2-meta.json");
   if (!fs.existsSync(metaPath)) return {};
@@ -267,6 +275,14 @@ export function readUiGenerationV2PublicMeta(workspaceRoot: string): {
         fallback_used?: string;
         env_guidance?: string;
         reference_file_keys_configured?: number;
+        key_diagnostics?: Array<{
+          key: string;
+          outcome: string;
+          http_status?: number;
+          score?: number;
+          file_name?: string;
+          bucket?: string;
+        }>;
       };
     };
     return {
@@ -279,6 +295,7 @@ export function readUiGenerationV2PublicMeta(workspaceRoot: string): {
       figma_fallback_used: j.figma?.fallback_used === "yes",
       env_guidance: j.figma?.env_guidance,
       reference_file_keys_configured: j.figma?.reference_file_keys_configured,
+      key_diagnostics: Array.isArray(j.figma?.key_diagnostics) ? j.figma.key_diagnostics : undefined,
     };
   } catch {
     return {};

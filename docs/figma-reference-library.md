@@ -8,9 +8,10 @@ Columns: `Bucket`, `Link`, `FileKey`.
 ## ELI5
 
 1. `FIGMA_API_KEY` = your Figma “library card” (secret token).  
-2. `FIGMA_REFERENCE_FILE_KEYS` = which design notebooks Nebulla may open.  
-3. Nebulla only opens the **first few** keys (default **3**, override with `FIGMA_REFERENCE_MAX_FILES`).  
-4. Links from **Figma Community** often **do not work** in the API until you **Duplicate** them into **your** Figma account, then copy the new key from `figma.com/design/<KEY>/...`.
+2. `FIGMA_REFERENCE_FILE_KEYS` = which design notebooks Nebulla may open (comma-separated owned keys).  
+3. `FIGMA_REFERENCE_BUCKETS` (optional) = tag keys by page family so landing/dashboard do not steal a mobile kit.  
+4. Nebulla only opens the **first few** keys (default **3**, override with `FIGMA_REFERENCE_MAX_FILES`, max **8**).  
+5. Links from **Figma Community** often **do not work** in the API until you **Duplicate** them into **your** Figma account, then copy the new key from `figma.com/design/<KEY>/...`.
 
 ## Starter keys (curated)
 
@@ -27,11 +28,17 @@ Columns: `Bucket`, `Link`, `FileKey`.
 FIGMA_REFERENCE_FILE_KEYS=ZEbJpC67UQyeeynt1UR8gT
 ```
 
-After you duplicate 2 more community files, append their **new** `/design/` keys:
+**Multi-bucket (optional — quality for varied page types, not mandatory):**
 
 ```bash
 FIGMA_REFERENCE_FILE_KEYS=ZEbJpC67UQyeeynt1UR8gT,<landingDesignKey>,<dashboardDesignKey>
+FIGMA_REFERENCE_BUCKETS=mobile=ZEbJpC67UQyeeynt1UR8gT,landing=<landingDesignKey>,dashboard=<dashboardDesignKey>
 ```
+
+Known bucket names: `mobile`, `landing`, `dashboard`, `auth`, `web`. Unknown names are ignored.
+
+- One owned mobile file is enough for **mobile-focused** generation.  
+- Multi-bucket only matters when you generate **landing / dashboard / web** and want Figma structure that matches.
 
 ## Operator steps
 
@@ -39,9 +46,11 @@ FIGMA_REFERENCE_FILE_KEYS=ZEbJpC67UQyeeynt1UR8gT,<landingDesignKey>,<dashboardDe
 2. Put token in `FIGMA_API_KEY` (local `.env` + Render). Do not commit it.  
 3. Open the sheet → pick buckets (mobile / landing / dashboard).  
 4. For each Community link: open → **Duplicate** / Open in Figma → copy key from the URL `figma.com/design/<KEY>/...`.  
-5. Set `FIGMA_REFERENCE_FILE_KEYS=key1,key2,key3`.  
+5. Set `FIGMA_REFERENCE_FILE_KEYS=key1,key2,key3` (and optional `FIGMA_REFERENCE_BUCKETS=...`).  
 6. Restart Nebulla locally, or set the same vars on Render and **Manual Deploy**.  
-7. Generate UI → check meta: `figma.figma_status` should be `success` when structure extracts (or a clear error / `weak_matches` — never a fake success).
+7. Generate UI → check meta: `nebulla-project/ui-generation-v2-meta.json` → `figma.figma_status`, `figma.figma_error`, `figma.env_guidance`, `figma.key_diagnostics`.  
+   - `success` only when structure extracts.  
+   - Never a fake success on seed fallback (`weak_matches` / `missing_key` / `unauthorized` / `failed`).
 
 ## Probe script
 
@@ -49,7 +58,22 @@ FIGMA_REFERENCE_FILE_KEYS=ZEbJpC67UQyeeynt1UR8gT,<landingDesignKey>,<dashboardDe
 npm run check:figma-refs
 ```
 
-Prints PASS/FAIL per key (never prints the token).
+Prints PASS/FAIL **per key** with HTTP outcome (never prints the token). Also prints parsed `FIGMA_REFERENCE_BUCKETS` if set.
+
+## Failure path (engine)
+
+```text
+missing FIGMA_API_KEY → missing_key → seed
+/me 401 → unauthorized → seed
+/me 429 → rate_limited → seed
+/me 403 → continue (OK for fine-grained tokens)
+empty keys → weak_matches + env_guidance → seed
+bucket tag missing for this page type → weak_matches (seed; avoids wrong mobile kit)
+per file: 404 / 401|403 / 429 / 5xx(retry once) / extract score
+bestScore < 4 → weak_matches → seed
+else → success + structure_hints
+network/throw → failed → seed
+```
 
 ## Token note
 
@@ -59,4 +83,5 @@ Fine-grained `figd_` tokens may **403** on `GET /v1/me` if they lack `current_us
 
 - `FIGMA_API_KEY`  
 - `FIGMA_REFERENCE_FILE_KEYS`  
-- optional: `FIGMA_REFERENCE_MAX_FILES` (default `3`)
+- optional: `FIGMA_REFERENCE_BUCKETS`  
+- optional: `FIGMA_REFERENCE_MAX_FILES` (default `3`, max `8`)

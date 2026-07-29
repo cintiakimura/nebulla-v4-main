@@ -80,6 +80,7 @@ export type RunUiGenerationResult = {
   patternMode?: "seed" | "figma";
   quality_gate_result?: string;
   figma_fallback_used?: boolean;
+  env_guidance?: string;
 };
 
 type PageDef = { name: string; route: string; body: string };
@@ -760,6 +761,7 @@ export async function runUiGenerationCycleV2(
           fallback_used: figma.fallback_used,
           reference_file_keys_configured: figma.reference_file_keys_configured,
           env_guidance: figma.env_guidance,
+          key_diagnostics: figma.key_diagnostics.slice(0, 8),
           selected_refs: figma.selected_refs,
           candidates: figma.candidates.slice(0, 6),
           structure_hints: figma.structure_hints.slice(0, 10),
@@ -819,5 +821,6 @@ export async function runUiGenerationCycleV2(
     patternMode,
     quality_gate_result: gate.gate,
     figma_fallback_used: figma.fallback_used === "yes",
+    env_guidance: figma.env_guidance,
   };
 }

@@ -1,5 +1,6 @@
 /**
- * Probe FIGMA_API_KEY + FIGMA_REFERENCE_FILE_KEYS (never prints secrets).
+ * Probe FIGMA_API_KEY + FIGMA_REFERENCE_FILE_KEYS (+ optional BUCKETS).
+ * Never prints secrets.
  * Usage: npm run check:figma-refs
  */
 import fs from "fs";
@@ -25,6 +26,40 @@ function loadDotEnv(): void {
   }
 }
 
+const KNOWN = new Set(["mobile", "landing", "dashboard", "auth", "web"]);
+
+function parseBuckets(raw: string): Map<string, string[]> {
+  const map = new Map<string, string[]>();
+  for (const part of raw.split(",")) {
+    const t = part.trim();
+    if (!t) continue;
+    const eq = t.indexOf("=");
+    if (eq <= 0) continue;
+    const bucket = t.slice(0, eq).trim().toLowerCase();
+    const fileKey = t.slice(eq + 1).trim();
+    if (!KNOWN.has(bucket) || !fileKey) continue;
+    const list = map.get(bucket) || [];
+    if (!list.includes(fileKey)) list.push(fileKey);
+    map.set(bucket, list);
+  }
+  return map;
+}
+
+async function fetchWithRetry(url: string, headers: Record<string, string>): Promise<Response | null> {
+  const attempt = async () => {
+    try {
+      return await fetch(url, { headers });
+    } catch {
+      return null;
+    }
+  };
+  let res = await attempt();
+  if (!res || res.status >= 500) {
+    res = await attempt();
+  }
+  return res;
+}
+
 async function main() {
   loadDotEnv();
   const token = (process.env.FIGMA_API_KEY || "").trim();
@@ -32,9 +67,23 @@ async function main() {
     .split(",")
     .map((s) => s.trim())
     .filter(Boolean);
+  const buckets = parseBuckets(process.env.FIGMA_REFERENCE_BUCKETS || "");
+  const maxFiles = Math.min(
+    8,
+    Math.max(1, Number(process.env.FIGMA_REFERENCE_MAX_FILES || "3") || 3),
+  );
 
   console.log("FIGMA_API_KEY:", token ? `set (len ${token.length}, prefix ${token.slice(0, 5)})` : "MISSING");
   console.log("FIGMA_REFERENCE_FILE_KEYS:", keys.length ? keys.join(", ") : "MISSING");
+  console.log("FIGMA_REFERENCE_MAX_FILES:", maxFiles);
+  if (buckets.size > 0) {
+    console.log(
+      "FIGMA_REFERENCE_BUCKETS:",
+      [...buckets.entries()].map(([b, ks]) => `${b}=${ks.join("|")}`).join(", "),
+    );
+  } else {
+    console.log("FIGMA_REFERENCE_BUCKETS: (unset — CSV order / score only)");
+  }
 
   if (!token) {
     console.log("\nFAIL — set FIGMA_API_KEY");
@@ -52,25 +101,37 @@ async function main() {
     process.exit(1);
   }
 
-  if (keys.length === 0) {
+  const probeKeys = [...new Set([...keys, ...[...buckets.values()].flat()])].slice(0, maxFiles);
+  if (probeKeys.length === 0) {
     console.log("\nFAIL — set FIGMA_REFERENCE_FILE_KEYS (see docs/figma-reference-library.md)");
     process.exit(1);
   }
 
   let okCount = 0;
-  for (const fileKey of keys) {
-    const fr = await fetch(
+  console.log("\nPer-key diagnostics:");
+  for (const fileKey of probeKeys) {
+    const fr = await fetchWithRetry(
       `https://api.figma.com/v1/files/${encodeURIComponent(fileKey)}?depth=2`,
-      { headers: { "X-Figma-Token": token } },
+      { "X-Figma-Token": token },
     );
+    if (!fr) {
+      console.log(`FAIL  file ${fileKey.slice(0, 12)}… → network`);
+      continue;
+    }
     let name = "";
+    let outcome = String(fr.status);
     if (fr.ok) {
       const data = (await fr.json()) as { name?: string };
       name = data.name || "";
       okCount += 1;
-    }
+      outcome = "ok";
+    } else if (fr.status === 404) outcome = "404";
+    else if (fr.status === 401) outcome = "401";
+    else if (fr.status === 403) outcome = "403";
+    else if (fr.status === 429) outcome = "429";
+    else if (fr.status >= 500) outcome = "5xx";
     console.log(
-      `${fr.ok ? "PASS" : "FAIL"}  file ${fileKey.slice(0, 12)}… → ${fr.status}${name ? ` (${name})` : ""}`,
+      `${fr.ok ? "PASS" : "FAIL"}  ${fileKey.slice(0, 12)}… → ${outcome} (http ${fr.status})${name ? ` (${name})` : ""}`,
     );
     if (fr.status === 404) {
       console.log("       hint: Community catalog IDs 404 — Duplicate into your account, use /design/<KEY>/");
@@ -79,7 +140,7 @@ async function main() {
 
   console.log(
     okCount > 0
-      ? `\nALL NEEDED PASS — ${okCount}/${keys.length} file(s) readable`
+      ? `\nALL NEEDED PASS — ${okCount}/${probeKeys.length} file(s) readable`
       : "\nFAIL — no readable files",
   );
   process.exit(okCount > 0 ? 0 : 1);
