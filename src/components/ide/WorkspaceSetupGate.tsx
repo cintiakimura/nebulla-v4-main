@@ -130,11 +130,6 @@ export function WorkspaceSetupGate({ onReady }: { onReady: (ctx: WorkspaceContex
     window.open(`/api/auth/github?${q}`, 'nebulla_oauth', 'width=520,height=720,scrollbars=yes');
   };
 
-  const openGoogleOAuth = () => {
-    const q = stayLoggedIn ? 'remember=1' : 'remember=0';
-    window.open(`/api/auth/google?${q}`, 'nebulla_oauth', 'width=520,height=720,scrollbars=yes');
-  };
-
   const runAuthJson = async (path: string, body: object) => {
     const res = await fetch(path, {
       method: 'POST',
@@ -256,7 +251,6 @@ export function WorkspaceSetupGate({ onReady }: { onReady: (ctx: WorkspaceContex
   }
 
   const githubOk = Boolean(config.githubOAuthReady);
-  const googleOk = Boolean(config.googleOAuthReady);
   const cloudOk = Boolean(config.cloudStorageReady);
 
   return (
@@ -323,7 +317,7 @@ export function WorkspaceSetupGate({ onReady }: { onReady: (ctx: WorkspaceContex
               </p>
             ) : null}
             <p className="text-sm text-slate-400 leading-relaxed">
-              Sign in with <strong className="font-normal text-slate-200">email</strong>, Google, or GitHub to save
+              Sign in with <strong className="font-normal text-slate-200">email</strong> or GitHub to save
               projects to the cloud. Grok receives your project name, workspace path, file index, and Master Plan on
               every message.
             </p>
@@ -376,7 +370,8 @@ export function WorkspaceSetupGate({ onReady }: { onReady: (ctx: WorkspaceContex
                   onChange={(e) => setPassword(e.target.value)}
                   disabled={!cloudOk || busy}
                   className="w-full rounded-lg border border-white/10 bg-black/40 px-3 py-2 text-sm text-slate-100 disabled:opacity-50"
-                  placeholder={emailMode === 'signup' ? '10+ chars, letters and numbers' : 'Your password'}
+                  placeholder={emailMode === 'signup' ? '8+ chars, letters and numbers' : 'Your password'}
+                  minLength={emailMode === 'signup' ? 8 : undefined}
                 />
               </div>
               {emailMode === 'signup' ? (
@@ -422,40 +417,9 @@ export function WorkspaceSetupGate({ onReady }: { onReady: (ctx: WorkspaceContex
               <Github className="h-5 w-5" aria-hidden />
               Continue with GitHub
             </button>
-            <button
-              type="button"
-              onClick={openGoogleOAuth}
-              disabled={!cloudOk || !googleOk || busy}
-              className="flex w-full items-center justify-center gap-2 rounded-xl bg-white py-3 text-[15px] font-medium text-[#0d1117] disabled:opacity-45"
-            >
-              <svg className="h-5 w-5" viewBox="0 0 24 24" aria-hidden="true">
-                <path
-                  fill="#EA4335"
-                  d="M12 10.2v3.9h5.5c-.2 1.3-.9 2.4-1.9 3.1l3.1 2.4c1.8-1.7 2.9-4.2 2.9-7.2 0-.7-.1-1.4-.2-2.1H12z"
-                />
-                <path
-                  fill="#34A853"
-                  d="M6.6 14.3l-.8.6-2.5 1.9C4.9 19.5 8.2 21.6 12 21.6c2.7 0 5-.9 6.7-2.4l-3.1-2.4c-.9.6-2 1-3.6 1-2.8 0-5.1-1.9-5.9-4.4z"
-                />
-                <path
-                  fill="#4A90E2"
-                  d="M3.3 7.2C2.5 8.8 2 10.3 2 12s.5 3.2 1.3 4.8l3.3-2.5c-.2-.6-.3-1.2-.3-2.3 0-1 .1-1.7.3-2.3L3.3 7.2z"
-                />
-                <path
-                  fill="#FBBC05"
-                  d="M12 5.4c1.5 0 2.8.5 3.8 1.5l2.8-2.8C16.9 2.4 14.7 1.5 12 1.5 8.2 1.5 4.9 3.6 3.3 7.2l3.3 2.5C7 7.2 9.2 5.4 12 5.4z"
-                />
-              </svg>
-              Continue with Google
-            </button>
             {!githubOk && cloudOk ? (
               <p className="text-xs text-amber-400/90">
-                GitHub is optional — email or Google above still save your project.
-              </p>
-            ) : null}
-            {!googleOk && cloudOk ? (
-              <p className="text-xs text-amber-400/90">
-                Google is optional — email or GitHub above still save your project.
+                GitHub is optional — email above still saves your project.
               </p>
             ) : null}
             {!cloudOk ? (

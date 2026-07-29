@@ -76,7 +76,7 @@ export function ResetPasswordPage() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               className="w-full bg-black/30 border border-white/10 rounded-lg px-3 py-2 text-sm text-slate-200 focus:border-cyan-500/40 outline-none"
-              placeholder="At least 10 characters, letters + numbers"
+              placeholder="At least 8 characters, letters + numbers"
             />
           </div>
           <div>
