@@ -1,12 +1,13 @@
-import { useMemo } from 'react';
+import { useCallback, useMemo } from 'react';
 import { NebullaIDE } from '@/components/ide/NebullaIDE';
+import { LandingPage } from '@/components/LandingPage';
 import { PrivacyPolicyPage } from './pages/PrivacyPolicyPage';
 import { TermsOfServicePage } from './pages/TermsOfServicePage';
 import { DpaPage } from './pages/DpaPage';
 import { ResetPasswordPage } from './pages/ResetPasswordPage';
-import { MarketingLandingPage } from './pages/MarketingLandingPage';
 import { LoginPage } from './pages/LoginPage';
 import { PricingPage } from './pages/PricingPage';
+import { goToApp } from './lib/authNavigate';
 
 function usePathname(): string {
   return useMemo(() => {
@@ -18,6 +19,10 @@ function usePathname(): string {
 export default function App() {
   const path = usePathname();
 
+  const enterApp = useCallback(() => {
+    goToApp();
+  }, []);
+
   if (path === '/privacy') return <PrivacyPolicyPage />;
   if (path === '/terms') return <TermsOfServicePage />;
   if (path === '/legal/dpa' || path === '/dpa') return <DpaPage />;
@@ -26,6 +31,6 @@ export default function App() {
   if (path === '/pricing') return <PricingPage />;
   if (path === '/app' || path === '/ide') return <NebullaIDE />;
 
-  // Public marketing home
-  return <MarketingLandingPage />;
+  // Original landing UI — "Try the App" enters the IDE (/app → login if needed).
+  return <LandingPage onEnter={enterApp} />;
 }

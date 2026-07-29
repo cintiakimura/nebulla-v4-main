@@ -43,12 +43,27 @@ export function LandingPage({ onEnter }: LandingPageProps) {
           <Logo className="w-8 h-8" />
           <span className="font-headline text-lg font-normal">nebulla</span>
         </div>
-        <button 
-          onClick={onEnter}
-          className="px-4 py-2 bg-cyan-500/10 text-cyan-300 border border-cyan-500/30 rounded-md hover:bg-cyan-500/20 transition-all font-headline text-sm font-normal"
-        >
-          Try the App
-        </button>
+        <div className="flex items-center gap-2">
+          <a
+            href="/login"
+            className="px-3 py-2 text-slate-400 hover:text-cyan-200 transition-all font-headline text-sm font-normal"
+          >
+            Sign in
+          </a>
+          <a
+            href="/pricing"
+            className="px-3 py-2 text-slate-400 hover:text-cyan-200 transition-all font-headline text-sm font-normal"
+          >
+            Pricing
+          </a>
+          <button
+            type="button"
+            onClick={onEnter}
+            className="px-4 py-2 bg-cyan-500/10 text-cyan-300 border border-cyan-500/30 rounded-md hover:bg-cyan-500/20 transition-all font-headline text-sm font-normal"
+          >
+            Try the App
+          </button>
+        </div>
       </header>
 
       {/* Main Content */}
