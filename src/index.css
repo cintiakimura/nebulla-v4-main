@@ -314,6 +314,9 @@
   .nebula-landing-page {
     position: relative;
     isolation: isolate;
+    height: 100vh;
+    overflow-x: hidden;
+    overflow-y: auto;
     background-color: #020617;
     color: var(--on-surface, #e2e8f0);
   }
