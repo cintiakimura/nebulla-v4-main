@@ -154,7 +154,7 @@ let lastDbFailureHint = "";
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-const RENDER_PG_REGIONS = ["oregon", "frankfurt", "ohio", "singapore", "virginia"] as const;
+const RENDER_PG_REGIONS = ["frankfurt", "oregon", "ohio", "singapore", "virginia"] as const;
 
 function hasDb(): boolean {
   return Boolean(pool && dbReady);
@@ -244,7 +244,7 @@ function normalizeDatabaseUrl(raw: string): string {
   const region =
     process.env.DATABASE_RENDER_REGION?.trim() ||
     process.env.RENDER_POSTGRES_REGION?.trim() ||
-    "oregon";
+    "frankfurt";
   return withRenderPgRegion(raw, region);
 }
 
@@ -323,16 +323,16 @@ async function ensureDbReady(): Promise<boolean> {
     console.error("[nebula] PostgreSQL init failed for all DATABASE_URL candidates.");
     console.warn("[nebula] Tried:", errors.join(" | "));
     console.warn(
-      "[nebula] Fix: Render → PostgreSQL → Connections → copy the full **External Database URL** (host must include .<region>-postgres.render.com), paste into the web service DATABASE_URL, then Manual Deploy / restart. If the Postgres instance was deleted, create a new one.",
+      "[nebula] Fix: use a full Postgres URL (Neon recommended for off-Render: …@ep-….REGION.aws.neon.tech/neondb?sslmode=require). If staying on Render, copy External Database URL (host must include .<region>-postgres.render.com). Truncated @dpg-…-a/dbname will fail. See docs/migration/render-to-cloudflare.md.",
     );
 
     const host = databaseUrlHostOnly(rawUrl);
     if (isTruncatedRenderPgHost(host)) {
       lastDbFailureHint =
-        "DATABASE_URL hostname is truncated (dpg-… with no domain) or the Postgres instance no longer exists. Paste the full External Database URL from Render → PostgreSQL → Connections, then restart.";
+        "DATABASE_URL hostname is truncated (dpg-… with no domain) or the Postgres instance no longer exists. Paste a full host URL (Render External …frankfurt-postgres.render.com, or Neon …neon.tech), then restart. See docs/migration/render-to-cloudflare.md.";
     } else {
       lastDbFailureHint =
-        "PostgreSQL did not connect. Check DATABASE_URL (External URL if connecting from outside Render), password, and that the database still exists — then restart the server.";
+        "PostgreSQL did not connect. Check DATABASE_URL (Neon or Render External URL with a real hostname), SSL, and that the database still exists — then restart. See docs/migration/render-to-cloudflare.md.";
     }
 
     dbReady = false;

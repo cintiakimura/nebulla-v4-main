@@ -12,6 +12,7 @@
     "lint": "tsc --noEmit",
     "test": "npm run lint && npm run test:i18n && npm run test:app-status && npm run test:app-status-smoke && npm run test:ui-gen && npm run test:security-scan && npm run check:client-secrets",
     "check:client-secrets": "node scripts/check-client-secrets.mjs",
+    "check:database-url": "tsx scripts/check-database-url.ts",
     "test:i18n": "tsx scripts/test-i18n-language.ts",
     "test:app-status": "tsx scripts/test-app-status-debug.ts",
     "test:app-status-smoke": "tsx scripts/test-app-status-smoke.ts",
