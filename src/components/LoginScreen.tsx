@@ -10,6 +10,8 @@ type PublicConfig = {
   googleOAuthReady?: boolean;
   databaseConnectionFailed?: boolean;
   databaseUrlConfigured?: boolean;
+  databaseUrlLooksTruncated?: boolean;
+  databaseFailureHint?: string;
 };
 
 function GoogleIcon({ className }: { className?: string }) {
@@ -228,9 +230,10 @@ export function LoginScreen({
             ) : null}
             {!cloudOk && config.databaseConnectionFailed ? (
               <p className="text-xs text-red-400/90 text-center leading-relaxed">
-                PostgreSQL did not connect (<code className="text-slate-400">DATABASE_URL</code> is set but the server
-                could not reach the database). Check the URL in Render → PostgreSQL → Connections (use the full External
-                URL), then restart the server. Sign-in is disabled until the database is healthy.
+                {config.databaseFailureHint ||
+                  (config.databaseUrlLooksTruncated
+                    ? 'DATABASE_URL hostname is truncated (dpg-… with no domain) or the Postgres instance was deleted. In Render → PostgreSQL → Connections, copy the full External Database URL (host must end with .REGION-postgres.render.com), paste it into the web service Environment → DATABASE_URL, then Manual Deploy.'
+                    : 'PostgreSQL did not connect (DATABASE_URL is set but the server could not reach the database). Check Render → PostgreSQL → Connections (full External URL), then restart. Sign-in is disabled until the database is healthy.')}
               </p>
             ) : !cloudOk ? (
               <p className="text-xs text-red-400/90 text-center leading-relaxed">

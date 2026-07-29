@@ -146,9 +146,15 @@ let poolInitFailed = false;
 let lastPoolRetryAt = 0;
 const POOL_RETRY_COOLDOWN_MS = 30_000;
 let dbRetryInFlight: Promise<boolean> | null = null;
+/** Connection string that successfully opened (may differ from raw env after region rewrite). */
+let activeDatabaseUrl: string | null = null;
+/** Safe, non-secret hint for operators / login UI. */
+let lastDbFailureHint = "";
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+const RENDER_PG_REGIONS = ["oregon", "frankfurt", "ohio", "singapore", "virginia"] as const;
 
 function hasDb(): boolean {
   return Boolean(pool && dbReady);
@@ -160,67 +166,6 @@ function requireDbPool(): pg.Pool {
     throw new Error("Database not configured");
   }
   return pool;
-}
-
-/**
- * Ensure Postgres is ready. Retries after boot failure (e.g. Render DB woke late / URL fixed)
- * with a cooldown so we do not hammer a bad DATABASE_URL.
- */
-async function ensureDbReady(): Promise<boolean> {
-  if (hasDb()) return true;
-  const rawUrl = process.env.DATABASE_URL?.trim();
-  if (!rawUrl) return false;
-  const now = Date.now();
-  if (poolInitFailed && now - lastPoolRetryAt < POOL_RETRY_COOLDOWN_MS) return false;
-  if (dbRetryInFlight) return dbRetryInFlight;
-
-  dbRetryInFlight = (async () => {
-    lastPoolRetryAt = Date.now();
-    poolInitFailed = false;
-    dbReady = false;
-    registerNebulaPgPool(null);
-    if (pool) {
-      try {
-        await pool.end();
-      } catch {
-        /* ignore */
-      }
-      pool = null;
-    }
-    const bootPool = getPool();
-    if (!bootPool) {
-      poolInitFailed = true;
-      return false;
-    }
-    try {
-      await ensureTables(bootPool);
-      dbReady = true;
-      poolInitFailed = false;
-      registerNebulaPgPool(bootPool);
-      console.log("[nebula] PostgreSQL schema ready.");
-      return true;
-    } catch (e) {
-      console.error("[nebula] PostgreSQL init failed:", e);
-      console.warn("[nebula] DATABASE_URL target:", describeDatabaseUrlHost(normalizeDatabaseUrl(rawUrl)));
-      console.warn(
-        "[nebula] Fix: use Render → PostgreSQL → Connections → **External** URL (full hostname), or remove DATABASE_URL for local dev without cloud auth.",
-      );
-      dbReady = false;
-      poolInitFailed = true;
-      registerNebulaPgPool(null);
-      try {
-        await bootPool.end();
-      } catch {
-        /* ignore */
-      }
-      pool = null;
-      return false;
-    } finally {
-      dbRetryInFlight = null;
-    }
-  })();
-
-  return dbRetryInFlight;
 }
 
 function pgErrorCode(err: unknown): string | undefined {
@@ -241,46 +186,183 @@ function describeDatabaseUrlHost(url: string): string {
   return `${host}:${port}`;
 }
 
-/** Render internal URLs sometimes omit the regional suffix; external clients need the full host. */
-function normalizeDatabaseUrl(raw: string): string {
+function databaseUrlHostOnly(raw: string): string {
+  const m = raw.trim().match(/@([^/?#:]+)/);
+  return m?.[1] || "";
+}
+
+function isTruncatedRenderPgHost(host: string): boolean {
+  return Boolean(host && !host.includes(".") && /^dpg-[a-z0-9-]+$/i.test(host));
+}
+
+function withRenderPgRegion(raw: string, region: string): string {
   const url = raw.trim();
-  if (!url) return url;
-  if (/@[^/]+\.[^/]+\//.test(url)) return url;
   const m = url.match(/@(dpg-[a-z0-9-]+)(?::(\d+))?(\/|$)/i);
   if (!m?.[1]) return url;
-  const region =
-    process.env.DATABASE_RENDER_REGION?.trim() ||
-    process.env.RENDER_POSTGRES_REGION?.trim() ||
-    "oregon";
   const port = m[2] ? `:${m[2]}` : "";
   const suffix = m[3] || "/";
   return url.replace(`@${m[1]}${port}${suffix}`, `@${m[1]}.${region}-postgres.render.com${port}${suffix}`);
 }
 
-function getPool(): pg.Pool | null {
-  const rawUrl = process.env.DATABASE_URL?.trim();
-  if (!rawUrl || poolInitFailed) return null;
-  const url = normalizeDatabaseUrl(rawUrl);
-  if (!pool) {
-    pool = new pg.Pool({
-      connectionString: url,
-      ssl: process.env.DATABASE_SSL === "false" ? false : { rejectUnauthorized: false },
-      max: 10,
-      connectionTimeoutMillis: 15000,
-    });
-    pool.on("connect", (client) => {
-      void client.query("SET search_path TO public");
-    });
-    pool.on("error", (err) => {
-      console.error("[nebula] PostgreSQL pool error:", err);
-    });
+/**
+ * Render Internal URLs use a short host (`dpg-…-a`) that only resolves on Render's private network.
+ * External URLs need `.<region>-postgres.render.com`. Prefer raw first (works on Render), then regions.
+ */
+function candidateDatabaseUrls(raw: string): string[] {
+  const trimmed = raw.trim();
+  if (!trimmed) return [];
+  const out: string[] = [];
+  const seen = new Set<string>();
+  const push = (u: string) => {
+    if (!u || seen.has(u)) return;
+    seen.add(u);
+    out.push(u);
+  };
+
+  push(trimmed);
+
+  const host = databaseUrlHostOnly(trimmed);
+  if (isTruncatedRenderPgHost(host)) {
+    const preferred =
+      process.env.DATABASE_RENDER_REGION?.trim() ||
+      process.env.RENDER_POSTGRES_REGION?.trim() ||
+      "";
+    const regions = [preferred, ...RENDER_PG_REGIONS].filter(
+      (r, i, arr) => Boolean(r) && arr.indexOf(r) === i,
+    );
+    for (const region of regions) {
+      push(withRenderPgRegion(trimmed, region));
+    }
   }
+  return out;
+}
+
+/** Legacy helper — prefer candidateDatabaseUrls. */
+function normalizeDatabaseUrl(raw: string): string {
+  const host = databaseUrlHostOnly(raw);
+  if (!isTruncatedRenderPgHost(host)) return raw.trim();
+  const region =
+    process.env.DATABASE_RENDER_REGION?.trim() ||
+    process.env.RENDER_POSTGRES_REGION?.trim() ||
+    "oregon";
+  return withRenderPgRegion(raw, region);
+}
+
+function createPgPool(connectionString: string): pg.Pool {
+  const p = new pg.Pool({
+    connectionString,
+    ssl: process.env.DATABASE_SSL === "false" ? false : { rejectUnauthorized: false },
+    max: 10,
+    connectionTimeoutMillis: 12000,
+  });
+  p.on("connect", (client) => {
+    void client.query("SET search_path TO public");
+  });
+  p.on("error", (err) => {
+    console.error("[nebula] PostgreSQL pool error:", err);
+  });
+  return p;
+}
+
+async function endPoolQuiet(p: pg.Pool | null) {
+  if (!p) return;
+  try {
+    await p.end();
+  } catch {
+    /* ignore */
+  }
+}
+
+/**
+ * Ensure Postgres is ready. Retries after boot failure (e.g. Render DB woke late / URL fixed)
+ * with a cooldown so we do not hammer a bad DATABASE_URL.
+ * Tries Internal host first, then External hosts across Render regions when the hostname is truncated.
+ */
+async function ensureDbReady(): Promise<boolean> {
+  if (hasDb()) return true;
+  const rawUrl = process.env.DATABASE_URL?.trim();
+  if (!rawUrl) return false;
+  const now = Date.now();
+  if (poolInitFailed && now - lastPoolRetryAt < POOL_RETRY_COOLDOWN_MS) return false;
+  if (dbRetryInFlight) return dbRetryInFlight;
+
+  dbRetryInFlight = (async () => {
+    lastPoolRetryAt = Date.now();
+    poolInitFailed = false;
+    dbReady = false;
+    registerNebulaPgPool(null);
+    await endPoolQuiet(pool);
+    pool = null;
+    activeDatabaseUrl = null;
+
+    const candidates = candidateDatabaseUrls(rawUrl);
+    const errors: string[] = [];
+
+    for (const url of candidates) {
+      const hostHint = describeDatabaseUrlHost(url);
+      const bootPool = createPgPool(url);
+      try {
+        await ensureTables(bootPool);
+        pool = bootPool;
+        activeDatabaseUrl = url;
+        dbReady = true;
+        poolInitFailed = false;
+        lastDbFailureHint = "";
+        registerNebulaPgPool(bootPool);
+        console.log("[nebula] PostgreSQL schema ready via", hostHint);
+        return true;
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        const code = pgErrorCode(e) || (e as { code?: string })?.code || "";
+        errors.push(`${hostHint}: ${code || msg.slice(0, 80)}`);
+        console.warn("[nebula] PostgreSQL candidate failed:", hostHint, code || msg.slice(0, 120));
+        await endPoolQuiet(bootPool);
+      }
+    }
+
+    console.error("[nebula] PostgreSQL init failed for all DATABASE_URL candidates.");
+    console.warn("[nebula] Tried:", errors.join(" | "));
+    console.warn(
+      "[nebula] Fix: Render → PostgreSQL → Connections → copy the full **External Database URL** (host must include .<region>-postgres.render.com), paste into the web service DATABASE_URL, then Manual Deploy / restart. If the Postgres instance was deleted, create a new one.",
+    );
+
+    const host = databaseUrlHostOnly(rawUrl);
+    if (isTruncatedRenderPgHost(host)) {
+      lastDbFailureHint =
+        "DATABASE_URL hostname is truncated (dpg-… with no domain) or the Postgres instance no longer exists. Paste the full External Database URL from Render → PostgreSQL → Connections, then restart.";
+    } else {
+      lastDbFailureHint =
+        "PostgreSQL did not connect. Check DATABASE_URL (External URL if connecting from outside Render), password, and that the database still exists — then restart the server.";
+    }
+
+    dbReady = false;
+    poolInitFailed = true;
+    registerNebulaPgPool(null);
+    pool = null;
+    activeDatabaseUrl = null;
+    return false;
+  })().finally(() => {
+    dbRetryInFlight = null;
+  });
+
+  return dbRetryInFlight;
+}
+
+function getPool(): pg.Pool | null {
+  if (poolInitFailed && !dbReady) return null;
+  if (pool) return pool;
+  const rawUrl = process.env.DATABASE_URL?.trim();
+  if (!rawUrl) return null;
+  const url = activeDatabaseUrl || candidateDatabaseUrls(rawUrl)[0];
+  if (!url) return null;
+  pool = createPgPool(url);
   return pool;
 }
 
 export function getRenderPublicConfig() {
   const urlConfigured = Boolean(process.env.DATABASE_URL?.trim());
   const db = hasDb();
+  const host = databaseUrlHostOnly(process.env.DATABASE_URL || "");
   return {
     cloudStorageReady: db,
     credentialsAuthReady: db,
@@ -289,6 +371,15 @@ export function getRenderPublicConfig() {
     /** True when DATABASE_URL is set but PostgreSQL did not initialize (wrong host, DB deleted, network, etc.). */
     databaseConnectionFailed: urlConfigured && poolInitFailed,
     databaseUrlConfigured: urlConfigured,
+    /** Hostname looks like a Render Internal id without .<region>-postgres.render.com */
+    databaseUrlLooksTruncated: isTruncatedRenderPgHost(host),
+    /** Safe operator hint (never includes password). */
+    databaseFailureHint: poolInitFailed ? lastDbFailureHint : "",
+    databaseHostHint: host
+      ? isTruncatedRenderPgHost(host)
+        ? `${host} (truncated — needs .<region>-postgres.render.com)`
+        : host.replace(/^([^.]+)\..+$/, "$1.***")
+      : "",
     githubOAuthReady: Boolean(
       process.env.GITHUB_CLIENT_ID?.trim() && process.env.GITHUB_CLIENT_SECRET?.trim()
     ),

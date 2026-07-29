@@ -10,6 +10,9 @@ export type NebulaPublicConfig = {
   googleClientSecretConfigured?: boolean;
   databaseConnectionFailed?: boolean;
   databaseUrlConfigured?: boolean;
+  databaseUrlLooksTruncated?: boolean;
+  databaseFailureHint?: string;
+  databaseHostHint?: string;
   pencilMockupsReady?: boolean;
   nebulaUiStudioDemo?: boolean;
   hasV0ApiKey?: boolean;
