@@ -5,6 +5,9 @@ export type NebulaPublicConfig = {
   githubClientIdConfigured?: boolean;
   /** True when GITHUB_CLIENT_SECRET is set. */
   githubClientSecretConfigured?: boolean;
+  googleOAuthReady?: boolean;
+  googleClientIdConfigured?: boolean;
+  googleClientSecretConfigured?: boolean;
   databaseConnectionFailed?: boolean;
   databaseUrlConfigured?: boolean;
   pencilMockupsReady?: boolean;

@@ -1,4 +1,4 @@
-import { getGithubOAuthCallbackUrl } from '../lib/authRedirect';
+import { getGithubOAuthCallbackUrl, getGoogleOAuthCallbackUrl } from '../lib/authRedirect';
 import { readResponseJson } from '../lib/apiFetch';
 import { withProjectQuery } from '../lib/nebulaProjectApi';
 import { useEffect, useState } from 'react';
@@ -6,6 +6,7 @@ import { useEffect, useState } from 'react';
 export function LoginOAuthHints() {
   const [publicSiteUrl, setPublicSiteUrl] = useState<string>('');
   const gh = getGithubOAuthCallbackUrl(publicSiteUrl);
+  const google = getGoogleOAuthCallbackUrl(publicSiteUrl);
 
   useEffect(() => {
     fetch(withProjectQuery('/api/config'))
@@ -47,6 +48,15 @@ export function LoginOAuthHints() {
         Callback is served by this app (<code className="text-slate-400">/api/auth/github/callback</code>), not a
         separate auth host.
       </p>
+      <p className="text-[11px] text-amber-200/90 leading-relaxed">
+        <span className="font-headline text-amber-100">Google redirect URI</span> in Google Cloud Console → Credentials
+        → your OAuth client → Authorized redirect URIs must be exactly:
+      </p>
+      <div>
+        <code className="block text-[10px] text-cyan-200/90 break-all bg-black/30 p-2 rounded border border-white/10">
+          {google}
+        </code>
+      </div>
     </div>
   );
 }

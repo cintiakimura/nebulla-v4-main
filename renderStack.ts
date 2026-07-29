@@ -96,7 +96,11 @@ function normalizeUsername(raw: unknown): string | null {
 
 function validateNewPassword(password: unknown): string | null {
   if (typeof password !== "string" || !password.length) return "Password is required.";
+  if (password.length < 10) return "Password must be at least 10 characters.";
   if (password.length > 8192) return "Password is too long.";
+  if (!/[A-Za-z]/.test(password) || !/[0-9]/.test(password)) {
+    return "Password must include at least one letter and one number.";
+  }
   return null;
 }
 
@@ -137,8 +141,11 @@ const OAUTH_REMEMBER_COOKIE = "oauth_remember";
 
 let pool: pg.Pool | null = null;
 let dbReady = false;
-/** After a failed schema/connect init, do not recreate the pool until process restart (avoids connect storms on bad URLs). */
+/** After a failed schema/connect init, throttle retries (avoids connect storms on bad URLs). */
 let poolInitFailed = false;
+let lastPoolRetryAt = 0;
+const POOL_RETRY_COOLDOWN_MS = 30_000;
+let dbRetryInFlight: Promise<boolean> | null = null;
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -153,6 +160,67 @@ function requireDbPool(): pg.Pool {
     throw new Error("Database not configured");
   }
   return pool;
+}
+
+/**
+ * Ensure Postgres is ready. Retries after boot failure (e.g. Render DB woke late / URL fixed)
+ * with a cooldown so we do not hammer a bad DATABASE_URL.
+ */
+async function ensureDbReady(): Promise<boolean> {
+  if (hasDb()) return true;
+  const rawUrl = process.env.DATABASE_URL?.trim();
+  if (!rawUrl) return false;
+  const now = Date.now();
+  if (poolInitFailed && now - lastPoolRetryAt < POOL_RETRY_COOLDOWN_MS) return false;
+  if (dbRetryInFlight) return dbRetryInFlight;
+
+  dbRetryInFlight = (async () => {
+    lastPoolRetryAt = Date.now();
+    poolInitFailed = false;
+    dbReady = false;
+    registerNebulaPgPool(null);
+    if (pool) {
+      try {
+        await pool.end();
+      } catch {
+        /* ignore */
+      }
+      pool = null;
+    }
+    const bootPool = getPool();
+    if (!bootPool) {
+      poolInitFailed = true;
+      return false;
+    }
+    try {
+      await ensureTables(bootPool);
+      dbReady = true;
+      poolInitFailed = false;
+      registerNebulaPgPool(bootPool);
+      console.log("[nebula] PostgreSQL schema ready.");
+      return true;
+    } catch (e) {
+      console.error("[nebula] PostgreSQL init failed:", e);
+      console.warn("[nebula] DATABASE_URL target:", describeDatabaseUrlHost(normalizeDatabaseUrl(rawUrl)));
+      console.warn(
+        "[nebula] Fix: use Render → PostgreSQL → Connections → **External** URL (full hostname), or remove DATABASE_URL for local dev without cloud auth.",
+      );
+      dbReady = false;
+      poolInitFailed = true;
+      registerNebulaPgPool(null);
+      try {
+        await bootPool.end();
+      } catch {
+        /* ignore */
+      }
+      pool = null;
+      return false;
+    } finally {
+      dbRetryInFlight = null;
+    }
+  })();
+
+  return dbRetryInFlight;
 }
 
 function pgErrorCode(err: unknown): string | undefined {
@@ -226,6 +294,11 @@ export function getRenderPublicConfig() {
     ),
     githubClientIdConfigured: Boolean(process.env.GITHUB_CLIENT_ID?.trim()),
     githubClientSecretConfigured: Boolean(process.env.GITHUB_CLIENT_SECRET?.trim()),
+    googleOAuthReady: Boolean(
+      process.env.GOOGLE_CLIENT_ID?.trim() && process.env.GOOGLE_CLIENT_SECRET?.trim()
+    ),
+    googleClientIdConfigured: Boolean(process.env.GOOGLE_CLIENT_ID?.trim()),
+    googleClientSecretConfigured: Boolean(process.env.GOOGLE_CLIENT_SECRET?.trim()),
     /** When false, new projects get a synthetic `local-…` id (Render project API not configured). */
     renderWorkspaceApiReady: Boolean(
       process.env.RENDER_API_KEY?.trim() &&
@@ -380,14 +453,19 @@ function publicBaseUrl(req: Request): string {
   return `http://localhost:${process.env.PORT || 3000}`;
 }
 
-/** GitHub redirect_uri must match the host the user actually hit (local dev vs Render). */
-function githubOAuthRedirectBase(req: Request): string {
+/** OAuth redirect_uri base must match the host the user actually hit (local dev vs Render). */
+function oauthRedirectBase(req: Request): string {
   if (process.env.NODE_ENV !== "production") {
     const fromReq = requestDerivedBaseUrl(req);
     if (fromReq) return fromReq;
     return `http://localhost:${process.env.PORT || 3000}`;
   }
   return publicBaseUrl(req);
+}
+
+/** @deprecated use oauthRedirectBase */
+function githubOAuthRedirectBase(req: Request): string {
+  return oauthRedirectBase(req);
 }
 
 function sessionCookieSecure(): boolean {
@@ -609,34 +687,10 @@ export async function resolveNebulaProjectDiskKey(req: Request): Promise<string>
 export async function mountRenderStack(app: Express) {
   app.use(cookieParser() as any);
 
-  const dbUrl = process.env.DATABASE_URL?.trim() || "";
-  const bootPool = getPool();
   dbReady = false;
   registerNebulaPgPool(null);
-  if (bootPool) {
-    try {
-      await ensureTables(bootPool);
-      dbReady = true;
-      registerNebulaPgPool(bootPool);
-      console.log("[nebula] PostgreSQL (Render) schema ready.");
-    } catch (e) {
-      console.error("[nebula] PostgreSQL init failed:", e);
-      if (dbUrl) {
-        console.warn("[nebula] DATABASE_URL target:", describeDatabaseUrlHost(normalizeDatabaseUrl(dbUrl)));
-        console.warn(
-          "[nebula] Fix: use Render → PostgreSQL → Connections → **External** URL (full hostname), or remove DATABASE_URL for local dev without cloud auth.",
-        );
-      }
-      dbReady = false;
-      poolInitFailed = true;
-      registerNebulaPgPool(null);
-      try {
-        await bootPool.end();
-      } catch {
-        /* ignore */
-      }
-      pool = null;
-    }
+  if (process.env.DATABASE_URL?.trim()) {
+    await ensureDbReady();
   }
 
   const ensureInitialProjectForUser = async (uid: string, preferredName?: string): Promise<void> => {
@@ -1138,11 +1192,11 @@ export async function mountRenderStack(app: Express) {
   });
 
   // --- GitHub OAuth (any GitHub account — use a standard OAuth App, not org-locked SSO-only flows) ---
-  app.get("/api/auth/github", (req, res) => {
-    if (!hasDb()) return res.status(503).send("Database not configured (DATABASE_URL)");
+  app.get("/api/auth/github", async (req, res) => {
+    if (!(await ensureDbReady())) return res.status(503).send("Database not configured (DATABASE_URL)");
     const id = process.env.GITHUB_CLIENT_ID?.trim();
     if (!id) return res.status(503).send("GITHUB_CLIENT_ID not configured");
-    const redirectUri = `${githubOAuthRedirectBase(req)}/api/auth/github/callback`;
+    const redirectUri = `${oauthRedirectBase(req)}/api/auth/github/callback`;
     const state = crypto.randomBytes(16).toString("hex");
     const remember = parseRememberFlag(req.query.remember);
     const oauthCookieOpts = { ...sessionCookieBaseOptions(), maxAge: 600000 };
@@ -1158,7 +1212,7 @@ export async function mountRenderStack(app: Express) {
   });
 
   app.get("/api/auth/github/callback", async (req, res) => {
-    if (!hasDb()) return res.status(503).send("Database not configured (DATABASE_URL)");
+    if (!(await ensureDbReady())) return res.status(503).send("Database not configured (DATABASE_URL)");
     const secret = process.env.GITHUB_CLIENT_SECRET?.trim();
     const id = process.env.GITHUB_CLIENT_ID?.trim();
     if (!secret || !id) return res.status(500).send("GitHub OAuth not configured");
@@ -1174,7 +1228,7 @@ export async function mountRenderStack(app: Express) {
       return res.status(400).send("Invalid OAuth state");
     }
 
-    const redirectUri = `${githubOAuthRedirectBase(req)}/api/auth/github/callback`;
+    const redirectUri = `${oauthRedirectBase(req)}/api/auth/github/callback`;
     try {
       const tokRes = await fetch("https://github.com/login/oauth/access_token", {
         method: "POST",
@@ -1244,10 +1298,111 @@ export async function mountRenderStack(app: Express) {
     }
   });
 
+  // --- Google OAuth ---
+  app.get("/api/auth/google", async (req, res) => {
+    if (!(await ensureDbReady())) return res.status(503).send("Database not configured (DATABASE_URL)");
+    const id = process.env.GOOGLE_CLIENT_ID?.trim();
+    if (!id) return res.status(503).send("GOOGLE_CLIENT_ID not configured");
+    const redirectUri = `${oauthRedirectBase(req)}/api/auth/google/callback`;
+    const state = crypto.randomBytes(16).toString("hex");
+    const remember = parseRememberFlag(req.query.remember);
+    const oauthCookieOpts = { ...sessionCookieBaseOptions(), maxAge: 600000 };
+    res.cookie("oauth_state", state, oauthCookieOpts);
+    res.cookie(OAUTH_REMEMBER_COOKIE, remember ? "1" : "0", oauthCookieOpts);
+    const q = new URLSearchParams({
+      client_id: id,
+      redirect_uri: redirectUri,
+      response_type: "code",
+      scope: "openid email profile",
+      state,
+      access_type: "online",
+      prompt: "select_account",
+    });
+    res.redirect(`https://accounts.google.com/o/oauth2/v2/auth?${q}`);
+  });
+
+  app.get("/api/auth/google/callback", async (req, res) => {
+    if (!(await ensureDbReady())) return res.status(503).send("Database not configured (DATABASE_URL)");
+    const secret = process.env.GOOGLE_CLIENT_SECRET?.trim();
+    const id = process.env.GOOGLE_CLIENT_ID?.trim();
+    if (!secret || !id) return res.status(500).send("Google OAuth not configured");
+
+    const code = typeof req.query.code === "string" ? req.query.code : "";
+    const state = typeof req.query.state === "string" ? req.query.state : "";
+    const cookieState = req.cookies?.oauth_state;
+    const remember = req.cookies?.[OAUTH_REMEMBER_COOKIE] !== "0";
+    res.clearCookie("oauth_state", sessionCookieBaseOptions());
+    res.clearCookie(OAUTH_REMEMBER_COOKIE, sessionCookieBaseOptions());
+    if (!code || !state || state !== cookieState) {
+      return res.status(400).send(oauthPopupHtml(false, "Invalid OAuth state"));
+    }
+
+    const redirectUri = `${oauthRedirectBase(req)}/api/auth/google/callback`;
+    try {
+      const tokRes = await fetch("https://oauth2.googleapis.com/token", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({
+          code,
+          client_id: id,
+          client_secret: secret,
+          redirect_uri: redirectUri,
+          grant_type: "authorization_code",
+        }),
+      });
+      const tokJson = (await tokRes.json()) as { access_token?: string; error?: string; error_description?: string };
+      if (!tokJson.access_token) {
+        return res
+          .status(400)
+          .send(oauthPopupHtml(false, tokJson.error_description || tokJson.error || "Google token exchange failed"));
+      }
+
+      const uRes = await fetch("https://www.googleapis.com/oauth2/v3/userinfo", {
+        headers: { Authorization: `Bearer ${tokJson.access_token}` },
+      });
+      if (!uRes.ok) {
+        return res.status(400).send(oauthPopupHtml(false, "Could not load Google profile"));
+      }
+      const gu = (await uRes.json()) as {
+        sub?: string;
+        email?: string | null;
+        email_verified?: boolean | string;
+        name?: string | null;
+        picture?: string | null;
+      };
+      const providerUserId = String(gu.sub || "").trim();
+      if (!providerUserId) {
+        return res.status(400).send(oauthPopupHtml(false, "Google profile missing user id"));
+      }
+      let email = (gu.email && String(gu.email).trim()) || "";
+      if (!email) {
+        email = `${providerUserId}@users.noreply.google.com`;
+      }
+      const display = (gu.name && String(gu.name).trim()) || email.split("@")[0] || "Google User";
+
+      const db = requireDbPool();
+      const ins = await db.query(
+        `INSERT INTO public.nebula_users (provider, provider_user_id, email, display_name, avatar_url, password_hash)
+         VALUES ('google', $1, $2, $3, $4, NULL)
+         ON CONFLICT (provider, provider_user_id) DO UPDATE
+         SET email = EXCLUDED.email, display_name = EXCLUDED.display_name, avatar_url = EXCLUDED.avatar_url
+         RETURNING id`,
+        [providerUserId, email, display, gu.picture || null]
+      );
+      const userId = ins.rows[0].id as string;
+      await ensureInitialProjectForUserSafe(userId);
+      setSessionCookie(res, signSession(userId), remember);
+      res.send(oauthPopupHtml(true, "Signed in with Google"));
+    } catch (e) {
+      console.error("[nebula] Google callback:", e);
+      res.status(500).send(oauthPopupHtml(false, "Google sign-in failed"));
+    }
+  });
+
   // --- Register: email + password (frictionless) or legacy username + password ---
   app.post("/api/auth/register", async (req, res) => {
     setNoStoreAuthHeaders(res);
-    if (!hasDb()) return res.status(503).json({ error: "Database not configured" });
+    if (!(await ensureDbReady())) return res.status(503).json({ error: "Database not configured" });
     const remember = parseRememberFlag(req.body?.remember);
     const emailAddr = normalizeEmail(req.body?.email);
     const rawPassword = req.body?.password;
@@ -1325,7 +1480,7 @@ export async function mountRenderStack(app: Express) {
 
   app.post("/api/auth/login", async (req, res) => {
     setNoStoreAuthHeaders(res);
-    if (!hasDb()) return res.status(503).json({ error: "Database not configured" });
+    if (!(await ensureDbReady())) return res.status(503).json({ error: "Database not configured" });
     const rawLogin =
       typeof req.body?.username === "string"
         ? req.body.username
@@ -1370,7 +1525,7 @@ export async function mountRenderStack(app: Express) {
   });
 
   app.post("/api/auth/forgot-password", async (req, res) => {
-    if (!hasDb()) return res.status(503).json({ error: "Database not configured" });
+    if (!(await ensureDbReady())) return res.status(503).json({ error: "Database not configured" });
     const email = normalizeEmail(req.body?.email);
     if (!email) return res.status(400).json({ error: "Valid email is required." });
     try {
@@ -1404,7 +1559,7 @@ export async function mountRenderStack(app: Express) {
   });
 
   app.post("/api/auth/reset-password", async (req, res) => {
-    if (!hasDb()) return res.status(503).json({ error: "Database not configured" });
+    if (!(await ensureDbReady())) return res.status(503).json({ error: "Database not configured" });
     const token = typeof req.body?.token === "string" ? req.body.token.trim() : "";
     const pwErr = validateNewPassword(req.body?.password);
     if (!token || token.length < 20) return res.status(400).json({ error: "Invalid or missing reset token." });
@@ -1600,16 +1755,18 @@ export async function mountRenderStack(app: Express) {
 
 function oauthPopupHtml(ok: boolean, message: string): string {
   const safe = message.replace(/</g, "&lt;");
+  const msgType = ok ? "OAUTH_AUTH_SUCCESS" : "OAUTH_AUTH_FAILURE";
+  const fallbackPath = ok ? "/app" : "/login";
   return `<!DOCTYPE html><html><head><meta charset="utf-8"/><title>${ok ? "OK" : "Error"}</title></head>
 <body style="font-family:system-ui;background:#040f1a;color:#e2e8f0;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;">
 <div style="text-align:center;max-width:360px;padding:2rem;">
 <p>${safe}</p>
 <script>
   if (window.opener) {
-    window.opener.postMessage({ type: 'OAUTH_AUTH_SUCCESS' }, '*');
+    window.opener.postMessage({ type: '${msgType}' }, window.location.origin);
     setTimeout(function(){ window.close(); }, 800);
   } else {
-    setTimeout(function(){ window.location.href = '/'; }, 1200);
+    setTimeout(function(){ window.location.href = '${fallbackPath}'; }, 1200);
   }
 </script>
 </div></body></html>`;

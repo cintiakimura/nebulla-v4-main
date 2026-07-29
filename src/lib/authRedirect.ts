@@ -14,3 +14,8 @@ export function getPublicSiteBase(serverPublicSiteUrl?: string | null): string {
 export function getGithubOAuthCallbackUrl(serverPublicSiteUrl?: string | null): string {
   return `${getPublicSiteBase(serverPublicSiteUrl)}/api/auth/github/callback`;
 }
+
+/** Must match Google Cloud Console → Authorized redirect URI. */
+export function getGoogleOAuthCallbackUrl(serverPublicSiteUrl?: string | null): string {
+  return `${getPublicSiteBase(serverPublicSiteUrl)}/api/auth/google/callback`;
+}
