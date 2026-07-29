@@ -308,6 +308,9 @@ export function IdeUiStudioBeta({
   }>({});
   const [lastGate, setLastGate] = useState<string>('');
   const [patternMode, setPatternMode] = useState<'seed' | 'figma' | ''>('');
+  const [figmaStatus, setFigmaStatus] = useState<string>('');
+  const [figmaError, setFigmaError] = useState<string>('');
+  const [figmaEnvGuidance, setFigmaEnvGuidance] = useState<string>('');
   const [previewSynced, setPreviewSynced] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const shellRef = useRef<HTMLDivElement>(null);
@@ -489,10 +492,24 @@ export function IdeUiStudioBeta({
         regeneration_count?: number;
         max_regenerations?: number;
         final_status?: string;
+        patternMode?: 'seed' | 'figma';
+        quality_gate_result?: string;
+        preview_applied?: boolean;
+        figma_status?: string;
+        figma_error?: string;
+        figma_fallback_used?: boolean;
+        env_guidance?: string;
       };
       if (typeof d.regeneration_count === 'number') setRegenCount(d.regeneration_count);
       if (typeof d.max_regenerations === 'number') setMaxRegens(d.max_regenerations);
       if (d.user_visible_stage) setEngineStage(d.user_visible_stage);
+      if (d.patternMode) setPatternMode(d.patternMode);
+      else if (d.figma_fallback_used) setPatternMode('seed');
+      if (d.quality_gate_result) setLastGate(d.quality_gate_result);
+      if (typeof d.figma_status === 'string') setFigmaStatus(d.figma_status);
+      if (typeof d.figma_error === 'string') setFigmaError(d.figma_error);
+      if (typeof d.env_guidance === 'string') setFigmaEnvGuidance(d.env_guidance);
+      if (d.preview_applied === true) setPreviewSynced(true);
       if (d.model?.pages && !isNebullaIdePlaceholderShell(d.model)) {
         applyEditorModel(
           d.model,
@@ -712,7 +729,14 @@ export function IdeUiStudioBeta({
         patternMode?: 'seed' | 'figma';
         quality_gate_result?: string;
         figma_fallback_used?: boolean;
-        context?: { page_name?: string; quality_gate_result?: string };
+        context?: {
+          page_name?: string;
+          quality_gate_result?: string;
+          figma_used?: string;
+          figma_status?: string;
+          figma_error?: string;
+          fallback_used?: string;
+        };
       };
       if (typeof data.regeneration_count === 'number') setRegenCount(data.regeneration_count);
       if (typeof data.max_regenerations === 'number') setMaxRegens(data.max_regenerations);
@@ -721,6 +745,9 @@ export function IdeUiStudioBeta({
       else if (data.figma_fallback_used) setPatternMode('seed');
       const gate = data.quality_gate_result || data.context?.quality_gate_result || '';
       if (gate) setLastGate(gate);
+      if (typeof data.context?.figma_status === 'string') setFigmaStatus(data.context.figma_status);
+      if (typeof data.context?.figma_error === 'string') setFigmaError(data.context.figma_error);
+      if (data.context?.fallback_used === 'yes' && !data.patternMode) setPatternMode('seed');
       if (data.preference_recovery) {
         setPreferenceRecovery(true);
         setPreferenceQuestion(
@@ -1008,12 +1035,15 @@ export function IdeUiStudioBeta({
   const runApplyToCode = async () => {
     setBusy(true);
     setError('');
-    const canApply = await ensureEligibleForApply();
+    // Engine v2 preview unlocks Save (server: hasUiGenerationV2Ready). Still try eligibility for v0 projects.
+    const canApply = hasEnginePreview ? true : await ensureEligibleForApply();
     if (!canApply) {
       notifyV0(
-        hasV0ApiKey
-          ? 'Save needs a first v0 UI generation — wait for auto v0, or Resume in chat.'
-          : 'Add V0_API_KEY and wait for auto v0, or complete Grok coding with an app/ folder first.',
+        hasEnginePreview
+          ? 'Save needs a successful Generate UI first (seed or Figma).'
+          : hasV0ApiKey
+            ? 'Save needs a first v0 UI generation — wait for auto v0, or Resume in chat.'
+            : 'Generate UI first (seed/Figma), or add V0_API_KEY for the legacy v0 path.',
         true,
       );
       setApplyConfirmOpen(false);
@@ -1035,6 +1065,7 @@ export function IdeUiStudioBeta({
       const data = await res.json();
       if (!res.ok) throw new Error(typeof data.error === 'string' ? data.error : 'Apply failed');
       setError('');
+      setEligible(true);
       await loadEligibility();
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Apply failed');
@@ -1589,6 +1620,24 @@ export function IdeUiStudioBeta({
                 {t('uiStudio.usingFigmaRefs')}
               </span>
             ) : null}
+            {figmaStatus ? (
+              <span
+                className={cn(
+                  'hidden max-w-[160px] truncate rounded-full px-2 py-0.5 text-[10px] font-medium sm:inline',
+                  figmaStatus === 'success'
+                    ? 'bg-emerald-500/15 text-emerald-200'
+                    : figmaStatus === 'weak_matches' || figmaStatus === 'missing_key'
+                      ? 'bg-amber-500/15 text-amber-100'
+                      : 'bg-rose-500/15 text-rose-100',
+                )}
+                title={
+                  [figmaError, figmaEnvGuidance].filter(Boolean).join(' — ') ||
+                  `${t('uiStudio.figmaStatus')}: ${figmaStatus}`
+                }
+              >
+                {t('uiStudio.figmaStatus')}: {figmaStatus}
+              </span>
+            ) : null}
             {lastGate ? (
               <span
                 className={cn(
@@ -1644,7 +1693,7 @@ export function IdeUiStudioBeta({
                 type="button"
                 disabled={busy}
                 onClick={() => void applyLastGenerationToPreview()}
-                className="hidden rounded-md border border-border px-2 py-1 text-[10px] text-foreground hover:bg-secondary disabled:opacity-40 md:inline"
+                className="rounded-md border border-border px-2 py-1 text-[10px] text-foreground hover:bg-secondary disabled:opacity-40"
                 title={t('uiStudio.applyToPreviewTitle')}
               >
                 {previewSynced ? t('uiStudio.previewSynced') : t('uiStudio.applyToPreview')}

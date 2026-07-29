@@ -223,7 +223,73 @@ export function resolveOriginalV0FolderRel(workspaceRoot: string): string | null
   return null;
 }
 
+/** True when UI Generation Engine v2 has produced usable meta (seed or Figma). */
+export function hasUiGenerationV2Ready(workspaceRoot: string): boolean {
+  const metaPath = path.join(workspaceRoot, "nebulla-project", "ui-generation-v2-meta.json");
+  if (!fs.existsSync(metaPath)) return false;
+  try {
+    const j = JSON.parse(fs.readFileSync(metaPath, "utf8")) as {
+      engine?: string;
+      quality_gate_result?: string;
+      preview_applied?: boolean;
+    };
+    if (j.engine !== "v2") return false;
+    if (j.preview_applied === true) return true;
+    return j.quality_gate_result === "pass" || j.quality_gate_result === "repair";
+  } catch {
+    return false;
+  }
+}
+
+/** Honest Figma + gate fields from the latest v2 meta (for Beta status/preview APIs). */
+export function readUiGenerationV2PublicMeta(workspaceRoot: string): {
+  pattern_mode?: "seed" | "figma";
+  quality_gate_result?: string;
+  preview_applied?: boolean;
+  figma_used?: string;
+  figma_status?: string;
+  figma_error?: string;
+  figma_fallback_used?: boolean;
+  env_guidance?: string;
+  reference_file_keys_configured?: number;
+} {
+  const metaPath = path.join(workspaceRoot, "nebulla-project", "ui-generation-v2-meta.json");
+  if (!fs.existsSync(metaPath)) return {};
+  try {
+    const j = JSON.parse(fs.readFileSync(metaPath, "utf8")) as {
+      pattern_mode?: "seed" | "figma";
+      quality_gate_result?: string;
+      preview_applied?: boolean;
+      figma?: {
+        figma_used?: string;
+        figma_status?: string;
+        figma_error?: string;
+        fallback_used?: string;
+        env_guidance?: string;
+        reference_file_keys_configured?: number;
+      };
+    };
+    return {
+      pattern_mode: j.pattern_mode === "figma" ? "figma" : j.pattern_mode === "seed" ? "seed" : undefined,
+      quality_gate_result: j.quality_gate_result,
+      preview_applied: j.preview_applied === true,
+      figma_used: j.figma?.figma_used,
+      figma_status: j.figma?.figma_status,
+      figma_error: j.figma?.figma_error,
+      figma_fallback_used: j.figma?.fallback_used === "yes",
+      env_guidance: j.figma?.env_guidance,
+      reference_file_keys_configured: j.figma?.reference_file_keys_configured,
+    };
+  } catch {
+    return {};
+  }
+}
+
 export function isVisualEditorEligible(workspaceRoot: string): { eligible: boolean; reason?: string } {
+  // UI Generation Engine v2 (seed/Figma) — Save must work without a prior v0 generation.
+  if (hasUiGenerationV2Ready(workspaceRoot)) {
+    return { eligible: true };
+  }
   const orig = resolveOriginalV0FolderRel(workspaceRoot);
   if (orig) {
     const innerManifest = path.join(workspaceRoot, orig, "manifest.json");
@@ -284,11 +350,12 @@ export function canPersistVisualPreviewModel(workspaceRoot: string): {
 } {
   if (process.env.NEBULA_VISUAL_EDITOR_DEV_UNLOCK === "true") return { ok: true };
   if (isVisualEditorEligible(workspaceRoot).eligible) return { ok: true };
+  if (hasUiGenerationV2Ready(workspaceRoot)) return { ok: true };
   if (hasWorkspaceCodingShell(workspaceRoot)) return { ok: true };
   return {
     ok: false,
     reason:
-      "Preview save needs a first v0 generation or Grok-coded app/src/pages/components files in the project.",
+      "Preview save needs UI Generate (seed/Figma), a first v0 generation, or Grok-coded app/src/pages/components files.",
   };
 }
 

@@ -137,6 +137,7 @@ import {
 } from "./src/lib/previewRuntimeBridgeScript";
 import {
   isVisualEditorEligible,
+  readUiGenerationV2PublicMeta,
   canPersistVisualPreviewModel,
   hasWorkspaceCodingShell,
   markV0FirstGenerationComplete,
@@ -3436,6 +3437,11 @@ ${modelJson}`;
             quality_gate_result: result.context.quality_gate_result,
             file_scanned: result.context.file_scanned,
             file_routes: result.context.file_routes,
+            figma_used: result.context.figma_used,
+            figma_status: result.context.figma_status,
+            figma_error: result.context.figma_error,
+            fallback_used: result.context.fallback_used,
+            reference_source: result.context.reference_source,
           },
         });
       }
@@ -3553,6 +3559,7 @@ ${modelJson}`;
     try {
       const { workspaceRoot } = projectPathsFor(req);
       const policy = readCyclePolicy(workspaceRoot);
+      const meta = readUiGenerationV2PublicMeta(workspaceRoot);
       return res.json({
         ok: true,
         user_visible_stage: policy.user_visible_stage,
@@ -3564,6 +3571,15 @@ ${modelJson}`;
         final_status: policy.final_status,
         page_key: policy.page_key,
         updated_at: policy.updated_at,
+        patternMode: meta.pattern_mode,
+        quality_gate_result: meta.quality_gate_result,
+        preview_applied: meta.preview_applied,
+        figma_used: meta.figma_used,
+        figma_status: meta.figma_status,
+        figma_error: meta.figma_error,
+        figma_fallback_used: meta.figma_fallback_used,
+        env_guidance: meta.env_guidance,
+        reference_file_keys_configured: meta.reference_file_keys_configured,
       });
     } catch (e) {
       return res.status(500).json({ error: e instanceof Error ? e.message : "failed" });
@@ -3578,6 +3594,7 @@ ${modelJson}`;
       const { model, source } = readEnginePreviewModel(workspaceRoot);
       const codePath = path.join(workspaceRoot, "nebulla-project", "ui-generation-output.tsx");
       const hasGeneratedCode = fs.existsSync(codePath) && fs.statSync(codePath).size > 0;
+      const meta = readUiGenerationV2PublicMeta(workspaceRoot);
       return res.json({
         ok: true,
         model,
@@ -3588,6 +3605,15 @@ ${modelJson}`;
         max_regenerations: policy.max_regenerations,
         final_status: policy.final_status,
         page_key: policy.page_key,
+        patternMode: meta.pattern_mode,
+        quality_gate_result: meta.quality_gate_result,
+        preview_applied: meta.preview_applied,
+        figma_used: meta.figma_used,
+        figma_status: meta.figma_status,
+        figma_error: meta.figma_error,
+        figma_fallback_used: meta.figma_fallback_used,
+        env_guidance: meta.env_guidance,
+        reference_file_keys_configured: meta.reference_file_keys_configured,
       });
     } catch (e) {
       return res.status(500).json({ error: e instanceof Error ? e.message : "failed" });
