@@ -2,6 +2,11 @@ import fs from "fs";
 import path from "path";
 import { execFileSync } from "child_process";
 import { sanitizeProjectKey } from "./nebulaProjectKey";
+import {
+  getWorkspaceStorageMode,
+  hydrateWorkspaceFromR2Safe,
+  scheduleWorkspaceFileR2Sync,
+} from "./nebulaWorkspaceStorage";
 
 export type CloudProjectPaths = {
   projectKey: string;
@@ -32,8 +37,10 @@ function copyIfMissing(src: string, dest: string) {
 }
 
 /**
- * Ensures `data/cloud-projects/{key}/` exists on the server (Render disk).
+ * Ensures `data/cloud-projects/{key}/` exists on the server (local working tree).
  * Seeds from bundled `nebula-project/` templates when files are missing.
+ * When WORKSPACE_STORAGE=r2|dual, prefer `ensureCloudProjectWorkspaceDurable` in async routes
+ * so R2 can restore files onto ephemeral disks.
  */
 export function ensureCloudProjectWorkspace(
   repoRoot: string,
@@ -99,6 +106,19 @@ export function ensureCloudProjectWorkspace(
     }
   }
 
+  if (getWorkspaceStorageMode() !== "local") {
+    for (const abs of [
+      masterPlanPath,
+      nebulaUiStudioPath,
+      path.join(workspaceRoot, "project-workflow.md"),
+      path.join(workspaceRoot, "SKILL.md"),
+    ]) {
+      if (fs.existsSync(abs)) {
+        scheduleWorkspaceFileR2Sync(projectKey, workspaceRoot, abs);
+      }
+    }
+  }
+
   return {
     projectKey,
     workspaceRoot,
@@ -106,4 +126,15 @@ export function ensureCloudProjectWorkspace(
     nebulaUiStudioPath,
     nebulaUiStudioOutputDir,
   };
+}
+
+/** Sync ensure + R2 hydrate (Phase 4). Prefer this in async route handlers. */
+export async function ensureCloudProjectWorkspaceDurable(
+  repoRoot: string,
+  legacyTemplateRoot: string,
+  rawProjectKey: string,
+): Promise<CloudProjectPaths> {
+  const paths = ensureCloudProjectWorkspace(repoRoot, legacyTemplateRoot, rawProjectKey);
+  await hydrateWorkspaceFromR2Safe(paths.projectKey, paths.workspaceRoot);
+  return paths;
 }

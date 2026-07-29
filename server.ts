@@ -22,8 +22,8 @@ import {
   guardianExpressErrorHandler,
   captureError,
 } from "./lib/nebulaGuardian";
-import { mountRenderStack, getRenderPublicConfig, resolveNebulaProjectDiskKey, readNebulaSessionUserId } from "./renderStack";
-import { getNebulaPgPool } from "./lib/nebulaPgPool";
+import { mountRenderStack, getRenderPublicConfig, resolveNebulaProjectDiskKey, readNebulaSessionUserId, ensureDbReady } from "./renderStack";
+import { getPlatformQueryable } from "./lib/nebulaPgPool";
 import { getUserByokStatus, hasAnyByokConfigured } from "./lib/nebulaUserGrokStore";
 import {
   resolvePencilApiKey,
@@ -449,6 +449,7 @@ async function startServer() {
   );
 
   app.get("/api/config", async (req, res) => {
+    await ensureDbReady();
     const grok = readMainAiApiKeyFromEnv();
     const mainAiProvider = grok.length >= 20 ? detectMainAiProvider(grok) : "unknown";
     const mainAiChatModel = grok.length >= 20 ? resolveMainAiChatModel(mainAiProvider) : undefined;
@@ -468,7 +469,7 @@ async function startServer() {
     };
     let hasUserByok = false;
     const uid = readNebulaSessionUserId(req);
-    const pool = getNebulaPgPool();
+    const pool = getPlatformQueryable();
     if (uid && pool) {
       try {
         const status = await getUserByokStatus(pool, uid);

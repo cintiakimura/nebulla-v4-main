@@ -3,9 +3,9 @@
  * Never write these into shared Render / .env. Platform MAIN_API_KEY_GROK is fallback only.
  */
 
-import type pg from "pg";
 import { decryptAtRest, encryptAtRest } from "./nebulaAtRestCrypto";
 import type { MainAiProvider } from "./nebulaMainAiProvider";
+import type { PlatformQueryable } from "./nebulaPlatformQueryable";
 
 export type ByokProvider = "xai" | "anthropic" | "openai";
 
@@ -73,7 +73,7 @@ export function keyTail(plain: string): string | undefined {
 }
 
 export async function saveUserByokApiKey(
-  pool: pg.Pool,
+  db: PlatformQueryable,
   uid: string,
   provider: ByokProvider,
   plain: string,
@@ -83,7 +83,7 @@ export async function saveUserByokApiKey(
   }
   const enc = encryptAtRest(plain.trim());
   const col = COLUMN[provider];
-  await pool.query(
+  await db.query(
     `UPDATE public.nebula_users SET ${col.enc} = $2, ${col.validated} = NOW() WHERE id = $1::uuid`,
     [uid, enc],
   );
@@ -92,33 +92,33 @@ export async function saveUserByokApiKey(
 
 /** @deprecated Prefer saveUserByokApiKey(..., "xai", ...) */
 export async function saveUserGrokApiKey(
-  pool: pg.Pool,
+  db: PlatformQueryable,
   uid: string,
   plain: string,
 ): Promise<{ ok: boolean }> {
-  const r = await saveUserByokApiKey(pool, uid, "xai", plain);
+  const r = await saveUserByokApiKey(db, uid, "xai", plain);
   return { ok: r.ok };
 }
 
 export async function clearUserByokApiKey(
-  pool: pg.Pool,
+  db: PlatformQueryable,
   uid: string,
   provider: ByokProvider,
 ): Promise<void> {
   const col = COLUMN[provider];
-  await pool.query(
+  await db.query(
     `UPDATE public.nebula_users SET ${col.enc} = NULL, ${col.validated} = NULL WHERE id = $1::uuid`,
     [uid],
   );
 }
 
 export async function getUserByokApiKeyDecrypted(
-  pool: pg.Pool,
+  db: PlatformQueryable,
   uid: string,
   provider: ByokProvider,
 ): Promise<string | undefined> {
   const col = COLUMN[provider];
-  const r = await pool.query(
+  const r = await db.query(
     `SELECT ${col.enc} AS enc FROM public.nebula_users WHERE id = $1::uuid`,
     [uid],
   );
@@ -131,10 +131,10 @@ export async function getUserByokApiKeyDecrypted(
 
 /** @deprecated Prefer getUserByokApiKeyDecrypted(..., "xai") */
 export async function getUserGrokApiKeyDecrypted(
-  pool: pg.Pool,
+  db: PlatformQueryable,
   uid: string,
 ): Promise<string | undefined> {
-  return getUserByokApiKeyDecrypted(pool, uid, "xai");
+  return getUserByokApiKeyDecrypted(db, uid, "xai");
 }
 
 export type ByokStatusProvider = {
@@ -145,8 +145,8 @@ export type ByokStatusProvider = {
 
 export type ByokStatus = Record<ByokProvider, ByokStatusProvider>;
 
-export async function getUserByokStatus(pool: pg.Pool, uid: string): Promise<ByokStatus> {
-  const r = await pool.query(
+export async function getUserByokStatus(db: PlatformQueryable, uid: string): Promise<ByokStatus> {
+  const r = await db.query(
     `SELECT grok_api_key_encrypted, grok_key_validated_at,
             anthropic_api_key_encrypted, anthropic_key_validated_at,
             openai_api_key_encrypted, openai_key_validated_at

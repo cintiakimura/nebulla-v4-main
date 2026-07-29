@@ -1,5 +1,5 @@
 import type express from "express";
-import { getNebulaPgPool } from "./nebulaPgPool";
+import { getPlatformQueryable } from "./nebulaPgPool";
 import {
   getUserByokApiKeyDecrypted,
   type ByokProvider,
@@ -136,10 +136,10 @@ export async function resolveAiApiKeyDetailed(
   const provider = normalizePreferred(preferred);
 
   const uid = readSessionUid(req);
-  const pool = getNebulaPgPool();
-  if (uid && pool) {
+  const db = getPlatformQueryable();
+  if (uid && db) {
     try {
-      const fromDb = await getUserByokApiKeyDecrypted(pool, uid, provider);
+      const fromDb = await getUserByokApiKeyDecrypted(db, uid, provider);
       if (fromDb && fromDb.length >= MIN_KEY_LEN) {
         return { ok: true, apiKey: fromDb, source: "user_db", provider };
       }

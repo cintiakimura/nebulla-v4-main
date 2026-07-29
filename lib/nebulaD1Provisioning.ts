@@ -38,7 +38,11 @@ export function resolveCloudflareAccountId(): string {
 }
 
 export function resolveCloudflareApiToken(): string {
-  return readEnvFirst("CLOUDFLARE_API_TOKEN", "CF_API_TOKEN");
+  return readEnvFirst(
+    "CLOUDFLARE_API_TOKEN",
+    "NEBULLA_D1_2_API_TOKEN",
+    "CF_API_TOKEN",
+  );
 }
 
 export function isD1ProvisioningConfigured(): boolean {

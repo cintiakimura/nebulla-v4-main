@@ -3,21 +3,45 @@
  * Authority: ui-generation-logic-v2.md §6
  *
  * Env (Render + local .env):
- * - FIGMA_API_KEY — personal access token (secret)
- * - FIGMA_REFERENCE_FILE_KEYS — comma-separated file keys from figma.com/file/<KEY>/...
+ * - FIGMA_API_KEY — personal access token (secret). Prefer a token that can
+ *   read files (`file_content:read`). `/v1/me` (`current_user:read`) is optional.
+ * - FIGMA_REFERENCE_FILE_KEYS — comma-separated file keys from
+ *   figma.com/design/<KEY>/... or figma.com/file/<KEY>/...
+ *   Community catalog IDs often 404 until you Duplicate into your account.
+ * - FIGMA_REFERENCE_MAX_FILES — optional (default 3, max 8) how many keys to probe
  *
  * Success requires usable structural guidance extracted from Figma frames —
  * not merely "file opened". Without FIGMA_REFERENCE_FILE_KEYS → weak_matches + seeds.
+ *
+ * Catalog: docs/figma-reference-library.md
  */
 
 import { rankSeedPatterns } from "../seedPatterns";
 import type { UiGenContextState } from "../types";
 import type { FigmaRecord, FigmaStatusV2, PageClassification, V2TemplateId } from "./types";
 
-const FIGMA_LIBRARY_KEYS = (process.env.FIGMA_REFERENCE_FILE_KEYS || "")
-  .split(",")
-  .map((s) => s.trim())
-  .filter(Boolean);
+function resolveLibraryKeys(): string[] {
+  return (process.env.FIGMA_REFERENCE_FILE_KEYS || "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+function resolveMaxFiles(): number {
+  const raw = Number(process.env.FIGMA_REFERENCE_MAX_FILES || "3");
+  if (!Number.isFinite(raw) || raw < 1) return 3;
+  return Math.min(8, Math.floor(raw));
+}
+
+/** Prefer known mobile design key first on mobile pages when present in the list. */
+function orderKeysForClassification(keys: string[], classification: PageClassification): string[] {
+  if (keys.length <= 1) return keys;
+  const mobilePreferred = "ZEbJpC67UQyeeynt1UR8gT";
+  if (classification.device === "mobile" && keys.includes(mobilePreferred)) {
+    return [mobilePreferred, ...keys.filter((k) => k !== mobilePreferred)];
+  }
+  return keys;
+}
 
 type FigmaNode = {
   id?: string;
@@ -121,6 +145,7 @@ export async function retrieveFigmaReferences(input: {
   >;
 }): Promise<FigmaRecord> {
   const key = (process.env.FIGMA_API_KEY || "").trim();
+  const libraryKeys = resolveLibraryKeys();
   const seeds = rankSeedPatterns({
     ...({} as UiGenContextState),
     device: input.seedState.device || "web",
@@ -141,14 +166,14 @@ export async function retrieveFigmaReferences(input: {
     why: `Strong seed fallback for ${input.classification.device}/${input.classification.page_type}: ${s.structure}`,
   }));
   const seedHints = mapSeedToTemplateHints(input.templateId, topSeeds[0]?.structure || "stacked sections");
-  const keysConfigured = FIGMA_LIBRARY_KEYS.length;
+  const keysConfigured = libraryKeys.length;
   const envGuidance =
     !key && keysConfigured === 0
-      ? "Set FIGMA_API_KEY and FIGMA_REFERENCE_FILE_KEYS on Render (and local .env). File key = ID in figma.com/file/<KEY>/..."
+      ? "Set FIGMA_API_KEY and FIGMA_REFERENCE_FILE_KEYS on Render (and local .env). Use keys from figma.com/design/<KEY>/... — see docs/figma-reference-library.md"
       : !key
-        ? "Set FIGMA_API_KEY (token). FIGMA_REFERENCE_FILE_KEYS alone is not enough."
+        ? "Set FIGMA_API_KEY (token with file read). FIGMA_REFERENCE_FILE_KEYS alone is not enough."
         : keysConfigured === 0
-          ? "FIGMA_API_KEY is set, but FIGMA_REFERENCE_FILE_KEYS is missing — add comma-separated Figma file keys or seed fallback stays on."
+          ? "FIGMA_API_KEY is set, but FIGMA_REFERENCE_FILE_KEYS is missing — add comma-separated design file keys (Community catalog IDs 404 until duplicated). See docs/figma-reference-library.md"
           : "Both FIGMA_API_KEY and FIGMA_REFERENCE_FILE_KEYS are configured.";
 
   const base = {
@@ -170,15 +195,17 @@ export async function retrieveFigmaReferences(input: {
   }
 
   try {
+    // Optional identity probe — fine-grained tokens may lack current_user:read.
+    // Do not hard-fail: file reads are what matter for layout extract.
     const me = await fetch("https://api.figma.com/v1/me", {
       headers: { "X-Figma-Token": key },
     });
-    if (me.status === 401 || me.status === 403) {
+    if (me.status === 401) {
       return {
         ...base,
         figma_used: "no",
         figma_status: "unauthorized",
-        figma_error: `Figma unauthorized (${me.status})`,
+        figma_error: `Figma unauthorized (${me.status}) — check FIGMA_API_KEY`,
         candidates: seedCandidates,
         selected_refs: seedSelected,
         fallback_used: "yes",
@@ -197,26 +224,15 @@ export async function retrieveFigmaReferences(input: {
         structure_hints: seedHints,
       };
     }
-    if (!me.ok) {
-      return {
-        ...base,
-        figma_used: "no",
-        figma_status: "failed",
-        figma_error: `Figma API probe failed (${me.status})`,
-        candidates: seedCandidates,
-        selected_refs: seedSelected,
-        fallback_used: "yes",
-        structure_hints: seedHints,
-      };
-    }
+    // 403 on /me (missing current_user:read) → continue to file probes
 
-    if (FIGMA_LIBRARY_KEYS.length === 0) {
+    if (libraryKeys.length === 0) {
       return {
         ...base,
         figma_used: "no",
         figma_status: "weak_matches",
         figma_error:
-          "FIGMA_API_KEY valid but FIGMA_REFERENCE_FILE_KEYS not set — cannot extract layout; seed fallback",
+          "FIGMA_API_KEY present but FIGMA_REFERENCE_FILE_KEYS not set — cannot extract layout; seed fallback",
         candidates: seedCandidates,
         selected_refs: seedSelected,
         fallback_used: "yes",
@@ -228,8 +244,15 @@ export async function retrieveFigmaReferences(input: {
     const allHints: string[] = [];
     let bestScore = 0;
     let bestKey = "";
+    let sawUnauthorizedFile = false;
+    let sawNotFound = 0;
 
-    for (const fileKey of FIGMA_LIBRARY_KEYS.slice(0, 3)) {
+    const ordered = orderKeysForClassification(libraryKeys, input.classification).slice(
+      0,
+      resolveMaxFiles(),
+    );
+
+    for (const fileKey of ordered) {
       try {
         const fr = await fetch(
           `https://api.figma.com/v1/files/${encodeURIComponent(fileKey)}?depth=3`,
@@ -246,6 +269,14 @@ export async function retrieveFigmaReferences(input: {
             fallback_used: "yes",
             structure_hints: seedHints,
           };
+        }
+        if (fr.status === 401 || fr.status === 403) {
+          sawUnauthorizedFile = true;
+          continue;
+        }
+        if (fr.status === 404) {
+          sawNotFound += 1;
+          continue;
         }
         if (!fr.ok) continue;
         const data = (await fr.json()) as {
@@ -269,14 +300,22 @@ export async function retrieveFigmaReferences(input: {
     }
 
     if (figmaCandidates.length === 0 || bestScore < 4) {
+      let detail =
+        bestScore === 0
+          ? "Figma files probed but no auto-layout/structure extracted — seed fallback"
+          : `Figma structure score too weak (${bestScore}) — seed fallback`;
+      if (sawNotFound > 0 && figmaCandidates.length === 0) {
+        detail =
+          "Figma file key(s) returned 404. Community catalog IDs are not API-readable until you Duplicate the file into your Figma account and use the new /design/<KEY>/ id. See docs/figma-reference-library.md";
+      } else if (sawUnauthorizedFile && figmaCandidates.length === 0) {
+        detail =
+          "Figma file read unauthorized — token needs file_content:read (and access to those files).";
+      }
       return {
         ...base,
         figma_used: "no",
-        figma_status: "weak_matches",
-        figma_error:
-          bestScore === 0
-            ? "Figma files probed but no auto-layout/structure extracted — seed fallback"
-            : `Figma structure score too weak (${bestScore}) — seed fallback`,
+        figma_status: sawUnauthorizedFile && figmaCandidates.length === 0 ? "unauthorized" : "weak_matches",
+        figma_error: detail,
         candidates: [...figmaCandidates, ...seedCandidates],
         selected_refs: seedSelected,
         fallback_used: "yes",

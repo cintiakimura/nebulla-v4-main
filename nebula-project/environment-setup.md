@@ -38,8 +38,9 @@ These names and **values are shared across the Nebulla deployment** (ops-owned).
 | `V0_API_KEY` | Optional platform v0 key. Users may also BYOK `V0_API_KEY` via browser header (separate from AI BYOK). |
 | `ANTHROPIC_API_KEY` / `CLAUDE_API_KEY` | Optional platform Claude fallback (not per-user). |
 | `OPENAI_API_KEY` | Optional platform OpenAI fallback (not per-user). |
-| `FIGMA_API_KEY` | Optional. Figma personal access token for UI Generation Engine v2. Alone is not enough — see `FIGMA_REFERENCE_FILE_KEYS`. |
-| `FIGMA_REFERENCE_FILE_KEYS` | Optional but required with the key for real layout extract. Comma-separated Figma **file keys**. |
+| `FIGMA_API_KEY` | Optional. Figma token for UI Generation Engine v2 (file read). Alone is not enough — see `FIGMA_REFERENCE_FILE_KEYS`. |
+| `FIGMA_REFERENCE_FILE_KEYS` | Comma-separated **design** file keys (`figma.com/design/<KEY>/...`). Community catalog IDs 404 until duplicated. See `docs/figma-reference-library.md`. |
+| `FIGMA_REFERENCE_MAX_FILES` | Optional. How many keys to probe (default 3). |
 
 Optional related keys: `PENCIL_API_URL`, model overrides such as `GROK_B_MODEL` — see `.env.example` and server code.
 

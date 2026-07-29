@@ -1,11 +1,11 @@
 /**
- * Render-first backend: PostgreSQL (Render) + cookie sessions + username/password + GitHub OAuth.
+ * Platform auth backend: PostgreSQL (legacy) or Cloudflare D1 (PLATFORM_DB_DRIVER=d1).
  * Mount with mountRenderStack(app) from server.ts.
  */
 
 import type { Express, Request, Response } from "express";
 import { getProjectKeyFromRequest, sanitizeProjectKey } from "./lib/nebulaProjectKey";
-import { registerNebulaPgPool } from "./lib/nebulaPgPool";
+import { registerNebulaPgPool, registerPlatformQueryable } from "./lib/nebulaPgPool";
 import { getMonthlyUsageSnapshot } from "./lib/token-usage";
 import {
   clearUserByokApiKey,
@@ -22,6 +22,17 @@ import {
   provisionD1ForNebulaProject,
   type D1ProvisionResult,
 } from "./lib/nebulaD1Provisioning";
+import { getPlatformDbDriver } from "./lib/nebulaPlatformDb";
+import {
+  createPlatformD1Queryable,
+  didPlatformD1InitFail,
+  ensurePlatformD1Ready,
+  getPlatformD1FailureHint,
+  isPlatformD1Configured,
+  isPlatformD1Ready,
+  resolvePlatformD1DatabaseId,
+} from "./lib/nebulaPlatformD1";
+import type { PlatformQueryable } from "./lib/nebulaPlatformQueryable";
 import { getNebullaPersistRoot, getNebulaProjectDocsRoot } from "./lib/nebulaWorkspaceRoot";
 import {
   deleteConversationLogsForUser,
@@ -140,6 +151,8 @@ const SESSION_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
 const OAUTH_REMEMBER_COOKIE = "oauth_remember";
 
 let pool: pg.Pool | null = null;
+/** Active platform DB (Postgres pool or D1 queryable). */
+let platformDb: PlatformQueryable | null = null;
 let dbReady = false;
 /** After a failed schema/connect init, throttle retries (avoids connect storms on bad URLs). */
 let poolInitFailed = false;
@@ -157,15 +170,18 @@ const UUID_RE =
 const RENDER_PG_REGIONS = ["frankfurt", "oregon", "ohio", "singapore", "virginia"] as const;
 
 function hasDb(): boolean {
-  return Boolean(pool && dbReady);
+  if (getPlatformDbDriver() === "d1") {
+    return Boolean(platformDb && dbReady && isPlatformD1Ready());
+  }
+  return Boolean(pool && dbReady && platformDb);
 }
 
-/** Active pool for route handlers — always use this instead of a mount-time local `p` reference. */
-function requireDbPool(): pg.Pool {
-  if (!pool || !dbReady) {
+/** Active platform DB for route handlers (Postgres or D1). */
+function requireDbPool(): PlatformQueryable {
+  if (!platformDb || !dbReady) {
     throw new Error("Database not configured");
   }
-  return pool;
+  return platformDb;
 }
 
 function pgErrorCode(err: unknown): string | undefined {
@@ -274,12 +290,40 @@ async function endPoolQuiet(p: pg.Pool | null) {
 }
 
 /**
- * Ensure Postgres is ready. Retries after boot failure (e.g. Render DB woke late / URL fixed)
- * with a cooldown so we do not hammer a bad DATABASE_URL.
- * Tries Internal host first, then External hosts across Render regions when the hostname is truncated.
+ * Ensure platform DB is ready (Postgres or D1 per PLATFORM_DB_DRIVER).
+ * Postgres: retries after boot failure with cooldown; tries Internal then External hosts when truncated.
+ * D1: applies migrations/platform-d1 schema via Cloudflare API.
  */
-async function ensureDbReady(): Promise<boolean> {
+export async function ensureDbReady(): Promise<boolean> {
   if (hasDb()) return true;
+
+  if (getPlatformDbDriver() === "d1") {
+    if (dbRetryInFlight) return dbRetryInFlight;
+    dbRetryInFlight = (async () => {
+      registerNebulaPgPool(null);
+      registerPlatformQueryable(null);
+      platformDb = null;
+      pool = null;
+      dbReady = false;
+      const ok = await ensurePlatformD1Ready();
+      if (ok) {
+        platformDb = createPlatformD1Queryable();
+        registerPlatformQueryable(platformDb);
+        dbReady = true;
+        poolInitFailed = false;
+        lastDbFailureHint = "";
+        return true;
+      }
+      poolInitFailed = didPlatformD1InitFail();
+      lastDbFailureHint = getPlatformD1FailureHint();
+      dbReady = false;
+      return false;
+    })().finally(() => {
+      dbRetryInFlight = null;
+    });
+    return dbRetryInFlight;
+  }
+
   const rawUrl = process.env.DATABASE_URL?.trim();
   if (!rawUrl) return false;
   const now = Date.now();
@@ -291,6 +335,8 @@ async function ensureDbReady(): Promise<boolean> {
     poolInitFailed = false;
     dbReady = false;
     registerNebulaPgPool(null);
+    registerPlatformQueryable(null);
+    platformDb = null;
     await endPoolQuiet(pool);
     pool = null;
     activeDatabaseUrl = null;
@@ -304,11 +350,13 @@ async function ensureDbReady(): Promise<boolean> {
       try {
         await ensureTables(bootPool);
         pool = bootPool;
+        platformDb = bootPool;
         activeDatabaseUrl = url;
         dbReady = true;
         poolInitFailed = false;
         lastDbFailureHint = "";
         registerNebulaPgPool(bootPool);
+        registerPlatformQueryable(bootPool);
         console.log("[nebula] PostgreSQL schema ready via", hostHint);
         return true;
       } catch (e) {
@@ -323,21 +371,23 @@ async function ensureDbReady(): Promise<boolean> {
     console.error("[nebula] PostgreSQL init failed for all DATABASE_URL candidates.");
     console.warn("[nebula] Tried:", errors.join(" | "));
     console.warn(
-      "[nebula] Fix: use a full Postgres URL (Neon recommended for off-Render: …@ep-….REGION.aws.neon.tech/neondb?sslmode=require). If staying on Render, copy External Database URL (host must include .<region>-postgres.render.com). Truncated @dpg-…-a/dbname will fail. See docs/migration/render-to-cloudflare.md.",
+      "[nebula] CF-native path: set PLATFORM_DB_DRIVER=d1 + PLATFORM_D1_DATABASE_ID (see docs/migration/render-to-cloudflare.md). Legacy Postgres: use a full host URL. Truncated @dpg-…-a/dbname will fail.",
     );
 
     const host = databaseUrlHostOnly(rawUrl);
     if (isTruncatedRenderPgHost(host)) {
       lastDbFailureHint =
-        "DATABASE_URL hostname is truncated (dpg-… with no domain) or the Postgres instance no longer exists. Paste a full host URL (Render External …frankfurt-postgres.render.com, or Neon …neon.tech), then restart. See docs/migration/render-to-cloudflare.md.";
+        "DATABASE_URL hostname is truncated (dpg-… with no domain) or the Postgres instance no longer exists. Prefer PLATFORM_DB_DRIVER=d1 for Cloudflare migration, or paste a full Postgres URL — then restart. See docs/migration/render-to-cloudflare.md.";
     } else {
       lastDbFailureHint =
-        "PostgreSQL did not connect. Check DATABASE_URL (Neon or Render External URL with a real hostname), SSL, and that the database still exists — then restart. See docs/migration/render-to-cloudflare.md.";
+        "PostgreSQL did not connect. Prefer PLATFORM_DB_DRIVER=d1 for Cloudflare migration, or fix DATABASE_URL — then restart. See docs/migration/render-to-cloudflare.md.";
     }
 
     dbReady = false;
     poolInitFailed = true;
     registerNebulaPgPool(null);
+    registerPlatformQueryable(null);
+    platformDb = null;
     pool = null;
     activeDatabaseUrl = null;
     return false;
@@ -348,38 +398,47 @@ async function ensureDbReady(): Promise<boolean> {
   return dbRetryInFlight;
 }
 
-function getPool(): pg.Pool | null {
-  if (poolInitFailed && !dbReady) return null;
-  if (pool) return pool;
-  const rawUrl = process.env.DATABASE_URL?.trim();
-  if (!rawUrl) return null;
-  const url = activeDatabaseUrl || candidateDatabaseUrls(rawUrl)[0];
-  if (!url) return null;
-  pool = createPgPool(url);
-  return pool;
+function getPlatformDbOrNull(): PlatformQueryable | null {
+  if (hasDb()) return platformDb;
+  return null;
 }
 
 export function getRenderPublicConfig() {
+  const driver = getPlatformDbDriver();
   const urlConfigured = Boolean(process.env.DATABASE_URL?.trim());
+  const d1Configured = isPlatformD1Configured();
   const db = hasDb();
   const host = databaseUrlHostOnly(process.env.DATABASE_URL || "");
+  const d1Fail = driver === "d1" && (didPlatformD1InitFail() || (d1Configured && !db));
+  const pgFail = driver === "postgres" && urlConfigured && poolInitFailed;
+  const publicSite = (process.env.PUBLIC_SITE_URL || "").trim().replace(/\/$/, "");
   return {
     cloudStorageReady: db,
     credentialsAuthReady: db,
     /** @deprecated use credentialsAuthReady */
     emailAuthReady: db,
-    /** True when DATABASE_URL is set but PostgreSQL did not initialize (wrong host, DB deleted, network, etc.). */
-    databaseConnectionFailed: urlConfigured && poolInitFailed,
+    platformDbDriver: driver,
+    platformD1Configured: d1Configured,
+    platformD1DatabaseIdHint: resolvePlatformD1DatabaseId()
+      ? `${resolvePlatformD1DatabaseId().slice(0, 8)}…`
+      : "",
+    /** True when configured platform DB failed to initialize. */
+    databaseConnectionFailed: d1Fail || pgFail,
     databaseUrlConfigured: urlConfigured,
     /** Hostname looks like a Render Internal id without .<region>-postgres.render.com */
-    databaseUrlLooksTruncated: isTruncatedRenderPgHost(host),
+    databaseUrlLooksTruncated: driver === "postgres" && isTruncatedRenderPgHost(host),
     /** Safe operator hint (never includes password). */
-    databaseFailureHint: poolInitFailed ? lastDbFailureHint : "",
-    databaseHostHint: host
-      ? isTruncatedRenderPgHost(host)
-        ? `${host} (truncated — needs .<region>-postgres.render.com)`
-        : host.replace(/^([^.]+)\..+$/, "$1.***")
-      : "",
+    databaseFailureHint: d1Fail || pgFail ? lastDbFailureHint || getPlatformD1FailureHint() : "",
+    databaseHostHint:
+      driver === "d1"
+        ? d1Configured
+          ? "cloudflare-d1"
+          : ""
+        : host
+          ? isTruncatedRenderPgHost(host)
+            ? `${host} (truncated — needs .<region>-postgres.render.com)`
+            : host.replace(/^([^.]+)\..+$/, "$1.***")
+          : "",
     githubOAuthReady: Boolean(
       process.env.GITHUB_CLIENT_ID?.trim() && process.env.GITHUB_CLIENT_SECRET?.trim()
     ),
@@ -390,15 +449,42 @@ export function getRenderPublicConfig() {
     ),
     googleClientIdConfigured: Boolean(process.env.GOOGLE_CLIENT_ID?.trim()),
     googleClientSecretConfigured: Boolean(process.env.GOOGLE_CLIENT_SECRET?.trim()),
-    /** When false, new projects get a synthetic `local-…` id (Render project API not configured). */
-    renderWorkspaceApiReady: Boolean(
-      process.env.RENDER_API_KEY?.trim() &&
-        (process.env.RENDER_OWNER_ID?.trim() ||
-          process.env.RENDER_WORKSPACE_ID?.trim() ||
-          process.env.WORKSPACE_ID?.trim())
-    ),
+    /** Always true after Phase 3 — isolation ids are synthetic `cfproj_…` (no Render Projects API). */
+    syntheticWorkspaceIdsReady: true,
+    /**
+     * @deprecated Phase 3 — always false. Was true when RENDER_API_KEY created Render Projects.
+     * Use syntheticWorkspaceIdsReady.
+     */
+    renderWorkspaceApiReady: false,
     /** Cloudflare D1 auto-provision for user app DBs (needs CLOUDFLARE_API_TOKEN + account id). */
     d1ProvisioningReady: isD1ProvisioningConfigured(),
+    /**
+     * Phase 6 — suggested GitHub/Google callback URLs to register (operator checklist).
+     * GitHub classic OAuth Apps allow only one callback; see docs/migration/phase-6-oauth.md.
+     */
+    oauthCallbackPaths: {
+      github: "/api/auth/github/callback",
+      google: "/api/auth/google/callback",
+    },
+    oauthCallbackUrlsSuggested: {
+      nebullaDev: publicSite.includes("nebulla.dev")
+        ? {
+            github: `${publicSite}/api/auth/github/callback`,
+            google: `${publicSite}/api/auth/google/callback`,
+          }
+        : {
+            github: "https://nebulla.dev/api/auth/github/callback",
+            google: "https://nebulla.dev/api/auth/google/callback",
+          },
+      renderLive: {
+        github: "https://nebulla-v4-main.onrender.com/api/auth/github/callback",
+        google: "https://nebulla-v4-main.onrender.com/api/auth/google/callback",
+      },
+      localDev: {
+        github: "http://localhost:3000/api/auth/github/callback",
+        google: "http://localhost:3000/api/auth/google/callback",
+      },
+    },
   };
 }
 
@@ -544,11 +630,21 @@ function publicBaseUrl(req: Request): string {
   return `http://localhost:${process.env.PORT || 3000}`;
 }
 
-/** OAuth redirect_uri base must match the host the user actually hit (local dev vs Render). */
+/**
+ * OAuth redirect_uri base must match the host the browser hit AND an allowed callback
+ * registered on the OAuth provider.
+ *
+ * Phase 6–7 (pre-cutover): prefer the request Host so Render (`*.onrender.com`),
+ * Cloudflare staging (`*.workers.dev`), and later `nebulla.dev` each work when that
+ * host’s callback is registered for the OAuth app used by that deployment.
+ *
+ * GitHub classic OAuth Apps allow only ONE callback URL — use separate OAuth apps
+ * per environment, or switch the single URL at Phase 7 cutover (see migration docs).
+ */
 function oauthRedirectBase(req: Request): string {
+  const fromReq = requestDerivedBaseUrl(req);
+  if (fromReq) return fromReq;
   if (process.env.NODE_ENV !== "production") {
-    const fromReq = requestDerivedBaseUrl(req);
-    if (fromReq) return fromReq;
     return `http://localhost:${process.env.PORT || 3000}`;
   }
   return publicBaseUrl(req);
@@ -603,51 +699,9 @@ function setNoStoreAuthHeaders(res: Response) {
 }
 
 /**
- * Creates a Render **Project** under your account/team owner.
- * Render’s public API does not expose `POST /v1/workspaces` (404); projects are the supported unit for new isolation groups.
- * Set `RENDER_OWNER_ID` (or alias `RENDER_WORKSPACE_ID`) to your owner id from Dashboard → Workspace Settings (e.g. `tea-…` / `usr-…`).
+ * @deprecated Phase 3+: Nebulla no longer creates Render Projects for isolation.
+ * New projects use synthetic `cfproj_` ids via provisionWorkspaceForNewProject.
  */
-async function createRenderProjectForNebula(displayName: string): Promise<{ id: string; name: string; raw: unknown }> {
-  const renderApiKey = process.env.RENDER_API_KEY?.trim();
-  const ownerId =
-    process.env.RENDER_OWNER_ID?.trim() ||
-    process.env.RENDER_WORKSPACE_ID?.trim() ||
-    process.env.WORKSPACE_ID?.trim() ||
-    "";
-  if (!renderApiKey) {
-    throw new Error("RENDER_API_KEY is not configured.");
-  }
-  if (!ownerId) {
-    throw new Error("RENDER_OWNER_ID (or RENDER_WORKSPACE_ID) is not configured.");
-  }
-  const baseUrl = (process.env.RENDER_API_BASE_URL || "https://api.render.com/v1").replace(/\/$/, "");
-  const renderRes = await fetch(`${baseUrl}/projects`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${renderApiKey}`,
-      "Content-Type": "application/json",
-      Accept: "application/json",
-    },
-    body: JSON.stringify({
-      name: displayName,
-      ownerId,
-      environments: [{ name: "production" }],
-    }),
-  });
-  if (!renderRes.ok) {
-    const errorText = await renderRes.text();
-    throw new Error(`Render project creation failed (${renderRes.status}): ${errorText.slice(0, 400)}`);
-  }
-  const payload: any = await renderRes.json();
-  const projectId = payload?.id || payload?.project?.id || payload?.projectId || null;
-  if (!projectId) throw new Error("Render response did not include a project ID.");
-  return {
-    id: String(projectId),
-    name: payload?.name || payload?.project?.name || displayName,
-    raw: payload,
-  };
-}
-
 
 /**
  * Create Cloudflare D1 for the user's app (one DB per Nebulla project).
@@ -655,7 +709,7 @@ async function createRenderProjectForNebula(displayName: string): Promise<{ id: 
  * Stores uuid/name on nebula_projects and writes .env.d1 into the project workspace.
  */
 async function provisionAndPersistD1ForProject(
-  db: pg.Pool,
+  db: PlatformQueryable,
   uid: string,
   projectName: string,
   workspaceId: string
@@ -683,7 +737,7 @@ async function provisionAndPersistD1ForProject(
     projectDiskKey: diskKey,
   });
 
-  if (!result.ok) {
+  if (result.ok === false) {
     return { d1DatabaseId: null, d1DatabaseName: null, d1Error: result.error };
   }
 
@@ -706,11 +760,11 @@ async function provisionAndPersistD1ForProject(
   };
 }
 
-/** One Render workspace per Nebula project (unique ID stored on `nebula_projects.workspace_id`). */
-async function provisionRenderWorkspaceForNewProject(
-  _userId: string,
-  projectName: string
-): Promise<{ id: string; name: string }> {
+/**
+ * One isolation id per Nebulla project (stored on `nebula_projects.workspace_id`).
+ * Phase 3: always synthetic `cfproj_<uuid>` — never calls Render Projects API.
+ */
+function provisionWorkspaceForNewProject(projectName: string): { id: string; name: string } {
   const shortId = crypto.randomBytes(4).toString("hex");
   const safe =
     projectName
@@ -720,17 +774,8 @@ async function provisionRenderWorkspaceForNewProject(
       .replace(/^-|-$/g, "")
       .slice(0, 32) || "project";
   const workspaceName = `nebulla-${safe}-${shortId}`.slice(0, 63);
-  try {
-    const created = await createRenderProjectForNebula(workspaceName);
-    return { id: created.id, name: created.name };
-  } catch (e) {
-    const id = `local-${crypto.randomBytes(16).toString("hex")}`;
-    console.warn(
-      "[nebula] Render project provisioning failed; using synthetic id for on-disk isolation.",
-      e instanceof Error ? e.message : e
-    );
-    return { id, name: workspaceName };
-  }
+  const id = `cfproj_${crypto.randomUUID().replace(/-/g, "")}`;
+  return { id, name: workspaceName };
 }
 
 /**
@@ -748,23 +793,23 @@ export async function resolveNebulaProjectDiskKey(req: Request): Promise<string>
     (typeof headerPn === "string" && headerPn.trim()) ||
     (typeof body?.projectName === "string" && body.projectName.trim()) ||
     "";
-  const dbPool = getPool();
-  if (!uid || !projectName || !dbPool || !dbReady) return fallback;
+  const dbHandle = getPlatformDbOrNull();
+  if (!uid || !projectName || !dbHandle || !dbReady) return fallback;
   try {
-    const r = await dbPool.query(
+    const r = await dbHandle.query(
       `SELECT workspace_id FROM public.nebula_projects WHERE user_id = $1::uuid AND name = $2`,
       [uid, projectName]
     );
     let wid = r.rows[0]?.workspace_id as string | undefined;
     if (!wid) {
-      const rw = await provisionRenderWorkspaceForNewProject(uid, projectName);
+      const rw = provisionWorkspaceForNewProject(projectName);
       wid = rw.id;
-      await dbPool.query(
+      await dbHandle.query(
         `UPDATE public.nebula_projects SET workspace_id = $1, updated_at = NOW()
          WHERE user_id = $2::uuid AND name = $3 AND (workspace_id IS NULL OR workspace_id = '')`,
         [wid, uid, projectName]
       );
-      void provisionAndPersistD1ForProject(dbPool, uid, projectName, wid).catch((e) => {
+      void provisionAndPersistD1ForProject(dbHandle, uid, projectName, wid).catch((e) => {
         console.warn("[nebula] D1 on disk-key resolve:", e);
       });
     }
@@ -779,8 +824,12 @@ export async function mountRenderStack(app: Express) {
   app.use(cookieParser() as any);
 
   dbReady = false;
+  platformDb = null;
   registerNebulaPgPool(null);
-  if (process.env.DATABASE_URL?.trim()) {
+  registerPlatformQueryable(null);
+  if (getPlatformDbDriver() === "d1") {
+    await ensureDbReady();
+  } else if (process.env.DATABASE_URL?.trim()) {
     await ensureDbReady();
   }
 
@@ -794,12 +843,13 @@ export async function mountRenderStack(app: Express) {
     if (count > 0) return;
 
     const projectName = (preferredName || "").trim() || "Untitled Project";
-    const workspace = await provisionRenderWorkspaceForNewProject(uid, projectName);
+    const workspace = provisionWorkspaceForNewProject(projectName);
+    const projectId = crypto.randomUUID();
     await db.query(
-      `INSERT INTO public.nebula_projects (user_id, name, pages, edges, workspace_id, updated_at)
-       VALUES ($1::uuid, $2, '[]'::jsonb, '[]'::jsonb, $3, NOW())
+      `INSERT INTO public.nebula_projects (id, user_id, name, pages, edges, workspace_id, updated_at)
+       VALUES ($1::uuid, $2::uuid, $3, '[]'::jsonb, '[]'::jsonb, $4, NOW())
        ON CONFLICT (user_id, name) DO NOTHING`,
-      [uid, projectName, workspace.id]
+      [projectId, uid, projectName, workspace.id]
     );
     try {
       await provisionAndPersistD1ForProject(db, uid, projectName, workspace.id);
@@ -847,7 +897,7 @@ export async function mountRenderStack(app: Express) {
     for (const row of rows) {
       let wid = row.workspace_id != null ? String(row.workspace_id).trim() : "";
       if (!wid) {
-        const rw = await provisionRenderWorkspaceForNewProject(uid, row.name);
+        const rw = provisionWorkspaceForNewProject(row.name);
         await db.query(
           `UPDATE public.nebula_projects SET workspace_id = $1, updated_at = NOW() WHERE user_id = $2::uuid AND name = $3`,
           [rw.id, uid, row.name]
@@ -869,7 +919,7 @@ export async function mountRenderStack(app: Express) {
   };
 
   const runProjectManagerSilently = async (
-    pool: pg.Pool,
+    db: PlatformQueryable,
     uid: string,
     opts: { projectName?: string; grokApiKey?: string; syncAllProjects?: boolean }
   ): Promise<{
@@ -888,11 +938,11 @@ export async function mountRenderStack(app: Express) {
     let grokSaved = false;
     let renderTouched = false;
     if (opts.grokApiKey && opts.grokApiKey.length >= 20) {
-      const r = await saveUserGrokApiKey(pool, uid, opts.grokApiKey);
+      const r = await saveUserGrokApiKey(db, uid, opts.grokApiKey);
       grokSaved = r.ok;
     }
     if (opts.syncAllProjects) {
-      const r = await pool.query(
+      const r = await db.query(
         `SELECT name, pages, edges, workspace_id, d1_database_id, d1_database_name, updated_at FROM public.nebula_projects WHERE user_id = $1::uuid ORDER BY updated_at DESC`,
         [uid]
       );
@@ -900,7 +950,7 @@ export async function mountRenderStack(app: Express) {
       await backfillMissingWorkspaceIds(uid, rows);
       renderTouched = rows.length > 0;
     } else if (opts.projectName?.trim()) {
-      const r = await pool.query(
+      const r = await db.query(
         `SELECT name, pages, edges, workspace_id, d1_database_id, d1_database_name, updated_at FROM public.nebula_projects WHERE user_id = $1::uuid AND name = $2`,
         [uid, opts.projectName.trim()]
       );
@@ -1284,7 +1334,7 @@ export async function mountRenderStack(app: Express) {
 
   // --- GitHub OAuth (any GitHub account — use a standard OAuth App, not org-locked SSO-only flows) ---
   app.get("/api/auth/github", async (req, res) => {
-    if (!(await ensureDbReady())) return res.status(503).send("Database not configured (DATABASE_URL)");
+    if (!(await ensureDbReady())) return res.status(503).send("Database not configured");
     const id = process.env.GITHUB_CLIENT_ID?.trim();
     if (!id) return res.status(503).send("GITHUB_CLIENT_ID not configured");
     const redirectUri = `${oauthRedirectBase(req)}/api/auth/github/callback`;
@@ -1303,7 +1353,7 @@ export async function mountRenderStack(app: Express) {
   });
 
   app.get("/api/auth/github/callback", async (req, res) => {
-    if (!(await ensureDbReady())) return res.status(503).send("Database not configured (DATABASE_URL)");
+    if (!(await ensureDbReady())) return res.status(503).send("Database not configured");
     const secret = process.env.GITHUB_CLIENT_SECRET?.trim();
     const id = process.env.GITHUB_CLIENT_ID?.trim();
     if (!secret || !id) return res.status(500).send("GitHub OAuth not configured");
@@ -1369,13 +1419,14 @@ export async function mountRenderStack(app: Express) {
       const display = gh.name || gh.login || "GitHub User";
 
       const db = requireDbPool();
+      const userIdNew = crypto.randomUUID();
       const ins = await db.query(
-        `INSERT INTO public.nebula_users (provider, provider_user_id, email, display_name, avatar_url, password_hash)
-         VALUES ('github', $1, $2, $3, $4, NULL)
+        `INSERT INTO public.nebula_users (id, provider, provider_user_id, email, display_name, avatar_url, password_hash)
+         VALUES ($1::uuid, 'github', $2, $3, $4, $5, NULL)
          ON CONFLICT (provider, provider_user_id) DO UPDATE
          SET email = EXCLUDED.email, display_name = EXCLUDED.display_name, avatar_url = EXCLUDED.avatar_url
          RETURNING id`,
-        [providerUserId, email, display, gh.avatar_url || null]
+        [userIdNew, providerUserId, email, display, gh.avatar_url || null]
       );
       const userId = ins.rows[0].id as string;
       await ensureInitialProjectForUserSafe(userId);
@@ -1391,7 +1442,7 @@ export async function mountRenderStack(app: Express) {
 
   // --- Google OAuth ---
   app.get("/api/auth/google", async (req, res) => {
-    if (!(await ensureDbReady())) return res.status(503).send("Database not configured (DATABASE_URL)");
+    if (!(await ensureDbReady())) return res.status(503).send("Database not configured");
     const id = process.env.GOOGLE_CLIENT_ID?.trim();
     if (!id) return res.status(503).send("GOOGLE_CLIENT_ID not configured");
     const redirectUri = `${oauthRedirectBase(req)}/api/auth/google/callback`;
@@ -1413,7 +1464,7 @@ export async function mountRenderStack(app: Express) {
   });
 
   app.get("/api/auth/google/callback", async (req, res) => {
-    if (!(await ensureDbReady())) return res.status(503).send("Database not configured (DATABASE_URL)");
+    if (!(await ensureDbReady())) return res.status(503).send("Database not configured");
     const secret = process.env.GOOGLE_CLIENT_SECRET?.trim();
     const id = process.env.GOOGLE_CLIENT_ID?.trim();
     if (!secret || !id) return res.status(500).send("Google OAuth not configured");
@@ -1472,13 +1523,14 @@ export async function mountRenderStack(app: Express) {
       const display = (gu.name && String(gu.name).trim()) || email.split("@")[0] || "Google User";
 
       const db = requireDbPool();
+      const userIdNew = crypto.randomUUID();
       const ins = await db.query(
-        `INSERT INTO public.nebula_users (provider, provider_user_id, email, display_name, avatar_url, password_hash)
-         VALUES ('google', $1, $2, $3, $4, NULL)
+        `INSERT INTO public.nebula_users (id, provider, provider_user_id, email, display_name, avatar_url, password_hash)
+         VALUES ($1::uuid, 'google', $2, $3, $4, $5, NULL)
          ON CONFLICT (provider, provider_user_id) DO UPDATE
          SET email = EXCLUDED.email, display_name = EXCLUDED.display_name, avatar_url = EXCLUDED.avatar_url
          RETURNING id`,
-        [providerUserId, email, display, gu.picture || null]
+        [userIdNew, providerUserId, email, display, gu.picture || null]
       );
       const userId = ins.rows[0].id as string;
       await ensureInitialProjectForUserSafe(userId);
@@ -1509,11 +1561,12 @@ export async function mountRenderStack(app: Express) {
       try {
         const db = requireDbPool();
         const hash = await hashPassword(rawPassword);
+        const userIdNew = crypto.randomUUID();
         const ins = await db.query(
-          `INSERT INTO public.nebula_users (provider, provider_user_id, email, display_name, avatar_url, password_hash)
-           VALUES ('email', $1, $2, $3, NULL, $4)
+          `INSERT INTO public.nebula_users (id, provider, provider_user_id, email, display_name, avatar_url, password_hash)
+           VALUES ($1::uuid, 'email', $2, $3, $4, NULL, $5)
            RETURNING id`,
-          [emailAddr, emailAddr, display, hash]
+          [userIdNew, emailAddr, emailAddr, display, hash]
         );
         const userId = ins.rows[0].id as string;
         await ensureInitialProjectForUserSafe(userId, preferredFirstProjectName);
@@ -1548,11 +1601,12 @@ export async function mountRenderStack(app: Express) {
     try {
       const db = requireDbPool();
       const hash = await hashPassword(password);
+      const userIdNew = crypto.randomUUID();
       const ins = await db.query(
-        `INSERT INTO public.nebula_users (provider, provider_user_id, email, display_name, avatar_url, password_hash)
-         VALUES ('username', $1, NULL, $2, NULL, $3)
+        `INSERT INTO public.nebula_users (id, provider, provider_user_id, email, display_name, avatar_url, password_hash)
+         VALUES ($1::uuid, 'username', $2, NULL, $3, NULL, $4)
          RETURNING id`,
-        [username, display, hash]
+        [userIdNew, username, display, hash]
       );
       const userId = ins.rows[0].id as string;
       const preferredFirstProjectName =
@@ -1635,8 +1689,8 @@ export async function mountRenderStack(app: Express) {
           [row.id]
         );
         await db.query(
-          `INSERT INTO public.nebula_password_resets (user_id, token_hash, expires_at) VALUES ($1::uuid, $2, $3)`,
-          [row.id, tokenHash, expires.toISOString()]
+          `INSERT INTO public.nebula_password_resets (id, user_id, token_hash, expires_at) VALUES ($1::uuid, $2::uuid, $3, $4)`,
+          [crypto.randomUUID(), row.id, tokenHash, expires.toISOString()]
         );
         const base = publicBaseUrl(req);
         const resetUrl = `${base}/reset-password?token=${encodeURIComponent(rawToken)}`;
@@ -1768,7 +1822,7 @@ export async function mountRenderStack(app: Express) {
       }
       let workspaceId = existing.rows[0]?.workspace_id as string | undefined;
       if (!workspaceId || !String(workspaceId).trim()) {
-        const rw = await provisionRenderWorkspaceForNewProject(uid, trimmed);
+        const rw = provisionWorkspaceForNewProject(trimmed);
         workspaceId = rw.id;
       }
       // Avoid wiping existing mind-map JSON when callers upsert with empty arrays on "create".
@@ -1785,8 +1839,8 @@ export async function mountRenderStack(app: Express) {
             ? JSON.stringify(existing.rows[0].edges ?? [])
             : JSON.stringify(edges ?? []);
       const saved = await db.query(
-        `INSERT INTO public.nebula_projects (user_id, name, pages, edges, workspace_id, updated_at)
-         VALUES ($1::uuid, $2, $3::jsonb, $4::jsonb, $5, NOW())
+        `INSERT INTO public.nebula_projects (id, user_id, name, pages, edges, workspace_id, updated_at)
+         VALUES ($1::uuid, $2::uuid, $3, $4::jsonb, $5::jsonb, $6, NOW())
          ON CONFLICT (user_id, name) DO UPDATE
          SET pages = EXCLUDED.pages,
              edges = EXCLUDED.edges,
@@ -1796,7 +1850,7 @@ export async function mountRenderStack(app: Express) {
              ),
              updated_at = NOW()
          RETURNING name, pages, edges, workspace_id, d1_database_id, d1_database_name, updated_at`,
-        [uid, trimmed, pagesJson, edgesJson, workspaceId]
+        [crypto.randomUUID(), uid, trimmed, pagesJson, edgesJson, workspaceId]
       );
       let d1Warning: string | null = null;
       let d1DatabaseId: string | null =

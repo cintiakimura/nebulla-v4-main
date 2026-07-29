@@ -3,8 +3,8 @@
  * Resets implicitly by `monthYear` key (`YYYY-MM`, UTC).
  */
 
-import type pg from "pg";
-import { getNebulaPgPool } from "./nebulaPgPool";
+import type { PlatformQueryable } from "./nebulaPlatformQueryable";
+import { getPlatformQueryable } from "./nebulaPgPool";
 import { FREE_TIER_MONTHLY_TOKEN_LIMIT, getUserCapabilities, normalizeUserTier, type UserTier } from "./user-tier";
 
 export type GrokUsageModelKind = "grok-3" | "grok-4";
@@ -54,16 +54,16 @@ function utcMonthYear(d = new Date()): string {
   return `${y}-${m < 10 ? `0${m}` : m}`;
 }
 
-async function fetchBillingTierForUser(pool: pg.Pool, userId: string): Promise<UserTier> {
-  const r = await pool.query(`SELECT billing_tier FROM public.nebula_users WHERE id = $1::uuid`, [userId]);
+async function fetchBillingTierForUser(db: PlatformQueryable, userId: string): Promise<UserTier> {
+  const r = await db.query(`SELECT billing_tier FROM public.nebula_users WHERE id = $1::uuid`, [userId]);
   const raw = r.rows[0]?.billing_tier as string | undefined;
   return normalizeUserTier(raw);
 }
 
-async function upsertAddTokens(pool: pg.Pool, userId: string, monthYear: string, delta: number, kind: GrokUsageModelKind) {
+async function upsertAddTokens(db: PlatformQueryable, userId: string, monthYear: string, delta: number, kind: GrokUsageModelKind) {
   const g3 = kind === "grok-3" ? delta : 0;
   const g4 = kind === "grok-4" ? delta : 0;
-  await pool.query(
+  await db.query(
     `INSERT INTO nebula_token_usage_monthly (user_id, month_year, total_tokens, grok3_tokens, grok4_tokens, updated_at)
      VALUES ($1::uuid, $2, $3, $4, $5, NOW())
      ON CONFLICT (user_id, month_year) DO UPDATE SET
@@ -81,11 +81,11 @@ async function upsertAddTokens(pool: pg.Pool, userId: string, monthYear: string,
  */
 export async function getRemainingTokens(userId: string): Promise<number> {
   if (!userId || userId === "anonymous") return Infinity;
-  const pool = getNebulaPgPool();
-  if (!pool) return Infinity;
+  const db = getPlatformQueryable();
+  if (!db) return Infinity;
   let tier: UserTier;
   try {
-    tier = await fetchBillingTierForUser(pool, userId);
+    tier = await fetchBillingTierForUser(db, userId);
   } catch {
     return Infinity;
   }
@@ -94,7 +94,7 @@ export async function getRemainingTokens(userId: string): Promise<number> {
 
   const monthYear = utcMonthYear();
   try {
-    const r = await pool.query(
+    const r = await db.query(
       `SELECT total_tokens FROM nebula_token_usage_monthly WHERE user_id = $1::uuid AND month_year = $2`,
       [userId, monthYear]
     );
@@ -110,11 +110,11 @@ export async function addTokens(userId: string, tokens: number, model: GrokUsage
   if (!userId || userId === "anonymous") return;
   const n = Math.max(0, Math.floor(tokens));
   if (!n) return;
-  const pool = getNebulaPgPool();
-  if (!pool) return;
+  const db = getPlatformQueryable();
+  if (!db) return;
   const monthYear = utcMonthYear();
   const kind: GrokUsageModelKind = model === "grok-3" ? "grok-3" : "grok-4";
-  await upsertAddTokens(pool, userId, monthYear, n, kind);
+  await upsertAddTokens(db, userId, monthYear, n, kind);
 }
 
 /**
@@ -124,15 +124,15 @@ export async function addTokens(userId: string, tokens: number, model: GrokUsage
 export async function checkAndEnforceLimit(userId: string): Promise<void> {
   if (!userId || userId === "anonymous") return;
   if (isFreeTierTokenLimitDisabled()) return;
-  const pool = getNebulaPgPool();
-  if (!pool) return;
+  const db = getPlatformQueryable();
+  if (!db) return;
   try {
-    const tier = await fetchBillingTierForUser(pool, userId);
+    const tier = await fetchBillingTierForUser(db, userId);
     const caps = getUserCapabilities({ tier });
     if (caps.monthlyTokenLimit == null) return;
 
     const monthYear = utcMonthYear();
-    const r = await pool.query(
+    const r = await db.query(
       `SELECT total_tokens FROM nebula_token_usage_monthly WHERE user_id = $1::uuid AND month_year = $2`,
       [userId, monthYear]
     );
@@ -156,13 +156,13 @@ export async function getMonthlyUsageSnapshot(userId: string): Promise<{
   remaining: number;
 } | null> {
   if (!userId || userId === "anonymous") return null;
-  const pool = getNebulaPgPool();
-  if (!pool) return null;
+  const db = getPlatformQueryable();
+  if (!db) return null;
   try {
-    const tier = await fetchBillingTierForUser(pool, userId);
+    const tier = await fetchBillingTierForUser(db, userId);
     const caps = getUserCapabilities({ tier });
     const monthYear = utcMonthYear();
-    const r = await pool.query(
+    const r = await db.query(
       `SELECT total_tokens, grok3_tokens, grok4_tokens FROM nebula_token_usage_monthly WHERE user_id = $1::uuid AND month_year = $2`,
       [userId, monthYear]
     );
