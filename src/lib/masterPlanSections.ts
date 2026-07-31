@@ -9,5 +9,6 @@ export {
   normalizeMasterPlanRecord,
   parseMasterPlanBlock,
   masterPlanSectionSeparationRules,
-  isMasterPlanCompleteForDiscovery,
 } from '../../lib/masterPlanSections';
+
+export { isMasterPlanCompleteForDiscovery } from '../../lib/masterPlanCompleteness';

@@ -1,6 +1,7 @@
 import fs from "fs";
 import path from "path";
 import { readV0PromptMarkdown, writeV0PromptMarkdown } from "./nebulaUiStudioPipeline";
+import { writeUiBriefMarkdown } from "./nebulaUiBrief";
 import { summarizeDesignReferencesForPrompt } from "./nebulaDesignReferences";
 import {
   isVisualEditorEligible,
@@ -235,6 +236,10 @@ function routeToLabel(route: string, projectLabel: string): string {
   return seg.replace(/[-_]/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
+/** §4 field lines — never promote these to Mind Map pages. */
+const PAGE_FIELD_LINE_RE =
+  /^(purpose|primary[_ ]?actions?|data[_ ]?entities?|data\b|authz|empty[_ ]?state|error[_ ]?state|empty\b|error\b|nav[_ ]?links?|nav\b)\s*:/i;
+
 /** Parse section 4 into page nodes (names + routes). Mind map uses this first. */
 export function mindMapPagesFromMasterPlan(
   plan: Record<string, string>,
@@ -245,45 +250,56 @@ export function mindMapPagesFromMasterPlan(
   const specs: MindMapPageSpec[] = [];
   const seen = new Set<string>();
 
-  const add = (label: string, route?: string) => {
+  const add = (label: string, route?: string, requireExplicitRoute = false) => {
     let clean = label.replace(/\*\*/g, "").trim();
     clean = clean.replace(/\s*\([^)]*\)\s*$/g, "").trim();
     if (!clean || clean.length < 2) return;
     if (/^(pages and navigation|navigation|overview)$/i.test(clean)) return;
-    const r = (route?.trim() || labelToRoute(clean)).replace(/\/+/g, "/");
+    if (PAGE_FIELD_LINE_RE.test(clean)) return;
+    const explicit = route?.trim();
+    if (requireExplicitRoute && !explicit) return;
+    const r = (explicit || labelToRoute(clean)).replace(/\/+/g, "/");
+    if (!r.startsWith("/")) return;
     const key = r.toLowerCase();
     if (seen.has(key)) return;
     seen.add(key);
-    specs.push({ route: r, label: clean });
+    specs.push({ route: r, label: clean.split(/\s+/).slice(0, 6).join(" ") });
   };
 
   for (const line of section.split("\n")) {
     const boldRoute = line.match(/\*\*([^*]+)\*\*\s*(?:\([^)]*?(`(\/[^`]+)`))?/);
     if (boldRoute) {
-      add(boldRoute[1], boldRoute[2]);
+      add(boldRoute[1], boldRoute[3] || undefined, Boolean(boldRoute[3]));
+      if (boldRoute[3]) continue;
+      // bold name without route — only keep if line also has a backtick route elsewhere
+      const r = line.match(/`(\/[^`]+)`/);
+      if (r) add(boldRoute[1], r[1], true);
       continue;
     }
     const heading = line.match(/^\s*#{2,4}\s+(?:\d+[.)]\s*)?(.+?)\s*$/);
     if (heading) {
-      add(heading[1]);
+      const raw = heading[1];
+      const routeIn = raw.match(/`(\/[^`]+)`/);
+      const name = raw.replace(/`[^`]+`/g, "").trim();
+      // Prefer explicit routes on headings (### Login `/login`)
+      add(name || raw, routeIn?.[1], true);
       continue;
     }
     const bullet = line.match(/^\s*[-*•]\s+(.+?)\s*$/);
     if (bullet) {
       const inner = bullet[1];
+      if (PAGE_FIELD_LINE_RE.test(inner.replace(/\*\*/g, "").trim())) continue;
       const routeInLine = inner.match(/`(\/[^`]+)`/);
+      if (!routeInLine) continue; // do not invent routes from field-like bullets
       const name = inner.replace(/`[^`]+`/g, "").replace(/\*\*/g, "").trim();
-      if (name.length >= 2) add(name, routeInLine?.[1]);
+      if (name.length >= 2) add(name, routeInLine[1], true);
       continue;
     }
     const routeOnly = line.match(/`(\/[^`]+)`/);
-    if (routeOnly?.[1]) add(routeToLabel(routeOnly[1], projectLabel), routeOnly[1]);
+    if (routeOnly?.[1] && !PAGE_FIELD_LINE_RE.test(line.trim())) {
+      add(routeToLabel(routeOnly[1], projectLabel), routeOnly[1], true);
+    }
   }
-
-  const proseRe =
-    /\b([A-Z][a-zA-Z]*(?:\s+[A-Z][a-zA-Z]*){0,4})\s+(?:page|screen|view|dashboard|portal)\b/g;
-  let pm: RegExpExecArray | null;
-  while ((pm = proseRe.exec(section)) !== null) add(pm[1]);
 
   return specs;
 }
@@ -408,7 +424,7 @@ export function hydrateMasterPlanDerivedSections(
   return { plan: out, changed };
 }
 
-/** Hydrate Master Plan §4/§5 if needed, then write nebula-ui-studio/v0-prompt.md. */
+/** Hydrate Master Plan §4/§5 if needed, then write nebula-ui-studio/v0-prompt.md (legacy distill). */
 export function syncV0PromptFromMasterPlan(
   workspaceRoot: string,
   masterPlanPath: string,
@@ -416,6 +432,38 @@ export function syncV0PromptFromMasterPlan(
   const plan = hydrateAndPersistMasterPlan(workspaceRoot, masterPlanPath);
   const { content, written } = writeV0PromptMarkdown(workspaceRoot, plan);
   return { plan, content, written };
+}
+
+/** Hydrate Master Plan, then write full nebula-ui-studio/ui-brief.md (primary UI input). */
+export function syncUiBriefFromMasterPlan(
+  workspaceRoot: string,
+  masterPlanPath: string,
+): { plan: Record<string, string>; content: string; written: boolean; path: string } {
+  const plan = hydrateAndPersistMasterPlan(workspaceRoot, masterPlanPath);
+  const { content, written, path: rel } = writeUiBriefMarkdown(workspaceRoot, plan);
+  return { plan, content, written, path: rel };
+}
+
+/**
+ * Sync primary ui-brief + optional legacy v0-prompt from current Master Plan.
+ * Prefer ui-brief for Studio / UI Gen; v0-prompt remains for optional V0 API.
+ */
+export function syncUiArtifactsFromMasterPlan(
+  workspaceRoot: string,
+  masterPlanPath: string,
+): {
+  plan: Record<string, string>;
+  uiBrief: { content: string; written: boolean };
+  v0Prompt: { content: string; written: boolean };
+} {
+  const plan = hydrateAndPersistMasterPlan(workspaceRoot, masterPlanPath);
+  const uiBrief = writeUiBriefMarkdown(workspaceRoot, plan);
+  const v0Prompt = writeV0PromptMarkdown(workspaceRoot, plan);
+  return {
+    plan,
+    uiBrief: { content: uiBrief.content, written: uiBrief.written },
+    v0Prompt: { content: v0Prompt.content, written: v0Prompt.written },
+  };
 }
 
 export function hydrateAndPersistMasterPlan(
@@ -457,22 +505,38 @@ export function syncMindMapFromMasterPlan(opts: {
   workspaceRoot: string;
   masterPlanPath: string;
   projectLabel: string;
-}): { pages: unknown[]; edges: unknown[]; written: boolean; routeCount: number } {
+}): {
+  pages: unknown[];
+  edges: unknown[];
+  written: boolean;
+  routeCount: number;
+  /** section4 = exclusive §4; workspace_fallback only when §4 has no parseable pages */
+  source: "section4" | "workspace_fallback";
+} {
   const plan = hydrateAndPersistMasterPlan(opts.workspaceRoot, opts.masterPlanPath);
   const specs = mindMapPagesFromMasterPlan(plan, opts.projectLabel);
+  /** Rule MM-1: when §4 has pages, never invent nodes from workspace routes. */
+  let source: "section4" | "workspace_fallback" = "section4";
   const graph =
     specs.length > 0
       ? buildMindMapGraphFromPageSpecs(specs, opts.projectLabel)
-      : buildMindMapGraphFromRoutes(
-          mergeRoutesForMindMap(opts.workspaceRoot, opts.masterPlanPath, opts.projectLabel),
-          opts.projectLabel
-        );
+      : (() => {
+          source = "workspace_fallback";
+          return buildMindMapGraphFromRoutes(
+            mergeRoutesForMindMap(opts.workspaceRoot, opts.masterPlanPath, opts.projectLabel),
+            opts.projectLabel,
+          );
+        })();
 
   const target = path.join(opts.workspaceRoot, MIND_MAP_REL);
   fs.mkdirSync(path.dirname(target), { recursive: true });
-  fs.writeFileSync(target, JSON.stringify(graph, null, 2), "utf8");
+  fs.writeFileSync(
+    target,
+    JSON.stringify({ version: 1, source, ...graph }, null, 2),
+    "utf8",
+  );
   const routeCount = specs.length || (Array.isArray(graph.pages) ? graph.pages.length : 0);
-  return { ...graph, written: true, routeCount };
+  return { ...graph, written: true, routeCount, source };
 }
 
 export function writeBasicUiScaffold(workspaceRoot: string, projectName: string): string[] {

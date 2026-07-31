@@ -55,10 +55,12 @@ Issue shape (conceptual):
 - `/api/app-preview/meta` always returns `preferV0: false` — iframe never loads v0.dev
 
 ## Chat vs Agent
-- **Fix with Agent** switches to Agent if needed (Discovery guard unchanged), then sends `[APP_STATUS_DEBUG]…` with **primary + up to 2 related** issues and optional `ide_open_file`
+- **Fix with Agent** switches to Agent if needed (Discovery guard unchanged — incomplete Master Plan still prefers Discovery before greenfield), then sends `[APP_STATUS_DEBUG]…` with **primary + up to 2 related** issues and optional `ide_open_file`
 - Saying “it’s broken” / FR·IT·ES·DE equivalents while an issue exists auto-attaches the multi-issue payload
 - Chat mode never writes files from App Status alone
 - Agent turns still receive `IDE_EDITOR_SURFACE` / workspace appendix like any other Agent send
+- Runtime fixes are **NDM + one slice** — do not dump the whole §4 app from App Status (`incremental-development.md`)
+- Beginner copy for plan-incomplete / Go-paused states: `user-communication-rules.md` (never dump gap codes like `SEC_RLS_MISSING`)
 
 ## Validate loop (post-fix)
 1. Successful Agent file apply on an App Status turn (`shouldMarkAppStatusValidation`) → mark fingerprints pending + accessory “Reload preview to validate”

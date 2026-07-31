@@ -3,8 +3,9 @@ import { BookOpen, Lock, Save, X } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { readResponseJson } from '../lib/apiFetch';
 import { PRE_CODING_SUMMARY_KEY } from '../lib/masterPlanSections';
-import { getBrowserProjectName, withProjectQuery } from '../lib/nebulaProjectApi';
+import { getBrowserProjectName, withProjectBody, withProjectQuery } from '../lib/nebulaProjectApi';
 import { runMasterPlanUiPipelineWithV0 } from '../lib/ideArtifactSync';
+import { MasterPlanStatusBanner } from './ide/MasterPlanStatusBanner';
 
 export function MasterPlan({
   onClose,
@@ -188,6 +189,8 @@ export function MasterPlan({
           </button>
         </div>
       </div>
+
+      <MasterPlanStatusBanner />
 
       {/* Body */}
       <div className="flex flex-1 overflow-hidden">

@@ -6,9 +6,12 @@ They do **NOT** override:
 
 - Master Plan tag format (`<START_MASTERPLAN>…</END_MASTERPLAN>`)
 - Discovery **one-question** gate when interviewing
+- Complete-plan checklist / security baseline (`project-execution-rules.md`, `chat-mode-detection.md`)
 - Agent mode behavior (execution, `file:` / Go / NDM)
 
 Source of truth for Chat brainstorming. Also see `user-communication-rules.md` (shared safety net) and `chat-vs-agent-mode.md`.
+
+When the Master Plan is incomplete and the user asks to “just build,” stay warm but **steer to Discovery** (one question) — do not overpromise a full app. Honest incomplete-plan language lives in `user-communication-rules.md`.
 
 ---
 
@@ -111,6 +114,7 @@ After they answer, Discovery may continue (goal / project type) — still **one 
 |-----|------|
 | Here’s the React component… | We’ve got a clear direction. Switch to **Agent** and I’ll implement the first slice. |
 | Press Go and I’ll dump the whole app. | When you’re ready to build, switch to **Agent** — we’ll do one solid slice at a time. |
+| We’ll skip planning and ship tonight. | Let’s lock pages and who can see what first — then Agent can build the foundation slice cleanly. |
 
 ---
 

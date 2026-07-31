@@ -8,8 +8,11 @@ Authority order:
 1. This v2 logic
 2. `nebulla-project/ui-generation-engine-manual.md` for cycle discipline
 3. `nebulla-project/ui-generation-context.md` as cycle memory
-4. Master Plan product truth
-5. Generated workspace files for concrete labels/routes/actions
+4. **`nebula-ui-studio/ui-brief.md`** (primary UI input — full §4 page contracts + §5 tokens; auto-written from Master Plan)
+5. Master Plan product truth (§1–§5; §5 = tokens)
+6. Generated workspace files for concrete labels/routes/actions
+
+Law of the Land: `nebula-project/project-execution-rules.md` (UI Gen Beta primary; V0/`v0-prompt.md` optional legacy).
 
 If old freeform behavior conflicts with this spec, this spec wins.
 
@@ -47,13 +50,13 @@ Generate in this exact order only:
 2. Choose layout template family
 3. Force Figma reference retrieval
 4. Adapt references into template slots
-5. Build design tokens from Master Plan §5
-6. Map content into slots from Master Plan + generated files
+5. Build design tokens from ui-brief / Master Plan §5
+6. Map content into slots from **ui-brief** + Master Plan + generated files
 7. Render constrained editor model + code
 8. Validate with hard quality gate
 9. Deliver to UI Studio Beta
 
-Never jump from Master Plan text directly to freeform boxes.
+Never jump from Master Plan text directly to freeform boxes. Prefer page bodies parsed from `ui-brief.md` when present.
 
 ---
 
@@ -61,12 +64,19 @@ Never jump from Master Plan text directly to freeform boxes.
 
 Required inputs for each generation cycle:
 
+### 2.0 UI brief (primary — when present)
+- Path: `nebula-ui-studio/ui-brief.md`
+- Full §4 page contracts (not an 8-route distill)
+- §5 design tokens
+- Security/authz notes that affect UI
+- Product auto-syncs this from Master Plan on save / Go / status / UI Gen cycle
+
 ### 2.1 Master Plan
 - §1 Goal
-- §2 Tech/research
+- §2 Tech/research (+ security baseline when auth/data)
 - §3 Features/KPIs
 - §4 Pages and navigation
-- §5 UI/UX design
+- §5 UI/UX design (concise tokens, ≤15–25 lines)
 
 ### 2.2 Generated files
 - routes

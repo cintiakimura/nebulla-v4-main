@@ -58,7 +58,7 @@ const DEBUG_INTENT_RE =
   /\b(debug(?:ging)?|broken|not working|failing test|stack trace|exception|crash|runtime error|null reference|cannot read propert(?:y|ies)|typeerror|referenceerror|fix(?:\s+\w+){0,6}\s+(?:bug|error|issue|crash)|(?:bug|error|issue|crash)(?:\s+\w+){0,4}\s+fix|there(?:'s| is) (?:a |an )?(?:bug|error)|got (?:an? )?error|throws?)\b/i;
 
 const UI_RE =
-  /\b(ui studio|nebula ui|v0(\.dev)?|mockup|ui\/ux|generate ui|visual editor|design system for (the )?app)\b/i;
+  /\b(ui studio|nebula ui|ui[-\s]?brief|ui gen(eration)?|v0(\.dev)?|mockup|ui\/ux|generate ui|visual editor|design system for (the )?app)\b/i;
 
 const FILE_RE =
   /\b(open file|load file|show (me )?the file|from github|open github|edit [\w./-]+\.(ts|tsx|js|jsx|md|json|css))\b/i;
@@ -212,7 +212,7 @@ export function describeChatMode(mode: ChatMode, discoveryRequired?: boolean): s
     case 'debugging':
       return "Let's debug carefully: Verify → Analyze → Trace → Fix → Validate.";
     case 'ui':
-      return "I'll craft a specific, research-grounded UI / V0 prompt.";
+      return "I'll use your UI brief and design tokens for UI Gen — research-grounded, not vague.";
     case 'file':
       return discoveryRequired
         ? "I'll open the file — then we should finish Discovery before building."

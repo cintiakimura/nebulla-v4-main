@@ -94,6 +94,10 @@ export function ensureCloudProjectWorkspace(
 
   const skillDest = path.join(workspaceRoot, "SKILL.md");
   copyIfMissing(path.join(legacyTemplateRoot, "SKILL.md"), skillDest);
+  copyIfMissing(
+    path.join(legacyTemplateRoot, "CHANGELOG-methodology.md"),
+    path.join(workspaceRoot, "CHANGELOG-methodology.md"),
+  );
 
   fs.mkdirSync(nebulaUiStudioOutputDir, { recursive: true });
 

@@ -23,7 +23,8 @@ User-controlled lock in the IDE chat header. Orthogonal to automatic detector mo
 
 - **Chat + coding/debug/UI intent** → local reply with **Switch to Agent** / **Stay in Chat** (no Grok coding pipeline).
 - **Chat + Go** → same CTA (Go is Agent-only).
-- **Agent** → existing Go / `START_CODING` / `file:` apply path; Discovery / Master Plan gates still apply.
+- **Agent** → existing Go / `START_CODING` / `file:` apply path; Discovery / Master Plan gates still apply (`isMasterPlanCompleteForDiscovery`, optional `MASTER_PLAN_STRICT`).
+- Incomplete plan → prefer Discovery messaging from `user-communication-rules.md` (honest, one next step) — do not silently start a full build.
 - System prompt appendix `USER_INTERACTION_MODE` reinforces the lock for the model.
 
 ### Fix with Agent (from App Status)

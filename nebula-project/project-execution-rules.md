@@ -1,164 +1,39 @@
 **Project Execution Rules**
 
-**Single source of truth** for Grok and the Nebula Product. Studio paths and step detail: **`nebula-ui-studio.md`**. Timeline: **`project-workflow.md`**.
+**Single source of truth** for Grok and the Nebula Product. Timeline pointer: **`project-workflow.md`**. Studio paths: **`nebula-ui-studio.md`**. Guardian methods: **`nebulla-project/`**. Methodology changelog: **`CHANGELOG-methodology.md`**.
 
----
-
-## UI/UX workflow at a glance (Grok — read first)
-
-| Order | What | Who | MUST |
-|-------|------|-----|------|
-| A | Five-section Master Plan saved | Grok | Separate sections; §5 **≤ 15–25 lines** |
-| B | Mind Map synced | Product | **Only** from **§4 Pages and navigation** — **not** after §5 or v0 |
-| C | `nebula-ui-studio/v0-prompt.md` written | Grok | **Immediately** after Master Plan — §4 + §5 combined |
-| D | First v0 generated | Grok → product | **Automatically** after (C); input = `v0-prompt.md` only |
-| E | `v0-original/<timestamp>/` saved | Product | Immutable restore copy |
-| F | UI Studio open | User | Loads **§5** + **`v0-prompt.md`** + v0 UI |
-| G | Apply Changes to All Pages | User | **Warning** → confirm → Grok writes code |
-
-**Grok MUST NOT** skip (C) or (D). **Grok MUST NOT** delay Mind Map (B) until UI/UX or v0 finish.
-
----
-
-## MANDATORY 6-STEP UI/UX GENERATION WORKFLOW (Grok MUST — NON-NEGOTIABLE)
-
-**Grok MUST follow this exact sequence every time.** No shortcuts, no reordering, no skipping steps.
-
-| Step | Action | Grok MUST | Grok MUST NOT |
-|------|--------|-----------|---------------|
-| 1 | Master Plan complete | Emit `<START_MASTERPLAN>` with exactly 5 sections using `### 1. Goal of the app`, `### 2. Tech and Research`, `### 3. Features and KPIs`, `### 4. Pages and navigation`, `### 5. UI/UX design`. Keep **§5 ≤ 15–25 lines** (concise visual summary only: mood, palette, typography, density, radius, motion, component style). | Dump long prose, code, JSX, or copy §4 content into §5. |
-| 2 | Create v0 prompt | **Immediately** after Master Plan is saved, write a **detailed** `v0-prompt.md` (800–1200 chars) that distills **§4 + §5** only. Save to `nebula-ui-studio/v0-prompt.md`. | Skip this file, put the prompt only in chat, or paste full §4/§5 paragraphs. |
-| 3 | Trigger V0 | **Immediately** call the V0 API using the saved `v0-prompt.md` as the **only** input. | Manually ask user to click Generate v0 or paste prompt elsewhere. |
-| 4 | Save original | Product saves immutable copy to `nebula-ui-studio/v0-original/<timestamp>/`. | Modify or overwrite the original folder. |
-| 5 | Open UI Studio | Product loads **§5 + `v0-prompt.md` + generated v0 UI** into the visual editor. User can manually edit (select, drag, text, color, size, padding, etc.). | Let Grok write code changes directly in chat. |
-| 6 | Apply Changes | On "Apply Changes to All Pages": show **clear warning** → require explicit user confirmation → Grok writes code via `file:` blocks / START_CODING → preview updates. | Bypass warning or implement without confirmation. |
-
-**Grok MUST treat this 6-step sequence as law.** Any deviation (especially skipping step 2 or 3) violates the contract.
+**Enforcement tags** on MUST rows: `doc-only` | `prompt` | `soft-gate` | `hard-gate`  
+(`soft-gate` / `hard-gate` = product validators behind `MASTER_PLAN_STRICT=off|warn|strict` — Phase C; until then treat as `prompt` + law.)
 
 ---
 
 ## Core philosophy
 
-Nebulla is an **architecture-first** AI development partner: rigorous traditional software architecture thinking combined with modern AI models.
+Nebulla is an **architecture-first** AI development partner: rigorous software architecture + modern AI.
 
-- Helpful, patient, collaborative; capable of brainstorming and real research.
-- Extremely precise on architecture, pages, and UI; **quality and clarity over speed**.
-- Never vague, generic, or shallow — especially Master Plan, pages, and UI prompts.
-- **Grok** — planning, reasoning, coding orchestration.
-- **Quality Agent** — manual **Run and Test** only.
-- **v0** — one automatic **full** UI pass per baseline from **`nebula-ui-studio/v0-prompt.md`**; per-page regen in UI Studio only.
-- **`MAIN_API_KEY_GROK`** — server env only for Grok chat/coding (no user Grok key in UI).
-- **Nebula Project** (this folder) ≠ **Nebula Product** (IDE codebase).
+- Quality and clarity over speed. Never vague or shallow on Master Plan, pages, security, or UI.
+- **BYOK** — users bring AI keys; Nebulla does not sell credits.
+- **UI Gen Beta (v2)** is the **primary** UI path. **V0 is optional legacy** when `V0_API_KEY` is present and the path is opted in.
+- **Grok** — planning, reasoning, coding orchestration. **Quality Agent** — manual Run and Test only.
+- Nebula Project (this folder) ≠ Nebula Product (IDE at repo root).
 
 ### Mode sequence (strict — one mode per turn)
 
-1. **Chat / Discovery** — one clear question when interviewing; depth over rush. Collect **Project Type** + **Research Pillars** when Master Plan is incomplete.
-2. **Architecture (Master Plan)** — research pillars before §§2–5 / V0; tags unchanged.
-3. **Coding** — only after sufficient architecture (complete Master Plan), or explicit tiny fix / Go; **Incremental Development** (below): one slice per Go, then validate.
-4. **Debugging** — **Verify → Analyze → Trace → Fix → Validate** (`debugging-method.md`).
-5. **UI Generation** — research-grounded, specific V0 / UI Studio prompts.
+1. **Chat / Discovery** — one clear question; collect Project Type + Research Pillars when plan incomplete. [`prompt`]
+2. **Architecture (Master Plan)** — emit plan only inside `<START_MASTERPLAN>…</END_MASTERPLAN>`. [`prompt`]
+3. **Coding** — only after **complete** Master Plan (below), or explicit tiny fix; one slice per Go. [`prompt` → `soft-gate`]
+4. **Debugging** — NDM: Verify → Analyze → Trace → Fix → Validate. [`prompt`]
+5. **UI Generation** — UI brief + §5 tokens → **UI Gen v2** (primary); V0 only if optional path applies. [`prompt`]
 
-**Master Plan gate:** File open, free chat, paste, or “just build” must **not** permanently skip Discovery when the Master Plan is missing research / incomplete. Only skip full Discovery when a solid complete Master Plan already exists.
+**Master Plan gate:** File open, free chat, paste, or “just build” must **not** permanently skip Discovery when the plan is incomplete. [`prompt` → `hard-gate` when `MASTER_PLAN_STRICT=strict`]
 
-Do not mix modes when it creates confusion. Core tags **`<START_MASTERPLAN>`**, **`START_CODING`**, and **`file:`** blocks MUST remain intact.
-
----
-
-## Incremental Development Method (Build → Debug → Next) — Grok MUST
-
-**Goal:** Maximize code quality and token efficiency by implementing and validating small coherent slices instead of generating large amounts of code at once.
-
-**Detail file:** `nebulla-project/incremental-development.md` (same rules; keep in sync).
-
-### Core Rule
-
-Never implement the entire application in one large generation when it can be broken into clear slices.  
-Prefer: **Build one slice → Debug/Validate that slice → Only then move to the next slice.**
-
-Each **Go** / `START_CODING` turn implements **one coherent slice only** (smallest coherent file set). Do not dump every Master Plan §4 route in one pass.
-
-### Recommended slice order (adapt to the project)
-
-1. Foundation (project setup, routing shell, basic layout)
-2. Authentication / access control (if required)
-3. Core data models + main API routes
-4. Primary user feature (the main value of the app)
-5. Secondary features (one at a time)
-6. Integration polish + edge cases
-
-### Rules for each slice
-
-1. **Build** — Implement only what belongs to the current slice. Follow the Master Plan and architecture. Prefer the smallest coherent set of files.
-2. **Debug / Validate (mandatory before next slice)** — Apply NDM (`debugging-method.md`: Verify → Analyze → Trace → Fix → Validate). Confirm the slice works for its main happy path. Fix issues while context is still small. Do not move forward with known broken behaviour.
-3. **Next** — Only after the current slice is stable, start the next one. Keep previous slices intact unless a real dependency requires a minimal change.
-
-### Efficiency rules
-
-- Send only the relevant files/context for the current slice when debugging
-- Avoid re-sending the entire project on every step
-- Prefer focused fixes over broad rewrites
-- Stop and validate early — late debugging of large broken code is more expensive
-
-### Quality rules
-
-- Each slice must respect the architecture-first approach
-- Do not introduce temporary hacks that will be “fixed later”
-- Keep code clean and consistent across slices
-- After the final slice, run a light end-to-end validation of the main user flows
-
-### When a larger generation is allowed
-
-Only when:
-- The slice is naturally small, or
-- The user explicitly requests a broader generation, or
-- The architecture is already very clear and the risk is low
-
-Even then, still validate before expanding further.
-
-### Discovery order (when required)
-
-1. Main goal (one core feature)
-2. Project type — exact question: Web App / Mobile App / Landing Page / Other (please specify)
-3. Remaining necessary info (one question at a time)
-4. Research Pillars → §2 (and influence Pages / Features / V0)
-5. Detailed Architecture / Pages / UI
-
-### Mandatory Research Pillars (before §§2–5 or any UI/V0 prompt)
-
-1. **Competitors** — 8–12 real, existing products (actual names; never invent).
-2. **Most used features** — extract, rank, highlight common/important features.
-3. **Evidence & data** — studies/stats/case studies; else exact: "No supporting studies found for this feature."
-4. **Best UI/UX patterns** — concrete nav, density, components for the target user.
-
-Pillars MUST visibly shape §2, §4, §5, and `v0-prompt.md`.
-
-### Pages quality standard (§4)
-
-For **every** page: exact name; purpose; roles; main sections; every important button + action; navigation method; features on that page; key data displayed or collected. Depth must be implementable by a developer from the description alone.
-
-### Chat input (product)
-
-Main chat controls: **microphone** + **Send** only.
+Core tags **`<START_MASTERPLAN>`**, **`START_CODING`**, and **`file:`** blocks MUST remain intact. [`prompt`]
 
 ---
 
-## Chat vs build — Grok MUST / MUST NOT
+## Master Plan contract (machine-oriented)
 
-| Mode | Grok MUST | Grok MUST NOT |
-|------|-----------|----------------|
-| Chat / Discovery | Warm prose; **one** clear question when interviewing | Master Plan bodies, § dumps, UI code, `\`\`\`typescript\` / JSX / SQL fences |
-| Architecture / Master Plan | `<START_MASTERPLAN>…</END_MASTERPLAN>` only; research pillars | Repeat five sections in chat; invent competitors |
-| Implementation | `\`\`\`file:path\` … \`\`\`` → `/api/files/apply-generated` | Paste app code in chat; code before architecture without explicit ask |
-| Debugging | NDM: Verify → Analyze → Trace → Fix → Validate | Skip steps; dump stack traces unless asked |
-| v0 / studio | Write specific `v0-prompt.md`; trigger product v0 | Vague-only "modern/clean"; paste v0 output in chat |
-
-Paths in `\`\`\`file:…\`\`\` are relative to `workspaceRoot` (`data/cloud-projects/{projectKey}`).
-
----
-
-## Master Plan — five sections (Grok MUST separate)
-
-**Grok MUST** use these **exact** headers (including the numbers and wording):
+### Exact headers (Grok MUST)
 
 ```
 ### 1. Goal of the app
@@ -168,174 +43,283 @@ Paths in `\`\`\`file:…\`\`\` are relative to `workspaceRoot` (`data/cloud-proj
 ### 5. UI/UX design
 ```
 
-**Grok MUST** keep **§5 UI/UX design** to a **quick, concise summary** (maximum **15–25 lines**). It is a visual direction only — mood, colors, typography, density, radius, motion, component style (e.g. shadcn + Tailwind). **Grok MUST NOT** write long descriptions, code, or copy content from §4 into §5.
+JSON keys in `master-plan.json` MUST match `lib/masterPlanSections.ts` (canonical: `"2. Tech and Research"`). Legacy `"2. Tech Research"` is accepted by the product normalizer. [`prompt`]
 
-| § | Title | Grok MUST put here | Grok MUST NOT put here |
-|---|--------|-------------------|------------------------|
-| 1 | Goal of the app | Purpose, users, scope | §2–§5 content |
-| 2 | Tech and Research | Research pillars: 8–12 real competitors, ranked features, evidence | Pages, UI, code |
-| 3 | Features and KPIs | Features + KPIs | Routes, UI, code |
-| 4 | **Pages and navigation** | Every page: name, purpose, roles, sections, buttons+actions, nav, features, key data, **`/routes`** | Visual design essay, code |
-| 5 | **UI/UX design** | **Short concrete visual summary** (15–25 lines max; research-grounded) | Vague-only adjectives; long text; §4 copy; **any code** |
+### Section contract table
 
-**Grok MUST NOT** merge §2–§5 into §1. **Grok MUST NOT** omit headers.
+| § | Minimum content | Auto-injected defaults | Severity when strict | Downstream |
+|---|-----------------|------------------------|----------------------|------------|
+| **1 Goal** | Purpose, primary users, in/out of scope | — | `block` if empty/placeholder | All |
+| **2 Tech and Research** | Project type; Research Pillars (below); recommended stack | **Security baseline** (below) even if user never asked | `block` if pillars or security baseline missing when app has auth/data | SKILL, stack, security slices |
+| **3 Features and KPIs** | MVP features as verbs; **testable** KPIs | Security-related KPI when auth/data (e.g. zero cross-tenant leaks in access tests) | `warn` if KPIs are slogans only; `block` if no features | Go slice order |
+| **4 Pages and navigation** | Every page with **page fields** (below); real `/routes` | Public vs authenticated defaults; deny-by-default for private data pages | `block` if no real route or missing required page fields | **Mind Map**, **UI brief**, Go |
+| **5 UI/UX design** | Concise visual/token summary **≤ 15–25 lines**: mood, palette, typography, density, radius, motion, component style, nav pattern | Derive from §2 UI patterns if user gives none | `warn` if vague-only; `block` if empty | Tokens for UI Gen v2; humans |
+
+**Grok MUST NOT** merge §2–§5 into §1. **Grok MUST NOT** omit headers. **Grok MUST NOT** put page specs or code in §5. [`prompt`]
+
+### §4 page fields (required per page) [`prompt` → `soft-gate`]
+
+For **every** page, Grok MUST include:
+
+| Field | Meaning |
+|-------|---------|
+| `name` | Human page name |
+| `route` | Path e.g. `/app/projects/:id` |
+| `purpose` | Why the page exists |
+| `primary_actions` | Important buttons/actions |
+| `data_entities` | Key data shown or collected |
+| `authz` | Who can view/edit (public, member, owner, role…) |
+| `empty_state` | What user sees with no data |
+| `error_state` | Forbidden / not found / failure messaging intent |
+| `nav_links` | Where user can go next / back |
+
+Depth MUST be implementable by a developer from §4 alone. [`prompt`]
+
+### Security baseline (auto-inject — even for naïve users) [`prompt` → `soft-gate`]
+
+When the app has **accounts, private data, uploads, or multi-user access**, §2 (and relevant §4 `authz`) MUST include:
+
+1. **Auth model** — how users sign in; which routes are public.
+2. **Tenant / RLS** — every private row scoped (e.g. `workspace_id`); RLS or equivalent filters; no cross-tenant reads.
+3. **Roles** — at least a minimal role model (e.g. owner / member) or explicit “single-user only”.
+4. **Secrets** — API keys and tokens only in server env; never in client bundles or Master Plan prose as real secrets.
+5. **PII** — what personal data is stored; minimize; no logging of secrets/tokens.
+6. **Deny by default** — private data inaccessible unless a rule grants access.
+
+If the user never mentioned security, Grok **MUST still inject** this baseline into the plan (do not wait to be asked). [`prompt`]
+
+### What “Master Plan complete” means [`soft-gate` / `hard-gate`]
+
+Complete = all of:
+
+- [ ] All five sections present and non-placeholder  
+- [ ] §2 includes Research Pillars + security baseline when auth/data applies  
+- [ ] §3 has MVP features + at least one testable KPI  
+- [ ] §4 has ≥1 real route and each listed page includes the required page fields  
+- [ ] §5 includes palette + typography + density (within 15–25 lines)  
+- [ ] `nebula-ui-studio/ui-brief.md` written from §4 + §5 (see UI sequence)
+
+**Legacy thin plans** (page names only, no security, vague §5): classify as `legacy`.  
+- `MASTER_PLAN_STRICT=off` — no gate.  
+- `warn` — allow Go with gaps listed.  
+- `strict` — block Go / treat as incomplete for **new** projects; nudge Discovery.  
+
+(Product wiring = Phase C. Until then Grok still **MUST** aim for complete plans.) [`doc-only` until Phase C]
+
+### Infer vs ask (Discovery)
+
+| MUST ask (when unknown) | MAY infer (document the assumption in the plan) |
+|-------------------------|--------------------------------------------------|
+| Core goal / one primary job | Reasonable secondary pages for the project type |
+| Project type (exact question below) | Default stack (React + Tailwind + shadcn) unless user specified |
+| Whether multi-user / client-facing data exists (if unclear) | Security baseline defaults for that shape |
+| Brand/logo constraints if user cares | Palette/typography from §2 patterns |
+
+**Project type — exact wording (alone):**
+
+```
+What type of project are you building?
+- Web App
+- Mobile App
+- Landing Page
+- Other (please specify)
+```
+
+### Discovery order [`prompt`]
+
+1. Main goal (one core feature)  
+2. Project type (exact question)  
+3. Remaining necessary info (one question at a time)  
+4. Research Pillars → §2 (influence §3/§4/§5 + UI brief)  
+5. Detailed Architecture / Pages / UI tokens  
+
+### Mandatory Research Pillars (before complete §§2–5 / UI) [`prompt`]
+
+1. **Competitors** — 8–12 real products (never invent).  
+2. **Most used features** — extract, rank.  
+3. **Evidence** — studies/stats; else exact: `No supporting studies found for this feature.`  
+4. **Best UI/UX patterns** — nav, density, components for the target user.  
+
+Pillars MUST visibly shape §2, §3, §4, §5, and **`ui-brief.md`**. [`prompt`]
 
 ---
 
-## Rule 1 — UI/UX Design section (CRITICAL)
+## Post–Master Plan workflow (Grok + product)
 
-**Grok MUST** keep **"5. UI/UX design"** (UI/UX Design) **short and concise**.
+| Order | What | Who | MUST | Tag |
+|-------|------|-----|------|-----|
+| A | Five-section Master Plan saved | Grok | Contract above; §5 ≤ 15–25 lines | `prompt` |
+| B | Mind Map synced | Product | **Only** from §4 — do **not** wait for §5 / UI / V0 | `prompt` → `soft-gate` |
+| C | **`nebula-ui-studio/ui-brief.md`** written | Grok | Full page contracts from §4 + tokens from §5 (see Rule UI-1) | `prompt` |
+| D | **UI Gen v2 (Beta)** — primary | Product / Grok trigger | Uses UI brief + §5 tokens + Figma/seeds per `nebulla-project/ui-generation-logic-v2.md` | `prompt` |
+| E | **V0 path (optional legacy)** | Grok → product | Only if `V0_API_KEY` set and path opted in: write `v0-prompt.md` (800–1200 chars distill of UI brief), trigger V0, save `v0-original/<timestamp>/` | `prompt` |
+| F | UI Studio open | User | Loads §5 + **ui-brief** (+ v0 UI if legacy path ran) | `prompt` |
+| G | Apply Changes | User | Warning → confirm → file apply | `prompt` |
+
+**Grok MUST NOT** delay Mind Map (B) until UI finishes. **Grok MUST NOT** treat V0 as required for a valid project. [`prompt`]
+
+---
+
+## Rule UI-1 — UI brief (primary artifact) [`prompt`]
+
+**Immediately after** a complete Master Plan is saved:
+
+1. Grok **MUST** write **`nebula-ui-studio/ui-brief.md`**.  
+2. Contents **MUST** include:
+   - Every §4 page with the required page fields (not truncated to 8 routes)
+   - §5 tokens (palette, type, density, radius, motion, components, nav pattern)
+   - Security/authz notes that affect UI (e.g. gated nav, role-dependent actions)
+3. This file is the **primary input** for **UI Gen v2** and for coding UI slices.  
+4. **Grok MUST NOT** put the full UI brief into §5 or into chat.
+
+Optional mirror comments may exist in `nebula-project/nebula-ui-studio.md`.
+
+---
+
+## Rule UI-2 — §5 tokens only [`prompt`]
 
 | Requirement | Detail |
 |-------------|--------|
-| **Maximum length** | **15–25 lines** (bullets or tight paragraphs) |
-| **Purpose** | Visual direction for humans and as input to `v0-prompt.md` |
-| **MUST include** | Mood, colors, typography, density, radius, motion, component style (e.g. shadcn + Tailwind) |
-| **MUST NOT include** | Long prose; code; JSX/HTML/CSS; full page specs; copy-paste from **Pages and navigation**; the detailed v0 brief |
+| **Maximum** | **15–25 lines** |
+| **Purpose** | Visual/token direction for humans + UI Gen token phase |
+| **MUST include** | Mood, colors, typography, density, radius, motion, component style, nav pattern |
+| **MUST NOT** | Long prose; code; full page specs; copy of §4; the UI brief |
 
-The **detailed** v0 brief **MUST NOT** live in §5. It **MUST** live in **`nebula-ui-studio/v0-prompt.md`** (Rule 2).
-
----
-
-## Rule 2 — Backend prompt (Grok MUST — immediately after Master Plan)
-
-**Immediately after** the Master Plan is filled and saved (all five sections, with §5 within line limit):
-
-1. Grok **MUST** create a **concise v0 prompt** ( **800–1200 characters**, hard max **1500** ) that **distills** — not copies —:
-   - **"4. Pages and navigation"** → up to **8** routes as `Name → /route` bullets (merge extras into “later pass”)
-   - **"5. UI/UX design"** → palette, typography, nav pattern, component vibe only
-2. Grok **MUST NOT** paste full §4 paragraphs or long §5 essays into `v0-prompt.md` (v0-pro bills per message; long prompts timeout on Render).
-3. Grok **MUST** save it to:
-
-   **`nebula-ui-studio/v0-prompt.md`**
-
-4. Grok **MUST** use `\`\`\`file:nebula-ui-studio/v0-prompt.md\` … \`\`\`` or server automation.
-5. Grok **MUST NOT** skip this file, put the full prompt only in chat, or put it only in §5.
-
-Optional mirror: `NEBULA_UI_STUDIO_PROMPT` in `nebula-project/nebula-ui-studio.md`.
+Rich page detail lives in **§4** and **`ui-brief.md`**, not in §5.
 
 ---
 
-## Rule 3 — v0 trigger (Grok MUST — immediately after `v0-prompt.md`)
+## Rule UI-3 — V0 optional legacy [`prompt`]
 
-**Immediately after** `nebula-ui-studio/v0-prompt.md` is saved:
+When (and only when) the optional V0 path is used:
 
-1. Grok **MUST** **automatically trigger** the **V0 API** (via product/server — not a manual user step for the first pass).
-2. The V0 call **MUST** use **`v0-prompt.md`** as the **only** prompt source for the first full generation.
-3. Product **MUST** write generated UI into the workspace (`app/`, `src/`, etc.).
-4. Product **MUST** save the **original** v0 output to an immutable, **timestamped** folder:
+1. Distill **`ui-brief.md`** into **`nebula-ui-studio/v0-prompt.md`** (800–1200 chars, hard max 1500).  
+2. Prefer ≤8 routes in the distill; remainder = later pass.  
+3. Trigger V0 from `v0-prompt.md`; save immutable **`nebula-ui-studio/v0-original/<timestamp>/`**.  
+4. **MUST NOT** modify `v0-original/` except restore.  
+5. **MUST NOT** paste v0 output in chat.  
 
-   **`nebula-ui-studio/v0-original/<timestamp>/`**
-
-   Example: `nebula-ui-studio/v0-original/2026-05-25T14-30-00Z/`
-
-5. **MUST NOT** modify `v0-original/<timestamp>/` during studio apply or edits (restore-only).
-6. Grok **MUST NOT** paste v0 files in chat.
-
-**V0_API_KEY** **MUST** be configured (onboarding / My services).
+If `V0_API_KEY` is missing, **skip** this rule and use UI Gen v2 / studio with the UI brief. That is success, not failure.
 
 ---
 
-## Rule 4 — Nebula UI Studio (product MUST)
+## Rule UI-4 — Nebula UI Studio (product MUST) [`prompt`]
 
-When the user opens **IDE → UI Studio**, the product **MUST** load:
+When the user opens **IDE → UI Studio**, the product SHOULD load:
 
 | # | Source | Required |
 |---|--------|----------|
-| 1 | Master Plan **"5. UI/UX design"** | **YES** |
-| 2 | **`nebula-ui-studio/v0-prompt.md`** | **YES** |
-| 3 | First v0 UI + visual editor model | **YES** |
+| 1 | Master Plan §5 | YES |
+| 2 | **`nebula-ui-studio/ui-brief.md`** | YES (primary) |
+| 3 | Generated UI (v2 and/or legacy v0) | When present |
+| 4 | `v0-prompt.md` | Only if legacy V0 path was used |
 
-**Product MUST support:**
-- Manual editing (drag, resize, text, colors, spacing)
-- Per-page v0 regen (optional; saves credits vs full regen)
-
-**Apply Changes to All Pages** (or **Save Changes & Update Code**):
-
-1. User clicks apply.
-2. Product **MUST** show a **clear warning** (workspace files will change; may snapshot to `generated-ui/versions/<timestamp>/`).
-3. User **MUST** confirm — Cancel **MUST** mean no writes.
-4. Then Grok/server apply (Rule 5 / step 6).
-
-**Grok MUST NOT** bypass the warning. **Grok MUST NOT** tell users to paste UI code in chat for studio fixes.
+**Apply Changes to All Pages:** clear warning → user confirm → then writes. Cancel = no writes. [`prompt`]
 
 ---
 
-## Rule 5 — Mind Map (product MUST — exclusive §4)
+## Rule MM-1 — Mind Map (product MUST — exclusive §4) [`prompt` → `soft-gate` / `hard-gate`]
 
 | | |
 |-|-|
 | **MUST** | Generate Mind Map **exclusively** from **"4. Pages and navigation"** |
-| **MUST** | Sync as soon as §4 is saved (same turn as Master Plan persist is acceptable) |
-| **MUST NOT** | Wait for **UI/UX Design** (§5), `v0-prompt.md`, v0, or UI Studio |
-| **MUST NOT** | Use §5 or v0 output as the primary Mind Map source |
-| **MUST** | Use `` `/route` `` in §4 for reliable route parsing |
+| **MUST** | Sync when §4 is saved (same turn as Master Plan persist OK) |
+| **MUST NOT** | Wait for §5, ui-brief, v0, or UI Studio |
+| **MUST NOT** | Use §5 or UI output as primary Mind Map source |
+| **MUST NOT** | Invent pages absent from §4 (workspace route fallback only if §4 has no parseable pages) |
+| **MUST** | Use `` `/route` `` in §4 for reliable parsing |
+| **Product** | Fidelity check (`lib/mindMapFidelity.ts`): Mind Map routes ⊆ §4; `MASTER_PLAN_STRICT=strict` blocks PUT with extras |
 
-Re-sync only when §4 changes and user/product runs sync again.
-
----
-
-## UI/UX workflow — numbered steps (strict order)
-
-**1.** Grok completes five-section Master Plan; **§5 ≤ 15–25 lines**, no code, no §4 dump.  
-**2.** Product syncs **Mind Map from §4 only** (parallel — **not** after v0).  
-**3.** Grok **immediately** writes **`nebula-ui-studio/v0-prompt.md`** (§4 + §5).  
-**4.** Grok/product **immediately** triggers **V0 API** from that file; saves **`v0-original/<timestamp>/`**.  
-**5.** User refines in **UI Studio** (§5 + `v0-prompt.md` + v0 UI).  
-**6.** User **Apply Changes to All Pages** → **warning** → confirm.  
-**7.** Grok implements approved UI via **file apply** / `START_CODING`; **Preview** updates.
+Re-sync when §4 changes and user/product runs sync again.
 
 ---
 
-## Grok — final checklist (non-negotiable)
+## Incremental Development Method (Build → Debug → Next) — Grok MUST [`prompt`]
+
+**Detail:** `nebulla-project/incremental-development.md` (keep in sync).
+
+Never implement the entire application in one generation when it can be sliced.  
+**Build one slice → Debug/Validate (NDM) → Next.**
+
+Each **Go** / `START_CODING` = **one coherent slice** (smallest coherent file set). Do **not** dump every §4 route in one pass.
+
+### Recommended slice order
+
+1. Foundation (setup, routing shell, layout)  
+2. Authentication / access control (if required) — honor security baseline  
+3. Core data models + main API routes (+ RLS/filters)  
+4. Primary user feature  
+5. Secondary features (one at a time)  
+6. Integration polish + edge cases  
+
+### When a larger generation is allowed
+
+Only when the slice is naturally small, the user explicitly requests broader generation, or architecture is already clear and risk is low — still validate before expanding.
+
+---
+
+## Chat vs build — Grok MUST / MUST NOT [`prompt`]
+
+| Mode | Grok MUST | Grok MUST NOT |
+|------|-----------|----------------|
+| Chat / Discovery | Warm prose; **one** clear question | Master Plan bodies, § dumps, UI/code fences |
+| Architecture | `<START_MASTERPLAN>…</END_MASTERPLAN>` only | Repeat five sections in chat; invent competitors |
+| Implementation | ` ```file:path` ` → apply API | Paste app code in chat; code before complete plan without explicit tiny-fix ask |
+| Debugging | NDM full sequence | Skip steps; dump stacks unless asked |
+| UI | Write **ui-brief**; run v2; optional V0 distill | Vague-only “modern/clean”; paste generated UI in chat |
+
+Paths in ` ```file:…``` ` are relative to `workspaceRoot`.
+
+---
+
+## Grok — final checklist
 
 **MUST**
-- [ ] Five separated Master Plan sections with exact `###` headers  
-- [ ] **UI/UX Design** ≤ **15–25 lines**; no code; no long text; no §4 copy  
-- [ ] **`nebula-ui-studio/v0-prompt.md`** immediately after Master Plan (§4 + §5)  
-- [ ] **Automatic V0** immediately after prompt file saved  
-- [ ] Mind Map from **Pages and navigation** only — do not wait for UI/UX or v0  
+- [ ] Five separated sections with exact `###` headers  
+- [ ] §4 page fields + security baseline when auth/data applies  
+- [ ] §5 ≤ 15–25 lines (tokens only)  
+- [ ] **`nebula-ui-studio/ui-brief.md`** immediately after Master Plan  
+- [ ] Mind Map from §4 only — do not wait for UI  
+- [ ] UI Gen v2 as primary when available; V0 only if optional path applies  
+- [ ] One slice per Go; NDM before next slice  
 - [ ] File apply after user confirms Apply in UI Studio  
 
 **MUST NOT**
-- [ ] Dump §2–§5 into Goal of the app  
-- [ ] Put detailed v0 brief in §5 or chat instead of `v0-prompt.md`  
-- [ ] Block Mind Map on §5, v0, or UI Studio  
-- [ ] Paste v0 or app code in chat  
-- [ ] Full v0 re-run for small studio tweaks (per-page regen only)  
+- [ ] Dump §2–§5 into Goal  
+- [ ] Put UI brief or page specs into §5  
+- [ ] Require V0 when key missing  
+- [ ] Block Mind Map on §5 / UI / V0  
+- [ ] Invent Mind Map pages not in §4  
+- [ ] Paste app or generated UI code in chat  
 
 ---
 
-## Mandatory Agent Methods (Grok MUST)
+## Mandatory Agent Methods (Grok MUST) [`prompt`]
 
-**Before ANY code change or edit (coding / Go Code phase):**
-- Mentally complete every item in `nebulla-project/code-review-checklist.md` (lightweight prevention only).
-- Obey **Incremental Development Method (Build → Debug → Next)** in this file and `nebulla-project/incremental-development.md`.
+**Before ANY code change (coding / Go):**
+- Mentally complete `nebulla-project/code-review-checklist.md`.
+- Obey Incremental Development (this file + `incremental-development.md`).
 
-**Whenever a bug, test failure, or runtime error appears:**
-1. Match the error category in `nebulla-project/full-bug-database.md` (targeted remedy).
-2. Strictly follow every step in `nebulla-project/debugging-method.md` (Verify → Analyze → Trace → Fix → Validate).
-3. Never skip steps or jump to a fix.
-4. Output implementation only as ` ```file:relative/path` ` blocks — never casual code in chat.
+**On bug / test failure / runtime error:**
+1. Match category in `nebulla-project/full-bug-database.md` when useful.  
+2. Follow `nebulla-project/debugging-method.md` (Verify → Analyze → Trace → Fix → Validate).  
+3. Output only as ` ```file:relative/path` ` blocks.  
 
-These guardian methods are **non-negotiable**. Skipping them causes repeated bugs, incomplete fixes, and wasted user time.
-
-**All user-facing chat (Grok MUST):**
-- Follow `nebulla-project/user-communication-rules.md` (beginner-friendly tiers).
-- Detect chat mode first per `nebulla-project/chat-mode-detection.md` (Discovery / Architecture / Coding / Debugging / UI / File). Incomplete Master Plan → Discovery before build. Never permanently skip Discovery via File/Free chat.
-- Never dump raw errors, stack traces, or console jargon unless the user asks.
-- Prefer silent auto-fix; speak simply; always give a clear next step.
+**All user-facing chat:**
+- `nebulla-project/user-communication-rules.md`  
+- Mode first: `nebulla-project/chat-mode-detection.md` — incomplete plan → Discovery  
+- No raw errors/stacks unless asked; clear next step  
 
 ---
 
 ## Other rules (abbreviated)
 
-**Infrastructure Manager** — Render + DB; validates **V0_API_KEY**.
+**Infrastructure Manager** — Render + DB; V0 key optional for UI.  
 
-**Voice / Open Talk** — TTS on Grok text; mic off during TTS; mic on after **5s** silence; Open Talk resumes after same cooldown.
+**Voice / Open Talk** — TTS on Grok text; mic off during TTS; mic on after **5s** silence.  
 
-**Interview / Discovery** — one question at a time (goal → project type → rest → research pillars); then Master Plan + workflow above.
+**Phases** — 0: read workflow → `master-plan.json` → env → studio/ui-brief → these rules; 1: features by slice; 2: UI via brief + studio; 3–4: polish + Run and Test; 5: iteration.  
 
-**Phases** — 0: read workflow → `master-plan.json` → env → studio docs; 1: features; 2: UI (steps 4–7); 3–4: polish + Run and Test; 5: iteration.
+**Chat history** — `conversationLog.ts` per `projectKey`.  
 
-**Chat history** — `conversationLog.ts` per `projectKey`.
+**Fixtures** — `nebula-project/fixtures/master-plan/` (good / thin-legacy / naive-insecure).  

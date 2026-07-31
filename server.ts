@@ -59,10 +59,16 @@ import {
   hydrateAndPersistMasterPlan,
   readMasterPlanFile,
   syncMindMapFromMasterPlan,
-  syncV0PromptFromMasterPlan,
+  syncUiArtifactsFromMasterPlan,
   unlockVisualEditorFromWorkspaceCoding,
   writeBasicUiScaffold,
 } from "./lib/nebulaIdeWorkspaceArtifacts";
+import { readUiBriefMarkdown } from "./lib/nebulaUiBrief";
+import {
+  assessMasterPlanCompleteness,
+  readMasterPlanStrictMode,
+} from "./lib/masterPlanCompleteness";
+import { assessMindMapSubsetOfSection4 } from "./lib/mindMapFidelity";
 import { ensureMasterPlanBeforeGo } from "./lib/nebulaMasterPlanSynthesis";
 import {
   addDesignReference,
@@ -670,19 +676,35 @@ No approved UI code yet.
     );
   };
 
-  /** Always rebuild v0-prompt.md from current Master Plan (avoids stale prompts after §4/§5 edits). */
+  /**
+   * Rebuild ui-brief.md (primary) + v0-prompt.md (legacy) from Master Plan.
+   * Studio prompt mirror prefers the full ui-brief.
+   * Returns v0 content for backward-compatible callers; also exposes uiBrief.
+   */
   const ensureV0PromptSynced = (
     pp: ReturnType<typeof projectPathsFor>,
-  ): { content: string; synced: boolean } => {
+  ): { content: string; synced: boolean; uiBrief: string; uiBriefSynced: boolean } => {
     try {
-      const prev = readV0PromptMarkdown(pp.workspaceRoot).trim();
-      const v0Sync = syncV0PromptFromMasterPlan(pp.workspaceRoot, pp.masterPlanPath);
-      mirrorV0PromptToStudioFile(pp, v0Sync.content);
-      const content = v0Sync.content.trim();
-      return { content, synced: content !== prev };
+      const prevBrief = readUiBriefMarkdown(pp.workspaceRoot).trim();
+      const prevV0 = readV0PromptMarkdown(pp.workspaceRoot).trim();
+      const arts = syncUiArtifactsFromMasterPlan(pp.workspaceRoot, pp.masterPlanPath);
+      const uiBrief = arts.uiBrief.content.trim();
+      const content = arts.v0Prompt.content.trim();
+      mirrorV0PromptToStudioFile(pp, uiBrief || content);
+      return {
+        content,
+        synced: content !== prevV0,
+        uiBrief,
+        uiBriefSynced: uiBrief !== prevBrief,
+      };
     } catch (e) {
       console.warn("[ensureV0PromptSynced]", e);
-      return { content: readV0PromptMarkdown(pp.workspaceRoot).trim(), synced: false };
+      return {
+        content: readV0PromptMarkdown(pp.workspaceRoot).trim(),
+        synced: false,
+        uiBrief: readUiBriefMarkdown(pp.workspaceRoot).trim(),
+        uiBriefSynced: false,
+      };
     }
   };
 
@@ -1105,6 +1127,47 @@ No approved UI code yet.
     }
   });
 
+  /** Completeness gaps for UI badge / Go gate (MASTER_PLAN_STRICT=off|warn|strict). */
+  app.get("/api/master-plan/status", (req, res) => {
+    try {
+      const pp = projectPathsFor(req);
+      let plan: Record<string, unknown> = {};
+      let uiBriefLength = 0;
+      if (fs.existsSync(pp.masterPlanPath)) {
+        try {
+          const arts = syncUiArtifactsFromMasterPlan(pp.workspaceRoot, pp.masterPlanPath);
+          plan = arts.plan;
+          uiBriefLength = arts.uiBrief.content.length;
+          mirrorV0PromptToStudioFile(pp, arts.uiBrief.content || arts.v0Prompt.content);
+        } catch {
+          plan = hydrateAndPersistMasterPlan(pp.workspaceRoot, pp.masterPlanPath) as Record<
+            string,
+            unknown
+          >;
+          uiBriefLength = readUiBriefMarkdown(pp.workspaceRoot).length;
+        }
+      }
+      const completeness = assessMasterPlanCompleteness({
+        plan,
+        mode: readMasterPlanStrictMode(),
+        workspaceRoot: pp.workspaceRoot,
+        checkUiBrief: true,
+      });
+      res.json({
+        mode: completeness.mode,
+        ok: completeness.ok,
+        allowGo: completeness.allowGo,
+        shape: completeness.shape,
+        gaps: completeness.gaps,
+        sectionLengths: completeness.sectionLengths,
+        uiBriefLength,
+      });
+    } catch (error) {
+      console.error("Error reading master plan status:", error);
+      res.status(500).json({ error: "Failed to assess master plan" });
+    }
+  });
+
   app.get("/api/conversation-log", (req, res) => {
     try {
       const uid = readNebulaSessionUserId(req) || "anonymous";
@@ -1157,6 +1220,8 @@ No approved UI code yet.
       res.json({
         success: true,
         tabName,
+        uiBriefSynced: v0Sync.uiBriefSynced,
+        uiBriefLength: v0Sync.uiBrief.length,
         v0PromptSynced: v0Sync.synced,
         v0PromptLength: v0Sync.content.length,
       });
@@ -1395,20 +1460,42 @@ No approved UI code yet.
 
   app.put("/api/workspace/mind-map", (req, res) => {
     try {
-      const { workspaceRoot } = projectPathsFor(req);
+      const pp = projectPathsFor(req);
       const pages = req.body?.pages;
       const edges = req.body?.edges;
       if (!Array.isArray(pages) || !Array.isArray(edges)) {
         return res.status(400).json({ error: "pages and edges must be arrays" });
       }
-      const payload = JSON.stringify({ version: 1, pages, edges });
+      const plan = hydrateAndPersistMasterPlan(pp.workspaceRoot, pp.masterPlanPath);
+      const fidelity = assessMindMapSubsetOfSection4({
+        plan,
+        mindMapPages: pages,
+        mode: readMasterPlanStrictMode(),
+      });
+      if (!fidelity.allowWrite) {
+        return res.status(409).json({
+          error: "Mind Map has pages not in Master Plan §4 (MASTER_PLAN_STRICT=strict).",
+          code: "MINDMAP_NOT_SUBSET",
+          mindMapFidelity: fidelity,
+        });
+      }
+      const payload = JSON.stringify({
+        version: 1,
+        pages,
+        edges,
+        fidelityWarning: fidelity.extraRoutes.length > 0 ? fidelity.gaps : undefined,
+      });
       if (payload.length > 900_000) {
         return res.status(413).json({ error: "Mind map payload too large" });
       }
-      const target = resolveWorkspaceRelative(workspaceRoot, MIND_MAP_WORKSPACE_REL);
+      const target = resolveWorkspaceRelative(pp.workspaceRoot, MIND_MAP_WORKSPACE_REL);
       fs.mkdirSync(path.dirname(target), { recursive: true });
       fs.writeFileSync(target, payload, "utf8");
-      res.json({ ok: true });
+      res.json({
+        ok: true,
+        mindMapFidelity: fidelity,
+        warning: fidelity.extraRoutes.length > 0,
+      });
     } catch (err: unknown) {
       res.status(500).json({ error: err instanceof Error ? err.message : "mind map write failed" });
     }
@@ -1427,11 +1514,19 @@ No approved UI code yet.
         masterPlanPath: pp.masterPlanPath,
         projectLabel,
       });
+      const plan = readMasterPlanFile(pp.masterPlanPath);
+      const fidelity = assessMindMapSubsetOfSection4({
+        plan,
+        mindMapPages: graph.pages,
+        mode: readMasterPlanStrictMode(),
+      });
       res.json({
         ok: true,
         pages: graph.pages,
         edges: graph.edges,
         routeCount: graph.routeCount,
+        source: graph.source,
+        mindMapFidelity: fidelity,
       });
     } catch (err: unknown) {
       res.status(500).json({ error: err instanceof Error ? err.message : "mind map sync failed" });
@@ -3811,7 +3906,11 @@ Rules:
 
       const memory = buildMemorySystemContent(convScopeGo);
 
-      let mpFill: { written: string[]; source: string } = { written: [], source: "skipped" };
+      let mpFill: {
+        written: string[];
+        source: string;
+        completeness?: ReturnType<typeof assessMasterPlanCompleteness>;
+      } = { written: [], source: "skipped" };
       if (!continuation) {
         mpFill = await ensureMasterPlanBeforeGo({
           apiKey,
@@ -3837,8 +3936,43 @@ Rules:
         }
       }
 
+      /** Write full ui-brief (+ legacy v0-prompt) before completeness check so UI_BRIEF_MISSING is not a false fail. */
+      let uiArts = syncUiArtifactsFromMasterPlan(ppGo.workspaceRoot, masterPlanPath);
+      console.log(
+        `[go-code] Wrote ui-brief.md (${uiArts.uiBrief.content.length} chars) + v0-prompt.md (${uiArts.v0Prompt.content.length} chars)`,
+      );
+      try {
+        mirrorV0PromptToStudioFile(ppGo, uiArts.uiBrief.content || uiArts.v0Prompt.content);
+      } catch {
+        /* ignore */
+      }
+
+      const completeness = assessMasterPlanCompleteness({
+        plan: planSnapshot,
+        mode: readMasterPlanStrictMode(),
+        workspaceRoot: ppGo.workspaceRoot,
+        checkUiBrief: true,
+      });
+      if (completeness.gaps.length > 0) {
+        console.log(
+          `[go-code] Master Plan gaps mode=${completeness.mode} shape=${completeness.shape} count=${completeness.gaps.length}`,
+        );
+      }
+      if (!completeness.allowGo) {
+        return res.status(409).json({
+          error:
+            "Master Plan incomplete for Go (MASTER_PLAN_STRICT=strict). Fix gaps or set MASTER_PLAN_STRICT=warn|off.",
+          code: "MASTER_PLAN_INCOMPLETE",
+          masterPlanCompleteness: completeness,
+        });
+      }
+
       let summary = "";
-      let v0Sync = syncV0PromptFromMasterPlan(ppGo.workspaceRoot, masterPlanPath);
+      let v0Sync = {
+        content: uiArts.v0Prompt.content,
+        written: uiArts.v0Prompt.written,
+        plan: uiArts.plan,
+      };
 
       if (!continuation) {
       const phaseASystem = `You are Grok 4 (planning only). The user pressed **Go** to run a coding pass with Grok Code.
@@ -3908,10 +4042,17 @@ Strict rules:
       // (Project Type parsing + v0 one-liner depend on a clean goal).
       plan[PRE_CODING_SUMMARY_KEY] = summary;
       fs.writeFileSync(masterPlanPath, JSON.stringify(plan, null, 2), "utf8");
-      v0Sync = syncV0PromptFromMasterPlan(ppGo.workspaceRoot, masterPlanPath);
-      mirrorV0PromptToStudioFile(ppGo, v0Sync.content);
+      uiArts = syncUiArtifactsFromMasterPlan(ppGo.workspaceRoot, masterPlanPath);
+      v0Sync = {
+        content: uiArts.v0Prompt.content,
+        written: uiArts.v0Prompt.written,
+        plan: uiArts.plan,
+      };
+      mirrorV0PromptToStudioFile(ppGo, uiArts.uiBrief.content || v0Sync.content);
       console.log(`[go-code] Wrote ${PRE_CODING_SUMMARY_KEY} (${summary.length} chars)`);
-      console.log(`[go-code] Wrote v0-prompt.md (${v0Sync.content.length} chars) from Master Plan §4+§5`);
+      console.log(
+        `[go-code] Refreshed ui-brief.md (${uiArts.uiBrief.content.length} chars) + v0-prompt.md (${v0Sync.content.length} chars)`,
+      );
       } else {
         let plan: Record<string, unknown> = {};
         if (fs.existsSync(masterPlanPath)) {
@@ -3925,8 +4066,13 @@ Strict rules:
         if (!summary) {
           summary = "Continue implementation from master-plan.json and project-execution-rules.md.";
         }
-        v0Sync = syncV0PromptFromMasterPlan(ppGo.workspaceRoot, masterPlanPath);
-        mirrorV0PromptToStudioFile(ppGo, v0Sync.content);
+        uiArts = syncUiArtifactsFromMasterPlan(ppGo.workspaceRoot, masterPlanPath);
+        v0Sync = {
+          content: uiArts.v0Prompt.content,
+          written: uiArts.v0Prompt.written,
+          plan: uiArts.plan,
+        };
+        mirrorV0PromptToStudioFile(ppGo, uiArts.uiBrief.content || v0Sync.content);
         console.log(`[go-code] Continuation pass — skipping Grok 4 summary (${summary.length} chars from plan)`);
       }
 
@@ -3966,21 +4112,21 @@ Follow project-execution-rules.md and nebulla-project/incremental-development.md
 
 ${codeQualityContract}
 
-Master Plan (project-execution-rules § A — MUST be complete before code):
-- master-plan.json below MUST have all five sections populated before you output app files.
-- If ANY of §2–§5 are still thin, emit \`\`\`file:master-plan.json\`\`\` FIRST with the full JSON object (preserve existing keys, fill empty sections from discovery — real competitors in §2, routes in §4, concrete palette in §5), then still emit the current slice's app files in the SAME response when possible.
-- §4: routes as \`- **Name** (\`/route\`)\`; §5: 15–25 lines max (palette, typography, nav — no §4 copy).
+Master Plan (project-execution-rules — MUST be complete before code):
+- master-plan.json below MUST satisfy the Master Plan contract (page fields in §4, security baseline when auth/data, §5 tokens).
+- If ANY of §2–§5 are still thin, emit \`\`\`file:master-plan.json\`\`\` FIRST with the full JSON object (preserve existing keys, fill from discovery), then still emit the current slice's app files in the SAME response when possible.
+- §4: full page contracts (route, purpose, primary_actions, data_entities, authz, empty/error, nav). §5: 15–25 lines tokens only.
+- Also keep \`nebula-ui-studio/ui-brief.md\` in sync when §4/§5 change (primary UI input). V0/\`v0-prompt.md\` is optional legacy only.
 
 Implementation (ONE SLICE per Go — Build → Debug → Next):
 - Implement only the slice named in "${PRE_CODING_SUMMARY_KEY}" (or infer next incomplete slice: Foundation first if no app shell exists).
 - Prefer the smallest coherent file set for that slice (often 3–8 file blocks). Do NOT emit every §4 route in one pass.
 - Include master-plan.json updates IN THE SAME response if needed — never as the only file when app code is due.
-- Then sync \`nebula-ui-studio/v0-prompt.md\` if §4/§5 changed (800–1200 chars).
+- Honor security baseline (RLS/tenant filters) in Auth/Data slices.
 
-Master Plan UI / v0:
-- If **"4. Pages and navigation"** or **"5. UI/UX design"** need updates, include them in master-plan.json first.
-- The server already wrote \`nebula-ui-studio/v0-prompt.md\`; refresh it if routes/design changed.
-- **UI styling:** Follow Master Plan §2 competitor research + §5 only. **Do NOT** copy Nebulla IDE / nebulla.dev product chrome (#080A14, #00D4D4, builder sidebar layout).
+Master Plan UI:
+- If **"4. Pages and navigation"** or **"5. UI/UX design"** need updates, include them in master-plan.json first, then refresh ui-brief.md.
+- **UI styling:** Follow §2 research + §5 tokens + ui-brief. **Do NOT** copy Nebulla IDE / nebulla.dev product chrome (#080A14, #00D4D4, builder sidebar layout).
 
 CRITICAL OUTPUT CONTRACT (no deviation):
 - Do NOT paste implementation as casual markdown code fences in chat — use file blocks the server can apply.
@@ -4105,14 +4251,16 @@ ${workflowContext}`;
             masterPlanPath: pp.masterPlanPath,
             projectName: convProject,
           });
-          const v0Sync = syncV0PromptFromMasterPlan(pp.workspaceRoot, pp.masterPlanPath);
-          mirrorV0PromptToStudioFile(pp, v0Sync.content);
+          const arts = syncUiArtifactsFromMasterPlan(pp.workspaceRoot, pp.masterPlanPath);
+          mirrorV0PromptToStudioFile(pp, arts.uiBrief.content || arts.v0Prompt.content);
           Object.assign(payload, {
-            v0PromptWritten: v0Sync.written,
-            v0PromptLength: v0Sync.content.length,
+            uiBriefWritten: arts.uiBrief.written,
+            uiBriefLength: arts.uiBrief.content.length,
+            v0PromptWritten: arts.v0Prompt.written,
+            v0PromptLength: arts.v0Prompt.content.length,
           });
         } catch (syncErr) {
-          console.warn("[go-code poll] v0 prompt sync failed:", syncErr);
+          console.warn("[go-code poll] ui-brief / v0 prompt sync failed:", syncErr);
         }
       }
       // Log once while result remains available for re-poll / apply.
@@ -4364,12 +4512,13 @@ Output in ONE reply, in this order:
    ### 5. UI/UX design
    Each section must be substantive (not placeholders).
    - §1: Project Type (Web App / Mobile App / Landing Page — infer best fit) + goal/users/scope.
-   - §2: Mandatory Research Pillars — **8–12 real, existing competitor product names** (never invent brands), ranked most-used features, evidence/studies or exact phrase "No supporting studies found for this feature.", UI patterns for the Project Type.
-   - §3: features + 3 measurable KPIs each from Pillar 2.
-   - §4: concrete pages as \`- **Name** (\`/route\`)\` with purpose and key actions (min 5 routes when Web/Mobile App).
-   - §5: 15–25 lines — hex palette, typography, nav for Project Type (no vague "modern/clean" alone).
-2) <FINISH_MASTERPLAN>
-3) <START_CODING>
+   - §2: Research Pillars — **8–12 real competitor names** (never invent), ranked features, evidence or "No supporting studies found for this feature.", UI patterns. **Auto-inject security baseline** if auth/private data (auth model, tenant/RLS, roles, secrets, PII, deny-by-default) even if user never asked.
+   - §3: MVP features + measurable KPIs (testable, not slogans).
+   - §4: each page with name, \`/route\`, purpose, primary_actions, data_entities, authz, empty_state, error_state, nav_links (min 5 routes when Web/Mobile App).
+   - §5: 15–25 lines tokens — hex palette, typography, density, nav (no vague "modern/clean" alone; no §4 dump).
+2) Immediately also emit \`\`\`file:nebula-ui-studio/ui-brief.md\` … \`\`\` combining full §4 page contracts + §5 tokens (primary UI input). V0/\`v0-prompt.md\` is optional legacy only.
+3) <FINISH_MASTERPLAN>
+4) <START_CODING> only if implementing; prefer plan+ui-brief first when greenfield.
 
 Optional: include ANSWER_Qn + <GROK_B_SUMMARY_Qn> for tabs as needed. After the tags, no extra user-visible prose.
 
@@ -4428,8 +4577,8 @@ ${answer.slice(0, 8000)}`;
         ].join("\n")
       : "";
     const modeBlock = buildMode
-      ? "BUILD_MODE: ON — architecture-first implementation. Master Plan only inside <START_MASTERPLAN>…</END_MASTERPLAN>. Code only as ```file:path``` blocks or START_CODING; never paste implementation as ```typescript``` in chat. Prefer smallest safe change; no hallucinated APIs. v0-prompt.md only as ```file:nebula-ui-studio/v0-prompt.md``` (concise); NEVER paste the v0 prompt text in visible chat prose."
-      : "CONVERSATION_MODE: ON — short natural prose only; no markdown code fences, v0 prompts, Master Plan bodies, or full file bodies in chat.";
+      ? "BUILD_MODE: ON — architecture-first implementation. Master Plan only inside <START_MASTERPLAN>…</END_MASTERPLAN>. After plan save write ```file:nebula-ui-studio/ui-brief.md``` (§4 + §5 tokens; primary UI input). Code only as ```file:path``` blocks or START_CODING; never paste implementation as ```typescript``` in chat. Prefer smallest safe change; no hallucinated APIs. Optional legacy: concise ```file:nebula-ui-studio/v0-prompt.md``` only if V0 path is used — NEVER paste UI brief / v0 prompt text in visible chat prose."
+      : "CONVERSATION_MODE: ON — short natural prose only; no markdown code fences, UI briefs, v0 prompts, Master Plan bodies, or full file bodies in chat.";
     const includeServerFileIndex =
       serverFileIndexBlock && !workspaceContextFromClient.includes("WORKSPACE_FILE_INDEX");
     const workspaceSystem = [workspaceBlock, rulesBlock, modeBlock, includeServerFileIndex ? serverFileIndexBlock : ""]

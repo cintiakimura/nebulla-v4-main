@@ -4,6 +4,9 @@ Nebulla is architecture-first. Analyze the user's input **and project state** (e
 
 **Also see:** `nebulla-project/chat-vs-agent-mode.md` — user-locked **Chat** (brainstorm) vs **Agent** (coding). That product toggle overrides coding/debug/UI execution while Chat is selected; detector modes still run for routing hints.
 
+**Product detector:** `src/lib/chatModeDetector.ts` (must stay aligned with this file).  
+**Complete plan checker:** `lib/masterPlanCompleteness.ts` → `isMasterPlanCompleteForDiscovery`.
+
 ## Mode sequence (strict)
 
 1. **Chat / Discovery**
@@ -18,23 +21,38 @@ Nebulla is architecture-first. Analyze the user's input **and project state** (e
 
 ## Master Plan gate (CRITICAL — overrides casual Free / File / “just build”)
 
-**Complete Master Plan** = all five sections present with substance, including **§2 Tech and Research** with Mandatory Research Pillars (competitors, features, evidence, UI patterns).
+**Complete Master Plan** = machine checklist in `nebula-project/project-execution-rules.md`:
 
-- If the project does **not** have a complete Master Plan (or research sections are missing):
-  - Enter / stay in **Discovery** before serious Architecture, Coding, or UI Generation.
-  - Opening a local file, opening GitHub, free chat, pasting code, or “just build something” does **NOT** permanently skip Discovery.
-  - File Ops may still open a preview, then return to Discovery (one clear question).
-  - Only skip full Discovery when a **solid, complete** Master Plan is already present.
-- Once the Master Plan is complete, normal Free Chat / Coding / File / Debugging / UI modes resume.
+- All five sections present with substance (not placeholders)
+- **§2** with Research Pillars **and** security baseline when the app has auth/private data
+- **§4** with real `/routes` and required page fields
+- **§5** token summary (palette + typography + density)
+- Product auto-writes **`nebula-ui-studio/ui-brief.md`** after plan save (agents should not skip asking for complete §4/§5)
 
-### Mandatory Research Pillars (always collect before Architecture / V0 when Discovery runs)
+Legacy thin plans are **not** complete. Soft/hard Go gates use `MASTER_PLAN_STRICT=off|warn|strict` (default `off`).
+
+**Signals that force Discovery when plan incomplete:**
+
+- New project / “just build” / “make an app”
+- Build / expand / continue / scaffold / implement / Go
+- Architecture / Master Plan refinement
+- UI Studio / UI Gen / mockup requests
+
+**May proceed without full Discovery:**
+
+- Clear debugging of an existing broken file (still nudge Discovery before greenfield)
+- Casual Free chat Q&A (discoveryRequired stays true for the model)
+
+File open / GitHub **does not** permanently skip Discovery.
+
+### Mandatory Research Pillars (before Architecture / UI when Discovery runs)
 
 1. Competitors — **8–12 real** products (actual names)
 2. Most used features across competitors
 3. Supporting data / studies (or exact: “No supporting studies found for this feature.”)
 4. Best UI/UX patterns for the target user + competition
 
-Pillars must influence Pages, Features, and the V0 prompt.
+Pillars must influence Pages, Features, §5 tokens, and **`ui-brief.md`**.
 
 ### Discovery question order (one question per reply)
 
@@ -54,14 +72,12 @@ What type of project are you building?
 - Other (please specify)
 ```
 
-Store project type and use it for page structure, navigation, UI/UX, and technical recommendations.
-
 ---
 
 ## A. CHAT / DISCOVERY (default + Guided when Master Plan incomplete)
 
 - **Triggers:** New project; incomplete Master Plan + build/architecture/UI intent; “just build”; general brainstorming
-- **Behavior:** Natural, warm, collaborative. **Exactly one clear question** per reply. Prefer depth and clarity over speed. Collect Research Pillars before coding architecture. Never dump Master Plan bodies or code fences in chat.
+- **Behavior:** Natural, warm, collaborative. **Exactly one clear question** per reply. Never dump Master Plan bodies or code fences in chat.
 
 ## B. ARCHITECTURE (Master Plan)
 
@@ -71,7 +87,7 @@ Store project type and use it for page structure, navigation, UI/UX, and technic
 ## C. CODING
 
 - **Triggers:** Write/implement/Go — **only** when Master Plan is complete **or** user explicitly requests a tiny fix after acknowledging incomplete plan (prefer Discovery first)
-- **Behavior:** `code-review-checklist.md` + `incremental-development.md` (one slice per Go: Build → Debug → Next); `file:` blocks and/or `START_CODING` / **Go**. Never casual code fences in chat. Never dump the full app when it can be sliced.
+- **Behavior:** `code-review-checklist.md` + `incremental-development.md` (one slice per Go); `file:` blocks and/or `START_CODING` / **Go**.
 
 ## D. DEBUGGING
 
@@ -80,7 +96,8 @@ Store project type and use it for page structure, navigation, UI/UX, and technic
 
 ## E. UI GENERATION
 
-- **Triggers:** UI Studio / v0 / mockup — requires research-grounded direction; if Master Plan incomplete → Discovery first
+- **Triggers:** UI Studio / UI Gen v2 / ui-brief / optional v0 / mockup — requires complete plan; if incomplete → Discovery first
+- **Behavior:** Primary input = `nebula-ui-studio/ui-brief.md` + §5 tokens
 
 ## F. FILE OPERATION MODE
 

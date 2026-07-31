@@ -6,7 +6,16 @@
 
 import fs from "fs";
 import path from "path";
-import { hydrateAndPersistMasterPlan, mindMapPagesFromMasterPlan } from "../../nebulaIdeWorkspaceArtifacts";
+import {
+  hydrateAndPersistMasterPlan,
+  mindMapPagesFromMasterPlan,
+  syncUiBriefFromMasterPlan,
+} from "../../nebulaIdeWorkspaceArtifacts";
+import {
+  extractDesignTokensFromUiBrief,
+  parsePagesFromUiBrief,
+  readUiBriefMarkdown,
+} from "../../nebulaUiBrief";
 import { MASTER_PLAN_SECTION_KEYS } from "../../masterPlanSections";
 import { writePreviewModel } from "../../visualUiEditorPreview";
 import { appendStepLog, writeContextFile } from "../contextIO";
@@ -380,7 +389,29 @@ export async function runUiGenerationCycleV2(
   const tech = section(plan, 2);
   const features = section(plan, 3);
   const pagesText = section(plan, 4);
-  const uiux = section(plan, 5);
+  let uiux = section(plan, 5);
+
+  /** Ensure primary ui-brief exists, then prefer its page contracts + design tokens. */
+  let uiBrief = "";
+  if (planExists && input.masterPlanPath) {
+    try {
+      const synced = syncUiBriefFromMasterPlan(workspaceRoot, input.masterPlanPath);
+      uiBrief = synced.content;
+    } catch {
+      uiBrief = readUiBriefMarkdown(workspaceRoot);
+    }
+  } else {
+    uiBrief = readUiBriefMarkdown(workspaceRoot);
+  }
+  const briefTokens = extractDesignTokensFromUiBrief(uiBrief);
+  if (briefTokens.trim().length > 40) {
+    uiux = briefTokens;
+  }
+  const briefPages = parsePagesFromUiBrief(uiBrief).map((p) => ({
+    name: p.name,
+    route: p.route,
+    body: p.body,
+  }));
 
   const fileFacts = collectWorkspaceFileFacts(workspaceRoot, input.writtenPaths);
   state.file_scanned = fileFacts.scanned_files;
@@ -389,9 +420,12 @@ export async function runUiGenerationCycleV2(
   state.file_headings = fileFacts.headings;
 
   const pages = mergePages(
-    pagesFromMasterPlan(plan, state.project_name, pagesText),
+    briefPages.length > 0 ? briefPages : pagesFromMasterPlan(plan, state.project_name, pagesText),
     pagesFromFileFacts(fileFacts),
   );
+  if (uiBrief) {
+    appendStepLog(state, `Using ui-brief.md (${uiBrief.length} chars) as primary UI input`);
+  }
   const hasGoal = hasUsableGoal(goal, tech, features, state.project_name, fileFacts);
   const hasPage = pages.length >= 1;
   const fileGrounded = hasMeaningfulUiFileGrounding(fileFacts);
@@ -436,9 +470,18 @@ export async function runUiGenerationCycleV2(
     state.project_type = "Mobile App";
   }
   state.priority_features = extractBullets(features, 8);
-  state.primary_actions = extractBullets(chosen.body, 6)
-    .filter((a) => a.length <= 40 && !a.includes("/"))
-    .slice(0, 2);
+  const primaryFromBrief = chosen.body.match(/primary[_ ]?actions?\s*:\s*(.+)/i);
+  if (primaryFromBrief?.[1]) {
+    state.primary_actions = primaryFromBrief[1]
+      .split(/[,;]/)
+      .map((s) => s.replace(/\*\*/g, "").trim())
+      .filter((s) => s.length >= 2 && s.length <= 48 && !s.includes("/"))
+      .slice(0, 3);
+  } else {
+    state.primary_actions = extractBullets(chosen.body, 6)
+      .filter((a) => a.length <= 40 && !a.includes("/"))
+      .slice(0, 2);
+  }
   if (fileFacts.button_labels[0] && !state.primary_actions.length) {
     state.primary_actions = [fileFacts.button_labels[0]];
   }

@@ -1,4 +1,5 @@
 import fs from "fs";
+import path from "path";
 import {
   MASTER_PLAN_SECTION_KEYS,
   masterPlanKeyForTabIndex,
@@ -8,9 +9,16 @@ import {
   fillMissingMasterPlanSectionsLocal,
   listMissingMasterPlanSections,
   readMasterPlanFile,
+  syncUiBriefFromMasterPlan,
 } from "./nebulaIdeWorkspaceArtifacts";
+import {
+  assessMasterPlanCompleteness,
+  readMasterPlanStrictMode,
+  type MasterPlanCompletenessResult,
+} from "./masterPlanCompleteness";
 
 export { listMissingMasterPlanSections, fillMissingMasterPlanSectionsLocal };
+export { assessMasterPlanCompleteness, readMasterPlanStrictMode };
 
 export function persistParsedMasterPlanSections(
   masterPlanPath: string,
@@ -50,7 +58,7 @@ export async function synthesizeMasterPlanSectionsWithGrok(opts: {
   const missing = listMissingMasterPlanSections(opts.planSnapshot);
   if (missing.length === 0) return { written: [] };
 
-  const system = `You are Grok 4 (Master Plan writer only). Follow nebula-project/project-execution-rules.md.
+  const system = `You are Grok 4 (Master Plan writer only). Follow nebula-project/project-execution-rules.md (Master Plan contract).
 
 Output EXACTLY one block: <START_MASTERPLAN>...</END_MASTERPLAN>
 
@@ -63,11 +71,11 @@ Inside, use these five headers exactly (### prefix recommended):
 
 Rules:
 - Synthesize ALL five sections from discovery — implementation-grade depth, no empty placeholders.
-- §1: state Project Type (Web App / Mobile App / Landing Page) clearly; goal + users + scope only.
-- §2: Mandatory Research Pillars — **8–12 real competitor product names** (never invent), ranked most-used features, evidence/studies or exact phrase "No supporting studies found for this feature.", plus UI/UX patterns for the Project Type.
-- §3: features with measurable KPIs derived from Pillar 2 ranking.
-- §4: every page as \`- **Name** (\`/route\`)\` — up to 12 routes; purpose + roles + key actions (drives Mind Map). Vague pages forbidden.
-- §5: **15–25 lines max** — concrete palette (hex), typography, nav pattern for Project Type; NO code; NO copy-paste of §4.
+- §1: Project Type (Web App / Mobile App / Landing Page) + goal + users + in/out of scope only.
+- §2: Research Pillars — **8–12 real competitor names** (never invent), ranked features, evidence or exact "No supporting studies found for this feature.", UI patterns. **Also auto-inject security baseline** when auth/private data applies: auth model, tenant/RLS (or equivalent), roles, secrets, PII, deny-by-default — even if the user never asked.
+- §3: MVP features as verbs + **testable** KPIs (not slogans).
+- §4: every page with required fields — name, route \`/path\`, purpose, primary_actions, data_entities, authz, empty_state, error_state, nav_links. This drives Mind Map + ui-brief. Vague page-name lists forbidden.
+- §5: **15–25 lines max** — mood, hex palette, typography, density, radius, motion, component style, nav pattern. NO code; NO §4 copy; page detail belongs in ui-brief.md (written after plan save).
 - Research must visibly shape §4/§5. Do NOT emit START_CODING, file blocks, or chat prose outside the tags.`;
 
   const user = `Project: ${opts.projectName}
@@ -143,9 +151,15 @@ export async function ensureMasterPlanBeforeGo(opts: {
   memoryContent: string;
   projectName: string;
   userNote?: string;
-}): Promise<{ written: string[]; source: "local" | "grok" | "none" }> {
+}): Promise<{
+  written: string[];
+  source: "local" | "grok" | "none";
+  completeness: MasterPlanCompletenessResult;
+}> {
   const thinSections = listMissingMasterPlanSections(opts.planSnapshot);
   const hasMemory = opts.memoryContent.trim().length > 200;
+  let written: string[] = [];
+  let source: "local" | "grok" | "none" = "none";
 
   if (hasMemory && thinSections.length > 0) {
     const grok = await synthesizeMasterPlanSectionsWithGrok({
@@ -153,18 +167,45 @@ export async function ensureMasterPlanBeforeGo(opts: {
       planSnapshot: opts.planSnapshot,
     });
     if (grok.written.length > 0) {
-      return { written: grok.written, source: "grok" };
+      written = grok.written;
+      source = "grok";
     }
   }
 
-  const local = fillMissingMasterPlanSectionsLocal({
-    workspaceRoot: opts.workspaceRoot,
-    masterPlanPath: opts.masterPlanPath,
-    projectName: opts.projectName,
-    userNote: opts.userNote,
-  });
-  if (local.updated.length > 0) {
-    return { written: local.updated, source: "local" };
+  if (written.length === 0) {
+    const local = fillMissingMasterPlanSectionsLocal({
+      workspaceRoot: opts.workspaceRoot,
+      masterPlanPath: opts.masterPlanPath,
+      projectName: opts.projectName,
+      userNote: opts.userNote,
+    });
+    if (local.updated.length > 0) {
+      written = local.updated;
+      source = "local";
+    }
   }
-  return { written: [], source: "none" };
+
+  let planForAssess = opts.planSnapshot;
+  if (written.length > 0) {
+    try {
+      planForAssess = readMasterPlanFile(opts.masterPlanPath);
+    } catch {
+      planForAssess = opts.planSnapshot;
+    }
+  }
+
+  try {
+    syncUiBriefFromMasterPlan(opts.workspaceRoot, opts.masterPlanPath);
+  } catch {
+    /* brief sync best-effort before completeness */
+  }
+
+  const completeness = assessMasterPlanCompleteness({
+    plan: planForAssess,
+    mode: readMasterPlanStrictMode(),
+    workspaceRoot: opts.workspaceRoot,
+    checkUiBrief: true,
+  });
+
+  return { written, source, completeness };
 }

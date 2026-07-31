@@ -41,8 +41,11 @@ These names and **values are shared across the Nebulla deployment** (ops-owned).
 | `FIGMA_API_KEY` | Optional. Figma token for UI Generation Engine v2 (file read). Alone is not enough — see `FIGMA_REFERENCE_FILE_KEYS`. |
 | `FIGMA_REFERENCE_FILE_KEYS` | Comma-separated **design** file keys (`figma.com/design/<KEY>/...`). Community catalog IDs 404 until duplicated. See `docs/figma-reference-library.md`. |
 | `FIGMA_REFERENCE_MAX_FILES` | Optional. How many keys to probe (default 3). |
+| `MASTER_PLAN_STRICT` | Master Plan completeness gate: `off` (default if unset) \| `warn` \| `strict`. Gaps via `GET /api/master-plan/status`. Rollout: local/staging `warn` → prod `strict` for new projects. See `CHANGELOG-methodology.md` Phase G. |
 
 Optional related keys: `PENCIL_API_URL`, model overrides such as `GROK_B_MODEL` — see `.env.example` and server code.
+
+**UI path note:** UI Gen Beta uses `nebula-ui-studio/ui-brief.md` (auto from Master Plan). `V0_API_KEY` is optional legacy only.
 
 ---
 

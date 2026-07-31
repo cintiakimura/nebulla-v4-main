@@ -8,9 +8,10 @@ Grok MUST scan this list mentally before every code output or file block.
 3. Missing or wrong environment variables / API keys
 4. HTTP errors (404, 400, 401, 403, 429, 500, CORS)
 5. Security issues (SQL/command injection, hardcoded secrets, auth bypass)
-6. Boundary / off-by-one / empty / null inputs
-7. React hydration mismatches or state issues
-8. Performance (infinite loops, memory leaks, N+1 queries)
+6. **Multi-tenant / RLS** — private rows scoped; no cross-workspace reads (honor Master Plan security baseline)
+7. Boundary / off-by-one / empty / null inputs (and §4 empty/error states when building UI)
+8. React hydration mismatches or state issues
+9. Performance (infinite loops, memory leaks, N+1 queries)
 
 ## Medium Priority
 - Concurrency / race conditions

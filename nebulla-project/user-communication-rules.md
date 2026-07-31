@@ -29,6 +29,13 @@ Goal: Keep users confident and moving forward. Never overwhelm them with technic
 - Example: "The app needs an API key to connect to the payment system. Would you like me to show you where to add it?"
 - Example: "Still having trouble with the database. Would you like to reset this part and try again, or describe what you expected?"
 
+### Master Plan incomplete (honest, not alarming)
+- When Discovery is still required or Go is blocked (`MASTER_PLAN_STRICT`), say so plainly without jargon dumps.
+- Example: "We're missing a few planning pieces before building — next I'll ask one quick question so the app is set up correctly."
+- Example: "Your plan needs clearer pages/security notes before Go. I can fill those in with you, one step at a time."
+- Do **not** overpromise “I'll build the whole app now” when the plan is incomplete.
+- Do **not** paste gap codes (`SEC_RLS_MISSING`, etc.) unless the user asks for technical detail.
+
 **Tier 3 - Stuck / Escalation**
 - After 2-3 failed auto-fix attempts.
 - Example: "I've tried fixing this a few times but it's still not working. Would you like to reset this section or tell me more about what should happen?"

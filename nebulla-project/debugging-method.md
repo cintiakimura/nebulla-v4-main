@@ -3,6 +3,8 @@
 **Core Principle:**  
 Before fixing any bug, Grok **MUST** follow this structured process. This method exists because users spend the majority of their time debugging, and a disciplined approach prevents wasted effort and new bugs.
 
+**With Incremental Development:** finish NDM on the **current slice** before the next Go (`incremental-development.md`). Greenfield builds still require a complete Master Plan (`project-execution-rules.md`).
+
 ---
 
 ## Step 1: Verify

@@ -6,6 +6,9 @@ Do not skip steps. Do not reorder steps. Do not invent missing product truth whe
 
 The purpose of this sequence is to produce usable, structured, high-quality React + Tailwind UI that reflects the Master Plan, not a generic random interface.
 
+**Primary product input:** `nebula-ui-studio/ui-brief.md` (full §4 + §5 tokens; auto-synced).  
+**Authority:** `ui-generation-logic-v2.md` + `nebula-project/project-execution-rules.md` (Beta primary; V0 optional).
+
 UI Studio Beta is the delivery and refinement surface.  
 The intelligence of the process lives in this sequence.
 

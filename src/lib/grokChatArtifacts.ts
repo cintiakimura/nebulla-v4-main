@@ -54,8 +54,11 @@ function buildIdeChatFallbackSummary(filePaths: string[], hadMasterPlan: boolean
   const hasV0 = uniq.some((p) => /v0-prompt\.md$/i.test(p));
   const parts: string[] = [];
   if (hadMasterPlan) parts.push('Master Plan saved to your project tabs.');
-  if (hasV0) {
-    parts.push('v0 prompt saved to the project — UI Studio runs the first UI pass automatically.');
+  const hasBrief = uniq.some((p) => /ui-brief\.md$/i.test(p));
+  if (hasBrief) {
+    parts.push('UI brief saved — ready for UI Gen Beta / Studio.');
+  } else if (hasV0) {
+    parts.push('v0 prompt saved (optional legacy path).');
   }
   const other = uniq.filter((p) => !/v0-prompt\.md$/i.test(p));
   if (other.length > 0) {
@@ -216,7 +219,7 @@ IDE CHAT SURFACE (project-execution-rules.md — strict):
 - **Two surface modes:** CONVERSATION_MODE (default) vs BUILD_MODE (build/fix/implement/Go).
 - **CONVERSATION_MODE:** Short natural prose only. **NEVER** output \`\`\`typescript\`, \`\`\`jsx\`, \`\`\`python\`, SQL, or any multi-line code in chat — the only valid code format is \`\`\`file:relative/path\` … \`\`\`. If the user asks you to show/write code, reply with one short sentence telling them to press **Go**.
 - **BUILD_MODE (UNCHANGED CORE — Master Plan + Go Code):** Master Plan only inside \`<START_MASTERPLAN>…</END_MASTERPLAN>\` (server persists to master-plan.json). Implementation only as \`\`\`file:relative/path\` … \`\`\` and/or \`START_CODING\` — server writes files under workspaceRoot. Never dump code in conversational prose in the same turn. Architecture-first: code-review-checklist.md, smallest safe change, no hallucinated APIs/paths.
-- **v0 prompt (critical):** Write \`nebula-ui-studio/v0-prompt.md\` only as a \`\`\`file:…\`\`\` block (800–1200 chars). **Never paste the v0 prompt body in chat** — the UI hides file blocks; users must not see routes, palette, or page specs in the chat bubble. After Master Plan, one short line in chat is enough (e.g. "Master Plan saved — starting UI pipeline.").
+- **UI brief (critical):** After Master Plan, write \`nebula-ui-studio/ui-brief.md\` as a \`\`\`file:…\`\`\` block (§4 page contracts + §5 tokens — primary UI Gen v2 input). **Never paste the brief body in chat**. Optional legacy: concise \`v0-prompt.md\` (800–1200 chars) only if V0 path is used. One short chat line is enough (e.g. "Master Plan saved — writing UI brief.").
 - **Never use** \`"""\`file:\` or triple-quote fences — use standard \`\`\`file:path\` only.
 - If unsure which mode: stay in CONVERSATION_MODE / Free Chat and ask one clarifying question, or tell the user to press **Go** for build mode.
 ${masterPlanSectionSeparationRules()}
@@ -225,10 +228,11 @@ ${masterPlanSectionSeparationRules()}
 export function buildModeSystemAppendix(): string {
   return `
 BUILD_MODE is active for this turn. Do not explain code in chat — emit file artifacts. Required when implementing:
-1) Optional \`<START_MASTERPLAN>…</END_MASTERPLAN>\` if the plan changed — use all five section headers (see MASTER PLAN SECTION SEPARATION).
-2) \`START_CODING\` on its own line when ready.
-3) One or more \`\`\`file:relative/path\` … \`\`\` blocks for the **current slice only** (Build → Debug → Next). Prefer foundation/auth/core feature slices over the entire §4 route map in one turn.
-4) Optional \`\`\`file:nebula-ui-studio/v0-prompt.md\` … \`\`\` — **concise v0 brief only (800–1200 chars max)**. Bullet summary: app one-liner, up to 8 \`/routes\`, palette/fonts/layout, shadcn+Tailwind output. **Never paste full Master Plan §4 or §5** (server also caps length; long prompts fail and waste v0 credits).
+1) Optional \`<START_MASTERPLAN>…</END_MASTERPLAN>\` if the plan changed — use all five section headers (see MASTER PLAN SECTION SEPARATION). Include security baseline in §2 when auth/data applies.
+2) \`\`\`file:nebula-ui-studio/ui-brief.md\` … \`\`\` — full §4 page contracts + §5 tokens (primary UI input).
+3) \`START_CODING\` on its own line when ready.
+4) One or more \`\`\`file:relative/path\` … \`\`\` blocks for the **current slice only** (Build → Debug → Next). Prefer foundation/auth/core feature slices over the entire §4 route map in one turn.
+5) Optional legacy only: \`\`\`file:nebula-ui-studio/v0-prompt.md\` … \`\`\` — concise distill (800–1200 chars) if V0 is configured. Prefer ui-brief for Beta UI Gen.
 `.trim();
 }
 
@@ -377,7 +381,7 @@ export function chatModeSystemAppendix(options: {
 
   if (mode === 'ui' && !discoveryRequired && interactionMode === 'agent') {
     parts.push(
-      `ACTIVE MODE: UI GENERATION — Ground v0 / UI Studio in §2 research (real competitors + UI patterns) + Project Type + §4 routes + §5 visuals. No vague "modern/clean" alone. Keep v0-prompt.md 800–1200 chars. User-facing UI copy language = CONTENT_LOCALE (${contentLocale}).`,
+      `ACTIVE MODE: UI GENERATION — Primary: UI Gen v2 from nebula-ui-studio/ui-brief.md + §5 tokens (+ §2 research, §4 routes). Optional legacy v0-prompt.md only if V0 configured. No vague "modern/clean" alone. User-facing UI copy language = CONTENT_LOCALE (${contentLocale}).`,
     );
   }
 

@@ -1,162 +1,111 @@
 # Nebula UI Studio
 
-**Nebula UI Studio** = IDE **UI Studio** tab: first **automatic v0** UI → visual edit → **Apply Changes to All Pages** → Grok writes repo code.
+**Nebula UI Studio** = IDE **UI Studio** tab: generate UI → visual edit → **Apply Changes to All Pages** → Grok writes repo code.
 
 | Document | Role |
 |----------|------|
-| **`project-execution-rules.md`** | **MUST / MUST NOT** — Grok’s law |
-| **`project-workflow.md`** | When each step runs in the project lifecycle |
-| **This file** | Paths, studio UI, step-by-step contracts |
+| **`project-execution-rules.md`** | **MUST / MUST NOT** — Grok’s law (wins on conflict) |
+| **`project-workflow.md`** | Lifecycle pointer |
+| **`nebulla-project/ui-generation-logic-v2.md`** | UI Gen Beta (primary engine) |
+| **This file** | Paths, studio load list, Apply contract |
 
 ---
 
-## Workflow diagram (strict sequence)
-
-**Grok and the product MUST follow this exact order. No reordering or skipping is allowed.**
+## Workflow diagram (aligned with execution-rules)
 
 ```
 Interview done
-    → Master Plan (exactly 5 sections with ### headers; §5 ≤ 15–25 lines concise summary)
-    → Mind Map sync (from §4 Pages and navigation ONLY)   ← MUST NOT wait for §5 or v0
-    → nebula-ui-studio/v0-prompt.md (detailed, §4 + §5 combined) ← IMMEDIATELY after Master Plan
-    → V0 API triggered automatically (using v0-prompt.md as sole input)
-    → v0-original/<timestamp>/ saved (immutable restore copy)
-    → Nebula UI Studio loads (§5 + v0-prompt.md + generated UI) for manual editing
-    → User edits visually → "Apply Changes to All Pages" (warning + explicit confirmation)
-    → Grok implements via file: blocks → App Preview updated
+    → Master Plan (5 sections; §5 ≤ 15–25 lines tokens)
+    → Mind Map sync (from §4 ONLY)   ← MUST NOT wait for UI
+    → nebula-ui-studio/ui-brief.md   ← §4 page contracts + §5 tokens (PRIMARY)
+    → UI Gen v2 (Beta) when ready
+    → [optional legacy] v0-prompt.md distill → V0 API → v0-original/<timestamp>/
+    → UI Studio loads (§5 + ui-brief + generated UI)
+    → User edits → Apply Changes (warning + confirm)
+    → Grok file: blocks → App Preview updated
 ```
 
-**This is the only valid sequence.** Any deviation (especially skipping v0-prompt.md creation or the automatic V0 trigger) is a violation.
+Full MUST/MUST NOT: **`project-execution-rules.md`** (Rules UI-1…UI-4, MM-1).
 
 ---
 
-## Mandatory 6-Step UI/UX Generation Process (Grok MUST)
+## Rule 1 — §5 UI/UX Design (tokens only)
 
-1. **Master Plan complete** — Grok emits the five sections. §5 is a short visual summary only (15–25 lines max).
-2. **Create `v0-prompt.md`** — Grok **immediately** writes a concise but detailed prompt (800–1200 chars) combining §4 + §5 and saves it to `nebula-ui-studio/v0-prompt.md`.
-3. **Trigger V0 API** — Grok **immediately** calls the V0 API using the saved prompt file as the **only** source.
-4. **Save original output** — Product writes the first v0 result to the immutable folder `nebula-ui-studio/v0-original/<timestamp>/`.
-5. **Open in UI Studio** — Product loads §5 + `v0-prompt.md` + the generated UI into the visual editor. User performs manual edits.
-6. **Apply Changes** — On user confirmation of "Apply Changes to All Pages", Grok writes the approved changes into the actual source files using proper `file:` blocks and updates the live preview.
-
-**Grok MUST NOT** write large code blocks in chat at any point. All implementation goes through the file apply mechanism.
-
----
-
-## Rule 1 — Master Plan: UI/UX Design (Grok MUST)
-
-**Section key:** `"5. UI/UX design"` (shown in UI as **UI/UX Design**).
+**Section key:** `"5. UI/UX design"`.
 
 | | |
 |-|-|
-| **Grok MUST** | Keep this section **short and concise** |
-| **Maximum** | **15–25 lines** total |
-| **Grok MUST** | Cover: mood, palette, typography, spacing/density, radius, motion, component style |
-| **Grok MUST NOT** | Exceed 25 lines (unless user explicitly requests more) |
-| **Grok MUST NOT** | Dump **long text** into UI/UX Design |
-| **Grok MUST NOT** | Put **code** (JSX, HTML, CSS, fences) in UI/UX Design |
-| **Grok MUST NOT** | **Copy** content from **Pages and navigation** (§4) or other sections into UI/UX Design |
+| **Maximum** | **15–25 lines** |
+| **MUST** | Mood, palette, typography, density, radius, motion, component style, nav pattern |
+| **MUST NOT** | Long prose; code; copy of §4; the UI brief |
 
-All page structure, routes, and flows **MUST** stay in **§4 Pages and navigation** only.
+Page structure stays in **§4** and **`ui-brief.md`**.
 
 ---
 
-## Rule 2 — Backend v0 prompt (Grok MUST — immediately after Master Plan)
+## Rule 2 — UI brief (primary — immediately after Master Plan)
 
-**Trigger:** The instant the Master Plan is saved (§1–§5 complete, §5 within line limit).
+**Path:** `nebula-ui-studio/ui-brief.md`  
+**Create via:** ` ```file:nebula-ui-studio/ui-brief.md` ` or server hook after Master Plan persist.
 
-| Step | Grok MUST |
-|------|-----------|
-| 1 | Read **full** **"4. Pages and navigation"** |
-| 2 | Read **full** **"5. UI/UX design"** (short summary) |
-| 3 | Merge into one **detailed** v0-ready prompt (all pages, stack: React + Tailwind + shadcn/ui + Lucide) |
-| 4 | Save to **`nebula-ui-studio/v0-prompt.md`** |
+**MUST include:** every §4 page (required page fields) + §5 tokens + authz/UI security notes.  
+**MUST NOT:** put the full brief only in §5 or only in chat.
 
-| Grok MUST NOT |
-|---------------|
-| Delay this step until chat ends without writing the file |
-| Put the detailed prompt only in §5 or only in chat |
-| Skip §4 or §5 when building the prompt |
-
-**File path (exact):** `nebula-ui-studio/v0-prompt.md`  
-**Create via:** `\`\`\`file:nebula-ui-studio/v0-prompt.md\` … \`\`\`` or server hook after Master Plan persist.
-
-**Legacy mirror (optional):** `NEBULA_UI_STUDIO_PROMPT` comment block at the bottom of this document.
+Legacy mirror (optional): `NEBULA_UI_STUDIO_PROMPT` comment block at the bottom of this document (prefer mirroring **ui-brief**, or v0 distill if legacy path).
 
 ---
 
-## Rule 3 — v0 trigger (Grok MUST — immediately after `v0-prompt.md`)
+## Rule 3 — V0 optional legacy
 
-**Trigger:** The instant `nebula-ui-studio/v0-prompt.md` exists on disk.
+Only when `V0_API_KEY` is set and the V0 path is opted in:
 
-| # | Actor | MUST |
-|---|--------|------|
-| 1 | Grok / product | **Automatically** call **V0 API** (first pass — no extra user click) |
-| 2 | Product | Use **`v0-prompt.md`** as the **sole** prompt for first full generation |
-| 3 | Product | Write UI files into workspace (`app/`, `src/`, `pages/`, `components/`, `public/`) |
-| 4 | Product | Copy **original** v0 tree to **`nebula-ui-studio/v0-original/<timestamp>/`** |
-| 5 | Everyone | **MUST NOT** edit `v0-original/<timestamp>/` later (restore-only) |
+1. Distill ui-brief → `nebula-ui-studio/v0-prompt.md` (800–1200 chars, max 1500).  
+2. Trigger V0; save `nebula-ui-studio/v0-original/<timestamp>/` (immutable).  
+3. **MUST NOT** paste v0 output in chat.  
 
-**Timestamp format (example):** `2026-05-25T14-30-00Z` → folder `nebula-ui-studio/v0-original/2026-05-25T14-30-00Z/`
-
-**Grok MUST NOT** paste v0 output in chat. **V0_API_KEY** **MUST** be set.
+If V0 is not configured, skip this rule — UI Gen v2 + ui-brief is success.
 
 ---
 
-## Rule 4 — Nebula UI Studio (product MUST)
+## Rule 4 — What the studio MUST load
 
-### What the studio MUST load
-
-| Priority | Source | Purpose |
-|----------|--------|---------|
-| 1 | Master Plan **"5. UI/UX design"** | Display visual direction to the user |
-| 2 | **`nebula-ui-studio/v0-prompt.md`** | Full brief; per-page v0 regen context |
-| 3 | First v0 + `generated-ui/visual-editor/preview-model.json` | Editable canvas |
-
-**Product MUST NOT** open studio without (1) and (2) when files exist.  
-**Product MUST NOT** require a long §5 before studio opens.
+| Priority | Source | Required |
+|----------|--------|----------|
+| 1 | Master Plan §5 | YES |
+| 2 | **`nebula-ui-studio/ui-brief.md`** | YES (primary) |
+| 3 | Generated UI (v2 and/or legacy v0) + preview model | When present |
+| 4 | `v0-prompt.md` | Only if legacy V0 path ran |
 
 ### Manual editing (product MUST support)
 
-- Drag / resize elements  
-- Edit text, colors, spacing, typography  
-- **Per-page v0 regen** (optional — saves credits vs full app regen)
+- Drag / resize; edit text, colors, spacing, typography  
+- Optional per-page regen  
 
 ### Apply Changes to All Pages (product MUST)
 
-| Step | Requirement |
-|------|-------------|
-| 1 | User clicks **Apply Changes to All Pages** (label may be **Save Changes & Update Code**) |
-| 2 | Product **MUST** show a **clear warning**: workspace files will be overwritten; prior files may be archived under `generated-ui/versions/<timestamp>/` |
-| 3 | User **MUST** confirm to proceed |
-| 4 | Cancel **MUST** abort all file writes |
-| 5 | After confirm → Grok/server apply (Rule 5 below) |
-
-**Grok MUST NOT** apply to disk without this confirmation in the UI Studio flow.
+1. User clicks Apply (or **Save Changes & Update Code**).  
+2. **Clear warning** (workspace may change; may archive under `generated-ui/versions/<timestamp>/`).  
+3. User **confirms** — Cancel = no writes.  
+4. Then Grok/server apply via `file:` / `START_CODING`.  
 
 ---
 
 ## Rule 5 — Grok implements code (after Apply confirm)
 
-1. Grok receives approved studio / visual model.  
-2. **MUST** emit `\`\`\`file:relative/path\` … \`\`\`` or `START_CODING`.  
-3. **MUST NOT** dump large code in chat.  
-4. **App Preview MUST** refresh.
-
-Update `NEBULA_UI_STUDIO_CODE` (below) after successful apply if the product uses it.
+1. Emit ` ```file:relative/path` ` or `START_CODING`.  
+2. **MUST NOT** dump large code in chat.  
+3. App Preview refreshes.  
+4. Update `NEBULA_UI_STUDIO_CODE` below after successful apply if used.
 
 ---
 
-## Rule 6 — Mind Map (exclusive §4 — MUST NOT wait for UI/UX or v0)
+## Rule 6 — Mind Map (exclusive §4)
 
 | MUST | MUST NOT |
 |------|----------|
-| Generate **exclusively** from **"4. Pages and navigation"** | Wait for **UI/UX Design** (§5) |
-| Sync when §4 is saved | Wait for `v0-prompt.md` |
-| Parse routes as `` `/path` `` in §4 | Wait for v0 generation |
-| | Use §5 or v0 files as primary Mind Map source |
-
-Mind Map is **independent** of Rules 1–4 timing except it shares §4 content.
+| Generate only from §4 | Wait for §5 / ui-brief / v0 |
+| Sync when §4 is saved | Invent pages absent from §4 |
+| Parse `` `/path` `` routes | Use §5 or UI output as primary source |
 
 ---
 
@@ -164,13 +113,11 @@ Mind Map is **independent** of Rules 1–4 timing except it shares §4 content.
 
 | Path | Required | Role |
 |------|----------|------|
-| `nebula-ui-studio/v0-prompt.md` | **YES** | Detailed v0 brief (§4 + §5) |
-| `nebula-ui-studio/v0-original/<timestamp>/` | **YES** | Immutable first v0 snapshot |
+| `nebula-ui-studio/ui-brief.md` | **YES** (after complete plan) | Primary UI input (§4 + §5) |
+| `nebula-ui-studio/v0-prompt.md` | Optional legacy | Distill for V0 only |
+| `nebula-ui-studio/v0-original/<timestamp>/` | If V0 ran | Immutable first v0 snapshot |
 | `generated-ui/visual-editor/preview-model.json` | product | Mutable editor |
 | `generated-ui/versions/<timestamp>/` | product | Pre-apply backup |
-| `nebula-project/nebula-ui-studio.md` | docs | This file |
-
-**Restore:** Copy from `v0-original/<timestamp>/` → live workspace (UI action only).
 
 ---
 
@@ -186,17 +133,17 @@ NEBULA_UI_STUDIO_CODE
 No approved UI code yet.
 -->
 
-- `NEBULA_UI_STUDIO_PROMPT` — **SHOULD** mirror `v0-prompt.md`  
+- `NEBULA_UI_STUDIO_PROMPT` — **SHOULD** mirror `ui-brief.md` (or `v0-prompt.md` on legacy path)  
 - `NEBULA_UI_STUDIO_CODE` — last applied UI; updated after Apply + Grok apply
 
 ---
 
-## Grok quick reference (crystal clear)
+## Grok quick reference
 
-1. **Separate** five Master Plan sections.  
-2. **UI/UX Design** = **15–25 lines max** — **no** long text, **no** code, **no** §4 copy.  
-3. **Immediately** write **`nebula-ui-studio/v0-prompt.md`** = §4 + §5.  
-4. **Immediately** trigger **V0** from that file → save **`v0-original/<timestamp>/`**.  
-5. **Mind Map** = **§4 only** — **never** wait for UI/UX or v0.  
-6. **UI Studio** = §5 + `v0-prompt.md` → edit → **Apply** with **warning** → file apply.  
-7. **Never** dump code or Master Plan in chat.
+1. Five Master Plan sections (see execution-rules contract).  
+2. §5 = **15–25 lines** tokens only.  
+3. **Immediately** write **`ui-brief.md`**.  
+4. UI Gen v2 primary; V0 only if optional.  
+5. Mind Map = §4 only.  
+6. Studio Apply = warning → confirm → file apply.  
+7. Never dump code or Master Plan in chat.

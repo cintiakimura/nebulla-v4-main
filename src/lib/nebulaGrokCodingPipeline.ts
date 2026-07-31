@@ -5,6 +5,7 @@ import { cancelProjectBackgroundJobs } from './ideProjectReset';
 import type { GrokActivityProgressFn } from './ideGrokActivityStatus';
 import { startGrokActivityWaitTicker } from './ideGrokActivityStatus';
 import { getGrokRequestHeaders } from './grokUserKey';
+import { formatGoBlockedByPlanMessage } from './masterPlanStatus';
 import { withProjectBody, withProjectQuery } from './nebulaProjectApi';
 import { triggerUiStudioBetaAfterFilesApplied } from './uiStudioBetaEngine';
 
@@ -308,7 +309,7 @@ async function kickGoCodeJob(options: {
       return await pollGoCodeUntilDone(projectName, onProgress);
     }
 
-    const data = await fetchJson<GoCodePayload>(withProjectQuery('/api/grok/go-code'), {
+    const goRes = await fetch(withProjectQuery('/api/grok/go-code'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...getGrokRequestHeaders() },
       credentials: 'include',
@@ -322,6 +323,27 @@ async function kickGoCodeJob(options: {
         }),
       ),
     });
+    const data = await readResponseJson<
+      GoCodePayload & {
+        code?: string;
+        masterPlanCompleteness?: {
+          gaps?: { code: string; section: string; severity: 'warn' | 'block'; message: string; remediation: string }[];
+          mode?: string;
+        };
+      }
+    >(goRes);
+    if (!goRes.ok) {
+      if (data.code === 'MASTER_PLAN_INCOMPLETE' || goRes.status === 409) {
+        const friendly = formatGoBlockedByPlanMessage(data);
+        onProgress?.(friendly.split('\n')[0] || 'Master Plan incomplete', 'warn');
+        throw new Error(friendly);
+      }
+      const msg =
+        typeof data.error === 'string' && data.error
+          ? data.error
+          : `Go Code failed (${goRes.status})`;
+      throw new Error(msg);
+    }
 
     if (data.pending && data.coding) {
       onProgress?.(
@@ -513,7 +535,8 @@ export async function runGoCodeAndApply(options: {
     };
   } catch (e) {
     const msg = e instanceof Error ? e.message : 'Go Code request failed';
-    onProgress?.(msg, 'error');
+    const planBlocked = /Go is paused|planning pieces|Master Plan incomplete/i.test(msg);
+    onProgress?.(msg, planBlocked ? 'warn' : 'error');
     return { ok: false, statusMessage: msg, totalWritten: 0 };
   }
 }

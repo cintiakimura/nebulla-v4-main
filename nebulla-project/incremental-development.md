@@ -2,29 +2,36 @@
 
 **Goal:** Maximize code quality and token efficiency by implementing and validating small coherent slices instead of generating large amounts of code at once.
 
+**Authority:** Keep in sync with `nebula-project/project-execution-rules.md` (Incremental Development + Master Plan contract).  
+**Complete plan first:** Do not greenfield-dump code when Discovery / Master Plan is incomplete (`chat-mode-detection.md`, `MASTER_PLAN_STRICT`).
+
 ## Core Rule
 
 Never implement the entire application in one large generation when it can be broken into clear slices.  
 Prefer: **Build one slice → Debug/Validate that slice → Only then move to the next slice.**
 
+Each **Go** / `START_CODING` turn = **one coherent slice** (smallest coherent file set). Do **not** dump every Master Plan §4 route in one pass.
+
 ## Recommended Slice Order (adapt to the project)
 
 1. Foundation (project setup, routing shell, basic layout)
-2. Authentication / access control (if required)
-3. Core data models + main API routes
+2. Authentication / access control (if required) — honor **security baseline** from §2 (auth model, RLS/tenant, roles)
+3. Core data models + main API routes (+ row filters / RLS)
 4. Primary user feature (the main value of the app)
 5. Secondary features (one at a time)
-6. Integration polish + edge cases
+6. Integration polish + edge cases (empty/error states from §4)
+
+Use §4 page contracts + `nebula-ui-studio/ui-brief.md` for UI slices — not a truncated route list.
 
 ## Rules for each slice
 
 ### 1. Build
 - Implement only what belongs to the current slice
-- Follow the Master Plan and architecture
+- Follow the Master Plan contract (§4 fields, security baseline, §5 tokens)
 - Prefer the smallest coherent set of files
 
 ### 2. Debug / Validate (mandatory before next slice)
-- Apply NDM (Verify → Analyze → Trace → Fix → Validate)
+- Apply NDM (`debugging-method.md`: Verify → Analyze → Trace → Fix → Validate)
 - Confirm the slice works for its main happy path
 - Fix issues while the context is still small
 - Do not move forward with known broken behaviour
@@ -46,6 +53,7 @@ Prefer: **Build one slice → Debug/Validate that slice → Only then move to th
 - Do not introduce temporary hacks that will be “fixed later”
 - Keep code clean and consistent across slices
 - After the final slice, run a light end-to-end validation of the main user flows
+- Mentally apply `code-review-checklist.md` before every file block
 
 ## When a larger generation is allowed
 

@@ -16,11 +16,13 @@ When documentation in this folder refers to “the platform” or “the server,
 
 ### Key files in this folder
 
-- **`project-execution-rules.md`** — Phase model and non‑negotiable execution rules for implementation (canonical; do not use root archives).
-- **`project-workflow.md`** — Canonical read order and high-level lifecycle (cloud workspaces seed from this folder).
+- **`project-execution-rules.md`** — Canonical law (Master Plan contract, security baseline, UI brief, Mind Map, Go slices). Wins on conflict.
+- **`CHANGELOG-methodology.md`** — Methodology change log (Phases A–F) + operator rollout notes for `MASTER_PLAN_STRICT`.
+- **`fixtures/master-plan/`** — Golden Master Plan fixtures for validators (`npm run test:master-plan`).
+- **`project-workflow.md`** — Lifecycle pointer (no duplicate MUSTS).
 - **`environment-setup.md`** — Canonical environment variable reference for deployments.
-- **`nebula-ui-studio.md`** — Workspace file the **Nebula Product** (IDE) reads/writes for UI Studio prompt and code (`NEBULA_UI_STUDIO_*` HTML comments); prose in that file describes the **product** feature, not methodology.
-- **`ui-studio.md`** — Short pointer into the UI Studio workflow and `nebula-ui-studio.md`.
+- **`nebula-ui-studio.md`** — Studio paths (`ui-brief.md`, optional v0); `NEBULA_UI_STUDIO_*` comment blocks.
+- **`ui-studio.md`** — Short pointer into the UI Studio workflow.
 - **`master-plan.json`**, **`conversation-log.md`**, **`Nebula Architecture Spec.md`**, **`SKILL.md`** — Planning and agent guidance as applicable to the template.
 
 If you are contributing to **how** projects are run, edit files here (and any workspace copies your pipeline uses). Guardian quality docs belong in **`nebulla-project/`**. If you are contributing to **the IDE itself**, work in Nebula Product paths and keep this separation in mind so rules and code do not drift together unintentionally.

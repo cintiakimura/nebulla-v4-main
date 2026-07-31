@@ -53,7 +53,7 @@ import {
 } from '../../lib/ideWorkspaceChatContext';
 import { createProjectForCurrentSession } from '../../lib/nebulaCloud';
 import { handleSmartChatMessage, type SmartChatFilePreview } from '../../lib/smartChatHandler';
-import { isMasterPlanCompleteForDiscovery } from '../../lib/masterPlanSections';
+import { isMasterPlanCompleteForDiscovery } from '../../lib/masterPlanCompleteness';
 import {
   interactionModeIdleSubhead,
   interactionModeStatusLabel,
@@ -2396,35 +2396,45 @@ export function AIChat() {
               </ChatRoundButton>
             </div>
 
-            <div className="flex items-center gap-1.5">
-              <button
-                type="button"
-                onClick={() => void handleGo()}
-                disabled={sending}
-                title={
-                  assistantInteractionMode === 'chat'
-                    ? t('chat.goNeedsAgent')
-                    : t('chat.goAgentTitle')
-                }
-                className={cn(
-                  'btn-primary-cta flex h-9 shrink-0 items-center gap-1.5 rounded-full px-4 text-[0.8125rem] disabled:opacity-40',
-                  assistantInteractionMode === 'chat' && 'opacity-70',
-                )}
-              >
-                <Rocket className="h-3.5 w-3.5" />
-                Go
-              </button>
-              <ChatRoundButton
-                label={t('chat.sendMessage')}
-                onClick={() => {
-                  stopVoiceRecognition();
-                  setIsRecordingVoice(false);
-                  void sendChat();
-                }}
-                disabled={!input.trim() || sending || uploadBusy}
-              >
-                <Send className="h-[18px] w-[18px]" />
-              </ChatRoundButton>
+            <div className="flex flex-col items-end gap-0.5">
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => void handleGo()}
+                  disabled={sending}
+                  title={
+                    !masterPlanCompleteHint
+                      ? 'Finish Discovery / Master Plan first for a solid build'
+                      : assistantInteractionMode === 'chat'
+                        ? t('chat.goNeedsAgent')
+                        : t('chat.goAgentTitle')
+                  }
+                  className={cn(
+                    'btn-primary-cta flex h-9 shrink-0 items-center gap-1.5 rounded-full px-4 text-[0.8125rem] disabled:opacity-40',
+                    assistantInteractionMode === 'chat' && 'opacity-70',
+                    !masterPlanCompleteHint && 'opacity-80',
+                  )}
+                >
+                  <Rocket className="h-3.5 w-3.5" />
+                  Go
+                </button>
+                <ChatRoundButton
+                  label={t('chat.sendMessage')}
+                  onClick={() => {
+                    stopVoiceRecognition();
+                    setIsRecordingVoice(false);
+                    void sendChat();
+                  }}
+                  disabled={!input.trim() || sending || uploadBusy}
+                >
+                  <Send className="h-[18px] w-[18px]" />
+                </ChatRoundButton>
+              </div>
+              {!masterPlanCompleteHint ? (
+                <p className="max-w-[14rem] text-right text-[10px] leading-snug text-muted-foreground">
+                  Finish Discovery first for a solid build
+                </p>
+              ) : null}
             </div>
           </div>
         </div>
