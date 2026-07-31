@@ -53,7 +53,7 @@ import {
 } from '../../lib/ideWorkspaceChatContext';
 import { createProjectForCurrentSession } from '../../lib/nebulaCloud';
 import { handleSmartChatMessage, type SmartChatFilePreview } from '../../lib/smartChatHandler';
-import { isMasterPlanCompleteForDiscovery } from '../../lib/masterPlanCompleteness';
+import { isMasterPlanCompleteForDiscovery } from '../../lib/masterPlanSections';
 import {
   interactionModeIdleSubhead,
   interactionModeStatusLabel,
