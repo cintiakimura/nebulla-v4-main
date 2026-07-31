@@ -444,10 +444,11 @@ export function getRenderPublicConfig() {
     ),
     githubClientIdConfigured: Boolean(process.env.GITHUB_CLIENT_ID?.trim()),
     githubClientSecretConfigured: Boolean(process.env.GITHUB_CLIENT_SECRET?.trim()),
-    /** Google OAuth intentionally disabled — product uses GitHub + email only. */
-    googleOAuthReady: false,
-    googleClientIdConfigured: false,
-    googleClientSecretConfigured: false,
+    googleOAuthReady: Boolean(
+      process.env.GOOGLE_CLIENT_ID?.trim() && process.env.GOOGLE_CLIENT_SECRET?.trim()
+    ),
+    googleClientIdConfigured: Boolean(process.env.GOOGLE_CLIENT_ID?.trim()),
+    googleClientSecretConfigured: Boolean(process.env.GOOGLE_CLIENT_SECRET?.trim()),
     /** Always true after Phase 3 — isolation ids are synthetic `cfproj_…` (no Render Projects API). */
     syntheticWorkspaceIdsReady: true,
     /**
@@ -1439,12 +1440,110 @@ export async function mountRenderStack(app: Express) {
     }
   });
 
-  // --- Google OAuth (disabled — product uses GitHub + email only) ---
-  app.get("/api/auth/google", (_req, res) => {
-    res.status(410).send("Google sign-in is disabled. Use GitHub or email.");
+  // --- Google OAuth ---
+  app.get("/api/auth/google", async (req, res) => {
+    if (!(await ensureDbReady())) return res.status(503).send("Database not configured");
+    const id = process.env.GOOGLE_CLIENT_ID?.trim();
+    if (!id) return res.status(503).send("GOOGLE_CLIENT_ID not configured");
+    const redirectUri = `${oauthRedirectBase(req)}/api/auth/google/callback`;
+    const state = crypto.randomBytes(16).toString("hex");
+    const remember = parseRememberFlag(req.query.remember);
+    const oauthCookieOpts = { ...sessionCookieBaseOptions(), maxAge: 600000 };
+    res.cookie("oauth_state", state, oauthCookieOpts);
+    res.cookie(OAUTH_REMEMBER_COOKIE, remember ? "1" : "0", oauthCookieOpts);
+    const q = new URLSearchParams({
+      client_id: id,
+      redirect_uri: redirectUri,
+      response_type: "code",
+      scope: "openid email profile",
+      state,
+      access_type: "online",
+      prompt: "select_account",
+    });
+    res.redirect(`https://accounts.google.com/o/oauth2/v2/auth?${q}`);
   });
-  app.get("/api/auth/google/callback", (_req, res) => {
-    res.status(410).send(oauthPopupHtml(false, "Google sign-in is disabled"));
+
+  app.get("/api/auth/google/callback", async (req, res) => {
+    if (!(await ensureDbReady())) return res.status(503).send("Database not configured");
+    const secret = process.env.GOOGLE_CLIENT_SECRET?.trim();
+    const id = process.env.GOOGLE_CLIENT_ID?.trim();
+    if (!secret || !id) return res.status(500).send("Google OAuth not configured");
+
+    const code = typeof req.query.code === "string" ? req.query.code : "";
+    const state = typeof req.query.state === "string" ? req.query.state : "";
+    const cookieState = req.cookies?.oauth_state;
+    const remember = req.cookies?.[OAUTH_REMEMBER_COOKIE] !== "0";
+    res.clearCookie("oauth_state", sessionCookieBaseOptions());
+    res.clearCookie(OAUTH_REMEMBER_COOKIE, sessionCookieBaseOptions());
+    if (!code || !state || state !== cookieState) {
+      return res.status(400).send(oauthPopupHtml(false, "Invalid OAuth state"));
+    }
+
+    const redirectUri = `${oauthRedirectBase(req)}/api/auth/google/callback`;
+    try {
+      const tokRes = await fetch("https://oauth2.googleapis.com/token", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({
+          code,
+          client_id: id,
+          client_secret: secret,
+          redirect_uri: redirectUri,
+          grant_type: "authorization_code",
+        }),
+      });
+      const tokJson = (await tokRes.json()) as {
+        access_token?: string;
+        error?: string;
+        error_description?: string;
+      };
+      if (!tokJson.access_token) {
+        return res
+          .status(400)
+          .send(oauthPopupHtml(false, tokJson.error_description || tokJson.error || "Google token exchange failed"));
+      }
+
+      const uRes = await fetch("https://www.googleapis.com/oauth2/v3/userinfo", {
+        headers: { Authorization: `Bearer ${tokJson.access_token}` },
+      });
+      if (!uRes.ok) {
+        return res.status(400).send(oauthPopupHtml(false, "Could not load Google profile"));
+      }
+      const gu = (await uRes.json()) as {
+        sub?: string;
+        email?: string | null;
+        email_verified?: boolean | string;
+        name?: string | null;
+        picture?: string | null;
+      };
+      const providerUserId = String(gu.sub || "").trim();
+      if (!providerUserId) {
+        return res.status(400).send(oauthPopupHtml(false, "Google profile missing user id"));
+      }
+      let email = (gu.email && String(gu.email).trim()) || "";
+      if (!email) {
+        email = `${providerUserId}@users.noreply.google.com`;
+      }
+      const display = (gu.name && String(gu.name).trim()) || email.split("@")[0] || "Google User";
+
+      const db = requireDbPool();
+      const userIdNew = crypto.randomUUID();
+      const ins = await db.query(
+        `INSERT INTO public.nebula_users (id, provider, provider_user_id, email, display_name, avatar_url, password_hash)
+         VALUES ($1::uuid, 'google', $2, $3, $4, $5, NULL)
+         ON CONFLICT (provider, provider_user_id) DO UPDATE
+         SET email = EXCLUDED.email, display_name = EXCLUDED.display_name, avatar_url = EXCLUDED.avatar_url
+         RETURNING id`,
+        [userIdNew, providerUserId, email, display, gu.picture || null]
+      );
+      const userId = ins.rows[0].id as string;
+      await ensureInitialProjectForUserSafe(userId);
+      setSessionCookie(res, signSession(userId), remember);
+      res.send(oauthPopupHtml(true, "Signed in with Google"));
+    } catch (e) {
+      console.error("[nebula] Google callback:", e);
+      res.status(500).send(oauthPopupHtml(false, "Google sign-in failed"));
+    }
   });
 
   // --- Register: email + password (frictionless) or legacy username + password ---
