@@ -303,9 +303,18 @@ Default if unset remains **`off`** (safe).
 | F — Communication + UI polish | **Done** |
 | G — Residual sync / ops | **Done** (prod `strict` still operator choice) |
 
-### Still operator-owned (not in git)
+### Executed ops (2026-07-31)
 
-1. Render staging: `MASTER_PLAN_STRICT=warn` → redeploy → smoke Master Plan banner + Go  
-2. Render prod (new projects): `strict` when ready; existing = `warn` or `off`  
-3. Manual pilots: naïve CRUD+auth, insecure portal fixture, multi-page app  
-4. Do **not** commit `.env` (local `warn` is fine privately)
+| Item | Status |
+|------|--------|
+| Route-parse bugfix (`/2fa`, empty ui-brief routes) | Committed `0131` |
+| Fixture pilots | `npm run test:methodology-pilots` (CRUD+auth, thin-legacy, naïve-insecure, multi-page `/2fa`) |
+| Render `nebulla-v4-main` | `MASTER_PLAN_STRICT=warn` via API + deploy triggered |
+| Prod `strict` | **Deferred** — wait for smoke on `warn`; then raise for new projects only |
+| Live IDE click-through pilots | Still human (banner + Go in browser after deploy finishes) |
+
+### Still operator-owned
+
+1. After Render deploy turns live: open Master Plan → confirm banner; try Go on a thin plan (should warn, not 409)  
+2. When comfortable: set Render `MASTER_PLAN_STRICT=strict` (new projects)  
+3. Do **not** commit `.env`

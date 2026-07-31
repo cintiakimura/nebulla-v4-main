@@ -24,6 +24,7 @@
     "test:mind-map": "tsx scripts/test-mind-map-fidelity.ts",
     "test:chat-mode": "tsx scripts/test-chat-mode-detector.ts",
     "test:master-plan-status": "tsx scripts/test-master-plan-status-ui.ts",
+    "test:methodology-pilots": "tsx scripts/pilot-master-plan-methodology.ts",
     "test:security-scan": "tsx scripts/test-security-scan.mjs",
     "test:grok": "node scripts/test-grok-chat.mjs",
     "smoke:prod": "node scripts/smoke-remote.mjs"
