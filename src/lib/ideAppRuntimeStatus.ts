@@ -4,6 +4,7 @@
  */
 
 import { t } from './i18n/t';
+import { reportAppStatusFixOutcome } from './contractTelemetryClient';
 
 export type AppRuntimeIssueSource = 'preview' | 'build' | 'network';
 
@@ -292,6 +293,7 @@ export function scheduleAppRuntimeHealthyCheck(options?: { quietMs?: number }): 
     if (reappeared.length > 0) {
       // Advance so the next clean reload (even without note) can clear.
       pendingValidationStartedAt = Date.now();
+      reportAppStatusFixOutcome({ outcome: 'stillRed', reloadCycles: 1 });
       return;
     }
     clearAppRuntimeByFingerprints(watched);
@@ -304,6 +306,7 @@ export function scheduleAppRuntimeHealthyCheck(options?: { quietMs?: number }): 
     notify();
     emit(CLEARED_EVENT, { reason: 'validated' });
     emit(LOOKS_FIXED_EVENT);
+    reportAppStatusFixOutcome({ outcome: 'reachedGreen', reloadCycles: 1 });
   }, quietMs);
 }
 

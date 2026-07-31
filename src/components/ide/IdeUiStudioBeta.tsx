@@ -677,6 +677,25 @@ export function IdeUiStudioBeta({
     setError('');
     setPreferenceRecovery(false);
     setPreviewSynced(false);
+    try {
+      const st = await fetch(withProjectQuery('/api/master-plan/status'), {
+        credentials: 'include',
+        cache: 'no-store',
+      });
+      if (st.ok) {
+        const body = (await st.json()) as { uiBriefLength?: number };
+        if (typeof body.uiBriefLength === 'number' && body.uiBriefLength < 80) {
+          setBusy(false);
+          setError(
+            'Finish page contracts first — save the Master Plan so the UI brief is generated, then Generate UI.',
+          );
+          setEngineStage('Needs page contracts');
+          return;
+        }
+      }
+    } catch {
+      /* continue to generate — server will soft-fail if needed */
+    }
     setEngineStage(
       opts?.regenerate
         ? 'Generate again…'

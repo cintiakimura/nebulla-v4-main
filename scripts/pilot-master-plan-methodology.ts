@@ -75,11 +75,13 @@ section("good-crud-auth — multi-page complete plan");
   assert.ok(pages.length >= 5);
   assert.ok(pages.every((p) => p.route.startsWith("/")));
 
+  const briefLen = fs.readFileSync(path.join(tmp, "nebula-ui-studio", "ui-brief.md"), "utf8")
+    .trim().length;
   const withBrief = assessMasterPlanCompleteness({
     plan,
     mode: "strict",
-    workspaceRoot: tmp,
     checkUiBrief: true,
+    uiBriefLength: briefLen,
   });
   assert.equal(withBrief.allowGo, true);
 

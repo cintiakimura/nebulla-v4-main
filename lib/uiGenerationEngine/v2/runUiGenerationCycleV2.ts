@@ -426,6 +426,20 @@ export async function runUiGenerationCycleV2(
   if (uiBrief) {
     appendStepLog(state, `Using ui-brief.md (${uiBrief.length} chars) as primary UI input`);
   }
+  const section4RouteHints = (pagesText.match(/`(\/[^`]+)`/g) || []).length;
+  if (
+    uiBrief.trim().length < 80 &&
+    briefPages.length < 1 &&
+    section4RouteHints >= 2 &&
+    !hasMeaningfulUiFileGrounding(fileFacts)
+  ) {
+    return fail(
+      workspaceRoot,
+      state,
+      "Finish page contracts first — save the Master Plan so ui-brief.md is generated, then Generate UI.",
+      "pending_discovery",
+    );
+  }
   const hasGoal = hasUsableGoal(goal, tech, features, state.project_name, fileFacts);
   const hasPage = pages.length >= 1;
   const fileGrounded = hasMeaningfulUiFileGrounding(fileFacts);

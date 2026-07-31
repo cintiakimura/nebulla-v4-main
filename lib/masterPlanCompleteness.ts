@@ -3,9 +3,10 @@
  * Authority: nebula-project/project-execution-rules.md
  *
  * MASTER_PLAN_STRICT=off|warn|strict (default: off)
+ *
+ * Pure module (no fs) so the browser can import discovery helpers safely.
+ * Disk ui-brief checks: `masterPlanCompletenessIo.ts`.
  */
-import fs from "fs";
-import path from "path";
 import {
   MASTER_PLAN_SECTION_KEYS,
   normalizeMasterPlanRecord,
@@ -117,10 +118,10 @@ export type AssessMasterPlanOptions = {
   /** Raw or normalized plan record */
   plan: Record<string, unknown> | Record<string, string>;
   mode?: MasterPlanStrictMode;
-  /** When set, also check nebula-ui-studio/ui-brief.md */
-  workspaceRoot?: string;
-  /** Default true when workspaceRoot set */
+  /** When true, require uiBriefLength >= 80 (IO must supply the length). */
   checkUiBrief?: boolean;
+  /** Character length of nebula-ui-studio/ui-brief.md (from IO layer). */
+  uiBriefLength?: number;
 };
 
 /**
@@ -316,18 +317,8 @@ export function assessMasterPlanCompleteness(
     }
   }
 
-  const checkUiBrief =
-    opts.checkUiBrief ?? Boolean(opts.workspaceRoot && opts.workspaceRoot.trim());
-  if (checkUiBrief && opts.workspaceRoot) {
-    const briefPath = path.join(opts.workspaceRoot, "nebula-ui-studio", "ui-brief.md");
-    let briefOk = false;
-    try {
-      if (fs.existsSync(briefPath)) {
-        briefOk = fs.readFileSync(briefPath, "utf8").trim().length >= 80;
-      }
-    } catch {
-      briefOk = false;
-    }
+  if (opts.checkUiBrief) {
+    const briefOk = (opts.uiBriefLength ?? 0) >= 80;
     if (!briefOk) {
       gaps.push(
         gap(
@@ -389,27 +380,4 @@ export function isMasterPlanCompleteForDiscovery(
     checkUiBrief: false,
   });
   return result.gaps.filter((g) => g.severity === "block").length === 0;
-}
-
-/** Convenience: assess plan file + optional workspace. */
-export function assessMasterPlanFile(
-  masterPlanPath: string,
-  opts?: { mode?: MasterPlanStrictMode; workspaceRoot?: string; checkUiBrief?: boolean },
-): MasterPlanCompletenessResult {
-  let raw: Record<string, unknown> = {};
-  try {
-    if (fs.existsSync(masterPlanPath)) {
-      raw = JSON.parse(fs.readFileSync(masterPlanPath, "utf8")) as Record<string, unknown>;
-    }
-  } catch {
-    raw = {};
-  }
-  const workspaceRoot =
-    opts?.workspaceRoot ?? path.dirname(masterPlanPath);
-  return assessMasterPlanCompleteness({
-    plan: raw,
-    mode: opts?.mode,
-    workspaceRoot,
-    checkUiBrief: opts?.checkUiBrief,
-  });
 }

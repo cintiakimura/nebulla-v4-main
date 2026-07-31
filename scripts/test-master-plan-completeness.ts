@@ -88,8 +88,8 @@ section("ui-brief missing blocks Go only when checkUiBrief + strict");
   const withBriefCheck = assessMasterPlanCompleteness({
     plan,
     mode: "strict",
-    workspaceRoot: path.join(FIXTURE_DIR, "_no_workspace_"),
     checkUiBrief: true,
+    uiBriefLength: 0,
   });
   assert.ok(
     withBriefCheck.gaps.some((g) => g.code === "UI_BRIEF_MISSING"),

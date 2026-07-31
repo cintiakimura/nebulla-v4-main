@@ -166,6 +166,8 @@ type Message = {
   showSwitchToAgentCta?: boolean;
   /** Pending user text to re-send after switching to Agent */
   pendingAgentText?: string;
+  /** After Go — nudge reload Preview to validate slice */
+  validateReloadHint?: boolean;
   /** Live thinking / action step — shown in-chat, not sent to the model API */
   variant?: 'status';
   statusKind?: GrokActivityLogKind;
@@ -1813,7 +1815,7 @@ export function AIChat() {
 
   const showGrokKeyBanner = serverHasGrokKey === false;
 
-  const handleGo = useCallback(async () => {
+  const handleGo = useCallback(async (opts?: { force?: boolean }) => {
     const userNote = inputRef.current.trim();
     if (sending || micInputBlocked) return;
 
@@ -1837,6 +1839,38 @@ export function AIChat() {
       });
       return;
     }
+
+    // Soft discourage: validate last slice / clear App Status before next Go
+    if (!opts?.force) {
+      const snap = getAppRuntimeSnapshot();
+      const errorCount = snap.issues.filter((i) => i.severity === 'error' || i.severity === 'warn').length;
+      if (snap.pendingValidation || errorCount > 0) {
+        const stamp = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+        const why = snap.pendingValidation
+          ? 'Validate the last slice first — reload Preview and wait for App Status to clear.'
+          : 'App Status still shows issues — Fix with Agent or clear them before the next Go.';
+        setAccessoryHint(`${why} Or continue anyway.`);
+        setMessages((p) => {
+          const next = [
+            ...p,
+            {
+              id: `go-soft-${Date.now()}`,
+              role: 'assistant' as const,
+              content: `${why}\n\n**Validate this slice before next Go** — or press Go again to continue anyway.`,
+              timestamp: stamp,
+              showGoCta: true,
+            },
+          ];
+          messagesRef.current = next;
+          return next;
+        });
+        // Next Go click within accessory: force via showGoCta handler — store force flag
+        (window as unknown as { __nebulaForceGo?: boolean }).__nebulaForceGo = true;
+        window.setTimeout(() => setAccessoryHint(null), 8000);
+        return;
+      }
+    }
+    (window as unknown as { __nebulaForceGo?: boolean }).__nebulaForceGo = false;
 
     if (serverHasGrokKey === null) {
       try {
@@ -1911,10 +1945,16 @@ export function AIChat() {
       });
       if (go.ok) {
         window.dispatchEvent(new CustomEvent('nebula-master-plan-updated'));
+        setAccessoryHint(
+          go.sliceLabel
+            ? `Slice ${go.sliceLabel} applied — reload Preview to validate before the next Go.`
+            : 'Reload Preview to validate this slice before the next Go.',
+        );
+        window.setTimeout(() => setAccessoryHint(null), 10000);
       }
       const goTs = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
       const chatCompleteLine = go.ok
-        ? `**Finished.** ${go.statusMessage}`
+        ? `**Finished.** ${go.statusMessage}\n\nValidate this slice (reload Preview / App Status) before the next Go.`
         : `**Go could not finish.** ${go.statusMessage}`;
       setMessages((p) => {
         const next = [
@@ -1924,6 +1964,7 @@ export function AIChat() {
             role: 'assistant' as const,
             content: chatCompleteLine,
             timestamp: goTs,
+            validateReloadHint: go.ok,
           },
         ];
         messagesRef.current = next;
@@ -2273,7 +2314,12 @@ export function AIChat() {
                 {message.showGoCta ? (
                   <button
                     type="button"
-                    onClick={() => void handleGo()}
+                    onClick={() => {
+                      const force = Boolean(
+                        (window as unknown as { __nebulaForceGo?: boolean }).__nebulaForceGo,
+                      );
+                      void handleGo({ force });
+                    }}
                     disabled={sending}
                     className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-lg border border-primary/40 bg-primary/15 px-3 py-2.5 text-sm font-semibold text-primary transition hover:bg-primary/25 disabled:opacity-45"
                   >

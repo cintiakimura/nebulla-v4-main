@@ -6,6 +6,8 @@ import type { GrokActivityProgressFn } from './ideGrokActivityStatus';
 import { startGrokActivityWaitTicker } from './ideGrokActivityStatus';
 import { getGrokRequestHeaders } from './grokUserKey';
 import { formatGoBlockedByPlanMessage } from './masterPlanStatus';
+import { reportGoApplyTelemetry } from './contractTelemetryClient';
+import { assessOversizedGoApply, parseGoSliceLabel, type GoSliceLabel } from '../../lib/goSliceContract';
 import { withProjectBody, withProjectQuery } from './nebulaProjectApi';
 import { triggerUiStudioBetaAfterFilesApplied } from './uiStudioBetaEngine';
 
@@ -366,7 +368,14 @@ export async function runGoCodeAndApply(options: {
   userNote?: string;
   messages?: { role: 'user' | 'assistant'; content: string }[];
   onProgress?: GrokActivityProgressFn;
-}): Promise<{ ok: boolean; statusMessage: string; codeText?: string; totalWritten?: number }> {
+}): Promise<{
+  ok: boolean;
+  statusMessage: string;
+  codeText?: string;
+  totalWritten?: number;
+  sliceLabel?: GoSliceLabel | null;
+  oversizedWarning?: string | null;
+}> {
   const { userId, projectName, userNote, messages, onProgress } = options;
   const baseMessages =
     messages && messages.length > 0
@@ -513,10 +522,24 @@ export async function runGoCodeAndApply(options: {
       }
     }
 
-    const statusMessage = buildGoCompleteMessage(totalWritten, allWrittenPaths, passes, partialPlanOnly);
+    const sliceLabel =
+      parseGoSliceLabel(lastCodeText) ||
+      parseGoSliceLabel(userNote) ||
+      parseGoSliceLabel('SLICE: Foundation');
+    const oversized = assessOversizedGoApply({ sliceLabel, writtenPaths: allWrittenPaths });
+    let statusMessage = buildGoCompleteMessage(totalWritten, allWrittenPaths, passes, partialPlanOnly);
+    if (sliceLabel) {
+      statusMessage = `Slice: **${sliceLabel}**. ${statusMessage}`;
+    }
+    if (oversized.oversized && oversized.message) {
+      statusMessage = `${statusMessage}\n\n_${oversized.message}_`;
+      onProgress?.(oversized.message, 'warn');
+    }
     if (totalWritten > 0) {
       onProgress?.(statusMessage, 'success');
     }
+
+    reportGoApplyTelemetry({ writtenPaths: allWrittenPaths, sliceLabel: sliceLabel || undefined });
 
     const ok = totalWritten > 0 && !partialPlanOnly;
     if (ok) {
@@ -532,6 +555,8 @@ export async function runGoCodeAndApply(options: {
       statusMessage,
       codeText: lastCodeText,
       totalWritten,
+      sliceLabel,
+      oversizedWarning: oversized.message,
     };
   } catch (e) {
     const msg = e instanceof Error ? e.message : 'Go Code request failed';

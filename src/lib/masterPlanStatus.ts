@@ -20,6 +20,11 @@ export type MasterPlanStatus = {
   gaps: MasterPlanStatusGap[];
   sectionLengths?: Record<string, number>;
   uiBriefLength?: number;
+  securityProposal?: {
+    needed: boolean;
+    sectionKey: string;
+    draftMarkdown: string;
+  } | null;
 };
 
 /** Friendly labels — never dump raw gap codes unless debugging. */

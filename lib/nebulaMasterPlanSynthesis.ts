@@ -12,13 +12,14 @@ import {
   syncUiBriefFromMasterPlan,
 } from "./nebulaIdeWorkspaceArtifacts";
 import {
-  assessMasterPlanCompleteness,
   readMasterPlanStrictMode,
   type MasterPlanCompletenessResult,
 } from "./masterPlanCompleteness";
+import { assessMasterPlanCompletenessWithWorkspace } from "./masterPlanCompletenessIo";
 
 export { listMissingMasterPlanSections, fillMissingMasterPlanSectionsLocal };
-export { assessMasterPlanCompleteness, readMasterPlanStrictMode };
+export { readMasterPlanStrictMode };
+export { assessMasterPlanCompletenessWithWorkspace as assessMasterPlanCompleteness };
 
 export function persistParsedMasterPlanSections(
   masterPlanPath: string,
@@ -72,7 +73,7 @@ Inside, use these five headers exactly (### prefix recommended):
 Rules:
 - Synthesize ALL five sections from discovery — implementation-grade depth, no empty placeholders.
 - §1: Project Type (Web App / Mobile App / Landing Page) + goal + users + in/out of scope only.
-- §2: Research Pillars — **8–12 real competitor names** (never invent), ranked features, evidence or exact "No supporting studies found for this feature.", UI patterns. **Also auto-inject security baseline** when auth/private data applies: auth model, tenant/RLS (or equivalent), roles, secrets, PII, deny-by-default — even if the user never asked.
+- §2: Research Pillars — **8–12 real competitor names** (never invent), ranked features, evidence or exact "No supporting studies found for this feature.", UI patterns. When auth/private data applies, **include a security baseline draft** (auth model, tenant/RLS, roles, secrets, PII, deny-by-default) so the product can offer Accept — do not hide security; the IDE may still ask the user to confirm.
 - §3: MVP features as verbs + **testable** KPIs (not slogans).
 - §4: every page with required fields — name, route \`/path\`, purpose, primary_actions, data_entities, authz, empty_state, error_state, nav_links. This drives Mind Map + ui-brief. Vague page-name lists forbidden.
 - §5: **15–25 lines max** — mood, hex palette, typography, density, radius, motion, component style, nav pattern. NO code; NO §4 copy; page detail belongs in ui-brief.md (written after plan save).
@@ -200,7 +201,7 @@ export async function ensureMasterPlanBeforeGo(opts: {
     /* brief sync best-effort before completeness */
   }
 
-  const completeness = assessMasterPlanCompleteness({
+  const completeness = assessMasterPlanCompletenessWithWorkspace({
     plan: planForAssess,
     mode: readMasterPlanStrictMode(),
     workspaceRoot: opts.workspaceRoot,

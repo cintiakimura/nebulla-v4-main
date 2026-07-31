@@ -319,3 +319,72 @@ Default if unset remains **`off`** (safe).
 1. After Render deploy turns live: open Master Plan → confirm banner; try Go on a thin plan (should warn, not 409)  
 2. When comfortable: set Render `MASTER_PLAN_STRICT=strict` (new projects)  
 3. Do **not** commit `.env`
+
+---
+
+## Improvement strategy (post-methodology)
+
+North star: plan controls the build; runtime proves the fix; one safe next step; predictable BYOK.
+
+**Sequence:** L0 Evidence/CI → L1 Control fidelity → L2 Slice loop → L3 Debug metrics → L4 UI honesty → L5 Next-action → L6 Strict.
+
+### Layer 0 — Evidence & safety net (2026-07-31)
+
+| Item | Status |
+|------|--------|
+| Local + Render `MASTER_PLAN_STRICT` | **warn** (do not flip to strict yet) |
+| Contract tests + Vite `npm run build` | Green at L0 baseline |
+| Telemetry (counts only) | `lib/nebulaContractTelemetry.ts` → `data/contract-telemetry.jsonl` + `[contract-telemetry]` logs |
+| Summarize | `npm run telemetry:contracts` |
+| Render build parity gate | `npm run check:render-build` (Vite build + methodology contracts) |
+| Client fs boundary | Pure `masterPlanCompleteness.ts`; IO in `masterPlanCompletenessIo.ts` |
+| Pilot runbook | See below |
+
+**Telemetry events:** `master_plan_go_gate`, `go_apply_result`, `mindmap_fidelity`, `app_status_fix_outcome`, `ui_gen_gate`.
+
+### Manual pilot runbook (same 4 apps every run)
+
+Copy a row per run into notes (or a private doc — not secrets).
+
+| App | Fixture / setup | Banner (warn) | Go under warn | Mind Map ⊆ §4 | ui-brief after plan save | App Status Fix → green |
+|-----|-----------------|---------------|---------------|---------------|--------------------------|-------------------------|
+| Thin legacy | `fixtures/master-plan/thin-legacy.json` | gaps / legacy | allow (not 409) | n/a or sync | generated if plan saved | optional |
+| Naïve insecure | `naive-insecure.json` | SEC gaps | allow | sync from §4 | yes | optional |
+| CRUD + auth | `good-crud-auth.json` | ok / polish | allow | no extras | parseable pages | break preview → Fix → reload |
+| Multi-page edge | plan with `/2fa`, `/_secret` | ok | allow | no false extras | routes present | optional |
+
+Automated: `npm run test:methodology-pilots`.
+
+### Residual contradictions (listed at L0 — fix in L1)
+
+Critical path still has V0-centric **prompt** language (not product gates):
+- `src/lib/nebulaAssistantSystemPrompt.ts` — research/UI still says “V0 / Studio prompt” in places
+- Historical notes in this CHANGELOG (inventory) — leave as archive
+- `*.old.md` — ignore
+
+Product law already: ui-brief primary, V0 optional (`project-execution-rules.md`).
+
+### L0 exit criteria
+
+- [x] `npm run build` + contract tests green  
+- [x] Telemetry events exist and documented  
+- [x] Pilot runbook template exists  
+- [x] Critical path contradictions listed (prompt polish deferred to L1)
+
+### Layer 1 — Control fidelity (continued)
+
+| Item | Status |
+|------|--------|
+| Prompt contradiction sweep | `nebulaAssistantSystemPrompt` + `check:ui-brief-primary` |
+| Security propose+accept | `POST /api/master-plan/accept-security-baseline` + banner Accept |
+| Mind Map extras | Banner: discard (sync) / propose §4 / Accept amendment |
+| Soft UI brief CTA | UI Gen + Studio Beta preflight when brief &lt; 80 chars |
+
+### Layer 2 — Slice loop (started)
+
+| Item | Status |
+|------|--------|
+| Slice contract | `lib/goSliceContract.ts` — `SLICE: Foundation\|Auth\|Data+API\|Primary\|Secondary\|Polish` |
+| Post-Go UX | Slice label in status; validate-before-next accessory |
+| Soft discourage next Go | Pending App Status / red → CTA; Go again forces continue |
+| Oversized apply | Soft warn when too many app files for slice |

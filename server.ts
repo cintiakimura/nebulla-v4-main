@@ -64,11 +64,15 @@ import {
   writeBasicUiScaffold,
 } from "./lib/nebulaIdeWorkspaceArtifacts";
 import { readUiBriefMarkdown } from "./lib/nebulaUiBrief";
-import {
-  assessMasterPlanCompleteness,
-  readMasterPlanStrictMode,
-} from "./lib/masterPlanCompleteness";
+import { readMasterPlanStrictMode } from "./lib/masterPlanCompleteness";
+import { assessMasterPlanCompletenessWithWorkspace } from "./lib/masterPlanCompletenessIo";
 import { assessMindMapSubsetOfSection4 } from "./lib/mindMapFidelity";
+import { recordContractTelemetry } from "./lib/nebulaContractTelemetry";
+import {
+  buildSecurityBaselineProposal,
+  mergeSecurityBaselineIntoSection2,
+} from "./lib/securityBaselinePropose";
+import { draftSection4AmendmentsForRoutes } from "./lib/mindMapAmendmentPropose";
 import { ensureMasterPlanBeforeGo } from "./lib/nebulaMasterPlanSynthesis";
 import {
   addDesignReference,
@@ -1147,12 +1151,13 @@ No approved UI code yet.
           uiBriefLength = readUiBriefMarkdown(pp.workspaceRoot).length;
         }
       }
-      const completeness = assessMasterPlanCompleteness({
+      const completeness = assessMasterPlanCompletenessWithWorkspace({
         plan,
         mode: readMasterPlanStrictMode(),
         workspaceRoot: pp.workspaceRoot,
         checkUiBrief: true,
       });
+      const securityProposal = buildSecurityBaselineProposal(plan);
       res.json({
         mode: completeness.mode,
         ok: completeness.ok,
@@ -1161,10 +1166,88 @@ No approved UI code yet.
         gaps: completeness.gaps,
         sectionLengths: completeness.sectionLengths,
         uiBriefLength,
+        securityProposal: securityProposal
+          ? {
+              needed: true,
+              sectionKey: securityProposal.sectionKey,
+              draftMarkdown: securityProposal.draftMarkdown,
+            }
+          : null,
       });
     } catch (error) {
       console.error("Error reading master plan status:", error);
       res.status(500).json({ error: "Failed to assess master plan" });
+    }
+  });
+
+  /** User-accepted security baseline → append to §2 (never silent). */
+  app.post("/api/master-plan/accept-security-baseline", (req, res) => {
+    try {
+      const pp = projectPathsFor(req);
+      let plan: Record<string, string> = {};
+      if (fs.existsSync(pp.masterPlanPath)) {
+        plan = JSON.parse(fs.readFileSync(pp.masterPlanPath, "utf8")) as Record<string, string>;
+      }
+      const key = "2. Tech and Research";
+      const merged = mergeSecurityBaselineIntoSection2(String(plan[key] ?? ""));
+      if (!merged) {
+        return res.json({ ok: true, applied: false, reason: "already_present" });
+      }
+      plan[key] = merged;
+      fs.writeFileSync(pp.masterPlanPath, JSON.stringify(plan, null, 2), "utf8");
+      try {
+        syncUiArtifactsFromMasterPlan(pp.workspaceRoot, pp.masterPlanPath);
+      } catch {
+        /* ignore */
+      }
+      res.json({ ok: true, applied: true, sectionKey: key });
+    } catch (e) {
+      res.status(500).json({ error: e instanceof Error ? e.message : "accept failed" });
+    }
+  });
+
+  /** Propose §4 markdown for Mind Map extra routes (Accept merges via master-plan/update). */
+  app.post("/api/master-plan/propose-section4-amendment", (req, res) => {
+    try {
+      const extras = Array.isArray(req.body?.extraRoutes)
+        ? req.body.extraRoutes.filter((r: unknown) => typeof r === "string")
+        : [];
+      const draftMarkdown = draftSection4AmendmentsForRoutes(extras);
+      if (!draftMarkdown) {
+        return res.status(400).json({ error: "extraRoutes required" });
+      }
+      res.json({
+        ok: true,
+        sectionKey: "4. Pages and navigation",
+        tabIndex: 4,
+        draftMarkdown,
+      });
+    } catch (e) {
+      res.status(500).json({ error: e instanceof Error ? e.message : "propose failed" });
+    }
+  });
+
+  app.post("/api/master-plan/accept-section4-amendment", (req, res) => {
+    try {
+      const draft = typeof req.body?.draftMarkdown === "string" ? req.body.draftMarkdown.trim() : "";
+      if (!draft) return res.status(400).json({ error: "draftMarkdown required" });
+      const pp = projectPathsFor(req);
+      let plan: Record<string, string> = {};
+      if (fs.existsSync(pp.masterPlanPath)) {
+        plan = JSON.parse(fs.readFileSync(pp.masterPlanPath, "utf8")) as Record<string, string>;
+      }
+      const key = "4. Pages and navigation";
+      const cur = String(plan[key] ?? "").trim();
+      plan[key] = cur ? `${cur}\n\n${draft}` : draft;
+      fs.writeFileSync(pp.masterPlanPath, JSON.stringify(plan, null, 2), "utf8");
+      try {
+        syncUiArtifactsFromMasterPlan(pp.workspaceRoot, pp.masterPlanPath);
+      } catch {
+        /* ignore */
+      }
+      res.json({ ok: true, applied: true });
+    } catch (e) {
+      res.status(500).json({ error: e instanceof Error ? e.message : "accept failed" });
     }
   });
 
@@ -1443,18 +1526,74 @@ No approved UI code yet.
 
   app.get("/api/workspace/mind-map", (req, res) => {
     try {
-      const { workspaceRoot } = projectPathsFor(req);
-      const target = resolveWorkspaceRelative(workspaceRoot, MIND_MAP_WORKSPACE_REL);
+      const pp = projectPathsFor(req);
+      const target = resolveWorkspaceRelative(pp.workspaceRoot, MIND_MAP_WORKSPACE_REL);
       if (!fs.existsSync(target)) {
-        return res.json({ pages: [], edges: [] });
+        return res.json({ pages: [], edges: [], fidelityWarning: undefined, mindMapFidelity: null });
       }
       const raw = fs.readFileSync(target, "utf8");
-      const j = JSON.parse(raw) as { pages?: unknown; edges?: unknown };
+      const j = JSON.parse(raw) as {
+        pages?: unknown;
+        edges?: unknown;
+        fidelityWarning?: unknown;
+      };
       const pages = Array.isArray(j.pages) ? j.pages : [];
       const edges = Array.isArray(j.edges) ? j.edges : [];
-      res.json({ pages, edges });
+      const plan = hydrateAndPersistMasterPlan(pp.workspaceRoot, pp.masterPlanPath);
+      const fidelity = assessMindMapSubsetOfSection4({
+        plan,
+        mindMapPages: pages,
+        mode: readMasterPlanStrictMode(),
+      });
+      res.json({
+        pages,
+        edges,
+        fidelityWarning: j.fidelityWarning ?? fidelity.gaps,
+        mindMapFidelity: fidelity,
+      });
     } catch (err: unknown) {
       res.status(500).json({ error: err instanceof Error ? err.message : "mind map read failed" });
+    }
+  });
+
+  /** Privacy-safe contract telemetry from the browser (counts/enums only). */
+  app.post("/api/contract-telemetry", (req, res) => {
+    try {
+      const body = req.body || {};
+      const event = String(body.event || "");
+      if (event === "go_apply_result") {
+        const applyKind = String(body.applyKind || "unknown");
+        recordContractTelemetry({
+          event: "go_apply_result",
+          applyKind:
+            applyKind === "planOnly" || applyKind === "hasAppFiles"
+              ? applyKind
+              : "unknown",
+          writtenCount: Math.max(0, Math.min(500, Number(body.writtenCount) || 0)),
+          sliceLabel:
+            typeof body.sliceLabel === "string"
+              ? body.sliceLabel.trim().slice(0, 40)
+              : undefined,
+        });
+        return res.json({ ok: true });
+      }
+      if (event === "app_status_fix_outcome") {
+        const outcome = String(body.outcome || "unknown");
+        recordContractTelemetry({
+          event: "app_status_fix_outcome",
+          outcome:
+            outcome === "reachedGreen" || outcome === "stillRed"
+              ? outcome
+              : "unknown",
+          reloadCycles: Math.max(0, Math.min(20, Number(body.reloadCycles) || 0)),
+        });
+        return res.json({ ok: true });
+      }
+      return res.status(400).json({ error: "unsupported event" });
+    } catch (e) {
+      return res.status(500).json({
+        error: e instanceof Error ? e.message : "telemetry failed",
+      });
     }
   });
 
@@ -1471,6 +1610,12 @@ No approved UI code yet.
         plan,
         mindMapPages: pages,
         mode: readMasterPlanStrictMode(),
+      });
+      recordContractTelemetry({
+        event: "mindmap_fidelity",
+        mode: fidelity.mode,
+        extraRouteCount: fidelity.extraRoutes.length,
+        allowWrite: fidelity.allowWrite,
       });
       if (!fidelity.allowWrite) {
         return res.status(409).json({
@@ -3505,6 +3650,12 @@ ${modelJson}`;
             ? body.preferenceHints
             : undefined,
       });
+      const gateRaw = String(result.quality_gate_result || "unknown");
+      const gate =
+        gateRaw === "pass" || gateRaw === "repair" || gateRaw === "weak"
+          ? gateRaw
+          : ("unknown" as const);
+      recordContractTelemetry({ event: "ui_gen_gate", gate });
       if (!result.ok) {
         return res.status(result.preference_recovery ? 409 : result.status === "pending_discovery" ? 409 : 422).json({
           ok: false,
@@ -3909,7 +4060,7 @@ Rules:
       let mpFill: {
         written: string[];
         source: string;
-        completeness?: ReturnType<typeof assessMasterPlanCompleteness>;
+        completeness?: ReturnType<typeof assessMasterPlanCompletenessWithWorkspace>;
       } = { written: [], source: "skipped" };
       if (!continuation) {
         mpFill = await ensureMasterPlanBeforeGo({
@@ -3947,11 +4098,26 @@ Rules:
         /* ignore */
       }
 
-      const completeness = assessMasterPlanCompleteness({
+      const completeness = assessMasterPlanCompletenessWithWorkspace({
         plan: planSnapshot,
         mode: readMasterPlanStrictMode(),
         workspaceRoot: ppGo.workspaceRoot,
         checkUiBrief: true,
+      });
+      const blockGaps = completeness.gaps.filter((g) => g.severity === "block");
+      const goGateOutcome =
+        !completeness.allowGo
+          ? "blocked"
+          : blockGaps.length > 0 || completeness.gaps.length > 0
+            ? "warned"
+            : "ok";
+      recordContractTelemetry({
+        event: "master_plan_go_gate",
+        mode: completeness.mode,
+        shape: completeness.shape,
+        allowGo: completeness.allowGo,
+        outcome: goGateOutcome,
+        gapCount: completeness.gaps.length,
       });
       if (completeness.gaps.length > 0) {
         console.log(
@@ -3981,7 +4147,7 @@ Your ONLY output for this turn: a **short** pre-coding summary for the Master Pl
 
 Strict rules:
 - Emit EXACTLY one block: <PRE_CODING_SUMMARY>...</PRE_CODING_SUMMARY>
-- Inside: maximum 1200 characters. Use bullets or tight prose: **name the current slice** (Foundation / Auth / Data+API / Primary feature / Secondary / Polish), Project Type, assumptions, files for THIS slice only, risks, and what to validate before the next Go.
+- Inside: maximum 1200 characters. **First line MUST be** \`SLICE: Foundation|Auth|Data+API|Primary|Secondary|Polish\` (exactly one). Then bullets: Project Type, assumptions, files for THIS slice only, risks, and what to validate before the next Go.
 - Architecture-first + Incremental Development (nebulla-project/incremental-development.md): one coherent slice — never plan dumping the entire §4 route map in one Go.
 - Do NOT paste project-execution-rules.md or long policy text.
 - Do NOT replace full Master Plan sections; this is a session brief only.

@@ -14,4 +14,6 @@ conversation-logs/**/*.md
 guardian-data/
 # Per-project cloud workspaces on disk (Render / local dev)
 data/cloud-projects/
+# Privacy-safe contract telemetry JSONL (Layer 0)
+data/contract-telemetry.jsonl
 .vercel
