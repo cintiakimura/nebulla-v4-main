@@ -23,7 +23,8 @@ export function section4RoutesFromPlan(plan: Record<string, string>): string[] {
   for (const m of section.matchAll(/`(\/[^`]+)`/g)) {
     routes.add(normalizeRoute(m[1]!));
   }
-  for (const m of section.matchAll(/(?:^|[\s(])(\/[a-zA-Z][\w\-./:{}\*]*)/g)) {
+  // Plain paths: allow digit/underscore first segment (`/2fa`, `/_secret`), not only letters.
+  for (const m of section.matchAll(/(?:^|[\s(])(\/[A-Za-z0-9_][\w\-./:{}\*]*)/g)) {
     const r = m[1]!;
     if (!r.includes(" ")) routes.add(normalizeRoute(r));
   }

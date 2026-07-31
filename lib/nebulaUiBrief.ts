@@ -229,8 +229,15 @@ export function parsePagesFromUiBrief(brief: string): { name: string; route: str
     const end = i + 1 < matches.length ? (matches[i + 1]!.index ?? pagesBlock.length) : pagesBlock.length;
     const chunk = pagesBlock.slice(start, end).trim();
     const name = (m[1] || "").replace(/\*\*/g, "").trim();
-    const route = (m[2] || m[3] || "").replace(/`/g, "").trim();
-    if (!name) continue;
+    let route = (m[2] || m[3] || "").replace(/`/g, "").trim();
+    // Heading without `/route` — recover from body, else skip (empty routes break merge/UI Gen).
+    if (!route.startsWith("/")) {
+      const fromBody =
+        chunk.match(/`(\/[^`\s]+)`/) ||
+        chunk.match(/(?:^|[\s(])(\/[A-Za-z0-9_][\w\-./:{}\*]*)/);
+      route = (fromBody?.[1] || "").trim();
+    }
+    if (!name || !route.startsWith("/")) continue;
     pages.push({ name, route, body: chunk });
   }
   return pages;

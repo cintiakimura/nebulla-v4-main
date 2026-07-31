@@ -38,7 +38,8 @@ export type MasterPlanCompletenessResult = {
 const PLACEHOLDER_RE =
   /^(tbd|todo|n\/a|none|placeholder|coming soon|\.|\-+)$/i;
 
-const ROUTE_RE = /`(\/[^`\s]+)`|(\/[a-zA-Z][\w\-./:{}\*]*)/g;
+/** Backtick paths, or plain `/…` allowing digit/underscore first segment (`/2fa`, `/_secret`). */
+const ROUTE_RE = /`(\/[^`\s]+)`|(\/[A-Za-z0-9_][\w\-./:{}\*]*)/g;
 
 const NEEDS_AUTH_RE =
   /\b(auth|login|sign[\s-]?up|sign[\s-]?in|oauth|multi[-\s]?tenant|workspace|client portal|invoice|private data|members?|roles?|accounts?)\b/i;

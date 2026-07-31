@@ -59,4 +59,29 @@ section("writeUiBriefMarkdown persists file");
   assert.equal(fs.readFileSync(abs, "utf8"), content);
 }
 
+section("parsePagesFromUiBrief skips empty routes; recovers route from body");
+{
+  const brief = [
+    "## Pages and navigation",
+    "",
+    "### Dashboard",
+    "No route on heading and none in body — drop.",
+    "",
+    "### Settings",
+    "Primary route is `/settings` in the body.",
+    "Purpose: account prefs",
+    "",
+    "### Login `/login`",
+    "Purpose: sign in",
+  ].join("\n");
+  const pages = parsePagesFromUiBrief(brief);
+  assert.ok(!pages.some((p) => !p.route.startsWith("/")), "no empty routes");
+  assert.ok(!pages.some((p) => p.name === "Dashboard"), "heading-only page dropped");
+  assert.ok(
+    pages.some((p) => p.name === "Settings" && p.route === "/settings"),
+    "route recovered from body",
+  );
+  assert.ok(pages.some((p) => p.name === "Login" && p.route === "/login"));
+}
+
 console.log("\nAll ui-brief tests passed.\n");

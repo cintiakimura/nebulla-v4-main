@@ -78,4 +78,31 @@ section("warn mode allows write with extras");
   assert.ok(fidelity.extraRoutes.length > 0);
 }
 
+section("plain and backticked /2fa /_secret are §4 routes (not extras)");
+{
+  const digitPlan = {
+    "4. Pages and navigation": [
+      "### Two-factor `/2fa`",
+      "Purpose: MFA challenge",
+      "",
+      "### Internal /_secret",
+      "Purpose: ops only",
+    ].join("\n"),
+  };
+  const routes = section4RoutesFromPlan(digitPlan);
+  assert.ok(routes.includes("/2fa"), `expected /2fa in ${routes.join(",")}`);
+  assert.ok(routes.includes("/_secret"), `expected /_secret in ${routes.join(",")}`);
+
+  const fidelity = assessMindMapSubsetOfSection4({
+    plan: digitPlan,
+    mindMapPages: [
+      { data: { label: "Two-factor", description: "Route: /2fa" } },
+      { data: { label: "Internal", description: "Route: /_secret" } },
+    ],
+    mode: "strict",
+  });
+  assert.equal(fidelity.extraRoutes.length, 0, fidelity.extraRoutes.join(","));
+  assert.equal(fidelity.allowWrite, true);
+}
+
 console.log("\nAll mind-map fidelity tests passed.\n");
