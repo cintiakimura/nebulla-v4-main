@@ -336,8 +336,10 @@ export function chatModeSystemAppendix(options: {
         'APP_STATUS_RUNTIME (Verify evidence present):',
         '- The user message includes [APP_STATUS_DEBUG] from Nebulla App Status (preview runtime).',
         '- NDM Step 1 Verify MUST use that payload (friendly + technical). Do NOT ask “what error do you see?”',
+        '- Do NOT ask for console screenshots, DevTools, or stack dumps when [APP_STATUS_DEBUG] is present.',
         '- Ask only if expected behavior is still unclear.',
-        '- Follow Verify → Analyze → Trace → Fix → Validate.',
+        '- Follow Verify → Analyze → Trace → Fix → Validate. Runtime fix = ONE slice — never dump full §4.',
+        '- Prefer ≤6 ```file:``` blocks for the smallest safe fix.',
         '- After Fix: tell the user to reload Preview; App Status should go green when the bug is gone.',
         '- Chat-facing copy stays beginner-friendly (user-communication-rules.md); never dump raw stacks in chat unless they expand Technical details themselves.',
         interactionMode === 'chat'

@@ -16,6 +16,7 @@ import {
   type MasterPlanCompletenessResult,
 } from "./masterPlanCompleteness";
 import { assessMasterPlanCompletenessWithWorkspace } from "./masterPlanCompletenessIo";
+import { resolveMasterPlanStrictMode } from "./masterPlanStrictPolicy";
 
 export { listMissingMasterPlanSections, fillMissingMasterPlanSectionsLocal };
 export { readMasterPlanStrictMode };
@@ -203,7 +204,7 @@ export async function ensureMasterPlanBeforeGo(opts: {
 
   const completeness = assessMasterPlanCompletenessWithWorkspace({
     plan: planForAssess,
-    mode: readMasterPlanStrictMode(),
+    mode: resolveMasterPlanStrictMode(opts.workspaceRoot),
     workspaceRoot: opts.workspaceRoot,
     checkUiBrief: true,
   });

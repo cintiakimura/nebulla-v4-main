@@ -37,6 +37,12 @@ export type ContractTelemetryEvent =
   | {
       event: "ui_gen_gate";
       gate: "pass" | "repair" | "weak" | "unknown";
+    }
+  | {
+      event: "ndm_app_status_turn";
+      verifyBeforeApply: boolean;
+      fileCount: number;
+      smallFix: boolean;
     };
 
 const REL = path.join("data", "contract-telemetry.jsonl");
@@ -78,6 +84,7 @@ export type ContractTelemetrySummary = {
   mindMap: { writes: number; extras: number; blockedWrites: number };
   appStatus: { reachedGreen: number; stillRed: number; unknown: number };
   uiGen: { pass: number; repair: number; weak: number; unknown: number };
+  ndm: { turns: number; verifyBeforeApply: number; smallFix: number };
 };
 
 export function summarizeContractTelemetry(logPath?: string): ContractTelemetrySummary {
@@ -91,6 +98,7 @@ export function summarizeContractTelemetry(logPath?: string): ContractTelemetryS
     mindMap: { writes: 0, extras: 0, blockedWrites: 0 },
     appStatus: { reachedGreen: 0, stillRed: 0, unknown: 0 },
     uiGen: { pass: 0, repair: 0, weak: 0, unknown: 0 },
+    ndm: { turns: 0, verifyBeforeApply: 0, smallFix: 0 },
   };
   if (!fs.existsSync(abs)) return summary;
   const lines = fs.readFileSync(abs, "utf8").split(/\r?\n/).filter(Boolean);
@@ -130,6 +138,10 @@ export function summarizeContractTelemetry(logPath?: string): ContractTelemetryS
       else if (g === "repair") summary.uiGen.repair += 1;
       else if (g === "weak") summary.uiGen.weak += 1;
       else summary.uiGen.unknown += 1;
+    } else if (event === "ndm_app_status_turn") {
+      summary.ndm.turns += 1;
+      if (row.verifyBeforeApply === true) summary.ndm.verifyBeforeApply += 1;
+      if (row.smallFix === true) summary.ndm.smallFix += 1;
     }
   }
   return summary;

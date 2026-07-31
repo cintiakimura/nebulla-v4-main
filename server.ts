@@ -64,7 +64,7 @@ import {
   writeBasicUiScaffold,
 } from "./lib/nebulaIdeWorkspaceArtifacts";
 import { readUiBriefMarkdown } from "./lib/nebulaUiBrief";
-import { readMasterPlanStrictMode } from "./lib/masterPlanCompleteness";
+import { resolveMasterPlanStrictMode } from "./lib/masterPlanStrictPolicy";
 import { assessMasterPlanCompletenessWithWorkspace } from "./lib/masterPlanCompletenessIo";
 import { assessMindMapSubsetOfSection4 } from "./lib/mindMapFidelity";
 import { recordContractTelemetry } from "./lib/nebulaContractTelemetry";
@@ -1153,7 +1153,7 @@ No approved UI code yet.
       }
       const completeness = assessMasterPlanCompletenessWithWorkspace({
         plan,
-        mode: readMasterPlanStrictMode(),
+        mode: resolveMasterPlanStrictMode(pp.workspaceRoot),
         workspaceRoot: pp.workspaceRoot,
         checkUiBrief: true,
       });
@@ -1543,7 +1543,7 @@ No approved UI code yet.
       const fidelity = assessMindMapSubsetOfSection4({
         plan,
         mindMapPages: pages,
-        mode: readMasterPlanStrictMode(),
+        mode: resolveMasterPlanStrictMode(pp.workspaceRoot),
       });
       res.json({
         pages,
@@ -1589,6 +1589,16 @@ No approved UI code yet.
         });
         return res.json({ ok: true });
       }
+      if (event === "ndm_app_status_turn") {
+        const fileCount = Math.max(0, Math.min(100, Number(body.fileCount) || 0));
+        recordContractTelemetry({
+          event: "ndm_app_status_turn",
+          verifyBeforeApply: body.verifyBeforeApply === true,
+          fileCount,
+          smallFix: body.smallFix === true || (fileCount > 0 && fileCount <= 6),
+        });
+        return res.json({ ok: true });
+      }
       return res.status(400).json({ error: "unsupported event" });
     } catch (e) {
       return res.status(500).json({
@@ -1609,7 +1619,7 @@ No approved UI code yet.
       const fidelity = assessMindMapSubsetOfSection4({
         plan,
         mindMapPages: pages,
-        mode: readMasterPlanStrictMode(),
+        mode: resolveMasterPlanStrictMode(pp.workspaceRoot),
       });
       recordContractTelemetry({
         event: "mindmap_fidelity",
@@ -1663,7 +1673,7 @@ No approved UI code yet.
       const fidelity = assessMindMapSubsetOfSection4({
         plan,
         mindMapPages: graph.pages,
-        mode: readMasterPlanStrictMode(),
+        mode: resolveMasterPlanStrictMode(pp.workspaceRoot),
       });
       res.json({
         ok: true,
@@ -4100,7 +4110,7 @@ Rules:
 
       const completeness = assessMasterPlanCompletenessWithWorkspace({
         plan: planSnapshot,
-        mode: readMasterPlanStrictMode(),
+        mode: resolveMasterPlanStrictMode(ppGo.workspaceRoot),
         workspaceRoot: ppGo.workspaceRoot,
         checkUiBrief: true,
       });

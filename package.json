@@ -27,6 +27,7 @@
     "test:methodology-pilots": "tsx scripts/pilot-master-plan-methodology.ts",
     "test:contract-telemetry": "tsx scripts/test-contract-telemetry.ts",
     "test:go-slice": "tsx scripts/test-go-slice-contract.ts",
+    "test:ide-next-action": "tsx scripts/test-ide-next-action.ts",
     "test:security-scan": "tsx scripts/test-security-scan.mjs",
     "test:grok": "node scripts/test-grok-chat.mjs",
     "telemetry:contracts": "tsx scripts/summarize-contract-telemetry.ts",

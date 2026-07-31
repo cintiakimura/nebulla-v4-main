@@ -7,6 +7,7 @@ import {
   hydrateWorkspaceFromR2Safe,
   scheduleWorkspaceFileR2Sync,
 } from "./nebulaWorkspaceStorage";
+import { ensureWorkspaceCreatedMarker } from "./masterPlanStrictPolicy";
 
 export type CloudProjectPaths = {
   projectKey: string;
@@ -50,6 +51,7 @@ export function ensureCloudProjectWorkspace(
   const projectKey = sanitizeProjectKey(rawProjectKey);
   const workspaceRoot = path.join(repoRoot, "data", "cloud-projects", projectKey);
   fs.mkdirSync(workspaceRoot, { recursive: true });
+  ensureWorkspaceCreatedMarker(workspaceRoot);
 
   const masterPlanPath = path.join(workspaceRoot, "master-plan.json");
   const nebulaUiStudioPath = path.join(workspaceRoot, "nebula-ui-studio.md");

@@ -380,7 +380,7 @@ Product law already: ui-brief primary, V0 optional (`project-execution-rules.md`
 | Mind Map extras | Banner: discard (sync) / propose §4 / Accept amendment |
 | Soft UI brief CTA | UI Gen + Studio Beta preflight when brief &lt; 80 chars |
 
-### Layer 2 — Slice loop (started)
+### Layer 2 — Slice loop
 
 | Item | Status |
 |------|--------|
@@ -388,3 +388,33 @@ Product law already: ui-brief primary, V0 optional (`project-execution-rules.md`
 | Post-Go UX | Slice label in status; validate-before-next accessory |
 | Soft discourage next Go | Pending App Status / red → CTA; Go again forces continue |
 | Oversized apply | Soft warn when too many app files for slice |
+
+### Layer 3 — Debug trust
+
+| Item | Status |
+|------|--------|
+| Evidence-first prompts | No DevTools/screenshot asks when `[APP_STATUS_DEBUG]` present; one-slice fix |
+| NDM telemetry | `ndm_app_status_turn` (verifyBeforeApply, smallFix ≤6 files) |
+| Failed apply ↛ Validate | Existing `shouldMarkAppStatusValidation` + smoke tests |
+
+### Layer 4 — UI honesty
+
+| Item | Status |
+|------|--------|
+| Weak gate | `shouldApplyUiToPreview` false for weak; Studio messaging; no Ready on weak |
+| Manual edits | IdeVisualEditor colors/spacing/typography without model call (existing) |
+| Soft brief CTA | Studio + UI Gen (L1) |
+
+### Layer 5 — Clarity
+
+| Item | Status |
+|------|--------|
+| Next action bar | `IdeNextActionBar` — one recommended action above chat |
+
+### Layer 6 — Strict for new projects
+
+| Item | Status |
+|------|--------|
+| Policy | `resolveMasterPlanStrictMode` + `.nebula-created-at` marker |
+| Env | `MASTER_PLAN_STRICT=warn` base; `MASTER_PLAN_STRICT_NEW_PROJECTS=strict` + `MASTER_PLAN_STRICT_AFTER` |
+| Rollback | Unset NEW_PROJECTS / AFTER, or set base to `off` |

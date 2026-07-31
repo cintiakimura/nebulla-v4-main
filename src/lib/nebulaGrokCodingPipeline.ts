@@ -576,7 +576,13 @@ export async function handlePostGrokCodingTurn(options: {
   projectName: string;
   userNote?: string;
   onProgress?: GrokActivityProgressFn;
-}): Promise<{ ran: boolean; ok?: boolean; statusMessage?: string }> {
+}): Promise<{
+  ran: boolean;
+  ok?: boolean;
+  statusMessage?: string;
+  writtenCount?: number;
+  writtenPaths?: string[];
+}> {
   const { assistantContent, planningPhase, userId, projectName, userNote, onProgress } = options;
 
   if (hasGrokFileBlocks(assistantContent)) {
@@ -588,9 +594,21 @@ export async function handlePostGrokCodingTurn(options: {
         projectName,
         onProgress,
       });
-      return { ran: true, ok: true, statusMessage: apply.message };
+      return {
+        ran: true,
+        ok: true,
+        statusMessage: apply.message,
+        writtenCount: apply.writtenCount,
+        writtenPaths: apply.writtenPaths,
+      };
     }
-    return { ran: true, ok: false, statusMessage: apply.message };
+    return {
+      ran: true,
+      ok: false,
+      statusMessage: apply.message,
+      writtenCount: apply.writtenCount,
+      writtenPaths: apply.writtenPaths,
+    };
   }
 
   const planning = planningPhase.trim();
@@ -621,5 +639,11 @@ export async function handlePostGrokCodingTurn(options: {
     await afterFilesAppliedArtifacts(userNote, projectName, onProgress);
     // UI Studio Beta already triggered inside runGoCodeAndApply after successful apply.
   }
-  return { ran: true, ok: go.ok, statusMessage: go.statusMessage };
+  return {
+    ran: true,
+    ok: go.ok,
+    statusMessage: go.statusMessage,
+    writtenCount: go.totalWritten,
+    writtenPaths: undefined,
+  };
 }
