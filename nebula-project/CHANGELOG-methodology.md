@@ -309,9 +309,10 @@ Default if unset remains **`off`** (safe).
 |------|--------|
 | Route-parse bugfix (`/2fa`, empty ui-brief routes) | Committed `0131` |
 | Fixture pilots | `npm run test:methodology-pilots` (CRUD+auth, thin-legacy, naïve-insecure, multi-page `/2fa`) |
-| Render `nebulla-v4-main` | `MASTER_PLAN_STRICT=warn` via API + deploy triggered |
-| Prod `strict` | **Deferred** — wait for smoke on `warn`; then raise for new projects only |
-| Live IDE click-through pilots | Still human (banner + Go in browser after deploy finishes) |
+| Render `nebulla-v4-main` | `MASTER_PLAN_STRICT=warn` set; deploy **live** (`0133` + smoke `/api/health` OK) |
+| Docker build break | Fixed AIChat import (`src/lib/masterPlanSections` re-export) — was blocking Render |
+| Prod `strict` | **Deferred** — smoke `warn` first; then raise when ready |
+| Live IDE click-through | Still human (Master Plan banner + Go in browser) |
 
 ### Still operator-owned
 
