@@ -1,0 +1,18 @@
+{
+  "id": "mobile-list-tasks",
+  "kind": "template",
+  "platform": "mobile",
+  "page_types": ["list", "home"],
+  "density": "compact",
+  "personality": ["clean", "professional"],
+  "best_for": ["task list", "todo feed", "practice queue"],
+  "strengths": ["List rows with meta", "Fast scan", "CTA for next action"],
+  "weaknesses": ["Poor for marketing heroes"],
+  "tags": ["mobile", "list", "tasks", "a11y"],
+  "description": "Compact mobile list/actions template for task and feed pages.",
+  "template_id": "mobile_list_actions",
+  "license": "Nebulla internal template",
+  "source": "ui-generation-engine/v2/selectTemplate",
+  "version": "1.0.0",
+  "industry": ["education", "general"]
+}

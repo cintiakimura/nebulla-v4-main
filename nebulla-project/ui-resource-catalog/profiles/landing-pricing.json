@@ -1,0 +1,17 @@
+{
+  "id": "landing-pricing",
+  "kind": "template",
+  "platform": "landing",
+  "page_types": ["landing"],
+  "density": "medium",
+  "personality": ["clean", "professional", "premium"],
+  "best_for": ["pricing page", "plan comparison landing"],
+  "strengths": ["Pricing card triad", "Hero + CTA band"],
+  "weaknesses": ["Less feature storytelling than hero-features"],
+  "tags": ["marketing", "pricing", "a11y"],
+  "description": "Landing variant focused on pricing sections and conversion CTA. Use when Master Plan emphasizes plans or tiers.",
+  "template_id": "landing_pricing_sections",
+  "license": "Nebulla internal template",
+  "source": "ui-generation-engine/v2/selectTemplate",
+  "version": "1.0.0"
+}

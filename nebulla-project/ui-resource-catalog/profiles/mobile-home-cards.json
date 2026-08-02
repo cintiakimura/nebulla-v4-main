@@ -1,0 +1,18 @@
+{
+  "id": "mobile-home-cards",
+  "kind": "template",
+  "platform": "mobile",
+  "page_types": ["home", "other"],
+  "density": "medium",
+  "personality": ["clean", "friendly"],
+  "best_for": ["mobile home", "task app home", "consumer app start"],
+  "strengths": ["Hero + card grid", "Bottom tabs region", "Clear primary CTA"],
+  "weaknesses": ["Not for marketing landings", "Limited for wide web dashboards"],
+  "tags": ["mobile", "cards", "bottom_tabs", "a11y"],
+  "description": "Mobile home with top bar, hero, three cards, CTA row, and bottom tabs. Default for consumer mobile apps.",
+  "template_id": "mobile_home_hero_cards",
+  "figma_file_key": "ZEbJpC67UQyeeynt1UR8gT",
+  "license": "Nebulla internal + optional Figma ref",
+  "source": "ui-generation-engine/v2 + FIGMA mobile bucket",
+  "version": "1.0.0"
+}

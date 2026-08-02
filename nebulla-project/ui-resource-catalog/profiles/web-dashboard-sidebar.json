@@ -1,0 +1,18 @@
+{
+  "id": "web-dashboard-sidebar",
+  "kind": "template",
+  "platform": "web",
+  "page_types": ["dashboard", "home", "list"],
+  "density": "medium",
+  "personality": ["professional", "clean"],
+  "best_for": ["saas dashboard", "admin overview", "web app home"],
+  "strengths": ["Sidebar + metrics + content", "Desktop scanning"],
+  "weaknesses": ["Wrong for pure marketing landings", "Heavy for simple mobile"],
+  "tags": ["web", "sidebar", "dashboard", "saas", "a11y"],
+  "description": "Web app shell with sidebar navigation, header, metrics row, and content panel.",
+  "template_id": "web_dashboard_sidebar",
+  "license": "Nebulla internal template",
+  "source": "ui-generation-engine/v2/selectTemplate",
+  "version": "1.0.0",
+  "industry": ["saas", "finance", "general"]
+}

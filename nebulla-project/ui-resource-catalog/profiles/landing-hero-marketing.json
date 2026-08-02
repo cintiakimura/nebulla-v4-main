@@ -1,0 +1,20 @@
+{
+  "id": "landing-hero-marketing",
+  "kind": "template",
+  "platform": "landing",
+  "page_types": ["landing", "home"],
+  "density": "spacious",
+  "personality": ["clean", "bold", "professional"],
+  "best_for": ["marketing site", "waitlist", "product launch landing"],
+  "strengths": ["Clear hero + feature cards", "Strong primary CTA band", "Scannable sections"],
+  "weaknesses": ["Not for dense dashboards", "Weak for authenticated app shells"],
+  "tags": ["marketing", "hero", "cta", "a11y"],
+  "description": "Spacious marketing landing with hero, three feature cards, and CTA band. Best when the product story needs conversion-focused hierarchy rather than app navigation.",
+  "suitability": "Landing Page / marketing project types with §5 spacious or medium density.",
+  "limitations": "Do not use for mobile bottom-tab apps or admin dashboards.",
+  "template_id": "landing_hero_features_cta",
+  "license": "Nebulla internal template",
+  "source": "ui-generation-engine/v2/selectTemplate",
+  "version": "1.0.0",
+  "industry": ["general", "saas"]
+}

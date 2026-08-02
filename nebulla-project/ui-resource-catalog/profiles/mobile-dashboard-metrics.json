@@ -1,0 +1,17 @@
+{
+  "id": "mobile-dashboard-metrics",
+  "kind": "template",
+  "platform": "mobile",
+  "page_types": ["dashboard", "home"],
+  "density": "medium",
+  "personality": ["clean", "professional"],
+  "best_for": ["mobile metrics", "streak KPI home", "progress overview"],
+  "strengths": ["Metric tiles", "Section body", "Bottom tabs"],
+  "weaknesses": ["Not a full web sidebar dashboard"],
+  "tags": ["mobile", "metrics", "dashboard"],
+  "description": "Mobile dashboard with metric chips and a supporting section.",
+  "template_id": "mobile_dashboard_metrics",
+  "license": "Nebulla internal template",
+  "source": "ui-generation-engine/v2/selectTemplate",
+  "version": "1.0.0"
+}

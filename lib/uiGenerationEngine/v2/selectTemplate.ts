@@ -323,3 +323,9 @@ export function selectTemplate(
 
   return TEMPLATE_DEFS[id];
 }
+
+/** Resolve a known template id, or null if unknown. */
+export function getTemplateById(id: string | undefined | null): TemplateDef | null {
+  if (!id) return null;
+  return TEMPLATE_DEFS[id as V2TemplateId] || null;
+}

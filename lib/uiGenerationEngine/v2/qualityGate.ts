@@ -12,6 +12,16 @@ import type {
   V2EditorModel,
   V2PageType,
 } from "./types";
+import type { DesignBrief } from "../resources/types";
+
+function luma(hex: string): number {
+  const h = (hex || "").replace("#", "");
+  if (h.length < 6) return 0.5;
+  const r = parseInt(h.slice(0, 2), 16) / 255;
+  const g = parseInt(h.slice(2, 4), 16) / 255;
+  const b = parseInt(h.slice(4, 6), 16) / 255;
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
 
 function isRouteLike(s: string): boolean {
   return /^\/[a-z0-9/_-]+$/i.test(s.trim()) || /\/[a-z0-9-]{6,}/i.test(s);
@@ -28,9 +38,11 @@ export function validateV2Quality(input: {
   slots: SlotMap;
   figmaStatus: FigmaStatusV2;
   pageType: V2PageType;
+  /** Optional compiled Design Brief — enables role/density guideline checks. */
+  designBrief?: DesignBrief | null;
 }): QualityGateV2 {
   const issues: string[] = [];
-  const { model, template, tokens, slots, figmaStatus, pageType } = input;
+  const { model, template, tokens, slots, figmaStatus, pageType, designBrief } = input;
 
   if (!model?.pages || !Object.keys(model.pages).length) {
     return { gate: "weak", issues: ["No editor model pages"] };
@@ -110,6 +122,36 @@ export function validateV2Quality(input: {
   if (!figmaStatus) issues.push("figma_status missing");
   if (figmaStatus === "success" && model.meta?.figma_status !== "success") {
     issues.push("figma success claimed without model meta");
+  }
+
+  // G.5 Design Brief guidelines (when present)
+  if (designBrief) {
+    const buttons = nodes.filter((n) => n.type === "button");
+    const primaryHex = designBrief.color_roles.primary.hex.toLowerCase();
+    const primaryOnButton = buttons.some(
+      (b) => (b.style?.backgroundColor || "").toLowerCase() === primaryHex,
+    );
+    if (template.needsPrimaryCta && buttons.length > 0 && !primaryOnButton) {
+      issues.push("Design Brief: primary color role not applied to any CTA button");
+    }
+    const textNodes = nodes.filter((n) => n.type === "text");
+    const primaryAsBody = textNodes.filter(
+      (t) => (t.style?.color || "").toLowerCase() === primaryHex,
+    ).length;
+    if (primaryAsBody >= 3) {
+      issues.push("Design Brief: primary color overused on body text (CTA-only role)");
+    }
+    const wantGap = designBrief.spacing_radius.gap;
+    if (Math.abs(tokens.gap - wantGap) > 8) {
+      issues.push(
+        `Design Brief: density/spacing mismatch (token gap ${tokens.gap} vs brief ${wantGap})`,
+      );
+    }
+    const bgL = luma(designBrief.color_roles.background.hex);
+    const textL = luma(designBrief.color_roles.on_surface.hex);
+    if (Math.abs(bgL - textL) < 0.25) {
+      issues.push("Design Brief: weak text/background contrast (a11y minimum)");
+    }
   }
 
   if (issues.length === 0) return { gate: "pass", issues };

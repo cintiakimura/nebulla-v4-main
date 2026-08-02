@@ -1,0 +1,17 @@
+{
+  "id": "mobile-auth-form",
+  "kind": "template",
+  "platform": "mobile",
+  "page_types": ["auth"],
+  "density": "spacious",
+  "personality": ["clean", "friendly"],
+  "best_for": ["mobile login", "mobile signup"],
+  "strengths": ["Simple form stack", "Strong CTA"],
+  "weaknesses": ["No bottom tabs (by design)"],
+  "tags": ["mobile", "auth", "a11y"],
+  "description": "Mobile auth form with hero copy, two fields, and primary/secondary CTAs.",
+  "template_id": "mobile_auth_form",
+  "license": "Nebulla internal template",
+  "source": "ui-generation-engine/v2/selectTemplate",
+  "version": "1.0.0"
+}

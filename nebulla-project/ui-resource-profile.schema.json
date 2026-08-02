@@ -1,0 +1,69 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "nebulla-ui-resource-profile-v1",
+  "title": "NebullaUiResourceProfile",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id",
+    "kind",
+    "platform",
+    "page_types",
+    "density",
+    "personality",
+    "best_for",
+    "strengths",
+    "weaknesses",
+    "tags",
+    "description",
+    "license",
+    "source",
+    "version"
+  ],
+  "properties": {
+    "id": { "type": "string", "minLength": 2, "maxLength": 64 },
+    "kind": { "type": "string", "enum": ["template", "figma_kit", "pattern"] },
+    "platform": { "type": "string", "enum": ["mobile", "web", "landing"] },
+    "page_types": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "home",
+          "list",
+          "detail",
+          "dashboard",
+          "settings",
+          "auth",
+          "checkout",
+          "profile",
+          "empty",
+          "landing",
+          "other"
+        ]
+      },
+      "minItems": 1
+    },
+    "density": { "type": "string", "enum": ["spacious", "medium", "compact"] },
+    "personality": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 2, "maxLength": 32 },
+      "minItems": 1
+    },
+    "best_for": { "type": "array", "items": { "type": "string" } },
+    "strengths": { "type": "array", "items": { "type": "string" } },
+    "weaknesses": { "type": "array", "items": { "type": "string" } },
+    "tags": { "type": "array", "items": { "type": "string" } },
+    "description": { "type": "string", "minLength": 20, "maxLength": 2000 },
+    "suitability": { "type": "string" },
+    "limitations": { "type": "string" },
+    "template_id": { "type": "string" },
+    "figma_file_key": { "type": "string" },
+    "preview_r2_key": { "type": "string" },
+    "preview_local": { "type": "string" },
+    "license": { "type": "string" },
+    "source": { "type": "string" },
+    "version": { "type": "string" },
+    "industry": { "type": "array", "items": { "type": "string" } }
+  }
+}

@@ -32,3 +32,25 @@ export {
   applyUiGenerationToPreviewShell,
 } from "./applyPreviewShell";
 export { polishSlotsForContentLocale } from "./polishSlotsLocale";
+export {
+  compileDesignBrief,
+  matchResources,
+  scoreProfile,
+  MAX_SCORE,
+  resolveCatalogMode,
+  catalogRootFromCwd,
+  listProfiles,
+  listProfilesFs,
+  applyBriefRefinePatch,
+  parseBriefRefinePatch,
+  parseRematchSuggestion,
+  applyRematchPick,
+  rankResourceCandidates,
+  shouldAttemptRematch,
+} from "./resources/index";
+export type {
+  DesignBrief,
+  ResourceMatchResult,
+  UiResourceProfile,
+  CatalogMode,
+} from "./resources/types";

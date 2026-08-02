@@ -1,0 +1,17 @@
+{
+  "id": "web-auth-card",
+  "kind": "template",
+  "platform": "web",
+  "page_types": ["auth"],
+  "density": "spacious",
+  "personality": ["clean", "professional"],
+  "best_for": ["sign in", "sign up", "login"],
+  "strengths": ["Centered auth card", "Clear fields + CTA"],
+  "weaknesses": ["Single-purpose"],
+  "tags": ["web", "auth", "a11y"],
+  "description": "Centered web authentication card with email/password fields and primary continue CTA.",
+  "template_id": "web_auth_center_card",
+  "license": "Nebulla internal template",
+  "source": "ui-generation-engine/v2/selectTemplate",
+  "version": "1.0.0"
+}

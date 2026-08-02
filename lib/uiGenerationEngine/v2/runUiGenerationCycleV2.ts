@@ -34,8 +34,14 @@ import { retrieveFigmaReferences } from "./figmaReferences";
 import { mapSlots } from "./mapSlots";
 import { repairSlots, validateV2Quality } from "./qualityGate";
 import { renderTemplateCode, renderTemplateModel } from "./renderTemplateModel";
-import { selectTemplate } from "./selectTemplate";
+import { getTemplateById, selectTemplate } from "./selectTemplate";
 import type { V2TemplateId } from "./types";
+import { compileDesignBrief } from "../resources/compileDesignBrief";
+import { matchResources } from "../resources/matchResources";
+import { refineDesignBriefWithGrok } from "../resources/refineDesignBrief";
+import { suggestResourceRematchWithGrok } from "../resources/suggestResourceRematch";
+import { listProfilesFs } from "../resources/catalogStore";
+import type { DesignBrief, ResourceMatchResult } from "../resources/types";
 import {
   applyUiGenerationToPreviewShell,
   shouldApplyUiToPreview,
@@ -543,6 +549,86 @@ export async function runUiGenerationCycleV2(
   state.current_step = 2;
   persist(workspaceRoot, state);
 
+  // -------- Design Brief + resource match (intelligence layer) --------
+  stage("Compiling design brief");
+  let designBrief: DesignBrief = compileDesignBrief({
+    uiuxSection: uiux,
+    uiBriefMarkdown: uiBrief,
+    classification,
+    projectName: state.project_name,
+  });
+  let briefGrokRefined = false;
+  if (input.apiKeyOverride?.trim()) {
+    const refined = await refineDesignBriefWithGrok({
+      brief: designBrief,
+      uiuxSection: uiux,
+      uiBriefMarkdown: uiBrief,
+      projectName: state.project_name,
+      apiKey: input.apiKeyOverride,
+    });
+    designBrief = refined.brief;
+    briefGrokRefined = refined.refined;
+    if (refined.refined) {
+      appendStepLog(state, "Design brief — Grok refine applied (roles only, no layout invent)");
+    } else if (refined.skippedReason && refined.skippedReason !== "disabled") {
+      state.generation_warnings.push(`Brief Grok refine skipped: ${refined.skippedReason}`);
+    }
+  }
+  try {
+    const briefPath = path.join(workspaceRoot, "nebulla-project", "ui-design-brief.json");
+    fs.mkdirSync(path.dirname(briefPath), { recursive: true });
+    fs.writeFileSync(briefPath, `${JSON.stringify(designBrief, null, 2)}\n`, "utf8");
+  } catch {
+    /* optional artifact */
+  }
+  appendStepLog(
+    state,
+    `Design brief — density=${designBrief.overview.density} personality=${designBrief.overview.personality.join(",")}`,
+  );
+
+  let resourceMatch: ResourceMatchResult = {
+    id: "",
+    score: 0,
+    max_score: 0,
+    reasons: [],
+    selection_mode: "disabled",
+  };
+  let rematchGrokApplied = false;
+  let catalogProfiles: Awaited<ReturnType<typeof listProfilesFs>> = [];
+  try {
+    const workspaceCatalog = path.join(workspaceRoot, "nebulla-project", "ui-resource-catalog");
+    const repoCatalog = path.join(process.cwd(), "nebulla-project", "ui-resource-catalog");
+    const local = await listProfilesFs(workspaceCatalog);
+    catalogProfiles = local.length > 0 ? local : await listProfilesFs(repoCatalog);
+    resourceMatch = matchResources({
+      profiles: catalogProfiles,
+      brief: designBrief,
+      classification,
+    });
+    if (input.apiKeyOverride?.trim() && catalogProfiles.length > 0) {
+      const rematch = await suggestResourceRematchWithGrok({
+        profiles: catalogProfiles,
+        brief: designBrief,
+        classification,
+        currentMatch: resourceMatch,
+        apiKey: input.apiKeyOverride,
+      });
+      if (rematch.rematched) {
+        resourceMatch = rematch.match;
+        rematchGrokApplied = true;
+        appendStepLog(
+          state,
+          `Resource rematch — Grok shortlist pick id=${resourceMatch.id} score=${resourceMatch.score}`,
+        );
+      }
+    }
+  } catch (e) {
+    appendStepLog(
+      state,
+      `Resource match skipped — ${e instanceof Error ? e.message : String(e)}`,
+    );
+  }
+
   // -------- Phase B — Template --------
   stage("Choosing layout");
   const preferAlternate =
@@ -553,10 +639,29 @@ export async function runUiGenerationCycleV2(
   const previousTemplate = (prevPolicy as { template_id?: string }).template_id as
     | V2TemplateId
     | undefined;
-  const template = selectTemplate(classification, {
+  let template = selectTemplate(classification, {
     preferAlternate,
     previousTemplate,
   });
+  if (
+    !preferAlternate &&
+    resourceMatch.selection_mode === "scored_match" &&
+    resourceMatch.template_id
+  ) {
+    const matched = getTemplateById(resourceMatch.template_id);
+    if (matched) {
+      template = matched;
+      appendStepLog(
+        state,
+        `Resource match — id=${resourceMatch.id} score=${resourceMatch.score}/${resourceMatch.max_score} → template ${template.id}`,
+      );
+    }
+  } else if (resourceMatch.id) {
+    appendStepLog(
+      state,
+      `Resource match — mode=${resourceMatch.selection_mode} score=${resourceMatch.score} (using selectTemplate fallback)`,
+    );
+  }
   state.template_id = template.id;
   appendStepLog(state, `Phase B template — ${template.id} regions=${template.regions.join(",")}`);
   state.current_step = 3;
@@ -604,6 +709,17 @@ export async function runUiGenerationCycleV2(
   // -------- Phase D — Tokens --------
   stage("Applying design tokens");
   const tokens = buildDesignTokens(uiux, state.palette, classification.density);
+  // Align spacing with compiled Design Brief roles (before preference nudges).
+  tokens.gap = designBrief.spacing_radius.gap;
+  tokens.pad = designBrief.spacing_radius.pad;
+  tokens.radius = designBrief.spacing_radius.radius;
+  tokens.primary = designBrief.color_roles.primary.hex;
+  tokens.bg = designBrief.color_roles.background.hex;
+  tokens.surface = designBrief.color_roles.surface.hex;
+  tokens.text = designBrief.color_roles.on_surface.hex;
+  tokens.mutedText = designBrief.color_roles.muted.hex;
+  tokens.border = designBrief.color_roles.border.hex;
+  if (designBrief.color_roles.accent) tokens.accent = designBrief.color_roles.accent.hex;
   // Soft-apply spacing/radius hints from Figma/seed when present
   for (const h of figma.structure_hints) {
     const sp = h.match(/spacing rhythm ≈ (\d+)/i);
@@ -716,6 +832,7 @@ export async function runUiGenerationCycleV2(
     slots,
     figmaStatus: figma.figma_status,
     pageType: classification.page_type,
+    designBrief,
   });
   state.repair_pass_used = "no";
   if (gate.gate !== "pass") {
@@ -739,6 +856,7 @@ export async function runUiGenerationCycleV2(
       slots,
       figmaStatus: figma.figma_status,
       pageType: classification.page_type,
+      designBrief,
     });
     appendStepLog(state, `Phase G repair — gate=${gate.gate}; issues=${gate.issues.join("; ") || "none"}`);
   }
@@ -811,6 +929,23 @@ export async function runUiGenerationCycleV2(
         pattern_mode: patternMode,
         preview_applied: previewApplied,
         preview_written: previewWritten,
+        design_brief_summary: {
+          density: designBrief.overview.density,
+          personality: designBrief.overview.personality,
+          gaps: designBrief.gaps,
+          primary: designBrief.color_roles.primary.hex,
+          grok_refined: briefGrokRefined,
+        },
+        resource_match: {
+          id: resourceMatch.id,
+          score: resourceMatch.score,
+          max_score: resourceMatch.max_score,
+          selection_mode: resourceMatch.selection_mode,
+          reasons: resourceMatch.reasons,
+          template_id: resourceMatch.template_id,
+          figma_file_key: resourceMatch.figma_file_key,
+          grok_rematch: rematchGrokApplied,
+        },
         figma: {
           figma_used: figma.figma_used,
           figma_status: figma.figma_status,
