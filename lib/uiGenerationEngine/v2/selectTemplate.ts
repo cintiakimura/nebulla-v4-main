@@ -271,7 +271,12 @@ export function selectTemplate(
   const { device, page_type, product_function } = classification;
   let id: V2TemplateId;
 
-  if (device === "landing" || page_type === "landing") {
+  if (
+    device === "landing" ||
+    page_type === "landing" ||
+    (product_function === "marketing" && device !== "mobile")
+  ) {
+    // Marketing / landing use landing families (not sidebar dashboards).
     id = opts?.preferAlternate ? "landing_pricing_sections" : "landing_hero_features_cta";
   } else if (page_type === "auth") {
     id = device === "mobile" ? "mobile_auth_form" : "web_auth_center_card";

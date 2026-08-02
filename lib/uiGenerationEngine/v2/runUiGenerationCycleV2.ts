@@ -818,6 +818,8 @@ export async function runUiGenerationCycleV2(
           fallback_used: figma.fallback_used,
           reference_file_keys_configured: figma.reference_file_keys_configured,
           env_guidance: figma.env_guidance,
+          selection_mode: figma.selection_mode,
+          preferred_bucket: figma.preferred_bucket,
           key_diagnostics: figma.key_diagnostics.slice(0, 8),
           selected_refs: figma.selected_refs,
           candidates: figma.candidates.slice(0, 6),
@@ -826,7 +828,7 @@ export async function runUiGenerationCycleV2(
         quality_gate_result: gate.gate,
         regeneration_count: state.regeneration_count,
         how_to_recheck:
-          "Generate UI → open nebulla-project/ui-generation-v2-meta.json → read pattern_mode / figma.fallback_used / preview_applied",
+          "Generate UI → open nebulla-project/ui-generation-v2-meta.json → read pattern_mode / figma.figma_status / figma.selection_mode / figma.preferred_bucket / preview_applied",
       },
       null,
       2,

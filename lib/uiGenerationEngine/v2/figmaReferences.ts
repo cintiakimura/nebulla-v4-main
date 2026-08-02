@@ -74,14 +74,32 @@ export function preferredBucketForClassification(classification: PageClassificat
 }
 
 function isLooseClassification(classification: PageClassification): boolean {
+  const preferred = preferredBucketForClassification(classification);
+  // Never treat landing/dashboard/auth/mobile as "loose" — that would probe untagged
+  // CSV (often a mobile-only library) and defeat C.3 bucket isolation.
+  if (
+    preferred === "landing" ||
+    preferred === "dashboard" ||
+    preferred === "auth" ||
+    preferred === "mobile"
+  ) {
+    return false;
+  }
   return classification.confidence === "low" || classification.page_type === "other";
+}
+
+/** Sibling tags safe to try when preferred bucket is empty (never mobile↔landing). */
+function siblingBuckets(preferred: string): string[] {
+  if (preferred === "landing") return ["web"];
+  if (preferred === "web") return ["landing"];
+  return [];
 }
 
 /**
  * Build ordered probe keys.
  * - Buckets set + preferred has keys → only those (avoid wrong mobile on landing/dashboard).
- * - Buckets set + preferred empty → untagged CSV only if classification is loose; else [].
- * - No buckets → CSV with light mobile prefer.
+ * - Buckets set + preferred empty → try safe siblings, then untagged CSV only if classification is loose; else [].
+ * - No buckets → CSV with light mobile prefer (and mobile deprioritized for landing/dashboard).
  */
 export function resolveProbeKeys(
   classification: PageClassification,
@@ -100,6 +118,17 @@ export function resolveProbeKeys(
         preferred_bucket: preferred,
       };
     }
+    for (const sib of siblingBuckets(preferred)) {
+      const sibKeys = buckets.get(sib) || [];
+      if (sibKeys.length > 0) {
+        return {
+          keys: sibKeys,
+          selection_mode: `bucket_sibling:${preferred}->${sib}`,
+          preferred_bucket: preferred,
+        };
+      }
+    }
+    // Strict page types: never probe untagged CSV (often a mobile-only library).
     if (isLooseClassification(classification) && libraryKeys.length > 0) {
       return {
         keys: orderKeysForClassification(libraryKeys, classification),
@@ -129,11 +158,16 @@ export function resolveProbeKeys(
   };
 }
 
-/** Prefer known mobile design key first on mobile pages when present in the list. */
+/** Prefer known mobile key on mobile; deprioritize it for landing/dashboard/auth/web. */
 function orderKeysForClassification(keys: string[], classification: PageClassification): string[] {
   if (keys.length <= 1) return keys;
   const mobilePreferred = "ZEbJpC67UQyeeynt1UR8gT";
-  if (classification.device === "mobile" && keys.includes(mobilePreferred)) {
+  if (!keys.includes(mobilePreferred)) return keys;
+  const preferred = preferredBucketForClassification(classification);
+  if (preferred && preferred !== "mobile") {
+    return [...keys.filter((k) => k !== mobilePreferred), mobilePreferred];
+  }
+  if (classification.device === "mobile") {
     return [mobilePreferred, ...keys.filter((k) => k !== mobilePreferred)];
   }
   return keys;
@@ -330,28 +364,32 @@ export async function retrieveFigmaReferences(input: {
   const bucketsConfigured = buckets.size;
   const envGuidance =
     !key && keysConfigured === 0
-      ? "Set FIGMA_API_KEY and FIGMA_REFERENCE_FILE_KEYS on Render (and local .env). Use keys from figma.com/design/<KEY>/... — see docs/figma-reference-library.md"
+      ? "Set FIGMA_API_KEY + FIGMA_REFERENCE_FILE_KEYS on Render. Duplicate Community files into your account, then use figma.com/design/<KEY>/…. Optional: FIGMA_REFERENCE_BUCKETS=mobile=KEY,landing=KEY,dashboard=KEY. See docs/figma-reference-library.md"
       : !key
         ? "Set FIGMA_API_KEY (token with file read). FIGMA_REFERENCE_FILE_KEYS alone is not enough."
         : keysConfigured === 0 && bucketsConfigured === 0
-          ? "FIGMA_API_KEY is set, but FIGMA_REFERENCE_FILE_KEYS is missing — add comma-separated design file keys (Community catalog IDs 404 until duplicated). See docs/figma-reference-library.md"
+          ? "FIGMA_API_KEY is set, but FIGMA_REFERENCE_FILE_KEYS / BUCKETS missing — add design keys (Duplicate Community files first). Example: FIGMA_REFERENCE_BUCKETS=mobile=KEY,landing=KEY,dashboard=KEY"
           : bucketsConfigured > 0
-            ? "FIGMA_API_KEY + optional FIGMA_REFERENCE_BUCKETS configured. Prefer tagged keys per device/page; Duplicate Community files before using catalog IDs."
-            : "Both FIGMA_API_KEY and FIGMA_REFERENCE_FILE_KEYS are configured.";
+            ? "FIGMA_API_KEY + FIGMA_REFERENCE_BUCKETS set. Tag landing/dashboard separately so mobile refs are not used. Duplicate Community files before using catalog IDs."
+            : "Both FIGMA_API_KEY and FIGMA_REFERENCE_FILE_KEYS are configured. Tip: set FIGMA_REFERENCE_BUCKETS for landing/dashboard/mobile.";
 
   const emptyDiags: FigmaKeyDiagnostic[] = [];
+  const preferredEarly = preferredBucketForClassification(input.classification);
   const base = {
     reference_file_keys_configured: keysConfigured,
     env_guidance: envGuidance,
     key_diagnostics: emptyDiags,
+    selection_mode: "pending",
+    preferred_bucket: preferredEarly,
   };
 
   if (!key) {
     return {
       ...base,
+      selection_mode: "skipped_no_api_key",
       figma_used: "no",
       figma_status: "missing_key",
-      figma_error: "FIGMA_API_KEY not set — using polished seed templates",
+      figma_error: "FIGMA_API_KEY not set — using polished seed templates (built-in patterns)",
       candidates: seedCandidates,
       selected_refs: seedSelected,
       fallback_used: "yes",
@@ -368,6 +406,7 @@ export async function retrieveFigmaReferences(input: {
     if (me.status === 401) {
       return {
         ...base,
+        selection_mode: "skipped_unauthorized",
         figma_used: "no",
         figma_status: "unauthorized",
         figma_error: `Figma unauthorized (${me.status}) — check FIGMA_API_KEY`,
@@ -380,6 +419,7 @@ export async function retrieveFigmaReferences(input: {
     if (me.status === 429) {
       return {
         ...base,
+        selection_mode: "skipped_rate_limited",
         figma_used: "no",
         figma_status: "rate_limited",
         figma_error: "Figma rate limited",
@@ -392,15 +432,20 @@ export async function retrieveFigmaReferences(input: {
     // 403 on /me (missing current_user:read) → continue to file probes
 
     const probe = resolveProbeKeys(input.classification, libraryKeys, buckets);
+    const withProbe = {
+      ...base,
+      selection_mode: probe.selection_mode,
+      preferred_bucket: probe.preferred_bucket,
+    };
 
     if (probe.selection_mode.startsWith("bucket_miss:")) {
       const bucket = probe.preferred_bucket || "unknown";
       return {
-        ...base,
+        ...withProbe,
         figma_used: "no",
         figma_status: "weak_matches",
-        figma_error: `No FIGMA_REFERENCE_BUCKETS entry for "${bucket}" — seed fallback (avoids wrong-bucket Figma). Add ${bucket}=<designKey> or set classification-loose untagged keys.`,
-        env_guidance: `${envGuidance} Missing bucket tag: ${bucket}.`,
+        figma_error: `No FIGMA_REFERENCE_BUCKETS entry for "${bucket}" — seed fallback (avoids wrong-bucket Figma). Duplicate a ${bucket} design, then add ${bucket}=<designKey>.`,
+        env_guidance: `${envGuidance} Missing bucket: ${bucket}. Example: FIGMA_REFERENCE_BUCKETS=mobile=…,landing=…,dashboard=…`,
         candidates: seedCandidates,
         selected_refs: seedSelected,
         fallback_used: "yes",
@@ -410,7 +455,7 @@ export async function retrieveFigmaReferences(input: {
 
     if (probe.keys.length === 0 && allConfiguredKeys.length === 0) {
       return {
-        ...base,
+        ...withProbe,
         figma_used: "no",
         figma_status: "weak_matches",
         figma_error:
@@ -452,7 +497,7 @@ export async function retrieveFigmaReferences(input: {
             bucket,
           });
           return {
-            ...base,
+            ...withProbe,
             key_diagnostics: keyDiagnostics,
             figma_used: "no",
             figma_status: "rate_limited",
@@ -542,7 +587,7 @@ export async function retrieveFigmaReferences(input: {
       }
       if (diagSummary) detail = `${detail} [${diagSummary}]`;
       return {
-        ...base,
+        ...withProbe,
         key_diagnostics: keyDiagnostics,
         figma_used: "no",
         figma_status: sawUnauthorizedFile && figmaCandidates.length === 0 ? "unauthorized" : "weak_matches",
@@ -570,7 +615,7 @@ export async function retrieveFigmaReferences(input: {
     }
 
     return {
-      ...base,
+      ...withProbe,
       key_diagnostics: keyDiagnostics,
       figma_used: "yes",
       figma_status: "success" as FigmaStatusV2,
@@ -587,6 +632,7 @@ export async function retrieveFigmaReferences(input: {
     const msg = e instanceof Error ? e.message : "Figma request failed";
     return {
       ...base,
+      selection_mode: "failed",
       figma_used: "no",
       figma_status: "failed",
       figma_error: redactSecrets(msg),

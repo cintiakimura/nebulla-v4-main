@@ -47,32 +47,46 @@ function itemLabels(input: SlotContentInput, count: number): string[] {
     .map((h) => cleanLabel(h, ""))
     .filter((h) => h && h.length <= 32);
   const fromFeatures = input.features
-    .map((f) => cleanLabel(f, ""))
-    .filter((f) => f && f.length <= 32);
-  const merged = [...fromHeadings, ...fromFeatures];
+    .map((f) => cleanLabel(f.replace(/^[-*•]\s*/, "").replace(/\*\*/g, ""), ""))
+    .filter((f) => f && f.length <= 32 && !/^kpi\b/i.test(f));
+  const merged = [...fromFeatures, ...fromHeadings];
   const uniq: string[] = [];
   for (const m of merged) {
     if (!uniq.some((u) => u.toLowerCase() === m.toLowerCase())) uniq.push(m);
   }
+  const fn = input.classification.product_function;
+  const page = input.classification.page_type;
   const defaults =
-    input.classification.product_function === "tasks"
-      ? ["Review vocabulary", "Listen practice", "Write three sentences", "Quick quiz"]
-      : input.classification.product_function === "course"
-        ? ["Today’s lesson", "Practice round", "Review cards", "Streak bonus"]
-        : ["Overview", "Details", "Activity", "Next step"];
+    page === "landing" || fn === "marketing"
+      ? ["Fast setup", "Clear workflows", "Built-in quality", "Ship with confidence"]
+      : fn === "tasks"
+        ? ["Today’s tasks", "Focus block", "Quick capture", "Done list"]
+        : fn === "course"
+          ? ["Today’s lesson", "Practice round", "Review cards", "Streak bonus"]
+          : page === "dashboard"
+            ? ["Active items", "This week", "Completion", "Next action"]
+            : ["Overview", "Details", "Activity", "Next step"];
   while (uniq.length < count) uniq.push(defaults[uniq.length % defaults.length]);
   return uniq.slice(0, count);
 }
 
 /** Fill every template slot with clean short human text. */
 export function mapSlots(input: SlotContentInput): SlotMap {
+  const isLanding =
+    input.classification.device === "landing" ||
+    input.classification.page_type === "landing" ||
+    input.classification.product_function === "marketing";
   const title = cleanLabel(
-    input.pageName || input.projectName || "Home",
+    isLanding
+      ? input.projectName || input.pageName || "Welcome"
+      : input.pageName || input.projectName || "Home",
     input.classification.page_type === "settings"
       ? "Settings"
       : input.classification.product_function === "tasks"
         ? "Tasks"
-        : "Home",
+        : isLanding
+          ? input.projectName || "Welcome"
+          : "Home",
   );
   const subtitle = cleanHumanSubtitle(
     input.pagePurpose,
@@ -109,7 +123,13 @@ export function mapSlots(input: SlotContentInput): SlotMap {
         slots[key] = primary;
         break;
       case "secondary_cta":
-        slots[key] = secondary || (input.classification.page_type === "auth" ? "Create account" : "See all");
+        slots[key] =
+          secondary ||
+          (input.classification.page_type === "auth"
+            ? "Create account"
+            : isLanding
+              ? "See how it works"
+              : "See all");
         break;
       case "empty_title":
         slots[key] = "Nothing here yet";
@@ -150,7 +170,11 @@ export function mapSlots(input: SlotContentInput): SlotMap {
         if (cardTitle) slots[key] = items[Number(cardTitle[1]) - 1] || `Card ${cardTitle[1]}`;
         else if (cardVal)
           slots[key] =
-            input.classification.product_function === "course" ? `${Number(cardVal[1]) * 12}%` : "Ready";
+            input.classification.product_function === "course"
+              ? `${Number(cardVal[1]) * 12}%`
+              : isLanding
+                ? ["Ship faster", "Stay on plan", "Fewer rewrites"][Number(cardVal[1]) - 1] || "Included"
+                : "Ready";
         else if (metricTitle) slots[key] = items[Number(metricTitle[1]) - 1] || `Metric ${metricTitle[1]}`;
         else if (metricVal) slots[key] = String(12 + Number(metricVal[1]) * 7);
         else if (itemTitle) slots[key] = items[Number(itemTitle[1]) - 1] || `Item ${itemTitle[1]}`;
@@ -162,7 +186,10 @@ export function mapSlots(input: SlotContentInput): SlotMap {
             `Setting ${rowTitle[1]}`;
         else if (rowMeta) slots[key] = "Configure";
         else if (secTitle) slots[key] = items[Number(secTitle[1]) - 1] || `Section ${secTitle[1]}`;
-        else if (secBody) slots[key] = "Supporting details for this section.";
+        else if (secBody)
+          slots[key] = isLanding
+            ? "Clear sections that match your product story."
+            : "Supporting details for this section.";
         else if (side) slots[key] = ["Home", "Explore", "Progress", "Profile"][Number(side[1]) - 1] || "Nav";
         else slots[key] = cleanLabel(key.replace(/_/g, " "), "—");
       }

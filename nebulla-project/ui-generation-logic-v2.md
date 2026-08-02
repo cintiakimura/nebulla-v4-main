@@ -584,4 +584,13 @@ Product rules:
 
 Manual 10-min check (no Figma): Master Plan present → Generate UI in Beta → status shows built-in patterns + gate → open App Preview → structure/labels match → optional CONTENT_LOCALE polish when Grok key set.
 
+### Prod smoke (nebulla.dev)
+1. Login → IDE → Master Plan with **§4 + §5** saved (ui-brief present).
+2. **UI Studio Beta** → **Generate UI**.
+3. Confirm badges: pattern mode (`Built-in patterns…` or Figma), Figma status (never fake success), gate (`pass` / `repair` / `weak`).
+4. If gate `pass|repair` → App Preview updates; if `weak` → Preview **not** overwritten + banner explains retry.
+5. Optional Figma quality: Duplicate landing/dashboard files → set  
+   `FIGMA_REFERENCE_BUCKETS=mobile=<KEY>,landing=<KEY>,dashboard=<KEY>` (+ `FIGMA_API_KEY` / `FIGMA_REFERENCE_FILE_KEYS`) → redeploy → Generate UI again → meta `figma.selection_mode` shows `bucket:…`.
+6. Debug without DevTools archaeology: `nebulla-project/ui-generation-v2-meta.json` → `pattern_mode`, `figma.figma_status`, `figma.selection_mode`, `figma.preferred_bucket`, `preview_applied`.
+
 Smoke: `npm run test:ui-gen`.

@@ -40,6 +40,11 @@ import {
   type NebulaProjectType,
   type StudioDeviceMode,
 } from '../../lib/nebulaProjectType';
+import {
+  figmaStatusLabel,
+  gateLabel,
+  weakGateUserMessage,
+} from '../../lib/uiGenStatusLabels';
 
 const V0_FETCH_TIMEOUT_MS = 360_000;
 
@@ -687,9 +692,9 @@ export function IdeUiStudioBeta({
         if (typeof body.uiBriefLength === 'number' && body.uiBriefLength < 80) {
           setBusy(false);
           setError(
-            'Finish page contracts first — save the Master Plan so the UI brief is generated, then Generate UI.',
+            'Finish Master Plan pages (§4) and UI/UX (§5), save so ui-brief.md exists, then Generate UI.',
           );
-          setEngineStage('Needs page contracts');
+          setEngineStage('Needs Master Plan §4+§5');
           return;
         }
       }
@@ -799,13 +804,12 @@ export function IdeUiStudioBeta({
       if (!r.ok || !data.ok) {
         const errMsg =
           gate === 'weak'
-            ? data.error ||
-              'Quality gate: weak skeleton — structure/labels did not meet the bar. Try Generate again.'
+            ? weakGateUserMessage()
             : data.error || 'UI Generation Engine failed';
         setError(errMsg);
         setEngineStage(
           data.user_visible_stage ||
-            (gate === 'weak' ? 'Weak quality — try Generate again' : 'Needs discovery'),
+            (gate === 'weak' ? weakGateUserMessage() : 'Finish Master Plan §4+§5, then Generate UI'),
         );
         setHasEnginePreview(false);
         setPreviewSynced(false);
@@ -1063,10 +1067,12 @@ export function IdeUiStudioBeta({
     if (!canApply) {
       notifyV0(
         hasEnginePreview
-          ? 'Save needs a successful Generate UI first (seed or Figma).'
-          : hasV0ApiKey
-            ? 'Save needs a first v0 UI generation — wait for auto v0, or Resume in chat.'
-            : 'Generate UI first (seed/Figma), or add V0_API_KEY for the legacy v0 path.',
+          ? t('uiStudio.saveNeedsGenerate')
+          : lastGate === 'weak'
+            ? t('uiStudio.gateWeakPreview')
+            : hasV0ApiKey
+              ? 'Save needs a first v0 UI generation — wait for auto v0, or Resume in chat.'
+              : 'Generate UI first (built-in patterns or Figma), or add V0_API_KEY for the legacy v0 path.',
         true,
       );
       setApplyConfirmOpen(false);
@@ -1646,7 +1652,7 @@ export function IdeUiStudioBeta({
             {figmaStatus ? (
               <span
                 className={cn(
-                  'hidden max-w-[160px] truncate rounded-full px-2 py-0.5 text-[10px] font-medium sm:inline',
+                  'hidden max-w-[180px] truncate rounded-full px-2 py-0.5 text-[10px] font-medium sm:inline',
                   figmaStatus === 'success'
                     ? 'bg-emerald-500/15 text-emerald-200'
                     : figmaStatus === 'weak_matches' || figmaStatus === 'missing_key'
@@ -1655,10 +1661,10 @@ export function IdeUiStudioBeta({
                 )}
                 title={
                   [figmaError, figmaEnvGuidance].filter(Boolean).join(' — ') ||
-                  `${t('uiStudio.figmaStatus')}: ${figmaStatus}`
+                  figmaStatusLabel(figmaStatus)
                 }
               >
-                {t('uiStudio.figmaStatus')}: {figmaStatus}
+                {figmaStatusLabel(figmaStatus)}
               </span>
             ) : null}
             {lastGate ? (
@@ -1671,9 +1677,13 @@ export function IdeUiStudioBeta({
                       ? 'bg-amber-500/15 text-amber-100'
                       : 'bg-rose-500/15 text-rose-100',
                 )}
-                title={`${t('uiStudio.gate')}: ${lastGate}`}
+                title={
+                  lastGate === 'weak'
+                    ? t('uiStudio.gateWeakPreview')
+                    : gateLabel(lastGate)
+                }
               >
-                {t('uiStudio.gate')}: {lastGate}
+                {gateLabel(lastGate)}
               </span>
             ) : null}
           </div>
@@ -1762,12 +1772,18 @@ export function IdeUiStudioBeta({
           </div>
         </div>
 
+        {lastGate === 'weak' ? (
+          <div className="border-t border-rose-500/30 bg-rose-500/10 px-2 py-1 text-[10px] leading-snug text-rose-100 sm:px-3">
+            {t('uiStudio.gateWeakPreview')}
+          </div>
+        ) : null}
         {figmaStatus && figmaStatus !== 'success' && (figmaEnvGuidance || figmaError) ? (
           <div
             className="border-t border-border/60 px-2 py-1 text-[10px] leading-snug text-muted-foreground sm:px-3"
             title={[figmaError, figmaEnvGuidance].filter(Boolean).join('\n')}
           >
-            <span className="font-medium text-amber-100/90">Figma:</span>{' '}
+            <span className="font-medium text-amber-100/90">{figmaStatusLabel(figmaStatus)}</span>
+            {' — '}
             <span className="line-clamp-2">
               {[figmaError, figmaEnvGuidance].filter(Boolean).join(' — ')}
             </span>

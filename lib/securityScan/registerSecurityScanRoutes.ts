@@ -59,7 +59,13 @@ export function registerSecurityScanRoutes(
       const pp = deps.projectPathsFor(req);
       const report = latestByProject.get(pp.projectKey);
       if (!report) {
-        return res.status(404).json({ ok: false, error: "No scan cached for this project yet." });
+        // 200 + empty avoids noisy browser console 404s before the first scan.
+        return res.status(200).json({
+          ok: true,
+          empty: true,
+          projectKey: pp.projectKey,
+          findings: [],
+        });
       }
       return res.json(report);
     } catch (e) {

@@ -103,37 +103,24 @@ export function PricingPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#050508] text-[#f2f2f2]">
-      <link
-        rel="stylesheet"
-        href="https://fonts.bunny.net/css?family=instrument-sans:400,500,600|fraunces:500,600"
-      />
+    <div className="min-h-screen bg-[#050508] text-[#f2f2f2] font-body">
       <header className="flex h-16 items-center justify-between border-b border-white/10 px-6 md:px-10">
         <button type="button" onClick={goToLanding} className="flex items-center gap-2.5">
           <Logo className="h-8 w-8" />
-          <span style={{ fontFamily: '"Fraunces", Georgia, serif' }} className="text-lg">
-            Nebulla
-          </span>
+          <span className="font-headline text-lg font-normal">Nebulla</span>
         </button>
         <button
           type="button"
           onClick={goToLanding}
-          className="inline-flex items-center gap-1.5 text-sm text-[#8a8a8a] hover:text-[#f2f2f2]"
-          style={{ fontFamily: '"Instrument Sans", system-ui, sans-serif' }}
+          className="inline-flex items-center gap-1.5 text-sm text-[#8a8a8a] hover:text-[#f2f2f2] font-headline"
         >
           <ArrowLeft className="h-4 w-4" />
           Home
         </button>
       </header>
 
-      <main
-        className="mx-auto max-w-5xl px-6 py-14 md:px-10"
-        style={{ fontFamily: '"Instrument Sans", system-ui, sans-serif' }}
-      >
-        <h1
-          className="text-4xl tracking-tight md:text-5xl"
-          style={{ fontFamily: '"Fraunces", Georgia, serif' }}
-        >
+      <main className="mx-auto max-w-5xl px-6 py-14 md:px-10 font-body">
+        <h1 className="text-4xl tracking-tight md:text-5xl font-headline font-normal text-[#f2f2f2]">
           Pricing
         </h1>
         <p className="mt-3 max-w-xl text-[#8a8a8a]">
@@ -165,19 +152,14 @@ export function PricingPage() {
                   : 'border-white/10 bg-black/40'
               }`}
             >
-              <h2
-                className="text-xl text-[#f2f2f2]"
-                style={{ fontFamily: '"Fraunces", Georgia, serif' }}
-              >
-                {plan.name}
-              </h2>
+              <h2 className="text-xl text-[#f2f2f2] font-headline font-normal">{plan.name}</h2>
               <p className="mt-1 text-2xl font-medium text-[#f2f2f2]">{plan.price}</p>
               <p className="mt-2 text-sm text-[#8a8a8a]">{plan.blurb}</p>
               <ul className="mt-5 flex-1 space-y-2 text-sm text-[#b8b8b8]">
                 {plan.features.map((f) => (
                   <li key={f} className="flex gap-2">
                     <Check className="mt-0.5 h-4 w-4 shrink-0 text-[#679BD1]" aria-hidden />
-                    {f}
+                    <span>{f}</span>
                   </li>
                 ))}
               </ul>
@@ -185,7 +167,7 @@ export function PricingPage() {
                 type="button"
                 disabled={busy === plan.id}
                 onClick={() => void startCheckout(plan.id)}
-                className={`mt-6 rounded-lg px-4 py-2.5 text-sm font-medium ${
+                className={`mt-6 rounded-lg px-4 py-2.5 text-sm font-headline font-medium ${
                   plan.id === 'free'
                     ? 'bg-[#f2f2f2] text-[#0a0a0a] hover:bg-white'
                     : 'border border-white/20 text-[#f2f2f2] hover:bg-white/5'

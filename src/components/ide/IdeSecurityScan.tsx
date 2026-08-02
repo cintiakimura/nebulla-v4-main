@@ -85,8 +85,8 @@ export function IdeSecurityScan() {
       try {
         const res = await fetch(withProjectQuery('/api/security-scan/latest'));
         if (!res.ok) return;
-        const data = (await res.json()) as SecurityScanReport;
-        if (!cancelled && data?.ok) {
+        const data = (await res.json()) as SecurityScanReport & { empty?: boolean };
+        if (!cancelled && data?.ok && !data.empty && Array.isArray(data.findings)) {
           setReport(data);
           setProjectKey(data.projectKey);
           setDismissed(readDismissals(data.projectKey));

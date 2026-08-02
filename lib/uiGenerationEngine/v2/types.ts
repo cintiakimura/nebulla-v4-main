@@ -125,6 +125,10 @@ export type FigmaRecord = {
   env_guidance: string;
   /** Per-key HTTP/structure outcomes for debugging. */
   key_diagnostics: FigmaKeyDiagnostic[];
+  /** C.3 probe mode, e.g. bucket:landing | bucket_miss:dashboard | csv */
+  selection_mode: string;
+  /** Preferred FIGMA_REFERENCE_BUCKETS tag for this classification (or null). */
+  preferred_bucket: string | null;
 };
 
 export type V2NodeStyle = {

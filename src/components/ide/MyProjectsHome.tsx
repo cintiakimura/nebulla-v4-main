@@ -210,6 +210,24 @@ export function MyProjectsHome() {
     window.location.reload();
   }, []);
 
+  /** Free plan: 1 project — if create fails, reuse the active project instead of bouncing to Pricing. */
+  const ensureProjectOrReuse = useCallback(async (label: string) => {
+    try {
+      await createProjectForCurrentSession(label);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (!/1 project|upgrade|Pricing/i.test(msg)) throw err;
+      const existing = getBrowserProjectName().trim();
+      if (existing) {
+        try {
+          await selectCloudProjectByName(existing);
+        } catch {
+          /* guest / already bound */
+        }
+      }
+    }
+  }, []);
+
   const onStartTypedProject = useCallback(
     async (type: NebulaProjectType) => {
       if (busyStarting) return;
@@ -217,7 +235,7 @@ export function MyProjectsHome() {
       try {
         markGuidedStartOnReady();
         await resetProjectFromScratch(type);
-        await createProjectForCurrentSession(type);
+        await ensureProjectOrReuse(type);
         // Persist after reset/create so projectKey is current (UI Studio device framing).
         setPendingProjectType(type);
         window.location.reload();
@@ -226,12 +244,9 @@ export function MyProjectsHome() {
         setStartingType(null);
         const msg = err instanceof Error ? err.message : 'Could not start the project.';
         window.alert(msg);
-        if (/upgrade|Pricing|1 project/i.test(msg)) {
-          window.location.assign('/pricing');
-        }
       }
     },
-    [busyStarting],
+    [busyStarting, ensureProjectOrReuse],
   );
 
   const onStartFromIdea = useCallback(async () => {
@@ -247,7 +262,7 @@ export function MyProjectsHome() {
       const label = shortNameFromIdea(idea);
       markGuidedStartOnReady();
       await resetProjectFromScratch(label);
-      await createProjectForCurrentSession(label);
+      await ensureProjectOrReuse(label);
       setPendingProjectIdea(idea);
       if (ideaType) setPendingProjectType(ideaType);
       window.location.reload();
@@ -256,11 +271,8 @@ export function MyProjectsHome() {
       setStartingIdea(false);
       const msg = err instanceof Error ? err.message : 'Could not start the project. Try again.';
       setIdeaError(msg);
-      if (/upgrade|Pricing|1 project/i.test(msg)) {
-        window.setTimeout(() => window.location.assign('/pricing'), 1200);
-      }
     }
-  }, [busyStarting, ideaInput, ideaType]);
+  }, [busyStarting, ideaInput, ideaType, ensureProjectOrReuse]);
 
   const onJustChat = useCallback(() => {
     dispatchStartFreeChat();

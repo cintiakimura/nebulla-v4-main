@@ -13,6 +13,11 @@ import {
 } from '../lib/uiGenerationEngine/index.ts';
 import { selectTemplate } from '../lib/uiGenerationEngine/v2/selectTemplate.ts';
 import { classifyPage } from '../lib/uiGenerationEngine/v2/classifyPage.ts';
+import {
+  parseReferenceBuckets,
+  preferredBucketForClassification,
+  resolveProbeKeys,
+} from '../lib/uiGenerationEngine/v2/figmaReferences.ts';
 
 function section(name: string) {
   console.log(`\n✓ ${name}`);
@@ -131,6 +136,68 @@ section('shouldApplyUiToPreview helper');
   assert.equal(shouldApplyUiToPreview('pass'), true);
   assert.equal(shouldApplyUiToPreview('repair'), true);
   assert.equal(shouldApplyUiToPreview('weak'), false);
+}
+
+section('Figma C.3 buckets: hit / miss / csv (never wrong mobile on landing)');
+{
+  const landingClass = classifyPage({
+    projectType: 'Landing Page',
+    goal: 'marketing waitlist landing',
+    features: 'hero cta pricing',
+    uiux: 'bold marketing',
+    pageName: 'Home',
+    pagePurpose: 'landing hero',
+    filePaths: ['app/page.tsx'],
+    fileRoutes: ['/'],
+  });
+  assert.equal(preferredBucketForClassification(landingClass), 'landing');
+
+  const buckets = parseReferenceBuckets(
+    'mobile=MOBILEKEY111,landing=LANDINGKEY222,dashboard=DASHKEY333',
+  );
+  const hit = resolveProbeKeys(landingClass, ['MOBILEKEY111', 'LANDINGKEY222'], buckets);
+  assert.equal(hit.selection_mode, 'bucket:landing');
+  assert.deepEqual(hit.keys, ['LANDINGKEY222']);
+
+  const missBuckets = parseReferenceBuckets('mobile=MOBILEKEY111');
+  const miss = resolveProbeKeys(landingClass, ['MOBILEKEY111', 'OTHERKEY'], missBuckets);
+  assert.equal(miss.selection_mode, 'bucket_miss:landing');
+  assert.equal(miss.keys.length, 0, 'strict landing must not probe mobile CSV when buckets exist');
+
+  const noBuckets = resolveProbeKeys(landingClass, ['MOBILEKEY111', 'ZEbJpC67UQyeeynt1UR8gT'], new Map());
+  assert.equal(noBuckets.selection_mode, 'csv');
+  assert.notEqual(noBuckets.keys[0], 'ZEbJpC67UQyeeynt1UR8gT', 'known mobile key deprioritized for landing');
+
+  const dashClass = classifyPage({
+    projectType: 'Web App',
+    goal: 'saas dashboard analytics',
+    features: 'metrics charts',
+    uiux: 'sidebar dense',
+    pageName: 'Dashboard',
+    pagePurpose: 'overview metrics',
+    filePaths: ['app/dashboard/page.tsx'],
+    fileRoutes: ['/dashboard'],
+  });
+  assert.equal(preferredBucketForClassification(dashClass), 'dashboard');
+  const dashMiss = resolveProbeKeys(dashClass, ['MOBILEKEY111'], parseReferenceBuckets('mobile=MOBILEKEY111'));
+  assert.equal(dashMiss.selection_mode, 'bucket_miss:dashboard');
+}
+
+section('selectTemplate: landing / marketing prefer landing family');
+{
+  const landing = selectTemplate(
+    classifyPage({
+      projectType: 'Landing Page',
+      goal: 'product marketing site',
+      features: 'hero features cta',
+      uiux: 'marketing',
+      pageName: 'Home',
+      pagePurpose: 'convert visitors',
+      filePaths: ['app/page.tsx'],
+      fileRoutes: ['/'],
+    }),
+  );
+  assert.ok(landing.id.startsWith('landing_'), `expected landing_* got ${landing.id}`);
 }
 
 section('applyPreviewShell writes only when called (pass path)');
