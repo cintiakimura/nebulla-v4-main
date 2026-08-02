@@ -9,6 +9,12 @@ export function goToLogin(next = '/app'): void {
   window.location.assign(`/login${q}`);
 }
 
+/** Free-trial onboarding: create account, then open the IDE. */
+export function goToTryFree(next = '/app'): void {
+  const dest = next.startsWith('/') && !next.startsWith('//') ? next : '/app';
+  window.location.assign(`/signup?next=${encodeURIComponent(dest)}`);
+}
+
 export function goToApp(): void {
   window.location.assign('/app');
 }

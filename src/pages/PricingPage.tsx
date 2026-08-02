@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { ArrowLeft, Check } from 'lucide-react';
 import { Logo } from '@/components/Logo';
 import { fetchSessionUser, type NebulaSessionUser } from '../lib/nebulaCloud';
-import { goToApp, goToLanding, goToLogin } from '../lib/authNavigate';
+import { goToApp, goToLanding, goToLogin, goToTryFree } from '../lib/authNavigate';
 
 type PlanId = 'free' | 'pro' | 'power';
 
@@ -18,9 +18,9 @@ const PLANS: {
     id: 'free',
     name: 'Free',
     price: '$0',
-    blurb: 'Ship one real product and learn the workflow.',
+    blurb: 'One trial project free — ship a real product and learn the workflow.',
     features: [
-      '1 active project',
+      '1 free trial project',
       'Monthly AI token allowance',
       'UI Studio, Master Plan, Security Scan',
       'Cloud workspace when signed in',
@@ -70,7 +70,7 @@ export function PricingPage() {
     setInfo(null);
     if (plan === 'free') {
       if (user) goToApp();
-      else goToLogin('/app');
+      else goToTryFree('/app');
       return;
     }
     if (!user) {
@@ -137,7 +137,7 @@ export function PricingPage() {
           Pricing
         </h1>
         <p className="mt-3 max-w-xl text-[#8a8a8a]">
-          Start with one free project. Upgrade when you need more workspace and AI capacity.
+          Start free with 1 trial project. Upgrade when you need more workspace and AI capacity.
         </p>
         {user ? (
           <p className="mt-2 text-xs text-[#679BD1]">
@@ -191,7 +191,11 @@ export function PricingPage() {
                     : 'border border-white/20 text-[#f2f2f2] hover:bg-white/5'
                 } disabled:opacity-50`}
               >
-                {busy === plan.id ? '…' : plan.cta}
+                {busy === plan.id
+                  ? '…'
+                  : plan.id === 'free' && user
+                    ? 'Open workspace'
+                    : plan.cta}
               </button>
             </div>
           ))}

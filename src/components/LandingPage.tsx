@@ -1,39 +1,23 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect } from 'react';
 import { Logo } from './Logo';
 import { Rocket, ArrowRight, CheckCircle, Terminal, LayoutGrid, Handshake, Network, Palette, Bug, Cpu, Globe, MoreHorizontal, PlusCircle, Save, Trash2, CreditCard, Camera, List, Code, User } from 'lucide-react';
 
 interface LandingPageProps {
-  onEnter: () => void;
+  /** Free-trial entry: account creation (or IDE if already signed in). */
+  onTryFree: () => void;
 }
 
-export function LandingPage({ onEnter }: LandingPageProps) {
-  const [loading, setLoading] = useState(false);
-  const [userEmail, setUserEmail] = useState<string | null>(null);
-
-  useEffect(() => {
-    // Mock authentication check from local storage
-    const savedUser = localStorage.getItem('nebula_user');
-    if (savedUser) {
-      const user = JSON.parse(savedUser);
-      setUserEmail(user.email || null);
-    }
-  }, []);
-
+export function LandingPage({ onTryFree }: LandingPageProps) {
   useEffect(() => {
     const query = new URLSearchParams(window.location.search);
     if (query.get('success')) {
       window.history.replaceState({}, document.title, window.location.pathname);
-      onEnter();
+      onTryFree();
     }
     if (query.get('canceled')) {
       window.history.replaceState({}, document.title, window.location.pathname);
-      alert('Payment canceled.');
     }
-  }, [onEnter]);
-
-  const handleCheckout = async () => {
-    onEnter();
-  };
+  }, [onTryFree]);
 
   return (
     <div className="nebula-landing-page min-h-screen text-on-surface font-body font-normal">
@@ -62,10 +46,10 @@ export function LandingPage({ onEnter }: LandingPageProps) {
           </a>
           <button
             type="button"
-            onClick={onEnter}
+            onClick={onTryFree}
             className="px-4 py-2 bg-cyan-500/10 text-cyan-300 border border-cyan-500/30 rounded-md hover:bg-cyan-500/20 transition-all font-headline text-sm font-normal"
           >
-            Try the App
+            Try free
           </button>
         </div>
       </header>
@@ -85,26 +69,36 @@ export function LandingPage({ onEnter }: LandingPageProps) {
             <p className="text-lg md:text-xl text-slate-300 font-normal max-w-2xl leading-relaxed">
               Stop wrestling with disjointed tools. Design your system, generate UI mockups, and build your application with a true dev partner.
             </p>
-            <div className="flex flex-col gap-8 mt-4">
-              <button 
-                onClick={onEnter}
+            <div className="flex flex-col gap-3 mt-4">
+              <button
+                type="button"
+                onClick={onTryFree}
                 className="px-6 py-3 bg-cyan-500/20 text-cyan-300 border border-cyan-500/50 rounded-lg hover:bg-cyan-500/30 transition-all font-headline text-base font-normal flex items-center gap-2 w-fit"
               >
-                Try the App
+                Try the app free
                 <ArrowRight className="w-4.5 h-4.5" />
               </button>
+              <p className="text-sm text-slate-400 font-normal max-w-md">
+                Create a free account — includes 1 trial project. Upgrade when you need more workspace.
+              </p>
             </div>
           </div>
           
           <div className="nebula-landing-card nebula-landing-card--hero flex flex-col justify-center items-start lg:items-end p-8 lg:p-12">
             <div className="text-7xl md:text-8xl lg:text-9xl font-headline text-cyan-300 font-normal tracking-tight mb-6">
-              €19.99
+              Free
             </div>
             <p className="text-xl md:text-2xl text-slate-200 font-normal max-w-sm text-left lg:text-right leading-snug">
-              One tier with all features<br/>
-              <span className="text-cyan-400/80">No credit limits</span><br/>
-              <span className="text-slate-400">No hidden costs</span>
+              1 trial project to start<br/>
+              <span className="text-cyan-400/80">UI Studio &amp; Master Plan</span><br/>
+              <span className="text-slate-400">Upgrade when you need more</span>
             </p>
+            <a
+              href="/pricing"
+              className="mt-6 text-sm text-slate-400 hover:text-cyan-200 transition-colors font-headline underline-offset-4 hover:underline"
+            >
+              See plans
+            </a>
           </div>
         </section>
 
@@ -117,8 +111,8 @@ export function LandingPage({ onEnter }: LandingPageProps) {
             <div className="lg:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-6">
               <FeatureCard 
                 icon={<Globe className="w-6 h-6" />} 
-                title="No credit limits" 
-                description="Build without boundaries. We don't cap your creativity or charge per generation."
+                title="Free to start" 
+                description="One trial project with a monthly AI allowance — ship something real before you upgrade."
               />
               <FeatureCard 
                 icon={<LayoutGrid className="w-6 h-6" />} 
@@ -148,19 +142,17 @@ export function LandingPage({ onEnter }: LandingPageProps) {
             </div>
             
             <div className="nebula-landing-card lg:col-span-1 flex flex-col gap-6 p-8">
-              <h3 className="text-xl font-headline text-cyan-300 font-normal mb-2">All Features Included</h3>
+              <h3 className="text-xl font-headline text-cyan-300 font-normal mb-2">Included on Free</h3>
               <ul className="flex flex-col gap-4">
                 {[
+                  "1 trial project",
+                  "Monthly AI token allowance",
                   "Handsfree open talk, no more prompts",
-                  "Backend functions",
-                  "Database",
-                  "Github integration",
-                  "The latest AI dev model",
-                  "Connect domain",
                   "Master plan - save all info no more hallucinations",
                   "Mind map - visualize your architecture, drag and drop",
                   "UI/UX mockup - AI gen. choose from 3 options",
-                  "Self debugging method"
+                  "Self debugging method",
+                  "Security Scan",
                 ].map((feature, i) => (
                   <li key={i} className="flex items-start gap-3 text-slate-300 text-sm">
                     <CheckCircle className="w-4.5 h-4.5 text-cyan-500 shrink-0 mt-0.5" />
@@ -305,23 +297,31 @@ export function LandingPage({ onEnter }: LandingPageProps) {
           </div>
         </section>
 
-        {/* Pricing CTA */}
+        {/* Pricing CTA — aligned with Free / Pro / Power */}
         <section className="nebula-landing-card nebula-landing-card--hero p-8 md:p-12 flex flex-col md:flex-row items-start md:items-center justify-between gap-8 text-left">
           <div className="flex flex-col gap-4">
             <h2 className="text-3xl font-headline text-cyan-300 font-normal">
-              Simple, transparent pricing.
+              Start free. Upgrade when you need more.
             </h2>
             <p className="text-slate-300 text-lg font-normal">
-              One tier with all features for only €19.99. No hidden fees, no credit limits.
+              Free includes 1 trial project. Pro and Power add more projects and AI capacity when you&apos;re ready.
             </p>
           </div>
-          <button 
-            onClick={handleCheckout}
-            disabled={loading}
-            className="px-8 py-4 bg-cyan-500/20 text-cyan-300 border border-cyan-500/50 rounded-xl hover:bg-cyan-500/30 transition-all font-headline text-lg font-normal whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {loading ? 'Processing...' : 'Get Started'}
-          </button>
+          <div className="flex flex-col sm:flex-row gap-3 shrink-0">
+            <button
+              type="button"
+              onClick={onTryFree}
+              className="px-8 py-4 bg-cyan-500/20 text-cyan-300 border border-cyan-500/50 rounded-xl hover:bg-cyan-500/30 transition-all font-headline text-lg font-normal whitespace-nowrap"
+            >
+              Try free
+            </button>
+            <a
+              href="/pricing"
+              className="px-8 py-4 border border-white/15 text-slate-300 rounded-xl hover:bg-white/5 transition-all font-headline text-lg font-normal whitespace-nowrap text-center"
+            >
+              View pricing
+            </a>
+          </div>
         </section>
       </main>
 

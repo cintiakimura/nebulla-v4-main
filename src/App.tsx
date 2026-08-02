@@ -7,7 +7,8 @@ import { DpaPage } from './pages/DpaPage';
 import { ResetPasswordPage } from './pages/ResetPasswordPage';
 import { LoginPage } from './pages/LoginPage';
 import { PricingPage } from './pages/PricingPage';
-import { goToApp } from './lib/authNavigate';
+import { goToApp, goToTryFree } from './lib/authNavigate';
+import { fetchSessionUser } from './lib/nebulaCloud';
 
 function usePathname(): string {
   return useMemo(() => {
@@ -19,8 +20,12 @@ function usePathname(): string {
 export default function App() {
   const path = usePathname();
 
-  const enterApp = useCallback(() => {
-    goToApp();
+  /** Signed-in → IDE; otherwise create a free account (1 trial project). */
+  const enterTryFree = useCallback(() => {
+    void fetchSessionUser().then((u) => {
+      if (u) goToApp();
+      else goToTryFree('/app');
+    });
   }, []);
 
   if (path === '/privacy') return <PrivacyPolicyPage />;
@@ -31,6 +36,5 @@ export default function App() {
   if (path === '/pricing') return <PricingPage />;
   if (path === '/app' || path === '/ide') return <NebullaIDE />;
 
-  // Original landing UI — "Try the App" enters the IDE (/app → login if needed).
-  return <LandingPage onEnter={enterApp} />;
+  return <LandingPage onTryFree={enterTryFree} />;
 }

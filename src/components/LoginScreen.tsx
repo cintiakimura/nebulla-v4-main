@@ -41,10 +41,16 @@ export function LoginScreen({
   onAuthenticated,
   onBack,
   initialEmailMode = 'signin',
+  heading,
+  subtitle,
 }: {
   onAuthenticated: () => void;
   onBack: () => void;
   initialEmailMode?: 'signin' | 'signup';
+  /** Optional override for the page title (e.g. free-trial signup). */
+  heading?: string;
+  /** Optional override for the supporting line under the title. */
+  subtitle?: string;
 }) {
   const [config, setConfig] = useState<PublicConfig>({});
   const [stayLoggedIn, setStayLoggedIn] = useState(true);
@@ -188,10 +194,12 @@ export function LoginScreen({
         <div className="w-full max-w-[420px] flex flex-col gap-8">
           <div className="text-center space-y-2">
             <h1 className="text-2xl md:text-3xl font-headline font-normal text-slate-100 tracking-tight">
-              {emailMode === 'signup' && emailOpen ? 'Create your account' : 'Sign in to continue'}
+              {heading ??
+                (emailMode === 'signup' && emailOpen ? 'Create your account' : 'Sign in to continue')}
             </h1>
             <p className="text-sm text-slate-500 leading-relaxed">
-              Continue with GitHub, Google, or email. Your session is stored securely in a browser cookie.
+              {subtitle ??
+                'Continue with GitHub, Google, or email. Your session is stored securely in a browser cookie.'}
             </p>
           </div>
 
