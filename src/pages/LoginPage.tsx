@@ -19,6 +19,8 @@ export function LoginPage() {
       initialEmailMode={initialEmailMode}
       heading={heading}
       subtitle={subtitle}
+      /** Signup from "Try the App" must show the page even if a cookie session exists. */
+      skipExistingSessionRedirect={isSignup}
       onAuthenticated={() => {
         window.location.assign(next.startsWith('/') ? next : '/app');
       }}

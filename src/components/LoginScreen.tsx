@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { ChevronLeft, Github, Mail } from 'lucide-react';
 import { Logo } from './Logo';
 import { readResponseJson } from '../lib/apiFetch';
-import { fetchSessionUser } from '../lib/nebulaCloud';
+import { fetchSessionUser, type NebulaSessionUser } from '../lib/nebulaCloud';
 
 type PublicConfig = {
   cloudStorageReady?: boolean;
@@ -43,6 +43,7 @@ export function LoginScreen({
   initialEmailMode = 'signin',
   heading,
   subtitle,
+  skipExistingSessionRedirect = false,
 }: {
   onAuthenticated: () => void;
   onBack: () => void;
@@ -51,6 +52,8 @@ export function LoginScreen({
   heading?: string;
   /** Optional override for the supporting line under the title. */
   subtitle?: string;
+  /** When true, stay on this page if a session already exists (e.g. /signup from Try the App). */
+  skipExistingSessionRedirect?: boolean;
 }) {
   const [config, setConfig] = useState<PublicConfig>({});
   const [stayLoggedIn, setStayLoggedIn] = useState(true);
@@ -62,6 +65,7 @@ export function LoginScreen({
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [existingUser, setExistingUser] = useState<NebulaSessionUser | null>(null);
 
   useEffect(() => {
     void fetch('/api/config')
@@ -73,12 +77,17 @@ export function LoginScreen({
   useEffect(() => {
     let cancelled = false;
     void fetchSessionUser().then((u) => {
-      if (!cancelled && u) onAuthenticated();
+      if (cancelled || !u) return;
+      if (skipExistingSessionRedirect) {
+        setExistingUser(u);
+        return;
+      }
+      onAuthenticated();
     });
     return () => {
       cancelled = true;
     };
-  }, [onAuthenticated]);
+  }, [onAuthenticated, skipExistingSessionRedirect]);
 
   useEffect(() => {
     const onMsg = (ev: MessageEvent) => {
@@ -202,6 +211,25 @@ export function LoginScreen({
                 'Continue with GitHub, Google, or email. Your session is stored securely in a browser cookie.'}
             </p>
           </div>
+
+          {existingUser ? (
+            <div className="rounded-2xl border border-cyan-500/30 bg-cyan-500/10 p-6 flex flex-col gap-3 text-center">
+              <p className="text-sm text-slate-300">
+                You&apos;re already signed in as{' '}
+                <span className="text-cyan-200">
+                  {existingUser.email || existingUser.displayName || 'your account'}
+                </span>
+                . Free includes 1 trial project.
+              </p>
+              <button
+                type="button"
+                onClick={onAuthenticated}
+                className="w-full py-3.5 px-4 rounded-xl bg-cyan-500/20 text-cyan-200 border border-cyan-500/40 font-headline text-[15px] font-medium hover:bg-cyan-500/30 transition-colors"
+              >
+                Open workspace
+              </button>
+            </div>
+          ) : null}
 
           <div className="rounded-2xl border border-white/10 bg-[#040f1a]/90 backdrop-blur-sm shadow-2xl shadow-black/40 p-8 flex flex-col gap-4">
             <button
