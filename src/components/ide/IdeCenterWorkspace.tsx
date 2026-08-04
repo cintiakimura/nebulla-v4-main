@@ -12,6 +12,7 @@ import {
   Shield,
   X,
 } from 'lucide-react';
+import { lazy, Suspense } from 'react';
 import { cn } from '@/lib/utils';
 import { AppPreviewPanel } from '../AppPreviewPanel';
 import { MasterPlan } from '../MasterPlan';
@@ -22,13 +23,17 @@ import { IdeVisualEditor } from './IdeVisualEditor';
 import { IdeUiStudioBeta } from './IdeUiStudioBeta';
 import { UiStudioMockupPanel } from './UiStudioMockupPanel';
 import { MindMapIdeRoute } from './MindMapIdeRoute';
-import { IdeFileEditor } from './IdeFileEditor';
 import { IdeSecurityScan } from './IdeSecurityScan';
 import { useIdeCenterTabs } from './IdeCenterTabsContext';
 import { useIdeWorkspace } from './IdeWorkspaceContext';
 import type { IdeCenterPane } from '../../lib/ideCenterPanes';
 import { getAppPreviewBrowserUrl, panelTabId } from '../../lib/ideCenterTabs';
 import { getBrowserProjectKey, getBrowserProjectName } from '../../lib/nebulaProjectApi';
+
+/** Route-level lazy: keep Monaco off My Projects / Plan first paint. */
+const IdeFileEditor = lazy(() =>
+  import('./IdeFileEditor').then((m) => ({ default: m.IdeFileEditor })),
+);
 
 const PANEL_ICONS: Partial<Record<IdeCenterPane, React.ReactNode>> = {
   preview: <MonitorPlay className="h-3 w-3 shrink-0 opacity-70" aria-hidden />,
@@ -144,9 +149,21 @@ export function IdeCenterWorkspace() {
           </div>
         ) : (
           <>
-            <PaneLayer visible={showFileEditor}>
-              <IdeFileEditor />
-            </PaneLayer>
+            {/* Mount Code editor only when file tabs exist — avoids Monaco on Projects-only home. */}
+            {fileTabs.length > 0 || showFileEditor ? (
+              <PaneLayer visible={showFileEditor}>
+                <Suspense
+                  fallback={
+                    <div className="flex h-full items-center justify-center gap-2 text-muted-foreground">
+                      <Loader2 className="h-5 w-5 animate-spin" />
+                      <span className="type-label-sm">Loading editor…</span>
+                    </div>
+                  }
+                >
+                  <IdeFileEditor active={showFileEditor} />
+                </Suspense>
+              </PaneLayer>
+            ) : null}
             <PaneLayer visible={activePane === 'preview'}>
               <AppPreviewPanel
                 pages={previewPages}

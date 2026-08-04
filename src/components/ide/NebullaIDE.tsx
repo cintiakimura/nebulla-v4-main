@@ -52,13 +52,27 @@ function IdeExplorerSidebar() {
   return <FileExplorer />;
 }
 
+function readStoredSize(key: string | undefined, fallback: number, min: number, max: number): number {
+  if (!key || typeof window === 'undefined') return fallback;
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return fallback;
+    const n = Number(raw);
+    if (!Number.isFinite(n)) return fallback;
+    return Math.min(max, Math.max(min, n));
+  } catch {
+    return fallback;
+  }
+}
+
 function useDragResize(
   initial: number,
   min: number,
   max: number,
   direction: 'horizontal-right' | 'horizontal-left' | 'vertical',
+  storageKey?: string,
 ) {
-  const [size, setSize] = useState(initial);
+  const [size, setSize] = useState(() => readStoredSize(storageKey, initial, min, max));
   const dragging = useRef(false);
   const startPos = useRef(0);
   const startSize = useRef(initial);
@@ -86,12 +100,27 @@ function useDragResize(
         dragging.current = false;
         window.removeEventListener('mousemove', onMove);
         window.removeEventListener('mouseup', onUp);
+        if (storageKey) {
+          try {
+            // Read latest size from startSize + last delta via closure — persist current state on next tick.
+            setSize((current) => {
+              try {
+                localStorage.setItem(storageKey, String(current));
+              } catch {
+                /* ignore */
+              }
+              return current;
+            });
+          } catch {
+            /* ignore */
+          }
+        }
       };
 
       window.addEventListener('mousemove', onMove);
       window.addEventListener('mouseup', onUp);
     },
-    [size, min, max, direction],
+    [size, min, max, direction, storageKey],
   );
 
   return { size, onMouseDown };
@@ -148,11 +177,23 @@ function shellStageFromCenterTab(tab: { kind?: string; pane?: string } | null): 
 
 function NebullaIDEShell() {
   const { activeNavId, openPanel, activeTab } = useIdeCenterTabs();
-  const explorer = useDragResize(EXPLORER_DEFAULT, EXPLORER_MIN, EXPLORER_MAX, 'horizontal-right');
+  const explorer = useDragResize(
+    EXPLORER_DEFAULT,
+    EXPLORER_MIN,
+    EXPLORER_MAX,
+    'horizontal-right',
+    'nebulla_ide_explorer_w',
+  );
   const [leftSidebarOpen, setLeftSidebarOpen] = useState(true);
   const [leftSidebarView, setLeftSidebarView] = useState<IdeLeftSidebarView>('explorer');
-  const chat = useDragResize(CHAT_DEFAULT, CHAT_MIN, CHAT_MAX, 'horizontal-left');
-  const terminal = useDragResize(TERMINAL_DEFAULT, TERMINAL_MIN, TERMINAL_MAX, 'vertical');
+  const chat = useDragResize(CHAT_DEFAULT, CHAT_MIN, CHAT_MAX, 'horizontal-left', 'nebulla_ide_chat_w');
+  const terminal = useDragResize(
+    TERMINAL_DEFAULT,
+    TERMINAL_MIN,
+    TERMINAL_MAX,
+    'vertical',
+    'nebulla_ide_terminal_h',
+  );
   const [terminalCollapsed, setTerminalCollapsed] = useState(true);
   const [securityAlertCount, setSecurityAlertCount] = useState(0);
   const prevShellStageRef = useRef<IdeShellStage | null>(null);

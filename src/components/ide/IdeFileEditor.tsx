@@ -1,5 +1,5 @@
 import { lazy, Suspense, useCallback, type KeyboardEvent } from 'react';
-import { ChevronRight, Loader2, Save } from 'lucide-react';
+import { ChevronRight, Circle, Loader2, Save } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useIdeWorkspace } from '@/components/ide/IdeWorkspaceContext';
 import { fileTabLabel } from '../../lib/ideCenterTabs';
@@ -8,8 +8,13 @@ const IdeMonacoEditor = lazy(() =>
   import('./IdeMonacoEditor').then((m) => ({ default: m.IdeMonacoEditor })),
 );
 
+type Props = {
+  /** Center Code pane is the active stage (for Monaco layout after tab switches). */
+  active?: boolean;
+};
+
 /** Editor body only — tabs live in the center tab strip. */
-export function IdeFileEditor() {
+export function IdeFileEditor({ active = true }: Props) {
   const {
     activePath,
     updateActiveContent,
@@ -34,6 +39,7 @@ export function IdeFileEditor() {
   }, [activePath, saveTab]);
 
   const crumbs = activePath ? activePath.split('/').filter(Boolean) : [];
+  const dirty = Boolean(activeTab?.dirty);
 
   return (
     <div className="flex h-full flex-col bg-[var(--surface-bright)]">
@@ -42,19 +48,27 @@ export function IdeFileEditor() {
           {crumbs.length === 0 ? (
             <span className="type-label-sm text-muted-foreground">Select a file in the explorer</span>
           ) : (
-            crumbs.map((part, i) => (
-              <span key={`${part}-${i}`} className="flex min-w-0 items-center gap-1">
-                {i > 0 ? <ChevronRight className="type-label-sm h-3 w-3 shrink-0" /> : null}
-                <span
-                  className={cn(
-                    'type-label-sm truncate',
-                    i === crumbs.length - 1 ? 'type-title-sm text-primary' : 'text-muted-foreground',
-                  )}
-                >
-                  {part}
+            <>
+              {dirty ? (
+                <Circle
+                  className="h-1.5 w-1.5 shrink-0 fill-primary text-primary"
+                  aria-label="Unsaved changes"
+                />
+              ) : null}
+              {crumbs.map((part, i) => (
+                <span key={`${part}-${i}`} className="flex min-w-0 items-center gap-1">
+                  {i > 0 ? <ChevronRight className="type-label-sm h-3 w-3 shrink-0" /> : null}
+                  <span
+                    className={cn(
+                      'type-label-sm truncate',
+                      i === crumbs.length - 1 ? 'type-title-sm text-primary' : 'text-muted-foreground',
+                    )}
+                  >
+                    {part}
+                  </span>
                 </span>
-              </span>
-            ))
+              ))}
+            </>
           )}
         </div>
         <button
@@ -105,6 +119,7 @@ export function IdeFileEditor() {
               path={activePath}
               value={activeTab.content}
               readOnly={Boolean(activeTab.loading)}
+              active={active}
               onChange={(value) => {
                 clearSaveError();
                 updateActiveContent(value);
