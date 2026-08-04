@@ -160,11 +160,26 @@ export function IdeCenterTabsProvider({ children }: { children: ReactNode }) {
     (path: string) => {
       const normalized = path.replace(/\\/g, '/');
       const id = fileTabId(normalized);
+      // Opening a file makes Code the center primary (not My Projects).
       setActiveTabId(id);
       void openFile(normalized);
     },
     [openFile],
   );
+
+  // If workspace activePath advances while Projects is still the selected center tab,
+  // switch to the file tab so Code feels like the primary stage.
+  useEffect(() => {
+    if (!activePath) return;
+    const fileId = fileTabId(activePath);
+    if (!tabs.some((t) => t.path === activePath)) return;
+    setActiveTabId((cur) => {
+      if (cur === fileId) return cur;
+      // Only auto-promote from Projects home — never steal Master Plan / UI Studio focus.
+      if (cur === panelTabId('projects') || cur == null) return fileId;
+      return cur;
+    });
+  }, [activePath, tabs]);
 
   const activateTab = useCallback(
     (tabId: string) => {

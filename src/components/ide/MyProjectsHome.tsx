@@ -39,6 +39,7 @@ import { resetProjectFromScratch } from '../../lib/ideProjectReset';
 import { ChatFilePreview } from './ChatFilePreview';
 import { openGitHubFile, openLocalFile } from '../../lib/fileOperations';
 import type { SmartChatFilePreview } from '../../lib/smartChatHandler';
+import { useIdeWorkspace } from './IdeWorkspaceContext';
 
 type ListedProject = {
   key: string;
@@ -106,6 +107,7 @@ const PROJECT_TYPES: {
  * Default post-login home — My Projects + quick actions.
  */
 export function MyProjectsHome() {
+  const { workspacePaths, tabs: openFileTabs } = useIdeWorkspace();
   const [projects, setProjects] = useState<ListedProject[]>([]);
   const [loadingList, setLoadingList] = useState(true);
   const [listNote, setListNote] = useState<string | null>(null);
@@ -121,6 +123,12 @@ export function MyProjectsHome() {
   const [startingIdea, setStartingIdea] = useState(false);
 
   const busyStarting = Boolean(startingType) || startingIdea;
+  const activeKey = getBrowserProjectKey();
+  /** Existing workspace → demote New Project hero so it doesn't fight Code / explorer. */
+  const hasExistingWork =
+    workspacePaths.length > 0 ||
+    openFileTabs.length > 0 ||
+    (Boolean(activeKey) && activeKey !== 'default' && projects.length > 0);
 
   const refreshList = useCallback(async () => {
     setLoadingList(true);
@@ -186,8 +194,6 @@ export function MyProjectsHome() {
   useEffect(() => {
     void refreshList();
   }, [refreshList]);
-
-  const activeKey = getBrowserProjectKey();
 
   const onOpenProject = useCallback(async (p: ListedProject) => {
     if (p.source === 'cloud') {
@@ -365,214 +371,256 @@ export function MyProjectsHome() {
     [onJustChat],
   );
 
+  const newProjectSection = (
+    <>
+      <section className="space-y-5">
+        <div className="space-y-2">
+          <h2
+            className={cn(
+              'font-normal tracking-tight text-foreground',
+              hasExistingWork
+                ? 'text-base'
+                : 'font-headline text-2xl sm:text-3xl',
+            )}
+          >
+            {hasExistingWork ? 'Start another project' : 'New Project'}
+          </h2>
+          <p className="max-w-xl text-sm leading-relaxed text-muted-foreground">
+            {hasExistingWork
+              ? 'Create a separate project when you are ready. Your current workspace stays in the explorer and Code tab.'
+              : 'Describe what you want to build. Grok will summarize what it understood, then ask the required Master Plan questions one at a time.'}
+          </p>
+        </div>
+
+        <div className="rounded-2xl border border-border bg-black p-5">
+          <label htmlFor="nebula-project-idea" className="flex items-center gap-2 text-sm text-foreground">
+            <Sparkles className="h-4 w-4 text-foreground/60" aria-hidden />
+            Start with a prompt
+          </label>
+          <textarea
+            id="nebula-project-idea"
+            value={ideaInput}
+            onChange={(e) => {
+              setIdeaInput(e.target.value);
+              if (ideaError) setIdeaError('');
+            }}
+            rows={hasExistingWork ? 3 : 4}
+            disabled={busyStarting}
+            placeholder="e.g. A mobile app for freelancers to track invoices and get paid reminders…"
+            className="mt-3 w-full resize-y rounded-xl border border-border bg-[#0a0a0a] px-3 py-2.5 text-sm leading-relaxed text-foreground outline-none ring-primary/25 placeholder:text-muted-foreground/70 focus:ring disabled:opacity-60"
+          />
+          <p className="mt-3 text-xs text-muted-foreground">
+            Optional — pick a type now so we skip that question later:
+          </p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {PROJECT_TYPES.map((t) => (
+              <button
+                key={t.id}
+                type="button"
+                disabled={busyStarting}
+                onClick={() => setIdeaType((prev) => (prev === t.id ? null : t.id))}
+                className={cn(
+                  'rounded-full border px-3 py-1.5 text-xs transition',
+                  ideaType === t.id
+                    ? 'border-foreground/40 bg-[#111111] text-foreground'
+                    : 'border-border text-muted-foreground hover:bg-[#111111] hover:text-foreground',
+                )}
+              >
+                {t.title}
+              </button>
+            ))}
+          </div>
+          {ideaError ? <p className="mt-2 text-xs text-rose-300">{ideaError}</p> : null}
+          <div className="mt-4 flex justify-end">
+            <button
+              type="button"
+              disabled={busyStarting || ideaInput.trim().length < 8}
+              onClick={() => void onStartFromIdea()}
+              className="inline-flex items-center gap-1.5 rounded-full bg-primary px-4 py-2 text-xs font-normal text-primary-foreground hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {startingIdea ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+              Continue
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <section className="space-y-6">
+        <div className="space-y-2">
+          <h2 className="text-base font-normal text-foreground">
+            {hasExistingWork ? 'Or choose a type for a new project' : 'Or choose a type'}
+          </h2>
+          <p className="max-w-xl text-sm leading-relaxed text-muted-foreground">
+            Skip the idea box — Grok will tell you it needs a few answers for the Master Plan, then
+            ask for your main goal (type already set).
+          </p>
+        </div>
+
+        <div className="grid gap-4 sm:grid-cols-3">
+          {PROJECT_TYPES.map((action) => {
+            const Icon = action.icon;
+            const busy = startingType === action.id;
+            return (
+              <button
+                key={action.id}
+                type="button"
+                disabled={busyStarting}
+                onClick={() => void onStartTypedProject(action.id)}
+                className="flex min-h-[11.5rem] flex-col items-start gap-4 rounded-2xl border border-border bg-black p-5 text-left transition hover:bg-[#111111] disabled:cursor-wait disabled:opacity-60"
+              >
+                <span className="flex h-11 w-11 items-center justify-center rounded-full bg-[#111111] text-foreground/70">
+                  {busy ? (
+                    <Loader2 className="h-5 w-5 animate-spin" />
+                  ) : (
+                    <Icon className="h-5 w-5" />
+                  )}
+                </span>
+                <span className="space-y-1.5">
+                  <span className="block text-sm font-normal text-foreground">{action.title}</span>
+                  <span className="block text-xs leading-relaxed text-muted-foreground">
+                    {action.blurb}
+                  </span>
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </section>
+    </>
+  );
+
+  const continueSection = (
+    <section className="space-y-6">
+      <div className="space-y-2">
+        <h2
+          className={cn(
+            'font-normal text-foreground',
+            hasExistingWork ? 'font-headline text-2xl sm:text-3xl tracking-tight' : 'text-base',
+          )}
+        >
+          {hasExistingWork ? 'Continue this workspace' : 'Or continue'}
+        </h2>
+        <p className="max-w-xl text-sm leading-relaxed text-muted-foreground">
+          Open a file, pull from GitHub, or chat freely without starting a new build.
+        </p>
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-3">
+        {continueActions.map((action) => {
+          const Icon = action.icon;
+          return (
+            <button
+              key={action.id}
+              type="button"
+              onClick={action.onClick}
+              className="flex min-h-[10rem] flex-col items-start gap-4 rounded-2xl border border-border bg-black p-5 text-left transition hover:bg-[#111111]"
+            >
+              <span className="flex h-10 w-10 items-center justify-center rounded-full bg-[#111111] text-foreground/60">
+                <Icon className="h-5 w-5" />
+              </span>
+              <span className="space-y-1.5">
+                <span className="block text-sm font-normal text-foreground">{action.title}</span>
+                <span className="block text-xs leading-relaxed text-muted-foreground">
+                  {action.blurb}
+                </span>
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    </section>
+  );
+
+  const projectsSection = (
+    <section className="space-y-4">
+      <div className="flex items-center justify-between gap-2">
+        <h2
+          className={cn(
+            'font-normal text-foreground',
+            hasExistingWork ? 'font-headline text-2xl sm:text-3xl tracking-tight' : 'text-base',
+          )}
+        >
+          Your projects
+        </h2>
+        {loadingList ? (
+          <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
+        ) : (
+          <span className="text-xs text-muted-foreground">{projects.length} total</span>
+        )}
+      </div>
+
+      {listNote ? (
+        <p className="rounded-lg border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-xs text-amber-100/90">
+          {listNote}
+        </p>
+      ) : null}
+
+      {projects.length === 0 && !loadingList ? (
+        <div className="rounded-2xl border border-dashed border-border px-6 py-12 text-center">
+          <p className="text-sm leading-relaxed text-muted-foreground">
+            No projects yet. Start with a prompt above, or pick{' '}
+            <span className="text-foreground">Web App</span>,{' '}
+            <span className="text-foreground">Mobile App</span>, or{' '}
+            <span className="text-foreground">Landing Page</span>.
+          </p>
+        </div>
+      ) : (
+        <ul className="divide-y divide-border overflow-hidden rounded-2xl border border-border">
+          {projects.map((p) => {
+            const isActive = p.key === activeKey || p.name === getBrowserProjectName();
+            return (
+              <li
+                key={`${p.source}-${p.key}`}
+                className={cn(
+                  'flex flex-wrap items-center justify-between gap-3 px-5 py-4',
+                  isActive && 'bg-[#111111]',
+                )}
+              >
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-normal text-foreground">
+                    {p.name}
+                    {isActive ? (
+                      <span className="ml-2 text-[10px] font-normal uppercase tracking-wide text-muted-foreground">
+                        Active
+                      </span>
+                    ) : null}
+                  </p>
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    Last modified {formatWhen(p.updatedAt)}
+                    {p.source === 'cloud' ? ' · Cloud' : p.source === 'guest' ? ' · Local' : ''}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => void onOpenProject(p)}
+                  className="rounded-full border border-border px-3 py-1.5 text-xs font-normal text-foreground hover:bg-[#111111]"
+                >
+                  Open
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </section>
+  );
+
   return (
     <div className="min-h-0 flex-1 overflow-auto bg-background">
       <div className="mx-auto flex w-full max-w-3xl flex-col gap-12 px-6 py-12 sm:px-10 sm:py-16">
-        <section className="space-y-5">
-          <div className="space-y-2">
-            <h2 className="font-headline text-2xl font-normal tracking-tight text-foreground sm:text-3xl">
-              New Project
-            </h2>
-            <p className="max-w-xl text-sm leading-relaxed text-muted-foreground">
-              Describe what you want to build. Grok will summarize what it understood, then ask the
-              required Master Plan questions one at a time.
-            </p>
-          </div>
-
-          <div className="rounded-2xl border border-border bg-black p-5">
-            <label htmlFor="nebula-project-idea" className="flex items-center gap-2 text-sm text-foreground">
-              <Sparkles className="h-4 w-4 text-foreground/60" aria-hidden />
-              Start with a prompt
-            </label>
-            <textarea
-              id="nebula-project-idea"
-              value={ideaInput}
-              onChange={(e) => {
-                setIdeaInput(e.target.value);
-                if (ideaError) setIdeaError('');
-              }}
-              rows={4}
-              disabled={busyStarting}
-              placeholder="e.g. A mobile app for freelancers to track invoices and get paid reminders…"
-              className="mt-3 w-full resize-y rounded-xl border border-border bg-[#0a0a0a] px-3 py-2.5 text-sm leading-relaxed text-foreground outline-none ring-primary/25 placeholder:text-muted-foreground/70 focus:ring disabled:opacity-60"
-            />
-            <p className="mt-3 text-xs text-muted-foreground">
-              Optional — pick a type now so we skip that question later:
-            </p>
-            <div className="mt-2 flex flex-wrap gap-2">
-              {PROJECT_TYPES.map((t) => (
-                <button
-                  key={t.id}
-                  type="button"
-                  disabled={busyStarting}
-                  onClick={() => setIdeaType((prev) => (prev === t.id ? null : t.id))}
-                  className={cn(
-                    'rounded-full border px-3 py-1.5 text-xs transition',
-                    ideaType === t.id
-                      ? 'border-foreground/40 bg-[#111111] text-foreground'
-                      : 'border-border text-muted-foreground hover:bg-[#111111] hover:text-foreground',
-                  )}
-                >
-                  {t.title}
-                </button>
-              ))}
-            </div>
-            {ideaError ? <p className="mt-2 text-xs text-rose-300">{ideaError}</p> : null}
-            <div className="mt-4 flex justify-end">
-              <button
-                type="button"
-                disabled={busyStarting || ideaInput.trim().length < 8}
-                onClick={() => void onStartFromIdea()}
-                className="inline-flex items-center gap-1.5 rounded-full bg-primary px-4 py-2 text-xs font-normal text-primary-foreground hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {startingIdea ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
-                Continue
-              </button>
-            </div>
-          </div>
-        </section>
-
-        <section className="space-y-6">
-          <div className="space-y-2">
-            <h2 className="text-base font-normal text-foreground">Or choose a type</h2>
-            <p className="max-w-xl text-sm leading-relaxed text-muted-foreground">
-              Skip the idea box — Grok will tell you it needs a few answers for the Master Plan, then
-              ask for your main goal (type already set).
-            </p>
-          </div>
-
-          <div className="grid gap-4 sm:grid-cols-3">
-            {PROJECT_TYPES.map((action) => {
-              const Icon = action.icon;
-              const busy = startingType === action.id;
-              return (
-                <button
-                  key={action.id}
-                  type="button"
-                  disabled={busyStarting}
-                  onClick={() => void onStartTypedProject(action.id)}
-                  className="flex min-h-[11.5rem] flex-col items-start gap-4 rounded-2xl border border-border bg-black p-5 text-left transition hover:bg-[#111111] disabled:cursor-wait disabled:opacity-60"
-                >
-                  <span className="flex h-11 w-11 items-center justify-center rounded-full bg-[#111111] text-foreground/70">
-                    {busy ? (
-                      <Loader2 className="h-5 w-5 animate-spin" />
-                    ) : (
-                      <Icon className="h-5 w-5" />
-                    )}
-                  </span>
-                  <span className="space-y-1.5">
-                    <span className="block text-sm font-normal text-foreground">
-                      {action.title}
-                    </span>
-                    <span className="block text-xs leading-relaxed text-muted-foreground">
-                      {action.blurb}
-                    </span>
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        </section>
-
-        <section className="space-y-6">
-          <div className="space-y-2">
-            <h2 className="text-base font-normal text-foreground">Or continue</h2>
-            <p className="max-w-xl text-sm leading-relaxed text-muted-foreground">
-              Open a file, pull from GitHub, or chat freely without starting a new build.
-            </p>
-          </div>
-
-          <div className="grid gap-4 sm:grid-cols-3">
-            {continueActions.map((action) => {
-              const Icon = action.icon;
-              return (
-                <button
-                  key={action.id}
-                  type="button"
-                  onClick={action.onClick}
-                  className="flex min-h-[10rem] flex-col items-start gap-4 rounded-2xl border border-border bg-black p-5 text-left transition hover:bg-[#111111]"
-                >
-                  <span className="flex h-10 w-10 items-center justify-center rounded-full bg-[#111111] text-foreground/60">
-                    <Icon className="h-5 w-5" />
-                  </span>
-                  <span className="space-y-1.5">
-                    <span className="block text-sm font-normal text-foreground">
-                      {action.title}
-                    </span>
-                    <span className="block text-xs leading-relaxed text-muted-foreground">
-                      {action.blurb}
-                    </span>
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        </section>
-
-        <section className="space-y-4">
-          <div className="flex items-center justify-between gap-2">
-            <h2 className="text-base font-normal text-foreground">Your projects</h2>
-            {loadingList ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
-            ) : (
-              <span className="text-xs text-muted-foreground">{projects.length} total</span>
-            )}
-          </div>
-
-          {listNote ? (
-            <p className="rounded-lg border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-xs text-amber-100/90">
-              {listNote}
-            </p>
-          ) : null}
-
-          {projects.length === 0 && !loadingList ? (
-            <div className="rounded-2xl border border-dashed border-border px-6 py-12 text-center">
-              <p className="text-sm leading-relaxed text-muted-foreground">
-                No projects yet. Start with a prompt above, or pick{' '}
-                <span className="text-foreground">Web App</span>,{' '}
-                <span className="text-foreground">Mobile App</span>, or{' '}
-                <span className="text-foreground">Landing Page</span>.
-              </p>
-            </div>
-          ) : (
-            <ul className="divide-y divide-border overflow-hidden rounded-2xl border border-border">
-              {projects.map((p) => {
-                const isActive = p.key === activeKey || p.name === getBrowserProjectName();
-                return (
-                  <li
-                    key={`${p.source}-${p.key}`}
-                    className={cn(
-                      'flex flex-wrap items-center justify-between gap-3 px-5 py-4',
-                      isActive && 'bg-[#111111]',
-                    )}
-                  >
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-normal text-foreground">
-                        {p.name}
-                        {isActive ? (
-                          <span className="ml-2 text-[10px] font-normal uppercase tracking-wide text-muted-foreground">
-                            Active
-                          </span>
-                        ) : null}
-                      </p>
-                      <p className="mt-0.5 text-xs text-muted-foreground">
-                        Last modified {formatWhen(p.updatedAt)}
-                        {p.source === 'cloud' ? ' · Cloud' : p.source === 'guest' ? ' · Local' : ''}
-                      </p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => void onOpenProject(p)}
-                      className="rounded-full border border-border px-3 py-1.5 text-xs font-normal text-foreground hover:bg-[#111111]"
-                    >
-                      Open
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-        </section>
+        {hasExistingWork ? (
+          <>
+            {projectsSection}
+            {continueSection}
+            {newProjectSection}
+          </>
+        ) : (
+          <>
+            {newProjectSection}
+            {continueSection}
+            {projectsSection}
+          </>
+        )}
       </div>
 
       {fileModal ? (

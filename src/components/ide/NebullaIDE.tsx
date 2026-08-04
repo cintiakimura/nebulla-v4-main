@@ -135,15 +135,42 @@ export function NebullaIDE() {
   );
 }
 
+type IdeShellStage = 'code' | 'projects' | 'plan' | 'ui-studio' | 'other';
+
+function shellStageFromCenterTab(tab: { kind?: string; pane?: string } | null): IdeShellStage {
+  if (!tab) return 'other';
+  if (tab.kind === 'file') return 'code';
+  if (tab.pane === 'projects') return 'projects';
+  if (tab.pane === 'master-plan' || tab.pane === 'mind-map') return 'plan';
+  if (tab.pane === 'ui-studio' || tab.pane === 'ui-studio-beta') return 'ui-studio';
+  return 'other';
+}
+
 function NebullaIDEShell() {
-  const { activeNavId, openPanel } = useIdeCenterTabs();
+  const { activeNavId, openPanel, activeTab } = useIdeCenterTabs();
   const explorer = useDragResize(EXPLORER_DEFAULT, EXPLORER_MIN, EXPLORER_MAX, 'horizontal-right');
   const [leftSidebarOpen, setLeftSidebarOpen] = useState(true);
   const [leftSidebarView, setLeftSidebarView] = useState<IdeLeftSidebarView>('explorer');
   const chat = useDragResize(CHAT_DEFAULT, CHAT_MIN, CHAT_MAX, 'horizontal-left');
   const terminal = useDragResize(TERMINAL_DEFAULT, TERMINAL_MIN, TERMINAL_MAX, 'vertical');
-  const [terminalCollapsed, setTerminalCollapsed] = useState(false);
+  const [terminalCollapsed, setTerminalCollapsed] = useState(true);
   const [securityAlertCount, setSecurityAlertCount] = useState(0);
+  const prevShellStageRef = useRef<IdeShellStage | null>(null);
+
+  // Apply chrome defaults only on stage transition — never fight user resizes continuously.
+  useEffect(() => {
+    const stage = shellStageFromCenterTab(activeTab);
+    if (prevShellStageRef.current === stage) return;
+    prevShellStageRef.current = stage;
+    setTerminalCollapsed(true);
+    if (stage === 'code') {
+      setLeftSidebarOpen(true);
+      setLeftSidebarView('explorer');
+    } else if (stage === 'plan' || stage === 'ui-studio') {
+      setLeftSidebarOpen(false);
+    }
+    // projects / other: keep explorer preference; only collapse terminal
+  }, [activeTab]);
 
   useEffect(() => {
     const refreshBadge = async () => {

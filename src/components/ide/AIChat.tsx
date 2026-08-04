@@ -2040,7 +2040,7 @@ export function AIChat() {
       setAssistantInteractionMode(mode);
 
       if (mode === 'chat') {
-        setAccessoryHint('Chat on — brainstorm & plan; files stay unchanged.');
+        setAccessoryHint('Chat on — plan & discuss; files stay unchanged.');
         window.setTimeout(() => setAccessoryHint(null), 3200);
         return;
       }
@@ -2462,7 +2462,7 @@ export function AIChat() {
                   disabled={sending}
                   title={
                     !masterPlanCompleteHint
-                      ? 'Finish Discovery / Master Plan first for a solid build'
+                      ? 'Complete the Master Plan first for a solid build'
                       : assistantInteractionMode === 'chat'
                         ? t('chat.goNeedsAgent')
                         : t('chat.goAgentTitle')
@@ -2490,7 +2490,7 @@ export function AIChat() {
               </div>
               {!masterPlanCompleteHint ? (
                 <p className="max-w-[14rem] text-right text-[10px] leading-snug text-muted-foreground">
-                  Finish Discovery first for a solid build
+                  Complete the Master Plan first for a solid build
                 </p>
               ) : null}
             </div>

@@ -1,29 +1,12 @@
-import { useCallback, useMemo, type KeyboardEvent } from 'react';
-import { oneDark } from '@codemirror/theme-one-dark';
-import CodeMirror from '@uiw/react-codemirror';
-import { css } from '@codemirror/lang-css';
-import { html } from '@codemirror/lang-html';
-import { javascript } from '@codemirror/lang-javascript';
-import { json } from '@codemirror/lang-json';
-import { markdown } from '@codemirror/lang-markdown';
-import { defaultHighlightStyle, syntaxHighlighting } from '@codemirror/language';
-import { ChevronRight, Circle, Loader2, Save } from 'lucide-react';
+import { lazy, Suspense, useCallback, type KeyboardEvent } from 'react';
+import { ChevronRight, Loader2, Save } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useIdeWorkspace } from '@/components/ide/IdeWorkspaceContext';
 import { fileTabLabel } from '../../lib/ideCenterTabs';
 
-function languageExtension(path: string) {
-  const lower = path.toLowerCase();
-  if (lower.endsWith('.tsx')) return javascript({ typescript: true, jsx: true });
-  if (lower.endsWith('.ts')) return javascript({ typescript: true });
-  if (lower.endsWith('.jsx')) return javascript({ jsx: true });
-  if (lower.endsWith('.js') || lower.endsWith('.mjs') || lower.endsWith('.cjs')) return javascript();
-  if (lower.endsWith('.json')) return json();
-  if (lower.endsWith('.css')) return css();
-  if (lower.endsWith('.html') || lower.endsWith('.htm')) return html();
-  if (lower.endsWith('.md') || lower.endsWith('.mdx')) return markdown();
-  return javascript({ typescript: true, jsx: true });
-}
+const IdeMonacoEditor = lazy(() =>
+  import('./IdeMonacoEditor').then((m) => ({ default: m.IdeMonacoEditor })),
+);
 
 /** Editor body only — tabs live in the center tab strip. */
 export function IdeFileEditor() {
@@ -46,12 +29,11 @@ export function IdeFileEditor() {
     [activePath, saveTab],
   );
 
+  const handleSave = useCallback(() => {
+    if (activePath) void saveTab(activePath);
+  }, [activePath, saveTab]);
+
   const crumbs = activePath ? activePath.split('/').filter(Boolean) : [];
-  const extensions = useMemo(() => {
-    const base = [oneDark, syntaxHighlighting(defaultHighlightStyle, { fallback: true })];
-    if (activePath) base.push(languageExtension(activePath));
-    return base;
-  }, [activePath]);
 
   return (
     <div className="flex h-full flex-col bg-[var(--surface-bright)]">
@@ -111,24 +93,25 @@ export function IdeFileEditor() {
             <span className="type-label-sm">Loading {fileTabLabel(activePath)}…</span>
           </div>
         ) : (
-          <CodeMirror
-            key={activePath}
-            value={activeTab.content}
-            height="100%"
-            className="nebulla-codemirror min-h-0 flex-1 overflow-hidden text-[13px]"
-            extensions={extensions}
-            editable={!activeTab.loading}
-            basicSetup={{
-              lineNumbers: true,
-              foldGutter: true,
-              highlightActiveLine: true,
-              bracketMatching: true,
-            }}
-            onChange={(value) => {
-              clearSaveError();
-              updateActiveContent(value);
-            }}
-          />
+          <Suspense
+            fallback={
+              <div className="flex h-full flex-1 items-center justify-center gap-2 text-muted-foreground">
+                <Loader2 className="h-5 w-5 animate-spin" />
+                <span className="type-label-sm">Loading editor…</span>
+              </div>
+            }
+          >
+            <IdeMonacoEditor
+              path={activePath}
+              value={activeTab.content}
+              readOnly={Boolean(activeTab.loading)}
+              onChange={(value) => {
+                clearSaveError();
+                updateActiveContent(value);
+              }}
+              onSave={handleSave}
+            />
+          </Suspense>
         )}
       </div>
     </div>

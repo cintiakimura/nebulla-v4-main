@@ -7,7 +7,7 @@
  * Nebulla IDE — refined / delicate black theme (colors only).
  * Inspired by calm AI chat UIs: true black, hairline seams, rare accents.
  * Accents (use sparingly): title #5750CC · subtitle #679BD1 · misc #C6937C
- * Layout / resize / collapse unchanged. CodeMirror tokens preserved.
+ * Layout / resize / collapse unchanged. Code editing uses Monaco (IdeFileEditor).
  * Rollback: src/theme-backups/original-ui-2026-07-24/
  */
 :root,
@@ -456,79 +456,4 @@
     overflow: hidden;
   }
 
-  .nebulla-codemirror {
-    height: 100%;
-    background: #000000;
-  }
-
-  .nebulla-codemirror .cm-editor {
-    height: 100%;
-    background: #000000 !important;
-    color: var(--foreground);
-  }
-
-  .nebulla-codemirror .cm-scroller {
-    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-    line-height: 1.55;
-  }
-
-  .nebulla-codemirror .cm-content {
-    caret-color: var(--primary);
-  }
-
-  .nebulla-codemirror .cm-gutters {
-    background: #000000 !important;
-    border-right: 0.5px solid var(--outline-variant);
-    color: var(--on-surface-variant);
-  }
-
-  .nebulla-codemirror .cm-activeLineGutter {
-    background: color-mix(in srgb, var(--primary) 8%, #000000);
-  }
-
-  .nebulla-codemirror .cm-activeLine {
-    background: color-mix(in srgb, #ffffff 3%, transparent);
-  }
-
-  .nebulla-codemirror .cm-selectionBackground,
-  .nebulla-codemirror .cm-content ::selection {
-    background: color-mix(in srgb, var(--primary) 28%, transparent) !important;
-  }
-
-  .nebulla-codemirror .cm-matchingBracket {
-    background: color-mix(in srgb, var(--primary) 20%, transparent);
-    outline: 0.5px solid var(--primary);
-  }
-
-  .nebulla-codemirror .tok-keyword {
-    color: #a89bff;
-  }
-  .nebulla-codemirror .tok-string {
-    color: #22c55e;
-  }
-  .nebulla-codemirror .tok-number {
-    color: #f0b27a;
-  }
-  .nebulla-codemirror .tok-comment {
-    color: #7a7a9a;
-    font-style: italic;
-  }
-  .nebulla-codemirror .tok-variableName {
-    color: #f0a0b0;
-  }
-  .nebulla-codemirror .tok-typeName,
-  .nebulla-codemirror .tok-className {
-    color: #f0d48a;
-  }
-  .nebulla-codemirror .tok-propertyName {
-    color: #8b84ff;
-  }
-  .nebulla-codemirror .tok-heading,
-  .nebulla-codemirror .tok-strong {
-    color: #f0d48a;
-    font-weight: 600;
-  }
-  .nebulla-codemirror .tok-link {
-    color: #6c63ff;
-  }
 }

@@ -24,8 +24,8 @@ const enChat: Catalog = {
   'chat.mode.agent': 'Agent',
   'chat.mode.chatHint': 'Brainstorm freely — no file writes until Agent',
   'chat.mode.agentHint': 'Can edit files and run Go when you ask',
-  'chat.greeting': "What's up? What would you like to create today?",
-  'chat.greetingSub': 'Brainstorm in Chat, or switch to Agent when you want files changed.',
+  'chat.greeting': 'Ready when you are — ask a question or continue what you want to create today.',
+  'chat.greetingSub': 'Plan in Chat, or switch to Agent when you want files changed.',
   'chat.placeholder.chat': 'Message Nebulla…',
   'chat.placeholder.agent': 'Describe what to build or fix…',
   'chat.attach': 'Attach file',
@@ -46,7 +46,7 @@ const enChat: Catalog = {
   'chat.thinking': 'Thinking…',
   'chat.interruptVoice': 'Interrupt Grok voice',
   'chat.voiceStopped': 'Stopped voice playback and any pending dictation send.',
-  'chat.stayHint': 'Staying in Chat — keep brainstorming.',
+  'chat.stayHint': 'Staying in Chat — keep planning.',
   'chat.goNeedsAgent': 'Go needs Agent mode — click to switch or use the Agent toggle',
   'chat.goAgentTitle': 'Go: Grok Code writes files to your workspace',
   'chat.openTalkOn':
@@ -55,7 +55,7 @@ const enChat: Catalog = {
   'chat.openTalkMicDenied': 'Open talk: allow the microphone for this site.',
   'chat.speechUnsupported': 'Speech recognition is not supported in this browser.',
   'chat.openTalkStartFailed': 'Could not start open talk — check browser permissions.',
-  'chat.status.chat': 'Chat · brainstorming',
+  'chat.status.chat': 'Chat · plan & discuss',
   'chat.status.agent': 'Agent · coding',
   'chat.idle.chat':
     'Chat mode — brainstorm & plan. Switch to Agent when you are ready to build or edit code.',
