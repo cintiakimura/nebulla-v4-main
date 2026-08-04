@@ -22,10 +22,15 @@ const enCommon: Catalog = {
 const enChat: Catalog = {
   'chat.mode.chat': 'Chat',
   'chat.mode.agent': 'Agent',
-  'chat.mode.chatHint': 'Brainstorm freely — no file writes until Agent',
+  'chat.mode.chatHint': 'Plan & discuss — no file writes until Agent',
   'chat.mode.agentHint': 'Can edit files and run Go when you ask',
   'chat.greeting': 'Ready when you are — ask a question or continue what you want to create today.',
   'chat.greetingSub': 'Plan in Chat, or switch to Agent when you want files changed.',
+  /** Softer empty state when My Projects / discovery is already the center hero. */
+  'chat.greeting.projects': 'The center is for starting a project.',
+  'chat.greetingSub.projects': 'Ask me anything here once you begin — or open a file to edit in Code.',
+  'chat.goMasterPlanHint': 'Complete the Master Plan first for a solid build',
+  'chat.goMasterPlanHint.soft': 'After you start in the center, finish the Master Plan before Go.',
   'chat.placeholder.chat': 'Message Nebulla…',
   'chat.placeholder.agent': 'Describe what to build or fix…',
   'chat.attach': 'Attach file',
@@ -58,11 +63,11 @@ const enChat: Catalog = {
   'chat.status.chat': 'Chat · plan & discuss',
   'chat.status.agent': 'Agent · coding',
   'chat.idle.chat':
-    'Chat mode — brainstorm & plan. Switch to Agent when you are ready to build or edit code.',
+    'Chat mode — plan & discuss. Switch to Agent when you are ready to build or edit code.',
   'chat.idle.agent':
-    'Agent mode — Go runs Grok Code and writes files. Switch to Chat to brainstorm without spending agent tokens.',
+    'Agent mode — Go runs Grok Code and writes files. Switch to Chat to plan without spending agent tokens.',
   'chat.switchPrompt':
-    "You're in **Chat** (brainstorm & plan) — I won't write files or run the coding agent while we talk.{{discovery}}\n\nSwitch to **Agent** to {{kind}}?",
+    "You're in **Chat** (plan & discuss) — I won't write files or run the coding agent while we talk.{{discovery}}\n\nSwitch to **Agent** to {{kind}}?",
   'chat.switchKind.debug': 'debug',
   'chat.switchKind.ui': 'generate UI',
   'chat.switchKind.implement': 'implement',

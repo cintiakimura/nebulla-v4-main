@@ -69,6 +69,7 @@ import {
   type StartGuidedChatDetail,
 } from '../../lib/ideHomeEvents';
 import { ideContextSnippetForChat, useIdeWorkspace } from '@/components/ide/IdeWorkspaceContext';
+import { useIdeCenterTabs } from '@/components/ide/IdeCenterTabsContext';
 import { ChatFilePreview } from '@/components/ide/ChatFilePreview';
 import { uploadFileToR2 } from '../../lib/nebulaStorageClient';
 import {
@@ -230,6 +231,10 @@ export function AIChat() {
     assistantInteractionMode,
     setAssistantInteractionMode,
   } = useIdeWorkspace();
+  const { activeTab: centerActiveTab } = useIdeCenterTabs();
+  /** Center My Projects / discovery already owns the hero — keep chat secondary. */
+  const centerIsProjectsHome =
+    centerActiveTab?.kind === 'panel' && centerActiveTab.pane === 'projects';
   const {
     t,
     resolvedIdeLocale,
@@ -2260,8 +2265,12 @@ export function AIChat() {
       >
         {messages.length === 0 && !sending ? (
           <div className="px-1 py-6 text-center">
-            <p className="type-body-md text-foreground/90">{t('chat.greeting')}</p>
-            <p className="type-label-sm mt-2 text-muted-foreground">{t('chat.greetingSub')}</p>
+            <p className="type-body-md text-foreground/90">
+              {centerIsProjectsHome ? t('chat.greeting.projects') : t('chat.greeting')}
+            </p>
+            <p className="type-label-sm mt-2 text-muted-foreground">
+              {centerIsProjectsHome ? t('chat.greetingSub.projects') : t('chat.greetingSub')}
+            </p>
           </div>
         ) : null}
         {messages.map((message) =>
@@ -2462,7 +2471,9 @@ export function AIChat() {
                   disabled={sending}
                   title={
                     !masterPlanCompleteHint
-                      ? 'Complete the Master Plan first for a solid build'
+                      ? centerIsProjectsHome
+                        ? t('chat.goMasterPlanHint.soft')
+                        : t('chat.goMasterPlanHint')
                       : assistantInteractionMode === 'chat'
                         ? t('chat.goNeedsAgent')
                         : t('chat.goAgentTitle')
@@ -2490,7 +2501,9 @@ export function AIChat() {
               </div>
               {!masterPlanCompleteHint ? (
                 <p className="max-w-[14rem] text-right text-[10px] leading-snug text-muted-foreground">
-                  Complete the Master Plan first for a solid build
+                  {centerIsProjectsHome
+                    ? t('chat.goMasterPlanHint.soft')
+                    : t('chat.goMasterPlanHint')}
                 </p>
               ) : null}
             </div>
