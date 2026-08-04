@@ -15,10 +15,12 @@ Hand-authored **Resource Profiles** for Nebulla UI Gen matching.
 ## Sync to Cloudflare R2
 
 ```bash
-npm run ui-resources:sync-r2
+npm run ui-resources:sync-r2 -- --dry-run   # list profiles, no upload
+npm run ui-resources:sync-r2               # upload when R2 env is configured
 ```
 
 Requires existing R2 env (`CLOUDFLARE_*` / `R2_*`). Optional: `UI_RESOURCE_CATALOG=r2` at runtime.
+FS remains production-capable for demos when R2 is unset.
 
 ## Vision draft (optional)
 
