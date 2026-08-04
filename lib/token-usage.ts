@@ -27,25 +27,16 @@ function parseEnvTruthy(raw: string | undefined): boolean | null {
 
 /**
  * Skip Nebula Free-tier monthly cap (not xAI/Grok provider quota).
- * - `DISABLE_FREE_TIER_TOKEN_LIMIT=true` → always off
- * - `ENFORCE_FREE_TIER_TOKEN_LIMIT=true` → always on (production billing)
- * - Render hosts (`RENDER` / `RENDER_SERVICE_ID`): off by default for operator testing
- * - `NODE_ENV !== production`: off for local dev
+ *
+ * **Billing is opt-in** while developing/testing:
+ * - Cap is **OFF** by default (local, Render, production).
+ * - Set `ENFORCE_FREE_TIER_TOKEN_LIMIT=true` to turn Nebulla Free monthly metering back on.
+ *
+ * Provider (xAI) quotas are separate and still apply to the key owner.
+ * User BYOK chat also skips this meter in `/api/grok/chat`.
  */
 export function isFreeTierTokenLimitDisabled(): boolean {
-  const explicit =
-    parseEnvTruthy(process.env.DISABLE_FREE_TIER_TOKEN_LIMIT) ??
-    parseEnvTruthy(process.env.DISABLE_MAIN_AI_USAGE_LIMIT);
-  if (explicit === true) return true;
-  if (explicit === false) return false;
-
-  if (parseEnvTruthy(process.env.ENFORCE_FREE_TIER_TOKEN_LIMIT) === true) return false;
-
-  if (process.env.RENDER === "true" || Boolean(process.env.RENDER_SERVICE_ID?.trim())) {
-    return true;
-  }
-  if (process.env.NODE_ENV !== "production") return true;
-  return false;
+  return parseEnvTruthy(process.env.ENFORCE_FREE_TIER_TOKEN_LIMIT) !== true;
 }
 
 function utcMonthYear(d = new Date()): string {

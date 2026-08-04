@@ -285,11 +285,13 @@ if (mainAiEnvProbe.length < 20) {
 }
 
 if (isFreeTierTokenLimitDisabled()) {
-  const reason =
-    process.env.RENDER === "true" || process.env.RENDER_SERVICE_ID
-      ? "Render host default (set ENFORCE_FREE_TIER_TOKEN_LIMIT=true to re-enable)"
-      : "DISABLE_FREE_TIER_TOKEN_LIMIT or non-production NODE_ENV";
-  console.warn(`[nebula] Free plan monthly AI token cap is OFF — ${reason}.`);
+  console.warn(
+    "[nebula] Free plan monthly AI token cap is OFF (default). Set ENFORCE_FREE_TIER_TOKEN_LIMIT=true to enable billing metering later.",
+  );
+} else {
+  console.warn(
+    "[nebula] Free plan monthly AI token cap is ON (ENFORCE_FREE_TIER_TOKEN_LIMIT). BYOK users are still exempt.",
+  );
 }
 
 const r2MissingOnBoot = getMissingR2EnvVars();
@@ -4783,19 +4785,25 @@ ${answer.slice(0, 8000)}`;
       messagesForApi.unshift({ role: "system", content: workspaceSystem });
     }
 
-    try {
-      await checkAndEnforceLimit(convUserId);
-    } catch (limitErr: unknown) {
-      if (limitErr instanceof TokenLimitExceededError) {
-        if (mainAiProvider === "xai" && (await respondWithClaudeQuotaFallback(messagesForApi, convScopeChat, res))) {
-          return;
+    // Nebulla Free monthly cap: skip when disabled (default) or when the request uses user BYOK.
+    // Platform-metered Free usage only applies to platform-key traffic under ENFORCE_FREE_TIER_TOKEN_LIMIT.
+    const usingUserByok =
+      keyRes.ok === true && (keyRes.source === "user_db" || keyRes.source === "client");
+    if (!usingUserByok) {
+      try {
+        await checkAndEnforceLimit(convUserId);
+      } catch (limitErr: unknown) {
+        if (limitErr instanceof TokenLimitExceededError) {
+          if (mainAiProvider === "xai" && (await respondWithClaudeQuotaFallback(messagesForApi, convScopeChat, res))) {
+            return;
+          }
+          return res.status(402).json({
+            error: FREE_TIER_MONTHLY_LIMIT_MESSAGE,
+            code: limitErr.code,
+          });
         }
-        return res.status(402).json({
-          error: FREE_TIER_MONTHLY_LIMIT_MESSAGE,
-          code: limitErr.code,
-        });
+        console.warn("[grok/chat] Unexpected limit check error (continuing):", limitErr);
       }
-      console.warn("[grok/chat] Unexpected limit check error (continuing):", limitErr);
     }
 
     try {
