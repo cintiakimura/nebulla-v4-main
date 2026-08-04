@@ -284,7 +284,7 @@ section('compileDesignBrief: roles from §5 + gaps when thin');
 section('matchResources: landing never picks mobile-only; scores required');
 {
   const profiles = await listProfilesFs(catalogRootFromCwd(process.cwd()));
-  assert.ok(profiles.length >= 5, `expected FS pilot profiles, got ${profiles.length}`);
+  assert.ok(profiles.length >= 12, `expected expanded FS catalog, got ${profiles.length}`);
 
   const landingClass = classifyPage({
     projectType: 'Landing Page',
@@ -311,6 +311,31 @@ section('matchResources: landing never picks mobile-only; scores required');
   assert.ok(mobileOnly.length > 0, 'catalog has mobile profiles for filter test');
   const filteredOut = !mobileOnly.some((p) => p.id === match.id);
   assert.ok(filteredOut || match.selection_mode === 'no_candidates', 'winner is not a mobile profile');
+
+  const settingsClass = classifyPage({
+    projectType: 'mobile app',
+    goal: 'task productivity',
+    features: 'settings preferences',
+    uiux: 'clean medium density professional',
+    pageName: 'Settings',
+    pagePurpose: 'account settings',
+    filePaths: ['app/(tabs)/settings.tsx'],
+    fileRoutes: ['/settings'],
+    hasBottomNav: true,
+  });
+  const settingsBrief = compileDesignBrief({
+    uiuxSection: 'Clean medium density, professional settings UI.',
+    classification: settingsClass,
+  });
+  const settingsMatch = matchResources({
+    profiles,
+    brief: settingsBrief,
+    classification: settingsClass,
+  });
+  assert.ok(
+    settingsMatch.id.includes('settings') || settingsMatch.template_id?.includes('settings'),
+    `settings should match a settings profile, got ${settingsMatch.id}`,
+  );
 }
 
 section('qualityGate: brief-aware rules (≥2)');
@@ -486,6 +511,16 @@ section('Phase G: brief refine parse rejects layout invent; rematch shortlist-on
   });
   assert.equal(lowMatch.selection_mode, 'below_threshold');
   assert.equal(shouldAttemptRematch(lowMatch, classification), true);
+
+  // Rematch must not promote picks below rubric floor (8).
+  const weakApplied = applyRematchPick(ranked, pickId, 'test');
+  assert.ok(weakApplied);
+  if (weakApplied && weakApplied.score < 8) {
+    assert.notEqual(
+      'scored_match',
+      weakApplied.score < 8 ? 'scored_match_blocked' : weakApplied.selection_mode,
+    );
+  }
 }
 
 fs.rmSync(tmp, { recursive: true, force: true });

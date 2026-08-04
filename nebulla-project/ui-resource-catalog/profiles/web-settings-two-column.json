@@ -1,0 +1,17 @@
+{
+  "id": "web-settings-two-column",
+  "kind": "template",
+  "platform": "web",
+  "page_types": ["settings"],
+  "density": "medium",
+  "personality": ["professional", "clean"],
+  "best_for": ["web settings", "workspace preferences", "account admin"],
+  "strengths": ["Two-column groups", "Clear labels", "Save CTA"],
+  "weaknesses": ["Not for mobile", "Not for landing conversion"],
+  "tags": ["web", "settings", "a11y"],
+  "description": "Web settings two-column form groups with primary save action.",
+  "template_id": "web_settings_two_column",
+  "license": "Nebulla internal template",
+  "source": "ui-generation-engine/v2/selectTemplate",
+  "version": "1.0.0"
+}

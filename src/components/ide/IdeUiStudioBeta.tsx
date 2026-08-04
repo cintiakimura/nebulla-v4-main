@@ -316,6 +316,8 @@ export function IdeUiStudioBeta({
   const [figmaStatus, setFigmaStatus] = useState<string>('');
   const [figmaError, setFigmaError] = useState<string>('');
   const [figmaEnvGuidance, setFigmaEnvGuidance] = useState<string>('');
+  const [resourceMatchLabel, setResourceMatchLabel] = useState<string>('');
+  const [resourceMatchTitle, setResourceMatchTitle] = useState<string>('');
   const [previewSynced, setPreviewSynced] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const shellRef = useRef<HTMLDivElement>(null);
@@ -504,6 +506,14 @@ export function IdeUiStudioBeta({
         figma_error?: string;
         figma_fallback_used?: boolean;
         env_guidance?: string;
+        resource_match?: {
+          id?: string;
+          score?: number;
+          max_score?: number;
+          selection_mode?: string;
+          template_id?: string;
+        };
+        design_brief_summary?: { density?: string; personality?: string[] };
       };
       if (typeof d.regeneration_count === 'number') setRegenCount(d.regeneration_count);
       if (typeof d.max_regenerations === 'number') setMaxRegens(d.max_regenerations);
@@ -514,6 +524,35 @@ export function IdeUiStudioBeta({
       if (typeof d.figma_status === 'string') setFigmaStatus(d.figma_status);
       if (typeof d.figma_error === 'string') setFigmaError(d.figma_error);
       if (typeof d.env_guidance === 'string') setFigmaEnvGuidance(d.env_guidance);
+      if (d.resource_match?.selection_mode) {
+        const rm = d.resource_match;
+        const score =
+          typeof rm.score === 'number' && typeof rm.max_score === 'number'
+            ? `${rm.score}/${rm.max_score}`
+            : '';
+        setResourceMatchLabel(
+          rm.selection_mode === 'scored_match' && rm.id
+            ? `Match ${rm.id}${score ? ` · ${score}` : ''}`
+            : rm.selection_mode === 'below_threshold'
+              ? 'Match low confidence'
+              : rm.selection_mode === 'no_candidates'
+                ? 'No catalog match'
+                : '',
+        );
+        setResourceMatchTitle(
+          [
+            rm.id && `id=${rm.id}`,
+            score && `score=${score}`,
+            rm.selection_mode && `mode=${rm.selection_mode}`,
+            rm.template_id && `template=${rm.template_id}`,
+            d.design_brief_summary?.density && `density=${d.design_brief_summary.density}`,
+            d.design_brief_summary?.personality?.length &&
+              `personality=${d.design_brief_summary.personality.join(',')}`,
+          ]
+            .filter(Boolean)
+            .join(' · '),
+        );
+      }
       if (d.preview_applied === true) setPreviewSynced(true);
       if (d.model?.pages && !isNebullaIdePlaceholderShell(d.model)) {
         applyEditorModel(
@@ -754,6 +793,14 @@ export function IdeUiStudioBeta({
         quality_gate_result?: string;
         figma_fallback_used?: boolean;
         env_guidance?: string;
+        resource_match?: {
+          id?: string;
+          score?: number;
+          max_score?: number;
+          selection_mode?: string;
+          template_id?: string;
+        };
+        design_brief_summary?: { density?: string; personality?: string[] };
         context?: {
           page_name?: string;
           quality_gate_result?: string;
@@ -762,6 +809,14 @@ export function IdeUiStudioBeta({
           figma_error?: string;
           fallback_used?: string;
           env_guidance?: string;
+          resource_match?: {
+            id?: string;
+            score?: number;
+            max_score?: number;
+            selection_mode?: string;
+            template_id?: string;
+          };
+          design_brief_summary?: { density?: string; personality?: string[] };
         };
       };
       if (typeof data.regeneration_count === 'number') setRegenCount(data.regeneration_count);
@@ -776,6 +831,37 @@ export function IdeUiStudioBeta({
       const guidance = data.env_guidance || data.context?.env_guidance;
       if (typeof guidance === 'string') setFigmaEnvGuidance(guidance);
       if (data.context?.fallback_used === 'yes' && !data.patternMode) setPatternMode('seed');
+      {
+        const rm = data.resource_match || data.context?.resource_match;
+        const brief = data.design_brief_summary || data.context?.design_brief_summary;
+        if (rm?.selection_mode) {
+          const score =
+            typeof rm.score === 'number' && typeof rm.max_score === 'number'
+              ? `${rm.score}/${rm.max_score}`
+              : '';
+          setResourceMatchLabel(
+            rm.selection_mode === 'scored_match' && rm.id
+              ? `Match ${rm.id}${score ? ` · ${score}` : ''}`
+              : rm.selection_mode === 'below_threshold'
+                ? 'Match low confidence'
+                : rm.selection_mode === 'no_candidates'
+                  ? 'No catalog match'
+                  : '',
+          );
+          setResourceMatchTitle(
+            [
+              rm.id && `id=${rm.id}`,
+              score && `score=${score}`,
+              rm.selection_mode && `mode=${rm.selection_mode}`,
+              rm.template_id && `template=${rm.template_id}`,
+              brief?.density && `density=${brief.density}`,
+              brief?.personality?.length && `personality=${brief.personality.join(',')}`,
+            ]
+              .filter(Boolean)
+              .join(' · '),
+          );
+        }
+      }
       if (data.preference_recovery) {
         setPreferenceRecovery(true);
         setPreferenceQuestion(
@@ -1684,6 +1770,14 @@ export function IdeUiStudioBeta({
                 }
               >
                 {gateLabel(lastGate)}
+              </span>
+            ) : null}
+            {resourceMatchLabel ? (
+              <span
+                className="hidden max-w-[200px] truncate rounded-full bg-secondary px-2 py-0.5 text-[10px] text-muted-foreground lg:inline"
+                title={resourceMatchTitle || resourceMatchLabel}
+              >
+                {resourceMatchLabel}
               </span>
             ) : null}
           </div>

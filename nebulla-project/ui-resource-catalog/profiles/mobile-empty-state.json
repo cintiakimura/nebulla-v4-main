@@ -1,0 +1,17 @@
+{
+  "id": "mobile-empty-state",
+  "kind": "template",
+  "platform": "mobile",
+  "page_types": ["empty", "other"],
+  "density": "spacious",
+  "personality": ["clean", "friendly"],
+  "best_for": ["empty state", "onboarding nudge", "zero results"],
+  "strengths": ["Calm whitespace", "Clear empty title + CTA", "Low clutter"],
+  "weaknesses": ["Not for dense data", "Not for dashboards"],
+  "tags": ["mobile", "empty", "a11y"],
+  "description": "Spacious mobile empty state with title, supporting copy, and primary CTA.",
+  "template_id": "mobile_empty_state",
+  "license": "Nebulla internal template",
+  "source": "ui-generation-engine/v2/selectTemplate",
+  "version": "1.0.0"
+}

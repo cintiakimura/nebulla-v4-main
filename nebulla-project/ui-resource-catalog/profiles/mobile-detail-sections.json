@@ -1,0 +1,17 @@
+{
+  "id": "mobile-detail-sections",
+  "kind": "template",
+  "platform": "mobile",
+  "page_types": ["detail", "profile"],
+  "density": "medium",
+  "personality": ["clean", "friendly"],
+  "best_for": ["detail page", "profile", "record view"],
+  "strengths": ["Header + stacked sections", "Primary action row", "Scannable blocks"],
+  "weaknesses": ["Not for list browsing", "Not for landing marketing"],
+  "tags": ["mobile", "detail", "profile", "a11y"],
+  "description": "Mobile detail/profile with header, section blocks, and CTA. Use for single-entity views.",
+  "template_id": "mobile_detail_sections",
+  "license": "Nebulla internal template",
+  "source": "ui-generation-engine/v2/selectTemplate",
+  "version": "1.0.0"
+}

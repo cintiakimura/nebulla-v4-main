@@ -241,7 +241,7 @@ export function hasUiGenerationV2Ready(workspaceRoot: string): boolean {
   }
 }
 
-/** Honest Figma + gate fields from the latest v2 meta (for Beta status/preview APIs). */
+/** Honest Figma + gate + resource match fields from the latest v2 meta (Beta status APIs). */
 export function readUiGenerationV2PublicMeta(workspaceRoot: string): {
   pattern_mode?: "seed" | "figma";
   quality_gate_result?: string;
@@ -260,6 +260,18 @@ export function readUiGenerationV2PublicMeta(workspaceRoot: string): {
     file_name?: string;
     bucket?: string;
   }>;
+  resource_match?: {
+    id?: string;
+    score?: number;
+    max_score?: number;
+    selection_mode?: string;
+    template_id?: string;
+  };
+  design_brief_summary?: {
+    density?: string;
+    personality?: string[];
+    primary?: string;
+  };
 } {
   const metaPath = path.join(workspaceRoot, "nebulla-project", "ui-generation-v2-meta.json");
   if (!fs.existsSync(metaPath)) return {};
@@ -268,6 +280,18 @@ export function readUiGenerationV2PublicMeta(workspaceRoot: string): {
       pattern_mode?: "seed" | "figma";
       quality_gate_result?: string;
       preview_applied?: boolean;
+      design_brief_summary?: {
+        density?: string;
+        personality?: string[];
+        primary?: string;
+      };
+      resource_match?: {
+        id?: string;
+        score?: number;
+        max_score?: number;
+        selection_mode?: string;
+        template_id?: string;
+      };
       figma?: {
         figma_used?: string;
         figma_status?: string;
@@ -296,6 +320,24 @@ export function readUiGenerationV2PublicMeta(workspaceRoot: string): {
       env_guidance: j.figma?.env_guidance,
       reference_file_keys_configured: j.figma?.reference_file_keys_configured,
       key_diagnostics: Array.isArray(j.figma?.key_diagnostics) ? j.figma.key_diagnostics : undefined,
+      resource_match: j.resource_match
+        ? {
+            id: j.resource_match.id,
+            score: j.resource_match.score,
+            max_score: j.resource_match.max_score,
+            selection_mode: j.resource_match.selection_mode,
+            template_id: j.resource_match.template_id,
+          }
+        : undefined,
+      design_brief_summary: j.design_brief_summary
+        ? {
+            density: j.design_brief_summary.density,
+            personality: Array.isArray(j.design_brief_summary.personality)
+              ? j.design_brief_summary.personality
+              : undefined,
+            primary: j.design_brief_summary.primary,
+          }
+        : undefined,
     };
   } catch {
     return {};

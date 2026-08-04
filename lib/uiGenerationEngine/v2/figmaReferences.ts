@@ -333,9 +333,14 @@ export async function retrieveFigmaReferences(input: {
     UiGenContextState,
     "device" | "page_type" | "function" | "navigation_type" | "industry_class" | "visual_tone" | "density"
   >;
+  /** Optional profile-preferred Figma key from resource match — probed first when present. */
+  preferredFileKey?: string;
 }): Promise<FigmaRecord> {
   const key = (process.env.FIGMA_API_KEY || "").trim();
-  const libraryKeys = resolveLibraryKeys();
+  const preferred = (input.preferredFileKey || "").trim();
+  const libraryKeys = [
+    ...new Set([...(preferred ? [preferred] : []), ...resolveLibraryKeys()]),
+  ];
   const buckets = parseReferenceBuckets();
   const allConfiguredKeys = [
     ...new Set([...libraryKeys, ...[...buckets.values()].flat()]),

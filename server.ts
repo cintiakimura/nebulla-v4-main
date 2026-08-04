@@ -3666,6 +3666,7 @@ ${modelJson}`;
           ? gateRaw
           : ("unknown" as const);
       recordContractTelemetry({ event: "ui_gen_gate", gate });
+      const matchMeta = readUiGenerationV2PublicMeta(pp.workspaceRoot);
       if (!result.ok) {
         return res.status(result.preference_recovery ? 409 : result.status === "pending_discovery" ? 409 : 422).json({
           ok: false,
@@ -3683,6 +3684,8 @@ ${modelJson}`;
           figma_fallback_used: result.figma_fallback_used,
           previewApplied: result.previewApplied === true,
           env_guidance: result.env_guidance,
+          resource_match: matchMeta.resource_match,
+          design_brief_summary: matchMeta.design_brief_summary,
           context: {
             context_id: result.context.context_id,
             current_step: result.context.current_step,
@@ -3700,6 +3703,8 @@ ${modelJson}`;
             fallback_used: result.context.fallback_used,
             reference_source: result.context.reference_source,
             env_guidance: result.env_guidance,
+            resource_match: matchMeta.resource_match,
+            design_brief_summary: matchMeta.design_brief_summary,
           },
         });
       }
@@ -3718,6 +3723,8 @@ ${modelJson}`;
         quality_gate_result: result.quality_gate_result,
         figma_fallback_used: result.figma_fallback_used,
         env_guidance: result.env_guidance,
+        resource_match: matchMeta.resource_match,
+        design_brief_summary: matchMeta.design_brief_summary,
         context: {
           context_id: result.context.context_id,
           page_name: result.context.page_name,
@@ -3742,6 +3749,8 @@ ${modelJson}`;
           auto_triggered: result.context.auto_triggered,
           user_visible_stage: result.context.user_visible_stage,
           step_log: result.context.step_log,
+          resource_match: matchMeta.resource_match,
+          design_brief_summary: matchMeta.design_brief_summary,
         },
       });
     } catch (e) {
@@ -3841,6 +3850,8 @@ ${modelJson}`;
         env_guidance: meta.env_guidance,
         reference_file_keys_configured: meta.reference_file_keys_configured,
         key_diagnostics: meta.key_diagnostics,
+        resource_match: meta.resource_match,
+        design_brief_summary: meta.design_brief_summary,
       });
     } catch (e) {
       return res.status(500).json({ error: e instanceof Error ? e.message : "failed" });
@@ -3876,6 +3887,8 @@ ${modelJson}`;
         env_guidance: meta.env_guidance,
         reference_file_keys_configured: meta.reference_file_keys_configured,
         key_diagnostics: meta.key_diagnostics,
+        resource_match: meta.resource_match,
+        design_brief_summary: meta.design_brief_summary,
       });
     } catch (e) {
       return res.status(500).json({ error: e instanceof Error ? e.message : "failed" });

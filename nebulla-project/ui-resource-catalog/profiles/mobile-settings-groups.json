@@ -1,0 +1,17 @@
+{
+  "id": "mobile-settings-groups",
+  "kind": "template",
+  "platform": "mobile",
+  "page_types": ["settings"],
+  "density": "medium",
+  "personality": ["clean", "professional"],
+  "best_for": ["settings", "preferences", "account options"],
+  "strengths": ["Grouped rows", "Clear section labels", "Bottom tabs compatible"],
+  "weaknesses": ["Not for marketing landings", "Weak for dense dashboards"],
+  "tags": ["mobile", "settings", "a11y"],
+  "description": "Mobile settings with grouped preference rows and optional CTA. Best when Master Plan lists account/settings pages.",
+  "template_id": "mobile_settings_groups",
+  "license": "Nebulla internal template",
+  "source": "ui-generation-engine/v2/selectTemplate",
+  "version": "1.0.0"
+}

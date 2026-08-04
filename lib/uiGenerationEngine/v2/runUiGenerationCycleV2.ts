@@ -40,7 +40,7 @@ import { compileDesignBrief } from "../resources/compileDesignBrief";
 import { matchResources } from "../resources/matchResources";
 import { refineDesignBriefWithGrok } from "../resources/refineDesignBrief";
 import { suggestResourceRematchWithGrok } from "../resources/suggestResourceRematch";
-import { listProfilesFs } from "../resources/catalogStore";
+import { listProfiles, listProfilesFs } from "../resources/catalogStore";
 import type { DesignBrief, ResourceMatchResult } from "../resources/types";
 import {
   applyUiGenerationToPreviewShell,
@@ -597,9 +597,9 @@ export async function runUiGenerationCycleV2(
   let catalogProfiles: Awaited<ReturnType<typeof listProfilesFs>> = [];
   try {
     const workspaceCatalog = path.join(workspaceRoot, "nebulla-project", "ui-resource-catalog");
-    const repoCatalog = path.join(process.cwd(), "nebulla-project", "ui-resource-catalog");
     const local = await listProfilesFs(workspaceCatalog);
-    catalogProfiles = local.length > 0 ? local : await listProfilesFs(repoCatalog);
+    // Prefer workspace FS → configured catalog mode (r2|fs via listProfiles) → never empty silently.
+    catalogProfiles = local.length > 0 ? local : await listProfiles(process.cwd());
     resourceMatch = matchResources({
       profiles: catalogProfiles,
       brief: designBrief,
@@ -672,6 +672,7 @@ export async function runUiGenerationCycleV2(
   const figma = await retrieveFigmaReferences({
     classification,
     templateId: template.id,
+    preferredFileKey: resourceMatch.figma_file_key,
     seedState: {
       device: classification.device,
       page_type: mapPageTypeToLegacy(classification.page_type),
@@ -720,16 +721,22 @@ export async function runUiGenerationCycleV2(
   tokens.mutedText = designBrief.color_roles.muted.hex;
   tokens.border = designBrief.color_roles.border.hex;
   if (designBrief.color_roles.accent) tokens.accent = designBrief.color_roles.accent.hex;
-  // Soft-apply spacing/radius hints from Figma/seed when present
+  // Soft-apply Figma/seed spacing only within ±4 of Design Brief (do not clobber density roles).
+  const briefGap = designBrief.spacing_radius.gap;
+  const briefPad = designBrief.spacing_radius.pad;
+  const briefRadius = designBrief.spacing_radius.radius;
   for (const h of figma.structure_hints) {
     const sp = h.match(/spacing rhythm ≈ (\d+)/i);
     if (sp) {
       const n = Math.min(24, Math.max(8, Number(sp[1])));
-      tokens.gap = n;
-      tokens.pad = Math.max(tokens.pad, n);
+      tokens.gap = Math.min(briefGap + 4, Math.max(briefGap - 4, n));
+      tokens.pad = Math.min(briefPad + 4, Math.max(briefPad - 4, Math.max(tokens.pad, n)));
     }
     const rad = h.match(/corner radius ≈ (\d+)/i);
-    if (rad) tokens.radius = Math.min(24, Math.max(4, Number(rad[1])));
+    if (rad) {
+      const n = Math.min(24, Math.max(4, Number(rad[1])));
+      tokens.radius = Math.min(briefRadius + 4, Math.max(briefRadius - 4, n));
+    }
   }
   const hints = input.preferenceHints || {};
   if (hints.denser) {

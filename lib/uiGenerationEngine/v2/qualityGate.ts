@@ -152,6 +152,17 @@ export function validateV2Quality(input: {
     if (Math.abs(bgL - textL) < 0.25) {
       issues.push("Design Brief: weak text/background contrast (a11y minimum)");
     }
+    // CTA label must contrast against primary fill when button uses primary role.
+    const primaryBtn = buttons.find(
+      (b) => (b.style?.backgroundColor || "").toLowerCase() === primaryHex,
+    );
+    if (primaryBtn) {
+      const labelL = luma(primaryBtn.style?.color || designBrief.color_roles.on_surface.hex);
+      const fillL = luma(primaryHex);
+      if (Math.abs(labelL - fillL) < 0.28) {
+        issues.push("Design Brief: weak CTA label contrast on primary fill");
+      }
+    }
   }
 
   if (issues.length === 0) return { gate: "pass", issues };

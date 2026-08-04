@@ -189,9 +189,17 @@ Rules:
     if (!applied) {
       return { match: options.currentMatch, rematched: false, skippedReason: "apply_failed" };
     }
-    // Still require minimum score unless Grok pick was already the top and close
-    if (applied.score < 6) {
-      return { match: options.currentMatch, rematched: false, skippedReason: "score_too_low" };
+    // Same accept floor as matchResources (8, or 10 when classification confidence is low).
+    const minScore = options.classification.confidence === "low" ? 10 : 8;
+    if (applied.score < minScore) {
+      return {
+        match: {
+          ...applied,
+          selection_mode: "below_threshold",
+        },
+        rematched: false,
+        skippedReason: "score_too_low",
+      };
     }
     return { match: applied, rematched: true };
   } catch {

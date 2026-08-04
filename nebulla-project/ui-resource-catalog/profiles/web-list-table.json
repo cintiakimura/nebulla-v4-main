@@ -1,0 +1,18 @@
+{
+  "id": "web-list-table",
+  "kind": "template",
+  "platform": "web",
+  "page_types": ["list", "dashboard"],
+  "density": "compact",
+  "personality": ["professional", "clean"],
+  "best_for": ["web list", "table browse", "admin records"],
+  "strengths": ["Table-like rows", "Toolbar + CTA", "Efficient scanning"],
+  "weaknesses": ["Not for mobile tabs", "Not for marketing landings"],
+  "tags": ["web", "list", "table", "a11y"],
+  "description": "Web list/table layout for browsing records with toolbar actions.",
+  "template_id": "web_list_table",
+  "license": "Nebulla internal template",
+  "source": "ui-generation-engine/v2/selectTemplate",
+  "version": "1.0.0",
+  "industry": ["saas", "general"]
+}

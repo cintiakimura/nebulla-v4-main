@@ -1,0 +1,17 @@
+{
+  "id": "web-detail-header",
+  "kind": "template",
+  "platform": "web",
+  "page_types": ["detail", "profile"],
+  "density": "medium",
+  "personality": ["professional", "clean"],
+  "best_for": ["web detail", "profile header", "record overview"],
+  "strengths": ["Header band + content", "Primary actions", "Readable sections"],
+  "weaknesses": ["Not for compact mobile", "Not for pricing landings"],
+  "tags": ["web", "detail", "profile", "a11y"],
+  "description": "Web detail/profile with header content band and supporting sections.",
+  "template_id": "web_detail_header_content",
+  "license": "Nebulla internal template",
+  "source": "ui-generation-engine/v2/selectTemplate",
+  "version": "1.0.0"
+}

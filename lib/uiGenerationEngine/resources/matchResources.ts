@@ -57,15 +57,21 @@ function scorePersonality(profile: UiResourceProfile, brief: DesignBrief): numbe
   return 0;
 }
 
+function pageTypeAligned(profile: UiResourceProfile, classification: PageClassification): boolean {
+  return pageTypeOk(profile, classification);
+}
+
 function scoreIntent(profile: UiResourceProfile, classification: PageClassification): number {
   const pt = classification.page_type;
   const exact = profile.page_types.includes(pt);
+  // home↔dashboard (and landing device aliases) count as aligned for scoring, not only filters.
+  const aligned = exact || pageTypeAligned(profile, classification);
   const best = profile.best_for.some((b) => {
     const x = b.toLowerCase();
     return x.includes(pt) || x.includes(classification.product_function) || x.includes(classification.device);
   });
-  if (exact && best) return 2;
-  if (exact) return 1;
+  if (aligned && best) return 2;
+  if (aligned) return 1;
   return 0;
 }
 
@@ -164,7 +170,26 @@ export function matchResources(input: {
   const ranked = candidates
     .map((profile) => {
       const { score, reasons } = scoreProfile(profile, input.brief, input.classification);
-      return { profile, score, reasons };
+      // Rubric: wrong density (spacious↔compact) is a heavy penalty — drop below accept floor.
+      const densityReason = reasons.find((r) => r.criterion === "density");
+      const densityKill =
+        densityReason?.score === 0 &&
+        ((profile.density === "spacious" && input.brief.overview.density === "compact") ||
+          (profile.density === "compact" && input.brief.overview.density === "spacious"));
+      return {
+        profile,
+        score: densityKill ? Math.min(score, min - 1) : score,
+        reasons: densityKill
+          ? [
+              ...reasons,
+              {
+                criterion: "density_conflict",
+                score: 0,
+                detail: "Opposite density — rejected per rubric",
+              },
+            ]
+          : reasons,
+      };
     })
     .sort((a, b) => {
       if (b.score !== a.score) return b.score - a.score;
