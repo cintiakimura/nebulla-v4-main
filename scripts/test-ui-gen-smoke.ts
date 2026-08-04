@@ -428,6 +428,46 @@ section('qualityGate: brief-aware rules (≥2)');
   assert.ok(/overused on body text/i.test(joined) || /density\/spacing mismatch/i.test(joined), 'rule: body or density');
   assert.ok(gated.gate === 'repair' || gated.gate === 'weak', 'brief violations fail gate');
   assert.equal(shouldApplyUiToPreview('weak'), false, 'weak still blocks Preview');
+
+  const padTokens = { ...tokens, gap: 12, pad: 28 };
+  const padGated = validateV2Quality({
+    model: {
+      version: 1 as const,
+      pages: {
+        home: {
+          id: 'home',
+          name: 'Home',
+          nodes: {
+            c1: { id: 'c1', type: 'container' as const, name: 'a', style: { backgroundColor: '#FAFAF9' } },
+            c2: { id: 'c2', type: 'container' as const, name: 'b', style: { backgroundColor: '#FFFFFF' } },
+            t1: { id: 't1', type: 'text' as const, name: 't', style: { color: '#1C1917', backgroundColor: '#FAFAF9' } },
+            b1: {
+              id: 'b1',
+              type: 'button' as const,
+              name: 'cta',
+              text: 'Continue',
+              style: { backgroundColor: '#0F766E', color: '#FFFFFF' },
+            },
+          },
+        },
+      },
+      meta: { template_id: template.id, figma_status: 'skipped' as const },
+    } as never,
+    template,
+    tokens: padTokens,
+    slots: {
+      hero_title: 'Home',
+      primary_cta: 'This is a very long prose dump for a button label.',
+      card_1_title: 'One',
+    },
+    figmaStatus: 'skipped',
+    pageType: 'home',
+    designBrief: brief,
+  });
+  assert.ok(
+    padGated.issues.some((i) => /padding mismatch/i.test(i) || /prose\/route dump/i.test(i)),
+    'pad mismatch or CTA prose dump flagged',
+  );
 }
 
 section('v2 meta exposes resource_match');
@@ -473,7 +513,18 @@ section('Phase G: brief refine parse rejects layout invent; rematch shortlist-on
   assert.ok(okPatch, 'valid refine patch');
   const merged = applyBriefRefinePatch(brief, okPatch!);
   assert.ok(merged.overview.personality.includes('bold'));
+  assert.equal(merged.overview.density, 'spacious');
+  assert.ok(merged.spacing_radius.gap >= 15, 'density refine resyncs spacing gap');
   assert.ok(merged.donts.some((d) => /freeform/i.test(d)), 'reinforce no layout invent');
+
+  const thinBrief = compileDesignBrief({
+    uiuxSection: '',
+    classification,
+    projectName: 'Acme Waitlist',
+  });
+  assert.ok(thinBrief.gaps.some((g) => /thin/i.test(g)), 'thin §5 records gap');
+  assert.ok(thinBrief.dos.length >= 4, 'thin §5 still has solid dos');
+  assert.ok(thinBrief.donts.some((d) => /Acme Waitlist/i.test(d)), 'project name in donts');
 
   const badLayout = parseBriefRefinePatch(
     JSON.stringify({

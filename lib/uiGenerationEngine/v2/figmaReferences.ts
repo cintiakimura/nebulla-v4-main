@@ -437,13 +437,23 @@ export async function retrieveFigmaReferences(input: {
     // 403 on /me (missing current_user:read) → continue to file probes
 
     const probe = resolveProbeKeys(input.classification, libraryKeys, buckets);
+    // Resource-match preferred key must stay first even when buckets return only tagged keys.
+    const probeKeys =
+      preferred && !probe.keys.includes(preferred)
+        ? [preferred, ...probe.keys]
+        : preferred && probe.keys[0] !== preferred
+          ? [preferred, ...probe.keys.filter((k) => k !== preferred)]
+          : probe.keys;
     const withProbe = {
       ...base,
-      selection_mode: probe.selection_mode,
+      selection_mode:
+        preferred && probeKeys[0] === preferred && !probe.selection_mode.includes("preferred")
+          ? `preferred+${probe.selection_mode}`
+          : probe.selection_mode,
       preferred_bucket: probe.preferred_bucket,
     };
 
-    if (probe.selection_mode.startsWith("bucket_miss:")) {
+    if (probe.selection_mode.startsWith("bucket_miss:") && probeKeys.length === 0) {
       const bucket = probe.preferred_bucket || "unknown";
       return {
         ...withProbe,
@@ -458,7 +468,7 @@ export async function retrieveFigmaReferences(input: {
       };
     }
 
-    if (probe.keys.length === 0 && allConfiguredKeys.length === 0) {
+    if (probeKeys.length === 0 && allConfiguredKeys.length === 0) {
       return {
         ...withProbe,
         figma_used: "no",
@@ -480,7 +490,7 @@ export async function retrieveFigmaReferences(input: {
     let sawUnauthorizedFile = false;
     let sawNotFound = 0;
 
-    const ordered = probe.keys.slice(0, resolveMaxFiles());
+    const ordered = probeKeys.slice(0, resolveMaxFiles());
 
     for (const fileKey of ordered) {
       const bucket = bucketForKey(fileKey, buckets);

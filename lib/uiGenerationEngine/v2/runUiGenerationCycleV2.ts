@@ -574,12 +574,16 @@ export async function runUiGenerationCycleV2(
       state.generation_warnings.push(`Brief Grok refine skipped: ${refined.skippedReason}`);
     }
   }
+  let designBriefPath: string | undefined;
   try {
     const briefPath = path.join(workspaceRoot, "nebulla-project", "ui-design-brief.json");
     fs.mkdirSync(path.dirname(briefPath), { recursive: true });
     fs.writeFileSync(briefPath, `${JSON.stringify(designBrief, null, 2)}\n`, "utf8");
-  } catch {
-    /* optional artifact */
+    designBriefPath = "nebulla-project/ui-design-brief.json";
+  } catch (e) {
+    state.generation_warnings.push(
+      `ui-design-brief.json write failed: ${e instanceof Error ? e.message : String(e)}`,
+    );
   }
   appendStepLog(
     state,
@@ -643,17 +647,25 @@ export async function runUiGenerationCycleV2(
     preferAlternate,
     previousTemplate,
   });
-  if (
-    !preferAlternate &&
-    resourceMatch.selection_mode === "scored_match" &&
-    resourceMatch.template_id
-  ) {
+  // Regen / moreSections: re-match excluding the previous template so intelligence still applies.
+  if (preferAlternate && catalogProfiles.length > 0) {
+    const altMatch = matchResources({
+      profiles: catalogProfiles,
+      brief: designBrief,
+      classification,
+      excludeTemplateIds: previousTemplate ? [previousTemplate, template.id] : [template.id],
+    });
+    if (altMatch.selection_mode === "scored_match" && altMatch.template_id) {
+      resourceMatch = altMatch;
+    }
+  }
+  if (resourceMatch.selection_mode === "scored_match" && resourceMatch.template_id) {
     const matched = getTemplateById(resourceMatch.template_id);
     if (matched) {
       template = matched;
       appendStepLog(
         state,
-        `Resource match — id=${resourceMatch.id} score=${resourceMatch.score}/${resourceMatch.max_score} → template ${template.id}`,
+        `Resource match — id=${resourceMatch.id} score=${resourceMatch.score}/${resourceMatch.max_score} → template ${template.id}${preferAlternate ? " (alternate)" : ""}`,
       );
     }
   } else if (resourceMatch.id) {
@@ -748,9 +760,18 @@ export async function runUiGenerationCycleV2(
     tokens.pad = Math.min(28, tokens.pad + 4);
   }
   if (hints.moreContrast) {
-    tokens.text = "#0C0A09";
-    tokens.mutedText = "#57534E";
-    tokens.primary = tokens.primary === "#0F766E" ? "#0D9488" : tokens.primary;
+    // Nudge text contrast only — never replace Design Brief primary role.
+    tokens.text = designBrief.color_roles.on_surface.hex;
+    tokens.mutedText = designBrief.color_roles.muted.hex;
+    const bgL =
+      parseInt(tokens.bg.replace("#", "").slice(0, 2), 16) / 255;
+    if (bgL > 0.5) {
+      tokens.text = "#0C0A09";
+      tokens.mutedText = "#57534E";
+    } else {
+      tokens.text = "#FAFAF9";
+      tokens.mutedText = "#A1A1AA";
+    }
   }
   state.design_tokens_json = JSON.stringify(tokens);
   state.design_system_rules_applied = "yes";
@@ -936,6 +957,7 @@ export async function runUiGenerationCycleV2(
         pattern_mode: patternMode,
         preview_applied: previewApplied,
         preview_written: previewWritten,
+        design_brief_path: designBriefPath || null,
         design_brief_summary: {
           density: designBrief.overview.density,
           personality: designBrief.overview.personality,
@@ -970,7 +992,7 @@ export async function runUiGenerationCycleV2(
         quality_gate_result: gate.gate,
         regeneration_count: state.regeneration_count,
         how_to_recheck:
-          "Generate UI → open nebulla-project/ui-generation-v2-meta.json → read pattern_mode / figma.figma_status / figma.selection_mode / figma.preferred_bucket / preview_applied",
+          "Generate UI → open nebulla-project/ui-generation-v2-meta.json → read design_brief_path / resource_match / pattern_mode / figma.figma_status / preview_applied",
       },
       null,
       2,

@@ -66,6 +66,9 @@ export function validateV2Quality(input: {
     if (buttons.length < 1) issues.push("Missing primary action");
     const cta = (slots.primary_cta || "").trim();
     if (!cta) issues.push("Primary CTA slot empty");
+    else if (isProseDump(cta) || isRouteLike(cta)) {
+      issues.push("Primary CTA looks like prose/route dump (keep verb-led, short)");
+    }
     if (
       buttons.length === 1 &&
       /^get started$/i.test(buttons[0].text || "") &&
@@ -142,10 +145,19 @@ export function validateV2Quality(input: {
       issues.push("Design Brief: primary color overused on body text (CTA-only role)");
     }
     const wantGap = designBrief.spacing_radius.gap;
+    const wantPad = designBrief.spacing_radius.pad;
     if (Math.abs(tokens.gap - wantGap) > 8) {
       issues.push(
         `Design Brief: density/spacing mismatch (token gap ${tokens.gap} vs brief ${wantGap})`,
       );
+    }
+    if (Math.abs(tokens.pad - wantPad) > 8) {
+      issues.push(
+        `Design Brief: density/padding mismatch (token pad ${tokens.pad} vs brief ${wantPad})`,
+      );
+    }
+    if (wantPad < 12) {
+      issues.push("Design Brief: touch pad below a11y minimum (pad ≥ 12)");
     }
     const bgL = luma(designBrief.color_roles.background.hex);
     const textL = luma(designBrief.color_roles.on_surface.hex);
@@ -192,7 +204,12 @@ export function repairSlots(slots: SlotMap, pageType: V2PageType): SlotMap {
           ? "Preferences and account"
           : "Ready when you are";
   }
-  if (next.primary_cta && /^get started$/i.test(next.primary_cta)) {
+  if (
+    next.primary_cta &&
+    (/^get started$/i.test(next.primary_cta) ||
+      isProseDump(next.primary_cta) ||
+      isRouteLike(next.primary_cta))
+  ) {
     next.primary_cta = pageType === "auth" ? "Continue" : "Continue";
   }
   // Strip any remaining path-like slot values

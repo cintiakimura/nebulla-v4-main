@@ -4,7 +4,14 @@
  */
 
 import { runAiChatCompletion } from "../../aiChatCompletion";
+import { defaultTokens } from "../v2/designTokens";
 import type { DesignBrief, ResourceDensity } from "./types";
+
+function densityPhilosophy(d: ResourceDensity): string {
+  if (d === "spacious") return "Airy sections, generous whitespace, calm scanning.";
+  if (d === "compact") return "Dense information, tighter gaps, efficient scanning.";
+  return "Balanced spacing — readable cards without sparse emptiness.";
+}
 
 const DENSITIES = new Set<ResourceDensity>(["spacious", "medium", "compact"]);
 
@@ -64,6 +71,16 @@ export function applyBriefRefinePatch(brief: DesignBrief, patch: BriefRefinePatc
   }
   if (patch.density && DENSITIES.has(patch.density)) {
     next.overview.density = patch.density;
+    // Keep spacing_radius in lockstep with density (Phase D reads brief spacing).
+    const spacing = defaultTokens(patch.density);
+    next.spacing_radius = {
+      gap: spacing.gap,
+      pad: spacing.pad,
+      radius: next.spacing_radius.radius || spacing.radius,
+    };
+    if (!patch.density_philosophy?.trim()) {
+      next.overview.density_philosophy = densityPhilosophy(patch.density);
+    }
   }
   if (patch.density_philosophy?.trim()) {
     next.overview.density_philosophy = patch.density_philosophy.trim().slice(0, 160);

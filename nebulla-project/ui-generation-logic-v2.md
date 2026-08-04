@@ -592,7 +592,8 @@ Manual 10-min check (no Figma): Master Plan present → Generate UI in Beta → 
 5. Optional Figma quality: Duplicate landing/dashboard files → set  
    `FIGMA_REFERENCE_BUCKETS=mobile=<KEY>,landing=<KEY>,dashboard=<KEY>` (+ `FIGMA_API_KEY` / `FIGMA_REFERENCE_FILE_KEYS`) → redeploy → Generate UI again → meta `figma.selection_mode` shows `bucket:…`.
 6. Debug without DevTools archaeology: `nebulla-project/ui-generation-v2-meta.json` → `pattern_mode`, `figma.figma_status`, `figma.selection_mode`, `figma.preferred_bucket`, `preview_applied`.
-7. **Resource match pilot:** same meta → `resource_match` (`id`, `score`, `selection_mode`, `reasons[]`) and `design_brief_summary`. Landing projects must not pick `platform: mobile` profiles when landing profiles exist. Low score → `below_threshold` and normal `selectTemplate` fallback (not random).
+7. **Resource match pilot:** same meta → `resource_match` (`id`, `score`, `selection_mode`, `reasons[]`), `design_brief_path`, and `design_brief_summary`. Landing projects must not pick `platform: mobile` profiles when landing profiles exist. Low score → `below_threshold` and normal `selectTemplate` fallback (not random). Regen / alternate preference re-matches excluding the previous template id.
+8. **Design Brief authority:** thin §5 still compiles solid role defaults; Grok refine may adjust roles/density/dos only (spacing resyncs with density). Phase D tokens follow the brief; preference contrast must not replace primary role.
 
 Smoke: `npm run test:ui-gen`.
 

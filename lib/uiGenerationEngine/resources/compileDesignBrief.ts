@@ -1,8 +1,9 @@
 /**
  * Compile a thin Stitch-inspired Design Brief from Master Plan §5 + ui-brief + classification.
+ * Thin §5 still produces solid role-based defaults — never invents layout architecture.
  */
 
-import { buildDesignTokens } from "../v2/designTokens";
+import { buildDesignTokens, defaultTokens } from "../v2/designTokens";
 import type { PageClassification } from "../v2/types";
 import type { DesignBrief, ResourceDensity } from "./types";
 
@@ -31,6 +32,49 @@ function densityPhilosophy(d: ResourceDensity): string {
   return "Balanced spacing — readable cards without sparse emptiness.";
 }
 
+/** Align overview.density with the spacing tokens actually produced. */
+function densityFromTokens(gap: number, fallback: ResourceDensity): ResourceDensity {
+  if (gap <= 9) return "compact";
+  if (gap >= 15) return "spacious";
+  return "medium";
+}
+
+function thinSectionDefaults(classification: PageClassification): {
+  dos: string[];
+  component_rules: string[];
+} {
+  const { device, page_type: pageType, navigation_mode: nav } = classification;
+  const dos = [
+    "Use role-based colors from color_roles.",
+    "Map real Master Plan / ui-brief labels into slots.",
+    "Prefer clear hierarchy: title → subtitle → CTA → content blocks.",
+    `Keep nav patterns consistent with ${nav}.`,
+  ];
+  const component_rules = [
+    "Stack regions: header → content → actions → nav (mobile tabs at bottom only).",
+    "One primary CTA per view; secondary is quieter.",
+    "Cards share consistent gap/radius from spacing_radius.",
+    `Template family must match ${device}/${pageType}.`,
+  ];
+  if (pageType === "landing" || device === "landing") {
+    dos.push("Hero title + primary CTA above the fold; features in short scannable cards.");
+    component_rules.push("Landing: hero → features → CTA band; no app shell chrome.");
+  } else if (pageType === "dashboard") {
+    dos.push("Lead with metrics or status; keep secondary actions quiet.");
+    component_rules.push("Dashboard: metrics/list regions before deep settings.");
+  } else if (pageType === "auth") {
+    dos.push("Single focused form; one primary continue action.");
+    component_rules.push("Auth: center card, minimal chrome, clear primary submit.");
+  } else if (pageType === "list") {
+    dos.push("Each row/card has a clear title; actions are secondary.");
+  } else if (pageType === "settings") {
+    dos.push("Group related preferences; avoid a single long dump of controls.");
+  } else if (pageType === "empty") {
+    dos.push("Empty state: short title, one next-step CTA, no fake data tables.");
+  }
+  return { dos: dos.slice(0, 8), component_rules: component_rules.slice(0, 8) };
+}
+
 export function compileDesignBrief(input: {
   uiuxSection: string;
   uiBriefMarkdown?: string;
@@ -41,12 +85,26 @@ export function compileDesignBrief(input: {
   const briefMd = (input.uiBriefMarkdown || "").trim();
   const blob = `${uiux}\n${briefMd}`;
   const gaps: string[] = [];
-  if (uiux.length < 40) gaps.push("Master Plan §5 UI/UX is thin — using defaults where needed");
-  if (briefMd.length < 80) gaps.push("ui-brief.md missing or short — page contracts may be weak");
+  const thinUx = uiux.length < 40;
+  const thinBrief = briefMd.length < 80;
+  if (thinUx) gaps.push("Master Plan §5 UI/UX is thin — using defaults where needed");
+  if (thinBrief) gaps.push("ui-brief.md missing or short — page contracts may be weak");
 
-  const density = input.classification.density;
-  const tokens = buildDesignTokens(uiux || briefMd, uiux, density);
+  const classDensity = input.classification.density;
+  const tokens = buildDesignTokens(uiux || briefMd, uiux, classDensity);
+  // Prefer token-implied density so overview and spacing_radius never disagree.
+  const density = densityFromTokens(tokens.gap, classDensity);
+  const spacing =
+    density === classDensity
+      ? { gap: tokens.gap, pad: tokens.pad, radius: tokens.radius }
+      : (() => {
+          const d = defaultTokens(density);
+          return { gap: d.gap, pad: d.pad, radius: tokens.radius || d.radius };
+        })();
+
   const personality = parsePersonality(blob);
+  const thinDefaults = thinSectionDefaults(input.classification);
+  const projectLabel = (input.projectName || "").trim();
 
   const brief: DesignBrief = {
     overview: {
@@ -91,28 +149,17 @@ export function compileDesignBrief(input: {
       body: "Supporting copy — keep under ~2 lines in slots",
       label: "Buttons, tabs, form labels — verb-led CTAs",
     },
-    spacing_radius: {
-      gap: tokens.gap,
-      pad: tokens.pad,
-      radius: tokens.radius,
-    },
-    component_rules: [
-      "Stack regions: header → content → actions → nav (mobile tabs at bottom only).",
-      "One primary CTA per view; secondary is quieter.",
-      "Cards share consistent gap/radius from spacing_radius.",
-      `Template family must match ${input.classification.device}/${input.classification.page_type}.`,
-    ],
-    dos: [
-      "Use role-based colors from color_roles.",
-      "Map real Master Plan / ui-brief labels into slots.",
-      "Prefer clear hierarchy: title → subtitle → CTA → content blocks.",
-      "Keep nav patterns consistent with classification.navigation_mode.",
-    ],
+    spacing_radius: spacing,
+    component_rules: thinDefaults.component_rules,
+    dos: thinDefaults.dos,
     donts: [
       "Do not invent freeform absolute-position layouts.",
       "Do not put route paths in titles or CTAs.",
       "Do not use primary color for all text.",
       "Do not claim Figma success when using seed fallback.",
+      ...(projectLabel
+        ? [`Do not invent a different product than "${projectLabel.slice(0, 48)}".`]
+        : []),
     ],
     a11y_minimums: [
       "Body text must contrast against background/surface.",
@@ -122,6 +169,13 @@ export function compileDesignBrief(input: {
     gaps,
     source: "master_plan_s5+ui_brief",
   };
+
+  if (thinUx || thinBrief) {
+    brief.dos = [
+      ...brief.dos,
+      "When §5 is thin, keep slots short and role-faithful — do not invent product features.",
+    ].slice(0, 10);
+  }
 
   return brief;
 }

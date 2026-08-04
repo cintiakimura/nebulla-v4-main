@@ -38,3 +38,9 @@ When the generate call has an API key and `UI_RESOURCE_GROK_ASSIST` is not `0`:
 2. **Rematch** — only if score below threshold / low confidence; Grok may pick from a pre-scored shortlist of profile ids.
 
 Layout stays template-first. Slot polish remains separate (`polishSlotsForContentLocale`).
+
+**Grok must never:** invent freeform layout, new templates, product structure, or bypass the quality gate.
+
+## Figma keys on profiles
+
+Optional `figma_file_key` per profile. Prefer **bucket-tagged** env keys (`FIGMA_REFERENCE_BUCKETS=mobile=…,landing=…,dashboard=…`) over copying a mobile kit onto landing/dashboard profiles. Seed path stays valid when Figma is missing.

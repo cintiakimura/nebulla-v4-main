@@ -148,13 +148,21 @@ export function matchResources(input: {
   classification: PageClassification;
   /** Override default threshold (rubric: 8, or 10 if low confidence). */
   minScore?: number;
+  /** Skip these template ids (regen / preferAlternate — pick next ranked profile). */
+  excludeTemplateIds?: string[];
 }): ResourceMatchResult {
   const min =
     input.minScore ??
     (input.classification.confidence === "low" ? 10 : 8);
+  const exclude = new Set(
+    (input.excludeTemplateIds || []).map((t) => t.trim()).filter(Boolean),
+  );
 
   const candidates = input.profiles.filter(
-    (p) => platformOk(p, input.classification) && pageTypeOk(p, input.classification),
+    (p) =>
+      platformOk(p, input.classification) &&
+      pageTypeOk(p, input.classification) &&
+      !(p.template_id && exclude.has(p.template_id)),
   );
 
   if (candidates.length === 0) {
