@@ -460,49 +460,85 @@
 
 /*
  * Trial: starfield behind IDE only.
- * Image: /public/images/ide-starfield.png
- * Revert: remove .nebulla-ide-shell rules below + class on NebullaIDE root + the png.
+ * Why v1 looked unchanged: every panel used 75% black → stacked to solid black
+ * on an already near-black image. Fix: ONE image + ONE 75% veil; panels transparent.
+ * Revert: remove this block + nebulla-ide-shell class on NebullaIDE + public/images/ide-starfield.png
  */
 .nebulla-ide-shell {
   position: relative;
   isolation: isolate;
   background-color: #000000;
+
+  /* Panels must stay transparent so the single veil is the only darkening */
+  --surface: transparent;
+  --surface-container: transparent;
+  --surface-bright: transparent;
+  --surface-container-highest: rgba(17, 17, 17, 0.35);
+  --secondary-container: transparent;
+  --elevated: rgba(17, 17, 17, 0.35);
+  --background: transparent;
+  --card: transparent;
+  --popover: rgba(10, 10, 10, 0.82);
+  --secondary: transparent;
+  --muted: transparent;
+  --accent: rgba(17, 17, 17, 0.35);
+  --input: rgba(10, 10, 10, 0.55);
+  --sidebar: transparent;
+  --sidebar-accent: rgba(17, 17, 17, 0.35);
+  --color-background: transparent;
+  --color-card: transparent;
+  --color-muted: transparent;
+  --color-secondary: transparent;
+  --color-sidebar: transparent;
+  --color-surface: transparent;
+  --color-surface-container: transparent;
+  --color-surface-bright: transparent;
+}
+
+.nebulla-ide-shell::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-color: #000000;
   background-image: url('/images/ide-starfield.png');
   background-size: cover;
   background-position: center;
   background-repeat: no-repeat;
-  background-attachment: fixed;
-
-  /* Same blacks as theme, 75% opacity so stars show through */
-  --surface: rgba(0, 0, 0, 0.75);
-  --surface-container: rgba(0, 0, 0, 0.75);
-  --surface-bright: rgba(10, 10, 10, 0.75);
-  --surface-container-highest: rgba(17, 17, 17, 0.75);
-  --secondary-container: rgba(17, 17, 17, 0.75);
-  --elevated: rgba(17, 17, 17, 0.75);
-  --background: rgba(0, 0, 0, 0.75);
-  --card: rgba(0, 0, 0, 0.75);
-  --popover: rgba(10, 10, 10, 0.75);
-  --secondary: rgba(10, 10, 10, 0.75);
-  --muted: rgba(10, 10, 10, 0.75);
-  --accent: rgba(17, 17, 17, 0.75);
-  --input: rgba(10, 10, 10, 0.75);
-  --sidebar: rgba(0, 0, 0, 0.75);
-  --sidebar-accent: rgba(17, 17, 17, 0.75);
 }
 
-.nebulla-ide-shell :is(.bg-black, .bg-\[\#000\], .bg-\[\#000000\]) {
-  background-color: rgba(0, 0, 0, 0.75) !important;
+/* Single 75% black veil — same effect as “black at 75% opacity” without stacking */
+.nebulla-ide-shell::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-color: rgba(0, 0, 0, 0.75);
 }
 
-.nebulla-ide-shell :is(.bg-\[\#0a0a0a\], .bg-\[\#0A0A0A\]) {
-  background-color: rgba(10, 10, 10, 0.75) !important;
+.nebulla-ide-shell > * {
+  position: relative;
+  z-index: 1;
 }
 
-.nebulla-ide-shell :is(.bg-\[\#111111\], .bg-\[\#111\]) {
-  background-color: rgba(17, 17, 17, 0.75) !important;
+.nebulla-ide-shell :is(.bg-black, .bg-\[\#000\], .bg-\[\#000000\], .bg-background, .bg-card) {
+  background-color: transparent !important;
+}
+
+.nebulla-ide-shell :is(.bg-\[\#0a0a0a\], .bg-\[\#0A0A0A\], .bg-muted, .bg-secondary) {
+  background-color: transparent !important;
+}
+
+.nebulla-ide-shell :is(.bg-\[\#111111\], .bg-\[\#111\], .bg-accent) {
+  background-color: rgba(17, 17, 17, 0.35) !important;
 }
 
 .nebulla-ide-shell :is(.bg-\[\#050508\]) {
-  background-color: rgba(5, 5, 8, 0.75) !important;
+  background-color: transparent !important;
+}
+
+.nebulla-ide-shell :is(.surface-base, .surface-active) {
+  background-color: transparent !important;
 }
