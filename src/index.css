@@ -457,3 +457,52 @@
   }
 
 }
+
+/*
+ * Trial: starfield behind IDE only.
+ * Image: /public/images/ide-starfield.png
+ * Revert: remove .nebulla-ide-shell rules below + class on NebullaIDE root + the png.
+ */
+.nebulla-ide-shell {
+  position: relative;
+  isolation: isolate;
+  background-color: #000000;
+  background-image: url('/images/ide-starfield.png');
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-attachment: fixed;
+
+  /* Same blacks as theme, 75% opacity so stars show through */
+  --surface: rgba(0, 0, 0, 0.75);
+  --surface-container: rgba(0, 0, 0, 0.75);
+  --surface-bright: rgba(10, 10, 10, 0.75);
+  --surface-container-highest: rgba(17, 17, 17, 0.75);
+  --secondary-container: rgba(17, 17, 17, 0.75);
+  --elevated: rgba(17, 17, 17, 0.75);
+  --background: rgba(0, 0, 0, 0.75);
+  --card: rgba(0, 0, 0, 0.75);
+  --popover: rgba(10, 10, 10, 0.75);
+  --secondary: rgba(10, 10, 10, 0.75);
+  --muted: rgba(10, 10, 10, 0.75);
+  --accent: rgba(17, 17, 17, 0.75);
+  --input: rgba(10, 10, 10, 0.75);
+  --sidebar: rgba(0, 0, 0, 0.75);
+  --sidebar-accent: rgba(17, 17, 17, 0.75);
+}
+
+.nebulla-ide-shell :is(.bg-black, .bg-\[\#000\], .bg-\[\#000000\]) {
+  background-color: rgba(0, 0, 0, 0.75) !important;
+}
+
+.nebulla-ide-shell :is(.bg-\[\#0a0a0a\], .bg-\[\#0A0A0A\]) {
+  background-color: rgba(10, 10, 10, 0.75) !important;
+}
+
+.nebulla-ide-shell :is(.bg-\[\#111111\], .bg-\[\#111\]) {
+  background-color: rgba(17, 17, 17, 0.75) !important;
+}
+
+.nebulla-ide-shell :is(.bg-\[\#050508\]) {
+  background-color: rgba(5, 5, 8, 0.75) !important;
+}

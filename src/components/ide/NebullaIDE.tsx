@@ -499,7 +499,7 @@ function NebullaIDEShell() {
         : activeNavId;
 
   return (
-    <div className="flex h-screen flex-col overflow-hidden bg-background text-foreground">
+    <div className="nebulla-ide-shell flex h-screen flex-col overflow-hidden text-foreground">
       {!workspaceCtx ? <WorkspaceSetupGate onReady={handleWorkspaceReady} /> : null}
       <WelcomeOnboardingModal
         open={welcomeOpen && Boolean(workspaceCtx)}
