@@ -1993,13 +1993,17 @@ No approved UI code yet.
       // Auto-V0 is off unless the client explicitly opts in (manual path only).
       const autoV0 = body.autoV0 === true;
 
-      const plan = hydrateAndPersistMasterPlan(pp.workspaceRoot, pp.masterPlanPath);
-      const v0Prompt = writeV0PromptMarkdown(pp.workspaceRoot, plan);
+      // Primary ui-brief + legacy v0-prompt — required before plan-first UI mockup.
+      const uiArts = syncUiArtifactsFromMasterPlan(pp.workspaceRoot, pp.masterPlanPath);
       ensureNebulaUiStudioFileAt(pp.nebulaUiStudioPath);
       const studioExisting = fs.readFileSync(pp.nebulaUiStudioPath, "utf8");
       fs.writeFileSync(
         pp.nebulaUiStudioPath,
-        upsertNebulaCommentSection(studioExisting, "NEBULA_UI_STUDIO_PROMPT", v0Prompt.content),
+        upsertNebulaCommentSection(
+          studioExisting,
+          "NEBULA_UI_STUDIO_PROMPT",
+          uiArts.uiBrief.content || uiArts.v0Prompt.content,
+        ),
         "utf8"
       );
 
@@ -2026,8 +2030,11 @@ No approved UI code yet.
 
       res.json({
         ok: true,
-        v0PromptWritten: v0Prompt.written,
+        v0PromptWritten: uiArts.v0Prompt.written,
         v0PromptPath: "nebula-ui-studio/v0-prompt.md",
+        uiBriefWritten: uiArts.uiBrief.written,
+        uiBriefPath: "nebula-ui-studio/ui-brief.md",
+        uiBriefLength: uiArts.uiBrief.content.length,
         mindMapSynced: mind.written && mindMapPages > 0,
         mindMapPageCount: mindMapPages,
         mindMapRouteCount: mind.routeCount,

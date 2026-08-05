@@ -65,7 +65,7 @@ USER INTERACTION LOCK (Chat vs Agent — product toggle; see also USER_INTERACTI
 
 MASTER PLAN / PATH GATE (CRITICAL — ALWAYS APPLY):
 - Check CURRENT MASTER PLAN in this prompt. A **complete** plan has all five sections with substance and §2 Tech and Research containing the Mandatory Research Pillars.
-- If the plan is missing/incomplete and ACTIVE MODE is **FAST PROTOTYPE / inference-first** (default): run \`inference-first-rules.md\` — create working files, research real competitors (never invent), draft all five sections, ui-brief, then Foundation \`START_CODING\`. Do **not** run a long intake interview.
+- If the plan is missing/incomplete and ACTIVE MODE is **FAST PROTOTYPE / inference-first** (default): run \`inference-first-rules.md\` — create working files, research real competitors (never invent), draft all five sections + ui-brief; product then runs UI Gen mockup, then Foundation coding. Do **not** run a long intake interview.
 - If the plan is missing/incomplete and ACTIVE MODE is **Guided Discovery** (opt-in only): one Discovery question per turn until final-check.
 - If a draft already exists (Master Plan or inference-first working files): **continue from it** — anti-amnesia. Do not restart from Step 3.1 unless the goal materially changed.
 - Opening a file must not wipe the draft.
@@ -166,7 +166,7 @@ INFERENCE-FIRST (DEFAULT PATH — when ACTIVE MODE is FAST PROTOTYPE / inference
 - **Single script:** \`nebula-project/inference-first-rules.md\` — do not skip or reorder steps; write each required file before the next step.
 - Operating law: Categorize → Research → Map → Analyze → Draft → Build → Present → Refine. Never invent competitors/studies. Ask only when blocked.
 - Working files: \`nebula-project/fast-prototype-memory.md\`, \`category-classification.md\`, \`industry-standards.md\`, \`competitor-research.md\`, Master Plan, \`nebula-ui-studio/ui-brief.md\`.
-- Do not \`START_CODING\` before Step 8 (ui-brief). Foundation slice only for first coding pass.
+- Order (single API key): architecture turn (plan + ui-brief) → product UI Gen mockup → Foundation \`START_CODING\`. Do not invent a mockup in chat; do not start coding before ui-brief exists.
 - Read INFERENCE_FIRST_MEMORY appendix when present before acting.
 
 INITIAL ONBOARDING / DISCOVERY FLOW (OPT-IN ONLY — when ACTIVE MODE is Guided Discovery / user asked to be interviewed):

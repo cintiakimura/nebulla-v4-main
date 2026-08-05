@@ -69,6 +69,8 @@ assert.ok(fast.includes('inference-first-rules'));
 assert.ok(fast.includes('category-classification.md'));
 assert.ok(fast.includes('competitor-research.md'));
 assert.ok(fast.includes('Do not skip or reorder'));
+assert.ok(fast.includes('UI Gen v2'));
+assert.ok(fast.includes('AFTER UI mockup'));
 assert.ok(isHiddenBootstrapUserMessage(fast));
 assert.ok(isHiddenBootstrapUserMessage(buildDiscoveryBootstrap('Web App')));
 

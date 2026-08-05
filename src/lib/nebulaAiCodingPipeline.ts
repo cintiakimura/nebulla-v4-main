@@ -4,9 +4,12 @@
  * Import from here in new code; `nebulaGrokCodingPipeline` stays as a compatible alias.
  */
 export {
+  applyArchitectureArtifactsFromAssistant,
   applyGeneratedFiles,
+  filterGrokContentToArchitectureFiles,
   handlePostGrokCodingTurn,
   hasGrokFileBlocks,
+  isArchitectureArtifactPath,
   isCodingIntent,
   notifyWorkspaceFilesChanged,
   runGoCodeAndApply,

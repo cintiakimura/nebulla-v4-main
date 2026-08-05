@@ -88,7 +88,9 @@ Pure debug and pure file-open remain outside this script (existing Coding / Debu
 ## 3. Sequence lock
 
 Execute steps **3.1 → 10.2 in order**.  
-Do not jump ahead to coding before Step 8 is complete.
+Do not jump ahead to **UI mockup** before Step 8.1 (ui-brief) + §§1–5 exist.  
+Do not jump ahead to **coding** before Step 8.3 (UI mockup) has been triggered.  
+**Single API key:** Research/Architecture AI turn → UI Gen stage → Coding stage (sequential, not concurrent).
 
 ---
 
@@ -381,15 +383,33 @@ Do not wait for UI generation to finish.
 
 ---
 
+### Step 8.3 — Generate UI mockup now (before coding finishes)
+**Generate** the first UI mockup through UI Gen v2 / UI Studio Beta using:
+- `ui-brief.md`
+- Section 5 tokens
+- §4 page structure
+
+**Gate:** only after §§1–5 draft + `ui-brief.md` exist.  
+**Do not** wait for foundation/feature coding to finish.  
+**Do not** start mockup before this gate.  
+**Single API key:** finish the architecture AI turn first; product then runs UI Gen as the next stage; coding follows after mockup is triggered (or completes).
+
+Record `stage=ui_mockup` in `fast-prototype-memory.md` (or product stage flag).
+
+**Output required:** UI preview/draft available in UI Studio Beta
+
+---
+
 ### Step 9.1 — Build foundation slice
-**Build** the first coding slice only:
+**Build** the first coding slice only (after Step 8.3 has been triggered):
 - app shell
 - routing
 - layout
 - base design tokens if needed
 
 Use incremental development.  
-Do not implement all features in one pass.
+Do not implement all features in one pass.  
+Record `stage=coding`.
 
 **Output required:** foundation files applied
 
@@ -404,13 +424,11 @@ Then **Validate** before expanding.
 
 ---
 
-### Step 9.3 — Generate first UI
-**Generate** first UI through UI Gen v2 using:
-- `ui-brief.md`
-- Section 5 tokens
-- current page structure
+### Step 9.3 — Optional UI refresh
+**Optionally** regenerate/refine UI Gen if pages/labels changed during coding.  
+First mockup must not depend on this step.
 
-**Output required:** UI preview/draft available in UI Studio Beta
+**Output required:** UI updated only when needed
 
 ---
 
@@ -419,7 +437,8 @@ Then **Validate** before expanding.
 - category chosen
 - key assumptions
 - main pages
-- what was generated
+- that UI mockup was generated from researched patterns + plan
+- that coding continues in slices next
 
 Invite corrections.  
 Do not restart the whole flow.
@@ -433,8 +452,9 @@ Do not restart the whole flow.
 - plan sections
 - research notes if needed
 - affected slices
+- UI mockup if visual direction changed
 
-**Preserve** everything else.
+**Preserve** everything else. Record `stage=refine`.
 
 **Output required:** revised plan + revised affected files only
 
@@ -488,11 +508,12 @@ Do not restart the whole flow.
 7. security baseline exists when required  
 8. assumptions are listed  
 9. `ui-brief.md` exists  
+10. UI mockup stage has been triggered (Step 8.3) before foundation/feature coding expands  
 
-If any item fails: **Repair** that item before coding further.
+If any item fails: **Repair** that item before coding further. Do not call the architecture draft complete until §§1–5 + ui-brief exist; do not treat coding as the unlock for the first mockup.
 
 ---
 
 ## 7. One-line rule
 
-**Categorize → Research → Map → Analyze → Draft → Build → Present → Refine. Never skip. Never invent. Never forget.**
+**Categorize → Research → Map → Analyze → Draft → UI mockup → Build → Present → Refine. Never skip. Never invent. Never forget.**

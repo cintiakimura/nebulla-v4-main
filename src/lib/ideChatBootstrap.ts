@@ -96,10 +96,11 @@ export function buildFastPrototypeBootstrap(
     `4.1–4.2 Research workspace + industry-standards.md.\n` +
     `5.1–5.3 Competitor list (5–10 real names only; never invent) + feature map + evidence in competitor-research.md.\n` +
     `6.1–6.2 UI/UX patterns + final standards package (validated common pattern | assumption).\n` +
-    `7.1–7.6 Draft all five Master Plan sections inside <START_MASTERPLAN>…</END_MASTERPLAN>; list assumptions in fast-prototype-memory.md.\n` +
+    `7.1–7.6 Draft all five Master Plan sections inside <START_MASTERPLAN>…</END_MASTERPLAN>; list assumptions + stage=plan_drafted in fast-prototype-memory.md.\n` +
     `8.1 Write nebula-ui-studio/ui-brief.md from §4 + §5.\n` +
-    `Then emit START_CODING / <START_CODING> for Step 9.1 Foundation slice only (shell, routing, layout, tokens). Do not implement all features.\n` +
-    `End with a short Step 10.1 user summary (category, assumptions, main pages). Prefer coherent first draft over interrogation.`
+    `Do NOT generate the visual mockup yourself — after this architecture turn the product runs UI Gen v2 (Step 8.3) before coding (single API key queue).\n` +
+    `Then emit START_CODING / <START_CODING> for Step 9.1 Foundation only — product runs coding AFTER UI mockup is triggered.\n` +
+    `End with a short Step 10.1 summary: category, assumptions, main pages, that UI mockup comes next from researched patterns. Prefer coherent first draft over interrogation.`
   );
 }
 

@@ -46,6 +46,7 @@ import { sanitizeAssistantChatText } from '../../../lib/assistantChatSanitize';
 import { dispatchOpenUiStudio, dispatchStartUiUxWorkflow } from '../../lib/nebulaUiStudioEvents';
 import {
   handlePostGrokCodingTurn,
+  applyArchitectureArtifactsFromAssistant,
   hasGrokFileBlocks,
   isCodingIntent,
   runGoCodeAndApply,
@@ -53,7 +54,10 @@ import {
 import { isShortCodingGoNudge, SHORT_CODING_GO_SUMMARY } from '../../lib/ideShortCodingNudge';
 import { setGrokCodingActive } from '../../lib/nebulaGrokCodingGate';
 import { runMasterPlanUiPipeline, runPostCodingWorkspaceSync } from '../../lib/ideArtifactSync';
-import { dispatchOpenUiStudioBeta } from '../../lib/uiStudioBetaEngine';
+import {
+  dispatchOpenUiStudioBeta,
+  triggerUiStudioBetaAfterPlanReady,
+} from '../../lib/uiStudioBetaEngine';
 import {
   clearDiscoveryClosed,
   clearIdeWorkspaceMetaCache,
@@ -64,6 +68,12 @@ import {
   isDiscoveryClosed,
   markDiscoveryClosed,
 } from '../../lib/ideWorkspaceChatContext';
+import {
+  assessUiMockupReadiness,
+  clearUiMockupStageFlags,
+  markUiMockupStageStarted,
+  setInferenceFirstStage,
+} from '../../lib/uiMockupGate';
 import { createProjectForCurrentSession } from '../../lib/nebulaCloud';
 import { handleSmartChatMessage, type SmartChatFilePreview } from '../../lib/smartChatHandler';
 import { isMasterPlanCompleteForDiscovery } from '../../lib/masterPlanSections';
@@ -944,6 +954,7 @@ export function AIChat() {
       setSendError(null);
       clearDiscoveryClosed(diskProjectKey);
       clearStoredStartMode(diskProjectKey);
+      clearUiMockupStageFlags(diskProjectKey);
       // Do NOT consume guided-on-ready here. "Start with a prompt" reloads the page after
       // reset; consuming the flag on reset left the idea stranded in localStorage.
     };
@@ -1546,14 +1557,14 @@ export function AIChat() {
           setGrokActivity((prev) =>
             advanceGrokActivity(prev, 3, {
               currentAction: willCode
-                ? 'UI pipeline — mind map & prompt (UI Studio Beta after files)…'
-                : 'Syncing mind map from Master Plan…',
+                ? 'UI pipeline — mind map + ui-brief (mockup before coding)…'
+                : 'Syncing mind map + ui-brief from Master Plan…',
               stepDetail: {
                 index: 2,
-                detail: `Saved ${mpSaved} Master Plan section(s). Building mind map from §4…`,
+                detail: `Saved ${mpSaved} Master Plan section(s). Building mind map + ui-brief from §4/§5…`,
               },
               log: {
-                message: `Master Plan updated — ${mpSaved} tab(s); starting UI pipeline`,
+                message: `Master Plan updated — ${mpSaved} tab(s); syncing mind map + ui-brief`,
                 kind: 'success',
               },
             }),
@@ -1573,26 +1584,102 @@ export function AIChat() {
             /* ignore */
           }
         }
+        setInferenceFirstStage('plan_drafted', diskProjectKey);
+      }
+
+      // Architecture docs (research + optional richer ui-brief) before mockup gate — not app code.
+      if (agentAllowed && (fastPrototypeTurn || willCode || mpSaved > 0) && hasGrokFileBlocks(raw)) {
+        try {
+          await applyArchitectureArtifactsFromAssistant(raw, {
+            projectName,
+            onProgress: pushActivity,
+          });
+        } catch (archErr) {
+          console.warn('[AIChat] architecture artifact apply:', archErr);
+        }
+      }
+
+      // Stage B — UI mockup after plan + ui-brief, BEFORE coding (single API key queue).
+      let uiMockupStarted = false;
+      if (agentAllowed && (fastPrototypeTurn || willCode || mpSaved > 0)) {
+        const readiness = await assessUiMockupReadiness({ projectKey: diskProjectKey });
+        if (readiness.ok) {
+          uiMockupStarted = true;
+          markUiMockupStageStarted(diskProjectKey);
+          pushActivity(
+            'Architecture draft ready — generating UI mockup from researched patterns + plan (before coding)',
+            'info',
+          );
+          setAccessoryHint(
+            'UI mockup next — grounded in Master Plan + ui-brief. Coding slices follow.',
+          );
+          window.setTimeout(() => setAccessoryHint(null), 8000);
+          if (showWorkActivity) {
+            setGrokActivity((prev) =>
+              advanceGrokActivity(prev, showWorkActivity ? 4 : 2, {
+                currentAction: 'UI Studio Beta — mockup from ui-brief (before coding)…',
+                log: {
+                  message: 'Step 8.3 — UI Gen v2 mockup (sequential; coding waits)',
+                  kind: 'info',
+                },
+              }),
+            );
+          }
+          const mockup = await triggerUiStudioBetaAfterPlanReady({
+            projectName,
+            onProgress: pushActivity,
+          });
+          if (mockup.ok) {
+            pushActivity('UI mockup ready in UI Studio Beta — starting coding slices next', 'success');
+            setMessages((p) => {
+              const next = [
+                ...p,
+                {
+                  id: `a-mockup-${Date.now()}`,
+                  role: 'assistant' as const,
+                  content:
+                    'Architecture draft is ready. UI mockup is generated from researched patterns + your Master Plan assumptions — you can correct them anytime. Coding continues next in slices (foundation first).',
+                  timestamp: new Date().toLocaleTimeString([], {
+                    hour: 'numeric',
+                    minute: '2-digit',
+                  }),
+                },
+              ];
+              messagesRef.current = next;
+              return next;
+            });
+          } else if (mockup.error) {
+            pushActivity(`UI mockup: ${mockup.error} — continuing to coding`, 'warn');
+          }
+        } else if (fastPrototypeTurn || willCode) {
+          pushActivity(
+            `UI mockup waiting — ${readiness.reasons.join('; ') || 'architecture inputs incomplete'}`,
+            'info',
+          );
+        }
       }
 
       try {
         if (willCode && !codingActivityRef.current) {
           beginCodingActivity('Grok Code — writing files to workspace', goWorkSteps(), {
-            subhead: 'Grok Code first, then UI Studio Beta generation from Master Plan + files.',
-            initialLog: 'Coding intent detected — starting file apply',
+            subhead: uiMockupStarted
+              ? 'UI mockup triggered — now Foundation coding slice.'
+              : 'Master Plan → Grok Code → files on disk.',
+            initialLog: 'Coding stage — after architecture (and UI mockup when ready)',
           });
         }
 
         if (willCode) {
+          setInferenceFirstStage('coding', diskProjectKey);
           setGrokActivity((prev) => {
             const mm =
               masterPlanPipeline.mindMapPageCount != null && masterPlanPipeline.mindMapPageCount > 0
                 ? `Mind map: ${masterPlanPipeline.mindMapPageCount} page(s).`
                 : undefined;
-            return advanceGrokActivity(prev, showWorkActivity ? 4 : 2, {
+            return advanceGrokActivity(prev, showWorkActivity ? 5 : 2, {
               currentAction: 'Grok Code generating files — applying to workspace…',
-              log: { message: 'Running Grok Code / file apply', kind: 'info' },
-              ...(mm ? { stepDetail: { index: showWorkActivity ? 3 : 1, detail: mm } } : {}),
+              log: { message: 'Running Grok Code / file apply (after UI mockup stage)', kind: 'info' },
+              ...(mm ? { stepDetail: { index: showWorkActivity ? 4 : 1, detail: mm } } : {}),
             });
           });
         }
@@ -1731,20 +1818,31 @@ export function AIChat() {
             if (showWorkActivity) {
               setGrokActivity((prev) =>
                 advanceGrokActivity(prev, showWorkActivity ? 6 : 4, {
-                  currentAction: 'Grok Code finished — UI Studio Beta generation…',
-                  log: { message: 'UI Studio Beta engine after Grok Code', kind: 'info' },
+                  currentAction: uiMockupStarted
+                    ? 'Coding slice applied — UI mockup already generated from plan'
+                    : 'Grok Code finished — opening UI Studio Beta…',
+                  log: {
+                    message: uiMockupStarted
+                      ? 'Post-code UI auto-refresh skipped (plan-first mockup)'
+                      : 'UI Studio Beta after coding (fallback)',
+                    kind: 'info',
+                  },
                 }),
               );
             }
-            // Mind map only — do not auto-run V0 (Beta already triggered from file apply).
+            // Mind map only — do not auto-run V0.
             masterPlanPipeline = await runMasterPlanUiPipeline({
               projectName,
               autoV0: false,
               quietV0Status: true,
               onProgress: pushActivity,
             });
-            dispatchOpenUiStudioBeta();
-            pushActivity('Coding pass finished — UI Studio Beta is the active generator', 'success');
+            if (!uiMockupStarted) {
+              dispatchOpenUiStudioBeta();
+              pushActivity('Coding pass finished — open UI Studio Beta to generate mockup', 'info');
+            } else {
+              pushActivity('Coding slice done — UI mockup was already generated from the plan', 'success');
+            }
             resetCodingActivity();
           }
         } else if (hasAppStatusPayload && agentAllowed && assistantSkippedNdmVerify(raw)) {

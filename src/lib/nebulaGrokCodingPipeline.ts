@@ -32,6 +32,35 @@ export function hasGrokFileBlocks(text: string): boolean {
   );
 }
 
+/** Research / plan / ui-brief paths — safe to apply before UI mockup (not app code). */
+export function isArchitectureArtifactPath(relPath: string): boolean {
+  const p = relPath.replace(/\\/g, '/').replace(/^\.?\//, '').trim();
+  if (!p) return false;
+  if (/^nebula-project\//i.test(p)) return true;
+  if (/^nebula-ui-studio\//i.test(p)) return true;
+  if (/(^|\/)(ui-brief|v0-prompt|master-plan)\.(md|json)$/i.test(p)) return true;
+  return false;
+}
+
+/**
+ * Keep only architecture/doc file blocks so research + ui-brief land before mockup,
+ * without applying foundation/app code in the same pass.
+ */
+export function filterGrokContentToArchitectureFiles(content: string): string {
+  const normalized = normalizeGrokFileBlockSyntax(content);
+  const blocks: string[] = [];
+  const re =
+    /```(?:file|filepath)\s*:\s*([^\n`]+)\n([\s\S]*?)```/gi;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(normalized)) !== null) {
+    const path = (m[1] || '').trim().replace(/^["'`]+|["'`]+$/g, '');
+    if (isArchitectureArtifactPath(path)) {
+      blocks.push(`\`\`\`file:${path}\n${m[2]}\`\`\``);
+    }
+  }
+  return blocks.join('\n\n').trim();
+}
+
 export function isCodingIntent(text: string): boolean {
   return START_CODING_RE.test(text);
 }
@@ -72,7 +101,7 @@ function buildGoCompleteMessage(
     appFiles.length > 0
       ? ` App routes: ${appFiles.slice(0, 6).join(', ')}${appFiles.length > 6 ? '…' : ''}.`
       : '';
-  return `Slice complete${passNote}. Applied ${totalWritten} file(s).${routeHint} Validate this slice (NDM happy path) before the next Go. Master Plan synced — UI Studio Beta will generate from Master Plan + these files.`;
+  return `Slice complete${passNote}. Applied ${totalWritten} file(s).${routeHint} Validate this slice (NDM happy path) before the next Go. Master Plan synced — UI mockup is plan-first (or optional refine if pages changed).`;
 }
 
 function stripNonFileArtifacts(text: string): string {
@@ -104,7 +133,13 @@ async function afterFilesAppliedArtifacts(
 
 export async function applyGeneratedFiles(
   content: string,
-  artifactContext?: { userNote?: string; projectName?: string; onProgress?: GrokActivityProgressFn },
+  artifactContext?: {
+    userNote?: string;
+    projectName?: string;
+    onProgress?: GrokActivityProgressFn;
+    /** Skip mind-map/preview sync (used when applying architecture docs before plan-first UI mockup). */
+    skipPostSync?: boolean;
+  },
 ): Promise<ApplyGeneratedResult> {
   const onProgress = artifactContext?.onProgress;
   const clean = stripNonFileArtifacts(normalizeGrokFileBlockSyntax(content));
@@ -155,10 +190,12 @@ export async function applyGeneratedFiles(
     if (writtenCount > 0) {
       onProgress?.(`Wrote ${writtenCount} file(s) to workspace`, 'success');
     }
-    if (writtenCount > 0) {
+    if (writtenCount > 0 && !artifactContext?.skipPostSync) {
       notifyWorkspaceFilesChanged();
       onProgress?.('Syncing Master Plan, mind map, and preview', 'info');
       await afterFilesAppliedArtifacts(artifactContext?.userNote, artifactContext?.projectName, onProgress);
+    } else if (writtenCount > 0) {
+      notifyWorkspaceFilesChanged();
     }
     return {
       ok: writtenCount > 0,
@@ -177,6 +214,21 @@ export async function applyGeneratedFiles(
     onProgress?.(msg, 'error');
     return { ok: false, writtenCount: 0, skippedCount: 0, writtenPaths: [], message: msg, error: msg };
   }
+}
+
+/** Apply research / ui-brief / plan docs only — before UI Gen mockup (single-key stage B). */
+export async function applyArchitectureArtifactsFromAssistant(
+  assistantContent: string,
+  options?: { projectName?: string; onProgress?: GrokActivityProgressFn },
+): Promise<ApplyGeneratedResult | null> {
+  const arch = filterGrokContentToArchitectureFiles(assistantContent);
+  if (!arch) return null;
+  options?.onProgress?.('Applying architecture artifacts (research + ui-brief) before UI mockup…', 'info');
+  return applyGeneratedFiles(arch, {
+    projectName: options?.projectName,
+    onProgress: options?.onProgress,
+    skipPostSync: true,
+  });
 }
 
 type GoCodePayload = {

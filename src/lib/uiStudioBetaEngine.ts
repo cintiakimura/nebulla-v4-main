@@ -1,6 +1,7 @@
 /**
- * UI Studio Beta engine client — active generator after successful file apply.
- * Original UI Studio / V0 remains available manually but is not auto-started.
+ * UI Studio Beta engine client.
+ * Default inference-first: mockup after Master Plan + ui-brief (before coding finishes).
+ * Post-file-apply refresh remains optional and is skipped when early mockup already ran.
  *
  * Trigger flow: open Beta pane → dispatch run event → IdeUiStudioBeta owns the API call
  * (so stage UI stays in sync). Completes when nebula-ui-studio-beta-complete fires.
@@ -11,6 +12,7 @@ import type { GrokActivityProgressFn } from './ideGrokActivityStatus';
 import { getGrokRequestHeaders } from './grokUserKey';
 import { withProjectQuery } from './nebulaProjectApi';
 import { dispatchOpenCenterPanel } from '@/components/ide/IdeCenterTabsContext';
+import { wasUiMockupStageStarted } from './uiMockupGate';
 
 export const NEBULA_UI_STUDIO_BETA_RUN = 'nebula-ui-studio-beta-run';
 export const NEBULA_UI_STUDIO_BETA_COMPLETE = 'nebula-ui-studio-beta-complete';
@@ -73,7 +75,9 @@ export async function runUiStudioBetaGeneration(
       options.regenerate
         ? 'Generate again — UI Studio Beta engine…'
         : options.autoTriggered
-          ? 'Files applied — starting UI Studio Beta generation…'
+          ? options.writtenPaths?.length
+            ? 'Files applied — refreshing UI Studio Beta…'
+            : 'Architecture ready — generating UI mockup (UI Gen v2)…'
           : 'Running UI Generation Engine…',
       'info',
     );
@@ -142,12 +146,23 @@ export async function runUiStudioBetaGeneration(
   return inFlight;
 }
 
-/** After successful apply-generated of UI-relevant files. */
+/** After successful apply-generated of UI-relevant files (optional refine). */
 export async function triggerUiStudioBetaAfterFilesApplied(options: {
   writtenPaths: string[];
   projectName?: string;
   onProgress?: GrokActivityProgressFn;
+  /** Force refine even if plan-first mockup already ran. */
+  force?: boolean;
 }): Promise<UiStudioBetaGenerateResult | null> {
+  // Early mockup already ran from plan+ui-brief — do not burn the single API key again.
+  if (!options.force && wasUiMockupStageStarted()) {
+    options.onProgress?.(
+      'UI mockup already generated from Master Plan + ui-brief — skipping post-code auto refresh',
+      'info',
+    );
+    return null;
+  }
+
   const paths = options.writtenPaths || [];
   if (!looksLikeUiRelevantPaths(paths)) {
     options.onProgress?.(
@@ -166,6 +181,22 @@ export async function triggerUiStudioBetaAfterFilesApplied(options: {
   return runUiStudioBetaGeneration({
     projectName: options.projectName,
     writtenPaths: paths,
+    autoTriggered: true,
+    openPane: true,
+    onProgress: options.onProgress,
+  });
+}
+
+/**
+ * Plan-first mockup: run UI Gen v2 once ui-brief + §§1–5 exist (before foundation coding).
+ */
+export async function triggerUiStudioBetaAfterPlanReady(options: {
+  projectName?: string;
+  onProgress?: GrokActivityProgressFn;
+}): Promise<UiStudioBetaGenerateResult> {
+  return runUiStudioBetaGeneration({
+    projectName: options.projectName,
+    writtenPaths: [],
     autoTriggered: true,
     openPane: true,
     onProgress: options.onProgress,

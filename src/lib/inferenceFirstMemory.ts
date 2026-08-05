@@ -4,6 +4,7 @@
  */
 
 import { openLocalFile } from './fileOperations';
+import { getInferenceFirstStage } from './uiMockupGate';
 
 const MEMORY_PATHS = [
   'nebula-project/inference-first-rules.md',
@@ -35,8 +36,12 @@ export async function buildInferenceFirstMemoryAppendix(options?: {
   includeRulesExcerpt?: boolean;
 }): Promise<string> {
   const includeRules = options?.includeRulesExcerpt !== false;
+  const stage = getInferenceFirstStage();
   const parts: string[] = [
     'INFERENCE_FIRST_MEMORY (anti-amnesia — read before acting; do not restart Step 3.1 if a valid draft exists):',
+    stage
+      ? `Current product stage: ${stage} (research → plan_drafted → ui_mockup → coding → refine). Single API key: do not run parallel architecture+UI+codegen.`
+      : 'Stages: research → plan_drafted → ui_mockup → coding → refine. UI mockup after ui-brief; coding after mockup triggered.',
   ];
   let used = 0;
   const missing: string[] = [];
