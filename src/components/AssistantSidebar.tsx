@@ -9,7 +9,11 @@ import { useModelSettings } from '@/components/settings/ModelSettingsContext';
 import { ChatModelSelector } from '@/components/settings/ModelSelector';
 import { computePhaseSyncAfterResponse } from '../lib/nebulaSwarmGate';
 import { fetchJson, readResponseJson } from '../lib/apiFetch';
-import { MAIN_AI_CHAT_SETUP_HINT, serverReportsMainAiKey } from '../lib/grokKey';
+import {
+  MAIN_AI_CHAT_SETUP_HINT,
+  resolveAiLimitUserMessage,
+  serverReportsMainAiKey,
+} from '../lib/grokKey';
 import { fetchNebulaPublicConfig } from '../lib/nebulaPublicConfig';
 import { dispatchOpenUiStudio, dispatchStartUiUxWorkflow } from '../lib/nebulaUiStudioEvents';
 import { withProjectBody, withProjectQuery } from '../lib/nebulaProjectApi';
@@ -341,16 +345,23 @@ export function AssistantSidebar({
           }),
           fetchNebulaPublicConfig(),
         ]);
-        if (
-          !pubCfg.freeTierTokenLimitDisabled &&
-          usage.remaining != null &&
-          usage.remaining <= 0
-        ) {
-          setMessages((prev) => [...prev, { role: 'system', text: MONTHLY_LIMIT_MESSAGE }]);
+        // Only block when server explicitly says metering is ON (default is OFF for closed beta).
+        const meteringOn = pubCfg.freeTierTokenLimitDisabled === false;
+        if (meteringOn && usage.remaining != null && usage.remaining <= 0) {
+          setMessages((prev) => [
+            ...prev,
+            {
+              role: 'system',
+              text:
+                pubCfg.billingEnabled === true
+                  ? MONTHLY_LIMIT_MESSAGE
+                  : 'Platform AI usage is temporarily limited. Add your Grok key in Secrets (BYOK).',
+            },
+          ]);
           return;
         }
       } catch {
-        /* POST /api/grok/chat still enforces Free tier */
+        /* POST /api/grok/chat still enforces when metering is enabled */
       }
     }
 
@@ -828,12 +839,17 @@ export function AssistantSidebar({
         rawMsg.includes('Please add your Grok') ||
         rawMsg.includes('401') ||
         rawMsg.includes('rejected this API key');
-      const displayMsg =
-        isKeyHelp
-          ? rawMsg.replace(/\n\n+/g, '\n\n')
-          : rawMsg.includes('monthly limit') || rawMsg.includes('Upgrade to Pro')
-            ? rawMsg
-            : `Error: ${rawMsg}`;
+      let displayMsg = isKeyHelp ? rawMsg.replace(/\n\n+/g, '\n\n') : `Error: ${rawMsg}`;
+      try {
+        const pubCfg = await fetchNebulaPublicConfig();
+        const limitMsg = resolveAiLimitUserMessage(rawMsg, {
+          billingEnabled: pubCfg.billingEnabled,
+          freeTierTokenLimitDisabled: pubCfg.freeTierTokenLimitDisabled,
+        });
+        if (limitMsg !== rawMsg) displayMsg = limitMsg;
+      } catch {
+        /* keep displayMsg */
+      }
       setMessages((prev) => [...prev, { role: 'system', text: displayMsg }]);
     } finally {
       setIsLoading(false);

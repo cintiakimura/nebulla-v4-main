@@ -32,7 +32,9 @@ export function ChatModelSelector() {
         <code className="text-slate-500">MAIN_API_KEY_GROK</code>,{' '}
         <code className="text-slate-500">CLAUDE_API_KEY</code>, or{' '}
         <code className="text-slate-500">OPENAI_API_KEY</code>). Go Code stays on Grok for now.
-        {capabilities.tier === 'free' ? ' Free tier: monthly token cap still applies.' : ''}
+        {capabilities.tier === 'free'
+          ? ' Closed beta: Nebulla Free monthly metering is off; provider (xAI) quotas still apply to the key in use.'
+          : ''}
       </p>
     </div>
   );

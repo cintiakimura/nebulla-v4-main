@@ -3,11 +3,11 @@ import { Bot, Hand, Loader2, Mic, Paperclip, Rocket, Send, User, Wrench } from '
 import { cn } from '@/lib/utils';
 import { fetchSessionUser, syncActiveCloudProjectFromSession, upsertCloudProject } from '../../lib/nebulaCloud';
 import {
-  FREE_TIER_MONTHLY_LIMIT_MESSAGE,
-  isMonthlyUsageLimitError,
   MAIN_AI_CHAT_SETUP_HINT,
+  resolveAiLimitUserMessage,
   serverReportsMainAiKey,
 } from '../../lib/grokKey';
+import { fetchNebulaPublicConfig } from '../../lib/nebulaPublicConfig';
 import { readResponseJson } from '../../lib/apiFetch';
 import {
   getBrowserProjectKey,
@@ -1614,9 +1614,13 @@ export function AIChat() {
         msg.includes('Please add your Grok') ||
         msg.includes('401') ||
         msg.includes('rejected this API key');
-      const isUsageLimit = isMonthlyUsageLimitError(msg);
-      if (isUsageLimit) {
-        setSendError(FREE_TIER_MONTHLY_LIMIT_MESSAGE);
+      const pubCfg = await fetchNebulaPublicConfig();
+      const limitMsg = resolveAiLimitUserMessage(msg, {
+        billingEnabled: pubCfg.billingEnabled,
+        freeTierTokenLimitDisabled: pubCfg.freeTierTokenLimitDisabled,
+      });
+      if (limitMsg !== msg) {
+        setSendError(limitMsg);
       } else if (isKeyHelp) {
         setSendError(MAIN_AI_CHAT_SETUP_HINT);
       } else {
