@@ -13,8 +13,13 @@ export type IdeWorkspaceMeta = {
 
 let cached: IdeWorkspaceMeta | null = null;
 
+/**
+ * Final Discovery check — exact prompt wording plus common model paraphrases.
+ * Historical working detector was simply /anything else you'd like to add/i.
+ */
 const FINAL_DISCOVERY_QUESTION_RE =
-  /I believe I have all the information I need to start building this for you\. Is there anything else you'd like to add\?/i;
+  /anything else.*(add|share|mention|include)|I believe I have (all the information|everything|enough).{0,100}(need|start|build)|ready to (start|begin) building.{0,80}anything else|Is there anything else you'd like to add/i;
+
 export const PROJECT_NAME_QUESTION_RE =
   /What would you like to name this project\?/i;
 export const DESIGN_REF_QUESTION_RE =
@@ -22,16 +27,48 @@ export const DESIGN_REF_QUESTION_RE =
 
 /** Short replies to the onboarding final question ("anything else to add?"). */
 const ONBOARDING_READY_REPLY_RE =
-  /^(?:no(?:pe|thing(?:\s+(?:else|more)(?:\s+to\s+add)?)?)?|nah|nothing(?:\s+(?:else|more)(?:\s+to\s+add)?)?|there(?:'s|\s+is)\s+nothing(?:\s+(?:else|more)(?:\s+to\s+add)?)?|that's\s+all|that\s+is\s+all|all\s+good|go\s+ahead|start(?:\s+building)?|yes(?:\s+please)?|yep|yeah|ok(?:ay)?|looks?\s+good|good\s+to\s+go|proceed|let'?s\s+go|build\s+it|ready|continue|sounds?\s+good)[.!?\s]*$/i;
+  /^(?:no(?:pe|thing(?:\s+(?:else|more)(?:\s+to\s+add)?)?)?|nah|nothing(?:\s+(?:else|more)(?:\s+to\s+add)?)?|i\s+have\s+nothing(?:\s+(?:else|more)(?:\s+to\s+add)?)?|there(?:'s|\s+is)\s+nothing(?:\s+(?:else|more)(?:\s+to\s+add)?)?|that's\s+all|that\s+is\s+all|all\s+good|go\s+ahead|start(?:\s+building)?|yes(?:\s+please)?|yep|yeah|ok(?:ay)?|looks?\s+good|good\s+to\s+go|proceed|let'?s\s+go|build\s+it|ready|continue|sounds?\s+good)[.!?\s]*$/i;
 
 /** Phrase forms that still mean Discovery is done (slightly longer than the regex above). */
 const ONBOARDING_READY_PHRASE_RE =
-  /\b(?:there(?:'s|\s+is)\s+)?nothing(?:\s+(?:else|more))\s+to\s+add\b|\bno\s+more\s+to\s+add\b|\bthat(?:'s|\s+is)\s+all\b/i;
+  /\b(?:i\s+have\s+)?(?:there(?:'s|\s+is)\s+)?nothing(?:\s+(?:else|more))\s+to\s+add\b|\bno\s+more\s+to\s+add\b|\bthat(?:'s|\s+is)\s+all\b|\bthat covers everything\b|\bi'?m\s+good\b|\bnothing from my side\b|\bgo\s+ahead and build\b/i;
 
 const NONE_REPLY_RE = /^(?:no(?:ne)?|nah|nothing|n\/a|skip)[.!?\s]*$/i;
 
+const DISCOVERY_CLOSED_KEY_PREFIX = 'nebula_discovery_closed:';
+
+export function discoveryClosedStorageKey(projectKey?: string): string {
+  const key = (projectKey || getBrowserProjectKey() || 'default').trim() || 'default';
+  return `${DISCOVERY_CLOSED_KEY_PREFIX}${key}`;
+}
+
+/** Persist that the user confirmed final Discovery for this project (blocks rediscovery). */
+export function markDiscoveryClosed(projectKey?: string): void {
+  try {
+    sessionStorage.setItem(discoveryClosedStorageKey(projectKey), '1');
+  } catch {
+    /* ignore */
+  }
+}
+
+export function clearDiscoveryClosed(projectKey?: string): void {
+  try {
+    sessionStorage.removeItem(discoveryClosedStorageKey(projectKey));
+  } catch {
+    /* ignore */
+  }
+}
+
+export function isDiscoveryClosed(projectKey?: string): boolean {
+  try {
+    return sessionStorage.getItem(discoveryClosedStorageKey(projectKey)) === '1';
+  } catch {
+    return false;
+  }
+}
+
 export function assistantAskedFinalDiscovery(content: string): boolean {
-  return FINAL_DISCOVERY_QUESTION_RE.test(content);
+  return FINAL_DISCOVERY_QUESTION_RE.test(String(content || ''));
 }
 
 export function assistantAskedProjectName(content: string): boolean {
@@ -44,7 +81,7 @@ export function assistantAskedDesignReferences(content: string): boolean {
 
 export function isOnboardingCompletionReply(text: string): boolean {
   const t = text.trim();
-  if (!t || t.length > 120) return false;
+  if (!t || t.length > 160) return false;
   if (ONBOARDING_READY_REPLY_RE.test(t)) return true;
   return ONBOARDING_READY_PHRASE_RE.test(t);
 }
@@ -67,15 +104,23 @@ export function detectProjectNameAnswer(
   return name;
 }
 
-/** User answered the final discovery question — next step is Master Plan + coding. */
+/**
+ * User answered the final discovery question — next step is Master Plan + coding.
+ * Looks at the last few assistant turns so a Switch-to-Agent CTA / status bubble
+ * cannot break detection.
+ */
 export function detectOnboardingBuildStart(
   userText: string,
   priorMessages: readonly { role: string; content: string }[],
 ): boolean {
-  const lastAssistant = [...priorMessages].reverse().find((m) => m.role === 'assistant');
-  if (!lastAssistant?.content?.trim()) return false;
-  if (!assistantAskedFinalDiscovery(lastAssistant.content)) return false;
-  return isOnboardingCompletionReply(userText);
+  if (!isOnboardingCompletionReply(userText)) return false;
+  const assistants = [...priorMessages]
+    .reverse()
+    .filter((m) => m.role === 'assistant' && String(m.content || '').trim());
+  for (const m of assistants.slice(0, 4)) {
+    if (assistantAskedFinalDiscovery(m.content)) return true;
+  }
+  return false;
 }
 
 /** Heuristic: user wants implementation / files, not casual Q&A. */

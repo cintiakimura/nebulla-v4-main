@@ -369,11 +369,24 @@ export function chatModeSystemAppendix(options: {
         'ACTIVE MODE: DEBUG DISCUSSION (Chat lock) — Talk through Verify → Analyze → Trace. Do not emit file fixes; ask user to switch to Agent to apply.',
       );
     }
-  } else if (hint === 'guided-onboarding' || hint === 'discovery-required' || hint === 'discovery-required-after-file') {
+  } else if (hint === 'discovery-complete-start-coding') {
+    parts.push(
+      [
+        'ACTIVE MODE: DISCOVERY COMPLETE — START BUILD (highest priority this turn)',
+        '- The user confirmed there is nothing more to add (final Discovery check).',
+        '- Do NOT ask any more questions. Do NOT restart Discovery. Do NOT brainstorm.',
+        '- Output ONLY: a complete <START_MASTERPLAN>…</END_MASTERPLAN> with all five sections, then START_CODING and <START_CODING> on their own lines.',
+        '- No visible chat prose, goodbye, or recap outside the Master Plan tags.',
+      ].join('\n'),
+    );
+  } else if (
+    discoveryRequired &&
+    (hint === 'guided-onboarding' || hint === 'discovery-required' || hint === 'discovery-required-after-file')
+  ) {
     parts.push(
       'ACTIVE MODE: DISCOVERY — Ask exactly one clear question. Follow INITIAL ONBOARDING order (goal → Project Type unless My Projects already set it → remaining info → Research Pillars → closing questions). Do not emit START_CODING until the final-check reply. Do not run Tab 2–6 interview loops yet.',
     );
-  } else if (hint && !hasAppStatusPayload) {
+  } else if (hint && !hasAppStatusPayload && hint !== 'guided-onboarding' && hint !== 'discovery-required' && hint !== 'discovery-required-after-file') {
     parts.push(`MODE_GUIDANCE: ${hint}`);
   }
 
@@ -387,7 +400,7 @@ export function chatModeSystemAppendix(options: {
     );
   }
 
-  if (discoveryRequired && mode === 'free') {
+  if (discoveryRequired && mode === 'free' && hint !== 'discovery-complete-start-coding') {
     parts.push(
       'DISCOVERY STILL REQUIRED — You may answer casually, but if the user asks to build/architecture/UI, switch to one Discovery question immediately. Do not emit START_CODING.',
     );

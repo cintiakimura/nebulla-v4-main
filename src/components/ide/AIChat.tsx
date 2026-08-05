@@ -45,11 +45,14 @@ import { setGrokCodingActive } from '../../lib/nebulaGrokCodingGate';
 import { runMasterPlanUiPipeline, runPostCodingWorkspaceSync } from '../../lib/ideArtifactSync';
 import { dispatchOpenUiStudioBeta } from '../../lib/uiStudioBetaEngine';
 import {
+  clearDiscoveryClosed,
   clearIdeWorkspaceMetaCache,
   detectBuildModeIntent,
   detectOnboardingBuildStart,
   detectProjectNameAnswer,
   fetchIdeWorkspaceMeta,
+  isDiscoveryClosed,
+  markDiscoveryClosed,
 } from '../../lib/ideWorkspaceChatContext';
 import { createProjectForCurrentSession } from '../../lib/nebulaCloud';
 import { handleSmartChatMessage, type SmartChatFilePreview } from '../../lib/smartChatHandler';
@@ -878,6 +881,7 @@ export function AIChat() {
   }, [diskProjectKey]);
 
   const startGuidedDiscovery = useCallback(() => {
+    clearDiscoveryClosed(diskProjectKey);
     const ideaPrompt = consumePendingProjectIdea();
     const projectType = consumePendingProjectType();
     if (ideaPrompt) {
@@ -894,7 +898,7 @@ export function AIChat() {
       return;
     }
     void sendChatRef.current(buildDiscoveryBootstrap(projectType));
-  }, []);
+  }, [diskProjectKey]);
 
   useEffect(() => {
     const onReset = () => {
@@ -903,12 +907,13 @@ export function AIChat() {
       chatHistoryLoadedRef.current = true;
       bootstrapStartedRef.current = false;
       setSendError(null);
+      clearDiscoveryClosed(diskProjectKey);
       // Do NOT consume guided-on-ready here. "Start with a prompt" reloads the page after
       // reset; consuming the flag on reset left the idea stranded in localStorage.
     };
     window.addEventListener('nebula-project-reset', onReset);
     return () => window.removeEventListener('nebula-project-reset', onReset);
-  }, []);
+  }, [diskProjectKey]);
 
   // Post-login: stay quiet until My Projects → New Project (or explicit guided event).
   useEffect(() => {
@@ -1109,6 +1114,10 @@ export function AIChat() {
         chatMode = smart.mode;
         codingHint = smart.codingHint;
         discoveryRequired = smart.modeMeta?.discoveryRequired ?? !masterPlanComplete;
+        // User already confirmed final Discovery — never force rediscovery on later turns.
+        if (isDiscoveryClosed(diskProjectKey) || masterPlanComplete) {
+          discoveryRequired = false;
+        }
         setMasterPlanCompleteHint(masterPlanComplete);
         if (hasAppStatusPayload && interactionModeRef.current === 'agent') {
           chatMode = 'debugging';
@@ -1243,9 +1252,22 @@ export function AIChat() {
     stickToBottomRef.current = true;
     setSending(true);
     setSendError(null);
-    const lockedChat = interactionModeRef.current === 'chat';
     const discoveryCompleteAck = detectOnboardingBuildStart(rawText, prior);
-    const onboardingBuildStart = !lockedChat && discoveryCompleteAck;
+    // Product promise: "nothing more to add" starts coding — even if the toggle is still Chat.
+    if (discoveryCompleteAck && interactionModeRef.current === 'chat') {
+      interactionModeRef.current = 'agent';
+      setAssistantInteractionMode('agent');
+      setAccessoryHint('Discovery done — switching to Agent and starting the first coding slice.');
+      window.setTimeout(() => setAccessoryHint(null), 4500);
+    }
+    if (discoveryCompleteAck) {
+      markDiscoveryClosed(diskProjectKey);
+      discoveryRequired = false;
+      chatMode = 'coding';
+      codingHint = 'discovery-complete-start-coding';
+    }
+    const lockedChat = interactionModeRef.current === 'chat';
+    const onboardingBuildStart = discoveryCompleteAck;
     const buildMode =
       !lockedChat &&
       !hasAppStatusPayload &&
@@ -1256,12 +1278,25 @@ export function AIChat() {
         interaction_mode: interactionModeRef.current,
         detector_mode: chatMode,
         build_mode: buildMode,
+        onboarding_build_start: onboardingBuildStart,
+        discovery_required: discoveryRequired,
         app_status: hasAppStatusPayload,
       });
     } catch {
       /* ignore */
     }
-    if (buildMode) {
+    if (onboardingBuildStart) {
+      beginCodingActivity(
+        'Discovery complete — saving Master Plan and starting code',
+        chatWorkSteps(),
+        {
+          subhead:
+            'Nothing more to add — writing Master Plan, then Grok Code builds the first slice.',
+          initialLog: `Discovery complete — "${rawText.trim()}"`,
+        },
+      );
+      pushActivity('Final discovery confirmed — Master Plan + START_CODING', 'info');
+    } else if (buildMode) {
       beginCodingActivity(
         'Build mode — Grok is implementing your request',
         chatWorkSteps(),
@@ -1271,17 +1306,6 @@ export function AIChat() {
         },
       );
       pushActivity(`Project: ${getBrowserProjectName().trim() || 'Untitled project'}`, 'info');
-    } else if (onboardingBuildStart) {
-      beginCodingActivity(
-        'Discovery complete — saving Master Plan and starting code',
-        chatWorkSteps(),
-        {
-          subhead:
-            'Your reply means nothing else to add. Grok will write the Master Plan, then Grok Code builds files.',
-          initialLog: `Discovery complete — "${rawText.trim()}"`,
-        },
-      );
-      pushActivity('Final discovery question answered — waiting for Grok Master Plan', 'info');
     }
 
     const projectName = getBrowserProjectName().trim() || 'Untitled project';
@@ -1405,17 +1429,6 @@ export function AIChat() {
             ? 'Discovery looks complete — starting the first coding slice in your workspace now.'
             : SHORT_CODING_GO_SUMMARY,
           timestamp: ts,
-        });
-      }
-      if (lockedChat && discoveryCompleteAck) {
-        toAppend.push({
-          id: `a-agent-${Date.now()}`,
-          role: 'assistant',
-          content:
-            'Discovery looks complete. Coding runs in **Agent** mode — switch to Agent to start the first slice.',
-          timestamp: ts,
-          showSwitchToAgentCta: true,
-          pendingAgentText: 'START_CODING — discovery complete, nothing more to add',
         });
       }
       if (toAppend.length > 0) {
