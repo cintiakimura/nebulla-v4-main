@@ -123,11 +123,17 @@ export function MyProjectsHome() {
 
   const busyStarting = Boolean(startingType) || startingIdea;
   const activeKey = getBrowserProjectKey();
-  /** Existing workspace → demote New Project hero so it doesn't fight Code / explorer. */
+  const activeName = getBrowserProjectName().trim();
+  /** Empty free-tier / default shell — keep Start prompt as the primary action. */
+  const isPlaceholderWorkspace = /^untitled(\s+project)?$/i.test(activeName || '');
+  /** Real product work in progress → demote New Project so Code / explorer stay primary. */
   const hasExistingWork =
-    workspacePaths.length > 0 ||
-    openFileTabs.length > 0 ||
-    (Boolean(activeKey) && activeKey !== 'default' && projects.length > 0);
+    !isPlaceholderWorkspace &&
+    (workspacePaths.length > 0 ||
+      openFileTabs.length > 0 ||
+      (Boolean(activeKey) && activeKey !== 'default' && projects.length > 0));
+  /** Always show goal-first hero for Untitled shells (deployed fix is behavioral + this UX). */
+  const showStartHeroFirst = !hasExistingWork || isPlaceholderWorkspace;
 
   const refreshList = useCallback(async () => {
     setLoadingList(true);
@@ -391,12 +397,18 @@ export function MyProjectsHome() {
       <section className="space-y-5">
         <div className="space-y-2">
           <h2 className="text-base font-normal tracking-tight text-foreground">
-            {hasExistingWork ? 'Start another project' : 'New Project'}
+            {isPlaceholderWorkspace
+              ? 'Start with a goal'
+              : hasExistingWork
+                ? 'Start another project'
+                : 'New Project'}
           </h2>
           <p className="max-w-xl text-sm leading-relaxed text-muted-foreground">
-            {hasExistingWork
-              ? 'Create a separate project when you are ready. Your current workspace stays in the explorer and Code tab.'
-              : 'Choose how to start, then describe what you want to build.'}
+            {isPlaceholderWorkspace
+              ? 'This workspace is still an empty Untitled shell. Paste a clear goal below — Continue runs inference-first (research → Master Plan → UI mockup → code). Free plan reuses this project slot and renames it.'
+              : hasExistingWork
+                ? 'Create a separate project when you are ready. Your current workspace stays in the explorer and Code tab.'
+                : 'Choose how to start, then describe what you want to build.'}
           </p>
         </div>
 
@@ -631,17 +643,17 @@ export function MyProjectsHome() {
   return (
     <div className="min-h-0 flex-1 overflow-auto bg-background">
       <div className="mx-auto flex w-full max-w-3xl flex-col gap-8 px-6 py-4 sm:px-10 sm:py-6">
-        {hasExistingWork ? (
+        {showStartHeroFirst ? (
           <>
-            {projectsSection}
-            {continueSection}
             {newProjectSection}
+            {continueSection}
+            {projectsSection}
           </>
         ) : (
           <>
-            {newProjectSection}
-            {continueSection}
             {projectsSection}
+            {continueSection}
+            {newProjectSection}
           </>
         )}
       </div>
