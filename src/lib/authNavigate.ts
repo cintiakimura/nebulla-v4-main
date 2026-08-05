@@ -20,7 +20,11 @@ export function goToApp(): void {
 }
 
 export function goToPricing(): void {
-  window.location.assign('/pricing');
+  window.location.assign('/payment');
+}
+
+export function goToPayment(): void {
+  window.location.assign('/payment');
 }
 
 export function readLoginNextParam(): string {

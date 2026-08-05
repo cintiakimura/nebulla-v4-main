@@ -138,6 +138,7 @@ export function IdeDashboardEmbed({
         onStartFlow={onStartFlow}
         sessionUser={sessionUser}
         publicConfig={publicConfig}
+        mode="ide-settings"
       />
     </div>
   );

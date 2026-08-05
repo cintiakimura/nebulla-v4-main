@@ -2795,7 +2795,7 @@ No approved UI code yet.
         mode: "subscription",
         line_items: [{ price: priceId, quantity: 1 }],
         success_url: `${site}/app?checkout=success`,
-        cancel_url: `${site}/pricing?canceled=1`,
+        cancel_url: `${site}/payment?canceled=1`,
         client_reference_id: uid,
         metadata: { nebula_user_id: uid, nebula_plan: plan === "power" ? "power" : "pro" },
       });

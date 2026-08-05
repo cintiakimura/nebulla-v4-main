@@ -7,7 +7,6 @@ interface LandingPageProps {
 }
 
 export function LandingPage({ onEnter }: LandingPageProps) {
-  const [loading, setLoading] = useState(false);
   const [userEmail, setUserEmail] = useState<string | null>(null);
 
   useEffect(() => {
@@ -31,8 +30,8 @@ export function LandingPage({ onEnter }: LandingPageProps) {
     }
   }, [onEnter]);
 
-  const handleCheckout = async () => {
-    onEnter();
+  const handleCheckout = () => {
+    window.location.assign('/payment');
   };
 
   return (
@@ -55,10 +54,10 @@ export function LandingPage({ onEnter }: LandingPageProps) {
             Sign in
           </a>
           <a
-            href="/pricing"
+            href="/payment"
             className="px-3 py-2 text-slate-400 hover:text-cyan-200 transition-all font-headline text-sm font-normal"
           >
-            Pricing
+            Payment
           </a>
           <button
             type="button"
@@ -308,19 +307,19 @@ export function LandingPage({ onEnter }: LandingPageProps) {
         {/* Pricing CTA */}
         <section className="nebula-landing-card nebula-landing-card--hero p-8 md:p-12 flex flex-col md:flex-row items-start md:items-center justify-between gap-8 text-left">
           <div className="flex flex-col gap-4">
-            <h2 className="text-3xl font-headline text-cyan-300 font-normal">
+            <h2 className="text-base font-normal text-cyan-300">
               Simple, transparent pricing.
             </h2>
-            <p className="text-slate-300 text-lg font-normal">
-              One tier with all features for only €19.99. No hidden fees, no credit limits.
+            <p className="text-slate-300 text-sm font-normal leading-relaxed">
+              One plan with all features for €19.99 / month. No hidden fees.
             </p>
           </div>
-          <button 
+          <button
+            type="button"
             onClick={handleCheckout}
-            disabled={loading}
-            className="px-8 py-4 bg-cyan-500/20 text-cyan-300 border border-cyan-500/50 rounded-xl hover:bg-cyan-500/30 transition-all font-headline text-lg font-normal whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed"
+            className="px-6 py-3 bg-cyan-500/20 text-cyan-300 border border-cyan-500/50 rounded-xl hover:bg-cyan-500/30 transition-all text-sm font-normal whitespace-nowrap"
           >
-            {loading ? 'Processing...' : 'Get Started'}
+            Go to payment
           </button>
         </section>
       </main>

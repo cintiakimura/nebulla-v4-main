@@ -58,6 +58,8 @@ interface DashboardProps {
   onStartFlow: (kind: 'quick' | 'devpartner' | 'github' | 'prompt' | 'upload') => void;
   sessionUser?: NebulaSessionUser | null;
   publicConfig?: NebulaPublicConfig;
+  /** IDE Key/settings pane: Secrets + DNS only (projects live on My Projects). */
+  mode?: 'full' | 'ide-settings';
 }
 
 export function Dashboard({
@@ -72,32 +74,35 @@ export function Dashboard({
   onStartFlow,
   sessionUser = null,
   publicConfig = {},
+  mode = 'full',
 }: DashboardProps) {
   const [versionHistoryOpen, setVersionHistoryOpen] = useState(false);
+  const tabs =
+    mode === 'ide-settings' ? DASH_TABS.filter((t) => t.id !== 'projects') : DASH_TABS;
+  const tab = mode === 'ide-settings' && activeTab === 'projects' ? 'secrets' : activeTab;
 
   return (
-    <div className="flex h-full flex-1 flex-col overflow-hidden rounded-lg border border-border/60 bg-card/30 backdrop-blur-sm relative">
+    <div className="flex h-full flex-1 flex-col overflow-hidden rounded-lg border border-border/60 bg-card/30 relative">
       <div className="flex h-10 shrink-0 items-center gap-1 border-b border-border/60 bg-muted/20 px-2">
-        {DASH_TABS.map((tab) => (
+        {tabs.map((t) => (
           <button
-            key={tab.id}
+            key={t.id}
             type="button"
-            onClick={() => onTabChange(tab.id)}
-            className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
-              activeTab === tab.id
+            onClick={() => onTabChange(t.id)}
+            className={`rounded-md px-3 py-1.5 text-xs font-normal transition-colors ${
+              tab === t.id
                 ? 'bg-background text-foreground shadow-sm ring-1 ring-border'
                 : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground'
             }`}
           >
-            {tab.label}
+            {t.label}
           </button>
         ))}
       </div>
 
-      {/* Dashboard Content Area */}
       <div className="flex-1 overflow-y-auto p-6">
         <div className="max-w-4xl mx-auto">
-          {activeTab === 'projects' && (
+          {mode === 'full' && tab === 'projects' && (
             <ProjectsTab
               projectName={projectName}
               onProjectNameChange={onProjectNameChange}
@@ -109,14 +114,14 @@ export function Dashboard({
               onOpenVersionHistory={() => setVersionHistoryOpen(true)}
             />
           )}
-          {activeTab === 'secrets' && (
+          {tab === 'secrets' && (
             <SecretsTab
               activeProjectKey={activeProjectKey}
               sessionUser={sessionUser}
               publicConfig={publicConfig}
             />
           )}
-          {activeTab === 'dns' && <CloudflareDnsPanel activeProjectKey={activeProjectKey} />}
+          {tab === 'dns' && <CloudflareDnsPanel activeProjectKey={activeProjectKey} />}
         </div>
       </div>
       <VersionHistoryModal open={versionHistoryOpen} onClose={() => setVersionHistoryOpen(false)} />
@@ -702,13 +707,13 @@ function SecretsTab({
       <SecretsKeysConnections user={sessionUser} config={publicConfig} />
       <div className="space-y-6 border-t border-white/10 pt-8">
         <div>
-          <h3 className="text-xl font-headline text-cyan-300 mb-1 flex items-center gap-2">
-            <Key className="w-6 h-6" aria-hidden />
+          <h3 className="text-base font-normal text-foreground mb-1 flex items-center gap-2">
+            <Key className="w-4 h-4 text-muted-foreground" aria-hidden />
             My Secrets
           </h3>
-          <p className="text-sm text-slate-500 mb-2">
+          <p className="text-sm text-muted-foreground mb-2">
             Browser-stored keys and variables for{' '}
-            <span className="font-mono text-cyan-500/80">{activeProjectKey}</span>. Reveal, copy, edit, or delete each
+            <span className="font-mono text-foreground/70">{activeProjectKey}</span>. Reveal, copy, edit, or delete each
             row.
           </p>
         </div>

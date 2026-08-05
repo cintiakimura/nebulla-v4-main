@@ -375,14 +375,7 @@ export function MyProjectsHome() {
     <>
       <section className="space-y-5">
         <div className="space-y-2">
-          <h2
-            className={cn(
-              'font-normal tracking-tight text-foreground',
-              hasExistingWork
-                ? 'text-base'
-                : 'font-headline text-2xl sm:text-3xl',
-            )}
-          >
+          <h2 className="text-base font-normal tracking-tight text-foreground">
             {hasExistingWork ? 'Start another project' : 'New Project'}
           </h2>
           <p className="max-w-xl text-sm leading-relaxed text-muted-foreground">
@@ -445,18 +438,17 @@ export function MyProjectsHome() {
         </div>
       </section>
 
-      <section className="space-y-6">
-        <div className="space-y-2">
+      <section className="space-y-4">
+        <div className="space-y-1">
           <h2 className="text-base font-normal text-foreground">
             {hasExistingWork ? 'Or choose a type for a new project' : 'Or choose a type'}
           </h2>
           <p className="max-w-xl text-sm leading-relaxed text-muted-foreground">
-            Skip the idea box — Grok will tell you it needs a few answers for the Master Plan, then
-            ask for your main goal (type already set).
+            Skip the idea box — Grok asks Master Plan questions, then your main goal.
           </p>
         </div>
 
-        <div className="grid gap-4 sm:grid-cols-3">
+        <div className="flex flex-wrap gap-2">
           {PROJECT_TYPES.map((action) => {
             const Icon = action.icon;
             const busy = startingType === action.id;
@@ -465,22 +457,16 @@ export function MyProjectsHome() {
                 key={action.id}
                 type="button"
                 disabled={busyStarting}
+                title={action.blurb}
                 onClick={() => void onStartTypedProject(action.id)}
-                className="flex min-h-[11.5rem] flex-col items-start gap-4 rounded-2xl border border-border bg-black p-5 text-left transition hover:bg-[#111111] disabled:cursor-wait disabled:opacity-60"
+                className="inline-flex items-center gap-2 rounded-full border border-border bg-black px-3 py-2 text-xs font-normal text-foreground transition hover:bg-[#111111] disabled:cursor-wait disabled:opacity-60"
               >
-                <span className="flex h-11 w-11 items-center justify-center rounded-full bg-[#111111] text-foreground/70">
-                  {busy ? (
-                    <Loader2 className="h-5 w-5 animate-spin" />
-                  ) : (
-                    <Icon className="h-5 w-5" />
-                  )}
-                </span>
-                <span className="space-y-1.5">
-                  <span className="block text-sm font-normal text-foreground">{action.title}</span>
-                  <span className="block text-xs leading-relaxed text-muted-foreground">
-                    {action.blurb}
-                  </span>
-                </span>
+                {busy ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Icon className="h-3.5 w-3.5 text-foreground/60" />
+                )}
+                {action.title}
               </button>
             );
           })}
@@ -490,22 +476,11 @@ export function MyProjectsHome() {
   );
 
   const continueSection = (
-    <section className="space-y-6">
-      <div className="space-y-2">
-        <h2
-          className={cn(
-            'font-normal text-foreground',
-            hasExistingWork ? 'font-headline text-2xl sm:text-3xl tracking-tight' : 'text-base',
-          )}
-        >
-          {hasExistingWork ? 'Continue this workspace' : 'Or continue'}
-        </h2>
-        <p className="max-w-xl text-sm leading-relaxed text-muted-foreground">
-          Open a file, pull from GitHub, or chat freely without starting a new build.
-        </p>
-      </div>
-
-      <div className="grid gap-4 sm:grid-cols-3">
+    <section className="space-y-3">
+      <h2 className="text-base font-normal text-foreground">
+        {hasExistingWork ? 'Continue this workspace' : 'Or continue'}
+      </h2>
+      <div className="flex flex-wrap gap-2">
         {continueActions.map((action) => {
           const Icon = action.icon;
           return (
@@ -513,17 +488,11 @@ export function MyProjectsHome() {
               key={action.id}
               type="button"
               onClick={action.onClick}
-              className="flex min-h-[10rem] flex-col items-start gap-4 rounded-2xl border border-border bg-black p-5 text-left transition hover:bg-[#111111]"
+              title={action.blurb}
+              className="inline-flex items-center gap-2 rounded-full border border-border bg-transparent px-3 py-2 text-xs font-normal text-muted-foreground transition hover:bg-[#111111] hover:text-foreground"
             >
-              <span className="flex h-10 w-10 items-center justify-center rounded-full bg-[#111111] text-foreground/60">
-                <Icon className="h-5 w-5" />
-              </span>
-              <span className="space-y-1.5">
-                <span className="block text-sm font-normal text-foreground">{action.title}</span>
-                <span className="block text-xs leading-relaxed text-muted-foreground">
-                  {action.blurb}
-                </span>
-              </span>
+              <Icon className="h-3.5 w-3.5" aria-hidden />
+              {action.title}
             </button>
           );
         })}
@@ -534,14 +503,7 @@ export function MyProjectsHome() {
   const projectsSection = (
     <section className="space-y-4">
       <div className="flex items-center justify-between gap-2">
-        <h2
-          className={cn(
-            'font-normal text-foreground',
-            hasExistingWork ? 'font-headline text-2xl sm:text-3xl tracking-tight' : 'text-base',
-          )}
-        >
-          Your projects
-        </h2>
+        <h2 className="text-base font-normal text-foreground">Your projects</h2>
         {loadingList ? (
           <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
         ) : (

@@ -285,13 +285,13 @@ export function UserProfilePage({
                   Current plan: <span className="text-cyan-200 font-medium">{billingLabel(user.billingTier)}</span>
                 </p>
                 <p className="text-sm text-slate-400 leading-relaxed">
-                  Free includes one active project. Upgrade for more projects and higher AI limits.
+                  One plan — €19.99 / month — unlocks full workspace and AI capacity.
                 </p>
                 <a
-                  href="/pricing"
+                  href="/payment"
                   className="inline-flex text-sm text-cyan-300/90 hover:text-cyan-200 underline-offset-2 hover:underline"
                 >
-                  View pricing &amp; upgrade →
+                  Go to payment →
                 </a>
               </section>
 

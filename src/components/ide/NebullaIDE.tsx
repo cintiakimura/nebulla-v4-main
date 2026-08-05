@@ -35,6 +35,9 @@ import { navIdToCenterPane } from '../../lib/ideCenterPanes';
 import { registerNebulaUiStudioBridge } from '../../lib/nebulaUiStudioEvents';
 import { shouldShowWelcomeOnboarding } from '../../lib/nebulaWelcomeOnboarding';
 import { cloudBlockedBannerMessage } from '../../lib/ideCloudStatus';
+import { IdeStatusStrip } from '@/components/ide/IdeStatusStrip';
+import { installOnboardingRideListeners } from '../../lib/ideOnboardingRide';
+import { markUserJumpedPhase } from '../../lib/ideProjectPhase';
 
 const EXPLORER_MIN = 160;
 const EXPLORER_MAX = 480;
@@ -212,6 +215,8 @@ function NebullaIDEShell() {
     }
     // projects / other: keep explorer preference; only collapse terminal
   }, [activeTab]);
+
+  useEffect(() => installOnboardingRideListeners(), []);
 
   useEffect(() => {
     const refreshBadge = async () => {
@@ -469,13 +474,16 @@ function NebullaIDEShell() {
         return;
       }
       if (id === 'explorer') {
+        markUserJumpedPhase();
         toggleLeftSidebar('explorer');
         return;
       }
       if (id === 'source-control') {
+        markUserJumpedPhase();
         toggleLeftSidebar('source-control');
         return;
       }
+      markUserJumpedPhase();
       const pane = navIdToCenterPane(id);
       if (pane !== 'code') openPanel(pane);
     },
@@ -570,6 +578,7 @@ function NebullaIDEShell() {
         ) : null}
 
         <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+          <IdeStatusStrip />
           <div className="flex min-h-0 flex-1 overflow-hidden">
             <IdeCenterWorkspace />
           </div>

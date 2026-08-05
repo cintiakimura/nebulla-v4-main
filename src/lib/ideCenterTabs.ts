@@ -16,8 +16,8 @@ export type CenterTab = {
 export const PANEL_LABELS: Record<IdeCenterPane, string> = {
   code: 'Code',
   preview: 'App Preview',
-  'master-plan': 'Master Plan',
-  'mind-map': 'Mind map',
+  'master-plan': 'Plan',
+  'mind-map': 'Plan',
   'ui-studio': 'UI Studio',
   'ui-studio-beta': 'UI Studio Beta',
   'source-control': 'Source Control',

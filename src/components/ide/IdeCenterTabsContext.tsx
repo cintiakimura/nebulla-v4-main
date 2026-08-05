@@ -19,6 +19,7 @@ import {
   type CenterTab,
 } from '../../lib/ideCenterTabs';
 import type { UiStudioTab } from '../../lib/nebulaUiStudioEvents';
+import { onRideCenterPaneOpened } from '../../lib/ideOnboardingRide';
 import { useIdeWorkspace } from './IdeWorkspaceContext';
 import { useLanguage } from '@/components/i18n/LanguageProvider';
 
@@ -141,7 +142,24 @@ export function IdeCenterTabsProvider({ children }: { children: ReactNode }) {
       // Search page removed — find/replace is the TopBar search icon only.
       if (pane === 'search') return;
       // DNS is not a side-nav page — open Secrets center pane; user picks DNS in the tab list.
-      const targetPane: IdeCenterPane = pane === 'dns' ? 'secrets' : pane;
+      // Mind Map merges into Plan (Master Plan surface) — same SoT, toggle view.
+      let targetPane: IdeCenterPane = pane === 'dns' ? 'secrets' : pane;
+      if (targetPane === 'mind-map') {
+        try {
+          sessionStorage.setItem('nebula_plan_view', 'mind-map');
+          window.dispatchEvent(new CustomEvent('nebula-plan-view', { detail: { view: 'mind-map' } }));
+        } catch {
+          /* ignore */
+        }
+        targetPane = 'master-plan';
+      } else if (pane === 'master-plan') {
+        try {
+          sessionStorage.setItem('nebula_plan_view', 'plan');
+          window.dispatchEvent(new CustomEvent('nebula-plan-view', { detail: { view: 'plan' } }));
+        } catch {
+          /* ignore */
+        }
+      }
       if (opts?.uiStudioTab) setUiStudioTab(opts.uiStudioTab);
       const id = panelTabId(targetPane);
       setPanelTabs((prev) => {
@@ -152,6 +170,7 @@ export function IdeCenterTabsProvider({ children }: { children: ReactNode }) {
         ];
       });
       setActiveTabId(id);
+      onRideCenterPaneOpened(targetPane);
     },
     [],
   );

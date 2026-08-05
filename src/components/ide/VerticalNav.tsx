@@ -5,7 +5,6 @@ import {
   GitBranch,
   KeyRound,
   LayoutGrid,
-  Network,
   Palette,
   Settings,
   Shield,
@@ -19,7 +18,6 @@ type NavItemId =
   | 'source-control'
   | 'projects'
   | 'master-plan'
-  | 'mind-map'
   | 'visual-ui-editor'
   | 'ui-studio-beta'
   | 'secrets'
@@ -31,7 +29,6 @@ const NAV_IDS: { id: NavItemId; icon: React.ReactNode }[] = [
   { id: 'source-control', icon: <GitBranch className="h-5 w-5" /> },
   { id: 'projects', icon: <LayoutGrid className="h-5 w-5" /> },
   { id: 'master-plan', icon: <BookMarked className="h-5 w-5" /> },
-  { id: 'mind-map', icon: <Network className="h-5 w-5" /> },
   { id: 'visual-ui-editor', icon: <Palette className="h-5 w-5" /> },
   { id: 'ui-studio-beta', icon: <Sparkles className="h-5 w-5" /> },
   { id: 'secrets', icon: <KeyRound className="h-5 w-5" /> },

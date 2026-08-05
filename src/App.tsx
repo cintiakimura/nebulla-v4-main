@@ -7,6 +7,7 @@ import { DpaPage } from './pages/DpaPage';
 import { ResetPasswordPage } from './pages/ResetPasswordPage';
 import { LoginPage } from './pages/LoginPage';
 import { PricingPage } from './pages/PricingPage';
+import { PaymentPage } from './pages/PaymentPage';
 import { goToTryFree } from './lib/authNavigate';
 
 function usePathname(): string {
@@ -29,6 +30,7 @@ export default function App() {
   if (path === '/legal/dpa' || path === '/dpa') return <DpaPage />;
   if (path === '/reset-password') return <ResetPasswordPage />;
   if (path === '/login' || path === '/signup') return <LoginPage />;
+  if (path === '/payment') return <PaymentPage />;
   if (path === '/pricing') return <PricingPage />;
   if (path === '/app' || path === '/ide') return <NebullaIDE />;
 

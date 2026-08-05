@@ -111,7 +111,6 @@ import {
   resetAppRuntimeForProject,
   shouldMarkAppStatusValidation,
 } from '../../lib/ideAppRuntimeStatus';
-import { IdeNextActionBar } from './IdeNextActionBar';
 import { postContractTelemetry } from '../../lib/contractTelemetryClient';
 import { useLanguage } from '@/components/i18n/LanguageProvider';
 import { bcp47ForLocale } from '../../lib/i18n/locales';
@@ -2217,8 +2216,6 @@ export function AIChat() {
           </span>
         </div>
       </div>
-
-      <IdeNextActionBar />
 
       {showActivityPanel ? (
         <IdeGrokActivityPanel activity={grokActivity} v0Live={v0Live || v0WatchActive} />

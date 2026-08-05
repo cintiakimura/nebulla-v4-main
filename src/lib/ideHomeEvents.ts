@@ -5,6 +5,7 @@
 
 import type { NebulaProjectType } from './nebulaProjectType';
 import { setStoredProjectType } from './nebulaProjectType';
+import { beginOnboardingRide } from './ideProjectPhase';
 
 export type { NebulaProjectType } from './nebulaProjectType';
 
@@ -58,6 +59,7 @@ export function markGuidedStartOnReady(): void {
   } catch {
     /* ignore */
   }
+  beginOnboardingRide();
 }
 
 export function consumeGuidedStartOnReady(): boolean {

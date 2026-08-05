@@ -145,7 +145,7 @@ export function SecretsKeysConnections({
   return (
     <div className="space-y-6">
       <div>
-        <h3 className="text-xl font-headline text-cyan-300 mb-1">Keys &amp; connections</h3>
+        <h3 className="text-base font-normal text-foreground mb-1">Keys &amp; connections</h3>
         <p className="text-sm text-slate-500">
           GitHub sign-in and AI keys for this workspace. Account details live under the TopBar profile (Account).
         </p>

@@ -15,14 +15,13 @@ import {
 import { lazy, Suspense } from 'react';
 import { cn } from '@/lib/utils';
 import { AppPreviewPanel } from '../AppPreviewPanel';
-import { MasterPlan } from '../MasterPlan';
 import { dispatchOpenLeftSidebar } from '../../lib/ideLeftSidebar';
 import { IdeDashboardEmbed } from './IdeDashboardEmbed';
 import { MyProjectsHome } from './MyProjectsHome';
 import { IdeVisualEditor } from './IdeVisualEditor';
 import { IdeUiStudioBeta } from './IdeUiStudioBeta';
 import { UiStudioMockupPanel } from './UiStudioMockupPanel';
-import { MindMapIdeRoute } from './MindMapIdeRoute';
+import { IdePlanPage } from './IdePlanPage';
 import { IdeSecurityScan } from './IdeSecurityScan';
 import { useIdeCenterTabs } from './IdeCenterTabsContext';
 import { useIdeWorkspace } from './IdeWorkspaceContext';
@@ -143,8 +142,7 @@ export function IdeCenterWorkspace() {
           <div className="flex h-full flex-col items-center justify-center gap-2 p-8 text-center">
             <p className="font-headline text-sm text-foreground">No editors open</p>
             <p className="max-w-sm text-xs text-muted-foreground">
-              Open a file from the explorer, or pick Master Plan, Mind map, App preview, or UI Studio from the
-              side bar.
+              Open a file from the explorer, or pick Plan, App preview, or UI Studio from the side bar.
             </p>
           </div>
         ) : (
@@ -173,14 +171,8 @@ export function IdeCenterWorkspace() {
                 hideChrome
               />
             </PaneLayer>
-            <PaneLayer visible={activePane === 'master-plan'}>
-              <MasterPlan
-                projectKey={projectKey}
-                onClose={() => closeTab(panelTabId('master-plan'))}
-              />
-            </PaneLayer>
-            <PaneLayer visible={activePane === 'mind-map'}>
-              <MindMapIdeRoute />
+            <PaneLayer visible={activePane === 'master-plan' || activePane === 'mind-map'}>
+              <IdePlanPage onClose={() => closeTab(panelTabId('master-plan'))} />
             </PaneLayer>
             <PaneLayer visible={activePane === 'ui-studio'}>
               {uiStudioTab === 'mockups' ? (
