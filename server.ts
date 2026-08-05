@@ -4999,15 +4999,36 @@ ${answer.slice(0, 8000)}`;
         const renderKeyHint = onRender
           ? ` On Render: open your web service → Environment → set MAIN_API_KEY_GROK (and optional CLAUDE_API_KEY / OPENAI_API_KEY), save, then redeploy.`
           : "";
+        const keyTail =
+          chatApiKeyOverride.length >= 4 ? chatApiKeyOverride.slice(-4) : undefined;
+        const keySourceLabel =
+          keyRes.source === "user_db"
+            ? "account"
+            : keyRes.source === "client"
+              ? "browser"
+              : "platform";
+        const keyMeta =
+          keyTail != null
+            ? ` (Nebulla used your ${keySourceLabel} key …${keyTail})`
+            : ` (Nebulla used your ${keySourceLabel} key)`;
+        const quotaLike = isGrokQuotaLimitError(completion.status, completion.error);
+        const baseError =
+          completion.status === 401
+            ? `AI provider rejected this API key (401). ${completion.error}${renderKeyHint}`
+            : completion.error;
         return res
           .status(completion.status >= 400 && completion.status < 600 ? completion.status : 502)
           .json({
-            error:
-              completion.status === 401
-                ? `AI provider rejected this API key (401). ${completion.error}${renderKeyHint}`
-                : completion.error,
+            error: quotaLike || isAuthKeyError ? `${baseError}${keyMeta}` : baseError,
             provider: completion.provider,
+            keySource: keyRes.source,
+            ...(keyTail ? { keyTail } : {}),
             ...(isAuthKeyError ? { hint: `${MAIN_AI_KEY_SETUP_HINT}${renderKeyHint}` } : {}),
+            ...(quotaLike && keyRes.source === "user_db"
+              ? {
+                  hint: "This is your Secrets/account xAI key, not Nebulla Free plan. Top up that key at console.x.ai or paste a different key with credits in Secrets.",
+                }
+              : {}),
           });
       }
 

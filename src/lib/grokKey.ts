@@ -28,7 +28,7 @@ export const PROVIDER_QUOTA_NO_BYOK_HINT =
   'No Grok key is saved on your account yet — chat is using the platform key. Open Secrets (key icon) → paste your xAI key → Save Grok key, then retry.';
 
 export const PROVIDER_QUOTA_WITH_BYOK_HINT =
-  'An account key is saved, but xAI still rejected it (quota/billing on that key). Paste a different key with credits in Secrets, or top up that xAI account.';
+  'An account key is saved, but xAI still rejected it (quota/billing on that key). Open console.x.ai → check credits/billing for the key ending in the digits shown in Secrets, or paste a different key with credits.';
 
 /** True only for Nebulla's own Free-tier meter (not xAI/Anthropic provider errors). */
 export function isNebullaFreeTierLimitError(message: string): boolean {
