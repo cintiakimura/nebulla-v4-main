@@ -2,6 +2,8 @@
 
 **Single source of truth** for Grok and the Nebula Product. Timeline pointer: **`project-workflow.md`**. Studio paths: **`nebula-ui-studio.md`**. Guardian methods: **`nebulla-project/`**. Methodology changelog: **`CHANGELOG-methodology.md`**.
 
+**Fast Prototype (additive):** inference-first draft path — **`inference-first-rules.md`**. Does **not** replace Discovery / INITIAL ONBOARDING below. Guided interview remains fully available.
+
 **Enforcement tags** on MUST rows: `doc-only` | `prompt` | `soft-gate` | `hard-gate`  
 (`soft-gate` / `hard-gate` = product validators behind `MASTER_PLAN_STRICT=off|warn|strict` — Phase C; until then treat as `prompt` + law.)
 

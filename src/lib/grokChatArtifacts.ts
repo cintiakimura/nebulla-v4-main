@@ -379,6 +379,19 @@ export function chatModeSystemAppendix(options: {
         '- No visible chat prose, goodbye, or recap outside the Master Plan tags.',
       ].join('\n'),
     );
+  } else if (hint === 'fast-prototype') {
+    parts.push(
+      [
+        'ACTIVE MODE: FAST PROTOTYPE (inference-first — additive; Guided interview OFF)',
+        '- Law: nebula-project/inference-first-rules.md — single behavioral script. Do not skip or reorder steps.',
+        '- Sequence: Categorize → Research → Map → Analyze → Draft → Build → Present → Refine.',
+        '- Required files (Create if missing): nebula-project/fast-prototype-memory.md, category-classification.md, industry-standards.md, competitor-research.md, Master Plan, nebula-ui-studio/ui-brief.md.',
+        '- Never invent competitors, studies, or statistics. Ask only when a step is blocked.',
+        '- Do not START_CODING before Step 8 (ui-brief) is complete. Foundation slice only for Step 9.1.',
+        '- Anti-amnesia: read working files before acting; do not restart Step 3.1 if a valid draft exists.',
+        '- Core tags / file apply / UI Studio Beta / Guided path unchanged when this mode is off.',
+      ].join('\n'),
+    );
   } else if (
     discoveryRequired &&
     (hint === 'guided-onboarding' || hint === 'discovery-required' || hint === 'discovery-required-after-file')

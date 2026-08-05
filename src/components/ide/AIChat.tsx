@@ -24,9 +24,18 @@ import { sendIdeAssistantGrokTurn } from '../../lib/ideAssistantGrokChat';
 import {
   conversationEntriesToIdeMessages,
   buildDiscoveryBootstrap,
+  buildFastPrototypeBootstrap,
   buildIdeaDiscoveryBootstrap,
+  FAST_PROTOTYPE_BOOTSTRAP_PREFIX,
   isHiddenBootstrapUserMessage,
 } from '../../lib/ideChatBootstrap';
+import {
+  clearStoredStartMode,
+  consumePendingStartMode,
+  detectFastPrototypeIntent,
+  isFastPrototypeMode,
+  setStoredStartMode,
+} from '../../lib/ideStartMode';
 import { fetchConversationLogEntries } from '../../lib/conversationLogClient';
 import {
   formatAssistantForIdeChatDisplay,
@@ -882,8 +891,33 @@ export function AIChat() {
 
   const startGuidedDiscovery = useCallback(() => {
     clearDiscoveryClosed(diskProjectKey);
+    const startMode = consumePendingStartMode();
+    setStoredStartMode(startMode, diskProjectKey);
     const ideaPrompt = consumePendingProjectIdea();
     const projectType = consumePendingProjectType();
+
+    if (startMode === 'fast_prototype') {
+      // Fast Prototype drafts + codes — Agent on; do not force Guided rediscovery.
+      markDiscoveryClosed(diskProjectKey);
+      if (interactionModeRef.current === 'chat') {
+        interactionModeRef.current = 'agent';
+        setAssistantInteractionMode('agent');
+      }
+      if (ideaPrompt) {
+        const stamp = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+        const visibleIdea: Message = {
+          id: `u-idea-${Date.now()}`,
+          role: 'user',
+          content: ideaPrompt,
+          timestamp: stamp,
+        };
+        setMessages([visibleIdea]);
+        messagesRef.current = [visibleIdea];
+      }
+      void sendChatRef.current(buildFastPrototypeBootstrap(ideaPrompt, projectType));
+      return;
+    }
+
     if (ideaPrompt) {
       const stamp = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
       const visibleIdea: Message = {
@@ -898,7 +932,7 @@ export function AIChat() {
       return;
     }
     void sendChatRef.current(buildDiscoveryBootstrap(projectType));
-  }, [diskProjectKey]);
+  }, [diskProjectKey, setAssistantInteractionMode]);
 
   useEffect(() => {
     const onReset = () => {
@@ -908,6 +942,7 @@ export function AIChat() {
       bootstrapStartedRef.current = false;
       setSendError(null);
       clearDiscoveryClosed(diskProjectKey);
+      clearStoredStartMode(diskProjectKey);
       // Do NOT consume guided-on-ready here. "Start with a prompt" reloads the page after
       // reset; consuming the flag on reset left the idea stranded in localStorage.
     };
@@ -1118,6 +1153,33 @@ export function AIChat() {
         if (isDiscoveryClosed(diskProjectKey) || masterPlanComplete) {
           discoveryRequired = false;
         }
+        // Fast Prototype (additive): never force Guided rediscovery; activate on clear brief.
+        const fastIntent = detectFastPrototypeIntent(rawText, {
+          masterPlanComplete,
+          hasAppStatusPayload: /\[APP_STATUS_DEBUG\]/i.test(rawText),
+        });
+        if (fastIntent) {
+          setStoredStartMode('fast_prototype', diskProjectKey);
+          markDiscoveryClosed(diskProjectKey);
+          if (interactionModeRef.current === 'chat') {
+            interactionModeRef.current = 'agent';
+            setAssistantInteractionMode('agent');
+          }
+          discoveryRequired = false;
+          if (chatMode !== 'debugging' && chatMode !== 'file') {
+            chatMode = 'coding';
+            codingHint = 'fast-prototype';
+          }
+        } else if (isFastPrototypeMode(diskProjectKey) && !masterPlanComplete) {
+          discoveryRequired = false;
+          if (
+            codingHint === 'discovery-required' ||
+            codingHint === 'guided-onboarding' ||
+            codingHint === 'discovery-required-after-file'
+          ) {
+            codingHint = 'fast-prototype';
+          }
+        }
         setMasterPlanCompleteHint(masterPlanComplete);
         if (hasAppStatusPayload && interactionModeRef.current === 'agent') {
           chatMode = 'debugging';
@@ -1163,6 +1225,10 @@ export function AIChat() {
       } catch {
         /* fall through to normal Grok / Master Plan / Go chat */
       }
+    } else if (rawText.trim().startsWith(FAST_PROTOTYPE_BOOTSTRAP_PREFIX)) {
+      discoveryRequired = false;
+      codingHint = 'fast-prototype';
+      chatMode = 'coding';
     }
 
     // Fast project creation from chat ("Create a new project: ...")
@@ -1268,11 +1334,14 @@ export function AIChat() {
     }
     const lockedChat = interactionModeRef.current === 'chat';
     const onboardingBuildStart = discoveryCompleteAck;
+    const fastPrototypeTurn =
+      codingHint === 'fast-prototype' ||
+      rawText.trim().startsWith(FAST_PROTOTYPE_BOOTSTRAP_PREFIX);
     const buildMode =
       !lockedChat &&
       !hasAppStatusPayload &&
-      (detectBuildModeIntent(rawText) || onboardingBuildStart);
-    const showWorkActivity = buildMode || onboardingBuildStart;
+      (detectBuildModeIntent(rawText) || onboardingBuildStart || fastPrototypeTurn);
+    const showWorkActivity = buildMode || onboardingBuildStart || fastPrototypeTurn;
     try {
       console.info('[AIChat] turn', {
         interaction_mode: interactionModeRef.current,
@@ -1296,6 +1365,17 @@ export function AIChat() {
         },
       );
       pushActivity('Final discovery confirmed — Master Plan + START_CODING', 'info');
+    } else if (fastPrototypeTurn) {
+      beginCodingActivity(
+        'Fast Prototype — inferring standards and drafting the first build',
+        chatWorkSteps(),
+        {
+          subhead:
+            'Industry defaults → draft Master Plan (assumptions labeled) → Foundation slice.',
+          initialLog: 'Fast Prototype mode — inference-first (Guided interview skipped)',
+        },
+      );
+      pushActivity('Fast Prototype — drafting Master Plan from inferred standards', 'info');
     } else if (buildMode) {
       beginCodingActivity(
         'Build mode — Grok is implementing your request',
@@ -1408,6 +1488,7 @@ export function AIChat() {
           hasGrokFileBlocks(raw) ||
           isCodingIntent(masterPlanSource) ||
           onboardingBuildStart ||
+          fastPrototypeTurn ||
           shortCodingNudge);
       const spoken = stripAssistantTagsForVoice(
         shortCodingNudge && !displayText.trim() ? SHORT_CODING_GO_SUMMARY : displayText,
@@ -1513,26 +1594,32 @@ export function AIChat() {
               onProgress: codingActivityRef.current ? pushActivity : undefined,
             })
           : { ran: false };
-        // No Go button: Discovery "nothing more to add" (or legacy "press Go" nudge) starts coding.
+        // No Go button: Discovery complete / Fast Prototype / legacy nudge starts coding.
         if (
           !coding.ran &&
           agentAllowed &&
-          (onboardingBuildStart || shortCodingNudge)
+          (onboardingBuildStart || fastPrototypeTurn || shortCodingNudge)
         ) {
           if (!codingActivityRef.current) {
             beginCodingActivity('Starting code — first slice', goWorkSteps(), {
               subhead: onboardingBuildStart
                 ? 'Nothing more to add — Master Plan saved, Grok Code building files.'
-                : 'Starting Grok Code for the next slice.',
+                : fastPrototypeTurn
+                  ? 'Fast Prototype draft ready — Grok Code building Foundation.'
+                  : 'Starting Grok Code for the next slice.',
               initialLog: onboardingBuildStart
                 ? 'Discovery complete — auto START_CODING'
-                : 'Auto coding pass (no Go button)',
+                : fastPrototypeTurn
+                  ? 'Fast Prototype — auto START_CODING'
+                  : 'Auto coding pass (no Go button)',
             });
           }
           pushActivity(
             onboardingBuildStart
               ? 'Nothing more to add — launching Go Code pipeline'
-              : 'START_CODING — launching Go Code pipeline',
+              : fastPrototypeTurn
+                ? 'Fast Prototype — launching Go Code pipeline'
+                : 'START_CODING — launching Go Code pipeline',
             'info',
           );
           const go = await runGoCodeAndApply({

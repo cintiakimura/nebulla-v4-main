@@ -18,6 +18,9 @@ const BOOTSTRAP_PREFIX = "I'm ready. Follow project-execution-rules.md INITIAL O
 /** Prefix for idea-prompt guided start (hidden from chat transcript). */
 export const IDEA_DISCOVERY_BOOTSTRAP_PREFIX = 'IDEA PROMPT DISCOVERY.';
 
+/** Prefix for Fast Prototype (inference-first) — hidden from chat transcript. */
+export const FAST_PROTOTYPE_BOOTSTRAP_PREFIX = 'FAST PROTOTYPE MODE.';
+
 /**
  * Bootstrap for guided discovery. When project type was chosen on My Projects,
  * instruct Grok to skip the project-type question and ask only the main goal first.
@@ -65,6 +68,41 @@ export function buildIdeaDiscoveryBootstrap(
   );
 }
 
+/**
+ * Fast Prototype (additive): infer industry defaults, draft Master Plan with labeled
+ * assumptions, then START_CODING Foundation — skip long Guided interview.
+ * Law: nebula-project/inference-first-rules.md
+ */
+export function buildFastPrototypeBootstrap(
+  idea?: string | null,
+  projectType?: NebulaProjectType | null,
+): string {
+  const trimmed = (idea || '').trim().slice(0, 4000);
+  const typeClause = projectType
+    ? `Platform already chosen: **${projectType}**. Use it. Do NOT ask project type.`
+    : `Platform unknown — infer conservatively from the goal (prefer Web App unless mobile/kids/on-the-go is clear). State the assumption explicitly. Ask at most ONE question only if platform truly cannot be inferred.`;
+
+  const goalBlock = trimmed
+    ? `User goal / brief:\n"""\n${trimmed}\n"""\n\n`
+    : `User chose Fast Prototype without a written goal yet. Ask exactly ONE question: the main goal (exact wording from INITIAL ONBOARDING goal question). After they answer, do not interview further — infer and draft.\n\n`;
+
+  return (
+    `${FAST_PROTOTYPE_BOOTSTRAP_PREFIX} Follow nebula-project/inference-first-rules.md EXACTLY (additive; do NOT run Guided Discovery interview). ` +
+    `Do not skip or reorder steps. Complete each step and write its required file output before the next. ${typeClause}\n\n` +
+    goalBlock +
+    `This turn — execute Steps 2.2 → 8.1 in order via \`\`\`file:nebula-project/…\`\`\` blocks and Master Plan tags:\n` +
+    `2.2 Write nebula-project/fast-prototype-memory.md (mode, activation reason, timestamp, goal).\n` +
+    `3.1–3.2 Categorize → nebula-project/category-classification.md (if confidence low: ONE question and stop).\n` +
+    `4.1–4.2 Research workspace + industry-standards.md.\n` +
+    `5.1–5.3 Competitor list (5–10 real names only; never invent) + feature map + evidence in competitor-research.md.\n` +
+    `6.1–6.2 UI/UX patterns + final standards package (validated common pattern | assumption).\n` +
+    `7.1–7.6 Draft all five Master Plan sections inside <START_MASTERPLAN>…</END_MASTERPLAN>; list assumptions in fast-prototype-memory.md.\n` +
+    `8.1 Write nebula-ui-studio/ui-brief.md from §4 + §5.\n` +
+    `Then emit START_CODING / <START_CODING> for Step 9.1 Foundation slice only (shell, routing, layout, tokens). Do not implement all features.\n` +
+    `End with a short Step 10.1 user summary (category, assumptions, main pages). Prefer coherent first draft over interrogation.`
+  );
+}
+
 export type IdeChatMessage = {
   id: string;
   role: 'user' | 'assistant';
@@ -101,6 +139,7 @@ export function isHiddenBootstrapUserMessage(text: string): boolean {
   if (t === IDE_CHAT_FAST_PROJECT_BOOTSTRAP) return true;
   if (t.startsWith(BOOTSTRAP_PREFIX)) return true;
   if (t.startsWith(IDEA_DISCOVERY_BOOTSTRAP_PREFIX)) return true;
+  if (t.startsWith(FAST_PROTOTYPE_BOOTSTRAP_PREFIX)) return true;
   if (t.startsWith('FAST PROJECT MODE.')) return true;
   return false;
 }

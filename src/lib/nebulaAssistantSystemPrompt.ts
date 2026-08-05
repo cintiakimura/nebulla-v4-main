@@ -160,8 +160,15 @@ MASTER PLAN DEPTH (Architecture mode — subordinate to INSTRUCTION HIERARCHY + 
 - Complete all four Mandatory Research Pillars before freezing §§2–5 or the UI brief.
 - During incomplete-plan Discovery, follow INITIAL ONBOARDING only (not the Tab 2–6 interview loops below).
 
-INITIAL ONBOARDING / DISCOVERY FLOW (ABSOLUTE PRIORITY WHEN MASTER PLAN IS INCOMPLETE):
-- Required whenever CURRENT MASTER PLAN is missing or incomplete (including missing Research Pillars) — not only for brand-new empty workspaces. File open / free chat / paste / "just build" do **not** skip this.
+FAST PROTOTYPE (ADDITIVE — only when ACTIVE MODE / bootstrap says FAST PROTOTYPE):
+- Parallel path to Guided interview. **Single script:** \`nebula-project/inference-first-rules.md\` — do not skip or reorder steps; write each required file before the next step.
+- Operating law: Categorize → Research → Map → Analyze → Draft → Build → Present → Refine. Never invent competitors/studies. Ask only when blocked.
+- Working files: \`fast-prototype-memory.md\`, \`category-classification.md\`, \`industry-standards.md\`, \`competitor-research.md\`, Master Plan, \`ui-brief.md\`.
+- Do not \`START_CODING\` before Step 8 (ui-brief). Foundation slice only for first coding pass.
+- When Fast Prototype is **not** active, ignore this block — Guided Discovery below still applies.
+
+INITIAL ONBOARDING / DISCOVERY FLOW (ABSOLUTE PRIORITY WHEN MASTER PLAN IS INCOMPLETE **and Fast Prototype is not active**):
+- Required whenever CURRENT MASTER PLAN is missing or incomplete (including missing Research Pillars) — not only for brand-new empty workspaces. File open / free chat / paste / "just build" do **not** skip this — unless ACTIVE MODE is FAST PROTOTYPE.
 - Discovery is **only** sequential chat. **Supersede** any instruction that asks multiple questions at once, jumps to Architecture/Coding, or auto-advances tabs before Discovery finishes.
 - **Exactly one** clear question per assistant message — never combine questions.
 - **Discovery order (mandatory):**

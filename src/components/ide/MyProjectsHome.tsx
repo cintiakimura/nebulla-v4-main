@@ -35,6 +35,10 @@ import {
   setPendingProjectType,
   type NebulaProjectType,
 } from '../../lib/ideHomeEvents';
+import {
+  setPendingStartMode,
+  type IdeStartMode,
+} from '../../lib/ideStartMode';
 import { resetProjectFromScratch } from '../../lib/ideProjectReset';
 import { ChatFilePreview } from './ChatFilePreview';
 import { openGitHubFile, openLocalFile } from '../../lib/fileOperations';
@@ -121,6 +125,8 @@ export function MyProjectsHome() {
   const [ideaType, setIdeaType] = useState<NebulaProjectType | null>(null);
   const [ideaError, setIdeaError] = useState('');
   const [startingIdea, setStartingIdea] = useState(false);
+  /** Additive: Fast Prototype vs Full architecture interview (default Guided). */
+  const [startMode, setStartMode] = useState<IdeStartMode>('guided');
 
   const busyStarting = Boolean(startingType) || startingIdea;
   const activeKey = getBrowserProjectKey();
@@ -239,6 +245,8 @@ export function MyProjectsHome() {
       if (busyStarting) return;
       setStartingType(type);
       try {
+        // Type chips under "Or choose a type" always start Guided interview.
+        setPendingStartMode('guided');
         markGuidedStartOnReady();
         await resetProjectFromScratch(type);
         await ensureProjectOrReuse(type);
@@ -259,17 +267,21 @@ export function MyProjectsHome() {
     if (busyStarting) return;
     const idea = ideaInput.trim();
     if (idea.length < 8) {
-      setIdeaError('Describe your idea in a sentence or two (at least a few words).');
+      setIdeaError(
+        startMode === 'fast_prototype'
+          ? 'Add a short goal (what the app does) — Fast Prototype needs at least one clear sentence.'
+          : 'Describe your idea in a sentence or two (at least a few words).',
+      );
       return;
     }
     setIdeaError('');
     setStartingIdea(true);
     try {
       const label = shortNameFromIdea(idea);
-      // Persist idea/type BEFORE reset/reload. Reset used to consume the guided-start
-      // flag before setPendingProjectIdea ran, so the prompt vanished and chat never saw it.
+      // Persist idea/type/mode BEFORE reset/reload so chat sees them after reload.
       setPendingProjectIdea(idea);
       if (ideaType) setPendingProjectType(ideaType);
+      setPendingStartMode(startMode);
       markGuidedStartOnReady();
       await resetProjectFromScratch(label);
       await ensureProjectOrReuse(label);
@@ -280,7 +292,7 @@ export function MyProjectsHome() {
       const msg = err instanceof Error ? err.message : 'Could not start the project. Try again.';
       setIdeaError(msg);
     }
-  }, [busyStarting, ideaInput, ideaType, ensureProjectOrReuse]);
+  }, [busyStarting, ideaInput, ideaType, ensureProjectOrReuse, startMode]);
 
   const onJustChat = useCallback(() => {
     dispatchStartFreeChat();
@@ -383,14 +395,52 @@ export function MyProjectsHome() {
           <p className="max-w-xl text-sm leading-relaxed text-muted-foreground">
             {hasExistingWork
               ? 'Create a separate project when you are ready. Your current workspace stays in the explorer and Code tab.'
-              : 'Describe what you want to build, then Continue. Your prompt moves into chat — Grok summarizes it and only asks for what is still missing.'}
+              : 'Choose how to start, then describe what you want to build.'}
           </p>
         </div>
 
         <div className="rounded-2xl border border-border bg-black p-5">
-          <label htmlFor="nebula-project-idea" className="flex items-center gap-2 text-sm text-foreground">
+          <p className="text-sm text-foreground">How do you want to start?</p>
+          <div className="mt-3 grid gap-2 sm:grid-cols-2">
+            <button
+              type="button"
+              disabled={busyStarting}
+              aria-pressed={startMode === 'fast_prototype'}
+              onClick={() => setStartMode('fast_prototype')}
+              className={cn(
+                'rounded-xl border px-3 py-3 text-left transition',
+                startMode === 'fast_prototype'
+                  ? 'border-foreground/40 bg-[#111111] text-foreground'
+                  : 'border-border text-muted-foreground hover:bg-[#111111] hover:text-foreground',
+              )}
+            >
+              <span className="block text-xs font-medium text-foreground">Fast Prototype</span>
+              <span className="mt-1 block text-[11px] leading-relaxed">
+                Infer industry standards and generate a first draft. You can edit assumptions after.
+              </span>
+            </button>
+            <button
+              type="button"
+              disabled={busyStarting}
+              aria-pressed={startMode === 'guided'}
+              onClick={() => setStartMode('guided')}
+              className={cn(
+                'rounded-xl border px-3 py-3 text-left transition',
+                startMode === 'guided'
+                  ? 'border-foreground/40 bg-[#111111] text-foreground'
+                  : 'border-border text-muted-foreground hover:bg-[#111111] hover:text-foreground',
+              )}
+            >
+              <span className="block text-xs font-medium text-foreground">Full architecture interview</span>
+              <span className="mt-1 block text-[11px] leading-relaxed">
+                Deeper guided Master Plan questions — one at a time (existing path).
+              </span>
+            </button>
+          </div>
+
+          <label htmlFor="nebula-project-idea" className="mt-5 flex items-center gap-2 text-sm text-foreground">
             <Sparkles className="h-4 w-4 text-foreground/60" aria-hidden />
-            Start with a prompt
+            {startMode === 'fast_prototype' ? 'Short goal / brief' : 'Start with a prompt'}
           </label>
           <textarea
             id="nebula-project-idea"
@@ -401,11 +451,17 @@ export function MyProjectsHome() {
             }}
             rows={hasExistingWork ? 3 : 4}
             disabled={busyStarting}
-            placeholder="e.g. A mobile app for freelancers to track invoices and get paid reminders…"
+            placeholder={
+              startMode === 'fast_prototype'
+                ? 'e.g. A mobile education app for kids to practice reading…'
+                : 'e.g. A mobile app for freelancers to track invoices and get paid reminders…'
+            }
             className="mt-3 w-full resize-y rounded-xl border border-border bg-[#0a0a0a] px-3 py-2.5 text-sm leading-relaxed text-foreground outline-none ring-primary/25 placeholder:text-muted-foreground/70 focus:ring disabled:opacity-60"
           />
           <p className="mt-3 text-xs text-muted-foreground">
-            Continue clears this box on purpose — the full prompt appears in chat. Optional type so we skip that question later:
+            {startMode === 'fast_prototype'
+              ? 'Fast Prototype will infer industry standards and generate a first draft. Optional platform chip below.'
+              : 'Continue moves your prompt into chat for the guided interview. Optional type so we skip that question later:'}
           </p>
           <div className="mt-2 flex flex-wrap gap-2">
             {PROJECT_TYPES.map((t) => (
@@ -446,7 +502,7 @@ export function MyProjectsHome() {
             {hasExistingWork ? 'Or choose a type for a new project' : 'Or choose a type'}
           </h2>
           <p className="max-w-xl text-sm leading-relaxed text-muted-foreground">
-            Skip the idea box — Grok asks Master Plan questions, then your main goal.
+            Full architecture interview — skip the idea box; Grok asks Master Plan questions one at a time.
           </p>
         </div>
 
