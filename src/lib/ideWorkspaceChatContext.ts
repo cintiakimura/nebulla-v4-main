@@ -22,7 +22,11 @@ export const DESIGN_REF_QUESTION_RE =
 
 /** Short replies to the onboarding final question ("anything else to add?"). */
 const ONBOARDING_READY_REPLY_RE =
-  /^(?:no(?:pe|thing(?:\s+else)?)?|nah|nothing(?:\s+else)?|that's\s+all|that\s+is\s+all|all\s+good|go\s+ahead|start(?:\s+building)?|yes(?:\s+please)?|yep|yeah|ok(?:ay)?|looks?\s+good|good\s+to\s+go|proceed|let'?s\s+go|build\s+it|ready|continue|sounds?\s+good)[.!?\s]*$/i;
+  /^(?:no(?:pe|thing(?:\s+(?:else|more)(?:\s+to\s+add)?)?)?|nah|nothing(?:\s+(?:else|more)(?:\s+to\s+add)?)?|there(?:'s|\s+is)\s+nothing(?:\s+(?:else|more)(?:\s+to\s+add)?)?|that's\s+all|that\s+is\s+all|all\s+good|go\s+ahead|start(?:\s+building)?|yes(?:\s+please)?|yep|yeah|ok(?:ay)?|looks?\s+good|good\s+to\s+go|proceed|let'?s\s+go|build\s+it|ready|continue|sounds?\s+good)[.!?\s]*$/i;
+
+/** Phrase forms that still mean Discovery is done (slightly longer than the regex above). */
+const ONBOARDING_READY_PHRASE_RE =
+  /\b(?:there(?:'s|\s+is)\s+)?nothing(?:\s+(?:else|more))\s+to\s+add\b|\bno\s+more\s+to\s+add\b|\bthat(?:'s|\s+is)\s+all\b/i;
 
 const NONE_REPLY_RE = /^(?:no(?:ne)?|nah|nothing|n\/a|skip)[.!?\s]*$/i;
 
@@ -40,8 +44,9 @@ export function assistantAskedDesignReferences(content: string): boolean {
 
 export function isOnboardingCompletionReply(text: string): boolean {
   const t = text.trim();
-  if (!t || t.length > 80) return false;
-  return ONBOARDING_READY_REPLY_RE.test(t);
+  if (!t || t.length > 120) return false;
+  if (ONBOARDING_READY_REPLY_RE.test(t)) return true;
+  return ONBOARDING_READY_PHRASE_RE.test(t);
 }
 
 export function isDesignReferenceSkipReply(text: string): boolean {
@@ -79,7 +84,7 @@ export function detectBuildModeIntent(text: string): boolean {
   if (!t) return false;
   if (/\bSTART_CODING\b/i.test(t)) return true;
   const buildRe =
-    /\b(build|implement|scaffold|create (the |a )?(app|feature|page|api|component)|add (a |the )?(feature|page|route|endpoint)|fix (the |this )?bug|write (the )?code|generate files?|make (the )?changes?|update (the )?code|ship|deploy|run go)\b/i;
+    /\b(build(?:\s+next)?|implement|scaffold|create (the |a )?(app|feature|page|api|component)|add (a |the )?(feature|page|route|endpoint)|fix (the |this )?bug|write (the )?code|generate files?|make (the )?changes?|update (the )?code|ship|deploy|start_coding|continue\s+anyway)\b/i;
   return buildRe.test(t);
 }
 

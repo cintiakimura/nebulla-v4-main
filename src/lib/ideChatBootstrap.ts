@@ -55,9 +55,13 @@ export function buildIdeaDiscoveryBootstrap(
     `${IDEA_DISCOVERY_BOOTSTRAP_PREFIX} Follow project-execution-rules.md Discovery (architecture-first). ${typeClause}\n\n` +
     `User's idea prompt:\n"""\n${trimmed}\n"""\n\n` +
     `Your first reply MUST:\n` +
-    `1) A short "Here's what I understood" summary in bullets (goal, users, main features, constraints) — only what the prompt clearly implies; say briefly if something is vague or missing.\n` +
+    `1) A short "Here's what I understood" summary in bullets (goal, users, main features, constraints, cited links) — only what the prompt clearly implies; say briefly if something is vague or missing.\n` +
     `2) Then ask exactly ONE missing required discovery question (Discovery order: main goal if still unclear → project type if unknown → remaining necessary info one at a time → research pillars later).\n` +
-    `Skip anything the prompt already answered clearly. Do NOT write Master Plan tags, code fences, or multiple questions. Do NOT emit <START_MASTERPLAN> or <START_CODING> until Discovery is complete.`
+    `Skip anything the prompt already answered clearly — including goals, users, features, auth, privacy, routes/pages, and study/research notes. ` +
+    `URLs in the prompt are user citations: do NOT say you cannot browse or refuse to proceed because of links. ` +
+    `Use the surrounding text they wrote about the study; treat the URL as a reference to keep in the Master Plan. ` +
+    `Do NOT re-ask for facts already stated. Do NOT write Master Plan tags, code fences, or multiple questions. ` +
+    `Do NOT emit <START_MASTERPLAN> or <START_CODING> until Discovery is complete.`
   );
 }
 

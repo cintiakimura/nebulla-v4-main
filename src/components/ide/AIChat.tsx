@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Bot, Hand, Loader2, Mic, Paperclip, Rocket, Send, User, Wrench } from 'lucide-react';
+import { Bot, Hand, Loader2, Mic, Paperclip, Send, User, Wrench } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { fetchSessionUser, syncActiveCloudProjectFromSession, upsertCloudProject } from '../../lib/nebulaCloud';
 import {
@@ -62,6 +62,7 @@ import {
   consumeGuidedStartOnReady,
   consumePendingProjectIdea,
   consumePendingProjectType,
+  peekPendingProjectIdea,
   NEBULA_CHAT_OPEN_FILE,
   NEBULA_START_FREE_CHAT,
   NEBULA_START_GUIDED_CHAT,
@@ -160,9 +161,6 @@ type Message = {
   timestamp: string;
   /** Rich file preview from Smart Chat Handler (File mode) */
   filePreview?: SmartChatFilePreview;
-  /** Short "Press Go" style reply — show prominent Go CTA */
-  showGoCta?: boolean;
-  goSummary?: string;
   /** Chat mode blocked coding — show Switch to Agent CTA */
   showSwitchToAgentCta?: boolean;
   /** Pending user text to re-send after switching to Agent */
@@ -905,23 +903,23 @@ export function AIChat() {
       chatHistoryLoadedRef.current = true;
       bootstrapStartedRef.current = false;
       setSendError(null);
-      // New Project flow marks guided start; do not auto-interview on every reset.
-      if (serverHasGrokKey === true && consumeGuidedStartOnReady()) {
-        bootstrapStartedRef.current = true;
-        startGuidedDiscovery();
-      }
+      // Do NOT consume guided-on-ready here. "Start with a prompt" reloads the page after
+      // reset; consuming the flag on reset left the idea stranded in localStorage.
     };
     window.addEventListener('nebula-project-reset', onReset);
     return () => window.removeEventListener('nebula-project-reset', onReset);
-  }, [serverHasGrokKey, startGuidedDiscovery]);
+  }, []);
 
   // Post-login: stay quiet until My Projects → New Project (or explicit guided event).
   useEffect(() => {
     if (serverHasGrokKey !== true) return;
     if (!chatHistoryLoadedRef.current) return;
-    if (messagesRef.current.length > 0) return;
     if (bootstrapStartedRef.current || sendingRef.current) return;
-    if (!consumeGuidedStartOnReady()) return;
+    // Prefer pending idea from "Start with a prompt" even if chat log restored noise.
+    const pendingIdea = peekPendingProjectIdea();
+    const guided = consumeGuidedStartOnReady();
+    if (!guided && !pendingIdea) return;
+    if (!pendingIdea && messagesRef.current.length > 0) return;
     bootstrapStartedRef.current = true;
     startGuidedDiscovery();
   }, [serverHasGrokKey, messages.length, diskProjectKey, startGuidedDiscovery]);
@@ -1246,8 +1244,12 @@ export function AIChat() {
     setSending(true);
     setSendError(null);
     const lockedChat = interactionModeRef.current === 'chat';
-    const buildMode = !lockedChat && !hasAppStatusPayload && detectBuildModeIntent(rawText);
-    const onboardingBuildStart = !lockedChat && detectOnboardingBuildStart(rawText, prior);
+    const discoveryCompleteAck = detectOnboardingBuildStart(rawText, prior);
+    const onboardingBuildStart = !lockedChat && discoveryCompleteAck;
+    const buildMode =
+      !lockedChat &&
+      !hasAppStatusPayload &&
+      (detectBuildModeIntent(rawText) || onboardingBuildStart);
     const showWorkActivity = buildMode || onboardingBuildStart;
     try {
       console.info('[AIChat] turn', {
@@ -1375,35 +1377,45 @@ export function AIChat() {
 
       const { displayText, hadCodingTag } = formatAssistantForIdeChatDisplay(raw);
       const agentAllowed = interactionModeRef.current === 'agent';
+      const shortCodingNudge = isShortCodingGoNudge(displayText || raw);
       const willCode =
         agentAllowed &&
-        (hadCodingTag || hasGrokFileBlocks(raw) || isCodingIntent(masterPlanSource));
-      const userWantsCode = agentAllowed && (isCodingIntent(text) || willCode);
-      const shortGoNudge =
-        userWantsCode &&
-        !hasGrokFileBlocks(raw) &&
-        isShortCodingGoNudge(displayText || raw);
-
+        (hadCodingTag ||
+          hasGrokFileBlocks(raw) ||
+          isCodingIntent(masterPlanSource) ||
+          onboardingBuildStart ||
+          shortCodingNudge);
       const spoken = stripAssistantTagsForVoice(
-        shortGoNudge ? SHORT_CODING_GO_SUMMARY : displayText,
+        shortCodingNudge && !displayText.trim() ? SHORT_CODING_GO_SUMMARY : displayText,
       );
       const ts = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
       const toAppend: Message[] = [];
-      if (shortGoNudge) {
-        toAppend.push({
-          id: `a-${Date.now()}`,
-          role: 'assistant',
-          content: SHORT_CODING_GO_SUMMARY,
-          timestamp: ts,
-          showGoCta: true,
-          goSummary: displayText.trim() || 'Press Go to generate files in your workspace.',
-        });
-      } else if (displayText.trim()) {
+      if (displayText.trim()) {
         toAppend.push({
           id: `a-${Date.now()}`,
           role: 'assistant',
           content: displayText.trim(),
           timestamp: ts,
+        });
+      } else if (willCode && (onboardingBuildStart || shortCodingNudge)) {
+        toAppend.push({
+          id: `a-${Date.now()}`,
+          role: 'assistant',
+          content: onboardingBuildStart
+            ? 'Discovery looks complete — starting the first coding slice in your workspace now.'
+            : SHORT_CODING_GO_SUMMARY,
+          timestamp: ts,
+        });
+      }
+      if (lockedChat && discoveryCompleteAck) {
+        toAppend.push({
+          id: `a-agent-${Date.now()}`,
+          role: 'assistant',
+          content:
+            'Discovery looks complete. Coding runs in **Agent** mode — switch to Agent to start the first slice.',
+          timestamp: ts,
+          showSwitchToAgentCta: true,
+          pendingAgentText: 'START_CODING — discovery complete, nothing more to add',
         });
       }
       if (toAppend.length > 0) {
@@ -1478,7 +1490,7 @@ export function AIChat() {
           });
         }
 
-        const coding = agentAllowed
+        let coding = agentAllowed
           ? await handlePostGrokCodingTurn({
               assistantContent: masterPlanSource,
               planningPhase,
@@ -1488,6 +1500,49 @@ export function AIChat() {
               onProgress: codingActivityRef.current ? pushActivity : undefined,
             })
           : { ran: false };
+        // No Go button: Discovery "nothing more to add" (or legacy "press Go" nudge) starts coding.
+        if (
+          !coding.ran &&
+          agentAllowed &&
+          (onboardingBuildStart || shortCodingNudge)
+        ) {
+          if (!codingActivityRef.current) {
+            beginCodingActivity('Starting code — first slice', goWorkSteps(), {
+              subhead: onboardingBuildStart
+                ? 'Nothing more to add — Master Plan saved, Grok Code building files.'
+                : 'Starting Grok Code for the next slice.',
+              initialLog: onboardingBuildStart
+                ? 'Discovery complete — auto START_CODING'
+                : 'Auto coding pass (no Go button)',
+            });
+          }
+          pushActivity(
+            onboardingBuildStart
+              ? 'Nothing more to add — launching Go Code pipeline'
+              : 'START_CODING — launching Go Code pipeline',
+            'info',
+          );
+          const go = await runGoCodeAndApply({
+            userId,
+            projectName,
+            userNote: text,
+            onProgress: pushActivity,
+            messages: [
+              { role: 'assistant', content: masterPlanSource.slice(0, 12000) },
+              {
+                role: 'user',
+                content:
+                  'START_CODING — implement ONE coherent slice only (Build → Debug → Next). File blocks for this slice only — not the full §4 app.',
+              },
+            ],
+          });
+          coding = {
+            ran: true,
+            ok: go.ok,
+            statusMessage: go.statusMessage,
+            writtenCount: go.totalWritten,
+          };
+        }
         if (!agentAllowed && (hadCodingTag || hasGrokFileBlocks(raw))) {
           // Chat lock: strip accidental coding artifacts from applying.
           try {
@@ -1834,8 +1889,9 @@ export function AIChat() {
 
   const showGrokKeyBanner = serverHasGrokKey === false;
 
-  const handleGo = useCallback(async (opts?: { force?: boolean }) => {
-    const userNote = inputRef.current.trim();
+  /** Manual / Agent-switch coding pass (replaces the removed Go button). */
+  const runCodingPass = useCallback(async (opts?: { force?: boolean; note?: string }) => {
+    const userNote = (opts?.note ?? inputRef.current).trim();
     if (sending || micInputBlocked) return;
 
     if (interactionModeRef.current === 'chat') {
@@ -1847,10 +1903,12 @@ export function AIChat() {
             id: `go-block-${Date.now()}`,
             role: 'assistant' as const,
             content:
-              "Go writes code to your workspace — that's **Agent** mode.\n\nSwitch to Agent to run Go?",
+              'Coding writes files to your workspace — that needs **Agent** mode.\n\nSwitch to Agent to start the next slice?',
             timestamp: stamp,
             showSwitchToAgentCta: true,
-            pendingAgentText: userNote ? `Go — ${userNote}` : 'Go — implement project',
+            pendingAgentText: userNote
+              ? `START_CODING — ${userNote}`
+              : 'START_CODING — implement next slice',
           },
         ];
         messagesRef.current = next;
@@ -1859,7 +1917,7 @@ export function AIChat() {
       return;
     }
 
-    // Soft discourage: validate last slice / clear App Status before next Go
+    // Soft discourage: validate last slice / clear App Status before next slice
     if (!opts?.force) {
       const snap = getAppRuntimeSnapshot();
       const errorCount = snap.issues.filter((i) => i.severity === 'error' || i.severity === 'warn').length;
@@ -1867,29 +1925,25 @@ export function AIChat() {
         const stamp = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
         const why = snap.pendingValidation
           ? 'Validate the last slice first — reload Preview and wait for App Status to clear.'
-          : 'App Status still shows issues — Fix with Agent or clear them before the next Go.';
-        setAccessoryHint(`${why} Or continue anyway.`);
+          : 'App Status still shows issues — Fix with Agent or clear them before the next slice.';
+        setAccessoryHint(`${why} Reply “continue” to build the next slice anyway.`);
         setMessages((p) => {
           const next = [
             ...p,
             {
               id: `go-soft-${Date.now()}`,
               role: 'assistant' as const,
-              content: `${why}\n\n**Validate this slice before next Go** — or press Go again to continue anyway.`,
+              content: `${why}\n\nReply **continue** (or **build next**) when you want the next slice anyway.`,
               timestamp: stamp,
-              showGoCta: true,
             },
           ];
           messagesRef.current = next;
           return next;
         });
-        // Next Go click within accessory: force via showGoCta handler — store force flag
-        (window as unknown as { __nebulaForceGo?: boolean }).__nebulaForceGo = true;
         window.setTimeout(() => setAccessoryHint(null), 8000);
         return;
       }
     }
-    (window as unknown as { __nebulaForceGo?: boolean }).__nebulaForceGo = false;
 
     if (serverHasGrokKey === null) {
       try {
@@ -1908,7 +1962,7 @@ export function AIChat() {
     const userMsg: Message = {
       id: `go-${Date.now()}`,
       role: 'user',
-      content: userNote ? `Go — ${userNote}` : 'Go — implement project',
+      content: userNote ? `START_CODING — ${userNote}` : 'START_CODING — implement next slice',
       timestamp: ts,
     };
     setMessages((p) => {
@@ -1921,9 +1975,11 @@ export function AIChat() {
     stickToBottomRef.current = true;
     setSending(true);
     setSendError(null);
-    beginCodingActivity('Go — one slice', goWorkSteps(), {
-      subhead: 'One Go — one coherent slice (Build → Debug → Next). Validate before the next Go.',
-      initialLog: userNote ? `Go started — slice focus: ${userNote.slice(0, 120)}` : 'Go started — next incomplete slice',
+    beginCodingActivity('Coding — one slice', goWorkSteps(), {
+      subhead: 'One coherent slice (Build → Debug → Next). Validate before the next slice.',
+      initialLog: userNote
+        ? `Coding started — slice focus: ${userNote.slice(0, 120)}`
+        : 'Coding started — next incomplete slice',
     });
 
     void cancelProjectBackgroundJobs();
@@ -1966,15 +2022,15 @@ export function AIChat() {
         window.dispatchEvent(new CustomEvent('nebula-master-plan-updated'));
         setAccessoryHint(
           go.sliceLabel
-            ? `Slice ${go.sliceLabel} applied — reload Preview to validate before the next Go.`
-            : 'Reload Preview to validate this slice before the next Go.',
+            ? `Slice ${go.sliceLabel} applied — reload Preview to validate before the next slice.`
+            : 'Reload Preview to validate this slice before the next slice.',
         );
         window.setTimeout(() => setAccessoryHint(null), 10000);
       }
       const goTs = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
       const chatCompleteLine = go.ok
-        ? `**Finished.** ${go.statusMessage}\n\nValidate this slice (reload Preview / App Status) before the next Go.`
-        : `**Go could not finish.** ${go.statusMessage}`;
+        ? `**Finished.** ${go.statusMessage}\n\nValidate this slice (reload Preview / App Status) before asking for the next one.`
+        : `**Coding could not finish.** ${go.statusMessage}`;
       setMessages((p) => {
         const next = [
           ...p,
@@ -2024,15 +2080,15 @@ export function AIChat() {
         onProgress: pushActivity,
       });
       dispatchOpenUiStudioBeta();
-      pushActivity('Go pipeline finished — UI Studio Beta is the active generator', 'success');
+      pushActivity('Coding pipeline finished — UI Studio Beta is the active generator', 'success');
       codingActivityRef.current = false;
       setGrokCodingActive(false);
       setGrokActivity((prev) =>
-        finishGrokActivity(prev, 'Go finished', goWorkSteps(), go.statusMessage),
+        finishGrokActivity(prev, 'Coding finished', goWorkSteps(), go.statusMessage),
       );
       setV0Live(false);
     } catch (e) {
-      setSendError(e instanceof Error ? e.message : 'Go failed');
+      setSendError(e instanceof Error ? e.message : 'Coding failed');
       resetCodingActivity();
     } finally {
       setSending(false);
@@ -2041,7 +2097,7 @@ export function AIChat() {
         resumeOpenTalkIfWanted();
       }
     }
-  }, [micInputBlocked, sending, serverHasGrokKey, stopVoiceRecognition, refreshWorkspaceMeta, resumeOpenTalkIfWanted, pushActivity, beginCodingActivity, resetCodingActivity, refreshChatV0Status, workspacePaths.length]);
+  }, [micInputBlocked, sending, serverHasGrokKey, stopVoiceRecognition, refreshWorkspaceMeta, resumeOpenTalkIfWanted, pushActivity, beginCodingActivity, resetCodingActivity, workspacePaths.length]);
 
   const applyInteractionMode = useCallback(
     async (mode: IdeAssistantInteractionMode, options?: { pendingText?: string }) => {
@@ -2071,7 +2127,7 @@ export function AIChat() {
 
       setAccessoryHint(
         complete
-          ? 'Agent on — Go and coding apply are enabled.'
+          ? 'Agent on — coding starts when Discovery is done (or you ask to build).'
           : 'Agent on — Discovery still required before a full build (architecture-first).',
       );
       window.setTimeout(() => setAccessoryHint(null), 4500);
@@ -2080,17 +2136,17 @@ export function AIChat() {
       pendingAgentResendRef.current = null;
       if (!pending || sending) return;
 
-      if (/^go(\s|[—-]|$)/i.test(pending)) {
-        const note = pending.replace(/^go\s*[—-]?\s*/i, '').trim();
-        if (note && !/^implement project$/i.test(note)) {
-          setInput(note);
-          inputRef.current = note;
-        } else {
-          setInput('');
-          inputRef.current = '';
-        }
+      if (/^(go|start_coding)(\s|[—-]|$)/i.test(pending)) {
+        const note = pending
+          .replace(/^(go|start_coding)\s*[—-]?\s*/i, '')
+          .trim();
         window.setTimeout(() => {
-          void handleGo();
+          void runCodingPass({
+            note:
+              note && !/^implement (project|next slice)$/i.test(note)
+                ? note
+                : 'discovery complete, nothing more to add',
+          });
         }, 0);
         return;
       }
@@ -2099,7 +2155,7 @@ export function AIChat() {
         void sendChatRef.current(pending);
       }, 0);
     },
-    [masterPlanCompleteHint, sending, setAssistantInteractionMode, handleGo],
+    [masterPlanCompleteHint, sending, setAssistantInteractionMode, runCodingPass],
   );
 
   const handleFixWithAgent = useCallback(
@@ -2311,25 +2367,6 @@ export function AIChat() {
                       })
                     : message.content}
                 </p>
-                {message.goSummary && message.showGoCta ? (
-                  <p className="mt-1.5 text-[11px] text-muted-foreground">{message.goSummary}</p>
-                ) : null}
-                {message.showGoCta ? (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const force = Boolean(
-                        (window as unknown as { __nebulaForceGo?: boolean }).__nebulaForceGo,
-                      );
-                      void handleGo({ force });
-                    }}
-                    disabled={sending}
-                    className="btn-cyan mt-3 inline-flex w-full items-center justify-center gap-2 rounded-lg px-3 py-2.5 text-sm disabled:opacity-45"
-                  >
-                    <Rocket className="h-4 w-4 shrink-0" aria-hidden />
-                    {t('chat.goCta')}
-                  </button>
-                ) : null}
                 {message.showSwitchToAgentCta ? (
                   <div className="mt-3 flex flex-col gap-2 sm:flex-row">
                     <button

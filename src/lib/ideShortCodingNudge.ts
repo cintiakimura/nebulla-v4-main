@@ -1,6 +1,6 @@
 /**
- * Detect ultra-short coding replies ("Press Go", "START_CODING", etc.)
- * so the IDE can surface a prominent Go CTA instead of a nearly empty bubble.
+ * Detect ultra-short coding replies that used to say "Press Go" / START_CODING.
+ * Product no longer shows a Go button — these become an auto coding-pass trigger instead.
  */
 
 const GO_NUDGE_RE =
@@ -17,4 +17,4 @@ export function isShortCodingGoNudge(text: string): boolean {
 }
 
 export const SHORT_CODING_GO_SUMMARY =
-  "I'll write the code in your workspace when you press Go — carefully, with null-safety where it matters.";
+  "I'll write the next slice in your workspace now — carefully, with null-safety where it matters.";

@@ -266,11 +266,13 @@ export function MyProjectsHome() {
     setStartingIdea(true);
     try {
       const label = shortNameFromIdea(idea);
+      // Persist idea/type BEFORE reset/reload. Reset used to consume the guided-start
+      // flag before setPendingProjectIdea ran, so the prompt vanished and chat never saw it.
+      setPendingProjectIdea(idea);
+      if (ideaType) setPendingProjectType(ideaType);
       markGuidedStartOnReady();
       await resetProjectFromScratch(label);
       await ensureProjectOrReuse(label);
-      setPendingProjectIdea(idea);
-      if (ideaType) setPendingProjectType(ideaType);
       window.location.reload();
     } catch (err) {
       console.error('[MyProjectsHome] start from idea failed', err);
@@ -381,7 +383,7 @@ export function MyProjectsHome() {
           <p className="max-w-xl text-sm leading-relaxed text-muted-foreground">
             {hasExistingWork
               ? 'Create a separate project when you are ready. Your current workspace stays in the explorer and Code tab.'
-              : 'Describe what you want to build. Grok will summarize what it understood, then ask the required Master Plan questions one at a time.'}
+              : 'Describe what you want to build, then Continue. Your prompt moves into chat — Grok summarizes it and only asks for what is still missing.'}
           </p>
         </div>
 
@@ -403,7 +405,7 @@ export function MyProjectsHome() {
             className="mt-3 w-full resize-y rounded-xl border border-border bg-[#0a0a0a] px-3 py-2.5 text-sm leading-relaxed text-foreground outline-none ring-primary/25 placeholder:text-muted-foreground/70 focus:ring disabled:opacity-60"
           />
           <p className="mt-3 text-xs text-muted-foreground">
-            Optional — pick a type now so we skip that question later:
+            Continue clears this box on purpose — the full prompt appears in chat. Optional type so we skip that question later:
           </p>
           <div className="mt-2 flex flex-wrap gap-2">
             {PROJECT_TYPES.map((t) => (
