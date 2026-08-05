@@ -30,8 +30,8 @@ export function LandingPage({ onEnter }: LandingPageProps) {
     }
   }, [onEnter]);
 
-  const handleCheckout = () => {
-    window.location.assign('/payment');
+  const handleTryFree = () => {
+    onEnter();
   };
 
   return (
@@ -53,18 +53,12 @@ export function LandingPage({ onEnter }: LandingPageProps) {
           >
             Sign in
           </a>
-          <a
-            href="/payment"
-            className="px-3 py-2 text-slate-400 hover:text-cyan-200 transition-all font-headline text-sm font-normal"
-          >
-            Payment
-          </a>
           <button
             type="button"
             onClick={onEnter}
             className="px-4 py-2 bg-cyan-500/10 text-cyan-300 border border-cyan-500/30 rounded-md hover:bg-cyan-500/20 transition-all font-headline text-sm font-normal"
           >
-            Try the App
+            Try free beta
           </button>
         </div>
       </header>
@@ -304,27 +298,33 @@ export function LandingPage({ onEnter }: LandingPageProps) {
           </div>
         </section>
 
-        {/* Pricing CTA */}
+        {/* Beta CTA */}
         <section className="nebula-landing-card nebula-landing-card--hero p-8 md:p-12 flex flex-col md:flex-row items-start md:items-center justify-between gap-8 text-left">
           <div className="flex flex-col gap-4">
             <h2 className="text-base font-normal text-cyan-300">
-              Simple, transparent pricing.
+              Free during beta.
             </h2>
             <p className="text-slate-300 text-sm font-normal leading-relaxed">
-              One plan with all features for €19.99 / month. No hidden fees.
+              Full workspace now. Paid plan (€19.99 / month) comes after beta — no payment required today.
             </p>
           </div>
           <button
             type="button"
-            onClick={handleCheckout}
+            onClick={handleTryFree}
             className="px-6 py-3 bg-cyan-500/20 text-cyan-300 border border-cyan-500/50 rounded-xl hover:bg-cyan-500/30 transition-all text-sm font-normal whitespace-nowrap"
           >
-            Go to payment
+            Start free beta
           </button>
         </section>
       </main>
 
       <footer className="nebula-landing-footer shrink-0 border-t border-cyan-500/10 py-6 px-8 flex flex-wrap items-center justify-center gap-6 text-13 text-slate-500">
+        <a href="/payment" className="text-slate-400 hover:text-cyan-300 transition-colors no-underline">
+          Payment
+        </a>
+        <span className="text-slate-600" aria-hidden>
+          ·
+        </span>
         <a href="/privacy" className="text-slate-400 hover:text-cyan-300 transition-colors no-underline">
           Privacy Policy
         </a>

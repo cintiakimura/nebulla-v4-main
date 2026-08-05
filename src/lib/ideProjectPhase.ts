@@ -49,12 +49,29 @@ const USER_JUMPED_SESSION = 'nebula_phase_user_jumped_session';
 
 export const NEBULA_PROJECT_PHASE_CHANGED = 'nebula-project-phase-changed';
 
+/** Session-only status line override (ride handoffs). */
+let rideStatusOverride: string | null = null;
+
 function storageKey(prefix: string, projectKey?: string): string {
   return `${prefix}${projectKey || getBrowserProjectKey() || 'default'}`;
 }
 
 export function phaseStatusLine(phase: ProjectPhase): string {
+  if (rideStatusOverride) return rideStatusOverride;
   return PHASE_STATUS[phase];
+}
+
+export function setRideStatusOverride(message: string | null): void {
+  rideStatusOverride = message?.trim() || null;
+  try {
+    window.dispatchEvent(new CustomEvent(NEBULA_PROJECT_PHASE_CHANGED, { detail: { override: true } }));
+  } catch {
+    /* ignore */
+  }
+}
+
+export function getRideStatusOverride(): string | null {
+  return rideStatusOverride;
 }
 
 export function readProjectPhase(projectKey?: string): ProjectPhase {

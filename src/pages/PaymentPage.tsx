@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import { ArrowLeft } from 'lucide-react';
 import { Logo } from '@/components/Logo';
 import { fetchSessionUser, type NebulaSessionUser } from '../lib/nebulaCloud';
+import { fetchNebulaPublicConfig } from '../lib/nebulaPublicConfig';
+import { BETA_FREE_BANNER, isBillingCheckoutEnabled } from '../lib/billingFlags';
 import { goToApp, goToLanding, goToLogin, goToTryFree } from '../lib/authNavigate';
 
 const PLAN_PRICE = '€19.99';
@@ -12,9 +14,13 @@ export function PaymentPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
+  const [billingEnabled, setBillingEnabled] = useState(false);
 
   useEffect(() => {
     void fetchSessionUser().then(setUser);
+    void fetchNebulaPublicConfig().then((cfg) => {
+      setBillingEnabled(isBillingCheckoutEnabled(cfg));
+    });
     try {
       if (new URLSearchParams(window.location.search).get('canceled') === '1') {
         setInfo('Checkout was canceled. You can try again whenever you are ready.');
@@ -28,6 +34,10 @@ export function PaymentPage() {
   const startCheckout = async () => {
     setError(null);
     setInfo(null);
+    if (!billingEnabled) {
+      setInfo(BETA_FREE_BANNER);
+      return;
+    }
     if (!user) {
       goToLogin('/payment');
       return;
@@ -80,13 +90,19 @@ export function PaymentPage() {
       <main className="mx-auto max-w-lg px-6 py-14 md:px-10">
         <h1 className="text-base font-normal tracking-tight text-[#f2f2f2]">Payment</h1>
         <p className="mt-3 text-sm leading-relaxed text-[#8a8a8a]">
-          One plan. All features. No tiers to compare.
+          One plan after beta. All features. No tiers to compare.
         </p>
+
+        {!billingEnabled ? (
+          <p className="mt-4 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-[#c8c8c8]">
+            {BETA_FREE_BANNER}
+          </p>
+        ) : null}
 
         {user ? (
           <p className="mt-2 text-xs text-[#8a8a8a]">
             Signed in as {user.email || user.displayName}
-            {alreadyPaid ? ' · active subscription' : ''}
+            {alreadyPaid ? ' · active subscription' : ' · beta (free)'}
           </p>
         ) : null}
 
@@ -100,14 +116,22 @@ export function PaymentPage() {
         <div className="mt-10 rounded-xl border border-white/10 bg-black/40 px-6 py-8">
           <p className="text-sm text-[#b8b8b8]">Nebulla</p>
           <p className="mt-2 text-2xl tracking-tight text-[#f2f2f2]">
-            {PLAN_PRICE}
-            <span className="ml-1 text-sm text-[#8a8a8a]">{PLAN_PERIOD}</span>
+            {billingEnabled ? PLAN_PRICE : 'Free'}
+            <span className="ml-1 text-sm text-[#8a8a8a]">
+              {billingEnabled ? PLAN_PERIOD : 'during beta'}
+            </span>
           </p>
+          {!billingEnabled ? (
+            <p className="mt-2 text-xs text-[#8a8a8a]">
+              Planned post-beta price: {PLAN_PRICE}
+              {PLAN_PERIOD}
+            </p>
+          ) : null}
           <ul className="mt-6 space-y-2 text-sm text-[#b8b8b8]">
-            <li>Unlimited projects in your workspace</li>
+            <li>Full workspace during beta</li>
             <li>Full AI capacity (bring your own key or use platform)</li>
             <li>UI Studio, Master Plan, Secrets &amp; DNS</li>
-            <li>No hidden fees</li>
+            <li>No payment required for beta</li>
           </ul>
 
           {alreadyPaid ? (
@@ -120,29 +144,39 @@ export function PaymentPage() {
             </button>
           ) : (
             <div className="mt-8 space-y-3">
-              <button
-                type="button"
-                disabled={busy}
-                onClick={() => void startCheckout()}
-                className="w-full rounded-lg bg-[#f2f2f2] px-4 py-2.5 text-sm text-[#0a0a0a] hover:bg-white disabled:opacity-50"
-              >
-                {busy ? '…' : user ? 'Continue to checkout' : 'Sign in to pay'}
-              </button>
+              {billingEnabled ? (
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => void startCheckout()}
+                  className="w-full rounded-lg bg-[#f2f2f2] px-4 py-2.5 text-sm text-[#0a0a0a] hover:bg-white disabled:opacity-50"
+                >
+                  {busy ? '…' : user ? 'Continue to checkout' : 'Sign in to pay'}
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  disabled
+                  className="w-full cursor-not-allowed rounded-lg border border-white/15 px-4 py-2.5 text-sm text-[#8a8a8a] opacity-70"
+                >
+                  Checkout coming after beta
+                </button>
+              )}
               {!user ? (
                 <button
                   type="button"
                   onClick={() => goToTryFree('/app')}
-                  className="w-full rounded-lg border border-white/15 px-4 py-2.5 text-sm text-[#c8c8c8] hover:bg-white/5"
+                  className="w-full rounded-lg bg-[#f2f2f2] px-4 py-2.5 text-sm text-[#0a0a0a] hover:bg-white"
                 >
-                  Start free first
+                  Start free beta
                 </button>
               ) : (
                 <button
                   type="button"
                   onClick={goToApp}
-                  className="w-full rounded-lg border border-white/15 px-4 py-2.5 text-sm text-[#c8c8c8] hover:bg-white/5"
+                  className="w-full rounded-lg bg-[#f2f2f2] px-4 py-2.5 text-sm text-[#0a0a0a] hover:bg-white"
                 >
-                  Back to workspace
+                  Open workspace
                 </button>
               )}
             </div>

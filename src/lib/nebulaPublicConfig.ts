@@ -35,6 +35,8 @@ export type NebulaPublicConfig = {
   mainAiKeyHint?: string;
   /** When true, Nebula Free-tier monthly token cap is not enforced. */
   freeTierTokenLimitDisabled?: boolean;
+  /** When true, Stripe checkout is live. Beta defaults false (BILLING_ENABLED). */
+  billingEnabled?: boolean;
   r2MissingEnv?: string[];
   r2StorageHint?: string;
   /** True when CLOUDFLARE_API_TOKEN + account id are set for per-project D1 provisioning. */

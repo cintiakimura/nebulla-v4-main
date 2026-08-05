@@ -282,16 +282,19 @@ export function UserProfilePage({
                   Billing
                 </h3>
                 <p className="text-sm text-slate-300">
-                  Current plan: <span className="text-cyan-200 font-medium">{billingLabel(user.billingTier)}</span>
+                  Current plan:{' '}
+                  <span className="text-cyan-200 font-medium">
+                    {billingLabel(user.billingTier) === 'Free' ? 'Beta (free)' : billingLabel(user.billingTier)}
+                  </span>
                 </p>
                 <p className="text-sm text-slate-400 leading-relaxed">
-                  One plan — €19.99 / month — unlocks full workspace and AI capacity.
+                  Nebulla beta is free — no payment required. Post-beta plan will be €19.99 / month.
                 </p>
                 <a
                   href="/payment"
-                  className="inline-flex text-sm text-cyan-300/90 hover:text-cyan-200 underline-offset-2 hover:underline"
+                  className="inline-flex text-sm text-slate-500 hover:text-slate-300 underline-offset-2 hover:underline"
                 >
-                  Go to payment →
+                  Billing details (inactive during beta) →
                 </a>
               </section>
 

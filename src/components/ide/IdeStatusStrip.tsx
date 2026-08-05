@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
@@ -12,16 +12,32 @@ import {
   readProjectPhase,
   type ProjectPhase,
 } from '../../lib/ideProjectPhase';
+
 /**
  * Permanent park-map of the project lifecycle. Clickable; never locks navigation.
  */
 export function IdeStatusStrip() {
   const [phase, setPhase] = useState<ProjectPhase>(() => readProjectPhase());
   const [deployOk, setDeployOk] = useState(() => isDeployUnlocked());
+  const [status, setStatus] = useState(() => phaseStatusLine(readProjectPhase()));
+  const [codePulse, setCodePulse] = useState(false);
+  const prevPhaseRef = useRef<ProjectPhase | null>(null);
 
   const refresh = useCallback(() => {
-    setPhase(readProjectPhase());
-    setDeployOk(isDeployUnlocked());
+    const next = readProjectPhase();
+    const unlocked = isDeployUnlocked();
+    if (prevPhaseRef.current !== null && prevPhaseRef.current !== 'code' && next === 'code') {
+      setCodePulse(true);
+      window.setTimeout(() => setCodePulse(false), 2800);
+    }
+    prevPhaseRef.current = next;
+    setPhase(next);
+    setDeployOk(unlocked);
+    setStatus(
+      (next === 'deploy' || next === 'live') && !unlocked
+        ? 'Deploy unlocks after your first UI result.'
+        : phaseStatusLine(next),
+    );
   }, []);
 
   useEffect(() => {
@@ -38,11 +54,6 @@ export function IdeStatusStrip() {
       window.removeEventListener('nebula-workspace-context-synced', onChange);
     };
   }, [refresh]);
-
-  const status =
-    (phase === 'deploy' || phase === 'live') && !deployOk
-      ? 'Deploy unlocks after your first UI result.'
-      : phaseStatusLine(phase);
 
   return (
     <div
@@ -71,6 +82,7 @@ export function IdeStatusStrip() {
                 className={cn(
                   'inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-normal transition-colors',
                   current && 'bg-[#111111] text-foreground ring-1 ring-border',
+                  step === 'code' && codePulse && 'ring-1 ring-foreground/35 bg-[#111111]/80',
                   done && !current && 'text-foreground/80',
                   !done && !current && 'text-muted-foreground hover:text-foreground',
                   locked && 'opacity-50',

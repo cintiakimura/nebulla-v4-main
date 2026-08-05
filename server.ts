@@ -513,6 +513,8 @@ async function startServer() {
       byok,
       mainAiKeyTail: byok.xai.tail || mainAiApiKeyTail(),
       freeTierTokenLimitDisabled: isFreeTierTokenLimitDisabled(),
+      /** Checkout live only when BILLING_ENABLED=true (beta defaults off). */
+      billingEnabled: process.env.BILLING_ENABLED === "true",
       mainAiProvider,
       mainAiChatModel,
       hasGrokSwarmApiKey: grokSwarm.length >= 20,
@@ -2754,9 +2756,16 @@ No approved UI code yet.
     res.json({ success: true });
   });
 
-  /** Stripe Checkout — requires STRIPE_SECRET_KEY (+ STRIPE_PRICE_PRO / STRIPE_PRICE_POWER). */
+  /** Stripe Checkout — requires BILLING_ENABLED=true + STRIPE_SECRET_KEY (+ STRIPE_PRICE_PRO / STRIPE_PRICE_POWER). */
   app.post("/api/create-checkout-session", async (req, res) => {
     try {
+      if (process.env.BILLING_ENABLED !== "true") {
+        return res.status(503).json({
+          error: "Billing not enabled",
+          message:
+            "Nebulla beta is free — checkout is paused. Set BILLING_ENABLED=true when you are ready to charge.",
+        });
+      }
       const secret =
         process.env.STRIPE_SECRET_KEY?.trim() ||
         process.env.STRIPE_SECRET_KEY_LIVE?.trim() ||
