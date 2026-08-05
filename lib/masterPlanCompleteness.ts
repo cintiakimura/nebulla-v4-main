@@ -43,11 +43,11 @@ const PLACEHOLDER_RE =
 const ROUTE_RE = /`(\/[^`\s]+)`|(\/[A-Za-z0-9_][\w\-./:{}\*]*)/g;
 
 const NEEDS_AUTH_RE =
-  /\b(auth|login|sign[\s-]?up|sign[\s-]?in|oauth|multi[-\s]?tenant|workspace|client portal|invoice|private data|members?|roles?|accounts?)\b/i;
+  /\b(auth|login|sign[\s-]?up|sign[\s-]?in|oauth|multi[-\s]?tenant|workspace|client portal|invoice|private data|members?|roles?|accounts?|kids?|students?|teachers?|parents?|classroom|school|coppa|ferpa)\b/i;
 
-/** Positive security baseline language (negations like "no RLS" must not count). */
+/** Positive security baseline language (not bare §4 page-field `authz:` labels). */
 const SECURITY_MARKERS_RE =
-  /\b(security baseline|row[-\s]?level security|\brls\b|workspace_id|deny by default|authz:|scoped by\s+\w+|multi[-\s]?tenant isolation:\s*\w)/i;
+  /\b(security baseline|row[-\s]?level security|\brls\b|workspace_id|classroom_id|deny by default|scoped by\s+\w+|multi[-\s]?tenant isolation:\s*\w)/i;
 
 const AUTH_MODEL_RE =
   /\b(auth(entication)?\s+required|auth model|magic[-\s]?link|oauth login|session cookie|sign[\s-]?in required|login required)\b/i;
@@ -380,4 +380,23 @@ export function isMasterPlanCompleteForDiscovery(
     checkUiBrief: false,
   });
   return result.gaps.filter((g) => g.severity === "block").length === 0;
+}
+
+/**
+ * Structure ready for plan-first UI mockup: §§1–5 usable + routes.
+ * Security baseline gaps alone must not block the first mockup (coding/Go still enforce them).
+ */
+export function isMasterPlanReadyForUiMockup(
+  raw: Record<string, unknown> | null | undefined,
+): boolean {
+  if (!raw || typeof raw !== "object") return false;
+  const result = assessMasterPlanCompleteness({
+    plan: raw,
+    mode: "strict",
+    checkUiBrief: false,
+  });
+  const structuralBlocks = result.gaps.filter(
+    (g) => g.severity === "block" && !g.code.startsWith("SEC_"),
+  );
+  return structuralBlocks.length === 0;
 }

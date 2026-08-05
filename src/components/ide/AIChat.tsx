@@ -35,6 +35,8 @@ import {
   detectGuidedInterviewIntent,
   detectInferenceFirstIntent,
   isFastPrototypeMode,
+  peekPendingStartMode,
+  setPendingStartMode,
   setStoredStartMode,
 } from '../../lib/ideStartMode';
 import { fetchConversationLogEntries } from '../../lib/conversationLogClient';
@@ -86,11 +88,15 @@ import {
   consumePendingProjectIdea,
   consumePendingProjectType,
   peekPendingProjectIdea,
+  setPendingProjectIdea,
+  setPendingProjectType,
   NEBULA_CHAT_OPEN_FILE,
   NEBULA_START_FREE_CHAT,
   NEBULA_START_GUIDED_CHAT,
+  NEBULA_START_GUIDED_ON_READY_KEY,
   type StartGuidedChatDetail,
 } from '../../lib/ideHomeEvents';
+import { shortNameFromIdea } from '../../lib/projectNameFromIdea';
 import { ideContextSnippetForChat, useIdeWorkspace } from '@/components/ide/IdeWorkspaceContext';
 import { useIdeCenterTabs } from '@/components/ide/IdeCenterTabsContext';
 import { ChatFilePreview } from '@/components/ide/ChatFilePreview';
@@ -538,6 +544,8 @@ export function AIChat() {
 
   const bootstrapStartedRef = useRef(false);
   const chatHistoryLoadedRef = useRef(false);
+  /** State (not only ref) so bootstrap effect re-runs after history finishes loading. */
+  const [chatHistoryReady, setChatHistoryReady] = useState(false);
 
   const isNearBottom = useCallback((el: HTMLDivElement, thresholdPx = 96) => {
     return el.scrollHeight - el.scrollTop - el.clientHeight <= thresholdPx;
@@ -876,6 +884,7 @@ export function AIChat() {
   useEffect(() => {
     let cancelled = false;
     chatHistoryLoadedRef.current = false;
+    setChatHistoryReady(false);
     bootstrapStartedRef.current = false;
     void (async () => {
       try {
@@ -892,7 +901,10 @@ export function AIChat() {
       } catch (e) {
         console.warn('[AIChat] conversation log load skipped:', e);
       } finally {
-        if (!cancelled) chatHistoryLoadedRef.current = true;
+        if (!cancelled) {
+          chatHistoryLoadedRef.current = true;
+          setChatHistoryReady(true);
+        }
       }
     })();
     return () => {
@@ -950,6 +962,7 @@ export function AIChat() {
       setMessages([]);
       messagesRef.current = [];
       chatHistoryLoadedRef.current = true;
+      setChatHistoryReady(true);
       bootstrapStartedRef.current = false;
       setSendError(null);
       clearDiscoveryClosed(diskProjectKey);
@@ -965,16 +978,23 @@ export function AIChat() {
   // Post-login: stay quiet until My Projects → New Project (or explicit guided event).
   useEffect(() => {
     if (serverHasGrokKey !== true) return;
-    if (!chatHistoryLoadedRef.current) return;
+    if (!chatHistoryReady) return;
     if (bootstrapStartedRef.current || sendingRef.current) return;
     // Prefer pending idea from "Start with a prompt" even if chat log restored noise.
     const pendingIdea = peekPendingProjectIdea();
-    const guided = consumeGuidedStartOnReady();
-    if (!guided && !pendingIdea) return;
+    // Peek-only until we commit — do not burn the flag on a skipped turn.
+    let guidedFlag = false;
+    try {
+      guidedFlag = localStorage.getItem(NEBULA_START_GUIDED_ON_READY_KEY) === '1';
+    } catch {
+      guidedFlag = false;
+    }
+    if (!guidedFlag && !pendingIdea) return;
     if (!pendingIdea && messagesRef.current.length > 0) return;
     bootstrapStartedRef.current = true;
+    consumeGuidedStartOnReady();
     startGuidedDiscovery();
-  }, [serverHasGrokKey, messages.length, diskProjectKey, startGuidedDiscovery]);
+  }, [serverHasGrokKey, chatHistoryReady, messages.length, diskProjectKey, startGuidedDiscovery]);
 
   useEffect(() => {
     const stamp = () =>
@@ -982,30 +1002,17 @@ export function AIChat() {
 
     const onGuided = (ev: Event) => {
       if (sendingRef.current) return;
-      if (messagesRef.current.length > 0) return;
-      bootstrapStartedRef.current = true;
       const detail = (ev as CustomEvent<StartGuidedChatDetail>).detail;
       const fromEventType = detail?.projectType;
       const fromEventIdea = detail?.ideaPrompt?.trim();
-      // Prefer event detail; always clear any pending storage so reload does not re-ask.
-      const projectType = fromEventType ?? consumePendingProjectType();
-      if (fromEventType) consumePendingProjectType();
-      const ideaPrompt = fromEventIdea || consumePendingProjectIdea();
-      if (fromEventIdea) consumePendingProjectIdea();
-      if (ideaPrompt) {
-        const stamp = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-        const visibleIdea: Message = {
-          id: `u-idea-${Date.now()}`,
-          role: 'user',
-          content: ideaPrompt,
-          timestamp: stamp,
-        };
-        setMessages([visibleIdea]);
-        messagesRef.current = [visibleIdea];
-        void sendChatRef.current(buildIdeaDiscoveryBootstrap(ideaPrompt, projectType));
-        return;
-      }
-      void sendChatRef.current(buildDiscoveryBootstrap(projectType));
+      if (fromEventIdea) setPendingProjectIdea(fromEventIdea);
+      if (fromEventType) setPendingProjectType(fromEventType);
+      // Live event without pending mode → respect stored pending, else default inference-first.
+      if (!peekPendingStartMode()) setPendingStartMode('fast_prototype');
+      const pendingIdea = peekPendingProjectIdea() || fromEventIdea;
+      if (!pendingIdea && messagesRef.current.length > 0) return;
+      bootstrapStartedRef.current = true;
+      startGuidedDiscovery();
     };
 
     const onFree = () => {
@@ -1255,18 +1262,18 @@ export function AIChat() {
       chatMode = 'coding';
     }
 
-    // Fast project creation from chat ("Create a new project: ...")
+    // Chat "Create a new project: …" — default inference-first (same as My Projects Continue).
     const projectCreation = detectProjectCreationIntent(rawText);
     if (projectCreation) {
-      const shortName =
-        projectCreation.description
-          .split(' ')
-          .slice(0, 4)
-          .join(' ')
-          .replace(/[^a-z0-9 ]/gi, '')
-          .trim() || 'New Project';
-      await createProjectForCurrentSession(shortName || 'New Project');
+      const shortName = shortNameFromIdea(projectCreation.description);
+      await createProjectForCurrentSession(shortName);
       clearIdeWorkspaceMetaCache();
+      setStoredStartMode('fast_prototype', diskProjectKey);
+      markDiscoveryClosed(diskProjectKey);
+      if (interactionModeRef.current === 'chat') {
+        interactionModeRef.current = 'agent';
+        setAssistantInteractionMode('agent');
+      }
 
       setInput('');
       inputRef.current = '';
@@ -1284,9 +1291,8 @@ export function AIChat() {
         return next;
       });
 
-      // Hidden idea bootstrap: summarize understanding, then one discovery question
       setTimeout(() => {
-        void sendChatRef.current(buildIdeaDiscoveryBootstrap(projectCreation.description));
+        void sendChatRef.current(buildFastPrototypeBootstrap(projectCreation.description));
       }, 10);
 
       return;

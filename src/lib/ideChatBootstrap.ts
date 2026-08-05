@@ -96,7 +96,13 @@ export function buildFastPrototypeBootstrap(
     `4.1–4.2 Research workspace + industry-standards.md.\n` +
     `5.1–5.3 Competitor list (5–10 real names only; never invent) + feature map + evidence in competitor-research.md.\n` +
     `6.1–6.2 UI/UX patterns + final standards package (validated common pattern | assumption).\n` +
-    `7.1–7.6 Draft all five Master Plan sections inside <START_MASTERPLAN>…</END_MASTERPLAN>; list assumptions + stage=plan_drafted in fast-prototype-memory.md.\n` +
+    `7.1–7.6 Draft all five Master Plan sections inside <START_MASTERPLAN>…</END_MASTERPLAN> with REAL content (never placeholder "Build Untitled…" or empty cyan shells):\n` +
+    `- §1 Goal: purpose, primary users/roles, in/out of scope.\n` +
+    `- §2 Tech and Research: Project Type, 5–10 real competitor names (never invent), patterns, evidence note; **include Security baseline** when accounts/kids/students/private data apply (auth model, tenant/RLS or classroom_id, roles, secrets, PII, deny-by-default).\n` +
+    `- §3 Features + at least one testable KPI.\n` +
+    `- §4 Pages: every page with route \`/…\` AND fields purpose, primary_actions, data_entities, authz, empty_state, error_state, nav_links (minimum 3–5 pages for a product app).\n` +
+    `- §5 UI tokens: mood, hex palette, typography, density, radius, motion, components, nav (15–25 lines).\n` +
+    `List assumptions + stage=plan_drafted in fast-prototype-memory.md.\n` +
     `8.1 Write nebula-ui-studio/ui-brief.md from §4 + §5.\n` +
     `Do NOT generate the visual mockup yourself — after this architecture turn the product runs UI Gen v2 (Step 8.3) before coding (single API key queue).\n` +
     `Then emit START_CODING / <START_CODING> for Step 9.1 Foundation only — product runs coding AFTER UI mockup is triggered.\n` +

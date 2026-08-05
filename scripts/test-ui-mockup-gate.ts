@@ -7,6 +7,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { canStartUiMockup } from '../src/lib/uiMockupGate';
+import { isMasterPlanReadyForUiMockup } from '../lib/masterPlanCompleteness';
 import {
   filterGrokContentToArchitectureFiles,
   isArchitectureArtifactPath,
@@ -20,6 +21,7 @@ const completePlan = JSON.parse(
   ),
 ) as Record<string, unknown>;
 
+assert.equal(isMasterPlanReadyForUiMockup(completePlan), true);
 assert.equal(
   canStartUiMockup({ masterPlan: completePlan, uiBriefLength: 200, inferenceFirst: true }),
   true,

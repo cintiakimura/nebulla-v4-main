@@ -4,28 +4,34 @@
 import { normalizeMasterPlanRecord } from "./masterPlanSections";
 
 const NEEDS_AUTH_RE =
-  /\b(auth|login|sign[\s-]?up|sign[\s-]?in|oauth|multi[-\s]?tenant|workspace|client portal|invoice|private data|members?|roles?|accounts?)\b/i;
+  /\b(auth|login|sign[\s-]?up|sign[\s-]?in|oauth|multi[-\s]?tenant|workspace|client portal|invoice|private data|members?|roles?|accounts?|kids?|students?|teachers?|parents?|classroom|school|coppa|ferpa)\b/i;
 
+/** Real §2 security baseline markers — not bare page-field `authz:` labels. */
 const SECURITY_MARKERS_RE =
-  /\b(security baseline|row[-\s]?level security|\brls\b|workspace_id|deny by default|authz:|scoped by\s+\w+|multi[-\s]?tenant isolation:\s*\w)/i;
+  /\b(security baseline|row[-\s]?level security|\brls\b|workspace_id|classroom_id|deny by default|scoped by\s+\w+|multi[-\s]?tenant isolation:\s*\w)/i;
+
+const AUTH_MODEL_RE =
+  /\b(auth(entication)?\s+required|auth model|magic[-\s]?link|oauth login|session cookie|sign[\s-]?in required|login required)\b/i;
 
 const SECURITY_NEGATED_RE =
   /\bno\s+(auth model|rls|pii|tenant isolation|security)\b/i;
 
 export const SECURITY_BASELINE_DRAFT = `### Security baseline
-- **Auth model:** Sign-in required for private routes (session or magic link / OAuth as appropriate).
-- **Tenant isolation:** Scope data by workspace_id (or equivalent); row-level security / deny-by-default on server queries.
-- **Roles:** Define least-privilege roles (e.g. owner / member / viewer) and enforce authz on every mutating action.
+- **Auth model:** Sign-in required for private routes (session or magic link / OAuth as appropriate). For kids/education: parent/teacher accounts; COPPA-aware consent when under-13 data applies.
+- **Tenant isolation:** Scope data by workspace_id / classroom_id (or equivalent); row-level security / deny-by-default on server queries.
+- **Roles:** Define least-privilege roles (e.g. owner / member / viewer / teacher / parent / student) and enforce authz on every mutating action.
 - **Secrets:** API keys and tokens only in server env / Secrets — never in client bundles or Master Plan.
-- **PII:** Minimize personal data; do not log tokens or secrets.
-- **Public routes:** Explicitly list which routes stay public (marketing / login only).`;
+- **PII:** Minimize personal data; do not log tokens or secrets; avoid collecting unnecessary child PII.
+- **Public routes:** Explicitly list which routes stay public (marketing / login only).
+- *(Assumption: security baseline drafted because the goal implies accounts or private/child data — correct if wrong.)*`;
 
 export function planNeedsSecurityBaseline(plan: Record<string, unknown> | Record<string, string>): boolean {
   const n = normalizeMasterPlanRecord(plan as Record<string, unknown>);
   const combined = Object.values(n).join("\n");
   if (!NEEDS_AUTH_RE.test(combined)) return false;
   if (SECURITY_NEGATED_RE.test(combined)) return true;
-  return !SECURITY_MARKERS_RE.test(combined);
+  // Need both isolation markers and an auth model — page-field authz alone is not enough.
+  return !(SECURITY_MARKERS_RE.test(combined) && AUTH_MODEL_RE.test(combined));
 }
 
 export function buildSecurityBaselineProposal(plan: Record<string, unknown> | Record<string, string>): {

@@ -1993,6 +1993,24 @@ No approved UI code yet.
       // Auto-V0 is off unless the client explicitly opts in (manual path only).
       const autoV0 = body.autoV0 === true;
 
+      // Inference-first start path: if auth/child/private data is implied but §2 lacks a
+      // security baseline, draft it now (labeled assumption) so strict Go isn't stuck.
+      try {
+        let planForSec = readMasterPlanFile(pp.masterPlanPath);
+        const secProposal = buildSecurityBaselineProposal(planForSec);
+        if (secProposal?.needed) {
+          const key = secProposal.sectionKey;
+          const merged = mergeSecurityBaselineIntoSection2(String(planForSec[key] ?? ""));
+          if (merged) {
+            planForSec = { ...planForSec, [key]: merged };
+            fs.mkdirSync(path.dirname(pp.masterPlanPath), { recursive: true });
+            fs.writeFileSync(pp.masterPlanPath, JSON.stringify(planForSec, null, 2), "utf8");
+          }
+        }
+      } catch {
+        /* non-fatal — mockup can still proceed without security for structure-ready plans */
+      }
+
       // Primary ui-brief + legacy v0-prompt — required before plan-first UI mockup.
       const uiArts = syncUiArtifactsFromMasterPlan(pp.workspaceRoot, pp.masterPlanPath);
       ensureNebulaUiStudioFileAt(pp.nebulaUiStudioPath);

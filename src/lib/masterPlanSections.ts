@@ -11,4 +11,7 @@ export {
   masterPlanSectionSeparationRules,
 } from '../../lib/masterPlanSections';
 
-export { isMasterPlanCompleteForDiscovery } from '../../lib/masterPlanCompleteness';
+export {
+  isMasterPlanCompleteForDiscovery,
+  isMasterPlanReadyForUiMockup,
+} from '../../lib/masterPlanCompleteness';

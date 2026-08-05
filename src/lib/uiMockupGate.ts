@@ -4,7 +4,7 @@
  */
 
 import { openLocalFile } from './fileOperations';
-import { isMasterPlanCompleteForDiscovery } from './masterPlanSections';
+import { isMasterPlanReadyForUiMockup } from './masterPlanSections';
 import { getBrowserProjectKey, withProjectQuery } from './nebulaProjectApi';
 import { readResponseJson } from './apiFetch';
 import { isFastPrototypeMode } from './ideStartMode';
@@ -105,7 +105,8 @@ export function canStartUiMockup(input: {
   if (input.inferenceFirst === false) {
     // Still allow when plan+brief ready on normal build path
   }
-  if (!isMasterPlanCompleteForDiscovery(input.masterPlan)) return false;
+  // Structure-ready (§§1–5 + routes). Security-only gaps do not block first mockup.
+  if (!isMasterPlanReadyForUiMockup(input.masterPlan)) return false;
   if ((input.uiBriefLength || 0) < UI_BRIEF_MIN) return false;
   return true;
 }
@@ -128,7 +129,7 @@ export async function assessUiMockupReadiness(options?: {
     plan = null;
   }
 
-  const planComplete = isMasterPlanCompleteForDiscovery(plan);
+  const planComplete = isMasterPlanReadyForUiMockup(plan);
   if (!planComplete) reasons.push('Master Plan draft incomplete (§§1–5 / usable §4 pages)');
 
   let uiBriefLength = 0;

@@ -24,6 +24,7 @@ import {
   createProjectForCurrentSession,
   fetchSessionUser,
   listCloudProjectsDetailed,
+  renameActiveProjectDisplayName,
   selectCloudProjectByName,
   setWorkspaceModePreference,
 } from '../../lib/nebulaCloud';
@@ -40,10 +41,13 @@ import {
   type IdeStartMode,
 } from '../../lib/ideStartMode';
 import { resetProjectFromScratch } from '../../lib/ideProjectReset';
+import { shortNameFromIdea } from '../../lib/projectNameFromIdea';
 import { ChatFilePreview } from './ChatFilePreview';
 import { openGitHubFile, openLocalFile } from '../../lib/fileOperations';
 import type { SmartChatFilePreview } from '../../lib/smartChatHandler';
 import { useIdeWorkspace } from './IdeWorkspaceContext';
+
+export { shortNameFromIdea } from '../../lib/projectNameFromIdea';
 
 type ListedProject = {
   key: string;
@@ -66,17 +70,6 @@ function formatWhen(iso: string): string {
   } catch {
     return 'Recently';
   }
-}
-
-function shortNameFromIdea(idea: string): string {
-  return (
-    idea
-      .split(/\s+/)
-      .slice(0, 4)
-      .join(' ')
-      .replace(/[^a-z0-9 ]/gi, '')
-      .trim() || 'New Project'
-  );
 }
 
 type FileModalMode = 'local' | 'github' | null;
@@ -222,10 +215,11 @@ export function MyProjectsHome() {
     window.location.reload();
   }, []);
 
-  /** Free plan: 1 project — if create fails, reuse the active project instead of bouncing to Pricing. */
+  /** Free plan: 1 project — if create fails, reuse + rename so the idea isn't stuck as Untitled. */
   const ensureProjectOrReuse = useCallback(async (label: string) => {
+    const wanted = label.trim() || 'New Project';
     try {
-      await createProjectForCurrentSession(label);
+      await createProjectForCurrentSession(wanted);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       if (!/1 project|upgrade|Pricing/i.test(msg)) throw err;
@@ -236,6 +230,12 @@ export function MyProjectsHome() {
         } catch {
           /* guest / already bound */
         }
+      }
+      try {
+        const user = await fetchSessionUser();
+        await renameActiveProjectDisplayName(wanted, user?.uid ? 'cloud' : 'guest');
+      } catch {
+        setBrowserProjectName(wanted);
       }
     }
   }, []);
@@ -278,13 +278,14 @@ export function MyProjectsHome() {
     setStartingIdea(true);
     try {
       const label = shortNameFromIdea(idea);
-      // Persist idea/type/mode BEFORE reset/reload so chat sees them after reload.
+      // Idea + mode before reset (reset clears pending project type only).
       setPendingProjectIdea(idea);
-      if (ideaType) setPendingProjectType(ideaType);
       setPendingStartMode(startMode);
       markGuidedStartOnReady();
       await resetProjectFromScratch(label);
       await ensureProjectOrReuse(label);
+      // After reset/create so projectKey is current (same order as typed-chip start).
+      if (ideaType) setPendingProjectType(ideaType);
       window.location.reload();
     } catch (err) {
       console.error('[MyProjectsHome] start from idea failed', err);
