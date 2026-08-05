@@ -45,17 +45,33 @@ function parseBuckets(raw: string): Map<string, string[]> {
   return map;
 }
 
+function sleep(ms: number): Promise<void> {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
 async function fetchWithRetry(url: string, headers: Record<string, string>): Promise<Response | null> {
-  const attempt = async () => {
+  const maxAttempts = Math.max(1, Number(process.env.FIGMA_PROBE_RETRIES || "4") || 4);
+  let res: Response | null = null;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
-      return await fetch(url, { headers });
+      res = await fetch(url, { headers });
     } catch {
-      return null;
+      res = null;
     }
-  };
-  let res = await attempt();
-  if (!res || res.status >= 500) {
-    res = await attempt();
+    if (!res) {
+      await sleep(1000 * attempt);
+      continue;
+    }
+    if (res.status !== 429 && res.status < 500) return res;
+    // Cap wait — Figma sometimes returns huge Retry-After values that would hang the probe.
+    const retryAfter = Number(res.headers.get("retry-after") || "");
+    const fromHeader =
+      Number.isFinite(retryAfter) && retryAfter > 0 ? Math.min(90, retryAfter) * 1000 : 0;
+    const waitMs = fromHeader || Math.min(60_000, 5000 * attempt);
+    if (attempt < maxAttempts) {
+      console.log(`       rate-limited (HTTP ${res.status}) — waiting ${Math.round(waitMs / 1000)}s…`);
+      await sleep(waitMs);
+    }
   }
   return res;
 }
@@ -108,8 +124,13 @@ async function main() {
   }
 
   let okCount = 0;
+  const delayMs = Math.max(0, Number(process.env.FIGMA_PROBE_DELAY_MS || "1200") || 0);
   console.log("\nPer-key diagnostics:");
-  for (const fileKey of probeKeys) {
+  for (let i = 0; i < probeKeys.length; i++) {
+    const fileKey = probeKeys[i]!;
+    if (i > 0 && delayMs > 0) {
+      await new Promise((r) => setTimeout(r, delayMs));
+    }
     const fr = await fetchWithRetry(
       `https://api.figma.com/v1/files/${encodeURIComponent(fileKey)}?depth=2`,
       { "X-Figma-Token": token },
@@ -138,12 +159,17 @@ async function main() {
     }
   }
 
+  if (okCount > 0) {
+    console.log(`\nALL NEEDED PASS — ${okCount}/${probeKeys.length} file(s) readable`);
+    process.exit(0);
+  }
+  console.log("\nFAIL — no readable files");
   console.log(
-    okCount > 0
-      ? `\nALL NEEDED PASS — ${okCount}/${probeKeys.length} file(s) readable`
-      : "\nFAIL — no readable files",
+    "hint: HTTP 429 = Figma rate limit. Wait a few minutes, then run:\n" +
+      "  FIGMA_PROBE_DELAY_MS=5000 npm run check:figma-refs\n" +
+      "(delay must be on the same line as npm, or use: export FIGMA_PROBE_DELAY_MS=5000)",
   );
-  process.exit(okCount > 0 ? 0 : 1);
+  process.exit(1);
 }
 
 main().catch((e) => {

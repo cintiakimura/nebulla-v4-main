@@ -28,7 +28,9 @@ npm run figma:publish-drafts -- --only=figma_somekit_abcdefgh
 
 | Path | Role |
 |------|------|
-| `figma-keys.csv` | Your owned Bucket/Link/FileKey list (gitignored) |
+| `figma-keys.csv` | Ops shortlist (4 buckets) — gitignored; used by download + mirrors `.env` |
+| `figma-keys.catalog.csv` | Full owned catalog from Sheet3 (machine buckets) — gitignored |
+| `figma-keys.example.csv` | Committed example shortlist |
 | `raw/{fileKey}/document.json` | Downloaded Figma file |
 | `download-manifest.json` | Resume + status |
 | `profile-drafts/*.json` | Drafts with `_draft_meta` |

@@ -15,24 +15,23 @@ Columns: `Bucket`, `Link`, `FileKey`.
 
 ## Starter keys (curated)
 
-| Role | Source | FileKey | API probe (2026-07-29) |
-|------|--------|---------|-------------------------|
-| Mobile screens | Sheet `/design/` copy | `ZEbJpC67UQyeeynt1UR8gT` | **OK** (~37 frames) |
-| Landing / web | Sheet community e.g. Whitepace `1156860863353724933` | *(duplicate first)* | Community ID → **404** until duplicated |
-| Dashboard / admin | Sheet e.g. Metrix `1149477096761797772` or TailAdmin `1214477970819985778` | *(duplicate first)* | Community ID → **404** until duplicated |
-| Auth (optional) | Sheet e.g. `1335900219638650169` | *(duplicate first)* | Community ID → **404** until duplicated |
+Ops CSV (gitignored): `nebulla-project/figma-library/figma-keys.csv`  
+Full owned catalog (gitignored): `nebulla-project/figma-library/figma-keys.catalog.csv`  
+Example shortlist (committed): `nebulla-project/figma-library/figma-keys.example.csv`
 
-**Local starter (works today with one owned file):**
+| Role (bucket) | Source | FileKey |
+|---------------|--------|---------|
+| mobile | Mobile UI kit (owned copy) | `ZEbJpC67UQyeeynt1UR8gT` |
+| landing | Whitepace SaaS landing (owned) | `P6lA9sHTHVbnmUfoYbV9Ir` |
+| dashboard | Metrix SaaS dashboard (owned) | `TgYmEqMwrWFHBxF2kAVOaF` |
+| auth | App login / signup kit (owned) | `MaFREMBRF3vQ8BhtqA2ZpK` |
 
-```bash
-FIGMA_REFERENCE_FILE_KEYS=ZEbJpC67UQyeeynt1UR8gT
-```
-
-**Multi-bucket (optional — quality for varied page types, not mandatory):**
+**Multi-bucket ops shortlist (recommended):**
 
 ```bash
-FIGMA_REFERENCE_FILE_KEYS=ZEbJpC67UQyeeynt1UR8gT,<landingDesignKey>,<dashboardDesignKey>
-FIGMA_REFERENCE_BUCKETS=mobile=ZEbJpC67UQyeeynt1UR8gT,landing=<landingDesignKey>,dashboard=<dashboardDesignKey>
+FIGMA_REFERENCE_FILE_KEYS=ZEbJpC67UQyeeynt1UR8gT,P6lA9sHTHVbnmUfoYbV9Ir,TgYmEqMwrWFHBxF2kAVOaF,MaFREMBRF3vQ8BhtqA2ZpK
+FIGMA_REFERENCE_BUCKETS=mobile=ZEbJpC67UQyeeynt1UR8gT,landing=P6lA9sHTHVbnmUfoYbV9Ir,dashboard=TgYmEqMwrWFHBxF2kAVOaF,auth=MaFREMBRF3vQ8BhtqA2ZpK
+FIGMA_REFERENCE_MAX_FILES=4
 ```
 
 Known bucket names: `mobile`, `landing`, `dashboard`, `auth`, `web`. Unknown names are ignored.
