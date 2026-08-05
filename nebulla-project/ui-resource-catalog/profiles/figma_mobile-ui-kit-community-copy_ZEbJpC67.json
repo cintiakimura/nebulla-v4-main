@@ -1,0 +1,50 @@
+{
+  "id": "figma_mobile-ui-kit-community-copy_ZEbJpC67",
+  "kind": "figma_kit",
+  "platform": "mobile",
+  "page_types": [
+    "auth",
+    "detail",
+    "home",
+    "empty"
+  ],
+  "density": "compact",
+  "personality": [
+    "clean",
+    "professional"
+  ],
+  "best_for": [
+    "auth",
+    "detail",
+    "home",
+    "empty",
+    "mobile",
+    "clean",
+    "professional"
+  ],
+  "strengths": [
+    "Broad screen coverage",
+    "Auth form patterns available"
+  ],
+  "weaknesses": [
+    "Confirm template_id maps to a real v2 template before relying on layout override"
+  ],
+  "tags": [
+    "mobile",
+    "auth",
+    "detail",
+    "home",
+    "empty",
+    "clean",
+    "professional"
+  ],
+  "description": "Mobile UI kit (Community) (Copy) Platform: mobile. Likely page types: auth, detail, home, empty. Density guess: compact. Suggested template_id: mobile_auth_form. Frames/components sampled: 292. Draft auto-profile from Figma document structure — review before publish.",
+  "suitability": "Best as structural inspiration for auth/detail/home/empty on mobile.",
+  "limitations": "Auto-draft from node names/structure only; not vision-reviewed yet.",
+  "template_id": "mobile_auth_form",
+  "figma_file_key": "ZEbJpC67UQyeeynt1UR8gT",
+  "license": "check-original-kit-license",
+  "source": "figma-api-download",
+  "version": "1",
+  "industry": []
+}
