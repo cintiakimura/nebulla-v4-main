@@ -12,6 +12,8 @@ Hand-authored **Resource Profiles** for Nebulla UI Gen matching.
 3. Optionally add `previews/{id}.png` and set `preview_local`: `previews/{id}.png`.
 4. Run `npm run test:ui-gen` (matching tests).
 
+**From Figma kits (offline):** see `nebulla-project/figma-library/README.md` — `figma:download` → `figma:profile-drafts` → review `template_id` → `figma:publish-drafts`.
+
 ## Sync to Cloudflare R2
 
 ```bash

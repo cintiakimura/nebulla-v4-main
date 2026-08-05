@@ -17,3 +17,12 @@ data/cloud-projects/
 # Privacy-safe contract telemetry JSONL (Layer 0)
 data/contract-telemetry.jsonl
 .vercel
+
+# Figma library ingest (large / license-sensitive — keep local)
+nebulla-project/figma-library/raw/
+nebulla-project/figma-library/profile-drafts/
+nebulla-project/figma-library/download-manifest.json
+nebulla-project/figma-library/figma-keys.csv
+figma-raw/
+figma-profile-drafts/
+download-manifest.json

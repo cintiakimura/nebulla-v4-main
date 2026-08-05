@@ -60,6 +60,23 @@ npm run check:figma-refs
 
 Prints PASS/FAIL **per key** with HTTP outcome (never prints the token). Also prints parsed `FIGMA_REFERENCE_BUCKETS` if set.
 
+## Offline library ingest (optional)
+
+Build an internal raw + profile catalog **without** calling Figma on every Generate UI:
+
+```bash
+cp nebulla-project/figma-library/figma-keys.example.csv nebulla-project/figma-library/figma-keys.csv
+# edit figma-keys.csv — owned FileKeys only (Duplicate Community first)
+
+export FIGMA_API_KEY=figd_…
+npm run figma:download -- ./nebulla-project/figma-library/figma-keys.csv
+npm run figma:profile-drafts
+# review drafts (set/confirm template_id), then:
+npm run figma:publish-drafts -- --only=<draft-id>
+```
+
+Details: `nebulla-project/figma-library/README.md`. Runtime still uses env keys + seed until profiles are published.
+
 ## Failure path (engine)
 
 ```text
