@@ -1,4 +1,4 @@
-import { getBrowserProjectName, withProjectQuery } from './nebulaProjectApi';
+import { withProjectQuery } from './nebulaProjectApi';
 
 /**
  * Download Markdown technical documentation for the active project (Master Plan export).
@@ -9,10 +9,8 @@ export async function downloadTechnicalDocumentation(): Promise<{
   filename?: string;
 }> {
   try {
-    const projectName = getBrowserProjectName().trim() || 'Untitled Project';
-    const url = withProjectQuery(
-      `/api/master-plan/technical-documentation?projectName=${encodeURIComponent(projectName)}`,
-    );
+    // withProjectQuery already appends projectKey + projectName — do not add them again.
+    const url = withProjectQuery('/api/master-plan/technical-documentation');
     const res = await fetch(url, { credentials: 'include', cache: 'no-store' });
     if (!res.ok) {
       let msg = `Export failed (${res.status})`;

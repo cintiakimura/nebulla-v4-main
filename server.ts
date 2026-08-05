@@ -1208,8 +1208,12 @@ No approved UI code yet.
         }
       }
 
-      const projectNameRaw =
-        typeof req.query.projectName === "string" ? String(req.query.projectName).trim() : "";
+      const projectNameParam = req.query.projectName;
+      const projectNameRaw = Array.isArray(projectNameParam)
+        ? String(projectNameParam[0] ?? "").trim()
+        : typeof projectNameParam === "string"
+          ? projectNameParam.trim()
+          : "";
       const projectName = projectNameRaw || "Untitled Project";
       const ops = getOpsReadiness();
       const completeness = assessMasterPlanCompletenessWithWorkspace({
