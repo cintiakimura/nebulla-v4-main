@@ -569,7 +569,7 @@ export function MyProjectsHome() {
 
   return (
     <div className="min-h-0 flex-1 overflow-auto bg-background">
-      <div className="mx-auto flex w-full max-w-3xl flex-col gap-12 px-6 py-12 sm:px-10 sm:py-16">
+      <div className="mx-auto flex w-full max-w-3xl flex-col gap-8 px-6 py-4 sm:px-10 sm:py-6">
         {hasExistingWork ? (
           <>
             {projectsSection}

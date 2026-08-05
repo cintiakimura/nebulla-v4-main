@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Activity, AlertCircle, CheckCircle2, ChevronDown, ChevronRight, Wrench, X } from 'lucide-react';
+import { AlertCircle, CheckCircle2, ChevronDown, ChevronRight, Wrench } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
   APP_STATUS_EVENTS,
@@ -34,7 +34,6 @@ function IssueCard({
   t: (key: string, vars?: Record<string, string | number>) => string;
 }) {
   const [techOpen, setTechOpen] = useState(false);
-  // Re-map so IDE locale changes refresh friendly copy without clearing issues.
   const friendly = mapRuntimeToFriendly({
     technicalMessage: issue.technicalMessage,
     source: issue.source,
@@ -91,21 +90,25 @@ function IssueCard({
   );
 }
 
-/** Cursor-style App Status control for the chat header. */
+/**
+ * Inline App Status (document flow — does not overlay chat greeting).
+ * Healthy: shows label only (no separate action button). Issues: auto-expands + voice nudge.
+ */
 export function IdeAppStatusMenuButton({
   onFixWithAgent,
   onVoiceNudge,
+  rideStatus,
 }: {
   onFixWithAgent: (debugMessage: string) => void;
-  /** Optional debounced TTS when a new issue arrives (parent gates Open talk). */
   onVoiceNudge?: (text: string) => void;
+  /** Optional ride / UI Gen line shown with App Status (not in header strip). */
+  rideStatus?: string | null;
 }) {
   const { t } = useLanguage();
   const snap = useAppRuntimeSnapshot();
   const [open, setOpen] = useState(false);
   const errorCount = snap.issues.filter((i) => i.severity !== 'info').length;
   const healthy = errorCount === 0;
-  const badge = snap.unreadCount > 0 ? snap.unreadCount : errorCount > 0 ? errorCount : 0;
 
   useEffect(() => {
     const onOpen = () => {
@@ -121,6 +124,8 @@ export function IdeAppStatusMenuButton({
       const detail = (ev as CustomEvent).detail as { issue?: AppRuntimeIssue; deduped?: boolean } | undefined;
       if (!detail?.issue || detail.deduped) return;
       if (detail.issue.severity === 'info') return;
+      setOpen(true);
+      markAppRuntimeSeen();
       onVoiceNudge?.(t('appStatus.voiceNudge'));
     };
     window.addEventListener(APP_STATUS_EVENTS.issue, onIssue);
@@ -131,7 +136,6 @@ export function IdeAppStatusMenuButton({
     (issue: AppRuntimeIssue) => {
       setOpen(false);
       const { primary, related } = getAppStatusDebugIssues(3);
-      // Prefer multi-issue payload; fall back to the clicked card as primary.
       const payload = primary
         ? formatAppStatusDebugMessage({
             primary: primary.id === issue.id ? primary : issue,
@@ -153,100 +157,70 @@ export function IdeAppStatusMenuButton({
       : t('appStatus.nIssues', { count: errorCount });
 
   return (
-    <div className="relative">
-      <button
-        type="button"
-        title={t('appStatus.titleAttr')}
-        aria-label={t('appStatus.title')}
-        aria-expanded={open}
-        onClick={() => {
-          setOpen((o) => !o);
-          if (!open) markAppRuntimeSeen();
-        }}
+    <div className="shrink-0 border-b border-border/70">
+      <div
         className={cn(
-          'relative flex h-8 w-8 items-center justify-center rounded-full ring-1 transition',
-          healthy
-            ? 'text-muted-foreground ring-[color-mix(in_srgb,var(--outline-variant)_18%,transparent)] hover:text-foreground'
-            : 'text-red-200 ring-red-500/35 bg-red-500/10 hover:bg-red-500/15',
+          'flex items-center gap-2 px-2.5 py-1.5',
+          healthy ? 'text-emerald-200/90' : 'bg-red-500/10 text-red-100',
         )}
       >
         {healthy ? (
-          <Activity className="h-3.5 w-3.5" aria-hidden />
+          <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-400/90" aria-hidden />
         ) : (
-          <AlertCircle className="h-3.5 w-3.5" aria-hidden />
+          <AlertCircle className="h-3.5 w-3.5 shrink-0 text-red-300/90" aria-hidden />
         )}
-        {badge > 0 ? (
-          <span className="absolute -right-0.5 -top-0.5 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-red-500 px-0.5 text-[9px] font-bold text-white">
-            {badge > 9 ? '9+' : badge}
-          </span>
-        ) : null}
-      </button>
-
-      {open ? (
-        <>
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-[11px] font-normal">{statusLabel}</p>
+          {rideStatus ? (
+            <p className="truncate text-[10px] text-muted-foreground">{rideStatus}</p>
+          ) : null}
+        </div>
+        {!healthy ? (
           <button
             type="button"
-            className="fixed inset-0 z-[70] cursor-default"
-            aria-label={t('common.close')}
-            onClick={() => setOpen(false)}
-          />
-          <div
-            className="absolute right-0 top-full z-[80] mt-1.5 w-[min(100vw-1.5rem,20rem)] rounded-xl border border-border bg-[#0a0a0a] p-2.5 shadow-xl ring-1 ring-[color-mix(in_srgb,var(--outline-variant)_14%,transparent)]"
-            role="dialog"
-            aria-label={t('appStatus.title')}
+            onClick={() => {
+              setOpen((o) => !o);
+              markAppRuntimeSeen();
+            }}
+            className="shrink-0 rounded-md px-2 py-0.5 text-[10px] text-red-100/90 ring-1 ring-red-500/30 hover:bg-red-500/15"
           >
-            <div className="mb-2 flex items-center justify-between gap-2 px-0.5">
-              <div className="flex min-w-0 items-center gap-1.5">
-                {healthy ? (
-                  <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-400/90" aria-hidden />
-                ) : (
-                  <AlertCircle className="h-3.5 w-3.5 shrink-0 text-red-300/90" aria-hidden />
-                )}
-                <span className="type-label-sm truncate font-medium text-foreground">{statusLabel}</span>
-              </div>
-              <button
-                type="button"
-                className="rounded p-0.5 text-muted-foreground hover:text-foreground"
-                aria-label={t('common.close')}
-                onClick={() => setOpen(false)}
-              >
-                <X className="h-3.5 w-3.5" />
-              </button>
-            </div>
+            {open ? t('common.close') : t('appStatus.title')}
+          </button>
+        ) : null}
+      </div>
 
-            <p className="type-label-sm mb-2 px-0.5 text-muted-foreground">
-              {healthy ? t('appStatus.healthyDetail') : t('appStatus.issuesDetail')}
-            </p>
-
-            <div className="max-h-[min(40vh,16rem)] space-y-2 overflow-y-auto">
-              {snap.issues.slice(0, 3).map((issue) => (
-                <IssueCard key={issue.id} issue={issue} onFix={handleFix} t={t} />
-              ))}
-            </div>
-
-            <div className="mt-2 flex items-center justify-between gap-2 border-t border-border/70 pt-2">
-              <button
-                type="button"
-                disabled={healthy}
-                onClick={() => {
-                  const latest = snap.issues[0];
-                  if (latest) handleFix(latest);
-                }}
-                className="type-label-sm rounded-md px-2 py-1 font-medium text-primary disabled:opacity-40"
-              >
-                {t('appStatus.askAgentFix')}
-              </button>
-              <button
-                type="button"
-                disabled={snap.issues.length === 0}
-                onClick={() => clearAppRuntimeIssues()}
-                className="type-label-sm rounded-md px-2 py-1 text-muted-foreground hover:text-foreground disabled:opacity-40"
-              >
-                {t('appStatus.clear')}
-              </button>
-            </div>
+      {open && !healthy ? (
+        <div
+          className="border-t border-border/70 bg-[#0a0a0a]/90 px-2.5 py-2"
+          role="region"
+          aria-label={t('appStatus.title')}
+        >
+          <p className="type-label-sm mb-2 text-muted-foreground">{t('appStatus.issuesDetail')}</p>
+          <div className="max-h-[min(40vh,14rem)] space-y-2 overflow-y-auto">
+            {snap.issues.slice(0, 3).map((issue) => (
+              <IssueCard key={issue.id} issue={issue} onFix={handleFix} t={t} />
+            ))}
           </div>
-        </>
+          <div className="mt-2 flex items-center justify-between gap-2 border-t border-border/70 pt-2">
+            <button
+              type="button"
+              onClick={() => {
+                const latest = snap.issues[0];
+                if (latest) handleFix(latest);
+              }}
+              className="type-label-sm rounded-md px-2 py-1 font-medium text-primary"
+            >
+              {t('appStatus.askAgentFix')}
+            </button>
+            <button
+              type="button"
+              onClick={() => clearAppRuntimeIssues()}
+              className="type-label-sm rounded-md px-2 py-1 text-muted-foreground hover:text-foreground"
+            >
+              {t('appStatus.clear')}
+            </button>
+          </div>
+        </div>
       ) : null}
     </div>
   );

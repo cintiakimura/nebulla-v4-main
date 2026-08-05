@@ -15,7 +15,7 @@ import {
 
 /**
  * Permanent park-map of the project lifecycle. Clickable; never locks navigation.
- * `header` — compact strip for TopBar center; `banner` — full-width under header (legacy).
+ * Header: steps only (detail lines live in App Status / UI Studio, not under the strip).
  */
 export function IdeStatusStrip({ variant = 'header' }: { variant?: 'header' | 'banner' }) {
   const [phase, setPhase] = useState<ProjectPhase>(() => readProjectPhase());
@@ -35,11 +35,19 @@ export function IdeStatusStrip({ variant = 'header' }: { variant?: 'header' | 'b
     prevPhaseRef.current = next;
     setPhase(next);
     setDeployOk(unlocked);
-    setStatus(
+    // Header uses static phase copy only — never ride overrides (those go to App Status / Studio).
+    const base =
       (next === 'deploy' || next === 'live') && !unlocked
         ? 'Deploy unlocks after your first UI result.'
-        : phaseStatusLine(next),
-    );
+        : ({
+            brainstorm: 'Shaping the idea — tell Nebulla what you’re building.',
+            plan: 'Structure from your idea — name the project to continue.',
+            ui: 'Open UI Studio to generate and refine.',
+            code: 'Optional — open Code when you want to edit files.',
+            deploy: 'Ready when you are — deploy this version.',
+            live: 'Custom domain & DNS — only if you need it.',
+          } as Record<ProjectPhase, string>)[next];
+    setStatus(base);
   }, []);
 
   useEffect(() => {
@@ -116,16 +124,10 @@ export function IdeStatusStrip({ variant = 'header' }: { variant?: 'header' | 'b
           );
         })}
       </ol>
-      <p
-        className={cn(
-          'leading-relaxed text-muted-foreground',
-          inHeader
-            ? 'mt-0.5 max-w-[min(100%,28rem)] truncate text-center text-[9px] lg:text-[10px]'
-            : 'mt-1.5 text-[11px]',
-        )}
-      >
-        {status}
-      </p>
+      {/* Banner variant only — header keeps steps; detail belongs in App Status / UI Studio */}
+      {!inHeader ? (
+        <p className="mt-1.5 text-[11px] leading-relaxed text-muted-foreground">{status}</p>
+      ) : null}
     </div>
   );
 }

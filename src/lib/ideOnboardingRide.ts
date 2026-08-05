@@ -59,14 +59,32 @@ async function maybeFirstUiGenerate(): Promise<void> {
 
   const ready = await isBriefReadyForFirstUi();
   if (!ready) {
-    setRideStatusOverride(
-      'UI Studio is open — finish Discovery / Save Master Plan so the brief is ready, then Generate UI.',
-    );
+    // Surface in chat App Status area — not under the header lifecycle strip.
+    try {
+      window.dispatchEvent(
+        new CustomEvent('nebula-ride-status', {
+          detail: {
+            message:
+              'UI Studio is open — finish Discovery / Save Master Plan so the brief is ready, then Generate UI.',
+          },
+        }),
+      );
+    } catch {
+      /* ignore */
+    }
     return;
   }
 
   firstGenerateAttempted = true;
-  setRideStatusOverride('Generating intentional UI from your plan…');
+  try {
+    window.dispatchEvent(
+      new CustomEvent('nebula-ride-status', {
+        detail: { message: 'Generating intentional UI from your plan…' },
+      }),
+    );
+  } catch {
+    /* ignore */
+  }
   dispatchUiStudioBetaRun({
     autoTriggered: true,
     projectName: getBrowserProjectName().trim() || undefined,

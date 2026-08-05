@@ -2157,14 +2157,32 @@ export function AIChat() {
     [sending, t],
   );
 
+  const [rideStatusLine, setRideStatusLine] = useState<string | null>(null);
+
+  useEffect(() => {
+    const onRideStatus = (ev: Event) => {
+      const msg = (ev as CustomEvent<{ message?: string }>).detail?.message?.trim();
+      setRideStatusLine(msg || null);
+      if (msg) {
+        window.setTimeout(() => setRideStatusLine((cur) => (cur === msg ? null : cur)), 12000);
+      }
+    };
+    const onUiDone = () => setRideStatusLine(null);
+    window.addEventListener('nebula-ride-status', onRideStatus);
+    window.addEventListener('nebula-ui-studio-beta-complete', onUiDone);
+    return () => {
+      window.removeEventListener('nebula-ride-status', onRideStatus);
+      window.removeEventListener('nebula-ui-studio-beta-complete', onUiDone);
+    };
+  }, []);
+
   return (
     <div className="surface-active flex h-full min-h-0 flex-col overflow-hidden">
-      <div className="flex shrink-0 items-center justify-end gap-1.5 border-b border-border/70 px-2.5 py-1.5">
-        <IdeAppStatusMenuButton
-          onFixWithAgent={handleFixWithAgent}
-          onVoiceNudge={onAppStatusVoiceNudge}
-        />
-      </div>
+      <IdeAppStatusMenuButton
+        onFixWithAgent={handleFixWithAgent}
+        onVoiceNudge={onAppStatusVoiceNudge}
+        rideStatus={rideStatusLine}
+      />
 
       {showActivityPanel ? (
         <IdeGrokActivityPanel activity={grokActivity} v0Live={v0Live || v0WatchActive} />
@@ -2210,11 +2228,11 @@ export function AIChat() {
         className="min-h-0 flex-1 space-y-3 overflow-auto p-3"
       >
         {messages.length === 0 && !sending ? (
-          <div className="px-1 py-6 text-center">
-            <p className="type-body-md text-foreground/90">
+          <div className="px-1 pt-2 pb-4 text-left">
+            <p className="text-[12px] leading-relaxed text-foreground/90">
               {centerIsProjectsHome ? t('chat.greeting.projects') : t('chat.greeting')}
             </p>
-            <p className="type-label-sm mt-2 text-muted-foreground">
+            <p className="mt-1 text-[11px] text-muted-foreground">
               {centerIsProjectsHome ? t('chat.greetingSub.projects') : t('chat.greetingSub')}
             </p>
           </div>
@@ -2349,32 +2367,30 @@ export function AIChat() {
           aria-hidden
           tabIndex={-1}
         />
-        <div className="surface-float relative rounded-md border border-transparent p-1.5 ring-1 ring-[color-mix(in_srgb,var(--outline-variant)_12%,transparent)] transition-[box-shadow,background-color] duration-300 ease-out focus-within:ring-[color-mix(in_srgb,var(--outline-variant)_22%,transparent)]">
-          <div className="mb-0.5 flex justify-end">
-            <button
-              type="button"
-              aria-pressed={assistantInteractionMode === 'agent'}
-              title={
-                assistantInteractionMode === 'agent'
-                  ? t('chat.mode.agentHint')
-                  : t('chat.mode.chatHint')
-              }
-              onClick={() =>
-                void applyInteractionMode(
-                  assistantInteractionMode === 'agent' ? 'chat' : 'agent',
-                )
-              }
-              className={cn(
-                'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-normal transition',
-                assistantInteractionMode === 'agent'
-                  ? 'bg-primary/20 text-primary ring-1 ring-primary/30'
-                  : 'text-muted-foreground ring-1 ring-border hover:text-foreground',
-              )}
-            >
-              <Wrench className="h-3 w-3" aria-hidden />
-              {t('chat.mode.agent')}
-            </button>
-          </div>
+        <div className="surface-float relative rounded-md border border-transparent p-1.5 pt-1 ring-1 ring-[color-mix(in_srgb,var(--outline-variant)_12%,transparent)] transition-[box-shadow,background-color] duration-300 ease-out focus-within:ring-[color-mix(in_srgb,var(--outline-variant)_22%,transparent)]">
+          <button
+            type="button"
+            aria-pressed={assistantInteractionMode === 'agent'}
+            title={
+              assistantInteractionMode === 'agent'
+                ? t('chat.mode.agentHint')
+                : t('chat.mode.chatHint')
+            }
+            onClick={() =>
+              void applyInteractionMode(
+                assistantInteractionMode === 'agent' ? 'chat' : 'agent',
+              )
+            }
+            className={cn(
+              'absolute right-1.5 top-1 z-10 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-normal transition',
+              assistantInteractionMode === 'agent'
+                ? 'bg-primary/20 text-primary ring-1 ring-primary/30'
+                : 'bg-black/40 text-muted-foreground ring-1 ring-border hover:text-foreground',
+            )}
+          >
+            <Wrench className="h-3 w-3" aria-hidden />
+            {t('chat.mode.agent')}
+          </button>
           <textarea
             value={input}
             onChange={(e) => {
@@ -2394,7 +2410,7 @@ export function AIChat() {
             }
             rows={2}
             disabled={sending || uploadBusy}
-            className="min-h-[2.75rem] w-full resize-y bg-transparent text-[12px] leading-relaxed text-foreground outline-none placeholder:text-muted-foreground disabled:opacity-50"
+            className="min-h-[2.75rem] w-full resize-none bg-transparent pt-0 pr-16 text-[12px] leading-snug text-foreground outline-none placeholder:text-muted-foreground disabled:opacity-50"
           />
 
           <div className="mt-1 flex items-center justify-between gap-2">
