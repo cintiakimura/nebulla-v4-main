@@ -88,6 +88,7 @@ import {
 import { readUiBriefMarkdown } from "./lib/nebulaUiBrief";
 import { resolveMasterPlanStrictMode } from "./lib/masterPlanStrictPolicy";
 import { assessMasterPlanCompletenessWithWorkspace } from "./lib/masterPlanCompletenessIo";
+import { buildTechnicalDocumentationMarkdown } from "./lib/technicalDocumentationExport";
 import { assessMindMapSubsetOfSection4 } from "./lib/mindMapFidelity";
 import { recordContractTelemetry } from "./lib/nebulaContractTelemetry";
 import {
@@ -1183,6 +1184,77 @@ No approved UI code yet.
     } catch (error) {
       console.error("Error reading master plan:", error);
       res.status(500).json({ error: "Failed to read master plan" });
+    }
+  });
+
+  /**
+   * Markdown technical documentation export (Master Plan + non-secret ops context).
+   * Same project resolution as Master Plan read — never includes secrets/env values.
+   */
+  app.get("/api/master-plan/technical-documentation", (req, res) => {
+    try {
+      const pp = projectPathsFor(req);
+      let plan: Record<string, unknown> = {};
+      if (fs.existsSync(pp.masterPlanPath)) {
+        try {
+          plan = sanitizeMasterPlanForClientResponse(
+            hydrateAndPersistMasterPlan(pp.workspaceRoot, pp.masterPlanPath) as Record<
+              string,
+              unknown
+            >,
+          );
+        } catch {
+          plan = {};
+        }
+      }
+
+      const projectNameRaw =
+        typeof req.query.projectName === "string" ? String(req.query.projectName).trim() : "";
+      const projectName = projectNameRaw || "Untitled Project";
+      const ops = getOpsReadiness();
+      const completeness = assessMasterPlanCompletenessWithWorkspace({
+        plan,
+        mode: resolveMasterPlanStrictMode(pp.workspaceRoot),
+        workspaceRoot: pp.workspaceRoot,
+        checkUiBrief: false,
+      });
+
+      const exportResult = buildTechnicalDocumentationMarkdown(plan, {
+        projectName,
+        projectKey: pp.projectKey,
+        generatedAt: new Date().toISOString(),
+        hosting: {
+          workspaceStorageMode: ops.workspaceStorageMode,
+          durableWorkspaceOk: ops.durableWorkspaceOk,
+          hasR2Storage: ops.r2CredentialsConfigured || ops.workspaceR2Ready,
+          syntheticIsolation: true,
+          notes: [
+            "Shared Nebulla platform service; project isolation via workspace ids",
+            ...(ops.warnings.length
+              ? [`Known platform warnings: ${ops.warnings.length} (see ops readiness; details not expanded here)`]
+              : []),
+          ],
+        },
+        gaps: completeness.gaps.map((g) => ({
+          code: g.code,
+          message: g.message,
+          section: g.section,
+        })),
+        strictMode: completeness.mode,
+      });
+
+      res.setHeader("Content-Type", "text/markdown; charset=utf-8");
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename="${exportResult.filename.replace(/"/g, "")}"`,
+      );
+      if (exportResult.warnings?.length) {
+        res.setHeader("X-Nebulla-Export-Warnings", exportResult.warnings.join("; ").slice(0, 500));
+      }
+      return res.status(200).send(exportResult.markdown);
+    } catch (error) {
+      console.error("Error exporting technical documentation:", error);
+      return res.status(500).json({ error: "Failed to export technical documentation" });
     }
   });
 

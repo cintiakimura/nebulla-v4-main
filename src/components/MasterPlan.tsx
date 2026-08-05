@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { BookOpen, Lock, Save, X } from 'lucide-react';
+import { BookOpen, Download, Lock, Loader2, Save, X } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { readResponseJson } from '../lib/apiFetch';
 import { PRE_CODING_SUMMARY_KEY } from '../lib/masterPlanSections';
 import { getBrowserProjectName, withProjectBody, withProjectQuery } from '../lib/nebulaProjectApi';
 import { runMasterPlanUiPipelineWithV0 } from '../lib/ideArtifactSync';
+import { downloadTechnicalDocumentation } from '../lib/technicalDocumentationDownload';
 import { MasterPlanStatusBanner } from './ide/MasterPlanStatusBanner';
 
 export function MasterPlan({
@@ -147,6 +148,9 @@ export function MasterPlan({
   const activeSection = visibleSections.find(s => s.id === activeTab);
   const activeContent = activeSection?.content ?? '';
 
+  const [exportBusy, setExportBusy] = useState(false);
+  const [exportMsg, setExportMsg] = useState<string | null>(null);
+
   const handleSave = async () => {
     setIsSaved(true);
     try {
@@ -163,6 +167,24 @@ export function MasterPlan({
     }
   };
 
+  const handleExportDocs = async () => {
+    if (exportBusy) return;
+    setExportBusy(true);
+    setExportMsg(null);
+    try {
+      const result = await downloadTechnicalDocumentation();
+      if (!result.ok) {
+        setExportMsg(result.error || 'Export failed');
+        window.setTimeout(() => setExportMsg(null), 6000);
+        return;
+      }
+      setExportMsg(result.filename ? `Downloaded ${result.filename}` : 'Downloaded');
+      window.setTimeout(() => setExportMsg(null), 4000);
+    } finally {
+      setExportBusy(false);
+    }
+  };
+
   return (
     <div className="flex h-full flex-col overflow-hidden border border-border bg-black shadow-2xl">
       {/* Header */}
@@ -176,6 +198,20 @@ export function MasterPlan({
           </span>
         </div>
         <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={() => void handleExportDocs()}
+            disabled={exportBusy}
+            title="Markdown summary of plan, stack, pages, and security baseline"
+            className="flex items-center gap-1 rounded-full border border-border px-3 py-1.5 text-xs font-normal text-foreground transition-colors hover:bg-[#111111] disabled:opacity-45"
+          >
+            {exportBusy ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
+            ) : (
+              <Download className="h-3.5 w-3.5" aria-hidden />
+            )}
+            Export technical documentation
+          </button>
           <button 
             onClick={handleSave}
             className="flex items-center gap-1 rounded-full border border-border px-4 py-1.5 text-xs font-normal text-foreground transition-colors hover:bg-[#111111]"
@@ -189,6 +225,14 @@ export function MasterPlan({
           </button>
         </div>
       </div>
+      {exportMsg ? (
+        <p
+          className="border-b border-border bg-[#111111] px-4 py-1.5 text-[11px] text-muted-foreground"
+          role="status"
+        >
+          {exportMsg}
+        </p>
+      ) : null}
 
       <MasterPlanStatusBanner />
 

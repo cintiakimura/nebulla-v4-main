@@ -22,6 +22,7 @@ Login → project → Plan → **UI Studio Beta** → one Go slice → App Previ
 - CI: `.github/workflows/ci.yml` (lint / test / build)
 - Legal pages: Privacy, Terms, DPA; account export / delete
 - Landing + welcome onboarding: closed-beta / BYOK Grok only (no V0 step)
+- **Export technical documentation** (Markdown) from Master Plan — packaging only; not a full system-design generator
 
 ## Known limitations
 
