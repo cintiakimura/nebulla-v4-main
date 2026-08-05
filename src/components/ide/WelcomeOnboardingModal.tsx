@@ -16,6 +16,7 @@ import {
   isPlausibleGrokApiKey,
   saveGrokApiKeyRobust,
 } from '../../lib/grokUserKey';
+import { XAI_KEY_ACL_SETUP_HINT } from '../../lib/grokKey';
 import {
   markWelcomeOnboardingDone,
   markWelcomeOnboardingSeen,
@@ -218,9 +219,10 @@ export function WelcomeOnboardingModal({ open, user, onClose }: Props) {
                     <ExternalLink className="h-3 w-3" aria-hidden />
                   </a>
                 </li>
-                <li>Create an API key</li>
+                <li>Create an API key and enable chat/model access (or all endpoints / all models)</li>
                 <li>Paste it below</li>
               </ol>
+              <p className="text-xs text-amber-200/80 leading-relaxed">{XAI_KEY_ACL_SETUP_HINT}</p>
 
               <div className="space-y-2">
                 <label className="block text-[11px] uppercase tracking-wider text-muted-foreground" htmlFor="welcome-grok-key">

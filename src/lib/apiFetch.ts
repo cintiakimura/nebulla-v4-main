@@ -44,7 +44,11 @@ export async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> 
     const msg = (data as { error?: string }).error;
     const hint = (data as { hint?: string }).hint;
     const base = typeof msg === "string" && msg ? msg : `Request failed: ${response.status}`;
-    const combined = hint ? `${base}\n\n${hint}` : base;
+    // Prefix status so clients can distinguish 403 (ACL) from 402 (quota) even when body is vague.
+    const withStatus = /\bHTTP\s*\d{3}\b/i.test(base)
+      ? base
+      : `HTTP ${response.status}: ${base}`;
+    const combined = hint ? `${withStatus}\n\n${hint}` : withStatus;
     throw new Error(combined);
   }
   return data as T;

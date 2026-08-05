@@ -28,7 +28,8 @@ Login → project → Plan → **UI Studio Beta** → one Go slice → App Previ
 
 - **Legacy v0 Studio** frozen (API **410** unless `ENABLE_LEGACY_V0=true`)
 - **Pencil live mockups** frozen unless `ENABLE_PENCIL=true` (bundled demo SVG may still serve)
-- **Nebulla Free monthly AI meter** is off by default; if chat shows a limit, it is almost always **xAI provider quota** on the platform key (add BYOK in Secrets) — not “Upgrade to Pro”
+- **Nebulla Free monthly AI meter** is off by default; chat errors are from **xAI** (BYOK or platform key) — not “Upgrade to Pro”
+- **xAI HTTP 403** usually means the API key lacks endpoint/model permissions (common on newly created keys) — enable ACLs in console.x.ai, not a Nebulla save bug
 - **No dedicated Render workspace per customer** — shared Nebulla Render service; isolation = `cfproj_` (+ optional per-project D1)
 - Stripe checkout UI exists but charging is dormant (no webhook tier upgrade yet)
 - Rate limits are per-process memory (not Redis) — fine for single Render instance

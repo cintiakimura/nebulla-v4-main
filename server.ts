@@ -5012,18 +5012,27 @@ ${answer.slice(0, 8000)}`;
             ? ` (Nebulla used your ${keySourceLabel} key …${keyTail})`
             : ` (Nebulla used your ${keySourceLabel} key)`;
         const quotaLike = isGrokQuotaLimitError(completion.status, completion.error);
+        const permissionLike =
+          completion.status === 403 ||
+          /forbidden|permission|acl|team admin|not (?:been )?granted|ask your team admin/i.test(
+            completion.error,
+          );
         const baseError =
           completion.status === 401
             ? `AI provider rejected this API key (401). ${completion.error}${renderKeyHint}`
             : completion.error;
+        const aclHint =
+          "xAI 403 usually means the API key has no chat/model permissions. In console.x.ai edit the key → enable all endpoints/models (or chat + grok models) → save → paste again in Secrets.";
         return res
           .status(completion.status >= 400 && completion.status < 600 ? completion.status : 502)
           .json({
-            error: quotaLike || isAuthKeyError ? `${baseError}${keyMeta}` : baseError,
+            error:
+              quotaLike || isAuthKeyError || permissionLike ? `${baseError}${keyMeta}` : baseError,
             provider: completion.provider,
             keySource: keyRes.source,
             ...(keyTail ? { keyTail } : {}),
             ...(isAuthKeyError ? { hint: `${MAIN_AI_KEY_SETUP_HINT}${renderKeyHint}` } : {}),
+            ...(permissionLike && !quotaLike ? { hint: aclHint } : {}),
             ...(quotaLike && keyRes.source === "user_db"
               ? {
                   hint: "This is your Secrets/account xAI key, not Nebulla Free plan. Top up that key at console.x.ai or paste a different key with credits in Secrets.",

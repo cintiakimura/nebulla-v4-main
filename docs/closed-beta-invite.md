@@ -19,6 +19,8 @@ You’re invited to the **Nebulla closed beta** (invite-only, free during beta).
 
 Bring your own **Grok/xAI** API key (BYOK). No payment on Nebulla during closed beta.
 
+**Important:** when you create the xAI key, enable **chat/model API access** (or all endpoints / all models). New keys with empty permissions return HTTP 403 in chat.
+
 **Out of scope for this wave:** Legacy V0 Studio, Pencil live mockups, billing/checkout.
 
 **Feedback (reply with short answers):**

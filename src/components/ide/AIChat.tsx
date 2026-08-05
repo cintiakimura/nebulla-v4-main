@@ -2228,7 +2228,7 @@ export function AIChat() {
           role="alert"
         >
           <p className="min-w-0 flex-1 leading-snug">{sendError}</p>
-          {/Secrets|BYOK|API key/i.test(sendError) ? (
+          {/Secrets|BYOK|API key|403|console\.x\.ai|permissions/i.test(sendError) ? (
             <button
               type="button"
               className="shrink-0 rounded-md px-2 py-0.5 font-medium text-red-50 ring-1 ring-red-400/40 hover:bg-red-500/20"

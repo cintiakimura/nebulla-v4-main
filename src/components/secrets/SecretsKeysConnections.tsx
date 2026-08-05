@@ -15,6 +15,7 @@ import {
   isPlausibleGrokApiKey,
   saveGrokApiKeyRobust,
 } from '../../lib/grokUserKey';
+import { XAI_KEY_ACL_SETUP_HINT } from '../../lib/grokKey';
 import { fetchByokStatus } from '../../lib/byokClient';
 import { getProjectSecretValue, upsertProjectSecret } from '../../lib/nebulaSecretHelpers';
 import { setPreferredAiProvider } from '../../lib/nebulaWelcomeOnboarding';
@@ -259,6 +260,7 @@ export function SecretsKeysConnections({
               </a>
               .
             </p>
+            <p className="text-xs text-amber-200/90 leading-relaxed pt-1">{XAI_KEY_ACL_SETUP_HINT}</p>
           </div>
         </div>
         <form
