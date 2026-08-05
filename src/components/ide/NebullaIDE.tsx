@@ -35,7 +35,6 @@ import { navIdToCenterPane } from '../../lib/ideCenterPanes';
 import { registerNebulaUiStudioBridge } from '../../lib/nebulaUiStudioEvents';
 import { shouldShowWelcomeOnboarding } from '../../lib/nebulaWelcomeOnboarding';
 import { cloudBlockedBannerMessage } from '../../lib/ideCloudStatus';
-import { IdeStatusStrip } from '@/components/ide/IdeStatusStrip';
 import { installOnboardingRideListeners } from '../../lib/ideOnboardingRide';
 import { markUserJumpedPhase } from '../../lib/ideProjectPhase';
 
@@ -578,7 +577,6 @@ function NebullaIDEShell() {
         ) : null}
 
         <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
-          <IdeStatusStrip />
           <div className="flex min-h-0 flex-1 overflow-hidden">
             <IdeCenterWorkspace />
           </div>

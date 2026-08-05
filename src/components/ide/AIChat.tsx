@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Bot, Hand, Loader2, Mic, MessageSquare, Paperclip, Rocket, Send, User, Wrench } from 'lucide-react';
+import { Bot, Hand, Loader2, Mic, Paperclip, Rocket, Send, User, Wrench } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { fetchSessionUser, syncActiveCloudProjectFromSession, upsertCloudProject } from '../../lib/nebulaCloud';
 import {
@@ -56,7 +56,6 @@ import { handleSmartChatMessage, type SmartChatFilePreview } from '../../lib/sma
 import { isMasterPlanCompleteForDiscovery } from '../../lib/masterPlanSections';
 import {
   interactionModeIdleSubhead,
-  interactionModeStatusLabel,
   type IdeAssistantInteractionMode,
 } from '../../lib/ideAssistantInteractionMode';
 import {
@@ -180,11 +179,13 @@ function ChatRoundButton({
   label,
   onClick,
   disabled,
+  size = 'md',
 }: {
   children: React.ReactNode;
   label: string;
   onClick?: () => void;
   disabled?: boolean;
+  size?: 'sm' | 'md';
 }) {
   return (
     <button
@@ -193,7 +194,10 @@ function ChatRoundButton({
       aria-label={label}
       onClick={onClick}
       disabled={disabled}
-      className="btn-secondary-surface flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-muted-foreground ring-1 ring-[color-mix(in_srgb,var(--outline-variant)_12%,transparent)] transition-[background-color,box-shadow,color] duration-300 ease-out hover:text-foreground hover:ring-[color-mix(in_srgb,var(--outline-variant)_22%,transparent)] disabled:pointer-events-none disabled:opacity-40"
+      className={cn(
+        'btn-secondary-surface flex shrink-0 items-center justify-center rounded-full text-muted-foreground ring-1 ring-[color-mix(in_srgb,var(--outline-variant)_12%,transparent)] transition-[background-color,box-shadow,color] duration-300 ease-out hover:text-foreground hover:ring-[color-mix(in_srgb,var(--outline-variant)_22%,transparent)] disabled:pointer-events-none disabled:opacity-40',
+        size === 'sm' ? 'h-7 w-7' : 'h-9 w-9',
+      )}
     >
       {children}
     </button>
@@ -289,11 +293,6 @@ export function AIChat() {
     window.addEventListener(APP_STATUS_EVENTS.looksFixed, onLooksFixed);
     return () => window.removeEventListener(APP_STATUS_EVENTS.looksFixed, onLooksFixed);
   }, [t]);
-
-  const modeStatusChip = useMemo(
-    () => interactionModeStatusLabel(assistantInteractionMode),
-    [assistantInteractionMode, t],
-  );
 
   useEffect(() => {
     resetAppRuntimeForProject();
@@ -2160,61 +2159,11 @@ export function AIChat() {
 
   return (
     <div className="surface-active flex h-full min-h-0 flex-col overflow-hidden">
-      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border/70 px-3 py-2">
-        <div
-          className="inline-flex rounded-full p-0.5 ring-1 ring-[color-mix(in_srgb,var(--outline-variant)_18%,transparent)]"
-          role="group"
-          aria-label="Assistant mode"
-        >
-          <button
-            type="button"
-            aria-pressed={assistantInteractionMode === 'chat'}
-            title={t('chat.mode.chatHint')}
-            onClick={() => void applyInteractionMode('chat')}
-            className={cn(
-              'inline-flex h-8 items-center gap-1.5 rounded-full px-3 text-[0.75rem] font-medium transition',
-              assistantInteractionMode === 'chat'
-                ? 'bg-foreground/10 text-foreground'
-                : 'text-muted-foreground hover:text-foreground',
-            )}
-          >
-            <MessageSquare className="h-3.5 w-3.5" aria-hidden />
-            {t('chat.mode.chat')}
-          </button>
-          <button
-            type="button"
-            aria-pressed={assistantInteractionMode === 'agent'}
-            title={t('chat.mode.agentHint')}
-            onClick={() => void applyInteractionMode('agent')}
-            className={cn(
-              'inline-flex h-8 items-center gap-1.5 rounded-full px-3 text-[0.75rem] font-medium transition',
-              assistantInteractionMode === 'agent'
-                ? 'bg-primary/20 text-primary'
-                : 'text-muted-foreground hover:text-foreground',
-            )}
-          >
-            <Wrench className="h-3.5 w-3.5" aria-hidden />
-            {t('chat.mode.agent')}
-          </button>
-        </div>
-        <div className="flex items-center gap-1.5">
-          <IdeAppStatusMenuButton
-            onFixWithAgent={handleFixWithAgent}
-            onVoiceNudge={onAppStatusVoiceNudge}
-          />
-          <span
-            className={cn(
-              'type-label-sm rounded-full px-2.5 py-1 ring-1',
-              assistantInteractionMode === 'agent'
-                ? 'text-primary ring-primary/30'
-                : 'text-muted-foreground ring-[color-mix(in_srgb,var(--outline-variant)_18%,transparent)]',
-              sending ? 'opacity-100' : 'opacity-80',
-            )}
-            role="status"
-          >
-            {modeStatusChip}
-          </span>
-        </div>
+      <div className="flex shrink-0 items-center justify-end gap-1.5 border-b border-border/70 px-2.5 py-1.5">
+        <IdeAppStatusMenuButton
+          onFixWithAgent={handleFixWithAgent}
+          onVoiceNudge={onAppStatusVoiceNudge}
+        />
       </div>
 
       {showActivityPanel ? (
@@ -2390,7 +2339,7 @@ export function AIChat() {
         <div ref={messagesEndRef} className="h-px shrink-0" aria-hidden />
       </div>
 
-      <div className="shrink-0 border-t border-border p-3">
+      <div className="shrink-0 border-t border-border p-2">
         <input
           ref={fileInputRef}
           type="file"
@@ -2400,7 +2349,32 @@ export function AIChat() {
           aria-hidden
           tabIndex={-1}
         />
-        <div className="surface-float rounded-lg border border-transparent p-2 ring-1 ring-[color-mix(in_srgb,var(--outline-variant)_12%,transparent)] transition-[box-shadow,background-color] duration-300 ease-out focus-within:ring-[color-mix(in_srgb,var(--outline-variant)_22%,transparent)]">
+        <div className="surface-float relative rounded-md border border-transparent p-1.5 ring-1 ring-[color-mix(in_srgb,var(--outline-variant)_12%,transparent)] transition-[box-shadow,background-color] duration-300 ease-out focus-within:ring-[color-mix(in_srgb,var(--outline-variant)_22%,transparent)]">
+          <div className="mb-0.5 flex justify-end">
+            <button
+              type="button"
+              aria-pressed={assistantInteractionMode === 'agent'}
+              title={
+                assistantInteractionMode === 'agent'
+                  ? t('chat.mode.agentHint')
+                  : t('chat.mode.chatHint')
+              }
+              onClick={() =>
+                void applyInteractionMode(
+                  assistantInteractionMode === 'agent' ? 'chat' : 'agent',
+                )
+              }
+              className={cn(
+                'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-normal transition',
+                assistantInteractionMode === 'agent'
+                  ? 'bg-primary/20 text-primary ring-1 ring-primary/30'
+                  : 'text-muted-foreground ring-1 ring-border hover:text-foreground',
+              )}
+            >
+              <Wrench className="h-3 w-3" aria-hidden />
+              {t('chat.mode.agent')}
+            </button>
+          </div>
           <textarea
             value={input}
             onChange={(e) => {
@@ -2418,25 +2392,27 @@ export function AIChat() {
                 ? t('chat.placeholder.agent')
                 : t('chat.placeholder.chat')
             }
-            rows={3}
+            rows={2}
             disabled={sending || uploadBusy}
-            className="type-body-md min-h-[4.5rem] w-full resize-y bg-transparent text-foreground outline-none placeholder:text-muted-foreground disabled:opacity-50"
+            className="min-h-[2.75rem] w-full resize-y bg-transparent text-[12px] leading-relaxed text-foreground outline-none placeholder:text-muted-foreground disabled:opacity-50"
           />
 
-          <div className="mt-2 flex items-center justify-between gap-3">
-            <div className="flex items-center gap-1.5">
+          <div className="mt-1 flex items-center justify-between gap-2">
+            <div className="flex items-center gap-1">
               <ChatRoundButton
+                size="sm"
                 label={uploadBusy ? t('chat.uploading') : t('chat.attach')}
                 onClick={handleFileAttachClick}
                 disabled={sending || uploadBusy || micInputBlocked}
               >
                 {uploadBusy ? (
-                  <Loader2 className="h-[18px] w-[18px] animate-spin" aria-hidden />
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
                 ) : (
-                  <Paperclip className="h-[18px] w-[18px]" aria-hidden />
+                  <Paperclip className="h-3.5 w-3.5" aria-hidden />
                 )}
               </ChatRoundButton>
               <ChatRoundButton
+                size="sm"
                 label={t('chat.interruptVoice')}
                 onClick={() => {
                   interruptVoiceAndTts();
@@ -2444,66 +2420,35 @@ export function AIChat() {
                   window.setTimeout(() => setAccessoryHint(null), 3200);
                 }}
               >
-                <Hand className="h-[18px] w-[18px]" />
+                <Hand className="h-3.5 w-3.5" />
               </ChatRoundButton>
               <ChatRoundButton
+                size="sm"
                 label={isRecordingVoice ? t('chat.micStop') : t('chat.mic')}
                 onClick={() => toggleVoiceMic()}
                 disabled={sending || uploadBusy}
               >
                 <Mic
                   className={cn(
-                    'h-[18px] w-[18px]',
+                    'h-3.5 w-3.5',
                     isRecordingVoice ? 'text-destructive' : '',
                   )}
                 />
               </ChatRoundButton>
             </div>
 
-            <div className="flex flex-col items-end gap-0.5">
-              <div className="flex items-center gap-1.5">
-                <button
-                  type="button"
-                  onClick={() => void handleGo()}
-                  disabled={sending}
-                  title={
-                    !masterPlanCompleteHint
-                      ? centerIsProjectsHome
-                        ? t('chat.goMasterPlanHint.soft')
-                        : t('chat.goMasterPlanHint')
-                      : assistantInteractionMode === 'chat'
-                        ? t('chat.goNeedsAgent')
-                        : t('chat.goAgentTitle')
-                  }
-                  className={cn(
-                    'btn-primary-cta flex h-9 shrink-0 items-center gap-1.5 rounded-full px-4 text-[0.8125rem] disabled:opacity-40',
-                    assistantInteractionMode === 'chat' && 'opacity-70',
-                    !masterPlanCompleteHint && 'opacity-80',
-                  )}
-                >
-                  <Rocket className="h-3.5 w-3.5" />
-                  Go
-                </button>
-                <ChatRoundButton
-                  label={t('chat.sendMessage')}
-                  onClick={() => {
-                    stopVoiceRecognition();
-                    setIsRecordingVoice(false);
-                    void sendChat();
-                  }}
-                  disabled={!input.trim() || sending || uploadBusy}
-                >
-                  <Send className="h-[18px] w-[18px]" />
-                </ChatRoundButton>
-              </div>
-              {!masterPlanCompleteHint ? (
-                <p className="max-w-[14rem] text-right text-[10px] leading-snug text-muted-foreground">
-                  {centerIsProjectsHome
-                    ? t('chat.goMasterPlanHint.soft')
-                    : t('chat.goMasterPlanHint')}
-                </p>
-              ) : null}
-            </div>
+            <ChatRoundButton
+              size="sm"
+              label={t('chat.sendMessage')}
+              onClick={() => {
+                stopVoiceRecognition();
+                setIsRecordingVoice(false);
+                void sendChat();
+              }}
+              disabled={!input.trim() || sending || uploadBusy}
+            >
+              <Send className="h-3.5 w-3.5" />
+            </ChatRoundButton>
           </div>
         </div>
       </div>

@@ -7,6 +7,7 @@ import { useClickOutside } from '../../lib/useClickOutside';
 import { type IdeChatModelId, useIdeWorkspace } from '@/components/ide/IdeWorkspaceContext';
 import { AI_CHAT_MODELS, AI_PROVIDER_LABELS } from '../../lib/aiProvider';
 import { useLanguage } from '@/components/i18n/LanguageProvider';
+import { IdeStatusStrip } from '@/components/ide/IdeStatusStrip';
 import { fetchSessionUser, logoutNebula, type NebulaSessionUser } from '../../lib/nebulaCloud';
 import { sessionInitials } from '../../lib/sessionInitials';
 
@@ -154,15 +155,15 @@ export function TopBar({
   }, [draftName, onProjectNameCommit, workspaceLabel]);
 
   return (
-    <div className="surface-active flex h-12 flex-col border-b border-border">
-      <div className="flex h-12 items-center justify-between px-3">
-        <div className="flex min-w-0 items-center gap-3">
-          <div className="flex h-full max-h-12 shrink-0 items-center gap-2.5">
-            <Logo className="h-[43px] w-[43px] max-h-[90%] shrink-0 object-contain opacity-95" />
-            <span className="app-logotype">Nebulla.beta</span>
+    <div className="surface-active flex min-h-12 flex-col border-b border-border">
+      <div className="flex min-h-12 items-center gap-2 px-3 py-1">
+        <div className="flex min-w-0 shrink-0 items-center gap-2 sm:gap-3 sm:max-w-[min(40%,22rem)]">
+          <div className="flex h-full max-h-14 shrink-0 items-center gap-2.5">
+            <Logo className="h-[48px] w-[48px] max-h-[95%] shrink-0 object-contain opacity-95" />
+            <span className="app-logotype hidden md:inline">Nebulla.beta</span>
           </div>
 
-          <div className="hidden min-w-0 max-w-[280px] items-center gap-1.5 sm:flex">
+          <div className="hidden min-w-0 flex-1 items-center gap-1 lg:flex">
             <input
               ref={nameInputRef}
               type="text"
@@ -182,23 +183,15 @@ export function TopBar({
               }}
               placeholder="Project name"
               aria-label="Project name"
-              title="Project name — used when saving to your projects"
-              className="btn-secondary-surface type-title-sm w-full min-w-[140px] truncate rounded-md px-2 py-1 text-muted-foreground outline-none ring-primary/30 placeholder:text-muted-foreground/50 focus:text-foreground focus:ring"
+              title="Project name — used when saving to your projects. Open My Projects from the side nav to switch."
+              className="btn-secondary-surface type-title-sm w-full min-w-0 max-w-[10rem] truncate rounded-md px-2 py-1 text-muted-foreground outline-none ring-primary/30 placeholder:text-muted-foreground/50 focus:text-foreground focus:ring xl:max-w-[14rem]"
             />
-            {onSwitchWorkspace ? (
-              <button
-                type="button"
-                onClick={onSwitchWorkspace}
-                title="Switch or create project"
-                className="btn-secondary-surface shrink-0 rounded-md px-2 py-1 text-[10px] text-primary/80 hover:text-primary"
-              >
-                Switch
-              </button>
-            ) : null}
           </div>
         </div>
 
-        <div className="flex shrink-0 items-center gap-2 sm:gap-3">
+        <IdeStatusStrip variant="header" />
+
+        <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
           <button
             type="button"
             title={t('ide.topbar.previewTitle')}
