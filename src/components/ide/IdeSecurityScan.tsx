@@ -210,10 +210,7 @@ export function IdeSecurityScan() {
               type="button"
               onClick={() => void runScan()}
               disabled={loading}
-              className={cn(
-                'inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors',
-                'bg-primary text-primary-foreground hover:opacity-90 disabled:opacity-60',
-              )}
+              className="btn-cyan inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm disabled:opacity-60"
             >
               {loading ? (
                 <Loader2 className="h-4 w-4 animate-spin" aria-hidden />

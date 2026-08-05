@@ -60,7 +60,7 @@ function IssueCard({
             <button
               type="button"
               onClick={() => onFix(issue)}
-              className="inline-flex items-center gap-1 rounded-md border border-primary/40 bg-primary/15 px-2 py-1 text-[11px] font-semibold text-primary hover:bg-primary/25"
+              className="btn-cyan inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px]"
             >
               <Wrench className="h-3 w-3" aria-hidden />
               {t('appStatus.fixWithAgent')}

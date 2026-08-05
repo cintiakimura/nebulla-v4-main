@@ -2306,7 +2306,7 @@ export function AIChat() {
                       void handleGo({ force });
                     }}
                     disabled={sending}
-                    className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-lg border border-primary/40 bg-primary/15 px-3 py-2.5 text-sm font-semibold text-primary transition hover:bg-primary/25 disabled:opacity-45"
+                    className="btn-cyan mt-3 inline-flex w-full items-center justify-center gap-2 rounded-lg px-3 py-2.5 text-sm disabled:opacity-45"
                   >
                     <Rocket className="h-4 w-4 shrink-0" aria-hidden />
                     {t('chat.goCta')}
@@ -2322,7 +2322,7 @@ export function AIChat() {
                           pendingText: message.pendingAgentText,
                         })
                       }
-                      className="inline-flex flex-1 items-center justify-center gap-2 rounded-lg border border-primary/40 bg-primary/15 px-3 py-2.5 text-sm font-semibold text-primary transition hover:bg-primary/25 disabled:opacity-45"
+                      className="btn-cyan inline-flex flex-1 items-center justify-center gap-2 rounded-lg px-3 py-2.5 text-sm disabled:opacity-45"
                     >
                       <Wrench className="h-4 w-4 shrink-0" aria-hidden />
                       {t('chat.switchToAgent')}

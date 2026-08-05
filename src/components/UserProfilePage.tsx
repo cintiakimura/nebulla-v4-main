@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { CreditCard, Download, KeyRound, LogOut, Trash2, User, X } from 'lucide-react';
+import { CreditCard, Download, KeyRound, LogOut, Trash2, X } from 'lucide-react';
 import {
   deleteNebullaAccount,
   downloadNebullaDataExport,
@@ -118,47 +118,53 @@ export function UserProfilePage({
   };
 
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-[#020814] text-slate-100">
-      <header className="shrink-0 border-b border-white/10 px-5 py-4 md:px-8 flex items-center justify-between bg-[#0a0e14]/85 backdrop-blur-md">
-        <div className="flex items-center gap-3 min-w-0">
-          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-cyan-900/40 border border-cyan-500/25 shrink-0">
-            <User className="h-4 w-4 text-cyan-300" aria-hidden />
-          </div>
-          <div className="min-w-0">
-            <p className="font-headline text-lg text-slate-100 tracking-tight truncate">Account</p>
-            <p className="text-xs text-slate-500 truncate">Profile, language, billing, and project settings</p>
-          </div>
+    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-transparent text-foreground">
+      <header className="flex shrink-0 items-center justify-between gap-3 border-b border-border px-4 py-3 sm:px-6">
+        <div className="min-w-0">
+          <p className="text-base font-normal tracking-tight text-foreground">Settings</p>
+          <p className="text-xs text-muted-foreground">Profile, language, billing</p>
         </div>
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex shrink-0 items-center gap-2">
+          {user ? (
+            <button
+              type="button"
+              disabled={logoutBusy}
+              onClick={() => void handleLogout()}
+              className="btn-cyan inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs disabled:opacity-40"
+            >
+              <LogOut className="h-3.5 w-3.5" aria-hidden />
+              {logoutBusy ? 'Signing out…' : 'Log out'}
+            </button>
+          ) : null}
           {onClose ? (
             <button
               type="button"
               onClick={onClose}
-              className="flex h-10 w-10 items-center justify-center rounded-xl border border-white/10 text-slate-400 hover:bg-white/5 hover:text-slate-200 transition-colors"
+              className="btn-secondary-surface flex h-9 w-9 items-center justify-center rounded-lg"
               title="Close"
-              aria-label="Close account"
+              aria-label="Close settings"
             >
-              <X className="h-5 w-5" aria-hidden />
+              <X className="h-4 w-4" aria-hidden />
             </button>
           ) : null}
         </div>
       </header>
 
-      <div className="flex-1 min-h-0 overflow-y-auto p-6 md:p-8">
-        <div className="max-w-2xl mx-auto space-y-8 animate-in slide-in-from-right-4 duration-300">
-          {loading ? <p className="text-sm text-slate-500">Loading profile…</p> : null}
+      <div className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-6">
+        <div className="mx-auto max-w-xl space-y-5">
+          {loading ? <p className="text-sm text-muted-foreground">Loading…</p> : null}
 
           {!loading && !user ? (
-            <section className="rounded-xl border border-white/10 bg-white/5 p-6 space-y-4">
-              {loadErr ? <p className="text-sm text-red-400">{loadErr}</p> : null}
-              <p className="text-sm text-slate-400">Sign in to see account details, billing, and manage your session.</p>
+            <section className="space-y-3 rounded-xl border border-border bg-black/40 p-5">
+              {loadErr ? <p className="text-sm text-red-300">{loadErr}</p> : null}
+              <p className="text-sm text-muted-foreground">Sign in to manage your session and billing.</p>
               <button
                 type="button"
                 onClick={() => {
                   onClose?.();
                   onRequestSignIn?.();
                 }}
-                className="inline-flex items-center gap-2 rounded-lg border border-cyan-500/30 bg-cyan-500/10 px-4 py-2 text-sm text-cyan-100 hover:bg-cyan-500/20"
+                className="btn-cyan inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm"
               >
                 Sign in
               </button>
@@ -167,65 +173,38 @@ export function UserProfilePage({
 
           {user ? (
             <>
-              <section className="rounded-xl border border-white/10 bg-white/5 p-6 space-y-5">
-                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 pb-2">
-                  <h3 className="text-sm font-headline text-slate-200">Account</h3>
-                  <button
-                    type="button"
-                    disabled={logoutBusy}
-                    onClick={() => void handleLogout()}
-                    className="inline-flex items-center gap-2 rounded-lg border border-white/15 bg-white/5 px-3 py-1.5 text-sm text-slate-100 hover:bg-white/10 disabled:opacity-40"
-                  >
-                    <LogOut className="h-4 w-4" aria-hidden />
-                    {logoutBusy ? 'Signing out…' : 'Log out'}
-                  </button>
-                </div>
-                <div className="flex flex-col sm:flex-row gap-6">
+              <section className="space-y-4 rounded-xl border border-border bg-black/40 p-5">
+                <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
                   {user.photoURL ? (
                     <img
                       src={user.photoURL}
                       alt=""
-                      className="w-20 h-20 rounded-full border border-white/10 object-cover shrink-0"
+                      className="h-14 w-14 shrink-0 rounded-full border border-cyan-500/25 object-cover"
                     />
                   ) : (
-                    <div className="w-20 h-20 rounded-full bg-cyan-900/40 border border-cyan-500/25 flex items-center justify-center text-cyan-200 text-2xl font-headline shrink-0">
+                    <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full border border-cyan-500/30 bg-cyan-500/10 text-lg text-cyan-100">
                       {(user.displayName || user.email || '?').slice(0, 1).toUpperCase()}
                     </div>
                   )}
-                  <dl className="flex-1 grid grid-cols-1 gap-3 text-sm">
+                  <dl className="grid min-w-0 flex-1 gap-2 text-sm">
                     <div>
-                      <dt className="text-[10px] uppercase tracking-wider text-slate-500 font-headline">Display name</dt>
-                      <dd className="text-slate-200 mt-0.5">{user.displayName || '—'}</dd>
+                      <dt className="text-[11px] text-muted-foreground">Name</dt>
+                      <dd className="text-foreground">{user.displayName || '—'}</dd>
                     </div>
                     <div>
-                      <dt className="text-[10px] uppercase tracking-wider text-slate-500 font-headline">Session email</dt>
-                      <dd className="text-slate-200 mt-0.5 font-mono text-xs break-all">{user.email || '—'}</dd>
+                      <dt className="text-[11px] text-muted-foreground">Email</dt>
+                      <dd className="break-all text-foreground">{user.email || user.accountEmail || '—'}</dd>
                     </div>
                     <div>
-                      <dt className="text-[10px] uppercase tracking-wider text-slate-500 font-headline">
-                        Stored email (account)
-                      </dt>
-                      <dd className="text-slate-200 mt-0.5 font-mono text-xs break-all">{user.accountEmail || '—'}</dd>
+                      <dt className="text-[11px] text-muted-foreground">Sign-in</dt>
+                      <dd className="text-foreground">
+                        {providerLabel(user.provider)}
+                        {user.hasPassword ? ' · password on file' : ''}
+                      </dd>
                     </div>
                     <div>
-                      <dt className="text-[10px] uppercase tracking-wider text-slate-500 font-headline">User id</dt>
-                      <dd className="text-slate-300 mt-0.5 font-mono text-xs break-all">{user.uid}</dd>
-                    </div>
-                    <div>
-                      <dt className="text-[10px] uppercase tracking-wider text-slate-500 font-headline">Sign-in method</dt>
-                      <dd className="text-slate-200 mt-0.5">{providerLabel(user.provider)}</dd>
-                    </div>
-                    <div>
-                      <dt className="text-[10px] uppercase tracking-wider text-slate-500 font-headline">Provider user id</dt>
-                      <dd className="text-slate-300 mt-0.5 font-mono text-xs break-all">{user.providerUserId || '—'}</dd>
-                    </div>
-                    <div>
-                      <dt className="text-[10px] uppercase tracking-wider text-slate-500 font-headline">Password on file</dt>
-                      <dd className="text-slate-200 mt-0.5">{user.hasPassword ? 'Yes' : 'No'}</dd>
-                    </div>
-                    <div>
-                      <dt className="text-[10px] uppercase tracking-wider text-slate-500 font-headline">Member since</dt>
-                      <dd className="text-slate-200 mt-0.5">{formatIso(user.signedUpAt)}</dd>
+                      <dt className="text-[11px] text-muted-foreground">Member since</dt>
+                      <dd className="text-foreground">{formatIso(user.signedUpAt)}</dd>
                     </div>
                   </dl>
                 </div>
@@ -233,14 +212,11 @@ export function UserProfilePage({
 
               <LanguageSettingsPanel />
 
-              <section className="rounded-xl border border-white/10 bg-white/5 p-6 space-y-3">
-                <h3 className="text-sm font-headline text-slate-200 border-b border-white/10 pb-2">
-                  How we use AI providers
-                </h3>
-                <p className="text-sm text-slate-400 leading-relaxed">
+              <section className="space-y-2 rounded-xl border border-border bg-black/40 p-5">
+                <h3 className="text-sm text-foreground">How we use AI providers</h3>
+                <p className="text-sm leading-relaxed text-muted-foreground">
                   Chat, architecture, coding, and optional UI generation may send prompts and project context to
-                  third-party AI providers (for example xAI / Grok, and V0 when you use a V0 key). Do not submit data you
-                  are not allowed to share with those providers. Details:{' '}
+                  third-party AI providers. Do not submit data you are not allowed to share. Details:{' '}
                   <a href="/privacy" target="_blank" rel="noreferrer" className="text-cyan-300 hover:underline">
                     Privacy Policy
                   </a>
@@ -248,15 +224,15 @@ export function UserProfilePage({
                 </p>
               </section>
 
-              <section className="rounded-xl border border-white/10 bg-white/5 p-6 space-y-4">
-                <h3 className="text-sm font-headline text-slate-200 flex items-center gap-2 border-b border-white/10 pb-2">
-                  <Download className="w-4 h-4 text-slate-400" aria-hidden />
+              <section className="space-y-3 rounded-xl border border-border bg-black/40 p-5">
+                <h3 className="flex items-center gap-2 text-sm text-foreground">
+                  <Download className="h-4 w-4 text-muted-foreground" aria-hidden />
                   Download your data
                 </h3>
-                <p className="text-sm text-slate-400 leading-relaxed">
+                <p className="text-sm leading-relaxed text-muted-foreground">
                   Export a JSON file with your profile and cloud project metadata. API key values are never included.
                 </p>
-                {exportMsg ? <p className="text-sm text-slate-300">{exportMsg}</p> : null}
+                {exportMsg ? <p className="text-sm text-foreground/80">{exportMsg}</p> : null}
                 <button
                   type="button"
                   disabled={exportBusy}
@@ -269,30 +245,30 @@ export function UserProfilePage({
                       setExportMsg(r.ok ? 'Download started.' : r.error || 'Export failed.');
                     })();
                   }}
-                  className="inline-flex items-center gap-2 rounded-lg border border-cyan-500/30 bg-cyan-500/10 px-4 py-2 text-sm text-cyan-100 hover:bg-cyan-500/20 disabled:opacity-40"
+                  className="btn-cyan inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm disabled:opacity-40"
                 >
                   <Download className="h-4 w-4" aria-hidden />
                   {exportBusy ? 'Preparing…' : 'Download data export'}
                 </button>
               </section>
 
-              <section className="rounded-xl border border-white/10 bg-white/5 p-6 space-y-4">
-                <h3 className="text-sm font-headline text-slate-200 flex items-center gap-2 border-b border-white/10 pb-2">
-                  <CreditCard className="w-4 h-4 text-slate-400" aria-hidden />
+              <section className="space-y-3 rounded-xl border border-border bg-black/40 p-5">
+                <h3 className="flex items-center gap-2 text-sm text-foreground">
+                  <CreditCard className="h-4 w-4 text-muted-foreground" aria-hidden />
                   Billing
                 </h3>
-                <p className="text-sm text-slate-300">
+                <p className="text-sm text-foreground/90">
                   Current plan:{' '}
-                  <span className="text-cyan-200 font-medium">
+                  <span className="font-medium text-cyan-200">
                     {billingLabel(user.billingTier) === 'Free' ? 'Beta (free)' : billingLabel(user.billingTier)}
                   </span>
                 </p>
-                <p className="text-sm text-slate-400 leading-relaxed">
+                <p className="text-sm leading-relaxed text-muted-foreground">
                   Nebulla beta is free — no payment required. Post-beta plan will be €19.99 / month.
                 </p>
                 <a
                   href="/payment"
-                  className="inline-flex text-sm text-slate-500 hover:text-slate-300 underline-offset-2 hover:underline"
+                  className="inline-flex text-sm text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
                 >
                   Billing details (inactive during beta) →
                 </a>

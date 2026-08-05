@@ -450,15 +450,14 @@ function NebullaIDEShell() {
   useEffect(() => {
     return registerNebulaUiStudioBridge({
       openUiStudio: (opts) => {
-        dispatchOpenCenterPanel('ui-studio', { uiStudioTab: opts?.tab ?? 'design' });
+        // Legacy v0 Studio disabled — always open UI Studio Beta.
+        dispatchOpenCenterPanel('ui-studio-beta', { uiStudioTab: opts?.tab ?? 'design' });
       },
       runV0Generate: (opts) => {
-        dispatchOpenCenterPanel('ui-studio', { uiStudioTab: 'design' });
-        // Dedicated exec event — do not re-dispatch RUN_V0 (bridge listens to that).
-        // Delay so IdeVisualEditor can mount before handling resume/generate.
+        dispatchOpenCenterPanel('ui-studio-beta', { uiStudioTab: 'design' });
         window.setTimeout(() => {
           window.dispatchEvent(
-            new CustomEvent('nebula-ui-studio-run-v0-exec', { detail: opts ?? {} }),
+            new CustomEvent('nebula-ui-studio-beta-run', { detail: { ...(opts ?? {}), autoTriggered: true } }),
           );
         }, 350);
       },

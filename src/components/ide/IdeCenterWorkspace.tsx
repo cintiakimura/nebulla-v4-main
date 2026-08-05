@@ -18,9 +18,7 @@ import { AppPreviewPanel } from '../AppPreviewPanel';
 import { dispatchOpenLeftSidebar } from '../../lib/ideLeftSidebar';
 import { IdeDashboardEmbed } from './IdeDashboardEmbed';
 import { MyProjectsHome } from './MyProjectsHome';
-import { IdeVisualEditor } from './IdeVisualEditor';
 import { IdeUiStudioBeta } from './IdeUiStudioBeta';
-import { UiStudioMockupPanel } from './UiStudioMockupPanel';
 import { IdePlanPage } from './IdePlanPage';
 import { IdeSecurityScan } from './IdeSecurityScan';
 import { useIdeCenterTabs } from './IdeCenterTabsContext';
@@ -50,8 +48,6 @@ export function IdeCenterWorkspace() {
     openTabs,
     activeTabId,
     activeTab,
-    uiStudioTab,
-    setUiStudioTab,
     activateTab,
     closeTab,
   } = useIdeCenterTabs();
@@ -174,19 +170,9 @@ export function IdeCenterWorkspace() {
             <PaneLayer visible={activePane === 'master-plan' || activePane === 'mind-map'}>
               <IdePlanPage onClose={() => closeTab(panelTabId('master-plan'))} />
             </PaneLayer>
-            <PaneLayer visible={activePane === 'ui-studio'}>
-              {uiStudioTab === 'mockups' ? (
-                <UiStudioMockupPanel />
-              ) : (
-                <IdeVisualEditor
-                  onLock={() => activeTabId && closeTab(activeTabId)}
-                  projectDisplayName={projectName}
-                />
-              )}
-            </PaneLayer>
-            <PaneLayer visible={activePane === 'ui-studio-beta'}>
-              {/* Mount only while active so beta never races original product v0 event handlers. */}
-              {activePane === 'ui-studio-beta' ? (
+            {/* Legacy v0 Studio disabled — any stale ui-studio pane renders Beta. */}
+            <PaneLayer visible={activePane === 'ui-studio' || activePane === 'ui-studio-beta'}>
+              {activePane === 'ui-studio' || activePane === 'ui-studio-beta' ? (
                 <IdeUiStudioBeta
                   onLock={() => activeTabId && closeTab(activeTabId)}
                   projectDisplayName={projectName}

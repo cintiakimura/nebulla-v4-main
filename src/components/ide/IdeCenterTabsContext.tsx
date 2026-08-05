@@ -142,8 +142,10 @@ export function IdeCenterTabsProvider({ children }: { children: ReactNode }) {
       // Search page removed — find/replace is the TopBar search icon only.
       if (pane === 'search') return;
       // DNS is not a side-nav page — open Secrets center pane; user picks DNS in the tab list.
+      // Legacy v0 Studio disabled — always open UI Studio Beta.
       // Mind Map merges into Plan (Master Plan surface) — same SoT, toggle view.
-      let targetPane: IdeCenterPane = pane === 'dns' ? 'secrets' : pane;
+      let targetPane: IdeCenterPane =
+        pane === 'dns' ? 'secrets' : pane === 'ui-studio' ? 'ui-studio-beta' : pane;
       if (targetPane === 'mind-map') {
         try {
           sessionStorage.setItem('nebula_plan_view', 'mind-map');
@@ -263,7 +265,7 @@ export function IdeCenterTabsProvider({ children }: { children: ReactNode }) {
     const onFilesApplied = () => openPanel('preview');
     const onUiStudio = (ev: Event) => {
       const tab = (ev as CustomEvent<{ tab?: UiStudioTab }>).detail?.tab;
-      openPanel('ui-studio', { uiStudioTab: tab ?? 'design' });
+      openPanel('ui-studio-beta', { uiStudioTab: tab ?? 'design' });
     };
 
     window.addEventListener('nebula-center-focus-file', onFocusFile);

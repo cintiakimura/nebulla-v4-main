@@ -270,7 +270,7 @@ export function TopBar({
                     type="button"
                     onClick={() => void applyReplace()}
                     disabled={!findQuery || !activePath || matchCount === 0}
-                    className="inline-flex items-center gap-1 rounded-md bg-primary px-2 py-1 text-[11px] font-medium text-primary-foreground hover:brightness-110 disabled:opacity-40"
+                    className="btn-cyan inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] disabled:opacity-40"
                     title={t('ide.topbar.replaceTitle')}
                   >
                     <Check className="h-3 w-3" aria-hidden />

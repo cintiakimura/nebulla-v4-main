@@ -14,14 +14,17 @@ export type IdeCenterPane =
   | 'search'; // legacy pane id — redirected away; find/replace lives in TopBar icon only
 
 /** Primary center tabs (workflow + Master Plan). Source Control lives in the left sidebar. */
+/** Legacy v0 Studio (`ui-studio`) disabled in UI — omit from primary tabs. */
 export const IDE_CENTER_PRIMARY_TABS: { id: IdeCenterPane; label: string }[] = [
   { id: 'code', label: 'Code' },
   { id: 'preview', label: 'App preview' },
   { id: 'master-plan', label: 'Plan' },
   { id: 'mind-map', label: 'Plan' },
-  { id: 'ui-studio', label: 'Legacy v0 Studio' },
   { id: 'ui-studio-beta', label: 'UI Studio Beta' },
 ];
+
+/** Still a valid pane id for deep links; always redirected to Beta. */
+export const LEGACY_V0_STUDIO_DISABLED = true;
 
 /** Open from the left nav only. DNS is a tab inside Secrets dashboard, not a side-nav page. */
 export const IDE_CENTER_NAV_ONLY_PANES = ['projects', 'secrets', 'security'] as const satisfies readonly IdeCenterPane[];
@@ -52,6 +55,8 @@ export function readStoredCenterPane(): IdeCenterPane {
     if (raw === 'search') return 'projects';
     // DNS page disabled — content lives under Secrets.
     if (raw === 'dns') return 'secrets';
+    // Legacy v0 Studio disabled — open UI Studio Beta instead.
+    if (raw === 'ui-studio') return 'ui-studio-beta';
     if (raw && IDE_CENTER_PANE_TABS.some((t) => t.id === raw)) return raw as IdeCenterPane;
   } catch {
     /* ignore */
@@ -69,7 +74,8 @@ export function storeCenterPane(pane: IdeCenterPane): void {
 
 export function navIdToCenterPane(navId: string): IdeCenterPane {
   if (navId === 'explorer' || navId === 'source-control') return 'code';
-  if (navId === 'visual-ui-editor') return 'ui-studio';
+  // Legacy v0 Studio nav id → Beta only.
+  if (navId === 'visual-ui-editor') return 'ui-studio-beta';
   if (navId === 'dns') return 'secrets';
   if (IDE_CENTER_PANE_TABS.some((t) => t.id === navId)) return navId as IdeCenterPane;
   return 'code';
@@ -77,6 +83,6 @@ export function navIdToCenterPane(navId: string): IdeCenterPane {
 
 export function centerPaneToNavId(pane: IdeCenterPane): string {
   if (pane === 'code') return 'explorer';
-  if (pane === 'ui-studio') return 'visual-ui-editor';
+  if (pane === 'ui-studio' || pane === 'ui-studio-beta') return 'ui-studio-beta';
   return pane;
 }

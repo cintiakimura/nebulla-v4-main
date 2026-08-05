@@ -102,7 +102,7 @@ export function IdePlanPage({ onClose }: { onClose: () => void }) {
           <button
             type="button"
             onClick={() => commitName({ advanceRide: true })}
-            className="rounded-md border border-border px-2.5 py-1.5 text-[11px] text-foreground hover:bg-[#111111]"
+            className="btn-cyan rounded-md px-2.5 py-1.5 text-[11px]"
           >
             Continue
           </button>

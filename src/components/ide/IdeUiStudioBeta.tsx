@@ -1685,7 +1685,7 @@ export function IdeUiStudioBeta({
                     preferenceHints,
                   });
                 }}
-                className="rounded-md bg-primary px-2 py-1 text-[10px] text-primary-foreground disabled:opacity-40"
+                className="btn-cyan rounded-md px-2 py-1 text-[10px] disabled:opacity-40"
               >
                 {t('uiStudio.guidedImprovement')}
               </button>
@@ -1800,7 +1800,7 @@ export function IdeUiStudioBeta({
               type="button"
               disabled={busy}
               onClick={() => void runEngineGenerate({ preferenceHints })}
-              className="rounded-md border border-primary/40 bg-primary/15 px-2.5 py-1 text-[11px] text-primary hover:bg-primary/25 disabled:opacity-40 sm:px-3"
+              className="btn-cyan rounded-md px-2.5 py-1 text-[11px] disabled:opacity-40 sm:px-3"
               title={t('uiStudio.generateTitle')}
             >
               {busy ? <Loader2 className="mr-1 inline h-3 w-3 animate-spin" /> : null}
@@ -1858,7 +1858,7 @@ export function IdeUiStudioBeta({
               type="button"
               disabled={busy}
               onClick={() => setApplyConfirmOpen(true)}
-              className="rounded-md bg-primary px-2.5 py-1 text-[11px] font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-40 sm:px-3"
+              className="btn-cyan rounded-md px-2.5 py-1 text-[11px] disabled:opacity-40 sm:px-3"
             >
               <Save className="mr-1 inline h-3 w-3" />
               Save
@@ -2511,7 +2511,7 @@ export function IdeUiStudioBeta({
                 type="button"
                 disabled={busy}
                 onClick={() => void runApplyToCode()}
-                className="rounded-lg bg-primary px-4 py-2 text-xs font-headline text-black disabled:opacity-40"
+                className="btn-cyan rounded-lg px-4 py-2 text-xs disabled:opacity-40"
               >
                 {busy ? <Loader2 className="inline h-4 w-4 animate-spin" /> : <Check className="inline h-4 w-4" />} Confirm
               </button>
@@ -2577,7 +2577,7 @@ export function IdeUiStudioBeta({
                 type="button"
                 disabled={busy}
                 onClick={() => void runRestoreOriginal()}
-                className="rounded-lg bg-primary px-4 py-2 text-xs font-headline text-white disabled:opacity-40"
+                className="btn-cyan rounded-lg px-4 py-2 text-xs disabled:opacity-40"
               >
                 {busy ? <Loader2 className="inline h-4 w-4 animate-spin" /> : <History className="inline h-4 w-4" />} Confirm restore
               </button>

@@ -246,32 +246,39 @@
     background-image: var(--gradient-active-tab);
   }
 
-  .btn-primary-cta {
-    background: var(--primary);
-    color: var(--on-primary-container);
-    border: none;
-    transition: opacity 0.25s ease, filter 0.25s ease;
+  /* Cyan transparent — product CTA (matches Secrets “Save V0 key”) */
+  .btn-primary-cta,
+  .btn-cyan {
+    background: color-mix(in srgb, #00d4d4 12%, transparent);
+    color: #cffafe;
+    border: 1px solid color-mix(in srgb, #00d4d4 35%, transparent);
+    transition: background-color 0.2s ease, border-color 0.2s ease, opacity 0.2s ease;
     font-weight: 400;
   }
 
-  .btn-primary-cta:hover:not(:disabled) {
-    filter: brightness(1.08);
+  .btn-primary-cta:hover:not(:disabled),
+  .btn-cyan:hover:not(:disabled) {
+    background: color-mix(in srgb, #00d4d4 22%, transparent);
+    border-color: color-mix(in srgb, #00d4d4 50%, transparent);
   }
 
-  .btn-primary-cta:disabled {
+  .btn-primary-cta:disabled,
+  .btn-cyan:disabled {
     opacity: 0.4;
   }
 
   .btn-secondary-surface {
-    background-color: transparent;
-    color: var(--foreground);
-    border: none;
-    transition: background-color 0.25s ease, color 0.2s ease;
+    background: color-mix(in srgb, #00d4d4 6%, transparent);
+    color: #a5f3fc;
+    border: 1px solid color-mix(in srgb, #00d4d4 22%, transparent);
+    transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease;
     font-weight: 400;
   }
 
   .btn-secondary-surface:hover {
-    background-color: var(--elevated);
+    background: color-mix(in srgb, #00d4d4 14%, transparent);
+    border-color: color-mix(in srgb, #00d4d4 40%, transparent);
+    color: #ecfeff;
   }
 
   .input-ghost-focus:focus,

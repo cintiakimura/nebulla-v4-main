@@ -387,7 +387,7 @@ export function WelcomeOnboardingModal({ open, user, onClose }: Props) {
             <button
               type="button"
               onClick={() => setStep(2)}
-              className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-5 py-3 text-sm font-semibold text-primary-foreground transition hover:brightness-110"
+              className="btn-cyan inline-flex w-full items-center justify-center gap-2 rounded-xl px-5 py-3 text-sm"
             >
               {t('ide.welcome.continue')}
               <ChevronRight className="h-4 w-4" aria-hidden />
@@ -407,7 +407,7 @@ export function WelcomeOnboardingModal({ open, user, onClose }: Props) {
                   }
                   saveGrokAndContinue();
                 }}
-                className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-5 py-3 text-sm font-semibold text-primary-foreground transition hover:brightness-110 disabled:opacity-45"
+                className="btn-cyan inline-flex w-full items-center justify-center gap-2 rounded-xl px-5 py-3 text-sm disabled:opacity-45"
               >
                 {grokBusy ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : null}
                 {t('ide.welcome.saveContinue')}
@@ -429,7 +429,7 @@ export function WelcomeOnboardingModal({ open, user, onClose }: Props) {
                 type="button"
                 disabled={v0Busy || !v0Input.trim()}
                 onClick={saveV0AndContinue}
-                className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl bg-primary px-5 py-3 text-sm font-semibold text-primary-foreground transition hover:brightness-110 disabled:opacity-45"
+                className="btn-cyan inline-flex flex-1 items-center justify-center gap-2 rounded-xl px-5 py-3 text-sm disabled:opacity-45"
               >
                 {v0Busy ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : null}
                 Add V0 key
@@ -453,7 +453,7 @@ export function WelcomeOnboardingModal({ open, user, onClose }: Props) {
                   dispatchOpenCenterPanel('secrets');
                   onClose();
                 }}
-                className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-primary/40 bg-primary/15 px-5 py-3 text-sm font-semibold text-primary transition hover:bg-primary/25"
+                className="btn-secondary-surface inline-flex w-full items-center justify-center gap-2 rounded-xl px-5 py-3 text-sm"
               >
                 <KeyRound className="h-4 w-4" aria-hidden />
                 Open Secrets
@@ -461,7 +461,7 @@ export function WelcomeOnboardingModal({ open, user, onClose }: Props) {
               <button
                 type="button"
                 onClick={finish}
-                className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-5 py-3 text-sm font-semibold text-primary-foreground transition hover:brightness-110"
+                className="btn-cyan inline-flex w-full items-center justify-center gap-2 rounded-xl px-5 py-3 text-sm"
               >
                 Start building
                 <ChevronRight className="h-4 w-4" aria-hidden />

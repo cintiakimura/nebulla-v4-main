@@ -429,7 +429,7 @@ export function MyProjectsHome() {
               type="button"
               disabled={busyStarting || ideaInput.trim().length < 8}
               onClick={() => void onStartFromIdea()}
-              className="inline-flex items-center gap-1.5 rounded-full bg-primary px-4 py-2 text-xs font-normal text-primary-foreground hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
+              className="btn-cyan inline-flex items-center gap-1.5 rounded-lg px-4 py-2 text-xs disabled:cursor-not-allowed disabled:opacity-50"
             >
               {startingIdea ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
               Continue
@@ -628,7 +628,7 @@ export function MyProjectsHome() {
                 type="button"
                 disabled={fileBusy}
                 onClick={() => void submitFileModal()}
-                className="inline-flex items-center gap-1.5 rounded-full bg-primary px-3 py-1.5 text-xs font-normal text-primary-foreground hover:brightness-110 disabled:opacity-50"
+                className="btn-cyan inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs disabled:opacity-50"
               >
                 {fileBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
                 Open
