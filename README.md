@@ -32,6 +32,8 @@ Production boot refuses weak secrets, `APP_PREVIEW_PUBLIC=true`, and `WORKSPACE_
 
 ## Docs
 
+- Closed beta runbook: `docs/closed-beta-runbook.md`
+- Invite note: `docs/closed-beta-invite.md`
 - Trust / Phase 1: `docs/trust/`
 - Figma references: `docs/figma-reference-library.md`
 - Render ↔ Cloudflare hybrid: `docs/migration/render-to-cloudflare.md`

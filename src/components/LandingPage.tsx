@@ -58,7 +58,7 @@ export function LandingPage({ onEnter }: LandingPageProps) {
             onClick={onEnter}
             className="px-4 py-2 bg-cyan-500/10 text-cyan-300 border border-cyan-500/30 rounded-md hover:bg-cyan-500/20 transition-all font-headline text-sm font-normal"
           >
-            Try free beta
+            Closed beta
           </button>
         </div>
       </header>
@@ -70,33 +70,33 @@ export function LandingPage({ onEnter }: LandingPageProps) {
           <div className="flex flex-col gap-6 text-left max-w-2xl">
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-cyan-500/10 border border-cyan-500/20 text-cyan-300 text-xs font-headline font-normal w-fit">
               <Rocket className="w-3.5 h-3.5" />
-              The future of software architecture
+              Free closed beta · invite only
             </div>
             <h1 className="text-4xl md:text-6xl font-headline text-slate-100 font-normal leading-tight">
               The first architecture-focused<br/>AI builder.
             </h1>
             <p className="text-lg md:text-xl text-slate-300 font-normal max-w-2xl leading-relaxed">
-              Stop wrestling with disjointed tools. Design your system, generate UI mockups, and build your application with a true dev partner.
+              Plan → UI Studio Beta → code → preview in one workspace. Free during closed beta — no payment required.
             </p>
             <div className="flex flex-col gap-8 mt-4">
               <button 
                 onClick={onEnter}
                 className="px-6 py-3 bg-cyan-500/20 text-cyan-300 border border-cyan-500/50 rounded-lg hover:bg-cyan-500/30 transition-all font-headline text-base font-normal flex items-center gap-2 w-fit"
               >
-                Try the App
+                Enter workspace
                 <ArrowRight className="w-4.5 h-4.5" />
               </button>
             </div>
           </div>
           
           <div className="nebula-landing-card nebula-landing-card--hero flex flex-col justify-center items-start lg:items-end p-8 lg:p-12">
-            <div className="text-7xl md:text-8xl lg:text-9xl font-headline text-cyan-300 font-normal tracking-tight mb-6">
-              €19.99
+            <div className="text-4xl md:text-5xl lg:text-6xl font-headline text-cyan-300 font-normal tracking-tight mb-6">
+              Free beta
             </div>
             <p className="text-xl md:text-2xl text-slate-200 font-normal max-w-sm text-left lg:text-right leading-snug">
-              One tier with all features<br/>
-              <span className="text-cyan-400/80">No credit limits</span><br/>
-              <span className="text-slate-400">No hidden costs</span>
+              Invite-only closed beta<br/>
+              <span className="text-cyan-400/80">Core ride only</span><br/>
+              <span className="text-slate-400">Paid plan after beta (€19.99)</span>
             </p>
           </div>
         </section>
@@ -302,10 +302,10 @@ export function LandingPage({ onEnter }: LandingPageProps) {
         <section className="nebula-landing-card nebula-landing-card--hero p-8 md:p-12 flex flex-col md:flex-row items-start md:items-center justify-between gap-8 text-left">
           <div className="flex flex-col gap-4">
             <h2 className="text-base font-normal text-cyan-300">
-              Free during beta.
+              Closed beta — invite only.
             </h2>
             <p className="text-slate-300 text-sm font-normal leading-relaxed">
-              Full workspace now. Paid plan (€19.99 / month) comes after beta — no payment required today.
+              Critical path: Plan → UI Studio Beta → one coding slice → App Preview. Billing is off. See BETA-STATUS for what works.
             </p>
           </div>
           <button
@@ -313,7 +313,7 @@ export function LandingPage({ onEnter }: LandingPageProps) {
             onClick={handleTryFree}
             className="px-6 py-3 bg-cyan-500/20 text-cyan-300 border border-cyan-500/50 rounded-xl hover:bg-cyan-500/30 transition-all text-sm font-normal whitespace-nowrap"
           >
-            Start free beta
+            Enter workspace
           </button>
         </section>
       </main>

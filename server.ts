@@ -37,6 +37,11 @@ import {
 } from "./lib/appPreviewAuthz";
 import { createApiRateLimitGate } from "./lib/rateLimit";
 import { getOpsReadiness, logOpsReadinessAtBoot } from "./lib/opsReadiness";
+import {
+  isLegacyV0ApiFrozen,
+  isPencilApiFrozen,
+  LEGACY_V0_FROZEN_MESSAGE,
+} from "./lib/betaLeanFlags";
 import { getPlatformQueryable } from "./lib/nebulaPgPool";
 import { getUserByokStatus, hasAnyByokConfigured } from "./lib/nebulaUserGrokStore";
 import {
@@ -553,8 +558,11 @@ async function startServer() {
       grokKeyHint: MAIN_AI_KEY_SETUP_HINT,
       hasGrokTtsKey: tts.length >= 20,
       hasGrokWriterKey: writer.length >= 20,
-      hasV0ApiKey: v0KeyRes.ok === true,
-      v0KeyHint: NEBULA_V0_KEY_SETUP_HINT,
+      hasV0ApiKey: isLegacyV0ApiFrozen() ? false : v0KeyRes.ok === true,
+      v0ApiFrozen: isLegacyV0ApiFrozen(),
+      v0KeyHint: isLegacyV0ApiFrozen()
+        ? LEGACY_V0_FROZEN_MESSAGE
+        : NEBULA_V0_KEY_SETUP_HINT,
       hasR2Storage: isR2Configured(),
       r2MissingEnv: r2MissingOnBoot,
       r2StorageHint:
@@ -564,8 +572,11 @@ async function startServer() {
       d1ProvisioningReady: Boolean(render.d1ProvisioningReady),
       cloudflareDnsReady: getCloudflareDnsStatus().ready,
       cloudflareDnsHint: getCloudflareDnsStatus().hint,
-      pencilMockupsReady: Boolean(pencilKey),
-      nebulaUiStudioDemo: Boolean(!pencilKey && useBundledDemoMockupWithoutKey()),
+      pencilMockupsReady: isPencilApiFrozen() ? false : Boolean(pencilKey),
+      pencilApiFrozen: isPencilApiFrozen(),
+      nebulaUiStudioDemo: Boolean(
+        (isPencilApiFrozen() || !pencilKey) && useBundledDemoMockupWithoutKey(),
+      ),
       workspaceMode: "cloud",
       hasActiveWorkspace: true,
       activeWorkspacePath: null,
@@ -2966,10 +2977,16 @@ No approved UI code yet.
     }
   };
 
-  app.post("/api/nebula-ui-studio/v0-start", handleV0Start);
+  const rejectFrozenV0: express.RequestHandler = (_req, res) => {
+    res.status(410).json({ error: LEGACY_V0_FROZEN_MESSAGE, uiStudioBeta: true });
+  };
+  const mountV0 = <T extends express.RequestHandler>(handler: T): express.RequestHandler =>
+    isLegacyV0ApiFrozen() ? rejectFrozenV0 : handler;
+
+  app.post("/api/nebula-ui-studio/v0-start", mountV0(handleV0Start));
   /** Legacy bundles called this before v0-start/v0-poll (Render-safe background start). */
-  app.post("/api/nebulla-v0-generate", handleV0Start);
-  app.post("/api/nebula-v0-generate", handleV0Start);
+  app.post("/api/nebulla-v0-generate", mountV0(handleV0Start));
+  app.post("/api/nebula-v0-generate", mountV0(handleV0Start));
 
   const handleV0Poll = async (req: express.Request, res: express.Response) => {
     try {
@@ -3135,26 +3152,29 @@ No approved UI code yet.
     }
   };
 
-  app.post("/api/nebula-ui-studio/v0-poll", handleV0Poll);
-  app.post("/api/nebulla-v0-poll", handleV0Poll);
-  app.post("/api/nebula-v0-poll", handleV0Poll);
+  app.post("/api/nebula-ui-studio/v0-poll", mountV0(handleV0Poll));
+  app.post("/api/nebulla-v0-poll", mountV0(handleV0Poll));
+  app.post("/api/nebula-v0-poll", mountV0(handleV0Poll));
 
   /** Clear stale v0 pending state (errors, stuck sessions) so Generate v0 can retry. */
-  app.post("/api/nebula-ui-studio/v0-clear", (req, res) => {
-    try {
-      const pp = projectPathsFor(req);
-      const cleared = cancelProjectBackgroundAttempts(pp.workspaceRoot);
-      return res.json({ ok: true, cleared });
-    } catch (err: unknown) {
-      return res.status(500).json({
-        error: err instanceof Error ? err.message : "v0 clear failed",
-      });
-    }
-  });
+  app.post(
+    "/api/nebula-ui-studio/v0-clear",
+    mountV0((req, res) => {
+      try {
+        const pp = projectPathsFor(req);
+        const cleared = cancelProjectBackgroundAttempts(pp.workspaceRoot);
+        return res.json({ ok: true, cleared });
+      } catch (err: unknown) {
+        return res.status(500).json({
+          error: err instanceof Error ? err.message : "v0 clear failed",
+        });
+      }
+    }),
+  );
 
-  app.post("/api/nebula-ui-studio/v0-generate", handleV0Start);
+  app.post("/api/nebula-ui-studio/v0-generate", mountV0(handleV0Start));
 
-  app.post("/api/nebula-ui-studio/v0-update", async (req, res) => {
+  app.post("/api/nebula-ui-studio/v0-update", mountV0(async (req, res) => {
     const body = req.body || {};
     const message = typeof body.message === "string" ? body.message.trim() : "";
     const chatId = typeof body.chatId === "string" ? body.chatId.trim() : "";
@@ -3196,11 +3216,11 @@ No approved UI code yet.
       console.error("[nebula-ui-studio/v0-update]", e);
       return res.status(500).json({ error: e instanceof Error ? e.message : "v0 update failed" });
     }
-  });
+  }));
 
   app.post("/api/nebula-ui-studio/generate", async (req, res) => {
     const { pagesText, branding } = req.body;
-    const pencilKey = resolvePencilApiKey();
+    const pencilKey = isPencilApiFrozen() ? "" : resolvePencilApiKey();
     const pencilUrl = resolvePencilMockupsUrl();
     const variationIndex = typeof req.body?.variationIndex === "number" ? req.body.variationIndex : 0;
 

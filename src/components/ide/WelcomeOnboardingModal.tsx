@@ -5,7 +5,6 @@ import {
   ExternalLink,
   KeyRound,
   Loader2,
-  Sparkles,
   X,
 } from 'lucide-react';
 import { Logo } from '@/components/Logo';
@@ -23,16 +22,10 @@ import {
   markWelcomeOnboardingSessionSkip,
   setPreferredAiProvider,
 } from '../../lib/nebulaWelcomeOnboarding';
-import { getBrowserProjectKey } from '../../lib/nebulaProjectApi';
-import { getProjectSecretValue, upsertProjectSecret } from '../../lib/nebulaSecretHelpers';
-import { getStoredV0ApiKey, setStoredV0ApiKey } from '../../lib/v0Key';
 import { dispatchOpenCenterPanel } from './IdeCenterTabsContext';
 import { useLanguage } from '@/components/i18n/LanguageProvider';
 
-const V0_ENV_NAME = 'V0_API_KEY';
-const V0_KEYS_URL = 'https://v0.dev/chat/settings/keys';
-
-type Step = 1 | 2 | 3 | 4;
+type Step = 1 | 2 | 4;
 
 type Props = {
   open: boolean;
@@ -41,29 +34,22 @@ type Props = {
 };
 
 /**
- * Low-friction first-time setup: Welcome → Grok (required) → V0 (optional) → Done.
- * Keys reuse project Secrets + browser storage (same system as Settings).
+ * Low-friction first-time setup: Welcome → Grok (required) → Done.
+ * Legacy V0 key step removed for closed beta (UI Studio Beta only).
  */
 export function WelcomeOnboardingModal({ open, user, onClose }: Props) {
   const { t } = useLanguage();
   const [step, setStep] = useState<Step>(1);
   const [grokInput, setGrokInput] = useState('');
-  const [v0Input, setV0Input] = useState('');
   const [grokBusy, setGrokBusy] = useState(false);
-  const [v0Busy, setV0Busy] = useState(false);
   const [grokMsg, setGrokMsg] = useState<string | null>(null);
-  const [v0Msg, setV0Msg] = useState<string | null>(null);
-  const [v0Saved, setV0Saved] = useState(false);
 
   useEffect(() => {
     if (!open) return;
     markWelcomeOnboardingSeen();
     setStep(1);
     setGrokInput('');
-    setV0Input('');
     setGrokMsg(null);
-    setV0Msg(null);
-    setV0Saved(Boolean(getStoredV0ApiKey() || getProjectSecretValue(getBrowserProjectKey(), V0_ENV_NAME)));
     void fetchSessionUser();
   }, [open, user]);
 
@@ -103,45 +89,13 @@ export function WelcomeOnboardingModal({ open, user, onClose }: Props) {
         setGrokMsg(result.error);
       }
       window.dispatchEvent(new CustomEvent('nebula-secrets-updated'));
-      setStep(3);
+      setStep(4);
     } catch {
       setGrokMsg('Could not save. Check that you are signed in and try again.');
     } finally {
       setGrokBusy(false);
     }
   }, [grokInput, t]);
-
-  const saveV0AndContinue = useCallback(() => {
-    setV0Msg(null);
-    const value = v0Input.trim();
-    if (!value) {
-      setV0Msg(t('ide.welcome.v0SkipHint'));
-      return;
-    }
-    if (value.length < 8) {
-      setV0Msg('That looks too short. Double-check you copied the full key.');
-      return;
-    }
-    setV0Busy(true);
-    try {
-      const projectKey = getBrowserProjectKey();
-      upsertProjectSecret(projectKey, V0_ENV_NAME, value, 'api_key');
-      setStoredV0ApiKey(value);
-      setV0Input('');
-      setV0Saved(true);
-      window.dispatchEvent(new CustomEvent('nebula-v0-key-updated'));
-      window.dispatchEvent(new CustomEvent('nebula-secrets-updated'));
-      setStep(4);
-    } catch {
-      setV0Msg('Could not save. Check that browser storage is allowed.');
-    } finally {
-      setV0Busy(false);
-    }
-  }, [v0Input, t]);
-
-  const skipV0 = useCallback(() => {
-    setStep(4);
-  }, []);
 
   if (!open) return null;
 
@@ -150,9 +104,7 @@ export function WelcomeOnboardingModal({ open, user, onClose }: Props) {
       ? t('ide.welcome.stepWelcome')
       : step === 2
         ? t('ide.welcome.step1')
-        : step === 3
-          ? t('ide.welcome.step2')
-          : t('ide.welcome.step3');
+        : t('ide.welcome.step3');
 
   return (
     <div
@@ -190,7 +142,7 @@ export function WelcomeOnboardingModal({ open, user, onClose }: Props) {
             </p>
             {step >= 2 && step <= 4 ? (
               <div className="flex items-center gap-1.5" aria-hidden>
-                {[2, 3, 4].map((n) => (
+                {[2, 4].map((n) => (
                   <span
                     key={n}
                     className={cn(
@@ -231,20 +183,12 @@ export function WelcomeOnboardingModal({ open, user, onClose }: Props) {
                     <KeyRound className="mt-0.5 h-4 w-4 shrink-0 text-primary" aria-hidden />
                     <span>
                       <strong className="font-medium text-foreground">{t('ide.welcome.grokLabel')}</strong> (required) — conversation,
-                      architecture, and coding
-                    </span>
-                  </li>
-                  <li className="flex gap-2">
-                    <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-primary/80" aria-hidden />
-                    <span>
-                      <strong className="font-medium text-foreground">{t('ide.welcome.v0Label')}</strong> (optional) — high-quality UI
-                      generation
+                      architecture, coding, and UI Studio Beta
                     </span>
                   </li>
                 </ul>
                 <p className="text-xs leading-relaxed text-muted-foreground border-t border-border pt-3">
-                  Billing stays transparent: Nebulla (if on a paid plan) + Grok/xAI + V0 (only if you use it). You
-                  control each account.
+                  Closed beta is free. You bring your own Grok/xAI key (BYOK). No payment required today.
                 </p>
               </section>
             </div>
@@ -305,59 +249,6 @@ export function WelcomeOnboardingModal({ open, user, onClose }: Props) {
             </div>
           ) : null}
 
-          {step === 3 ? (
-            <div className="space-y-5">
-              <header className="space-y-2 pr-8">
-                <h2 id="welcome-onboarding-title" className="font-headline text-xl font-semibold text-foreground">
-                  Connect V0 (Optional)
-                </h2>
-                <p className="text-sm leading-relaxed text-muted-foreground">
-                  V0 generates high-quality UI. You can skip this and use Nebulla normally — add V0 later anytime.
-                </p>
-              </header>
-
-              <ol className="list-decimal space-y-2 pl-5 text-sm text-muted-foreground">
-                <li>
-                  Open{' '}
-                  <a
-                    href={V0_KEYS_URL}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 font-medium text-primary underline-offset-2 hover:underline"
-                  >
-                    v0 API keys
-                    <ExternalLink className="h-3 w-3" aria-hidden />
-                  </a>
-                </li>
-                <li>Create a key and paste it below — or skip</li>
-              </ol>
-
-              <div className="space-y-2">
-                <label className="block text-[11px] uppercase tracking-wider text-muted-foreground" htmlFor="welcome-v0-key">
-                  {t('ide.welcome.v0Label')}
-                </label>
-                <input
-                  id="welcome-v0-key"
-                  type="password"
-                  autoComplete="off"
-                  value={v0Input}
-                  onChange={(e) => {
-                    setV0Input(e.target.value);
-                    setV0Msg(null);
-                  }}
-                  placeholder={t('ide.welcome.v0Placeholder')}
-                  className="w-full rounded-xl border border-border bg-[var(--surface)] px-3 py-3 text-sm text-foreground outline-none ring-primary/30 placeholder:text-muted-foreground/60 focus:ring"
-                />
-                {v0Saved && !v0Input ? (
-                  <p className="flex items-center gap-1.5 text-xs text-[var(--success)]">
-                    <CheckCircle2 className="h-3.5 w-3.5" aria-hidden />A V0 key is already saved.
-                  </p>
-                ) : null}
-                {v0Msg ? <p className="text-xs text-amber-200/90">{v0Msg}</p> : null}
-              </div>
-            </div>
-          ) : null}
-
           {step === 4 ? (
             <div className="space-y-5">
               <header className="flex items-start gap-3">
@@ -369,14 +260,14 @@ export function WelcomeOnboardingModal({ open, user, onClose }: Props) {
                     You&apos;re ready
                   </h2>
                   <p className="text-sm leading-relaxed text-muted-foreground">
-                    Setup is done. Grok is connected
-                    {v0Saved || getStoredV0ApiKey() ? ' and V0 is ready for UI generation' : ''}. You can change keys
-                    later under <strong className="font-medium text-foreground">Secrets</strong> (left nav).
+                    Setup is done. Grok is connected. Use UI Studio Beta for Generate UI. You can change keys later
+                    under <strong className="font-medium text-foreground">Secrets</strong> (left nav).
                   </p>
                 </div>
               </header>
               <p className="rounded-xl border border-border bg-[var(--surface)]/60 px-4 py-3 text-xs text-muted-foreground">
-                Reminder: xAI and V0 bill separately from Nebulla. You only pay for what you use on each service.
+                Reminder: xAI bills separately from Nebulla. Closed beta is free on Nebulla; you only pay xAI for what
+                you use.
               </p>
             </div>
           ) : null}
@@ -402,7 +293,7 @@ export function WelcomeOnboardingModal({ open, user, onClose }: Props) {
                 onClick={() => {
                   if (!grokInput.trim() && hasLocalGrokApiKey()) {
                     setPreferredAiProvider('grok');
-                    setStep(3);
+                    setStep(4);
                     return;
                   }
                   saveGrokAndContinue();
@@ -420,27 +311,6 @@ export function WelcomeOnboardingModal({ open, user, onClose }: Props) {
               >
                 Open xAI console to create a key
               </a>
-            </div>
-          ) : null}
-
-          {step === 3 ? (
-            <div className="flex flex-col gap-2 sm:flex-row">
-              <button
-                type="button"
-                disabled={v0Busy || !v0Input.trim()}
-                onClick={saveV0AndContinue}
-                className="btn-cyan inline-flex flex-1 items-center justify-center gap-2 rounded-xl px-5 py-3 text-sm disabled:opacity-45"
-              >
-                {v0Busy ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : null}
-                Add V0 key
-              </button>
-              <button
-                type="button"
-                onClick={skipV0}
-                className="inline-flex flex-1 items-center justify-center rounded-xl border border-border px-5 py-3 text-sm font-medium text-foreground transition hover:bg-white/5"
-              >
-                {t('ide.welcome.skip')}
-              </button>
             </div>
           ) : null}
 
