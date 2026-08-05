@@ -845,6 +845,7 @@ export function AssistantSidebar({
         const limitMsg = resolveAiLimitUserMessage(rawMsg, {
           billingEnabled: pubCfg.billingEnabled,
           freeTierTokenLimitDisabled: pubCfg.freeTierTokenLimitDisabled,
+          hasUserByok: pubCfg.hasUserByok,
         });
         if (limitMsg !== rawMsg) displayMsg = limitMsg;
       } catch {

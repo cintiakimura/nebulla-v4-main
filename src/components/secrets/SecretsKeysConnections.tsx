@@ -15,6 +15,7 @@ import {
   isPlausibleGrokApiKey,
   saveGrokApiKeyRobust,
 } from '../../lib/grokUserKey';
+import { fetchByokStatus } from '../../lib/byokClient';
 import { getProjectSecretValue, upsertProjectSecret } from '../../lib/nebulaSecretHelpers';
 import { setPreferredAiProvider } from '../../lib/nebulaWelcomeOnboarding';
 import { getStoredV0ApiKey, setStoredV0ApiKey } from '../../lib/v0Key';
@@ -45,12 +46,27 @@ export function SecretsKeysConnections({
   const [grokBusy, setGrokBusy] = useState(false);
   const [v0Busy, setV0Busy] = useState(false);
   const [grokMsg, setGrokMsg] = useState<string | null>(null);
+  const [grokMsgTone, setGrokMsgTone] = useState<'ok' | 'warn' | 'err'>('ok');
   const [v0Msg, setV0Msg] = useState<string | null>(null);
   const [activeCloudProject, setActiveCloudProject] = useState<string | null>(null);
+  const [accountGrokTail, setAccountGrokTail] = useState<string | null>(null);
+  const [accountGrokConfigured, setAccountGrokConfigured] = useState(false);
 
   useEffect(() => {
     setUser(userProp);
   }, [userProp]);
+
+  const refreshByokStatus = useCallback(async () => {
+    const status = await fetchByokStatus();
+    if (!status || !status.ok) {
+      setAccountGrokConfigured(false);
+      setAccountGrokTail(null);
+      return;
+    }
+    const xai = status.providers?.xai;
+    setAccountGrokConfigured(Boolean(xai?.configured));
+    setAccountGrokTail(xai?.tail || null);
+  }, []);
 
   useEffect(() => {
     void (async () => {
@@ -58,6 +74,8 @@ export function SecretsKeysConnections({
       if (u) setUser(u);
       if (!u) {
         setActiveCloudProject(null);
+        setAccountGrokConfigured(false);
+        setAccountGrokTail(null);
         return;
       }
       await ensureCloudWorkspaceReady();
@@ -66,8 +84,19 @@ export function SecretsKeysConnections({
       if (rows.length > 0 && !getBrowserProjectName().trim()) {
         setActiveCloudProject(rows[0].name);
       }
+      await refreshByokStatus();
     })();
-  }, [userProp?.uid]);
+  }, [userProp?.uid, refreshByokStatus]);
+
+  useEffect(() => {
+    const onByok = () => void refreshByokStatus();
+    window.addEventListener('nebula-byok-updated', onByok);
+    window.addEventListener('nebula-secrets-updated', onByok);
+    return () => {
+      window.removeEventListener('nebula-byok-updated', onByok);
+      window.removeEventListener('nebula-secrets-updated', onByok);
+    };
+  }, [refreshByokStatus]);
 
   useEffect(() => {
     const onOAuth = (ev: MessageEvent) => {
@@ -92,6 +121,7 @@ export function SecretsKeysConnections({
     setGrokMsg(null);
     const v = grokInput.trim();
     if (!isPlausibleGrokApiKey(v)) {
+      setGrokMsgTone('err');
       setGrokMsg(v ? 'That key looks too short. Paste the full xAI key.' : 'Paste your Grok API key first.');
       return;
     }
@@ -99,23 +129,31 @@ export function SecretsKeysConnections({
     try {
       const result = await saveGrokApiKeyRobust(v);
       if (!result.ok) {
+        setGrokMsgTone('err');
         setGrokMsg(result.error || 'Could not save key.');
         return;
       }
       setPreferredAiProvider('grok');
       setGrokInput('');
-      setGrokMsg(
-        result.source === 'server'
-          ? 'Saved on your account (encrypted). Grok is ready for chat, architecture, and coding.'
-          : result.error || 'Saved in this browser only. Sign in so the key syncs across devices.',
-      );
+      await refreshByokStatus();
+      if (result.source === 'server') {
+        setGrokMsgTone('ok');
+        setGrokMsg('Saved on your account (encrypted). Grok is ready — send a chat message to verify.');
+      } else {
+        setGrokMsgTone('warn');
+        setGrokMsg(
+          result.error ||
+            'Saved in this browser only. Sign in so the key syncs to your account and survives reload.',
+        );
+      }
       window.dispatchEvent(new CustomEvent('nebula-secrets-updated'));
     } catch {
+      setGrokMsgTone('err');
       setGrokMsg('Could not save. Sign in and try again.');
     } finally {
       setGrokBusy(false);
     }
-  }, [grokInput]);
+  }, [grokInput, refreshByokStatus]);
 
   const saveV0 = useCallback(() => {
     setV0Msg(null);
@@ -139,7 +177,7 @@ export function SecretsKeysConnections({
     }
   }, [projectKey, v0Input]);
 
-  const grokOnFile = hasLocalGrokApiKey();
+  const grokOnFile = hasLocalGrokApiKey() || accountGrokConfigured;
   const v0OnFile = Boolean(getProjectSecretValue(projectKey, V0_ENV_NAME) ?? getStoredV0ApiKey());
 
   return (
@@ -241,9 +279,17 @@ export function SecretsKeysConnections({
             className="w-full bg-black/30 border border-white/10 rounded-lg px-3 py-2 text-sm text-slate-200 placeholder:text-slate-600 focus:border-cyan-500/40 outline-none"
             placeholder={grokOnFile ? 'Key on file — paste a new key to replace' : 'Paste your Grok / xAI API key'}
           />
-          {grokOnFile && !grokInput ? (
+          {accountGrokConfigured && !grokInput ? (
             <p className="text-xs text-emerald-400 flex items-center gap-1.5">
-              <CheckCircle2 className="w-3.5 h-3.5 shrink-0" aria-hidden /> A Grok key is already saved.
+              <CheckCircle2 className="w-3.5 h-3.5 shrink-0" aria-hidden />
+              Grok key saved on your account
+              {accountGrokTail ? ` (…${accountGrokTail})` : ''}. Paste a new key only to replace it.
+            </p>
+          ) : null}
+          {!accountGrokConfigured && hasLocalGrokApiKey() && !grokInput ? (
+            <p className="text-xs text-amber-300 flex items-center gap-1.5">
+              <CheckCircle2 className="w-3.5 h-3.5 shrink-0" aria-hidden />
+              Key saved in this browser only — sign in and Save again to store it on your account.
             </p>
           ) : null}
           <div className="flex flex-wrap items-center gap-3">
@@ -255,7 +301,19 @@ export function SecretsKeysConnections({
               {grokBusy ? <Loader2 className="w-4 h-4 animate-spin" aria-hidden /> : null}
               Save Grok key
             </button>
-            {grokMsg ? <p className="text-sm text-slate-400">{grokMsg}</p> : null}
+            {grokMsg ? (
+              <p
+                className={
+                  grokMsgTone === 'err'
+                    ? 'text-sm text-rose-300'
+                    : grokMsgTone === 'warn'
+                      ? 'text-sm text-amber-300'
+                      : 'text-sm text-emerald-300'
+                }
+              >
+                {grokMsg}
+              </p>
+            ) : null}
           </div>
         </form>
       </section>

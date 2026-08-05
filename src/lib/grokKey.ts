@@ -24,6 +24,12 @@ export const BETA_PLATFORM_AI_LIMIT_MESSAGE =
 export const PROVIDER_QUOTA_LIMIT_MESSAGE =
   'Grok/xAI hit a provider quota or billing limit on the API key in use. This is not a Nebulla Free-plan limit. Add your own key in Secrets, or top up the xAI account that owns the platform key.';
 
+export const PROVIDER_QUOTA_NO_BYOK_HINT =
+  'No Grok key is saved on your account yet — chat is using the platform key. Open Secrets (key icon) → paste your xAI key → Save Grok key, then retry.';
+
+export const PROVIDER_QUOTA_WITH_BYOK_HINT =
+  'An account key is saved, but xAI still rejected it (quota/billing on that key). Paste a different key with credits in Secrets, or top up that xAI account.';
+
 /** True only for Nebulla's own Free-tier meter (not xAI/Anthropic provider errors). */
 export function isNebullaFreeTierLimitError(message: string): boolean {
   const m = message.toLowerCase();
@@ -54,7 +60,11 @@ export function isProviderQuotaLimitError(message: string): boolean {
 /** Pick user-facing copy for limit-like chat errors during closed beta. */
 export function resolveAiLimitUserMessage(
   message: string,
-  opts?: { billingEnabled?: boolean; freeTierTokenLimitDisabled?: boolean },
+  opts?: {
+    billingEnabled?: boolean;
+    freeTierTokenLimitDisabled?: boolean;
+    hasUserByok?: boolean;
+  },
 ): string {
   const billingOn = opts?.billingEnabled === true;
   const meteringOff = opts?.freeTierTokenLimitDisabled !== false;
@@ -64,7 +74,13 @@ export function resolveAiLimitUserMessage(
     return FREE_TIER_MONTHLY_LIMIT_MESSAGE;
   }
   if (isProviderQuotaLimitError(message)) {
-    return PROVIDER_QUOTA_LIMIT_MESSAGE;
+    const hint =
+      opts?.hasUserByok === true
+        ? PROVIDER_QUOTA_WITH_BYOK_HINT
+        : opts?.hasUserByok === false
+          ? PROVIDER_QUOTA_NO_BYOK_HINT
+          : '';
+    return hint ? `${PROVIDER_QUOTA_LIMIT_MESSAGE} ${hint}` : PROVIDER_QUOTA_LIMIT_MESSAGE;
   }
   return message;
 }

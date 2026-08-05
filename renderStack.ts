@@ -1161,8 +1161,11 @@ export async function mountRenderStack(app: Express) {
       const db = requireDbPool();
       const saved = await saveUserByokApiKey(db, uid, provider, apiKey);
       if (!saved.ok) {
-        return res.status(400).json({
-          error: "That API key looks invalid. Paste the full key from the provider console.",
+        const notFound = saved.reason === "user_not_found";
+        return res.status(notFound ? 409 : 400).json({
+          error: notFound
+            ? "Could not save key for this account. Sign out and sign in again, then retry."
+            : "That API key looks invalid. Paste the full key from the provider console.",
           code: saved.reason || "invalid_key",
         });
       }

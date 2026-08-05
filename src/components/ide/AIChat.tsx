@@ -234,7 +234,7 @@ export function AIChat() {
     assistantInteractionMode,
     setAssistantInteractionMode,
   } = useIdeWorkspace();
-  const { activeTab: centerActiveTab } = useIdeCenterTabs();
+  const { activeTab: centerActiveTab, openPanel } = useIdeCenterTabs();
   /** Center My Projects / discovery already owns the hero — keep chat secondary. */
   const centerIsProjectsHome =
     centerActiveTab?.kind === 'panel' && centerActiveTab.pane === 'projects';
@@ -1618,6 +1618,7 @@ export function AIChat() {
       const limitMsg = resolveAiLimitUserMessage(msg, {
         billingEnabled: pubCfg.billingEnabled,
         freeTierTokenLimitDisabled: pubCfg.freeTierTokenLimitDisabled,
+        hasUserByok: pubCfg.hasUserByok,
       });
       if (limitMsg !== msg) {
         setSendError(limitMsg);
@@ -2222,9 +2223,21 @@ export function AIChat() {
       ) : null}
 
       {sendError ? (
-        <p className="type-label-sm border-b border-red-500/20 bg-red-500/10 px-3 py-1.5 text-red-100/95" role="alert">
-          {sendError}
-        </p>
+        <div
+          className="type-label-sm flex items-start gap-2 border-b border-red-500/20 bg-red-500/10 px-3 py-1.5 text-red-100/95"
+          role="alert"
+        >
+          <p className="min-w-0 flex-1 leading-snug">{sendError}</p>
+          {/Secrets|BYOK|API key/i.test(sendError) ? (
+            <button
+              type="button"
+              className="shrink-0 rounded-md px-2 py-0.5 font-medium text-red-50 ring-1 ring-red-400/40 hover:bg-red-500/20"
+              onClick={() => openPanel('secrets')}
+            >
+              Open Secrets
+            </button>
+          ) : null}
+        </div>
       ) : null}
 
       <div

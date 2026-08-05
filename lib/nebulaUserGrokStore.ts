@@ -83,10 +83,14 @@ export async function saveUserByokApiKey(
   }
   const enc = encryptAtRest(plain.trim());
   const col = COLUMN[provider];
-  await db.query(
+  const updated = await db.query(
     `UPDATE public.nebula_users SET ${col.enc} = $2, ${col.validated} = NOW() WHERE id = $1::uuid`,
     [uid, enc],
   );
+  // D1/Postgres can report success with 0 rows if the session uid is stale or missing.
+  if (typeof updated.rowCount === "number" && updated.rowCount < 1) {
+    return { ok: false, reason: "user_not_found" };
+  }
   return { ok: true };
 }
 

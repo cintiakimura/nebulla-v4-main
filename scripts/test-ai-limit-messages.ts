@@ -24,6 +24,20 @@ assert.equal(
   "xAI spending limit is not Nebulla Free plan",
 );
 
+assert.ok(
+  resolveAiLimitUserMessage("Your team has reached its monthly spending limit", {
+    billingEnabled: false,
+    freeTierTokenLimitDisabled: true,
+    hasUserByok: false,
+  }).includes("No Grok key is saved"),
+);
+assert.ok(
+  resolveAiLimitUserMessage("Your team has reached its monthly spending limit", {
+    billingEnabled: false,
+    freeTierTokenLimitDisabled: true,
+    hasUserByok: true,
+  }).includes("account key is saved"),
+);
 assert.equal(
   resolveAiLimitUserMessage("Your team has reached its monthly spending limit", {
     billingEnabled: false,
