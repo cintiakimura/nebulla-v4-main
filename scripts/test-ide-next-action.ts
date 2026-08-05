@@ -45,12 +45,12 @@ const env = {
   MASTER_PLAN_STRICT: "warn",
   MASTER_PLAN_STRICT_NEW_PROJECTS: "strict",
   MASTER_PLAN_STRICT_AFTER: "2000-01-01T00:00:00.000Z",
-} as NodeJS.ProcessEnv;
+} as unknown as NodeJS.ProcessEnv;
 assert.equal(resolveMasterPlanStrictMode(tmp, env), "strict");
 const envOld = {
   ...env,
   MASTER_PLAN_STRICT_AFTER: "2099-01-01T00:00:00.000Z",
-} as NodeJS.ProcessEnv;
+} as unknown as NodeJS.ProcessEnv;
 assert.equal(resolveMasterPlanStrictMode(tmp, envOld), "warn");
 
 console.log("\n✓ next-action + weak-gate + strict policy tests passed\n");

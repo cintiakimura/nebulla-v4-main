@@ -115,27 +115,29 @@ export function AccountProjectSettings({
 
       <div>
         <label className="block text-[10px] uppercase tracking-wider text-slate-500 font-headline mb-1">
-          Client ID (Render workspace ID)
+          Isolation id (cfproj_…)
         </label>
         <input
           type="text"
           value={fields.renderWorkspaceId}
           onChange={(e) => setField('renderWorkspaceId', e.target.value)}
-          placeholder="Render workspace_id — server-side only in production"
+          placeholder="cfproj_… — server-assigned project scope key"
           className="w-full bg-black/30 border border-white/10 rounded-lg px-3 py-2 text-sm text-slate-200 font-mono focus:border-cyan-500/40 outline-none"
         />
-        <p className="text-[11px] text-slate-600 mt-1">Internal Render workspace identifier for this tenant boundary.</p>
+        <p className="text-[11px] text-slate-600 mt-1">
+          Synthetic Nebulla project scope (not a Render Projects API workspace id).
+        </p>
       </div>
 
       <div>
         <label className="block text-[10px] uppercase tracking-wider text-slate-500 font-headline mb-1">
-          Project ID (Render project / service ID)
+          External deploy / service id (optional)
         </label>
         <input
           type="text"
           value={fields.renderProjectId}
           onChange={(e) => setField('renderProjectId', e.target.value)}
-          placeholder="Nebulla project id or Render service id"
+          placeholder="Optional host service id if you deploy outside Nebulla"
           className="w-full bg-black/30 border border-white/10 rounded-lg px-3 py-2 text-sm text-slate-200 font-mono focus:border-cyan-500/40 outline-none"
         />
       </div>

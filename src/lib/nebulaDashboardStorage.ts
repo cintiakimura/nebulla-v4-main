@@ -14,7 +14,7 @@ export type SecretEntry = {
 export type ProjectSettingsStored = {
   localFolderPath: string;
   githubRepository: string;
-  /** Render workspace ID (internal client / workspace boundary). */
+  /** Synthetic project isolation id (`cfproj_…`) — not a Render Projects API workspace. */
   renderWorkspaceId: string;
   /** Render service / Nebula project ID as you use it in dashboards. */
   renderProjectId: string;

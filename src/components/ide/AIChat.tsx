@@ -1220,9 +1220,10 @@ export function AIChat() {
       clearIdeWorkspaceMetaCache();
       void upsertCloudProject({ name: projectNameAnswer, pages: [], edges: [] }).catch(() => {});
     }
+    const latestAppIssue = alreadyHasAppStatus ? getAppStatusDebugIssues(1).primary : null;
     const displayContent =
-      alreadyHasAppStatus && latestIssue
-        ? `Fix preview issue: ${latestIssue.friendlyTitle}`
+      alreadyHasAppStatus && latestAppIssue?.friendlyTitle
+        ? `Fix preview issue: ${latestAppIssue.friendlyTitle}`
         : alreadyHasAppStatus
           ? 'Fix the preview issue from App Status'
           : rawText;

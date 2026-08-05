@@ -3,6 +3,8 @@
  * Call once at server boot before accepting traffic.
  */
 
+import { getWorkspaceStorageMode, isWorkspaceR2Configured } from "./nebulaWorkspaceStorage";
+
 const DEV_SESSION = "dev-only-nebula-session-change-me";
 const DEV_AT_REST = "dev-only-nebula-at-rest-change-me";
 
@@ -18,7 +20,7 @@ function isWeakSecret(value: string | undefined, forbiddenExact: string[]): bool
 /**
  * In NODE_ENV=production, exit if SESSION_SECRET or NEBULA_SECRETS_ENCRYPTION_KEY
  * are missing, too short, or still a known development default.
- * SESSION_SECRET alone is not enough for at-rest keys in production — require dedicated encryption key.
+ * Also refuse APP_PREVIEW_PUBLIC and non-durable workspace storage when R2 is missing.
  */
 export function assertProductionSecretsOrExit(): void {
   if (process.env.NODE_ENV !== "production") return;
@@ -37,10 +39,24 @@ export function assertProductionSecretsOrExit(): void {
       "NEBULA_SECRETS_ENCRYPTION_KEY must be set to a strong secret (≥16 chars) dedicated to at-rest encryption (do not use the development default).",
     );
   }
+  if ((process.env.APP_PREVIEW_PUBLIC || "").trim() === "true") {
+    problems.push("APP_PREVIEW_PUBLIC must not be true in production (preview authz would be open).");
+  }
+  const mode = getWorkspaceStorageMode();
+  if ((mode === "dual" || mode === "r2") && !isWorkspaceR2Configured()) {
+    problems.push(
+      `WORKSPACE_STORAGE=${mode} but R2 is not fully configured (credentials + bucket).`,
+    );
+  }
+  if (mode === "local" && (process.env.ALLOW_LOCAL_WORKSPACE_IN_PRODUCTION || "").trim() !== "true") {
+    problems.push(
+      "WORKSPACE_STORAGE=local is not allowed in production (ephemeral disk). Set dual|r2 + R2, or ALLOW_LOCAL_WORKSPACE_IN_PRODUCTION=true to override (not recommended).",
+    );
+  }
 
   if (problems.length === 0) return;
 
-  console.error("[nebula] Refusing to start in production with weak secrets:");
+  console.error("[nebula] Refusing to start in production with weak secrets / unsafe ops:");
   for (const p of problems) console.error(`  - ${p}`);
   process.exit(1);
 }

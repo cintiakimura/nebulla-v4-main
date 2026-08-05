@@ -3,7 +3,7 @@ const KEY_LS = 'nebula_browser_project_key_v1';
 const NAME_LS = 'nebula_browser_project_name_v1';
 
 let currentProjectKey = 'default';
-/** DB project name (must match `nebula_projects.name` when logged in) for per-project disk / Render workspace. */
+/** DB project name (must match `nebula_projects.name` when logged in) for per-project disk / cfproj_ scope. */
 let currentProjectName = '';
 
 function sanitizeProjectKey(raw: string): string {

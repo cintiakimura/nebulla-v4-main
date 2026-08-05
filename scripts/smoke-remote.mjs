@@ -30,6 +30,25 @@ function main() {
     console.log(`GET /api/health  → ${health.status} ${health.ok ? "OK" : "FAIL"}`);
     if (health.json) console.log(JSON.stringify(health.json));
 
+    const ops = await get("/api/ops/readiness");
+    console.log(`\nGET /api/ops/readiness → ${ops.status} ${ops.ok ? "OK" : "FAIL"}`);
+    if (ops.json) {
+      const o = ops.json;
+      console.log(
+        JSON.stringify(
+          {
+            workspaceStorageMode: o.workspaceStorageMode,
+            durableWorkspaceOk: o.durableWorkspaceOk,
+            billingEnabled: o.billingEnabled,
+            figmaKeysConfigured: o.figmaKeysConfigured,
+            warnings: o.warnings,
+          },
+          null,
+          2,
+        ),
+      );
+    }
+
     const config = await get("/api/config");
     console.log(`\nGET /api/config → ${config.status} ${config.ok ? "OK" : "FAIL"}`);
     if (config.json) {
@@ -38,6 +57,10 @@ function main() {
         cloudStorageReady: c.cloudStorageReady,
         githubOAuthReady: c.githubOAuthReady,
         workspaceMode: c.workspaceMode,
+        workspaceStorageMode: c.workspaceStorageMode,
+        durableWorkspaceOk: c.durableWorkspaceOk,
+        billingEnabled: c.billingEnabled,
+        syntheticIsolation: c.syntheticIsolation,
         githubClientId: c.githubClientId ? `${String(c.githubClientId).slice(0, 8)}…` : null,
       };
       console.log(JSON.stringify(pick, null, 2));
@@ -47,7 +70,10 @@ function main() {
         );
       }
       if (c.cloudStorageReady === false) {
-        console.log("\nNote: cloudStorageReady is false — set DATABASE_URL on the server.");
+        console.log("\nNote: cloudStorageReady is false — set DATABASE_URL / platform D1 on the server.");
+      }
+      if (c.durableWorkspaceOk === false) {
+        console.log("\nNote: durableWorkspaceOk is false — set WORKSPACE_STORAGE=dual|r2 + R2 on the server.");
       }
     } else {
       console.log(config.text);

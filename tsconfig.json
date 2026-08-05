@@ -29,5 +29,13 @@
     "allowImportingTsExtensions": true,
     "noEmit": true
   },
-  "exclude": ["node_modules", "0vgenerated-v2"]
+  "exclude": [
+    "node_modules",
+    "0vgenerated-v2",
+    "data",
+    "dist",
+    "nebulla-project/figma-library/raw",
+    "nebulla-project/figma-library/profile-drafts",
+    "scripts/stress-test-hardened-pipeline.mts"
+  ]
 }

@@ -287,13 +287,8 @@ export function selectTemplate(
   } else if (page_type === "list" || product_function === "tasks") {
     id = device === "web" ? "web_list_table" : "mobile_list_actions";
   } else if (product_function === "ecommerce" || product_function === "booking") {
-    if (device === "landing" || page_type === "landing") {
-      id = "landing_hero_features_cta";
-    } else if (page_type === "list") {
-      id = device === "web" ? "web_list_table" : "mobile_list_actions";
-    } else {
-      id = device === "mobile" ? "mobile_home_hero_cards" : "web_dashboard_sidebar";
-    }
+    // list already handled above; ecommerce home/detail-ish → cards or dashboard shell
+    id = device === "mobile" ? "mobile_home_hero_cards" : "web_dashboard_sidebar";
   } else if (page_type === "detail" || page_type === "profile") {
     id = device === "web" ? "web_detail_header_content" : "mobile_detail_sections";
   } else if (page_type === "dashboard") {

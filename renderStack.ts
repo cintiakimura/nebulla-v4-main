@@ -609,6 +609,24 @@ export function readNebulaSessionUserId(req: Request): string | null {
   return readSession(req);
 }
 
+/** True when the signed-in user owns a project whose workspace_id (disk key) matches. */
+export async function userOwnsWorkspaceDiskKey(uid: string, diskKey: string): Promise<boolean> {
+  const key = sanitizeProjectKey(diskKey);
+  if (!uid || !key) return false;
+  const dbHandle = getPlatformDbOrNull();
+  if (!dbHandle || !dbReady) return false;
+  try {
+    const r = await dbHandle.query(
+      `SELECT 1 AS ok FROM public.nebula_projects WHERE user_id = $1::uuid AND workspace_id = $2 LIMIT 1`,
+      [uid, key],
+    );
+    return Boolean(r.rows[0]);
+  } catch (e) {
+    console.warn("[nebula] userOwnsWorkspaceDiskKey:", e);
+    return false;
+  }
+}
+
 function requestDerivedBaseUrl(req: Request): string | null {
   const forwardedHost = (req.get("x-forwarded-host") || "").split(",")[0]?.trim();
   const host = (req.get("host") || "").trim();

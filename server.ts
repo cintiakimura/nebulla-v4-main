@@ -22,7 +22,21 @@ import {
   guardianExpressErrorHandler,
   captureError,
 } from "./lib/nebulaGuardian";
-import { mountRenderStack, getRenderPublicConfig, resolveNebulaProjectDiskKey, readNebulaSessionUserId, ensureDbReady } from "./renderStack";
+import {
+  mountRenderStack,
+  getRenderPublicConfig,
+  resolveNebulaProjectDiskKey,
+  readNebulaSessionUserId,
+  ensureDbReady,
+  userOwnsWorkspaceDiskKey,
+} from "./renderStack";
+import {
+  canReadAppPreview,
+  issuePreviewGrantCookieMerging,
+  isSyntheticWorkspaceKey,
+} from "./lib/appPreviewAuthz";
+import { createApiRateLimitGate } from "./lib/rateLimit";
+import { getOpsReadiness, logOpsReadinessAtBoot } from "./lib/opsReadiness";
 import { getPlatformQueryable } from "./lib/nebulaPgPool";
 import { getUserByokStatus, hasAnyByokConfigured } from "./lib/nebulaUserGrokStore";
 import {
@@ -348,12 +362,14 @@ async function startServer() {
   initGuardianProcessHandlers();
   const { assertProductionSecretsOrExit } = await import("./lib/assertProductionSecrets");
   assertProductionSecretsOrExit();
+  logOpsReadinessAtBoot();
 
   // Behind Railway / Render / Fly / nginx / Docker — correct client IPs and secure cookies.
   app.set("trust proxy", 1);
 
   app.use(express.json({ limit: '50mb' }) as any);
   app.use(express.urlencoded({ extended: true, limit: '50mb' }) as any);
+  app.use(createApiRateLimitGate());
 
   await mountRenderStack(app);
 
@@ -374,8 +390,19 @@ async function startServer() {
     console.log(`${req.method} ${req.url}`);
     next();
   });
-  app.get("/api/health", (req, res) => {
-    res.json({ status: "ok" });
+  app.get("/api/health", (_req, res) => {
+    const ops = getOpsReadiness();
+    res.json({
+      status: "ok",
+      workspaceStorageMode: ops.workspaceStorageMode,
+      durableWorkspaceOk: ops.durableWorkspaceOk,
+      billingEnabled: ops.billingEnabled,
+      warnings: ops.warnings.length,
+    });
+  });
+
+  app.get("/api/ops/readiness", (_req, res) => {
+    res.json({ ok: true, ...getOpsReadiness() });
   });
 
   app.get("/api/storage/status", async (_req, res) => {
@@ -539,6 +566,15 @@ async function startServer() {
       hasActiveWorkspace: true,
       activeWorkspacePath: null,
       cloudProjectKey: pp.projectKey,
+      ...(() => {
+        const ops = getOpsReadiness();
+        return {
+          workspaceStorageMode: ops.workspaceStorageMode,
+          durableWorkspaceOk: ops.durableWorkspaceOk,
+          opsWarnings: ops.warnings,
+          syntheticIsolation: true as const,
+        };
+      })(),
     });
   });
 
@@ -1298,7 +1334,7 @@ No approved UI code yet.
       if (fs.existsSync(pp.masterPlanPath)) {
         plan = JSON.parse(fs.readFileSync(pp.masterPlanPath, "utf8"));
       }
-
+      
       // Update the specific tab content using mapped tabName as key
       (plan as any)[tabName] = content;
 
@@ -1985,9 +2021,21 @@ No approved UI code yet.
   });
 
   /** Bootstrap HTML for in-IDE preview: inject base + rewrite root-relative URLs under this project. */
-  app.get("/api/app-preview/bootstrap", (req, res) => {
+  app.get("/api/app-preview/bootstrap", async (req, res) => {
     try {
       const pp = projectPathsFor(req);
+      const uid = readNebulaSessionUserId(req);
+      if (isSyntheticWorkspaceKey(pp.projectKey)) {
+        if (!uid) {
+          return res.status(401).type("text/plain").send("Sign in required for this workspace preview");
+        }
+        const owns = await userOwnsWorkspaceDiskKey(uid, pp.projectKey);
+        if (!owns) {
+          return res.status(403).type("text/plain").send("Preview access denied for this workspace");
+        }
+      }
+      issuePreviewGrantCookieMerging(req, res, pp.projectKey);
+
       const idx = path.join(pp.workspaceRoot, "index.html");
       if (!fs.existsSync(idx) || fs.statSync(idx).size < 80) {
         const q = req.query as Record<string, unknown>;
@@ -2018,7 +2066,7 @@ No approved UI code yet.
   });
 
   /** Raw workspace file for preview assets (URL path must match active project key). */
-  app.use((req, res, next) => {
+  app.use(async (req, res, next) => {
     if (req.method !== "GET" || !req.path.startsWith("/api/app-preview/p/")) return next();
     try {
       const asterisk = req.path.slice("/api/app-preview/p/".length);
@@ -2030,8 +2078,15 @@ No approved UI code yet.
       relPath = relPath.replace(/^\.\/+/, "").replace(/^\/+/, "");
       if (!relPath) relPath = "index.html";
 
-      // Path key is authoritative — iframe asset requests do not carry ?projectKey=
-      // (previously compared path key vs query/default and returned 403 Project key mismatch).
+      const access = await canReadAppPreview(req, projectKey, {
+        sessionUserId: readNebulaSessionUserId(req),
+        userOwnsDiskKey: userOwnsWorkspaceDiskKey,
+      });
+      if (access.ok === false) {
+        res.status(access.status).type("text/plain").send(access.reason);
+        return;
+      }
+
       const { workspaceRoot } = ensureCloudProjectWorkspace(
         REPO_ROOT,
         NEBULA_PROJECT_ROOT,
@@ -2043,7 +2098,6 @@ No approved UI code yet.
         return;
       }
       if (!fs.existsSync(target)) {
-        // Soft fallback: ensure a basic preview shell exists for empty workspaces
         if (relPath === "index.html") {
           ensurePreviewIndexHtml(workspaceRoot, projectKey);
           if (fs.existsSync(target)) {
@@ -2527,14 +2581,11 @@ No approved UI code yet.
       const rawPaths = Array.isArray(req.body?.paths) ? req.body.paths : null;
       let paths: string[];
       if (rawPaths && rawPaths.length > 0) {
-        paths = [
-          ...new Set(
-            rawPaths
-              .filter((p: unknown): p is string => typeof p === "string" && p.trim().length > 0)
-              .map((p: string) => p.replace(/\\/g, "/").replace(/^\.\/+/, ""))
-              .filter((p: string) => isUserAppProductPath(p))
-          ),
-        ];
+        const cleaned: string[] = rawPaths
+          .filter((p: unknown): p is string => typeof p === "string" && p.trim().length > 0)
+          .map((p: string) => p.replace(/\\/g, "/").replace(/^\.\/+/, ""))
+          .filter((p: string) => isUserAppProductPath(p));
+        paths = [...new Set(cleaned)];
       } else {
         const entries = await readGitPorcelainEntries(workspaceRoot);
         paths = [
@@ -3072,7 +3123,8 @@ No approved UI code yet.
             : undefined,
         });
       }
-      return res.json({ ok: true, pending: false, source: pass.source, ...pass });
+      const source = "source" in pass && pass.source ? pass.source : "v0";
+      return res.json({ ok: true, pending: false, source, ...pass });
     } catch (e) {
       console.error("[nebula-ui-studio/v0-poll]", e);
       return res.status(500).json({ error: e instanceof Error ? e.message : "v0 poll failed" });
@@ -3187,7 +3239,7 @@ No approved UI code yet.
       if (pencilKey) {
         const result = await callPencilMockupsGenerate({ apiKey: pencilKey, apiUrl: pencilUrl, body });
         if (result.ok === true) {
-          const raw = result.raw as Record<string, unknown>;
+        const raw = result.raw as Record<string, unknown>;
           const r2 = await r2FieldsForSvg(
             projectDiskKey(req),
             result.svg,
@@ -4347,9 +4399,12 @@ ${workflowContext}`;
       const codeUserContent = continuation
         ? `CONTINUATION — master-plan.json is ready; emit the Foundation slice now (layout, globals, root page, minimal shell). Do NOT implement every §4 route. Focus: ${note || "(foundation shell)"}`
         : `Run the coding pass now. Output ONE coherent slice only (Build → Debug → Next) — not the full app. Respect "${PRE_CODING_SUMMARY_KEY}" and Master Plan §4 for that slice's scope. Session focus: ${note || "(next incomplete slice)"}`;
-      const codeMessages = [
+      const codeMessages: { role: string; content: string }[] = [
         { role: "system", content: codeSystemPrompt },
-        ...withMem.slice(-16),
+        ...withMem.slice(-16).map((m) => ({
+          role: String(m.role || "user"),
+          content: typeof m.content === "string" ? m.content : "",
+        })),
         {
           role: "user",
           content: codeUserContent,
@@ -4369,8 +4424,8 @@ ${workflowContext}`;
         const existing = readGoCodePending(ppGo.workspaceRoot);
         if (existing?.status === "running" || isGoCodeJobActive(ppGo.workspaceRoot)) {
           return res.json({
-            preCodingSummary: summary,
-            summarySaved: true,
+          preCodingSummary: summary,
+          summarySaved: true,
             pending: true,
             coding: true,
             resumed: true,
@@ -4383,7 +4438,7 @@ ${workflowContext}`;
 
       try {
         if (!continuation) {
-          appendConversationTurn(convScopeGo, "user", `[Go] ${note || "start coding"}`);
+        appendConversationTurn(convScopeGo, "user", `[Go] ${note || "start coding"}`);
         } else {
           appendConversationTurn(convScopeGo, "user", `[Go continuation] foundation slice`);
         }
@@ -4860,49 +4915,49 @@ ${answer.slice(0, 8000)}`;
       /** Planning text — used for Master Plan + Grok B summaries (provider-agnostic). */
       const planningCapture = responseText;
 
-      // Grok B (writer): run as soon as meaningful summary content appears.
+  // Grok B (writer): run as soon as meaningful summary content appears.
       const summarySource = planningCapture;
-      const answerTabMatches = [...summarySource.matchAll(/\bANSWER_Q([1-6])\b/gi)];
-      const answerTabs = [...new Set(answerTabMatches.map((m) => parseInt(m[1], 10)))].sort(
+  const answerTabMatches = [...summarySource.matchAll(/\bANSWER_Q([1-6])\b/gi)];
+  const answerTabs = [...new Set(answerTabMatches.map((m) => parseInt(m[1], 10)))].sort(
         (a, b) => a - b,
-      );
-      const summaries = extractGrokBSummaries(summarySource);
-      const blockFallbackSummaries = extractSummariesFromMasterPlanBlock(summarySource);
-      const mergedSummaries: Partial<Record<number, string>> = {
-        ...blockFallbackSummaries,
-        ...summaries,
-      };
-      const summaryTabs = Object.keys(mergedSummaries)
-        .map((k) => parseInt(k, 10))
-        .filter((n) => Number.isInteger(n) && n >= 1 && n <= 6)
-        .sort((a, b) => a - b);
-      const shouldRunWriter = answerTabs.length > 0 || summaryTabs.length > 0;
-      if (shouldRunWriter) {
-        const targetTabs = answerTabs.length > 0 ? answerTabs : summaryTabs;
-        const summaryEntries = targetTabs
-          .map((idx) => {
-            const summary = mergedSummaries[idx];
-            return summary ? ({ tabIndex: idx, summary } as const) : null;
-          })
-          .filter((entry): entry is { tabIndex: number; summary: string } => entry !== null);
+  );
+  const summaries = extractGrokBSummaries(summarySource);
+  const blockFallbackSummaries = extractSummariesFromMasterPlanBlock(summarySource);
+  const mergedSummaries: Partial<Record<number, string>> = {
+    ...blockFallbackSummaries,
+    ...summaries,
+  };
+  const summaryTabs = Object.keys(mergedSummaries)
+    .map((k) => parseInt(k, 10))
+    .filter((n) => Number.isInteger(n) && n >= 1 && n <= 6)
+    .sort((a, b) => a - b);
+  const shouldRunWriter = answerTabs.length > 0 || summaryTabs.length > 0;
+  if (shouldRunWriter) {
+    const targetTabs = answerTabs.length > 0 ? answerTabs : summaryTabs;
+    const summaryEntries = targetTabs
+      .map((idx) => {
+        const summary = mergedSummaries[idx];
+        return summary ? ({ tabIndex: idx, summary } as const) : null;
+      })
+      .filter((entry): entry is { tabIndex: number; summary: string } => entry !== null);
 
-        if (summaryEntries.length === 0) {
-          console.warn("[GROK B] Trigger ignored: missing <GROK_B_SUMMARY_Qn> payload.");
-        } else {
-          appendWriterAuditEvent({
-            userId: convUserId,
-            projectKey: ppChat.projectKey,
-            projectName: convProject,
-            triggeredQn: summaryEntries.map((x) => x.tabIndex),
-          });
-          console.log(
+    if (summaryEntries.length === 0) {
+      console.warn("[GROK B] Trigger ignored: missing <GROK_B_SUMMARY_Qn> payload.");
+    } else {
+      appendWriterAuditEvent({
+        userId: convUserId,
+        projectKey: ppChat.projectKey,
+        projectName: convProject,
+        triggeredQn: summaryEntries.map((x) => x.tabIndex),
+      });
+      console.log(
             `[GROK B] Trigger: ANSWER_Q tabs=${summaryEntries.map((x) => x.tabIndex).join(",")}`,
-          );
-          runGrokB(projectPathsFor(req).masterPlanPath, summaryEntries).catch((err) => {
-            console.error("[GROK B] Failed to update Master Plan:", err);
-          });
-        }
-      }
+      );
+      runGrokB(projectPathsFor(req).masterPlanPath, summaryEntries).catch((err) => {
+        console.error("[GROK B] Failed to update Master Plan:", err);
+      });
+    }
+  }
 
       const cleanText = stripAssistantTagsForMemory(responseText);
       if (cleanText) {
@@ -4970,12 +5025,12 @@ ${answer.slice(0, 8000)}`;
       const upstream = await speakUpstream(text, language);
       if (!upstream.body) {
         const audio = Buffer.from(await upstream.arrayBuffer());
-        res.set({
-          "Content-Type": "audio/mpeg",
-          "Content-Length": audio.length.toString(),
+      res.set({
+        "Content-Type": "audio/mpeg",
+        "Content-Length": audio.length.toString(),
           "Cache-Control": "no-store",
-        });
-        res.send(audio);
+      });
+      res.send(audio);
         console.log(`[TTS] buffered speak ${Date.now() - t0}ms (${audio.length}b)`);
         return;
       }
@@ -5006,7 +5061,7 @@ ${answer.slice(0, 8000)}`;
         route: "/api/speak",
       });
       if (!res.headersSent) {
-        res.status(500).json({ error: "TTS failed" });
+      res.status(500).json({ error: "TTS failed" });
       }
     }
   };
@@ -5110,7 +5165,7 @@ startServer().catch((err) => {
 async function speakUpstream(text: string, language = "en"): Promise<Response> {
   const apiKey = process.env.GROK_TTS_NEW_API_KEY;
   const lang = ["en", "fr", "it", "es", "de"].includes(language) ? language : "en";
-
+  
   if (!apiKey) {
     throw new Error("GROK_TTS_NEW_API_KEY is not set. Please check your environment variables.");
   }

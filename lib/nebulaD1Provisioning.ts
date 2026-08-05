@@ -288,11 +288,11 @@ export async function provisionD1ForNebulaProject(opts: {
   projectDiskKey: string;
 }): Promise<D1ProvisionResult> {
   const created = await createCloudflareD1Database(opts.projectName);
-  if (!created.ok) {
-    if (!created.skipped) {
-      console.warn(`[nebula] D1 provisioning failed for "${opts.projectName}":`, created.error);
-    } else {
+  if (created.ok === false) {
+    if (created.skipped) {
       console.warn(`[nebula] D1 skipped for "${opts.projectName}":`, created.error);
+    } else {
+      console.warn(`[nebula] D1 provisioning failed for "${opts.projectName}":`, created.error);
     }
     return created;
   }

@@ -103,8 +103,9 @@ section('runUiGenerationCycleV2 without Figma / without Grok key');
     // no apiKeyOverride — seed path must still work
   });
 
-  assert.ok(result.editorModel?.pages, 'editor model pages present');
-  const page = Object.values(result.editorModel!.pages)[0];
+  const editorModel = result.editorModel as { pages?: Record<string, { nodes?: Record<string, unknown> }> } | undefined;
+  assert.ok(editorModel?.pages, 'editor model pages present');
+  const page = Object.values(editorModel!.pages!)[0];
   assert.ok(page && Object.keys(page.nodes || {}).length >= 4, 'nodes present');
 
   assert.equal(result.patternMode, 'seed');

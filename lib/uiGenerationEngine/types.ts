@@ -13,6 +13,7 @@ export type CycleStatus =
 
 export type DeviceClass = "web" | "mobile" | "landing";
 export type PageType =
+  | "home"
   | "dashboard"
   | "auth"
   | "settings"
@@ -21,6 +22,7 @@ export type PageType =
   | "landing"
   | "checkout"
   | "profile"
+  | "empty"
   | "other";
 export type ProductFunction =
   | "saas_admin"
@@ -30,6 +32,7 @@ export type ProductFunction =
   | "marketplace"
   | "community"
   | "marketing"
+  | "tasks"
   | "general";
 export type Industry =
   | "education"

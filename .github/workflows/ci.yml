@@ -1,0 +1,42 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Typecheck (lint)
+        run: npm run lint
+
+      - name: Test scripts
+        run: npm test
+        env:
+          # Deterministic offline smokes — never call live Figma/AI in CI
+          FIGMA_API_KEY: ""
+          FIGMA_REFERENCE_FILE_KEYS: ""
+          BILLING_ENABLED: "false"
+          RATE_LIMIT_DISABLED: "false"
+          WORKSPACE_STORAGE: "local"
+          NODE_ENV: "development"
+
+      - name: Production build
+        run: npm run build

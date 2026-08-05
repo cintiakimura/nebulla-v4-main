@@ -331,34 +331,31 @@ TAB 6 HIDDEN RULES (Environment Setup) — BACKEND ONLY:
 - Read the approved UI code from nebula-ui-studio.md (NEBULA_UI_STUDIO_CODE) and nebulla-sysh-ui-sysh-studio/approved/approved-ui.svg **only when the user explicitly approved UI in Nebula UI Studio** — not for default/fallback styling.
 - Build Environment Setup (Tab 6) using that approved UI as the source of truth for layout, screens, and components.
 - The plan must use approved UI details: colors, layout, components, and Tailwind classes.
-- Nebula system architecture (must stay consistent in Tab 6 and any infra wording):
-  - Main Render account: nebulla.dev.ai@gmail.com. All automated provisioning runs there; never assume the end user has their own Render login.
-  - One Render workspace per Nebula client. The Render workspace ID returned at creation time is the permanent internal client ID for that client (single source of truth). Never generate a separate random "client ID" that is not that workspace ID.
-  - Every project, web service, PostgreSQL database, background worker, and environment-variable set for that client must be created inside that client's Render workspace, scoped with the stored workspace ID (client ID).
-  - Public-facing product URLs and branding use the nebulla.dev domain family; user-facing copy uses project name and human-readable labels only.
-  - The workspace ID / client ID must be stored only in Nebula-controlled secrets or secure server-side configuration (encrypted store, vault, or equivalent). It must never appear in chat, Master Plan client-visible tabs, Nebula UI Studio output shown to the client, or the browser. If logs need a key, use opaque internal references that do not echo the raw workspace ID to operators who are not infra.
-- Required layers (exact):
-  Layer 0: Render workspace and client identity (foundation)
-  - When a user creates a project in Nebula, the control plane must automatically create (or bind to) a Render workspace under nebulla.dev.ai@gmail.com for that tenant boundary.
-  - Capture the API response workspace_id; persist it as the sole permanent internal client ID for all future infra. Do not mint a second client ID; do not recycle or overwrite the mapping without a migration plan.
-  - Store that ID only in secure internal storage; never show it to the client or in user-visible surfaces.
-  - Only after the workspace exists: create inside that workspace the web service, PostgreSQL, workers, and env/secrets. Link service IDs, DB URLs, and env blocks to the same internal client ID (workspace_id) so every lookup is workspace_id → resources.
-  - All future services, databases, and environment variables for this client are created or updated only in that workspace using the stored client ID.
-  - Secrets and Integrations (Dashboard): AI keys (XAI_API_KEY, ANTHROPIC_API_KEY, OPENAI_API_KEY) save encrypted on the user account via BYOK — never into Nebulla's shared Render env. Other app-deploy secrets may sync to that project's own Render service when applicable. Plan Tab 6 only after reviewing Secrets so non-BYOK integrations are not missing.
+- Nebula system architecture (must stay consistent in Tab 6 and any infra wording) — **current control plane (Phase 3)**:
+  - Nebulla the product runs on **one shared Render service**. Do **not** claim that each end user gets a dedicated Render Projects workspace or that Nebulla calls the Render Projects API for tenant isolation.
+  - Each Nebulla project gets a synthetic isolation id stored as \`workspace_id\`: \`cfproj_<uuid>\`. That id is the disk/API scope key (and optional per-project Cloudflare D1 binding). It is **not** a Render workspace id from Render's API.
+  - User-facing copy: project name and human-readable labels only. Never invent a second "client ID". Never tell the user that their app was provisioned as a separate Render account/workspace unless that is truly implemented later.
+  - Secrets and Integrations: AI keys save encrypted on the user account via BYOK — never into Nebulla's shared Render env.
+  - In-IDE App Preview serves the project's workspace files under Nebulla (authz-gated). "Deploy" for the Nebulla app itself redeploys the shared Nebulla service — do not promise automatic per-customer production hosting on Render unless the product later ships that.
+- Required layers (exact) — plan the **user's application** (what they are building), scoped by Nebulla project isolation:
+  Layer 0: Project isolation identity (foundation)
+  - On project create, Nebulla assigns/persists synthetic \`cfproj_\` workspace_id for that user+project. Use it only as the internal scope key; do not mint a parallel random client id.
+  - Optional: per-project Cloudflare D1 when platform Cloudflare credentials are configured.
+  - Secrets (Dashboard): BYOK AI keys on the user account; other integration secrets as applicable.
   Layer 1: Authentication and Security
   - Implement full custom authentication: login, register, password reset, sessions.
-  - Set up user roles and permission system. Permission and tenant resolution on the server must ultimately resolve to the internal client ID (workspace) for data isolation; never expose that ID in tokens or responses to the browser.
+  - Set up user roles and permission system. Server queries for the user's app must be tenant-scoped (e.g. workspace_id / org_id); never expose Nebulla internal ids in browser-facing tokens.
   Layer 2: Data layer
   - Analyze previous tabs + UI code from nebula-ui-studio.md.
-  - Design complete PostgreSQL schema: tables, relationships, indexes, constraints. The database instance itself lives in the client's Render workspace (Layer 0).
+  - Design complete PostgreSQL (or D1/SQLite) schema: tables, relationships, indexes, constraints for the **user's** app — not "a database inside a dedicated Render workspace for that Nebulla client".
   Layer 3: Back end
-  - Build complete backend API structure and endpoints for features/pages. Deploy targets and secrets for this API are scoped to the client's Render workspace.
+  - Build complete backend API structure and endpoints for features/pages for the user's app.
   Layer 4: Front-end implementation
-  - Implement every page exactly as approved in Nebula UI Studio. Client sees project name and nebulla.dev-facing URLs only; no workspace or internal client IDs.
+  - Implement every page exactly as approved in Nebula UI Studio. Client sees project name and product URLs only.
   Layer 5: Integration and Testing
-  - Connect frontend/backend, write critical-flow tests, fix bugs. Test configs use workspace-scoped staging resources where applicable.
+  - Connect frontend/backend, write critical-flow tests, fix bugs.
   Layer 6: Deployment
-  - Deploy the full application to Render inside the same client workspace from Layer 0; production aligns with nebulla.dev domain strategy.
+  - Describe how the user's app can be published (export, user's own host, or future Nebulla hosting). Do **not** state that Nebulla already auto-creates a dedicated Render workspace/service per client unless that feature is confirmed shipping.
 - After presenting Tab 6 content, ask ONLY:
   "Would like to add, remove, or change anything."
 
