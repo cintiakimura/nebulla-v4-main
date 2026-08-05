@@ -153,8 +153,16 @@ export async function handleSmartChatMessage(
     };
   }
 
-  // Chat lock: never silently enter coding / debug-apply / UI-generate pipelines.
-  if (interactionMode === 'chat' && isAgentLockedDetectorMode(mode)) {
+  const inferenceFirst = Boolean(modeMeta.inferenceFirst);
+  const hardGuidedInterview = Boolean(discoveryRequired && mode === 'guided');
+
+  // Chat lock: block silent coding/debug/UI — except inference-first (product auto-promotes Agent).
+  if (
+    interactionMode === 'chat' &&
+    isAgentLockedDetectorMode(mode) &&
+    !inferenceFirst &&
+    !hardGuidedInterview
+  ) {
     return {
       mode,
       modeMeta,
@@ -168,30 +176,33 @@ export async function handleSmartChatMessage(
     };
   }
 
-  // Non-file modes — pass through to existing Grok chat (Master Plan + Go intact).
-  // Incomplete plan + guided = hard Discovery (codingHint guided-onboarding), not a soft free hint.
-  const hardDiscovery = Boolean(discoveryRequired && mode === 'guided');
+  // Non-file modes — pass through to Grok (Master Plan + Go intact).
+  // Default incomplete-plan path = inference-first; Guided interview only when discoveryRequired.
+  let codingHint: string | undefined;
+  if (hardGuidedInterview) {
+    codingHint = 'guided-onboarding';
+  } else if (inferenceFirst || (mode === 'coding' && !masterPlanComplete)) {
+    codingHint = 'fast-prototype';
+  } else if (mode === 'coding') {
+    codingHint =
+      'Use nebulla-project/code-review-checklist.md; prefer smallest safe change; architecture first unless user explicitly requested code.';
+  } else if (mode === 'debugging') {
+    codingHint =
+      'NDM: Verify → Analyze → Trace → Fix → Validate; use full-bug-database.md; smallest safe fix.';
+  } else if (mode === 'architecture') {
+    codingHint = 'Mandatory Research Pillars before §§2–5 / V0; Master Plan tags only.';
+  } else if (mode === 'ui') {
+    codingHint =
+      'Research-grounded V0/UI Studio prompt; no vague modern/clean/user-friendly alone.';
+  } else if (mode === 'guided') {
+    codingHint = 'guided-onboarding';
+  }
+
   return {
     mode,
     modeMeta,
     handledLocally: false,
     assistantMessage: describeChatMode(mode, discoveryRequired),
-    codingHint: hardDiscovery
-      ? 'guided-onboarding'
-      : discoveryRequired && (mode === 'coding' || mode === 'ui' || mode === 'architecture')
-        ? 'guided-onboarding'
-        : mode === 'coding'
-          ? 'Use nebulla-project/code-review-checklist.md; prefer smallest safe change; architecture first unless user explicitly requested code.'
-          : mode === 'debugging'
-            ? 'NDM: Verify → Analyze → Trace → Fix → Validate; use full-bug-database.md; smallest safe fix.'
-            : mode === 'architecture'
-              ? 'Mandatory Research Pillars before §§2–5 / V0; Master Plan tags only.'
-              : mode === 'ui'
-                ? 'Research-grounded V0/UI Studio prompt; no vague modern/clean/user-friendly alone.'
-                : mode === 'guided'
-                  ? 'guided-onboarding'
-                  : discoveryRequired
-                    ? 'discovery-required'
-                    : undefined,
+    codingHint,
   };
 }

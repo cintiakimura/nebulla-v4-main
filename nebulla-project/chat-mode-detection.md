@@ -4,7 +4,7 @@ Nebulla is architecture-first. Analyze the user's input **and project state** (e
 
 **Also see:** `nebulla-project/chat-vs-agent-mode.md` — user-locked **Chat** (brainstorm) vs **Agent** (coding). That product toggle overrides coding/debug/UI execution while Chat is selected; detector modes still run for routing hints.
 
-**Fast Prototype (additive):** `nebula-project/inference-first-rules.md` + product start mode (`src/lib/ideStartMode.ts`). When active, do **not** force Guided Discovery — infer defaults, draft Master Plan with labeled assumptions, then Foundation coding. Guided interview remains available and unchanged when Fast Prototype is not selected. Never steal debug / file-open / App Status turns.
+**Inference-first (default):** `nebula-project/inference-first-rules.md` + `src/lib/ideStartMode.ts`. Clear goal / build brief → categorize → research → draft → build (no long Q&A). **Guided interview is opt-in** (brainstorm / interview me / full architecture interview). Never steal debug / file-open / App Status turns. Never wipe plan memory on Chat↔Agent switch.
 
 **Product detector:** `src/lib/chatModeDetector.ts` (must stay aligned with this file).  
 **Complete plan checker:** `lib/masterPlanCompleteness.ts` → `isMasterPlanCompleteForDiscovery`.

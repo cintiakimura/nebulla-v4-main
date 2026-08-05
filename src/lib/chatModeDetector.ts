@@ -2,13 +2,17 @@
  * Chat mode detection for Nebula Guardian / Smart Chat Handler.
  * Run this FIRST on every user message before routing.
  *
- * Mode sequence (product): Chat/Discovery → Architecture → Coding → Debugging → UI Generation
- * (+ File Ops short-circuit). Detector labels map to that sequence.
+ * Default incomplete-plan path: **inference-first** (`nebula-project/inference-first-rules.md`)
+ * — categorize → research → draft → build. Guided interview is opt-in only.
  *
- * Critical: File / Free Chat / paste-code / "just build" must NOT permanently skip Discovery.
- * If the project lacks a complete Master Plan (with research pillars), prefer Discovery
- * before serious Architecture / Coding / UI work.
+ * Mode sequence (product): Chat / Inference-first → Architecture → Coding → Debugging → UI
+ * (+ File Ops short-circuit). Explicit brainstorm / full interview → Guided Discovery.
  */
+
+import {
+  detectGuidedInterviewIntent,
+  detectInferenceFirstIntent,
+} from './ideStartMode';
 
 export type ChatMode =
   | 'guided'
@@ -25,10 +29,12 @@ export type ChatModeResult = {
   label: string;
   confidence: 'high' | 'medium' | 'low';
   /**
-   * When true, Master Plan is incomplete — Discovery + Research Pillars are still required
-   * before architecture/coding (even after a File open).
+   * When true, Guided interview / Discovery Q&A is required (opt-in exception).
+   * Default incomplete-plan builds use inference-first with discoveryRequired false.
    */
   discoveryRequired?: boolean;
+  /** When true, follow inference-first-rules.md (default for clear goals / new builds). */
+  inferenceFirst?: boolean;
 };
 
 export type DetectChatModeOptions = {
@@ -90,17 +96,22 @@ export function detectChatMode(
 ): ChatModeResult {
   const text = String(input || '').trim();
   const masterPlanComplete = opts?.masterPlanComplete === true;
-  const discoveryRequired = !masterPlanComplete;
+  const planIncomplete = !masterPlanComplete;
 
   if (!text) {
     return {
-      mode: discoveryRequired ? 'guided' : 'free',
-      label: discoveryRequired ? 'Discovery' : 'Chat',
+      mode: 'free',
+      label: 'Chat',
       confidence: 'low',
-      discoveryRequired,
+      discoveryRequired: false,
+      inferenceFirst: planIncomplete,
     };
   }
 
+  const wantsInterview = detectGuidedInterviewIntent(text);
+  const inferenceGoal = detectInferenceFirstIntent(text, {
+    masterPlanComplete,
+  });
   const looksGuided = GUIDED_RE.test(text);
   const looksBuildExpand = BUILD_EXPAND_RE.test(text);
   const looksArchitecture = ARCHITECTURE_RE.test(text);
@@ -120,62 +131,81 @@ export function detectChatMode(
     (hasOpenVerb && hasFilePath) ||
     (FILE_RE.test(text) && hasOpenVerb);
 
-  // File Ops win over Debugging when the user is clearly opening a path/URL —
-  // even if the filename contains "bug", "error", or "fix".
-  if (hasGitHubUrl || (hasOpenVerb && hasFilePath && !looksGuided && !looksArchitecture)) {
+  // File Ops win when the user is clearly opening a path/URL.
+  if (hasGitHubUrl || (hasOpenVerb && hasFilePath && !looksGuided && !looksArchitecture && !wantsInterview)) {
     return {
       mode: 'file',
       label: 'Files',
       confidence: 'high',
-      discoveryRequired,
+      discoveryRequired: false,
+      inferenceFirst: false,
     };
   }
 
-  // Incomplete Master Plan: force Discovery for build / architecture / UI / guided intents
-  // (Debugging existing code may still run NDM; Free casual Q&A may stay free.)
-  if (discoveryRequired) {
-    // NDM before Discovery for clear bug/error language — tiny fixes must not be blocked.
-    if (looksDebug) {
-      return {
-        mode: 'debugging',
-        label: 'Debugging',
-        confidence: 'high',
-        discoveryRequired: true,
-      };
-    }
-    if (looksGuided || looksBuildExpand || looksCoding || looksArchitecture || looksUi) {
-      return {
-        mode: 'guided',
-        label: 'Discovery',
-        confidence: 'high',
-        discoveryRequired: true,
-      };
-    }
-    if (looksFile) {
-      return {
-        mode: 'file',
-        label: 'Files',
-        confidence: 'medium',
-        discoveryRequired: true,
-      };
-    }
-    // Free chat is allowed, but discoveryRequired stays true so the model resumes Discovery
-    // before architecture / coding.
+  if (looksDebug) {
+    return {
+      mode: 'debugging',
+      label: 'Debugging',
+      confidence: 'high',
+      discoveryRequired: false,
+      inferenceFirst: false,
+    };
+  }
+
+  // Opt-in Guided interview only.
+  if (wantsInterview) {
+    return {
+      mode: 'guided',
+      label: 'Discovery',
+      confidence: 'high',
+      discoveryRequired: true,
+      inferenceFirst: false,
+    };
+  }
+
+  // Incomplete plan + clear goal / build → inference-first (default), not Q&A Discovery.
+  if (
+    planIncomplete &&
+    (inferenceGoal || looksGuided || looksBuildExpand || looksCoding || looksArchitecture || looksUi)
+  ) {
+    return {
+      mode: 'coding',
+      label: 'Inference-first',
+      confidence: 'high',
+      discoveryRequired: false,
+      inferenceFirst: true,
+    };
+  }
+
+  if (planIncomplete && looksFile) {
+    return {
+      mode: 'file',
+      label: 'Files',
+      confidence: 'medium',
+      discoveryRequired: false,
+      inferenceFirst: false,
+    };
+  }
+
+  if (planIncomplete) {
     return {
       mode: 'free',
       label: 'Chat',
       confidence: 'medium',
-      discoveryRequired: true,
+      discoveryRequired: false,
+      inferenceFirst: true,
     };
   }
 
   // Master Plan complete — normal mode matrix
   if (looksGuided) {
-    return { mode: 'guided', label: 'Discovery', confidence: 'high', discoveryRequired: false };
-  }
-
-  if (looksDebug) {
-    return { mode: 'debugging', label: 'Debugging', confidence: 'high', discoveryRequired: false };
+    return {
+      mode: 'guided',
+      label: 'Discovery',
+      confidence: 'high',
+      discoveryRequired: false,
+      inferenceFirst: false,
+    };
   }
 
   if (looksUi) {
@@ -186,7 +216,7 @@ export function detectChatMode(
     return { mode: 'architecture', label: 'Architecture', confidence: 'high', discoveryRequired: false };
   }
 
-  if (looksCoding || looksBuildExpand) {
+  if (looksCoding || looksBuildExpand || inferenceGoal) {
     return { mode: 'coding', label: 'Coding', confidence: 'high', discoveryRequired: false };
   }
 
@@ -199,8 +229,8 @@ export function detectChatMode(
 
 /** Friendly one-liner explaining the active mode (for optional UI hints). */
 export function describeChatMode(mode: ChatMode, discoveryRequired?: boolean): string {
-  if (discoveryRequired && mode !== 'file' && mode !== 'debugging') {
-    return "Let's finish Discovery first (goal, project type, and research) before architecture or coding.";
+  if (discoveryRequired && mode === 'guided') {
+    return 'Guided interview — I will ask one clear Discovery question at a time.';
   }
   switch (mode) {
     case 'guided':
@@ -208,19 +238,15 @@ export function describeChatMode(mode: ChatMode, discoveryRequired?: boolean): s
     case 'architecture':
       return "I'll deepen the Master Plan with research-backed architecture.";
     case 'coding':
-      return "I'll help write or change code carefully — smallest safe change.";
+      return 'Inference-first or coding: categorize, research, draft the Master Plan, then build carefully.';
     case 'debugging':
       return "Let's debug carefully: Verify → Analyze → Trace → Fix → Validate.";
     case 'ui':
       return "I'll use your UI brief and design tokens for UI Gen — research-grounded, not vague.";
     case 'file':
-      return discoveryRequired
-        ? "I'll open the file — then we should finish Discovery before building."
-        : "I'll open the file and show a preview.";
+      return "I'll open the file and show a preview.";
     case 'free':
     default:
-      return discoveryRequired
-        ? "Happy to chat — when you're ready to build, we'll complete Discovery and the Research Pillars first."
-        : "I'm here to chat, brainstorm, and help — depth over rush.";
+      return 'Ask me anything — clear goals start inference-first; say "interview me" for guided Q&A.';
   }
 }

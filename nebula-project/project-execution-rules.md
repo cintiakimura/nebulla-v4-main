@@ -2,7 +2,7 @@
 
 **Single source of truth** for Grok and the Nebula Product. Timeline pointer: **`project-workflow.md`**. Studio paths: **`nebula-ui-studio.md`**. Guardian methods: **`nebulla-project/`**. Methodology changelog: **`CHANGELOG-methodology.md`**.
 
-**Fast Prototype (additive):** inference-first draft path — **`inference-first-rules.md`**. Does **not** replace Discovery / INITIAL ONBOARDING below. Guided interview remains fully available.
+**Inference-first (default):** clear goal → categorize → research → draft → build — **`inference-first-rules.md`**. Guided / full interview is an **opt-in exception** only (brainstorm / “interview me” / Full architecture interview).
 
 **Enforcement tags** on MUST rows: `doc-only` | `prompt` | `soft-gate` | `hard-gate`  
 (`soft-gate` / `hard-gate` = product validators behind `MASTER_PLAN_STRICT=off|warn|strict` — Phase C; until then treat as `prompt` + law.)
@@ -21,13 +21,13 @@ Nebulla is an **architecture-first** AI development partner: rigorous software a
 
 ### Mode sequence (strict — one mode per turn)
 
-1. **Chat / Discovery** — one clear question; collect Project Type + Research Pillars when plan incomplete. [`prompt`]
+1. **Chat / Inference-first (default)** — clear goal → follow `inference-first-rules.md` (no long intake). Guided Discovery Q&A only when user opts into interview. [`prompt`]
 2. **Architecture (Master Plan)** — emit plan only inside `<START_MASTERPLAN>…</END_MASTERPLAN>`. [`prompt`]
-3. **Coding** — only after **complete** Master Plan (below), or explicit tiny fix; one slice per Go. [`prompt` → `soft-gate`]
+3. **Coding** — after draft plan / inference-first Step 8, or explicit tiny fix; one slice per Go. [`prompt` → `soft-gate`]
 4. **Debugging** — NDM: Verify → Analyze → Trace → Fix → Validate. [`prompt`]
 5. **UI Generation** — UI brief + §5 tokens → **UI Gen v2** (primary); V0 only if optional path applies. [`prompt`]
 
-**Master Plan gate:** File open, free chat, paste, or “just build” must **not** permanently skip Discovery when the plan is incomplete. [`prompt` → `hard-gate` when `MASTER_PLAN_STRICT=strict`]
+**Path gate:** Clear goals use inference-first by default. Guided interview is opt-in. File open / mode switch must **not** wipe plan memory. [`prompt` → `hard-gate` when `MASTER_PLAN_STRICT=strict`]
 
 Core tags **`<START_MASTERPLAN>`**, **`START_CODING`**, and **`file:`** blocks MUST remain intact. [`prompt`]
 

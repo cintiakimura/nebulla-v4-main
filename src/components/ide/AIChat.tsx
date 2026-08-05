@@ -32,7 +32,8 @@ import {
 import {
   clearStoredStartMode,
   consumePendingStartMode,
-  detectFastPrototypeIntent,
+  detectGuidedInterviewIntent,
+  detectInferenceFirstIntent,
   isFastPrototypeMode,
   setStoredStartMode,
 } from '../../lib/ideStartMode';
@@ -1148,17 +1149,31 @@ export function AIChat() {
         });
         chatMode = smart.mode;
         codingHint = smart.codingHint;
-        discoveryRequired = smart.modeMeta?.discoveryRequired ?? !masterPlanComplete;
+        discoveryRequired = smart.modeMeta?.discoveryRequired === true;
         // User already confirmed final Discovery — never force rediscovery on later turns.
         if (isDiscoveryClosed(diskProjectKey) || masterPlanComplete) {
           discoveryRequired = false;
         }
-        // Fast Prototype (additive): never force Guided rediscovery; activate on clear brief.
-        const fastIntent = detectFastPrototypeIntent(rawText, {
+        const interviewIntent = detectGuidedInterviewIntent(rawText);
+        const inferenceIntent = detectInferenceFirstIntent(rawText, {
           masterPlanComplete,
           hasAppStatusPayload: /\[APP_STATUS_DEBUG\]/i.test(rawText),
         });
-        if (fastIntent) {
+        const runInferenceFirst =
+          !interviewIntent &&
+          chatMode !== 'debugging' &&
+          chatMode !== 'file' &&
+          (inferenceIntent ||
+            smart.codingHint === 'fast-prototype' ||
+            Boolean(smart.modeMeta?.inferenceFirst && chatMode === 'coding'));
+
+        if (interviewIntent) {
+          setStoredStartMode('guided', diskProjectKey);
+          discoveryRequired = true;
+          chatMode = 'guided';
+          codingHint = 'guided-onboarding';
+        } else if (runInferenceFirst) {
+          // Default path: inference-first — auto Agent so files/plan apply.
           setStoredStartMode('fast_prototype', diskProjectKey);
           markDiscoveryClosed(diskProjectKey);
           if (interactionModeRef.current === 'chat') {
@@ -1166,18 +1181,16 @@ export function AIChat() {
             setAssistantInteractionMode('agent');
           }
           discoveryRequired = false;
-          if (chatMode !== 'debugging' && chatMode !== 'file') {
-            chatMode = 'coding';
-            codingHint = 'fast-prototype';
-          }
-        } else if (isFastPrototypeMode(diskProjectKey) && !masterPlanComplete) {
+          chatMode = 'coding';
+          codingHint = 'fast-prototype';
+        } else if (!masterPlanComplete && !interviewIntent) {
+          // Casual chat: never force Guided rediscovery when inference-first is the default path.
           discoveryRequired = false;
           if (
-            codingHint === 'discovery-required' ||
-            codingHint === 'guided-onboarding' ||
-            codingHint === 'discovery-required-after-file'
+            isFastPrototypeMode(diskProjectKey) &&
+            (codingHint === 'discovery-required' || codingHint === 'guided-onboarding')
           ) {
-            codingHint = 'fast-prototype';
+            codingHint = undefined;
           }
         }
         setMasterPlanCompleteHint(masterPlanComplete);

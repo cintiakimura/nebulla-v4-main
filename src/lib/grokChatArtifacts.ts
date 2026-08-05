@@ -208,7 +208,9 @@ function looksLikeResidualDump(text: string): boolean {
 
 /** Extra rules appended for IDE right-panel chat only. */
 export const IDE_CHAT_EXECUTION_APPENDIX = `
-IDE CHAT SURFACE (project-execution-rules.md — strict):
+IDE CHAT SURFACE (project-execution-rules.md + inference-first-rules.md — strict):
+- **DEFAULT PATH:** clear goal → nebula-project/inference-first-rules.md (Categorize → Research → Draft → Build). Do not interrogate by default.
+- **GUIDED INTERVIEW:** only when user asks to brainstorm / be interviewed / full architecture interview.
 - **USER TONE:** nebulla-project/user-communication-rules.md — friendly, short, no raw errors/jargon unless asked; silent fixes; clear next step.
 - **MODE FIRST (Guided / Free / Coding / File):** Follow nebulla-project/chat-mode-detection.md on every turn.
   - Guided = new project / Master Plan interview (one question at a time).

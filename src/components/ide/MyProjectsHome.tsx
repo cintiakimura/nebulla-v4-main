@@ -125,8 +125,8 @@ export function MyProjectsHome() {
   const [ideaType, setIdeaType] = useState<NebulaProjectType | null>(null);
   const [ideaError, setIdeaError] = useState('');
   const [startingIdea, setStartingIdea] = useState(false);
-  /** Additive: Fast Prototype vs Full architecture interview (default Guided). */
-  const [startMode, setStartMode] = useState<IdeStartMode>('guided');
+  /** Inference-first (default) vs Full architecture interview (opt-in). */
+  const [startMode, setStartMode] = useState<IdeStartMode>('fast_prototype');
 
   const busyStarting = Boolean(startingType) || startingIdea;
   const activeKey = getBrowserProjectKey();
@@ -245,8 +245,8 @@ export function MyProjectsHome() {
       if (busyStarting) return;
       setStartingType(type);
       try {
-        // Type chips under "Or choose a type" always start Guided interview.
-        setPendingStartMode('guided');
+        // Type chips: inference-first with platform pre-set (Guided is opt-in via the other card).
+        setPendingStartMode('fast_prototype');
         markGuidedStartOnReady();
         await resetProjectFromScratch(type);
         await ensureProjectOrReuse(type);
@@ -414,9 +414,11 @@ export function MyProjectsHome() {
                   : 'border-border text-muted-foreground hover:bg-[#111111] hover:text-foreground',
               )}
             >
-              <span className="block text-xs font-medium text-foreground">Fast Prototype</span>
+              <span className="block text-xs font-medium text-foreground">
+                Inference-first (default)
+              </span>
               <span className="mt-1 block text-[11px] leading-relaxed">
-                Infer industry standards and generate a first draft. You can edit assumptions after.
+                Categorize, research, draft Master Plan, then build. Edit assumptions after the draft.
               </span>
             </button>
             <button
@@ -433,7 +435,7 @@ export function MyProjectsHome() {
             >
               <span className="block text-xs font-medium text-foreground">Full architecture interview</span>
               <span className="mt-1 block text-[11px] leading-relaxed">
-                Deeper guided Master Plan questions — one at a time (existing path).
+                Opt-in: guided Master Plan questions one at a time when you want to brainstorm.
               </span>
             </button>
           </div>
@@ -502,7 +504,7 @@ export function MyProjectsHome() {
             {hasExistingWork ? 'Or choose a type for a new project' : 'Or choose a type'}
           </h2>
           <p className="max-w-xl text-sm leading-relaxed text-muted-foreground">
-            Full architecture interview — skip the idea box; Grok asks Master Plan questions one at a time.
+            Pick a platform and start inference-first (goal asked once if missing). For guided Q&A, choose Full architecture interview above.
           </p>
         </div>
 

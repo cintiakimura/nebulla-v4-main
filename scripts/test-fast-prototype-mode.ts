@@ -19,7 +19,8 @@ import {
 
 assert.equal(normalizeStartMode('fast_prototype'), 'fast_prototype');
 assert.equal(normalizeStartMode('guided'), 'guided');
-assert.equal(normalizeStartMode('nope'), 'guided');
+assert.equal(normalizeStartMode('nope'), 'fast_prototype'); // default = inference-first
+assert.equal(normalizeStartMode(undefined), 'fast_prototype');
 assert.equal(isIdeStartMode('fast_prototype'), true);
 assert.equal(isIdeStartMode('guided'), true);
 assert.equal(isIdeStartMode('agent'), false);
@@ -31,6 +32,12 @@ assert.equal(
 assert.equal(
   detectFastPrototypeIntent(
     'Build a mobile education app for kids to practice reading every day',
+  ),
+  true,
+);
+assert.equal(
+  detectFastPrototypeIntent(
+    'Education app for kids to practice reading; teachers track progress',
   ),
   true,
 );

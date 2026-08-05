@@ -21,6 +21,7 @@ import {
 } from './aiProvider';
 import type { IdeLocaleCode } from './i18n/locales';
 import type { ContentLanguageMode } from './i18n/userLanguagePreferences';
+import { buildInferenceFirstMemoryAppendix } from './inferenceFirstMemory';
 
 export type IdeChatTurnMessage = { role: 'user' | 'assistant' | 'system'; content: string };
 
@@ -119,6 +120,19 @@ export async function sendIdeAssistantGrokTurn(options: {
     contentMode: options.contentMode,
   });
 
+  const inferenceFirstTurn =
+    options.codingHint === 'fast-prototype' ||
+    (options.chatMode === 'coding' && options.discoveryRequired !== true);
+
+  let inferenceMemory = '';
+  if (inferenceFirstTurn && !hasAppStatusPayload) {
+    try {
+      inferenceMemory = await buildInferenceFirstMemoryAppendix({ includeRulesExcerpt: true });
+    } catch {
+      inferenceMemory = '';
+    }
+  }
+
   let systemPrompt =
     buildNebulaAssistantSystemPrompt(
       latestMP,
@@ -132,6 +146,7 @@ export async function sendIdeAssistantGrokTurn(options: {
     `\n\n${IDE_CHAT_EXECUTION_APPENDIX}` +
     (modeAppendix ? `\n\n${modeAppendix}` : '') +
     (buildMode ? `\n\n${buildModeSystemAppendix()}` : '') +
+    (inferenceMemory ? `\n\n${inferenceMemory}` : '') +
     (ideAppendix.trim()
       ? `\n\nIDE_EDITOR_SURFACE (active workspace file context — user may be editing here):\n${ideAppendix.trim()}`
       : '') +
