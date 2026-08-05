@@ -29,11 +29,11 @@ These names and **values are shared across the Nebulla deployment** (ops-owned).
 
 | Variable | Role |
 |----------|------|
-| `MAIN_API_KEY_GROK` | Optional platform main AI brain fallback. Default model **grok-4** on xAI when using an xAI key. Legacy aliases: `MAIN_AI_API_KEY`, `GROK_API_KEY_LUMEN`. **Prefer user BYOK.** |
-| `GROK_SWARM_API_KEY` | Nebula-owned swarm / sidecar Grok usage — **set only in Nebula `.env`**. |
-| `GROK_TTS_NEW_API_KEY` | Grok TTS (new API) — **set only in Nebula `.env`**. |
+| `MAIN_API_KEY_GROK` | **Single platform Grok/xAI key** (chat, Go, Inspect, TTS). Default model **grok-4**. Legacy aliases: `MAIN_AI_API_KEY`, `GROK_API_KEY_LUMEN`. **Prefer user BYOK for chat.** |
+| `GROK_SWARM_API_KEY` | Optional Inspect override — defaults to `MAIN_API_KEY_GROK`. |
+| `GROK_TTS_NEW_API_KEY` | Optional TTS override — defaults to `MAIN_API_KEY_GROK`. |
 | `NEBULA_SECRETS_ENCRYPTION_KEY` | Dedicated key for **AES-256-GCM** encryption of per-user BYOK secrets at rest (falls back to `SESSION_SECRET` in dev). **Required in production** if users save keys. |
-| `GROK_3_API_KEY` | Grok B — Master Plan writer (separate from the main brain). |
+| `GROK_3_API_KEY` | Legacy (Master Plan writer is file-copy; no separate API call). |
 | `PENCIL_API_KEY` | Nebula UI Studio → Pencil.dev mockups API. |
 | `V0_API_KEY` | Optional platform v0 key. Users may also BYOK `V0_API_KEY` via browser header (separate from AI BYOK). |
 | `ANTHROPIC_API_KEY` / `CLAUDE_API_KEY` | Optional platform Claude fallback (not per-user). |

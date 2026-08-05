@@ -5,7 +5,13 @@ import {
   type ByokProvider,
   isByokProvider,
 } from "./nebulaUserGrokStore";
-import type { MainAiProvider } from "./nebulaMainAiProvider";
+import {
+  detectMainAiProvider,
+  mainAiProviderLabel,
+  resolveMainAiChatModel,
+  FREE_TIER_MONTHLY_LIMIT_MESSAGE,
+  type MainAiProvider,
+} from "./nebulaMainAiProvider";
 
 /** Canonical server env var for the main Grok / xAI brain (chat, coding, UI tools, Master Plan). */
 export const MAIN_AI_ENV_VAR = "MAIN_API_KEY_GROK";
@@ -33,7 +39,7 @@ export {
   resolveMainAiChatModel,
   FREE_TIER_MONTHLY_LIMIT_MESSAGE,
   type MainAiProvider,
-} from "./nebulaMainAiProvider";
+};
 
 const MIN_KEY_LEN = 20;
 
@@ -81,6 +87,42 @@ export function readMainAiApiKeyFromEnv(): string {
     if (v) return v;
   }
   return "";
+}
+
+/**
+ * Platform xAI key for sidecars (Inspect / TTS).
+ * Uses dedicated env when set (≥20 chars); otherwise falls back to {@link readMainAiApiKeyFromEnv}
+ * when that key is xAI (or unknown shape — not Anthropic/OpenAI).
+ * Does not read user BYOK — sidecars stay platform-scoped.
+ */
+export function readPlatformXaiSidecarKey(dedicatedEnvVar: string): string {
+  const dedicated = sanitizeEnvSecret(process.env[dedicatedEnvVar] ?? "");
+  if (dedicated.length >= MIN_KEY_LEN) return dedicated;
+  const main = readMainAiApiKeyFromEnv();
+  if (main.length < MIN_KEY_LEN) return "";
+  const provider = detectMainAiProvider(main);
+  if (provider === "anthropic" || provider === "openai") return "";
+  return main;
+}
+
+/** Inspect (Quality) — `GROK_SWARM_API_KEY` or main xAI key. */
+export function readPlatformSwarmApiKey(): string {
+  return readPlatformXaiSidecarKey("GROK_SWARM_API_KEY");
+}
+
+/** TTS — `GROK_TTS_NEW_API_KEY` or main xAI key. */
+export function readPlatformTtsApiKey(): string {
+  return readPlatformXaiSidecarKey("GROK_TTS_NEW_API_KEY");
+}
+
+/**
+ * Legacy “Grok B writer” flag. Writer no longer calls a separate API (copies summaries to disk);
+ * report ready when main platform key exists, or optional `GROK_3_API_KEY` override.
+ */
+export function readPlatformWriterApiKey(): string {
+  const dedicated = sanitizeEnvSecret(process.env.GROK_3_API_KEY ?? "");
+  if (dedicated.length >= MIN_KEY_LEN) return dedicated;
+  return readMainAiApiKeyFromEnv();
 }
 
 function readEnvKeyForProvider(provider: ByokProvider): string {

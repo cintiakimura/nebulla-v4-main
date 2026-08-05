@@ -4,8 +4,8 @@
  * - **No** Planner, Researcher, Tester, or Reviewer on normal chat handoffs.
  * - Main Grok 4 handles planning/research in user chat.
  * - Single **Quality** agent (code review + test suggestions) runs **only** when `manualRunAndTest`
- *   is set (TopBar Inspect), using **`GROK_SWARM_API_KEY`** + `GROK_SWARM_MODEL` (default `grok-3-mini`),
- *   scoped to recently changed git paths + optional client snippets. Normal chat uses `MAIN_API_KEY_GROK` only.
+ *   is set (TopBar Inspect), using **`GROK_SWARM_API_KEY` or `MAIN_API_KEY_GROK`** + `GROK_SWARM_MODEL` (default `grok-3-mini`),
+ *   scoped to recently changed git paths + optional client snippets. Normal chat uses `MAIN_API_KEY_GROK` (BYOK-first).
  */
 
 import fs from "fs";
@@ -154,7 +154,7 @@ export type SwarmHandoffServerResult = {
 };
 
 export const NO_SWARM_AGENTS_NOTE =
-  "Lean swarm: no support agents ran on this chat turn. Planning and research stay in main Grok (server MAIN_API_KEY_GROK). Use **Inspect** when you want a scoped Quality pass on recently changed files (GROK_SWARM_API_KEY).";
+  "Lean swarm: no support agents ran on this chat turn. Planning and research stay in main Grok (server MAIN_API_KEY_GROK). Use **Inspect** when you want a scoped Quality pass on recently changed files (same key or optional GROK_SWARM_API_KEY).";
 
 function stubSkipped(agent: string, reason: string): Record<string, unknown> {
   return { _skipped: true, _agent: agent, markdown: "", reason };
@@ -168,7 +168,7 @@ type HandoffOpts = {
   projectName: string;
   runId: string;
   intensity: SwarmIntensity;
-  /** Manual "Run and Test" / Inspect — single Quality call using `GROK_SWARM_API_KEY` + swarm model (default grok-3-mini). */
+  /** Manual "Run and Test" / Inspect — single Quality call using swarm/main xAI key + swarm model (default grok-3-mini). */
   manualRunAndTest?: boolean;
   qualityLane?: { apiKey: string; model: string };
   contextSummary?: string;

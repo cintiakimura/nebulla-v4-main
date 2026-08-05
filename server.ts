@@ -55,6 +55,9 @@ import {
   MAIN_AI_KEY_SETUP_HINT,
   mainAiApiKeyTail,
   readMainAiApiKeyFromEnv,
+  readPlatformSwarmApiKey,
+  readPlatformTtsApiKey,
+  readPlatformWriterApiKey,
   tryClaudeQuotaFallback,
   detectMainAiProvider,
   resolveMainAiChatModel,
@@ -493,9 +496,10 @@ async function startServer() {
     const grok = readMainAiApiKeyFromEnv();
     const mainAiProvider = grok.length >= 20 ? detectMainAiProvider(grok) : "unknown";
     const mainAiChatModel = grok.length >= 20 ? resolveMainAiChatModel(mainAiProvider) : undefined;
-    const grokSwarm = process.env.GROK_SWARM_API_KEY?.trim() ?? "";
-    const tts = process.env.GROK_TTS_NEW_API_KEY?.trim() ?? "";
-    const writer = process.env.GROK_3_API_KEY?.trim() ?? "";
+    // Sidecars share MAIN_API_KEY_GROK unless a dedicated override env is set.
+    const grokSwarm = readPlatformSwarmApiKey();
+    const tts = readPlatformTtsApiKey();
+    const writer = readPlatformWriterApiKey();
     const render = getRenderPublicConfig();
     const publicSiteUrl = process.env.PUBLIC_SITE_URL?.trim() || "";
     const pencilKey = resolvePencilApiKey();
@@ -4576,10 +4580,10 @@ ${workflowContext}`;
 
   app.post("/api/nebula-swarm/handoff", async (req, res) => {
     try {
-      /** Lean swarm: chat never runs agents. `manualRunAndTest` → single Quality (Inspect) call using `GROK_SWARM_API_KEY` + `grok-3-mini` (or `GROK_SWARM_MODEL`). */
+      /** Lean swarm: chat never runs agents. Inspect uses GROK_SWARM_API_KEY or MAIN_API_KEY_GROK (xAI). */
       const body = (req.body || {}) as Record<string, unknown>;
       const manualRunAndTest = Boolean(body.manualRunAndTest);
-      const swarmKey = process.env.GROK_SWARM_API_KEY?.trim() ?? "";
+      const swarmKey = readPlatformSwarmApiKey();
       const swarmModel = process.env.GROK_SWARM_MODEL?.trim() || "grok-3-mini";
 
       const rawIntensity = typeof body.swarmIntensity === "string" ? body.swarmIntensity.trim() : "";
@@ -4659,7 +4663,7 @@ ${workflowContext}`;
         if (!swarmKey || swarmKey.length < 20) {
           return res.status(401).json({
             error:
-              `Inspect (Quality) requires GROK_SWARM_API_KEY (20+ characters) in the server .env. Normal chat uses ${MAIN_AI_ENV_VAR} only — do not use the swarm key for /api/grok/chat.`,
+              `Inspect (Quality) needs an xAI key: set ${MAIN_AI_ENV_VAR} (preferred) or optional GROK_SWARM_API_KEY override in the server .env.`,
           });
         }
         qualityLane = { apiKey: swarmKey, model: swarmModel };
@@ -5163,11 +5167,13 @@ startServer().catch((err) => {
 
 /** Open upstream Grok TTS and return the Response (body streamed — do not buffer). */
 async function speakUpstream(text: string, language = "en"): Promise<Response> {
-  const apiKey = process.env.GROK_TTS_NEW_API_KEY;
+  const apiKey = readPlatformTtsApiKey();
   const lang = ["en", "fr", "it", "es", "de"].includes(language) ? language : "en";
-  
+
   if (!apiKey) {
-    throw new Error("GROK_TTS_NEW_API_KEY is not set. Please check your environment variables.");
+    throw new Error(
+      `TTS needs an xAI key: set ${MAIN_AI_ENV_VAR} (preferred) or optional GROK_TTS_NEW_API_KEY in the server .env.`,
+    );
   }
 
   const response = await fetch("https://api.x.ai/v1/audio/speech", {
