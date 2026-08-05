@@ -9,17 +9,20 @@ Batch-download **owned** Figma FileKeys, draft `UiResourceProfile` JSON, then pu
 ```bash
 # 1) Copy example → fill owned keys only (Duplicate Community files first)
 cp nebulla-project/figma-library/figma-keys.example.csv nebulla-project/figma-library/figma-keys.csv
+# edit figma-keys.csv — remove YOUR_OWNED_* placeholders
 
-# 2) Download (sequential, resume-safe)
-export FIGMA_API_KEY=figd_…
-npm run figma:download -- ./nebulla-project/figma-library/figma-keys.csv
+# 2) Download (reads FIGMA_API_KEY from .env automatically)
+npm run figma:download
+# or: npm run figma:download -- ./nebulla-project/figma-library/figma-keys.csv
 
-# 3) Heuristic profile drafts
+# 3) Heuristic profile drafts (only after download succeeds)
 npm run figma:profile-drafts
 
 # 4) Review drafts (especially template_id), then publish selected ids
 npm run figma:publish-drafts -- --only=figma_somekit_abcdefgh
 ```
+
+`figma:profile-drafts` / `figma:publish-drafts` fail until step 2 has created `raw/` and drafts — that is expected.
 
 ## Paths
 

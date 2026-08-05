@@ -25,8 +25,31 @@ import { fileURLToPath } from "url";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, "..");
 
+/** Load repo `.env` into process.env (does not override existing exports). */
+function loadDotEnv() {
+  const p = path.join(REPO_ROOT, ".env");
+  if (!fs.existsSync(p)) return;
+  for (const line of fs.readFileSync(p, "utf8").split("\n")) {
+    const t = line.trim();
+    if (!t || t.startsWith("#")) continue;
+    const eq = t.indexOf("=");
+    if (eq <= 0) continue;
+    const key = t.slice(0, eq).trim();
+    let val = t.slice(eq + 1).trim();
+    if (
+      (val.startsWith('"') && val.endsWith('"')) ||
+      (val.startsWith("'") && val.endsWith("'"))
+    ) {
+      val = val.slice(1, -1);
+    }
+    if (process.env[key] === undefined) process.env[key] = val;
+  }
+}
+
+loadDotEnv();
+
 const API = "https://api.figma.com/v1";
-const TOKEN = process.env.FIGMA_API_KEY || "";
+const TOKEN = (process.env.FIGMA_API_KEY || "").trim();
 const DELAY_MS = Number(process.env.DELAY_MS || 2500);
 const MAX_RETRIES = Number(process.env.MAX_RETRIES || 4);
 const OUT_DIR = process.env.OUT_DIR
@@ -35,17 +58,28 @@ const OUT_DIR = process.env.OUT_DIR
 const MANIFEST_PATH = process.env.MANIFEST_PATH
   ? path.resolve(process.env.MANIFEST_PATH)
   : path.join(REPO_ROOT, "nebulla-project", "figma-library", "download-manifest.json");
+const DEFAULT_CSV = path.join(REPO_ROOT, "nebulla-project", "figma-library", "figma-keys.csv");
+const EXAMPLE_CSV = path.join(
+  REPO_ROOT,
+  "nebulla-project",
+  "figma-library",
+  "figma-keys.example.csv",
+);
 
 if (!TOKEN) {
-  console.error("Missing FIGMA_API_KEY");
+  console.error("Missing FIGMA_API_KEY (set in .env or export FIGMA_API_KEY=figd_…)");
   process.exit(1);
 }
 
-const csvPath = process.argv[2];
-if (!csvPath || !fs.existsSync(csvPath)) {
+const csvPath = process.argv[2]
+  ? path.resolve(process.argv[2])
+  : fs.existsSync(DEFAULT_CSV)
+    ? DEFAULT_CSV
+    : EXAMPLE_CSV;
+if (!fs.existsSync(csvPath)) {
   console.error(
-    "Usage: node scripts/download-figma-library.mjs <keys.csv>\n" +
-      "Example CSV: nebulla-project/figma-library/figma-keys.example.csv",
+    "Usage: npm run figma:download -- [keys.csv]\n" +
+      "Copy nebulla-project/figma-library/figma-keys.example.csv → figma-keys.csv and fill owned FileKeys.",
   );
   process.exit(1);
 }
@@ -78,7 +112,14 @@ function parseCsv(text) {
     const cols = lines[i].split(",").map((c) => c.trim());
     const file_key = (cols[iKey] || "").trim();
     if (!file_key || file_key.length < 8) continue;
-    if (/^your_key/i.test(file_key) || file_key.includes("…") || file_key.includes("...")) continue;
+    // Skip CSV placeholders from the example file
+    if (
+      /your[_-]?owned|your[_-]?key|placeholder|xxxx/i.test(file_key) ||
+      file_key.includes("…") ||
+      file_key.includes("...")
+    ) {
+      continue;
+    }
     rows.push({
       bucket: iBucket >= 0 ? cols[iBucket] || "" : "",
       link: iLink >= 0 ? cols[iLink] || "" : "",
