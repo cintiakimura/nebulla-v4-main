@@ -20,17 +20,26 @@ export type ClaudeFallbackChatPayload = {
   claudeFallbackNotice: string;
 };
 
-/** True only for Grok quota / billing limit — not timeouts, 401, ACL 403, 500, etc. */
+/** True only for Grok quota / billing limit — not timeouts, 401, empty-ACL 403, 500, etc. */
 export function isGrokQuotaLimitError(status: number, errorText: string): boolean {
   const s = errorText.toLowerCase();
-  // New xAI keys often return 403 (missing ACLs) — that is NOT a billing quota.
+  // xAI often returns HTTP 403 + code "permission-denied" for team credit / spending caps.
+  if (
+    /used all available credits|reached its monthly spending limit|raise your spending limit|purchase more credits/i.test(
+      s,
+    )
+  ) {
+    return true;
+  }
   if (
     status === 403 ||
     /\bforbidden\b/.test(s) ||
-    /permission|not (?:been )?granted|\bacls?\b|team admin|ask your team admin/i.test(s)
+    /ask your team admin|not (?:been )?granted|\bacls?\b/i.test(s)
   ) {
-    // Only treat as quota if the body clearly says so.
-    return /monthly limit|quota exceeded|payment required|credits?\s+(exhausted|exceeded|depleted)/i.test(s);
+    // Bare ACL 403 — not billing.
+    return /monthly (?:spending |usage )?limit|quota exceeded|payment required|credits?\s+(exhausted|exceeded|depleted)/i.test(
+      s,
+    );
   }
   if (status === 402) return true;
   return /monthly limit|quota exceeded|\bquota\b|payment required/i.test(s);

@@ -32,7 +32,7 @@ export const PROVIDER_QUOTA_NO_BYOK_HINT =
   'No Grok key is saved on your account yet — chat is using the platform key. Open Secrets (key icon) → paste your xAI key → Save Grok key, then retry.';
 
 export const PROVIDER_QUOTA_WITH_BYOK_HINT =
-  'An account key is saved, but xAI still rejected it for quota/billing. Open console.x.ai → credits for that key, or paste a different key with credits.';
+  'An account key is saved, but your xAI team is out of credits or hit its monthly spending limit. In console.x.ai → Billing: buy credits or raise the team spending limit (key ACLs alone are not enough).';
 
 /** xAI 403: key valid but missing endpoint/model ACLs (common for newly created keys). */
 export const PROVIDER_PERMISSION_LIMIT_MESSAGE =
@@ -60,41 +60,45 @@ export function isMonthlyUsageLimitError(message: string): boolean {
   );
 }
 
-/** xAI key ACL / team permission failures (often HTTP 403 on brand-new keys). */
+/** True when the provider body is clearly team credits / spending (xAI often uses HTTP 403 + code permission-denied). */
+export function isProviderSpendingLimitError(message: string): boolean {
+  const m = message.toLowerCase();
+  return (
+    /used all available credits|reached its monthly spending limit|raise your spending limit|purchase more credits/i.test(
+      m,
+    ) ||
+    /monthly (?:spending |usage )?limit/i.test(m) ||
+    /credits?\s+(exhausted|exceeded|depleted|used up)/i.test(m) ||
+    /quota exceeded/i.test(m)
+  );
+}
+
+/** xAI key ACL / team permission failures (often HTTP 403 on brand-new keys with empty ACLs). */
 export function isProviderPermissionError(message: string): boolean {
   if (isNebullaFreeTierLimitError(message)) return false;
+  // xAI bills/credits failures are labeled permission-denied + 403 — treat as spending, not ACL.
+  if (isProviderSpendingLimitError(message)) return false;
   const m = message.toLowerCase();
-  // Explicit permission language wins even if "limit" appears elsewhere.
-  if (
+  return (
     /\bforbidden\b/.test(m) ||
     /\b403\b/.test(m) ||
     /permission|not (?:been )?granted|\bacls?\b|access denied|team admin|does not have access|unauthorized for|ask your team admin/i.test(
       m,
     )
-  ) {
-    // Don't steal true spending-limit copy that happens to mention "403" nowhere — if it's clearly quota-only, defer.
-    if (
-      /monthly (?:spending |usage )?limit|quota exceeded|credits?\s+(exhausted|exceeded|depleted)/i.test(m) &&
-      !/\b403\b|\bforbidden\b|permission|acl|team admin/i.test(m)
-    ) {
-      return false;
-    }
-    return true;
-  }
-  return false;
+  );
 }
 
 /** xAI / Anthropic / OpenAI quota-style errors (provider billing, not Nebulla Free plan). */
 export function isProviderQuotaLimitError(message: string): boolean {
   if (isNebullaFreeTierLimitError(message)) return false;
+  if (isProviderSpendingLimitError(message)) return true;
   if (isProviderPermissionError(message)) return false;
   const m = message.toLowerCase();
   return (
     /\b402\b/.test(m) ||
     /payment required/i.test(m) ||
-    /quota exceeded|\bquota\b/.test(m) ||
-    (m.includes('monthly') && (m.includes('limit') || m.includes('spending') || m.includes('budget'))) ||
-    /credits?\s+(exhausted|exceeded|depleted)/.test(m)
+    /\bquota\b/.test(m) ||
+    (m.includes('monthly') && (m.includes('limit') || m.includes('spending') || m.includes('budget')))
   );
 }
 

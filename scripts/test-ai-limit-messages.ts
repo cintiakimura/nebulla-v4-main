@@ -36,7 +36,7 @@ assert.equal(
 assert.equal(
   isProviderQuotaLimitError("HTTP 403: Forbidden. Ask your team admin for permission."),
   false,
-  "403 must not be classified as quota",
+  "403 ACL must not be classified as quota",
 );
 assert.equal(
   isGrokQuotaLimitError(403, "Forbidden"),
@@ -47,6 +47,31 @@ assert.equal(
   isGrokQuotaLimitError(402, "Payment required"),
   true,
   "402 remains quota",
+);
+
+const xaiTeamSpend403 =
+  'HTTP 403: Your team c1ed20a1-7424-4f4c-85a0-34ee06eaf610 has either used all available credits or reached its monthly spending limit. To continue making API requests, please purchase more credits or raise your spending limit.';
+assert.equal(
+  isProviderQuotaLimitError(xaiTeamSpend403),
+  true,
+  "xAI team spending 403 is quota/billing",
+);
+assert.equal(
+  isProviderPermissionError(xaiTeamSpend403),
+  false,
+  "xAI team spending 403 is not ACL",
+);
+assert.equal(
+  isGrokQuotaLimitError(
+    403,
+    "Your team has either used all available credits or reached its monthly spending limit",
+  ),
+  true,
+  "server treats xAI credit 403 as quota",
+);
+assert.ok(
+  resolveAiLimitUserMessage(xaiTeamSpend403, { hasUserByok: true }).includes("spending limit") ||
+    resolveAiLimitUserMessage(xaiTeamSpend403, { hasUserByok: true }).includes("credits"),
 );
 
 assert.ok(
