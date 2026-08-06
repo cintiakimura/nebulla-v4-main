@@ -178,7 +178,7 @@ function buildWaitingModel(stageHint?: string): EditorModel {
             type: 'text',
             text:
               stageHint?.trim() ||
-              'Press Generate UI after coding, or wait for the engine after file apply. Preview shows engine output — not the Nebulla IDE shell.',
+              'Press Generate UI when Master Plan + ui-brief are ready (inference-first runs this before coding). Preview shows engine output — not the Nebulla IDE shell.',
             style: {
               ...defaultStyle(),
               backgroundColor: '#FAFAF9',
@@ -587,6 +587,41 @@ export function IdeUiStudioBeta({
   useEffect(() => {
     void loadEnginePreview();
   }, [loadEnginePreview]);
+
+  // Connect Studio → App Preview when meta already passed but index.html still scaffold.
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const r = await fetch(withProjectQuery('/api/ui-studio-beta/status'), {
+          credentials: 'include',
+          headers: getGrokRequestHeaders(),
+        });
+        if (!r.ok || cancelled) return;
+        const st = (await r.json()) as {
+          preview_applied?: boolean;
+          quality_gate_result?: string;
+        };
+        const gate = String(st.quality_gate_result || '').toLowerCase();
+        if (st.preview_applied) return;
+        if (gate !== 'pass' && gate !== 'repair') return;
+        const apply = await fetch(withProjectQuery('/api/ui-studio-beta/apply-preview'), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...getGrokRequestHeaders() },
+          credentials: 'include',
+          body: JSON.stringify(withProjectBody({})),
+        });
+        if (!apply.ok || cancelled) return;
+        setPreviewSynced(true);
+        window.dispatchEvent(new CustomEvent('nebula-reload-app-preview'));
+      } catch {
+        /* ignore */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     const onRefresh = () => void loadEnginePreview();

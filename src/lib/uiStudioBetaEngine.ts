@@ -10,9 +10,13 @@
 import { fetchJson } from './apiFetch';
 import type { GrokActivityProgressFn } from './ideGrokActivityStatus';
 import { getGrokRequestHeaders } from './grokUserKey';
-import { withProjectQuery } from './nebulaProjectApi';
+import { withProjectBody, withProjectQuery } from './nebulaProjectApi';
 import { dispatchOpenCenterPanel } from '@/components/ide/IdeCenterTabsContext';
-import { wasUiMockupStageStarted } from './uiMockupGate';
+import {
+  clearUiMockupStageFlags,
+  hasPersistedUiMockup,
+  wasUiMockupStageStarted,
+} from './uiMockupGate';
 
 export const NEBULA_UI_STUDIO_BETA_RUN = 'nebula-ui-studio-beta-run';
 export const NEBULA_UI_STUDIO_BETA_COMPLETE = 'nebula-ui-studio-beta-complete';
@@ -146,6 +150,40 @@ export async function runUiStudioBetaGeneration(
   return inFlight;
 }
 
+/** Push last successful UI Gen meta into App Preview (index.html shell). */
+export async function applyUiStudioBetaToAppPreview(
+  onProgress?: GrokActivityProgressFn,
+): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const data = await fetchJson<{ ok?: boolean; error?: string }>(
+      withProjectQuery('/api/ui-studio-beta/apply-preview'),
+      {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json', ...getGrokRequestHeaders() },
+        body: JSON.stringify(withProjectBody({})),
+      },
+    );
+    if (!data.ok) {
+      onProgress?.(data.error || 'Could not apply UI Gen to App Preview', 'warn');
+      return { ok: false, error: data.error };
+    }
+    onProgress?.('UI Studio Beta applied to App Preview', 'success');
+    try {
+      window.dispatchEvent(new CustomEvent('nebula-files-applied'));
+      window.dispatchEvent(new CustomEvent('nebula-reload-app-preview'));
+      window.dispatchEvent(new CustomEvent('nebula-open-app-preview'));
+    } catch {
+      /* ignore */
+    }
+    return { ok: true };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : 'Apply to App Preview failed';
+    onProgress?.(msg, 'warn');
+    return { ok: false, error: msg };
+  }
+}
+
 /** After successful apply-generated of UI-relevant files (optional refine). */
 export async function triggerUiStudioBetaAfterFilesApplied(options: {
   writtenPaths: string[];
@@ -154,13 +192,30 @@ export async function triggerUiStudioBetaAfterFilesApplied(options: {
   /** Force refine even if plan-first mockup already ran. */
   force?: boolean;
 }): Promise<UiStudioBetaGenerateResult | null> {
-  // Early mockup already ran from plan+ui-brief — do not burn the single API key again.
+  // Skip only when a real mockup exists on disk — session flag alone is not enough
+  // (false "already generated" left Studio on Waiting + cyan App Preview).
   if (!options.force && wasUiMockupStageStarted()) {
+    const persisted = await hasPersistedUiMockup();
+    if (persisted) {
+      const applied = await applyUiStudioBetaToAppPreview(options.onProgress);
+      if (applied.ok) {
+        options.onProgress?.(
+          'UI mockup already on disk — synced to App Preview (skipped re-generation)',
+          'info',
+        );
+        return null;
+      }
+      options.onProgress?.(
+        'UI mockup meta exists — skipping re-generation (open UI Studio Beta → Generate if preview is empty)',
+        'info',
+      );
+      return null;
+    }
+    clearUiMockupStageFlags();
     options.onProgress?.(
-      'UI mockup already generated from Master Plan + ui-brief — skipping post-code auto refresh',
-      'info',
+      'Prior mockup flag was empty — regenerating UI Gen so Studio and App Preview connect',
+      'warn',
     );
-    return null;
   }
 
   const paths = options.writtenPaths || [];

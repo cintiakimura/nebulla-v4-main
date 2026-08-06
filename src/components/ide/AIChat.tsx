@@ -8,7 +8,7 @@ import {
   serverReportsMainAiKey,
 } from '../../lib/grokKey';
 import { fetchNebulaPublicConfig } from '../../lib/nebulaPublicConfig';
-import { readResponseJson } from '../../lib/apiFetch';
+import { fetchJson, readResponseJson } from '../../lib/apiFetch';
 import {
   getBrowserProjectKey,
   getBrowserProjectName,
@@ -60,6 +60,7 @@ import { isShortCodingGoNudge, SHORT_CODING_GO_SUMMARY } from '../../lib/ideShor
 import { setGrokCodingActive } from '../../lib/nebulaGrokCodingGate';
 import { runMasterPlanUiPipeline, runPostCodingWorkspaceSync } from '../../lib/ideArtifactSync';
 import {
+  applyUiStudioBetaToAppPreview,
   dispatchOpenUiStudioBeta,
   triggerUiStudioBetaAfterPlanReady,
 } from '../../lib/uiStudioBetaEngine';
@@ -77,6 +78,7 @@ import {
   assessUiMockupReadiness,
   clearUiMockupStageFlags,
   markUiMockupStageStarted,
+  markUiMockupSucceeded,
   setInferenceFirstStage,
 } from '../../lib/uiMockupGate';
 import { createProjectForCurrentSession } from '../../lib/nebulaCloud';
@@ -1638,12 +1640,32 @@ export function AIChat() {
         }
       }
 
+      // Auto-accept security baseline for inference-first so strict Go isn't stuck on Accept.
+      if (agentAllowed && (fastPrototypeTurn || mpSaved > 0)) {
+        try {
+          const sec = await fetchJson<{ ok?: boolean; applied?: boolean }>(
+            withProjectQuery('/api/master-plan/accept-security-baseline'),
+            {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              credentials: 'include',
+              body: JSON.stringify(withProjectBody({})),
+            },
+          );
+          if (sec.applied) {
+            pushActivity('Security baseline drafted into §2 (assumption — correct if wrong)', 'info');
+            window.dispatchEvent(new CustomEvent('nebula-master-plan-updated'));
+          }
+        } catch {
+          /* non-fatal */
+        }
+      }
+
       // Stage B — UI mockup after plan + ui-brief, BEFORE coding (single API key queue).
       let uiMockupStarted = false;
       if (agentAllowed && (fastPrototypeTurn || willCode || mpSaved > 0)) {
         const readiness = await assessUiMockupReadiness({ projectKey: diskProjectKey });
         if (readiness.ok) {
-          uiMockupStarted = true;
           markUiMockupStageStarted(diskProjectKey);
           pushActivity(
             'Architecture draft ready — generating UI mockup from researched patterns + plan (before coding)',
@@ -1669,7 +1691,15 @@ export function AIChat() {
             onProgress: pushActivity,
           });
           if (mockup.ok) {
-            pushActivity('UI mockup ready in UI Studio Beta — starting coding slices next', 'success');
+            uiMockupStarted = true;
+            markUiMockupSucceeded(diskProjectKey);
+            const applied = await applyUiStudioBetaToAppPreview(pushActivity);
+            pushActivity(
+              applied.ok
+                ? 'UI mockup ready — App Preview updated from UI Studio Beta'
+                : 'UI mockup ready in UI Studio Beta — open App Preview / Generate if shell still looks empty',
+              applied.ok ? 'success' : 'warn',
+            );
             setMessages((p) => {
               const next = [
                 ...p,
@@ -1677,7 +1707,7 @@ export function AIChat() {
                   id: `a-mockup-${Date.now()}`,
                   role: 'assistant' as const,
                   content:
-                    'Architecture draft is ready. UI mockup is generated from researched patterns + your Master Plan assumptions — you can correct them anytime. Coding continues next in slices (foundation first).',
+                    'Architecture draft is ready. UI mockup is generated from researched patterns + your Master Plan — check UI Studio Beta and App Preview. Coding continues next in slices (foundation first).',
                   timestamp: new Date().toLocaleTimeString([], {
                     hour: 'numeric',
                     minute: '2-digit',
@@ -1687,8 +1717,12 @@ export function AIChat() {
               messagesRef.current = next;
               return next;
             });
-          } else if (mockup.error) {
-            pushActivity(`UI mockup: ${mockup.error} — continuing to coding`, 'warn');
+          } else {
+            clearUiMockupStageFlags(diskProjectKey);
+            pushActivity(
+              `UI mockup: ${mockup.error || 'incomplete'} — will retry after coding if needed`,
+              'warn',
+            );
           }
         } else if (fastPrototypeTurn || willCode) {
           pushActivity(

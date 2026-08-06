@@ -55,7 +55,13 @@ export function getInferenceFirstStage(projectKey?: string): InferenceFirstStage
   return null;
 }
 
+/** Mark mockup stage in progress (does NOT mean App Preview was updated). */
 export function markUiMockupStageStarted(projectKey?: string): void {
+  setInferenceFirstStage('ui_mockup', projectKey);
+}
+
+/** Only after a successful generation that can feed App Preview. */
+export function markUiMockupSucceeded(projectKey?: string): void {
   try {
     sessionStorage.setItem(mockupDoneKey(projectKey), '1');
   } catch {
@@ -67,6 +73,29 @@ export function markUiMockupStageStarted(projectKey?: string): void {
 export function wasUiMockupStageStarted(projectKey?: string): boolean {
   try {
     return sessionStorage.getItem(mockupDoneKey(projectKey)) === '1';
+  } catch {
+    return false;
+  }
+}
+
+/** True when disk meta says UI Gen produced a usable preview (not just a session flag). */
+export async function hasPersistedUiMockup(): Promise<boolean> {
+  try {
+    const r = await fetch(withProjectQuery('/api/ui-studio-beta/status'), {
+      credentials: 'include',
+      cache: 'no-store',
+    });
+    if (!r.ok) return false;
+    const st = (await readResponseJson(r)) as {
+      preview_applied?: boolean;
+      quality_gate_result?: string;
+      final_status?: string;
+    };
+    if (st.preview_applied === true) return true;
+    const gate = String(st.quality_gate_result || '').toLowerCase();
+    if (gate === 'pass' || gate === 'repair') return true;
+    if (String(st.final_status || '').toLowerCase() === 'ready') return true;
+    return false;
   } catch {
     return false;
   }
