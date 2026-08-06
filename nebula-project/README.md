@@ -16,7 +16,10 @@ When documentation in this folder refers to “the platform” or “the server,
 
 ### Key files in this folder
 
-- **`project-execution-rules.md`** — Canonical law (Master Plan contract, security baseline, UI brief, Mind Map, Go slices). Wins on conflict.
+- **`recovery-orchestration.md`** — Recovery conductor map (inventory index, KEEP/FIX/QUARANTINE, spine order). Does not replace domain rules.
+- **`recovery-inventory-*.md`** — Pages / documents / modules inventory sheets.
+- **`inference-first-rules.md`** — Default intake / stage sequence (inference-first).
+- **`project-execution-rules.md`** — Canonical law (Master Plan contract, security baseline, UI brief, Mind Map, Go slices). Wins on conflict vs non-orchestration domain docs.
 - **`CHANGELOG-methodology.md`** — Methodology change log (Phases A–F) + operator rollout notes for `MASTER_PLAN_STRICT`.
 - **`fixtures/master-plan/`** — Golden Master Plan fixtures for validators (`npm run test:master-plan`).
 - **`project-workflow.md`** — Lifecycle pointer (no duplicate MUSTS).

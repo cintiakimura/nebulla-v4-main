@@ -1,9 +1,11 @@
 /**
  * Anti-amnesia loader for inference-first working files.
  * Injected into IDE Grok turns so Agent/coding continues from the draft.
+ * Uses a batch API so missing files do not spam browser 404s on /api/files/open.
  */
 
-import { openLocalFile } from './fileOperations';
+import { fetchJson } from './apiFetch';
+import { withProjectBody, withProjectQuery } from './nebulaProjectApi';
 import { getInferenceFirstStage } from './uiMockupGate';
 
 const MEMORY_PATHS = [
@@ -17,16 +19,6 @@ const MEMORY_PATHS = [
 
 const PER_FILE_CHARS = 3500;
 const TOTAL_CHARS = 14_000;
-
-async function readOptional(path: string): Promise<string | null> {
-  try {
-    const opened = await openLocalFile(path);
-    if (opened.success === false || !opened.content?.trim()) return null;
-    return opened.content.trim();
-  } catch {
-    return null;
-  }
-}
 
 /**
  * Load inference-first law + project memory for the system prompt.
@@ -46,9 +38,28 @@ export async function buildInferenceFirstMemoryAppendix(options?: {
   let used = 0;
   const missing: string[] = [];
 
-  for (const path of MEMORY_PATHS) {
-    if (!includeRules && path.endsWith('inference-first-rules.md')) continue;
-    const body = await readOptional(path);
+  const paths = MEMORY_PATHS.filter(
+    (p) => includeRules || !p.endsWith('inference-first-rules.md'),
+  );
+
+  let files: Record<string, string | null> = {};
+  try {
+    const res = await fetchJson<{ ok?: boolean; files?: Record<string, string | null> }>(
+      withProjectQuery('/api/inference-first/memory'),
+      {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(withProjectBody({ paths: [...paths] })),
+      },
+    );
+    if (res.files && typeof res.files === 'object') files = res.files;
+  } catch {
+    files = {};
+  }
+
+  for (const path of paths) {
+    const body = (files[path] || '').trim();
     if (!body) {
       missing.push(path);
       continue;

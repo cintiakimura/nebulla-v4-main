@@ -11,6 +11,7 @@ import {
 import {
   buildDiscoveryBootstrap,
   buildFastPrototypeBootstrap,
+  buildFastPrototypeContinueBootstrap,
   buildIdeaDiscoveryBootstrap,
   FAST_PROTOTYPE_BOOTSTRAP_PREFIX,
   IDEA_DISCOVERY_BOOTSTRAP_PREFIX,
@@ -73,5 +74,9 @@ assert.ok(fast.includes('UI Gen v2'));
 assert.ok(fast.includes('AFTER UI mockup'));
 assert.ok(isHiddenBootstrapUserMessage(fast));
 assert.ok(isHiddenBootstrapUserMessage(buildDiscoveryBootstrap('Web App')));
+
+const cont = buildFastPrototypeContinueBootstrap();
+assert.ok(isHiddenBootstrapUserMessage(cont));
+assert.ok(cont.includes('START_MASTERPLAN'));
 
 console.log('test-fast-prototype-mode: ok');

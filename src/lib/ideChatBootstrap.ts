@@ -21,6 +21,28 @@ export const IDEA_DISCOVERY_BOOTSTRAP_PREFIX = 'IDEA PROMPT DISCOVERY.';
 /** Prefix for Fast Prototype (inference-first) — hidden from chat transcript. */
 export const FAST_PROTOTYPE_BOOTSTRAP_PREFIX = 'FAST PROTOTYPE MODE.';
 
+/** One automatic follow-up when the first Fast Prototype reply omitted Master Plan tags. */
+export const FAST_PROTOTYPE_CONTINUE_PREFIX = 'FAST PROTOTYPE CONTINUE.';
+
+export function buildFastPrototypeContinueBootstrap(): string {
+  return (
+    `${FAST_PROTOTYPE_CONTINUE_PREFIX} Your previous reply did NOT include <START_MASTERPLAN> tags. ` +
+    `This is a HARD retry — do NOT ask questions; do NOT apologize; do NOT interview.\n` +
+    `Immediately output in this order:\n` +
+    `1) <START_MASTERPLAN>…</END_MASTERPLAN> with ALL five sections (real content; label assumptions).\n` +
+    `   §1 goal/users/scope · §2 Project Type + 5–10 real competitors + Security baseline if accounts/kids/private data · ` +
+    `§3 features+KPI · §4 pages with /routes + purpose/primary_actions/authz/empty_state/error_state/nav_links · ` +
+    `§5 hex tokens (15–25 lines).\n` +
+    `2) \`\`\`file:nebula-project/fast-prototype-memory.md\` … \`\`\`\n` +
+    `3) \`\`\`file:nebula-project/category-classification.md\` … \`\`\`\n` +
+    `4) \`\`\`file:nebula-project/industry-standards.md\` … \`\`\`\n` +
+    `5) \`\`\`file:nebula-project/competitor-research.md\` … \`\`\`\n` +
+    `6) \`\`\`file:nebula-ui-studio/ui-brief.md\` … \`\`\` from §4+§5\n` +
+    `7) START_CODING / <START_CODING> for Foundation only.\n` +
+    `Chat prose: at most 4 short lines listing assumptions. Product runs UI Gen after this turn.`
+  );
+}
+
 /**
  * Bootstrap for guided discovery. When project type was chosen on My Projects,
  * instruct Grok to skip the project-type question and ask only the main goal first.
@@ -147,6 +169,7 @@ export function isHiddenBootstrapUserMessage(text: string): boolean {
   if (t.startsWith(BOOTSTRAP_PREFIX)) return true;
   if (t.startsWith(IDEA_DISCOVERY_BOOTSTRAP_PREFIX)) return true;
   if (t.startsWith(FAST_PROTOTYPE_BOOTSTRAP_PREFIX)) return true;
+  if (t.startsWith(FAST_PROTOTYPE_CONTINUE_PREFIX)) return true;
   if (t.startsWith('FAST PROJECT MODE.')) return true;
   return false;
 }

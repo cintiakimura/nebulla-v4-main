@@ -25,10 +25,13 @@ import {
   conversationEntriesToIdeMessages,
   buildDiscoveryBootstrap,
   buildFastPrototypeBootstrap,
+  buildFastPrototypeContinueBootstrap,
   buildIdeaDiscoveryBootstrap,
   FAST_PROTOTYPE_BOOTSTRAP_PREFIX,
+  FAST_PROTOTYPE_CONTINUE_PREFIX,
   isHiddenBootstrapUserMessage,
 } from '../../lib/ideChatBootstrap';
+import { sourceHasMasterPlanBlock } from '../../../lib/masterPlanTags';
 import {
   clearStoredStartMode,
   consumePendingStartMode,
@@ -1256,7 +1259,10 @@ export function AIChat() {
       } catch {
         /* fall through to normal Grok / Master Plan / Go chat */
       }
-    } else if (rawText.trim().startsWith(FAST_PROTOTYPE_BOOTSTRAP_PREFIX)) {
+    } else if (
+      rawText.trim().startsWith(FAST_PROTOTYPE_BOOTSTRAP_PREFIX) ||
+      rawText.trim().startsWith(FAST_PROTOTYPE_CONTINUE_PREFIX)
+    ) {
       discoveryRequired = false;
       codingHint = 'fast-prototype';
       chatMode = 'coding';
@@ -1366,7 +1372,9 @@ export function AIChat() {
     const onboardingBuildStart = discoveryCompleteAck;
     const fastPrototypeTurn =
       codingHint === 'fast-prototype' ||
-      rawText.trim().startsWith(FAST_PROTOTYPE_BOOTSTRAP_PREFIX);
+      rawText.trim().startsWith(FAST_PROTOTYPE_BOOTSTRAP_PREFIX) ||
+      rawText.trim().startsWith(FAST_PROTOTYPE_CONTINUE_PREFIX);
+    const isFastPrototypeContinue = rawText.trim().startsWith(FAST_PROTOTYPE_CONTINUE_PREFIX);
     const buildMode =
       !lockedChat &&
       !hasAppStatusPayload &&
@@ -1511,6 +1519,31 @@ export function AIChat() {
 
       const { displayText, hadCodingTag } = formatAssistantForIdeChatDisplay(raw);
       const agentAllowed = interactionModeRef.current === 'agent';
+
+      // First Fast Prototype reply often comes back as short chat prose (~hundreds of chars)
+      // with no Master Plan tags — one automatic hard continue (single API key queue).
+      if (
+        agentAllowed &&
+        fastPrototypeTurn &&
+        !isFastPrototypeContinue &&
+        mpSaved === 0 &&
+        !sourceHasMasterPlanBlock(masterPlanSource)
+      ) {
+        pushActivity(
+          'Draft incomplete (no Master Plan tags) — one automatic architecture continue…',
+          'warn',
+        );
+        setAccessoryHint('Continuing Fast Prototype — requesting full Master Plan + ui-brief…');
+        window.setTimeout(() => setAccessoryHint(null), 6000);
+        window.setTimeout(() => {
+          void sendChatRef.current(buildFastPrototypeContinueBootstrap());
+        }, 80);
+        resetCodingActivity();
+        setSending(false);
+        sendingRef.current = false;
+        return;
+      }
+
       const shortCodingNudge = isShortCodingGoNudge(displayText || raw);
       const willCode =
         agentAllowed &&

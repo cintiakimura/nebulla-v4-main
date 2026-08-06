@@ -386,13 +386,14 @@ export function chatModeSystemAppendix(options: {
       [
         'ACTIVE MODE: FAST PROTOTYPE (inference-first — additive; Guided interview OFF)',
         '- Law: nebula-project/inference-first-rules.md — single behavioral script. Do not skip or reorder steps.',
+        '- HARD OUTPUT THIS TURN: You MUST emit <START_MASTERPLAN>…</END_MASTERPLAN> with all five sections. A short chat-only reply is a failure.',
         '- Sequence: Categorize → Research → Map → Analyze → Draft Master Plan → ui-brief → UI mockup (UI Gen v2) → Coding slices → Present/Refine.',
         '- Required files (Create if missing): nebula-project/fast-prototype-memory.md, category-classification.md, industry-standards.md, competitor-research.md, Master Plan, nebula-ui-studio/ui-brief.md.',
-        '- Never invent competitors, studies, or statistics. Ask only when a step is blocked.',
+        '- Never invent competitors, studies, or statistics. Prefer labeled assumptions over asking questions.',
         '- Write ui-brief in this architecture turn. Do not run UI Gen yourself — product triggers UI Studio Beta after §§1–5 + ui-brief (before coding finishes).',
         '- Emit START_CODING for Foundation only; product queues coding AFTER mockup stage (one API key — no parallel architecture+UI+codegen).',
         '- Anti-amnesia: read working files before acting; do not restart Step 3.1 if a valid draft exists.',
-        '- Core tags / file apply / Guided path unchanged when this mode is off.',
+        '- Chat: ≤4 short lines (assumptions). All substance in tags + file blocks.',
       ].join('\n'),
     );
   } else if (

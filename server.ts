@@ -1522,6 +1522,65 @@ No approved UI code yet.
     }
   });
 
+  /**
+   * Batch-read inference-first working files (200 + nulls for missing).
+   * Avoids spamming the browser console with /api/files/open 404s on first Start.
+   */
+  app.post("/api/inference-first/memory", (req, res) => {
+    try {
+      const { workspaceRoot } = projectPathsFor(req);
+      const rawPaths = Array.isArray(req.body?.paths) ? req.body.paths : [];
+      const paths = rawPaths
+        .filter((p: unknown): p is string => typeof p === "string")
+        .map((p: string) => p.trim().replace(/^\.\/+/, "").replace(/\\/g, "/"))
+        .filter(Boolean)
+        .slice(0, 12);
+
+      const tryResolveUnder = (root: string, rel: string): string | null => {
+        try {
+          const full = resolveWorkspaceRelative(root, rel);
+          if (fs.existsSync(full) && !fs.statSync(full).isDirectory()) return full;
+        } catch {
+          /* access denied or missing */
+        }
+        return null;
+      };
+
+      const files: Record<string, string | null> = {};
+      for (const filePath of paths) {
+        let fullPath =
+          tryResolveUnder(workspaceRoot, filePath) ||
+          tryResolveUnder(REPO_ROOT, filePath) ||
+          tryResolveUnder(NEBULA_PROJECT_ROOT, filePath);
+        if (!fullPath && filePath.startsWith("nebulla-project/")) {
+          const alt = filePath.replace(/^nebulla-project\//, "");
+          fullPath = tryResolveUnder(NEBULA_PROJECT_ROOT, alt);
+        }
+        if (!fullPath) {
+          files[filePath] = null;
+          continue;
+        }
+        try {
+          const size = fs.statSync(fullPath).size;
+          if (size > FILE_OPEN_MAX_BYTES) {
+            files[filePath] = null;
+            continue;
+          }
+          files[filePath] = fs.readFileSync(fullPath, "utf8");
+        } catch {
+          files[filePath] = null;
+        }
+      }
+      return res.json({ ok: true, files });
+    } catch (err: unknown) {
+      return res.status(500).json({
+        ok: false,
+        error: err instanceof Error ? err.message : "memory read failed",
+        files: {},
+      });
+    }
+  });
+
   /** Open a workspace-relative file (File Ops mode) — content + language hint. */
   app.post("/api/files/open", (req, res) => {
     try {
