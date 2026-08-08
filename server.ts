@@ -97,6 +97,7 @@ import {
   buildSecurityBaselineProposal,
   mergeSecurityBaselineIntoSection2,
 } from "./lib/securityBaselinePropose";
+import { softenSecurityBlocksForMvpGo } from "./lib/mvpDeliveryGates";
 import { draftSection4AmendmentsForRoutes } from "./lib/mindMapAmendmentPropose";
 import { ensureMasterPlanBeforeGo } from "./lib/nebulaMasterPlanSynthesis";
 import {
@@ -1284,12 +1285,14 @@ No approved UI code yet.
           uiBriefLength = readUiBriefMarkdown(pp.workspaceRoot).length;
         }
       }
-      const completeness = assessMasterPlanCompletenessWithWorkspace({
+      // Assess with MVP soft-continue: SEC_* never presents as Go-paused (Go path merges draft).
+      let completeness = assessMasterPlanCompletenessWithWorkspace({
         plan,
         mode: resolveMasterPlanStrictMode(pp.workspaceRoot),
         workspaceRoot: pp.workspaceRoot,
         checkUiBrief: true,
       });
+      completeness = softenSecurityBlocksForMvpGo(completeness);
       const securityProposal = buildSecurityBaselineProposal(plan);
       res.json({
         mode: completeness.mode,
@@ -4370,12 +4373,33 @@ Rules:
         /* ignore */
       }
 
-      const completeness = assessMasterPlanCompletenessWithWorkspace({
+      // Industry-standard security baseline before Go — never leave SEC gaps as a hard stop for MVP.
+      try {
+        const secKey = "2. Tech and Research";
+        const secMerged = mergeSecurityBaselineIntoSection2(String(planSnapshot[secKey] ?? ""));
+        if (secMerged) {
+          planSnapshot[secKey] = secMerged;
+          try {
+            const onDisk = readMasterPlanFile(masterPlanPath);
+            onDisk[secKey] = secMerged;
+            fs.mkdirSync(path.dirname(masterPlanPath), { recursive: true });
+            fs.writeFileSync(masterPlanPath, JSON.stringify(onDisk, null, 2), "utf8");
+            console.log("[go-code] Applied industry security baseline draft to §2 (MVP continue)");
+          } catch {
+            /* in-memory plan still used for gate */
+          }
+        }
+      } catch {
+        /* non-fatal */
+      }
+
+      let completeness = assessMasterPlanCompletenessWithWorkspace({
         plan: planSnapshot,
         mode: resolveMasterPlanStrictMode(ppGo.workspaceRoot),
         workspaceRoot: ppGo.workspaceRoot,
         checkUiBrief: true,
       });
+      completeness = softenSecurityBlocksForMvpGo(completeness);
       const blockGaps = completeness.gaps.filter((g) => g.severity === "block");
       const goGateOutcome =
         !completeness.allowGo
@@ -4393,7 +4417,7 @@ Rules:
       });
       if (completeness.gaps.length > 0) {
         console.log(
-          `[go-code] Master Plan gaps mode=${completeness.mode} shape=${completeness.shape} count=${completeness.gaps.length}`,
+          `[go-code] Master Plan gaps mode=${completeness.mode} shape=${completeness.shape} count=${completeness.gaps.length} allowGo=${completeness.allowGo}`,
         );
       }
       if (!completeness.allowGo) {

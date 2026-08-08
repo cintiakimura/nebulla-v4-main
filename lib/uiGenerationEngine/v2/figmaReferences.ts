@@ -427,7 +427,8 @@ export async function retrieveFigmaReferences(input: {
         selection_mode: "skipped_rate_limited",
         figma_used: "no",
         figma_status: "rate_limited",
-        figma_error: "Figma rate limited",
+        figma_error:
+          "Figma rate limited — ignored; continuing with built-in industry patterns (MVP not blocked)",
         candidates: seedCandidates,
         selected_refs: seedSelected,
         fallback_used: "yes",
@@ -516,7 +517,7 @@ export async function retrieveFigmaReferences(input: {
             key_diagnostics: keyDiagnostics,
             figma_used: "no",
             figma_status: "rate_limited",
-            figma_error: `Figma rate limited while reading reference files (${summarizeDiagnostics(keyDiagnostics)})`,
+            figma_error: `Figma rate limited (${summarizeDiagnostics(keyDiagnostics)}) — ignored; continuing with built-in industry patterns (MVP not blocked)`,
             candidates: seedCandidates,
             selected_refs: seedSelected,
             fallback_used: "yes",

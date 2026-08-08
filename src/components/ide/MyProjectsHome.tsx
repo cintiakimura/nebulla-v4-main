@@ -36,10 +36,7 @@ import {
   setPendingProjectType,
   type NebulaProjectType,
 } from '../../lib/ideHomeEvents';
-import {
-  setPendingStartMode,
-  type IdeStartMode,
-} from '../../lib/ideStartMode';
+import { setPendingStartMode } from '../../lib/ideStartMode';
 import { resetProjectFromScratch } from '../../lib/ideProjectReset';
 import { shortNameFromIdea } from '../../lib/projectNameFromIdea';
 import { ChatFilePreview } from './ChatFilePreview';
@@ -116,10 +113,8 @@ export function MyProjectsHome() {
   const [startingType, setStartingType] = useState<NebulaProjectType | null>(null);
   const [ideaInput, setIdeaInput] = useState('');
   const [ideaType, setIdeaType] = useState<NebulaProjectType | null>(null);
-  const [ideaError, setIdeaError] = useState('');
+  const [startError, setStartError] = useState('');
   const [startingIdea, setStartingIdea] = useState(false);
-  /** Inference-first (default) vs Full architecture interview (opt-in). */
-  const [startMode, setStartMode] = useState<IdeStartMode>('fast_prototype');
 
   const busyStarting = Boolean(startingType) || startingIdea;
   const activeKey = getBrowserProjectKey();
@@ -250,8 +245,9 @@ export function MyProjectsHome() {
     async (type: NebulaProjectType) => {
       if (busyStarting) return;
       setStartingType(type);
+      setStartError('');
       try {
-        // Type chips: inference-first with platform pre-set (Guided is opt-in via the other card).
+        // Platform chip → inference-first; chat asks for the goal if still missing.
         setPendingStartMode('fast_prototype');
         markGuidedStartOnReady();
         await resetProjectFromScratch(type);
@@ -263,7 +259,7 @@ export function MyProjectsHome() {
         console.error('[MyProjectsHome] start typed project failed', err);
         setStartingType(null);
         const msg = err instanceof Error ? err.message : 'Could not start the project.';
-        window.alert(msg);
+        setStartError(msg);
       }
     },
     [busyStarting, ensureProjectOrReuse],
@@ -272,21 +268,13 @@ export function MyProjectsHome() {
   const onStartFromIdea = useCallback(async () => {
     if (busyStarting) return;
     const idea = ideaInput.trim();
-    if (idea.length < 8) {
-      setIdeaError(
-        startMode === 'fast_prototype'
-          ? 'Add a short goal (what the app does) — Fast Prototype needs at least one clear sentence.'
-          : 'Describe your idea in a sentence or two (at least a few words).',
-      );
-      return;
-    }
-    setIdeaError('');
+    setStartError('');
     setStartingIdea(true);
     try {
-      const label = shortNameFromIdea(idea);
-      // Idea + mode before reset (reset clears pending project type only).
-      setPendingProjectIdea(idea);
-      setPendingStartMode(startMode);
+      const label = idea ? shortNameFromIdea(idea) : ideaType || 'New Project';
+      // Prompt optional — missing goal/platform is asked in chat after Continue.
+      if (idea) setPendingProjectIdea(idea);
+      setPendingStartMode('fast_prototype');
       markGuidedStartOnReady();
       await resetProjectFromScratch(label);
       await ensureProjectOrReuse(label);
@@ -297,9 +285,9 @@ export function MyProjectsHome() {
       console.error('[MyProjectsHome] start from idea failed', err);
       setStartingIdea(false);
       const msg = err instanceof Error ? err.message : 'Could not start the project. Try again.';
-      setIdeaError(msg);
+      setStartError(msg);
     }
-  }, [busyStarting, ideaInput, ideaType, ensureProjectOrReuse, startMode]);
+  }, [busyStarting, ideaInput, ideaType, ensureProjectOrReuse]);
 
   const onJustChat = useCallback(() => {
     dispatchStartFreeChat();
@@ -398,85 +386,39 @@ export function MyProjectsHome() {
         <div className="space-y-2">
           <h2 className="text-base font-normal tracking-tight text-foreground">
             {isPlaceholderWorkspace
-              ? 'Start with a goal'
+              ? 'Start with a prompt'
               : hasExistingWork
                 ? 'Start another project'
                 : 'New Project'}
           </h2>
           <p className="max-w-xl text-sm leading-relaxed text-muted-foreground">
             {isPlaceholderWorkspace
-              ? 'This workspace is still an empty Untitled shell. Paste a clear goal below — Continue runs inference-first (research → Master Plan → UI mockup → code). Free plan reuses this project slot and renames it.'
+              ? 'This workspace is still an empty Untitled shell. Add a prompt (optional platform), then Continue — research → Master Plan → UI mockup → code. Anything missing is asked in chat. Free plan reuses this project slot and renames it.'
               : hasExistingWork
                 ? 'Create a separate project when you are ready. Your current workspace stays in the explorer and Code tab.'
-                : 'Choose how to start, then describe what you want to build.'}
+                : 'Describe what you want to build. Missing details are asked in chat.'}
           </p>
         </div>
 
         <div className="ide-glass-card rounded-2xl border border-border p-5">
-          <p className="text-sm text-foreground">How do you want to start?</p>
-          <div className="mt-3 grid gap-2 sm:grid-cols-2">
-            <button
-              type="button"
-              disabled={busyStarting}
-              aria-pressed={startMode === 'fast_prototype'}
-              onClick={() => setStartMode('fast_prototype')}
-              className={cn(
-                'rounded-xl border px-3 py-3 text-left transition',
-                startMode === 'fast_prototype'
-                  ? 'ide-glass-card--selected border-foreground/40 text-foreground'
-                  : 'ide-glass-card--choice border-border text-muted-foreground',
-              )}
-            >
-              <span className="block text-xs font-medium text-foreground">
-                Inference-first (default)
-              </span>
-              <span className="mt-1 block text-[11px] leading-relaxed">
-                Categorize, research, draft Master Plan, then build. Edit assumptions after the draft.
-              </span>
-            </button>
-            <button
-              type="button"
-              disabled={busyStarting}
-              aria-pressed={startMode === 'guided'}
-              onClick={() => setStartMode('guided')}
-              className={cn(
-                'rounded-xl border px-3 py-3 text-left transition',
-                startMode === 'guided'
-                  ? 'ide-glass-card--selected border-foreground/40 text-foreground'
-                  : 'ide-glass-card--choice border-border text-muted-foreground',
-              )}
-            >
-              <span className="block text-xs font-medium text-foreground">Full architecture interview</span>
-              <span className="mt-1 block text-[11px] leading-relaxed">
-                Opt-in: guided Master Plan questions one at a time when you want to brainstorm.
-              </span>
-            </button>
-          </div>
-
-          <label htmlFor="nebula-project-idea" className="mt-5 flex items-center gap-2 text-sm text-foreground">
+          <label htmlFor="nebula-project-idea" className="flex items-center gap-2 text-sm text-foreground">
             <Sparkles className="h-4 w-4 text-foreground/60" aria-hidden />
-            {startMode === 'fast_prototype' ? 'Short goal / brief' : 'Start with a prompt'}
+            Prompt
           </label>
           <textarea
             id="nebula-project-idea"
             value={ideaInput}
             onChange={(e) => {
               setIdeaInput(e.target.value);
-              if (ideaError) setIdeaError('');
+              if (startError) setStartError('');
             }}
             rows={hasExistingWork ? 3 : 4}
             disabled={busyStarting}
-            placeholder={
-              startMode === 'fast_prototype'
-                ? 'e.g. A mobile education app for kids to practice reading…'
-                : 'e.g. A mobile app for freelancers to track invoices and get paid reminders…'
-            }
+            placeholder="e.g. A mobile education app for kids to practice reading…"
             className="ide-glass-input mt-3 w-full resize-y rounded-xl border border-border px-3 py-2.5 text-sm leading-relaxed text-foreground outline-none placeholder:text-muted-foreground/70 disabled:opacity-60"
           />
           <p className="mt-3 text-xs text-muted-foreground">
-            {startMode === 'fast_prototype'
-              ? 'Fast Prototype will infer industry standards and generate a first draft. Optional platform chip below.'
-              : 'Continue moves your prompt into chat for the guided interview. Optional type so we skip that question later:'}
+            Optional platform chip. If the goal or platform is missing, chat will ask after Continue.
           </p>
           <div className="mt-2 flex flex-wrap gap-2">
             {PROJECT_TYPES.map((t) => (
@@ -492,11 +434,11 @@ export function MyProjectsHome() {
               </button>
             ))}
           </div>
-          {ideaError ? <p className="mt-2 text-xs text-rose-300">{ideaError}</p> : null}
+          {startError ? <p className="mt-2 text-xs text-rose-300">{startError}</p> : null}
           <div className="mt-4 flex justify-end">
             <button
               type="button"
-              disabled={busyStarting || ideaInput.trim().length < 8}
+              disabled={busyStarting}
               onClick={() => void onStartFromIdea()}
               className="btn-cyan inline-flex items-center gap-1.5 rounded-lg px-4 py-2 text-xs disabled:cursor-not-allowed disabled:opacity-50"
             >
@@ -507,13 +449,13 @@ export function MyProjectsHome() {
         </div>
       </section>
 
-      <section className="space-y-4">
+      <section className="ide-glass-card space-y-4 rounded-2xl border border-border p-5">
         <div className="space-y-1">
           <h2 className="text-base font-normal text-foreground">
             {hasExistingWork ? 'Or choose a type for a new project' : 'Or choose a type'}
           </h2>
           <p className="max-w-xl text-sm leading-relaxed text-muted-foreground">
-            Pick a platform and start inference-first (goal asked once if missing). For guided Q&A, choose Full architecture interview above.
+            Pick a platform to start. Chat asks for the goal if you have not written a prompt yet.
           </p>
         </div>
 
@@ -545,7 +487,7 @@ export function MyProjectsHome() {
   );
 
   const continueSection = (
-    <section className="space-y-3">
+    <section className="ide-glass-card space-y-3 rounded-2xl border border-border p-5">
       <h2 className="text-base font-normal text-foreground">
         {hasExistingWork ? 'Continue this workspace' : 'Or continue'}
       </h2>
@@ -570,7 +512,7 @@ export function MyProjectsHome() {
   );
 
   const projectsSection = (
-    <section className="space-y-4">
+    <section className="ide-glass-card space-y-4 rounded-2xl border border-border p-5">
       <div className="flex items-center justify-between gap-2">
         <h2 className="text-base font-normal text-foreground">Your projects</h2>
         {loadingList ? (
@@ -587,7 +529,7 @@ export function MyProjectsHome() {
       ) : null}
 
       {projects.length === 0 && !loadingList ? (
-        <div className="rounded-2xl border border-dashed border-border px-6 py-12 text-center">
+        <div className="rounded-xl border border-dashed border-border/70 px-6 py-10 text-center">
           <p className="text-sm leading-relaxed text-muted-foreground">
             No projects yet. Start with a prompt above, or pick{' '}
             <span className="text-foreground">Web App</span>,{' '}
@@ -596,15 +538,15 @@ export function MyProjectsHome() {
           </p>
         </div>
       ) : (
-        <ul className="divide-y divide-border overflow-hidden rounded-2xl border border-border">
+        <ul className="divide-y divide-border overflow-hidden rounded-xl border border-border/60">
           {projects.map((p) => {
             const isActive = p.key === activeKey || p.name === getBrowserProjectName();
             return (
               <li
                 key={`${p.source}-${p.key}`}
                 className={cn(
-                  'flex flex-wrap items-center justify-between gap-3 px-5 py-4',
-                  isActive && 'bg-[#111111]',
+                  'flex flex-wrap items-center justify-between gap-3 px-4 py-3',
+                  isActive && 'bg-white/[0.04]',
                 )}
               >
                 <div className="min-w-0">
@@ -656,7 +598,7 @@ export function MyProjectsHome() {
 
       {fileModal ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-lg rounded-2xl border border-border bg-[#0a0a0a] p-5 shadow-2xl">
+          <div className="ide-glass-card w-full max-w-lg rounded-2xl border border-border p-5">
             <h3 className="text-base font-normal text-foreground">
               {fileModal === 'github' ? 'Open from GitHub' : 'Open existing file'}
             </h3>
@@ -676,7 +618,7 @@ export function MyProjectsHome() {
                   ? 'https://raw.githubusercontent.com/…'
                   : 'path/to/file.md'
               }
-              className="mt-4 w-full rounded-xl border border-border bg-black px-3 py-2 text-sm text-foreground outline-none ring-primary/25 focus:ring"
+              className="ide-glass-input mt-4 w-full rounded-xl border border-border px-3 py-2 text-sm text-foreground outline-none"
               autoFocus
             />
             {fileError ? <p className="mt-2 text-xs text-rose-300">{fileError}</p> : null}

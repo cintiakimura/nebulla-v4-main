@@ -233,6 +233,8 @@ Work **one step per Agent turn / PR** after constitution install. Fix the **earl
 | 2026-08-08 | Phase 7.5: arch-only ```file:``` no longer counts as coding; Foundation Go after persisted mockup or skip; `canStartFoundationCoding` | ui-brief apply skipped Foundation — explorer stuck on preview shell only |
 | 2026-08-08 | App Preview shell renders template chrome (top bar, metrics, progress, bottom tabs) from meta classification | Phase H wrote hero+cards only — Studio richer than Preview |
 | 2026-08-08 | Early Phase 8: Generate UI builds up to 3 plan screens into Studio + App Preview switcher; Live Activity is logo-only row | User needed multi-screen mockup + compact throbber before full Phase 8 polish |
+| 2026-08-08 | Start home: remove inference/interview chooser; label Prompt; unify ide-glass-card; Continue = btn-cyan chips; missing goal/platform asked in chat | Markup on Start modal — simplify path; chat owns gaps |
+| 2026-08-08 | MVP soft-continue: Figma 429 → seed patterns (amber, not hard fail); Go auto-merges industry security baseline + demotes SEC_* blocks | Stop blocking first MVP on optional Figma / security docs polish |
 
 ---
 

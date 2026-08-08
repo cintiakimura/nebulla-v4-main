@@ -41,6 +41,7 @@ import {
   type StudioDeviceMode,
 } from '../../lib/nebulaProjectType';
 import {
+  figmaStatusIsSoftFallback,
   figmaStatusLabel,
   gateLabel,
   weakGateUserMessage,
@@ -1814,12 +1815,12 @@ export function IdeUiStudioBeta({
             {figmaStatus ? (
               <span
                 className={cn(
-                  'hidden max-w-[180px] truncate rounded-full px-2 py-0.5 text-[10px] font-medium sm:inline',
+                  'hidden max-w-[220px] truncate rounded-full px-2 py-0.5 text-[10px] font-medium sm:inline',
                   figmaStatus === 'success'
                     ? 'bg-emerald-500/15 text-emerald-200'
-                    : figmaStatus === 'weak_matches' || figmaStatus === 'missing_key'
+                    : figmaStatusIsSoftFallback(figmaStatus)
                       ? 'bg-amber-500/15 text-amber-100'
-                      : 'bg-rose-500/15 text-rose-100',
+                      : 'bg-muted/40 text-muted-foreground',
                 )}
                 title={
                   [figmaError, figmaEnvGuidance].filter(Boolean).join(' — ') ||
@@ -1952,10 +1953,20 @@ export function IdeUiStudioBeta({
             className="border-t border-border/60 px-2 py-1 text-[10px] leading-snug text-muted-foreground sm:px-3"
             title={[figmaError, figmaEnvGuidance].filter(Boolean).join('\n')}
           >
-            <span className="font-medium text-amber-100/90">{figmaStatusLabel(figmaStatus)}</span>
+            <span
+              className={cn(
+                'font-medium',
+                figmaStatusIsSoftFallback(figmaStatus) ? 'text-amber-100/90' : 'text-muted-foreground',
+              )}
+            >
+              {figmaStatusLabel(figmaStatus)}
+            </span>
             {' — '}
             <span className="line-clamp-2">
-              {[figmaError, figmaEnvGuidance].filter(Boolean).join(' — ')}
+              {figmaStatusIsSoftFallback(figmaStatus)
+                ? figmaError ||
+                  'Continuing with built-in patterns — Figma is optional for MVP.'
+                : [figmaError, figmaEnvGuidance].filter(Boolean).join(' — ')}
             </span>
           </div>
         ) : null}

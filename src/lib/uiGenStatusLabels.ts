@@ -7,20 +7,32 @@ export function figmaStatusLabel(status: string): string {
     case 'success':
       return 'Figma: matched';
     case 'weak_matches':
-      return 'Figma: weak match';
+      return 'Patterns: built-in (Figma weak)';
     case 'missing_key':
-      return 'Figma: not configured';
+      return 'Patterns: built-in';
     case 'unauthorized':
-      return 'Figma: unauthorized';
+      return 'Patterns: built-in (Figma auth)';
     case 'rate_limited':
-      return 'Figma: rate limited';
+      return 'Patterns: built-in (Figma busy)';
     case 'failed':
-      return 'Figma: failed';
+      return 'Patterns: built-in (Figma skip)';
     case 'skipped':
-      return 'Figma: skipped';
+      return 'Patterns: built-in';
     default:
       return status ? `Figma: ${status}` : '';
   }
+}
+
+/** Soft statuses — seed fallback already applied; do not paint as hard failure. */
+export function figmaStatusIsSoftFallback(status: string): boolean {
+  return (
+    status === 'rate_limited' ||
+    status === 'weak_matches' ||
+    status === 'missing_key' ||
+    status === 'failed' ||
+    status === 'skipped' ||
+    status === 'unauthorized'
+  );
 }
 
 export function patternModeLabel(mode: string): string {
