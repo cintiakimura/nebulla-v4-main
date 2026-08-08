@@ -41,6 +41,21 @@ const authFilled = mergeSecurityBaselineIntoSection2(partialSec["2. Tech and Res
 assert.ok(authFilled && /sign-?in required|Auth model/i.test(authFilled));
 assert.equal(planNeedsSecurityBaseline({ ...partialSec, "2. Tech and Research": authFilled! }), false);
 
+// "no PII" in goals must NOT permanently block Accept / keep SEC gaps.
+const noPiiGoal = {
+  "1. Goal of the app": "Kids app. Out of scope: no PII marketplace, no social.",
+  "2. Tech and Research":
+    "### Security baseline\n- **Auth model:** Sign-in required for private routes.\n- classroom_id + row-level security / deny-by-default.",
+};
+assert.equal(planNeedsSecurityBaseline(noPiiGoal), false);
+
+// Bare "Auth model TBD" is not a real sign-in model — still needs merge.
+const tbdAuth = {
+  "1. Goal of the app": "Kids reading with teachers",
+  "2. Tech and Research": "Security baseline: classroom_id. Auth model TBD.",
+};
+assert.equal(planNeedsSecurityBaseline(tbdAuth), true);
+
 const draft = draftSection4AmendmentsForRoutes(["/2fa", "/_secret"]);
 assert.match(draft, /`\/2fa`/);
 assert.match(draft, /`\/_secret`/);

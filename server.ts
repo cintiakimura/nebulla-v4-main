@@ -95,6 +95,7 @@ import { assessMindMapSubsetOfSection4 } from "./lib/mindMapFidelity";
 import { recordContractTelemetry } from "./lib/nebulaContractTelemetry";
 import {
   buildSecurityBaselineProposal,
+  ensureSecurityBaselineInPlan,
   mergeSecurityBaselineIntoSection2,
 } from "./lib/securityBaselinePropose";
 import { softenSecurityBlocksForMvpGo } from "./lib/mvpDeliveryGates";
@@ -1320,23 +1321,22 @@ No approved UI code yet.
   app.post("/api/master-plan/accept-security-baseline", (req, res) => {
     try {
       const pp = projectPathsFor(req);
-      let plan: Record<string, string> = {};
+      let raw: Record<string, string> = {};
       if (fs.existsSync(pp.masterPlanPath)) {
-        plan = JSON.parse(fs.readFileSync(pp.masterPlanPath, "utf8")) as Record<string, string>;
+        raw = JSON.parse(fs.readFileSync(pp.masterPlanPath, "utf8")) as Record<string, string>;
       }
-      const key = "2. Tech and Research";
-      const merged = mergeSecurityBaselineIntoSection2(String(plan[key] ?? ""));
-      if (!merged) {
+      const ensured = ensureSecurityBaselineInPlan(raw);
+      if (!ensured.applied) {
         return res.json({ ok: true, applied: false, reason: "already_present" });
       }
-      plan[key] = merged;
-      fs.writeFileSync(pp.masterPlanPath, JSON.stringify(plan, null, 2), "utf8");
+      fs.mkdirSync(path.dirname(pp.masterPlanPath), { recursive: true });
+      fs.writeFileSync(pp.masterPlanPath, JSON.stringify(ensured.plan, null, 2), "utf8");
       try {
         syncUiArtifactsFromMasterPlan(pp.workspaceRoot, pp.masterPlanPath);
       } catch {
         /* ignore */
       }
-      res.json({ ok: true, applied: true, sectionKey: key });
+      res.json({ ok: true, applied: true, sectionKey: ensured.sectionKey });
     } catch (e) {
       res.status(500).json({ error: e instanceof Error ? e.message : "accept failed" });
     }
@@ -4375,15 +4375,12 @@ Rules:
 
       // Industry-standard security baseline before Go — never leave SEC gaps as a hard stop for MVP.
       try {
-        const secKey = "2. Tech and Research";
-        const secMerged = mergeSecurityBaselineIntoSection2(String(planSnapshot[secKey] ?? ""));
-        if (secMerged) {
-          planSnapshot[secKey] = secMerged;
+        const ensured = ensureSecurityBaselineInPlan(planSnapshot);
+        if (ensured.applied) {
+          planSnapshot = { ...planSnapshot, ...ensured.plan };
           try {
-            const onDisk = readMasterPlanFile(masterPlanPath);
-            onDisk[secKey] = secMerged;
             fs.mkdirSync(path.dirname(masterPlanPath), { recursive: true });
-            fs.writeFileSync(masterPlanPath, JSON.stringify(onDisk, null, 2), "utf8");
+            fs.writeFileSync(masterPlanPath, JSON.stringify(ensured.plan, null, 2), "utf8");
             console.log("[go-code] Applied industry security baseline draft to §2 (MVP continue)");
           } catch {
             /* in-memory plan still used for gate */

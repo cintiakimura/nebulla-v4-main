@@ -29,13 +29,22 @@ export function MasterPlanStatusBanner() {
     setAccepting(true);
     setAcceptNote(null);
     try {
-      await fetchJson(withProjectQuery('/api/master-plan/accept-security-baseline'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify(withProjectBody({})),
-      });
-      setAcceptNote('Security baseline added to Tech and Research.');
+      const res = await fetchJson<{ ok?: boolean; applied?: boolean; reason?: string }>(
+        withProjectQuery('/api/master-plan/accept-security-baseline'),
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify(withProjectBody({})),
+        },
+      );
+      if (res.applied) {
+        setAcceptNote('Security baseline + sign-in approach saved in Tech and Research.');
+      } else if (res.reason === 'already_present') {
+        setAcceptNote('Security baseline already present in Tech and Research.');
+      } else {
+        setAcceptNote('Security baseline checked.');
+      }
       window.dispatchEvent(new CustomEvent('nebula-master-plan-updated'));
       refresh();
     } catch (e) {
@@ -48,12 +57,33 @@ export function MasterPlanStatusBanner() {
   if (!status) return null;
 
   const summary = summarizeMasterPlanStatus(status);
-  const Icon =
-    summary.tone === 'ok' ? CheckCircle2 : summary.tone === 'warn' ? Info : AlertCircle;
+  // Softened SEC_* gaps are MVP warnings — don't keep screaming "blocking" polish after Go is allowed.
+  const displayLines =
+    status.allowGo
+      ? summary.lines.filter(
+          (line) =>
+            !/private data stays private|how people sign in|security baseline/i.test(line),
+        )
+      : summary.lines;
+  const tone =
+    status.allowGo && summary.tone === 'block'
+      ? 'warn'
+      : displayLines.length === 0 && status.allowGo
+        ? 'ok'
+        : summary.tone;
+  const title =
+    tone === 'ok'
+      ? 'Plan looks ready'
+      : tone === 'warn'
+        ? displayLines.length
+          ? 'Plan works — a few polish items'
+          : 'Plan looks ready'
+        : summary.title;
+  const Icon = tone === 'ok' ? CheckCircle2 : tone === 'warn' ? Info : AlertCircle;
   const border =
-    summary.tone === 'ok'
+    tone === 'ok'
       ? 'border-emerald-500/30 bg-emerald-500/5 text-emerald-100/90'
-      : summary.tone === 'warn'
+      : tone === 'warn'
         ? 'border-amber-500/35 bg-amber-500/5 text-amber-100/90'
         : 'border-rose-500/35 bg-rose-500/5 text-rose-100/90';
 
@@ -64,12 +94,18 @@ export function MasterPlanStatusBanner() {
       <div className="flex items-start gap-2">
         <Icon className="mt-0.5 h-3.5 w-3.5 shrink-0 opacity-90" aria-hidden />
         <div className="min-w-0 flex-1">
-          <p className="font-medium tracking-wide">{summary.title}</p>
-          <ul className="mt-1 space-y-0.5 text-[11px] opacity-90">
-            {summary.lines.map((line) => (
-              <li key={line}>{line}</li>
-            ))}
-          </ul>
+          <p className="font-medium tracking-wide">{title}</p>
+          {displayLines.length > 0 ? (
+            <ul className="mt-1 space-y-0.5 text-[11px] opacity-90">
+              {displayLines.map((line) => (
+                <li key={line}>{line}</li>
+              ))}
+            </ul>
+          ) : tone === 'ok' ? (
+            <p className="mt-1 text-[11px] opacity-90">
+              Pages, research, and design tokens are in good shape for the next coding slice.
+            </p>
+          ) : null}
           {showSecurityAccept ? (
             <div className="mt-2 flex flex-wrap items-center gap-2">
               <p className="text-[11px] opacity-90">

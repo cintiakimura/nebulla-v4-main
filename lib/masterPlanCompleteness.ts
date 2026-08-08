@@ -11,6 +11,13 @@ import {
   MASTER_PLAN_SECTION_KEYS,
   normalizeMasterPlanRecord,
 } from "./masterPlanSections";
+import {
+  AUTH_MODEL_RE,
+  NEEDS_AUTH_RE,
+  SECURITY_MARKERS_RE,
+  SECURITY_NEGATED_RE,
+  sectionHasSecurityBaseline,
+} from "./securityBaselinePropose";
 
 export type MasterPlanStrictMode = "off" | "warn" | "strict";
 
@@ -42,21 +49,8 @@ const PLACEHOLDER_RE =
 /** Backtick paths, or plain `/…` allowing digit/underscore first segment (`/2fa`, `/_secret`). */
 const ROUTE_RE = /`(\/[^`\s]+)`|(\/[A-Za-z0-9_][\w\-./:{}\*]*)/g;
 
-const NEEDS_AUTH_RE =
-  /\b(auth|login|sign[\s-]?up|sign[\s-]?in|oauth|multi[-\s]?tenant|workspace|client portal|invoice|private data|members?|roles?|accounts?|kids?|students?|teachers?|parents?|classroom|school|coppa|ferpa)\b/i;
-
-/** Positive security baseline language (not bare §4 page-field `authz:` labels). */
-const SECURITY_MARKERS_RE =
-  /\b(security baseline|row[-\s]?level security|\brls\b|workspace_id|classroom_id|deny by default|scoped by\s+\w+|multi[-\s]?tenant isolation:\s*\w)/i;
-
-const AUTH_MODEL_RE =
-  /\b(auth(entication)?\s+required|auth model|magic[-\s]?link|oauth login|session cookie|sign[\s-]?in required|login required)\b/i;
-
 const PII_RE =
   /\b(pii\s*:|personal data\s*:|minimize|no logging of (tokens|secrets))\b/i;
-
-const SECURITY_NEGATED_RE =
-  /\bno\s+(auth model|rls|pii|tenant isolation|security)\b/i;
 
 const PAGE_FIELD_HINTS_RE =
   /\b(purpose|primary[_ ]?actions?|data[_ ]?entities?|authz|empty[_ ]?state|error[_ ]?state|nav[_ ]?links?|roles?)\b/i;
@@ -279,10 +273,11 @@ export function assessMasterPlanCompleteness(
 
   const needsSecurity = NEEDS_AUTH_RE.test(combined);
   if (needsSecurity) {
-    const securityPresent =
-      SECURITY_MARKERS_RE.test(combined) && !SECURITY_NEGATED_RE.test(combined);
-    const authPresent = AUTH_MODEL_RE.test(combined) && !SECURITY_NEGATED_RE.test(combined);
-    if (!securityPresent) {
+    const securityOk = sectionHasSecurityBaseline(s2);
+    // Keep marker/auth checks for precise gap codes (shared regexes with accept path).
+    const securityPresent = SECURITY_MARKERS_RE.test(s2) && !SECURITY_NEGATED_RE.test(s2);
+    const authPresent = AUTH_MODEL_RE.test(s2) && !SECURITY_NEGATED_RE.test(s2);
+    if (!securityOk && !securityPresent) {
       gaps.push(
         gap(
           "SEC_RLS_MISSING",
@@ -293,7 +288,7 @@ export function assessMasterPlanCompleteness(
         ),
       );
     }
-    if (!authPresent) {
+    if (!securityOk && !authPresent) {
       gaps.push(
         gap(
           "SEC_AUTH_MISSING",
