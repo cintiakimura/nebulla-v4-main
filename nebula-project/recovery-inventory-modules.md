@@ -2,7 +2,8 @@
 
 | Module | Path | Trigger | Inputs | Outputs | Upstream | Downstream | Status | API-key sensitivity | Class |
 |--------|------|---------|--------|---------|----------|------------|--------|---------------------|-------|
-| Project key / name | `src/lib/nebulaProjectApi.ts`, `nebulaCloud.ts` | login, create, rename | session, label | browser key/name | auth | all APIs | partial | medium | FIX |
+| Project key / name | `src/lib/nebulaProjectApi.ts`, `nebulaCloud.ts`, `projectNameFromIdea.ts` | login, create, rename, Continue | session, label | browser key/name | auth | all APIs | partial | medium | FIX |
+| Orchestration path filter | `lib/nebulaOrchestrationPaths.ts` | overview / openFile | rel path | hide platform files | seed workspace | FileExplorer, SC | new | low | FIX |
 | Start mode | `src/lib/ideStartMode.ts` | My Projects Continue | pending mode | durable mode | UI | bootstrap | working | low | KEEP |
 | Home events / pending idea | `src/lib/ideHomeEvents.ts` | Continue | idea, type, guided flag | localStorage | Start UI | AIChat bootstrap | partial | low | FIX |
 | Chat bootstrap | `src/lib/ideChatBootstrap.ts` | startGuidedDiscovery | idea, type | hidden user turn | start mode | Grok chat | partial | high | FIX |

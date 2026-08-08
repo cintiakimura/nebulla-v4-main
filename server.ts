@@ -87,6 +87,7 @@ import {
 } from "./lib/nebulaIdeWorkspaceArtifacts";
 import { readUiBriefMarkdown } from "./lib/nebulaUiBrief";
 import { resolveMasterPlanStrictMode } from "./lib/masterPlanStrictPolicy";
+import { isUserAppProductPath } from "./lib/nebulaOrchestrationPaths";
 import { assessMasterPlanCompletenessWithWorkspace } from "./lib/masterPlanCompletenessIo";
 import { buildTechnicalDocumentationMarkdown } from "./lib/technicalDocumentationExport";
 import { assessMindMapSubsetOfSection4 } from "./lib/mindMapFidelity";
@@ -2588,47 +2589,6 @@ No approved UI code yet.
       entries.push({ status, path: filePath.replace(/\\/g, "/") });
     }
     return entries;
-  }
-
-  /** Bundled Nebula / planning files — not the user app Grok writes under src/, public/, etc. */
-  function isNebulaOrchestrationPath(relPath: string): boolean {
-    const p = relPath.replace(/\\/g, "/").replace(/^\/+/, "");
-    if (!p) return true;
-    const exact = new Set([
-      "master-plan.json",
-      "project-execution-rules.md",
-      "environment-setup.md",
-      "Nebula Architecture Spec.md",
-      "SKILL.md",
-      "nebula-ui-studio.md",
-      "conversation-log.md",
-      "project-workflow.md",
-    ]);
-    if (exact.has(p)) return true;
-    const prefixes = [
-      "generated-ui/",
-      "nebulla-version-history/",
-      "nebulla-ide/",
-      "nebula-project/",
-      "nebula-ui-studio/",
-      ".cursor/",
-      "conversation-logs/",
-      "dist/",
-      "build/",
-      "coverage/",
-    ];
-    for (const pre of prefixes) {
-      if (p.startsWith(pre)) return true;
-    }
-    return false;
-  }
-
-  function isUserAppProductPath(relPath: string): boolean {
-    const p = relPath.replace(/\\/g, "/").replace(/^\/+/, "");
-    if (!p || p.includes("..")) return false;
-    if (p.startsWith("node_modules/") || p.includes("/node_modules/")) return false;
-    if (p.startsWith(".git/")) return false;
-    return !isNebulaOrchestrationPath(p);
   }
 
   /** Git status + workspace tree for the active cloud project. */

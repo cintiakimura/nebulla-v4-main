@@ -226,6 +226,7 @@ Work **one step per Agent turn / PR** after constitution install. Fix the **earl
 | 2026-08-08 | NO SECOND CONDUCTOR — amend this file only | Prevent strategy fragmentation |
 | 2026-08-08 | Studio ↔ Preview reconnect shipped in product (`0176` lineage) | 7.4 artifact apply-preview + persisted success flags |
 | 2026-08-08 | Constitution installed in this conductor; Phase 7.0 fail-fast + taxonomy in code | Single map of record; stop false pipeline on 401/403/missing key |
+| 2026-08-08 | Phase 7.1: shortNameFromIdea + hide orchestration paths (CHANGELOG / `.nebula-*`) | Long brief no longer names project “me an responsiven…”; platform files out of user tree |
 
 ---
 

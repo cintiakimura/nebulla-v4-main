@@ -15,6 +15,7 @@ import {
   withProjectBody,
   withProjectQuery,
 } from '../../lib/nebulaProjectApi';
+import { isUserAppProductPath } from '../../../lib/nebulaOrchestrationPaths';
 import {
   buildIdeSwarmFocusFromEditor,
   IDE_SWARM_FOCUS_SNIPPET_MAX,
@@ -158,6 +159,7 @@ export function IdeWorkspaceProvider({ children }: { children: ReactNode }) {
       }>(withProjectQuery('/api/source-control/overview'));
       const paths = (data.nebulaFiles ?? [])
         .map((f) => f.relativePath.replace(/\\/g, '/'))
+        .filter((p) => isUserAppProductPath(p))
         .sort((a, b) => a.localeCompare(b));
       setWorkspacePaths(paths);
       const b = data.git?.branch?.trim();
@@ -175,6 +177,15 @@ export function IdeWorkspaceProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     void refreshTree();
   }, [refreshTree]);
+
+  // Drop platform/methodology tabs that may already be open (legacy seed / mistaken open).
+  useEffect(() => {
+    setTabs((prev) => {
+      const next = prev.filter((t) => isUserAppProductPath(t.path));
+      return next.length === prev.length ? prev : next;
+    });
+    setActivePath((cur) => (cur && !isUserAppProductPath(cur) ? null : cur));
+  }, [diskProjectKey]);
 
   useEffect(() => {
     const onRefresh = () => void refreshTree();
@@ -197,6 +208,11 @@ export function IdeWorkspaceProvider({ children }: { children: ReactNode }) {
 
   const openFile = useCallback(async (relPath: string) => {
     const normalized = relPath.replace(/\\/g, '/');
+    // Phase 7.1 — platform/methodology files stay out of the user editor tree.
+    if (!isUserAppProductPath(normalized)) {
+      setSaveError(null);
+      return;
+    }
     setSaveError(null);
     setActivePath(normalized);
 

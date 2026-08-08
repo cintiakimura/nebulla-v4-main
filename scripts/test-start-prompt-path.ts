@@ -20,6 +20,13 @@ import {
 
 assert.equal(shortNameFromIdea('Build a mobile education app for kids'), 'mobile education app for kids');
 assert.equal(shortNameFromIdea('Create an app for teachers'), 'app for teachers');
+assert.equal(shortNameFromIdea('build me an responsiven webapp for kids'), 'responsiven webapp for kids');
+assert.equal(
+  shortNameFromIdea(
+    'build me an responsiven (webapp and mobile app running on browser) app that create an app to tutor kids with ADHD where the teacher can upload homework',
+  ),
+  'tutor kids with ADHD',
+);
 assert.ok(shortNameFromIdea('!!!').length > 0);
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));

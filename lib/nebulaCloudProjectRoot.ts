@@ -96,10 +96,8 @@ export function ensureCloudProjectWorkspace(
 
   const skillDest = path.join(workspaceRoot, "SKILL.md");
   copyIfMissing(path.join(legacyTemplateRoot, "SKILL.md"), skillDest);
-  copyIfMissing(
-    path.join(legacyTemplateRoot, "CHANGELOG-methodology.md"),
-    path.join(workspaceRoot, "CHANGELOG-methodology.md"),
-  );
+  // Do not seed CHANGELOG-methodology.md into user workspaces — platform-only
+  // (recovery §7.1: keep methodology out of the user file tree).
 
   fs.mkdirSync(nebulaUiStudioOutputDir, { recursive: true });
 
