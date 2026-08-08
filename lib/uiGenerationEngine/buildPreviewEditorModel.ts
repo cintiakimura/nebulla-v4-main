@@ -162,8 +162,10 @@ export function cleanHumanTitle(raw: string, fallback = "Home"): string {
     s = parts.slice(0, Math.min(2, parts.length)).join(" ");
   }
 
-  // Drop trailing "at /route" crumbs
+  // Drop trailing "at /route" crumbs and broken "Home (" from `Home (`/`)` parses
   s = s.replace(/\s+at\s+\/[a-z0-9/_-]+$/i, "").trim();
+  s = s.replace(/\s*[(`]\/[^)`]*[)`]?\s*$/i, "").trim();
+  s = s.replace(/\s*\(\s*$/g, "").trim();
   s = s.replace(/\s+/g, " ").trim();
 
   // Collapse duplicate consecutive words: "Task Task" → "Task"

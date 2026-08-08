@@ -98,36 +98,41 @@ function tabLabels(slots: SlotMap, classification?: PreviewClassificationHint): 
   return [home, "Explore", "Activity", "Me"];
 }
 
-/**
- * Build self-contained preview HTML from template + slots + tokens.
- * Exported for tests.
- */
-export function buildUiGenerationPreviewHtml(options: {
+export type PreviewScreenInput = {
+  pageKey: string;
+  templateId: string;
+  slots: SlotMap;
+  classification?: PreviewClassificationHint;
+};
+
+function buildScreenMarkup(input: {
   projectName: string;
   templateId: string;
   tokens: DesignTokens;
   slots: SlotMap;
   patternMode?: "seed" | "figma";
   classification?: PreviewClassificationHint;
+  pageKey: string;
+  active: boolean;
 }): string {
-  const { tokens, slots, templateId } = options;
-  const title = esc(slots.hero_title || slots.nav_title || options.projectName || "App");
-  const navTitle = esc(slots.nav_title || slots.hero_title || options.projectName || "Home");
+  const { tokens, slots, templateId } = input;
+  const title = esc(slots.hero_title || slots.nav_title || input.projectName || "App");
+  const navTitle = esc(slots.nav_title || slots.hero_title || input.pageKey || "Home");
   const sub = esc(slots.hero_subtitle || "");
   const cta = esc(slots.primary_cta || "Continue");
   const cta2 = esc(slots.secondary_cta || "");
   const patternNote =
-    options.patternMode === "figma"
+    input.patternMode === "figma"
       ? "Layout references Figma structure hints where available."
       : "Using Nebulla built-in layout patterns (Figma optional).";
   const items = collectItems(slots, templateId);
-  const mobile = isMobileTemplate(templateId, options.classification);
-  const tabs = wantsBottomTabs(templateId, options.classification);
+  const mobile = isMobileTemplate(templateId, input.classification);
+  const tabs = wantsBottomTabs(templateId, input.classification);
   const auth = /auth/i.test(templateId);
   const dashboard = /dashboard|metrics|home_hero/i.test(templateId);
   const courseLike =
-    options.classification?.product_function === "course" ||
-    options.classification?.industry === "education" ||
+    input.classification?.product_function === "course" ||
+    input.classification?.industry === "education" ||
     /course|lesson|practice|learn/i.test(`${slots.hero_title} ${slots.hero_subtitle} ${templateId}`);
 
   const metricRow =
@@ -158,7 +163,7 @@ export function buildUiGenerationPreviewHtml(options: {
     .join("\n");
 
   const tabHtml = tabs
-    ? tabLabels(slots, options.classification)
+    ? tabLabels(slots, input.classification)
         .map(
           (label, i) =>
             `<button type="button" class="tab${i === 0 ? " tab--active" : ""}">${esc(label)}</button>`,
@@ -179,19 +184,100 @@ export function buildUiGenerationPreviewHtml(options: {
 
   const shellClass = [
     "shell",
+    "screen",
     mobile ? "shell--phone" : "shell--web",
     tabs ? "shell--tabs" : "",
     auth ? "shell--auth" : "",
+    input.active ? "screen--active" : "screen--hidden",
   ]
     .filter(Boolean)
     .join(" ");
+
+  return `<div class="${shellClass}" data-screen="${esc(input.pageKey)}" data-template="${esc(templateId)}" ${input.active ? "" : 'hidden'}>
+    <header class="topbar">
+      <h1>${navTitle}</h1>
+      <span class="badge">${esc(mobile ? "Mobile" : "Web")}</span>
+    </header>
+    <main class="scroll" style="padding-bottom:${tabs ? "76px" : "var(--pad)"}">
+      <section class="hero">
+        <h2>${title}</h2>
+        ${sub ? `<p class="sub">${sub}</p>` : ""}
+        <div class="actions">
+          <button type="button" class="btn">${cta}</button>
+          ${cta2 ? `<button type="button" class="btn secondary">${cta2}</button>` : ""}
+        </div>
+      </section>
+      ${progressHtml}
+      ${metricRow ? `<section class="metrics" aria-label="Highlights">${metricRow}</section>` : ""}
+      <p class="section-label">${auth ? "Sign in" : courseLike ? "Up next" : "Overview"}</p>
+      <section class="list">${listHtml}</section>
+      <p class="meta">${esc(patternNote)}</p>
+    </main>
+    ${tabs ? `<nav class="tabs" aria-label="Primary">${tabHtml}</nav>` : ""}
+  </div>`;
+}
+
+/**
+ * Build self-contained preview HTML from template + slots + tokens.
+ * Exported for tests. Supports up to 3 plan screens with a switcher.
+ */
+export function buildUiGenerationPreviewHtml(options: {
+  projectName: string;
+  templateId: string;
+  tokens: DesignTokens;
+  slots: SlotMap;
+  patternMode?: "seed" | "figma";
+  classification?: PreviewClassificationHint;
+  screens?: PreviewScreenInput[];
+}): string {
+  const { tokens } = options;
+  const screens: PreviewScreenInput[] =
+    options.screens && options.screens.length > 0
+      ? options.screens
+      : [
+          {
+            pageKey: options.slots.hero_title || options.slots.nav_title || "Home",
+            templateId: options.templateId,
+            slots: options.slots,
+            classification: options.classification,
+          },
+        ];
+
+  const screenMarkup = screens
+    .map((s, i) =>
+      buildScreenMarkup({
+        projectName: options.projectName,
+        templateId: s.templateId,
+        tokens,
+        slots: s.slots,
+        patternMode: options.patternMode,
+        classification: s.classification || options.classification,
+        pageKey: s.pageKey,
+        active: i === 0,
+      }),
+    )
+    .join("\n");
+
+  const switcher =
+    screens.length > 1
+      ? `<div class="screen-switcher" role="tablist" aria-label="Screens">
+      ${screens
+        .map(
+          (s, i) =>
+            `<button type="button" class="screen-btn${i === 0 ? " screen-btn--active" : ""}" data-go="${esc(s.pageKey)}" role="tab" aria-selected="${i === 0 ? "true" : "false"}">${esc(s.pageKey)}</button>`,
+        )
+        .join("\n")}
+    </div>`
+      : "";
+
+  const docTitle = esc(screens[0]?.pageKey || options.projectName || "App");
 
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <title>${title} — Preview</title>
+  <title>${docTitle} — Preview</title>
   <style>
     :root {
       --bg: ${tokens.bg};
@@ -210,9 +296,24 @@ export function buildUiGenerationPreviewHtml(options: {
       font-family: system-ui, -apple-system, Segoe UI, sans-serif;
       background: #0a0a0a;
       color: var(--text);
-      display: flex; justify-content: center; align-items: stretch;
-      padding: 12px;
+      display: flex; flex-direction: column; align-items: center;
+      padding: 12px; gap: 10px;
     }
+    .screen-switcher {
+      display: flex; flex-wrap: wrap; gap: 6px; justify-content: center;
+      max-width: 420px; width: 100%;
+    }
+    .screen-btn {
+      border: 1px solid color-mix(in srgb, var(--primary) 35%, transparent);
+      background: color-mix(in srgb, var(--primary) 12%, transparent);
+      color: #fff; border-radius: 8px; padding: .4rem .75rem;
+      font-size: .75rem; cursor: pointer;
+    }
+    .screen-btn--active {
+      background: color-mix(in srgb, var(--primary) 28%, transparent);
+      border-color: color-mix(in srgb, var(--primary) 55%, transparent);
+    }
+    .stage { width: 100%; display: flex; justify-content: center; }
     .shell {
       width: 100%;
       background: var(--bg); color: var(--text);
@@ -220,11 +321,12 @@ export function buildUiGenerationPreviewHtml(options: {
       border: 1px solid color-mix(in srgb, var(--border) 80%, #fff 10%);
       border-radius: calc(var(--radius) + 4px);
       overflow: hidden;
-      min-height: min(720px, 100vh - 24px);
+      min-height: min(720px, 100vh - 64px);
       position: relative;
     }
     .shell--phone { max-width: 390px; }
     .shell--web { max-width: 920px; }
+    .screen--hidden { display: none !important; }
     .topbar {
       display: flex; align-items: center; justify-content: space-between;
       padding: 12px var(--pad);
@@ -240,7 +342,6 @@ export function buildUiGenerationPreviewHtml(options: {
     .scroll {
       flex: 1; overflow: auto;
       padding: var(--pad);
-      padding-bottom: ${tabs ? "76px" : "var(--pad)"};
       display: flex; flex-direction: column; gap: var(--gap);
     }
     .hero {
@@ -281,9 +382,7 @@ export function buildUiGenerationPreviewHtml(options: {
       height: 8px; border-radius: 999px; background: color-mix(in srgb, var(--border) 70%, var(--bg));
       overflow: hidden;
     }
-    .progress-fill {
-      height: 100%; border-radius: inherit; background: var(--primary);
-    }
+    .progress-fill { height: 100%; border-radius: inherit; background: var(--primary); }
     .section-label {
       margin: .25rem 0 0; font-size: .72rem; font-weight: 600;
       letter-spacing: .04em; text-transform: uppercase; color: var(--muted);
@@ -315,28 +414,32 @@ export function buildUiGenerationPreviewHtml(options: {
   </style>
 </head>
 <body>
-  <div class="${shellClass}" data-template="${esc(templateId)}" data-nav="${esc(options.classification?.navigation_mode || (tabs ? "bottom_tabs" : "none"))}">
-    <header class="topbar">
-      <h1>${navTitle}</h1>
-      <span class="badge">${esc(mobile ? "Mobile" : "Web")}</span>
-    </header>
-    <main class="scroll">
-      <section class="hero">
-        <h2>${title}</h2>
-        ${sub ? `<p class="sub">${sub}</p>` : ""}
-        <div class="actions">
-          <button type="button" class="btn">${cta}</button>
-          ${cta2 ? `<button type="button" class="btn secondary">${cta2}</button>` : ""}
-        </div>
-      </section>
-      ${progressHtml}
-      ${metricRow ? `<section class="metrics" aria-label="Highlights">${metricRow}</section>` : ""}
-      <p class="section-label">${auth ? "Sign in" : courseLike ? "Up next" : "Overview"}</p>
-      <section class="list">${listHtml}</section>
-      <p class="meta">${esc(patternNote)}</p>
-    </main>
-    ${tabs ? `<nav class="tabs" aria-label="Primary">${tabHtml}</nav>` : ""}
-  </div>
+  ${switcher}
+  <div class="stage">${screenMarkup}</div>
+  <script>
+    (function () {
+      var buttons = document.querySelectorAll('.screen-btn');
+      var screens = document.querySelectorAll('[data-screen]');
+      function show(key) {
+        screens.forEach(function (el) {
+          var on = el.getAttribute('data-screen') === key;
+          el.hidden = !on;
+          el.classList.toggle('screen--active', on);
+          el.classList.toggle('screen--hidden', !on);
+        });
+        buttons.forEach(function (btn) {
+          var on = btn.getAttribute('data-go') === key;
+          btn.classList.toggle('screen-btn--active', on);
+          btn.setAttribute('aria-selected', on ? 'true' : 'false');
+        });
+      }
+      buttons.forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          show(btn.getAttribute('data-go') || '');
+        });
+      });
+    })();
+  </script>
 </body>
 </html>`;
 }
@@ -353,6 +456,7 @@ export function applyUiGenerationToPreviewShell(options: {
   slots: SlotMap;
   patternMode?: "seed" | "figma";
   classification?: PreviewClassificationHint;
+  screens?: PreviewScreenInput[];
 }): string[] {
   const { workspaceRoot } = options;
   const html = buildUiGenerationPreviewHtml(options);

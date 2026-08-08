@@ -4006,6 +4006,18 @@ ${modelJson}`;
           product_function?: string;
           industry?: string;
         };
+        screens?: Array<{
+          page_key?: string;
+          template_id?: string;
+          slots?: Record<string, string>;
+          classification?: {
+            device?: string;
+            page_type?: string;
+            navigation_mode?: string;
+            product_function?: string;
+            industry?: string;
+          };
+        }>;
       };
       if (!shouldApplyUiToPreview(meta.quality_gate_result)) {
         return res.status(422).json({
@@ -4017,6 +4029,16 @@ ${modelJson}`;
       if (!meta.tokens || !meta.slots || !meta.template_id) {
         return res.status(422).json({ ok: false, error: "Incomplete generation meta" });
       }
+      const screens = Array.isArray(meta.screens)
+        ? meta.screens
+            .filter((s) => s && s.slots && s.template_id && s.page_key)
+            .map((s) => ({
+              pageKey: String(s.page_key),
+              templateId: String(s.template_id),
+              slots: s.slots as Record<string, string>,
+              classification: s.classification,
+            }))
+        : undefined;
       const written = applyUiGenerationToPreviewShell({
         workspaceRoot,
         projectName: "App",
@@ -4025,6 +4047,7 @@ ${modelJson}`;
         slots: meta.slots,
         patternMode: meta.pattern_mode === "figma" ? "figma" : "seed",
         classification: meta.classification,
+        screens,
       });
       return res.json({
         ok: true,

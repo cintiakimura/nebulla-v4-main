@@ -510,12 +510,12 @@ export function AIChat() {
     });
   }, [grokActivity.liveLog]);
 
+  // Only while work/error — do not keep a tall card open because liveLog still has history.
   const showActivityPanel =
     grokActivity.tone === 'work' ||
+    grokActivity.tone === 'error' ||
     v0WatchActive ||
-    v0Live ||
-    Boolean(grokActivity.v0Status) ||
-    grokActivity.liveLog.length > 0;
+    v0Live;
 
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);

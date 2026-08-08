@@ -203,6 +203,49 @@ function pickPage(pages: PageDef[], want?: string): PageDef | undefined {
   return nonAuth || pages[0];
 }
 
+/** Up to 3 distinct plan pages for Studio + App Preview (Phase 8 early mockup). */
+function selectMockupPages(pages: PageDef[], want?: string, max = 3): PageDef[] {
+  if (!pages.length) return [];
+  const primary = pickPage(pages, want);
+  if (!primary) return [];
+  const out: PageDef[] = [primary];
+  const score = (p: PageDef): number => {
+    const blob = `${p.name} ${p.route}`.toLowerCase();
+    if (isAuthishPage(p)) return 10;
+    if (/practice|lesson|exercise|task/i.test(blob)) return 90;
+    if (/progress|dashboard|teacher|parent|stats/i.test(blob)) return 80;
+    if (/home|today|feed|overview/i.test(blob)) return 70;
+    if (/setting|profile|account/i.test(blob)) return 40;
+    return 50;
+  };
+  const rest = pages
+    .filter((p) => p !== primary)
+    .sort((a, b) => score(b) - score(a));
+  for (const p of rest) {
+    if (out.length >= max) break;
+    const key = (p.route || p.name).toLowerCase();
+    if (out.some((o) => (o.route || o.name).toLowerCase() === key)) continue;
+    // Keep at most one auth screen, and only if we still have room after product pages.
+    if (isAuthishPage(p) && out.some(isAuthishPage)) continue;
+    out.push(p);
+  }
+  // Prefer product screens: if we have < max and skipped auth, that's fine.
+  return out.slice(0, max);
+}
+
+function uniquePageKey(name: string, used: Set<string>): string {
+  let base = cleanHumanTitle(name, "Home").replace(/\s+/g, " ").trim() || "Home";
+  if (base.length > 28) base = base.slice(0, 28).trim();
+  let key = base;
+  let n = 2;
+  while (used.has(key.toLowerCase())) {
+    key = `${base} ${n}`;
+    n += 1;
+  }
+  used.add(key.toLowerCase());
+  return key;
+}
+
 function hasUsableGoal(
   goal: string,
   tech: string,
@@ -919,6 +962,111 @@ export async function runUiGenerationCycleV2(
   state.current_step = 8;
   persist(workspaceRoot, state);
 
+  // -------- Phase G.2 — Extra plan screens (up to 3) for Studio + App Preview --------
+  type ScreenPreview = {
+    pageKey: string;
+    templateId: string;
+    slots: typeof slots;
+    classification: {
+      device: string;
+      page_type: string;
+      navigation_mode: string;
+      product_function: string;
+      industry: string;
+    };
+  };
+  const usedPageKeys = new Set<string>();
+  const primaryPageKey = uniquePageKey(state.page_name || "Home", usedPageKeys);
+  // Rename primary page key in model if needed
+  const primaryPageNodes = Object.values(model.pages)[0];
+  const mergedPages: typeof model.pages = primaryPageNodes
+    ? { [primaryPageKey]: primaryPageNodes }
+    : { ...model.pages };
+  const screens: ScreenPreview[] = [
+    {
+      pageKey: primaryPageKey,
+      templateId: template.id,
+      slots: { ...slots },
+      classification: {
+        device: classification.device,
+        page_type: classification.page_type,
+        navigation_mode: classification.navigation_mode,
+        product_function: classification.product_function,
+        industry: classification.industry,
+      },
+    },
+  ];
+
+  if (shouldApplyUiToPreview(gate.gate)) {
+    stage("Rendering extra screens");
+    const mockupPages = selectMockupPages(pages, input.pageName || undefined, 3);
+    for (const extra of mockupPages.slice(1)) {
+      try {
+        const pageName = cleanHumanTitle(extra.name, "Screen");
+        const pagePurpose =
+          firstLines(extra.body.replace(extra.name, ""), 4) || `Help users use ${pageName}`;
+        const pageClass = classifyPage({
+          projectType: state.project_type,
+          goal: goal || state.product_goal,
+          features: features || state.priority_features.join("\n"),
+          uiux,
+          pageName,
+          pagePurpose,
+          filePaths: fileFacts.scanned_files,
+          fileRoutes: fileFacts.routes,
+          hasBottomNav: /BottomNav|tab bar/i.test(fileFacts.scanned_files.join(" ")),
+        });
+        const pageTemplate = selectTemplate(pageClass);
+        const pageSlots = mapSlots({
+          template: pageTemplate,
+          classification: pageClass,
+          pageName,
+          pagePurpose,
+          projectName: state.project_name,
+          primaryActions: extractBullets(extra.body, 4).slice(0, 2),
+          secondaryActions: state.secondary_actions,
+          headings: state.file_headings,
+          buttonLabels: state.file_button_labels,
+          features: state.priority_features,
+          preferenceFeedback,
+        });
+        const pageModel = renderTemplateModel({
+          template: pageTemplate,
+          classification: pageClass,
+          tokens,
+          slots: pageSlots,
+          figmaStatus: figma.figma_status === "success" ? "success" : "skipped",
+        });
+        const pageKey = uniquePageKey(
+          pageSlots.hero_title || pageSlots.nav_title || pageName,
+          usedPageKeys,
+        );
+        const pageData = Object.values(pageModel.pages)[0];
+        if (pageData) mergedPages[pageKey] = pageData;
+        screens.push({
+          pageKey,
+          templateId: pageTemplate.id,
+          slots: pageSlots,
+          classification: {
+            device: pageClass.device,
+            page_type: pageClass.page_type,
+            navigation_mode: pageClass.navigation_mode,
+            product_function: pageClass.product_function,
+            industry: pageClass.industry,
+          },
+        });
+      } catch (e) {
+        state.generation_warnings.push(
+          `Extra screen soft-failed: ${e instanceof Error ? e.message : String(e)}`,
+        );
+      }
+    }
+    appendStepLog(
+      state,
+      `Phase G.2 screens — ${screens.map((s) => s.pageKey).join(", ")} (${screens.length})`,
+    );
+  }
+
   // -------- Phase H — Deliver --------
   const deliveredStage =
     gate.gate === "pass"
@@ -929,7 +1077,7 @@ export async function runUiGenerationCycleV2(
   stage(deliveredStage);
 
   const editorModel = {
-    pages: model.pages,
+    pages: mergedPages,
   };
   try {
     writeEnginePreviewModel(workspaceRoot, editorModel);
@@ -964,6 +1112,7 @@ export async function runUiGenerationCycleV2(
           product_function: classification.product_function,
           industry: classification.industry,
         },
+        screens,
       });
       previewApplied = previewWritten.length > 0;
       appendStepLog(state, `Phase H preview sync — wrote ${previewWritten.join(", ")}`);
@@ -989,6 +1138,12 @@ export async function runUiGenerationCycleV2(
         pattern_mode: patternMode,
         preview_applied: previewApplied,
         preview_written: previewWritten,
+        screens: screens.map((s) => ({
+          page_key: s.pageKey,
+          template_id: s.templateId,
+          classification: s.classification,
+          slots: s.slots,
+        })),
         design_brief_path: designBriefPath || null,
         design_brief_summary: {
           density: designBrief.overview.density,
