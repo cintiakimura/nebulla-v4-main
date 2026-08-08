@@ -238,6 +238,8 @@ Work **one step per Agent turn / PR** after constitution install. Fix the **earl
 | 2026-08-08 | User "go" / "start coding" + assistant "Starting Foundation…" force Go pipeline even without START_CODING tag | Chat promised coding but never called runGoCodeAndApply |
 | 2026-08-08 | Figma 429: probe other keys → offline raw library → catalog+Stitch brief → seed last; stop Nebulla-seed-only short-circuit | UI was ignoring Figma DB / Stitch / Grok brief path |
 | 2026-08-08 | Security Accept loop: tighten negation ("no PII" ≠ skip security); Auth model TBD ≠ done; ensureSecurityBaselineInPlan + banner honesty | Accept claimed success but SEC polish kept blocking |
+| 2026-08-08 | Security baseline = auto-applied §2 assumptions (asset); SEC_* warn-only; Accept optional; never hard-block Go/Foundation on MVP | Product: liability was treating security polish as Go gate |
+| 2026-08-08 | Single Figma model: Generate = local-first (offline→catalog→brief→seed); live only if FIGMA_LIVE_ON_GENERATE + key + local miss | Invert live-first dual logic; ingest scripts keep live |
 
 ---
 

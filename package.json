@@ -33,6 +33,7 @@
     "test:app-status": "tsx scripts/test-app-status-debug.ts",
     "test:app-status-smoke": "tsx scripts/test-app-status-smoke.ts",
     "test:ui-gen": "tsx scripts/test-ui-gen-smoke.ts",
+    "test:figma-local-first": "tsx scripts/test-figma-local-first.ts",
     "test:monaco-lang": "tsx scripts/test-monaco-language.ts",
     "ui-resources:sync-r2": "tsx scripts/sync-ui-resource-catalog-r2.ts",
     "ui-resources:classify-preview": "tsx scripts/classify-ui-resource-preview.ts",

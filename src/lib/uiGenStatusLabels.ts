@@ -4,18 +4,20 @@
 
 export function figmaStatusLabel(status: string): string {
   switch (status) {
+    case 'offline':
+      return 'Offline library';
     case 'success':
-      return 'Figma: matched';
+      return 'Figma: live matched';
     case 'weak_matches':
-      return 'Patterns: catalog + brief (Figma weak)';
+      return 'Patterns: seed fallback';
     case 'missing_key':
       return 'Patterns: catalog + brief';
     case 'unauthorized':
-      return 'Patterns: catalog + brief (Figma auth)';
+      return 'Patterns: seed fallback (Figma auth)';
     case 'rate_limited':
-      return 'Patterns: catalog + brief (Figma busy)';
+      return 'Patterns: seed fallback (Figma busy)';
     case 'failed':
-      return 'Patterns: catalog + brief (Figma skip)';
+      return 'Patterns: seed fallback (Figma skip)';
     case 'skipped':
       return 'Patterns: catalog + brief';
     default:
@@ -23,7 +25,7 @@ export function figmaStatusLabel(status: string): string {
   }
 }
 
-/** Soft statuses — seed fallback already applied; do not paint as hard failure. */
+/** Soft statuses — seed/catalog fallback already applied; do not paint as hard failure. */
 export function figmaStatusIsSoftFallback(status: string): boolean {
   return (
     status === 'rate_limited' ||
@@ -36,8 +38,8 @@ export function figmaStatusIsSoftFallback(status: string): boolean {
 }
 
 export function patternModeLabel(mode: string): string {
-  if (mode === 'seed') return 'Built-in patterns (Figma not used)';
-  if (mode === 'figma') return 'Figma references';
+  if (mode === 'seed') return 'Built-in patterns (seed fallback)';
+  if (mode === 'figma') return 'Offline / Figma library';
   return '';
 }
 

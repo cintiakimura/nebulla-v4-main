@@ -1816,7 +1816,7 @@ export function IdeUiStudioBeta({
               <span
                 className={cn(
                   'hidden max-w-[220px] truncate rounded-full px-2 py-0.5 text-[10px] font-medium sm:inline',
-                  figmaStatus === 'success'
+                  figmaStatus === 'success' || figmaStatus === 'offline'
                     ? 'bg-emerald-500/15 text-emerald-200'
                     : figmaStatusIsSoftFallback(figmaStatus)
                       ? 'bg-amber-500/15 text-amber-100'
@@ -1948,7 +1948,10 @@ export function IdeUiStudioBeta({
             {t('uiStudio.gateWeakPreview')}
           </div>
         ) : null}
-        {figmaStatus && figmaStatus !== 'success' && (figmaEnvGuidance || figmaError) ? (
+        {figmaStatus &&
+        figmaStatus !== 'success' &&
+        figmaStatus !== 'offline' &&
+        (figmaEnvGuidance || figmaError) ? (
           <div
             className="border-t border-border/60 px-2 py-1 text-[10px] leading-snug text-muted-foreground sm:px-3"
             title={[figmaError, figmaEnvGuidance].filter(Boolean).join('\n')}
@@ -1965,7 +1968,7 @@ export function IdeUiStudioBeta({
             <span className="line-clamp-2">
               {figmaStatusIsSoftFallback(figmaStatus)
                 ? figmaError ||
-                  'Figma API skipped — using offline library / catalog + Stitch Design Brief (not Nebulla-only seeds).'
+                  'Using catalog + Stitch Design Brief or seed patterns (live Figma not required on Generate).'
                 : [figmaError, figmaEnvGuidance].filter(Boolean).join(' — ')}
             </span>
           </div>

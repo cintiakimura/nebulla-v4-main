@@ -49,6 +49,7 @@ export type QualityGate = "pass" | "repair" | "weak";
 export type ReferenceSource = "figma" | "seed" | "mixed";
 export type FigmaStatus =
   | "success"
+  | "offline"
   | "failed"
   | "missing_key"
   | "unauthorized"

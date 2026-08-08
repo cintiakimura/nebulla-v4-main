@@ -48,14 +48,7 @@ export function computeIdeNextAction(opts: {
         : false;
 
   if (!complete) {
-    if (masterPlanStatus?.securityProposal?.needed) {
-      return {
-        id: 'accept-security',
-        label: 'Review security baseline',
-        detail: 'Accept the starter security notes on the Master Plan tab.',
-        event: 'nebula-open-master-plan',
-      };
-    }
+    // Security baseline is auto-applied assumptions — never the primary next action / Go blocker.
     return {
       id: 'discovery',
       label: 'Continue Discovery',

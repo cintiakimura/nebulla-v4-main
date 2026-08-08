@@ -112,16 +112,16 @@ section("thin-legacy — warn allows Go; strict blocks");
   assert.match(msg, /paused|planning|Master Plan/i);
 }
 
-// --- Pilot 3: naïve insecure (security gaps) ---
-section("naive-insecure — security baseline gaps; strict blocks");
+// --- Pilot 3: naïve insecure (security gaps are warn-only on MVP) ---
+section("naive-insecure — security baseline gaps warn; never hard-block Go alone");
 {
   const plan = load("naive-insecure.json");
   const warn = assess(plan, "warn");
   assert.equal(warn.allowGo, true);
   assert.ok(warn.gaps.some((g) => g.code.startsWith("SEC_")));
   const strict = assess(plan, "strict");
-  assert.equal(strict.allowGo, false);
-  assert.ok(strict.gaps.some((g) => g.severity === "block" && g.code.startsWith("SEC_")));
+  assert.ok(strict.gaps.some((g) => g.code.startsWith("SEC_") && g.severity === "warn"));
+  assert.ok(!strict.gaps.some((g) => g.severity === "block" && g.code.startsWith("SEC_")));
 }
 
 // --- Pilot 4: multi-page digit/underscore routes (regression) ---

@@ -1049,7 +1049,10 @@ export async function runUiGenerationCycleV2(
           classification: pageClass,
           tokens,
           slots: pageSlots,
-          figmaStatus: figma.figma_status === "success" ? "success" : "skipped",
+          figmaStatus:
+            figma.figma_status === "success" || figma.figma_status === "offline"
+              ? "success"
+              : "skipped",
         });
         const pageKey = uniquePageKey(
           pageSlots.hero_title || pageSlots.nav_title || pageName,
@@ -1107,7 +1110,10 @@ export async function runUiGenerationCycleV2(
   fs.writeFileSync(path.join(outDir, "ui-generation-output.tsx"), code, "utf8");
 
   const patternMode: "seed" | "figma" =
-    figma.figma_used === "yes" && figma.figma_status === "success" ? "figma" : "seed";
+    figma.figma_used === "yes" &&
+    (figma.figma_status === "success" || figma.figma_status === "offline")
+      ? "figma"
+      : "seed";
   let previewWritten: string[] = [];
   let previewApplied = false;
   if (shouldApplyUiToPreview(gate.gate)) {

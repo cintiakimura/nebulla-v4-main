@@ -1286,7 +1286,23 @@ No approved UI code yet.
           uiBriefLength = readUiBriefMarkdown(pp.workspaceRoot).length;
         }
       }
-      // Assess with MVP soft-continue: SEC_* never presents as Go-paused (Go path merges draft).
+      // Auto-merge security/sign-in assumptions into §2 (asset). Never wait on Accept for MVP.
+      let securityAutoApplied = false;
+      try {
+        const ensured = ensureSecurityBaselineInPlan(plan as Record<string, string>);
+        if (ensured.applied) {
+          plan = ensured.plan;
+          securityAutoApplied = true;
+          fs.mkdirSync(path.dirname(pp.masterPlanPath), { recursive: true });
+          fs.writeFileSync(pp.masterPlanPath, JSON.stringify(ensured.plan, null, 2), "utf8");
+        } else {
+          plan = ensured.plan;
+        }
+      } catch {
+        /* non-fatal */
+      }
+
+      // SEC_* are warn-only; soften is a safety net for residual blocks.
       let completeness = assessMasterPlanCompletenessWithWorkspace({
         plan,
         mode: resolveMasterPlanStrictMode(pp.workspaceRoot),
@@ -1294,6 +1310,7 @@ No approved UI code yet.
         checkUiBrief: true,
       });
       completeness = softenSecurityBlocksForMvpGo(completeness);
+      // Optional acknowledgment only — coding/Go must not depend on this.
       const securityProposal = buildSecurityBaselineProposal(plan);
       res.json({
         mode: completeness.mode,
@@ -1303,9 +1320,11 @@ No approved UI code yet.
         gaps: completeness.gaps,
         sectionLengths: completeness.sectionLengths,
         uiBriefLength,
+        securityAutoApplied,
         securityProposal: securityProposal
           ? {
               needed: true,
+              optional: true,
               sectionKey: securityProposal.sectionKey,
               draftMarkdown: securityProposal.draftMarkdown,
             }
@@ -1317,7 +1336,7 @@ No approved UI code yet.
     }
   });
 
-  /** User-accepted security baseline → append to §2 (never silent). */
+  /** Optional acknowledgment — append security assumptions to §2 (Go does not require this). */
   app.post("/api/master-plan/accept-security-baseline", (req, res) => {
     try {
       const pp = projectPathsFor(req);

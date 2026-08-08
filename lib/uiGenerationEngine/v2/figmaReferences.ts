@@ -1,22 +1,22 @@
 /**
- * Phase C — Forced Figma reference retrieval (honest status, layered fallback).
+ * Phase C — Figma / reference retrieval (local library first).
  * Authority: ui-generation-logic-v2.md §6 + ui-resource-selection-rubric.md
  *
- * Env (Render + local .env):
- * - FIGMA_API_KEY — personal access token (secret). Prefer a token that can
- *   read files (`file_content:read`). `/v1/me` (`current_user:read`) is optional.
- * - FIGMA_REFERENCE_FILE_KEYS — comma-separated file keys from
- *   figma.com/design/<KEY>/... or figma.com/file/<KEY>/...
- *   Community catalog IDs often 404 until you Duplicate into your account.
- * - FIGMA_REFERENCE_BUCKETS — optional tagged library, e.g.
- *   mobile=KEY,landing=KEY,dashboard=KEY (unknown buckets ignored)
- * - FIGMA_REFERENCE_MAX_FILES — optional (default 3, max 8) how many keys to probe
+ * Generate-time order (single path):
+ * 1) offline `nebulla-project/figma-library/raw/<key>/document.json`
+ * 2) published catalog profiles + Stitch / ui-brief hints
+ * 3) internal seed patterns (last resort)
+ * 4) live Figma only when FIGMA_LIVE_ON_GENERATE=1|true AND FIGMA_API_KEY set
+ *    AND offline + catalog did not yield usable structure (max 1 file, hard cap 2)
  *
- * Fallback order when live Figma fails (429/etc):
- * 1) other FileKeys in the probe list (do not abort on first 429)
- * 2) offline `nebulla-project/figma-library/raw/<key>/document.json`
- * 3) catalog + Stitch Design Brief hints (resource match)
- * 4) internal seed patterns (last resort only)
+ * Ingest/refresh (`npm run figma:download` etc.) may call live Figma freely.
+ *
+ * Env (Render + local .env):
+ * - FIGMA_API_KEY — token for ingest / optional live Generate (secret)
+ * - FIGMA_LIVE_ON_GENERATE — default off; set 1|true to allow live probe on Generate
+ * - FIGMA_REFERENCE_FILE_KEYS / FIGMA_REFERENCE_BUCKETS — owned FileKeys + buckets
+ * - FIGMA_REFERENCE_MAX_FILES — offline scan width (default 3–4, max 8);
+ *   live Generate capped at min(env, 2) with default 1
  *
  * Catalog: docs/figma-reference-library.md
  */
@@ -63,12 +63,27 @@ export function parseReferenceBuckets(
 }
 
 function resolveMaxFiles(): number {
-  // Default 4 when buckets are set so mobile/landing/dashboard/auth can all be probed.
+  // Offline/local scan width — buckets default to 4 so mobile/landing/dashboard/auth fit.
   const bucketsSet = (process.env.FIGMA_REFERENCE_BUCKETS || "").trim().length > 0;
   const fallback = bucketsSet ? "4" : "3";
   const raw = Number(process.env.FIGMA_REFERENCE_MAX_FILES || fallback);
   if (!Number.isFinite(raw) || raw < 1) return bucketsSet ? 4 : 3;
   return Math.min(8, Math.floor(raw));
+}
+
+/** Live Generate probe — default 1 file, hard cap 2. */
+function resolveLiveGenerateMaxFiles(): number {
+  const raw = Number(process.env.FIGMA_REFERENCE_MAX_FILES || "1");
+  if (!Number.isFinite(raw) || raw < 1) return 1;
+  return Math.min(2, Math.floor(raw));
+}
+
+/** Opt-in live Figma on Generate UI (default: disabled). */
+export function isFigmaLiveOnGenerate(
+  raw: string = process.env.FIGMA_LIVE_ON_GENERATE || "",
+): boolean {
+  const v = raw.trim().toLowerCase();
+  return v === "1" || v === "true" || v === "yes";
 }
 
 /** Preferred bucket for Stitch-like C.3 (device → page type). */
@@ -207,7 +222,7 @@ function mapSeedToTemplateHints(templateId: V2TemplateId, structure: string): st
   ];
 }
 
-/** Offline ingest from `npm run figma:download` — used when live API is rate-limited. */
+/** Offline extract from `npm run figma:download` — Generate primary path. */
 function loadOfflineFigmaFile(fileKey: string): {
   name?: string;
   document?: FigmaNode;
@@ -378,7 +393,10 @@ function bucketForKey(key: string, buckets: Map<string, string[]>): string | und
   return undefined;
 }
 
-/** Always attempt Figma when key exists; never claim success without usable structural refs. */
+/**
+ * Generate-time reference retrieval — local library first.
+ * Never claims live Figma success when only seeds/catalog ran.
+ */
 export async function retrieveFigmaReferences(input: {
   classification: PageClassification;
   templateId: V2TemplateId;
@@ -392,7 +410,8 @@ export async function retrieveFigmaReferences(input: {
   catalogHints?: string[];
   catalogProfileId?: string;
 }): Promise<FigmaRecord> {
-  const key = (process.env.FIGMA_API_KEY || "").trim();
+  const apiKey = (process.env.FIGMA_API_KEY || "").trim();
+  const liveEnabled = isFigmaLiveOnGenerate();
   const preferred = (input.preferredFileKey || "").trim();
   const libraryKeys = [
     ...new Set([...(preferred ? [preferred] : []), ...resolveLibraryKeys()]),
@@ -401,6 +420,10 @@ export async function retrieveFigmaReferences(input: {
   const allConfiguredKeys = [
     ...new Set([...libraryKeys, ...[...buckets.values()].flat()]),
   ];
+  const keysConfigured = allConfiguredKeys.length;
+  const bucketsConfigured = buckets.size;
+  const preferredEarly = preferredBucketForClassification(input.classification);
+
   const seeds = rankSeedPatterns({
     ...({} as UiGenContextState),
     device: input.seedState.device || "web",
@@ -420,369 +443,336 @@ export async function retrieveFigmaReferences(input: {
     id: s.id,
     why: `Strong seed fallback for ${input.classification.device}/${input.classification.page_type}: ${s.structure}`,
   }));
-  const seedHints = mapSeedToTemplateHints(input.templateId, topSeeds[0]?.structure || "stacked sections");
+  const seedHints = mapSeedToTemplateHints(
+    input.templateId,
+    topSeeds[0]?.structure || "stacked sections",
+  );
   const intelligenceHints = catalogBriefHints({
     templateId: input.templateId,
     catalogHints: input.catalogHints,
     catalogProfileId: input.catalogProfileId,
   });
   const hasCatalogIntel =
-    Boolean(input.catalogProfileId) || (input.catalogHints && input.catalogHints.length > 0);
+    Boolean(input.catalogProfileId) ||
+    Boolean(input.catalogHints && input.catalogHints.length > 0);
 
-  const buildLayeredFallback = (opts: {
-    status: FigmaStatusV2;
-    selection_mode: string;
-    figma_error: string;
-    key_diagnostics?: FigmaKeyDiagnostic[];
-    env_guidance?: string;
-    probeKeys?: string[];
-  }): FigmaRecord => {
-    // Prefer offline Figma extracts (full library download) before Nebulla seeds.
-    const tryKeys = opts.probeKeys?.length
-      ? opts.probeKeys
-      : [...allConfiguredKeys].slice(0, resolveMaxFiles());
-    for (const fileKey of tryKeys) {
-      const offline = loadOfflineFigmaFile(fileKey);
-      if (!offline?.document) continue;
-      const extracted = extractStructureHints(
-        offline.document,
-        input.classification,
-        input.templateId,
-      );
-      if (extracted.score < 4) continue;
-      return {
-        reference_file_keys_configured: keysConfigured,
-        env_guidance: opts.env_guidance || envGuidance,
-        key_diagnostics: [
-          ...(opts.key_diagnostics || []),
-          {
-            key: fileKey,
-            outcome: "ok",
-            score: extracted.score,
-            file_name: offline.name,
-            bucket: bucketForKey(fileKey, buckets),
-          },
-        ],
-        selection_mode: `${opts.selection_mode}+offline`,
-        preferred_bucket: preferredEarly,
-        figma_used: "yes",
-        figma_status: "success",
-        figma_error: "",
-        candidates: [
-          {
-            id: `figma-offline:${fileKey}`,
-            reason: `Offline library "${offline.name || fileKey}" score=${extracted.score} (live API skipped/busy)`,
-          },
-          ...seedCandidates,
-        ],
-        selected_refs: [
-          {
-            id: `figma-offline:${fileKey}`,
-            why: `Offline Figma structure for ${input.templateId} (API busy — library used)`,
-          },
-        ],
-        fallback_used: "no",
-        structure_hints: [
-          ...extracted.hints,
-          ...intelligenceHints,
-          "Use Figma section order / card grouping / spacing only — do not copy decorative noise",
-        ].slice(0, 16),
-      };
-    }
+  const envGuidance =
+    keysConfigured === 0 && bucketsConfigured === 0
+      ? "Populate offline library (npm run figma:download) and/or set FIGMA_REFERENCE_FILE_KEYS / BUCKETS. Live Generate needs FIGMA_LIVE_ON_GENERATE=1 + FIGMA_API_KEY. See docs/figma-reference-library.md"
+      : !apiKey
+        ? "Local library keys configured. FIGMA_API_KEY needed only for ingest (`figma:download`) or optional live Generate (FIGMA_LIVE_ON_GENERATE=1)."
+        : liveEnabled
+          ? "FIGMA_LIVE_ON_GENERATE enabled — live probe runs only if offline + catalog miss. Prefer offline raw/ + published catalog on Render."
+          : "Local-first Generate (live off). Refresh library with npm run figma:download; optional FIGMA_LIVE_ON_GENERATE=1 for rare live probes.";
 
-    const layeredHints = hasCatalogIntel
-      ? [...intelligenceHints, ...seedHints].slice(0, 16)
-      : seedHints;
-    const layeredSelected = hasCatalogIntel
-      ? [
-          {
-            id: `catalog:${input.catalogProfileId || "brief"}`,
-            why: "Catalog + Stitch Design Brief (Figma API unavailable) — not Nebulla-only seeds",
-          },
-          ...seedSelected.slice(0, 1),
-        ]
-      : seedSelected;
+  const probe = resolveProbeKeys(input.classification, libraryKeys, buckets);
+  const probeKeys =
+    preferred && !probe.keys.includes(preferred)
+      ? [preferred, ...probe.keys]
+      : preferred && probe.keys[0] !== preferred
+        ? [preferred, ...probe.keys.filter((k) => k !== preferred)]
+        : probe.keys;
+  const selectionModeBase =
+    preferred && probeKeys[0] === preferred && !probe.selection_mode.includes("preferred")
+      ? `preferred+${probe.selection_mode}`
+      : probe.selection_mode;
+  const preferredBucket = probe.preferred_bucket ?? preferredEarly;
+
+  // Offline may scan configured keys even on bucket_miss (avoid wrong live, still use local).
+  const offlineScanKeys = [
+    ...new Set([
+      ...probeKeys,
+      ...(probeKeys.length === 0 ? allConfiguredKeys : []),
+    ]),
+  ].slice(0, resolveMaxFiles());
+
+  // 1) Offline extracts first
+  for (const fileKey of offlineScanKeys) {
+    const offline = loadOfflineFigmaFile(fileKey);
+    if (!offline?.document) continue;
+    const extracted = extractStructureHints(
+      offline.document,
+      input.classification,
+      input.templateId,
+    );
+    if (extracted.score < 4) continue;
     return {
       reference_file_keys_configured: keysConfigured,
-      env_guidance: opts.env_guidance || envGuidance,
-      key_diagnostics: opts.key_diagnostics || [],
-      selection_mode: opts.selection_mode,
-      preferred_bucket: preferredEarly,
-      figma_used: "no",
-      figma_status: opts.status,
-      figma_error: opts.figma_error,
-      candidates: [
-        ...(hasCatalogIntel
-          ? [
-              {
-                id: `catalog:${input.catalogProfileId || "brief"}`,
-                reason: "Scored ui-resource-catalog + Stitch brief",
-              },
-            ]
-          : []),
-        ...seedCandidates,
-      ],
-      selected_refs: layeredSelected,
-      fallback_used: "yes",
-      structure_hints: layeredHints,
-    };
-  };
-
-  const keysConfigured = allConfiguredKeys.length;
-  const bucketsConfigured = buckets.size;
-  const envGuidance =
-    !key && keysConfigured === 0
-      ? "Set FIGMA_API_KEY + FIGMA_REFERENCE_FILE_KEYS on Render. Duplicate Community files into your account, then use figma.com/design/<KEY>/…. Optional: FIGMA_REFERENCE_BUCKETS=mobile=KEY,landing=KEY,dashboard=KEY. See docs/figma-reference-library.md"
-      : !key
-        ? "Set FIGMA_API_KEY (token with file read). FIGMA_REFERENCE_FILE_KEYS alone is not enough."
-        : keysConfigured === 0 && bucketsConfigured === 0
-          ? "FIGMA_API_KEY is set, but FIGMA_REFERENCE_FILE_KEYS / BUCKETS missing — add design keys (Duplicate Community files first). Example: FIGMA_REFERENCE_BUCKETS=mobile=KEY,landing=KEY,dashboard=KEY"
-          : bucketsConfigured > 0
-            ? "FIGMA_API_KEY + FIGMA_REFERENCE_BUCKETS set. Tag landing/dashboard separately so mobile refs are not used. Duplicate Community files before using catalog IDs."
-            : "Both FIGMA_API_KEY and FIGMA_REFERENCE_FILE_KEYS are configured. Tip: set FIGMA_REFERENCE_BUCKETS for landing/dashboard/mobile.";
-
-  const emptyDiags: FigmaKeyDiagnostic[] = [];
-  const preferredEarly = preferredBucketForClassification(input.classification);
-  const base = {
-    reference_file_keys_configured: keysConfigured,
-    env_guidance: envGuidance,
-    key_diagnostics: emptyDiags,
-    selection_mode: "pending",
-    preferred_bucket: preferredEarly,
-  };
-
-  if (!key) {
-    return buildLayeredFallback({
-      status: "missing_key",
-      selection_mode: "skipped_no_api_key",
-      figma_error: hasCatalogIntel
-        ? "FIGMA_API_KEY not set — using catalog + Stitch Design Brief (seed last)"
-        : "FIGMA_API_KEY not set — using polished seed templates (built-in patterns)",
-      probeKeys: allConfiguredKeys,
-    });
-  }
-
-  try {
-    // Optional identity probe — fine-grained tokens may lack current_user:read.
-    // Do not hard-fail: file reads are what matter for layout extract.
-    const me = await fetch("https://api.figma.com/v1/me", {
-      headers: { "X-Figma-Token": key },
-    });
-    if (me.status === 401) {
-      return buildLayeredFallback({
-        status: "unauthorized",
-        selection_mode: "skipped_unauthorized",
-        figma_error: `Figma unauthorized (${me.status}) — check FIGMA_API_KEY; using offline/catalog/Stitch before seeds`,
-        probeKeys: allConfiguredKeys,
-      });
-    }
-    // 429 on /me: still probe files + offline — do not jump straight to Nebulla seeds.
-    const meRateLimited = me.status === 429;
-    // 403 on /me (missing current_user:read) → continue to file probes
-    void meRateLimited;
-
-    const probe = resolveProbeKeys(input.classification, libraryKeys, buckets);
-    // Resource-match preferred key must stay first even when buckets return only tagged keys.
-    const probeKeys =
-      preferred && !probe.keys.includes(preferred)
-        ? [preferred, ...probe.keys]
-        : preferred && probe.keys[0] !== preferred
-          ? [preferred, ...probe.keys.filter((k) => k !== preferred)]
-          : probe.keys;
-    const withProbe = {
-      ...base,
-      selection_mode:
-        preferred && probeKeys[0] === preferred && !probe.selection_mode.includes("preferred")
-          ? `preferred+${probe.selection_mode}`
-          : probe.selection_mode,
-      preferred_bucket: probe.preferred_bucket,
-    };
-
-    if (probe.selection_mode.startsWith("bucket_miss:") && probeKeys.length === 0) {
-      const bucket = probe.preferred_bucket || "unknown";
-      return buildLayeredFallback({
-        status: "weak_matches",
-        selection_mode: withProbe.selection_mode,
-        figma_error: `No FIGMA_REFERENCE_BUCKETS entry for "${bucket}" — offline/catalog/Stitch before seed (avoids wrong-bucket Figma). Duplicate a ${bucket} design, then add ${bucket}=<designKey>.`,
-        env_guidance: `${envGuidance} Missing bucket: ${bucket}. Example: FIGMA_REFERENCE_BUCKETS=mobile=…,landing=…,dashboard=…`,
-        probeKeys: allConfiguredKeys,
-      });
-    }
-
-    if (probeKeys.length === 0 && allConfiguredKeys.length === 0) {
-      return buildLayeredFallback({
-        status: "weak_matches",
-        selection_mode: withProbe.selection_mode,
-        figma_error:
-          "FIGMA_API_KEY present but FIGMA_REFERENCE_FILE_KEYS / BUCKETS not set — cannot extract layout; catalog/Stitch then seed",
-        probeKeys: [],
-      });
-    }
-
-    const figmaCandidates: { id: string; reason: string }[] = [];
-    const allHints: string[] = [];
-    const keyDiagnostics: FigmaKeyDiagnostic[] = [];
-    let bestScore = 0;
-    let bestKey = "";
-    let sawUnauthorizedFile = false;
-    let sawNotFound = 0;
-
-    const ordered = probeKeys.slice(0, resolveMaxFiles());
-
-    for (const fileKey of ordered) {
-      const bucket = bucketForKey(fileKey, buckets);
-      try {
-        const { res: fr, networkError } = await fetchFigmaFileOnce(fileKey, key);
-        if (!fr) {
-          keyDiagnostics.push({
-            key: fileKey,
-            outcome: "network",
-            bucket,
-          });
-          continue;
-        }
-        if (fr.status === 429) {
-          // Do not abort the whole library — try remaining FileKeys, then offline/catalog.
-          keyDiagnostics.push({
-            key: fileKey,
-            outcome: "429",
-            http_status: 429,
-            bucket,
-          });
-          continue;
-        }
-        if (fr.status === 401 || fr.status === 403) {
-          sawUnauthorizedFile = true;
-          keyDiagnostics.push({
-            key: fileKey,
-            outcome: outcomeFromStatus(fr.status),
-            http_status: fr.status,
-            bucket,
-          });
-          continue;
-        }
-        if (fr.status === 404) {
-          sawNotFound += 1;
-          keyDiagnostics.push({
-            key: fileKey,
-            outcome: "404",
-            http_status: 404,
-            bucket,
-          });
-          continue;
-        }
-        if (!fr.ok) {
-          keyDiagnostics.push({
-            key: fileKey,
-            outcome: outcomeFromStatus(fr.status),
-            http_status: fr.status,
-            bucket,
-          });
-          continue;
-        }
-        const data = (await fr.json()) as {
-          name?: string;
-          document?: FigmaNode;
-        };
-        const extracted = extractStructureHints(data.document, input.classification, input.templateId);
-        keyDiagnostics.push({
+      env_guidance: envGuidance,
+      key_diagnostics: [
+        {
           key: fileKey,
           outcome: "ok",
-          http_status: 200,
           score: extracted.score,
-          file_name: data.name,
-          bucket,
-        });
-        figmaCandidates.push({
-          id: `figma:${fileKey}`,
-          reason: `File "${data.name || fileKey}" frames=${extracted.frameNames.slice(0, 5).join(", ") || "(none)"} score=${extracted.score} mode=${probe.selection_mode}`,
-        });
-        if (extracted.score > bestScore) {
-          bestScore = extracted.score;
-          bestKey = fileKey;
-          allHints.length = 0;
-          allHints.push(...extracted.hints);
+          file_name: offline.name,
+          bucket: bucketForKey(fileKey, buckets),
+        },
+      ],
+      selection_mode: `offline:${selectionModeBase}`,
+      preferred_bucket: preferredBucket,
+      figma_used: "yes",
+      figma_status: "offline",
+      figma_error: "",
+      candidates: [
+        {
+          id: `figma-offline:${fileKey}`,
+          reason: `Offline library "${offline.name || fileKey}" score=${extracted.score}`,
+        },
+        ...seedCandidates,
+      ],
+      selected_refs: [
+        {
+          id: `figma-offline:${fileKey}`,
+          why: `Offline Figma structure for ${input.templateId}`,
+        },
+      ],
+      fallback_used: "no",
+      structure_hints: [
+        ...extracted.hints,
+        ...intelligenceHints,
+        "Use Figma section order / card grouping / spacing only — do not copy decorative noise",
+      ].slice(0, 16),
+    };
+  }
+
+  // 2) Catalog + Stitch / ui-brief intelligence (usable guidance without live)
+  if (hasCatalogIntel) {
+    return {
+      reference_file_keys_configured: keysConfigured,
+      env_guidance: envGuidance,
+      key_diagnostics: [],
+      selection_mode: `local:catalog_brief:${selectionModeBase}`,
+      preferred_bucket: preferredBucket,
+      figma_used: "no",
+      figma_status: "skipped",
+      figma_error: "Using scored catalog + Stitch Design Brief (offline raw miss; live not required)",
+      candidates: [
+        {
+          id: `catalog:${input.catalogProfileId || "brief"}`,
+          reason: "Scored ui-resource-catalog + Stitch brief",
+        },
+        ...seedCandidates,
+      ],
+      selected_refs: [
+        {
+          id: `catalog:${input.catalogProfileId || "brief"}`,
+          why: "Catalog + Stitch Design Brief structure hints",
+        },
+        ...seedSelected.slice(0, 1),
+      ],
+      fallback_used: "yes",
+      structure_hints: [...intelligenceHints, ...seedHints].slice(0, 16),
+    };
+  }
+
+  // 3→4) Optional live only after offline + catalog miss
+  const canLive = liveEnabled && Boolean(apiKey) && probeKeys.length > 0;
+  if (canLive) {
+    try {
+      const keyDiagnostics: FigmaKeyDiagnostic[] = [];
+      const figmaCandidates: { id: string; reason: string }[] = [];
+      const allHints: string[] = [];
+      let bestScore = 0;
+      let bestKey = "";
+      let sawUnauthorizedFile = false;
+      let sawNotFound = 0;
+      let sawRateLimited = false;
+
+      const ordered = probeKeys.slice(0, resolveLiveGenerateMaxFiles());
+
+      for (const fileKey of ordered) {
+        if (sawRateLimited) break; // stop further live probes on 429
+        const bucket = bucketForKey(fileKey, buckets);
+        try {
+          const { res: fr } = await fetchFigmaFileOnce(fileKey, apiKey);
+          if (!fr) {
+            keyDiagnostics.push({ key: fileKey, outcome: "network", bucket });
+            continue;
+          }
+          if (fr.status === 429) {
+            sawRateLimited = true;
+            keyDiagnostics.push({
+              key: fileKey,
+              outcome: "429",
+              http_status: 429,
+              bucket,
+            });
+            break;
+          }
+          if (fr.status === 401 || fr.status === 403) {
+            sawUnauthorizedFile = true;
+            keyDiagnostics.push({
+              key: fileKey,
+              outcome: outcomeFromStatus(fr.status),
+              http_status: fr.status,
+              bucket,
+            });
+            continue;
+          }
+          if (fr.status === 404) {
+            sawNotFound += 1;
+            keyDiagnostics.push({
+              key: fileKey,
+              outcome: "404",
+              http_status: 404,
+              bucket,
+            });
+            continue;
+          }
+          if (!fr.ok) {
+            keyDiagnostics.push({
+              key: fileKey,
+              outcome: outcomeFromStatus(fr.status),
+              http_status: fr.status,
+              bucket,
+            });
+            continue;
+          }
+          const data = (await fr.json()) as {
+            name?: string;
+            document?: FigmaNode;
+          };
+          const extracted = extractStructureHints(
+            data.document,
+            input.classification,
+            input.templateId,
+          );
+          keyDiagnostics.push({
+            key: fileKey,
+            outcome: "ok",
+            http_status: 200,
+            score: extracted.score,
+            file_name: data.name,
+            bucket,
+          });
+          figmaCandidates.push({
+            id: `figma:${fileKey}`,
+            reason: `Live "${data.name || fileKey}" frames=${extracted.frameNames.slice(0, 5).join(", ") || "(none)"} score=${extracted.score}`,
+          });
+          if (extracted.score > bestScore) {
+            bestScore = extracted.score;
+            bestKey = fileKey;
+            allHints.length = 0;
+            allHints.push(...extracted.hints);
+          }
+        } catch {
+          keyDiagnostics.push({ key: fileKey, outcome: "network", bucket });
         }
-        void networkError;
-      } catch (e) {
-        keyDiagnostics.push({
-          key: fileKey,
-          outcome: "network",
-          bucket,
-        });
-        void e;
       }
-    }
 
-    const diagSummary = summarizeDiagnostics(keyDiagnostics);
-    const sawRateLimited = keyDiagnostics.some((d) => d.outcome === "429") || meRateLimited;
+      if (figmaCandidates.length > 0 && bestScore >= 4) {
+        const selected = figmaCandidates
+          .filter((c) => c.id.includes(bestKey))
+          .slice(0, 2)
+          .map((c) => ({
+            id: c.id,
+            why: `Live structural guidance for ${input.templateId}: ${c.reason}`,
+          }));
+        if (!selected.length) {
+          selected.push({
+            id: figmaCandidates[0].id,
+            why: figmaCandidates[0].reason,
+          });
+        }
+        return {
+          reference_file_keys_configured: keysConfigured,
+          env_guidance: envGuidance,
+          key_diagnostics: keyDiagnostics,
+          selection_mode: `live:${selectionModeBase}`,
+          preferred_bucket: preferredBucket,
+          figma_used: "yes",
+          figma_status: "success",
+          figma_error: "",
+          candidates: [...figmaCandidates, ...seedCandidates],
+          selected_refs: selected,
+          fallback_used: "no",
+          structure_hints: [
+            ...allHints,
+            ...intelligenceHints.slice(0, 4),
+            "Use Figma section order / card grouping / spacing only — do not copy decorative noise",
+          ].slice(0, 16),
+        };
+      }
 
-    if (figmaCandidates.length === 0 || bestScore < 4) {
+      const diagSummary = summarizeDiagnostics(keyDiagnostics);
+      // Fall through to seeds with honest live-attempt status
+      const liveStatus: FigmaStatusV2 = sawRateLimited
+        ? "rate_limited"
+        : sawUnauthorizedFile && figmaCandidates.length === 0
+          ? "unauthorized"
+          : "weak_matches";
       let detail =
         bestScore === 0
-          ? "Figma live probe yielded no usable structure — trying offline library → catalog/Stitch → seed"
-          : `Figma structure score too weak (${bestScore}) — trying offline library → catalog/Stitch → seed`;
+          ? "Live Figma probe yielded no usable structure — seed last resort"
+          : `Live Figma structure score too weak (${bestScore}) — seed last resort`;
       if (sawRateLimited) {
-        detail = `Figma rate limited (${diagSummary || "429"}) — offline library / catalog + Stitch Design Brief before Nebulla seeds (MVP not blocked)`;
+        detail = `Figma rate limited (${diagSummary || "429"}) — seed last resort (MVP not blocked)`;
       } else if (sawNotFound > 0 && figmaCandidates.length === 0) {
         detail =
-          "Figma file key(s) returned 404. Community catalog IDs are not API-readable until you Duplicate the file into your Figma account and use the new /design/<KEY>/ id. See docs/figma-reference-library.md";
+          "Figma file key(s) returned 404. Duplicate Community files into your account first. See docs/figma-reference-library.md";
       } else if (sawUnauthorizedFile && figmaCandidates.length === 0) {
         detail =
           "Figma file read unauthorized — token needs file_content:read (and access to those files).";
       }
       if (diagSummary && !sawRateLimited) detail = `${detail} [${diagSummary}]`;
-      const status: FigmaStatusV2 = sawRateLimited
-        ? "rate_limited"
-        : sawUnauthorizedFile && figmaCandidates.length === 0
-          ? "unauthorized"
-          : "weak_matches";
-      return buildLayeredFallback({
-        status,
-        selection_mode: withProbe.selection_mode,
-        figma_error: detail,
-        key_diagnostics: keyDiagnostics,
+
+      return {
+        reference_file_keys_configured: keysConfigured,
         env_guidance: diagSummary ? `${envGuidance} Probes: ${diagSummary}` : envGuidance,
-        probeKeys: ordered,
-      });
+        key_diagnostics: keyDiagnostics,
+        selection_mode: `local:seed_after_live:${selectionModeBase}`,
+        preferred_bucket: preferredBucket,
+        figma_used: "no",
+        figma_status: liveStatus,
+        figma_error: detail,
+        candidates: seedCandidates,
+        selected_refs: seedSelected,
+        fallback_used: "yes",
+        structure_hints: seedHints,
+      };
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Figma request failed";
+      return {
+        reference_file_keys_configured: keysConfigured,
+        env_guidance: envGuidance,
+        key_diagnostics: [],
+        selection_mode: `local:seed_after_live_error:${selectionModeBase}`,
+        preferred_bucket: preferredBucket,
+        figma_used: "no",
+        figma_status: "failed",
+        figma_error: `${redactSecrets(msg)} — seed last resort`,
+        candidates: seedCandidates,
+        selected_refs: seedSelected,
+        fallback_used: "yes",
+        structure_hints: seedHints,
+      };
     }
-
-    const selected = figmaCandidates
-      .filter((c) => c.id.includes(bestKey))
-      .slice(0, 2)
-      .map((c) => ({
-        id: c.id,
-        why: `Structural guidance for ${input.templateId}: ${c.reason}`,
-      }));
-    if (!selected.length) {
-      selected.push({
-        id: figmaCandidates[0].id,
-        why: figmaCandidates[0].reason,
-      });
-    }
-
-    return {
-      ...withProbe,
-      key_diagnostics: keyDiagnostics,
-      figma_used: "yes",
-      figma_status: "success" as FigmaStatusV2,
-      figma_error: "",
-      candidates: [...figmaCandidates, ...seedCandidates],
-      selected_refs: selected,
-      fallback_used: "no",
-      structure_hints: [
-        ...allHints,
-        ...intelligenceHints.slice(0, 4),
-        "Use Figma section order / card grouping / spacing only — do not copy decorative noise",
-      ].slice(0, 16),
-    };
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : "Figma request failed";
-    return buildLayeredFallback({
-      status: "failed",
-      selection_mode: "failed",
-      figma_error: `${redactSecrets(msg)} — offline/catalog/Stitch before seed`,
-      probeKeys: allConfiguredKeys,
-    });
   }
+
+  // Live gated off / no key / no probe keys → seed last resort (never fake live success)
+  const seedReason = !liveEnabled
+    ? "Local library miss — seed patterns (live Generate disabled; set FIGMA_LIVE_ON_GENERATE=1 only if needed)"
+    : !apiKey
+      ? "Local library miss — seed patterns (FIGMA_API_KEY unset; live Generate not attempted)"
+      : probeKeys.length === 0
+        ? selectionModeBase.startsWith("bucket_miss:")
+          ? `No bucket keys for "${preferredBucket || "unknown"}" — seed patterns (avoids wrong-bucket live)`
+          : "No FIGMA_REFERENCE_FILE_KEYS / BUCKETS for probe — seed patterns"
+        : "Local library miss — seed patterns";
+
+  return {
+    reference_file_keys_configured: keysConfigured,
+    env_guidance: envGuidance,
+    key_diagnostics: [],
+    selection_mode: `local:seed:${selectionModeBase}`,
+    preferred_bucket: preferredBucket,
+    figma_used: "no",
+    // Distinct from catalog `skipped` and from live `success` / offline `offline`
+    figma_status: "weak_matches",
+    figma_error: seedReason,
+    candidates: seedCandidates,
+    selected_refs: seedSelected,
+    fallback_used: "yes",
+    structure_hints: seedHints,
+  };
 }

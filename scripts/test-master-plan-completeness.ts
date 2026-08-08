@@ -65,21 +65,23 @@ section("thin-legacy: allowGo in off/warn; block in strict");
   assert.equal(isMasterPlanCompleteForDiscovery(plan), false);
 }
 
-section("naive-insecure: security gaps; block in strict");
+section("naive-insecure: security gaps are warn-only (MVP — never hard-block Go)");
 {
   const plan = loadFixture("naive-insecure.json");
   const warn = blockCodes(plan, "warn");
   assert.equal(warn.result.allowGo, true);
   const sec = warn.result.gaps.filter((g) => g.code.startsWith("SEC_"));
   assert.ok(sec.length > 0, "expected SEC_* gaps");
+  assert.ok(sec.every((g) => g.severity === "warn"), "SEC_* must be warn, not block");
 
   const strict = blockCodes(plan, "strict");
-  assert.equal(strict.result.allowGo, false);
+  // Structural page gaps may still block; SEC alone must not.
   assert.ok(
-    strict.blocks.some((c) => c.startsWith("SEC_")),
-    `expected SEC block, got ${strict.blocks.join(",")}`,
+    !strict.blocks.some((c) => c.startsWith("SEC_")),
+    `SEC must not be block severity, got ${strict.blocks.join(",")}`,
   );
-  assert.equal(isMasterPlanCompleteForDiscovery(plan), false);
+  const secStrict = strict.result.gaps.filter((g) => g.code.startsWith("SEC_"));
+  assert.ok(secStrict.every((g) => g.severity === "warn"));
 }
 
 section("ui-brief missing blocks Go only when checkUiBrief + strict");

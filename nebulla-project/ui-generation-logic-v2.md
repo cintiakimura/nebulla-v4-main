@@ -215,19 +215,22 @@ It does not allow free-floating absolute chaos.
 
 ## 6. Phase C — Forced Figma resource access
 
-### C.1 Always attempt Figma first when key exists
-If `FIGMA_API_KEY` is present, the engine must attempt retrieval before fallback.  
-If `FIGMA_REFERENCE_FILE_KEYS` is missing, status must be `weak_matches` (not success) and seed fallback used.
+### C.1 Local library first on Generate (live opt-in)
+Generate UI reads the classified **local** reference library first: offline `raw/<fileKey>/document.json` → published catalog + Stitch / ui-brief → seed last resort.  
+Live Figma on Generate runs **only** when `FIGMA_LIVE_ON_GENERATE=1|true` **and** `FIGMA_API_KEY` is set **and** offline + catalog did not yield usable structure (default: live off).  
+Ingest/refresh scripts (`figma:download`, profile-drafts, publish) remain the place that may call live Figma for owned keys.  
+Never report live `success` when only seeds ran. If offline/catalog miss and live is off/unavailable, status is `weak_matches` / `skipped` (not fake success) and seed fallback is used.
 
 ### C.2 Required Figma status values
 Exactly one:
-- `success`
+- `success` (rare live match)
+- `offline` (usable offline library)
 - `failed`
 - `missing_key`
 - `unauthorized`
 - `rate_limited`
-- `weak_matches`
-- `skipped`
+- `weak_matches` (seed fallback / live weak)
+- `skipped` (catalog + brief guidance)
 
 ### C.3 Retrieval criteria ordered by priority
 1. device

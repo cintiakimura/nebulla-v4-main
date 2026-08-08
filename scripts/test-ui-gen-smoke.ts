@@ -132,8 +132,15 @@ section('runUiGenerationCycleV2 without live Figma / without Grok key');
   };
   assert.ok(meta.pattern_mode === 'seed' || meta.pattern_mode === 'figma');
   if (meta.pattern_mode === 'seed') {
+    // Seed path must never claim live Figma success (offline status is ok only with pattern_mode figma).
     assert.notEqual(meta.figma?.figma_status, 'success');
     assert.equal(meta.figma?.fallback_used, 'yes');
+  }
+  if (meta.pattern_mode === 'figma') {
+    assert.ok(
+      meta.figma?.figma_status === 'offline' || meta.figma?.figma_status === 'success',
+      `figma pattern_mode needs offline|success, got ${meta.figma?.figma_status}`,
+    );
   }
 
   const title = meta.slots?.hero_title || meta.slots?.nav_title || '';

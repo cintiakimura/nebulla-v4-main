@@ -48,6 +48,7 @@ export type V2TemplateId =
 
 export type FigmaStatusV2 =
   | "success"
+  | "offline"
   | "failed"
   | "missing_key"
   | "unauthorized"

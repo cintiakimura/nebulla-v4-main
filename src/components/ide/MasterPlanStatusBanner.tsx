@@ -106,10 +106,16 @@ export function MasterPlanStatusBanner() {
               Pages, research, and design tokens are in good shape for the next coding slice.
             </p>
           ) : null}
+          {status.securityAutoApplied ? (
+            <p className="mt-2 text-[11px] opacity-90">
+              Security + sign-in assumptions were auto-added to Tech and Research (MVP). Coding does not wait on
+              Accept — harden before deploy.
+            </p>
+          ) : null}
           {showSecurityAccept ? (
             <div className="mt-2 flex flex-wrap items-center gap-2">
               <p className="text-[11px] opacity-90">
-                We can add a starter security baseline (sign-in, private data, roles). Review and accept when ready.
+                Optional: acknowledge the starter security baseline in §2. Foundation coding is not blocked.
               </p>
               <button
                 type="button"
@@ -117,7 +123,7 @@ export function MasterPlanStatusBanner() {
                 onClick={() => void acceptSecurity()}
                 className="rounded-md border border-amber-400/40 bg-amber-500/15 px-2.5 py-1 text-[11px] font-medium text-amber-50 hover:bg-amber-500/25 disabled:opacity-50"
               >
-                {accepting ? 'Adding…' : 'Accept security baseline'}
+                {accepting ? 'Adding…' : 'Acknowledge security assumptions'}
               </button>
             </div>
           ) : null}

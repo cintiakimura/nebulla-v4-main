@@ -20,8 +20,12 @@ export type MasterPlanStatus = {
   gaps: MasterPlanStatusGap[];
   sectionLengths?: Record<string, number>;
   uiBriefLength?: number;
+  /** True when status sync auto-merged industry security assumptions into §2. */
+  securityAutoApplied?: boolean;
   securityProposal?: {
     needed: boolean;
+    /** MVP: Accept is optional acknowledgment only — never required for Go. */
+    optional?: boolean;
     sectionKey: string;
     draftMarkdown: string;
   } | null;
@@ -38,9 +42,9 @@ const GAP_FRIENDLY: Record<string, string> = {
   PAGE_MISSING_ACTIONS: 'Add actions and access rules on each page',
   UI_TOKENS_MISSING: 'Add colors, fonts, and density in UI/UX design',
   UI_SECTION_TOO_LONG: 'Keep UI/UX design short — page detail belongs in the UI brief',
-  SEC_RLS_MISSING: 'Add how private data stays private (security baseline)',
-  SEC_AUTH_MISSING: 'Say how people sign in',
-  SEC_PII_MISSING: 'Note what personal data you store',
+  SEC_RLS_MISSING: 'Security assumptions will auto-fill in Tech and Research (optional polish)',
+  SEC_AUTH_MISSING: 'Sign-in assumptions will auto-fill (does not pause coding)',
+  SEC_PII_MISSING: 'Note what personal data you store (harden before deploy)',
   UI_BRIEF_MISSING: 'Save the Master Plan so the UI brief can be generated',
   MINDMAP_EXTRA_ROUTES: 'Mind Map has pages not in the plan — re-sync from Pages',
 };

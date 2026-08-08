@@ -277,14 +277,15 @@ export function assessMasterPlanCompleteness(
     // Keep marker/auth checks for precise gap codes (shared regexes with accept path).
     const securityPresent = SECURITY_MARKERS_RE.test(s2) && !SECURITY_NEGATED_RE.test(s2);
     const authPresent = AUTH_MODEL_RE.test(s2) && !SECURITY_NEGATED_RE.test(s2);
+    // Product contract (recovery): SEC_* are ASSUMPTION polish (warn), never hard Go blockers on MVP.
     if (!securityOk && !securityPresent) {
       gaps.push(
         gap(
           "SEC_RLS_MISSING",
           "2. Tech and Research",
-          "block",
-          "App appears to need auth/private data but security baseline is missing.",
-          "Auto-inject auth model, tenant/RLS (or equivalent), roles, secrets, PII, deny-by-default.",
+          "warn",
+          "Security baseline assumptions not yet written into §2 (auto-applied on Go / plan sync).",
+          "MVP: industry-standard auth/RLS draft is merged as labeled assumptions — harden before deploy.",
         ),
       );
     }
@@ -293,9 +294,9 @@ export function assessMasterPlanCompleteness(
         gap(
           "SEC_AUTH_MISSING",
           "2. Tech and Research",
-          "block",
-          "No authentication model documented.",
-          "State how users sign in and which routes are public.",
+          "warn",
+          "Sign-in approach not yet written into §2 (auto-applied as assumption on Go / plan sync).",
+          "MVP: sign-in model is drafted as assumption — confirm before deploy; does not pause Foundation.",
         ),
       );
     }
@@ -306,7 +307,7 @@ export function assessMasterPlanCompleteness(
           "2. Tech and Research",
           "warn",
           "PII / sensitive data handling not documented.",
-          "Note what personal data is stored and minimization rules.",
+          "Note what personal data is stored and minimization rules (harden before deploy).",
         ),
       );
     }
@@ -379,7 +380,7 @@ export function isMasterPlanCompleteForDiscovery(
 
 /**
  * Structure ready for plan-first UI mockup: §§1–5 usable + routes.
- * Security baseline gaps alone must not block the first mockup (coding/Go still enforce them).
+ * Security baseline is warn-only (auto-applied assumptions) — never blocks mockup or Go.
  */
 export function isMasterPlanReadyForUiMockup(
   raw: Record<string, unknown> | null | undefined,
@@ -390,8 +391,6 @@ export function isMasterPlanReadyForUiMockup(
     mode: "strict",
     checkUiBrief: false,
   });
-  const structuralBlocks = result.gaps.filter(
-    (g) => g.severity === "block" && !g.code.startsWith("SEC_"),
-  );
+  const structuralBlocks = result.gaps.filter((g) => g.severity === "block");
   return structuralBlocks.length === 0;
 }

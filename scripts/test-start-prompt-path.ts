@@ -41,7 +41,7 @@ assert.equal(isMasterPlanReadyForUiMockup(good), true);
 assert.equal(isMasterPlanCompleteForDiscovery(good), true);
 assert.equal(canStartUiMockup({ masterPlan: good, uiBriefLength: 200 }), true);
 
-// Structure-ready plan missing security → mockup OK, discovery-complete false
+// Structure-ready plan missing security → mockup OK; discovery complete (SEC is warn-only MVP).
 const eduThinSec = {
   ...good,
   '1. Goal of the app':
@@ -51,11 +51,12 @@ const eduThinSec = {
 };
 assert.equal(planNeedsSecurityBaseline(eduThinSec), true);
 assert.equal(isMasterPlanReadyForUiMockup(eduThinSec), true);
-assert.equal(isMasterPlanCompleteForDiscovery(eduThinSec), false);
+assert.equal(isMasterPlanCompleteForDiscovery(eduThinSec), true);
 
 const merged = mergeSecurityBaselineIntoSection2(String(eduThinSec['2. Tech and Research']));
 assert.ok(merged && /security baseline/i.test(merged));
 const withSec = { ...eduThinSec, '2. Tech and Research': merged! };
+assert.equal(planNeedsSecurityBaseline(withSec), false);
 assert.equal(isMasterPlanCompleteForDiscovery(withSec), true);
 
 const boot = buildFastPrototypeBootstrap(

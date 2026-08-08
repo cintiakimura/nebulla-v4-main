@@ -2,7 +2,8 @@
  * MVP delivery gates — soft-continue policies so optional services / polish
  * never hard-block Foundation coding for a first shippable draft.
  *
- * Authority: nebula-project/recovery-orchestration.md (Phase 7 exit / golden brief)
+ * Authority: nebula-project/recovery-orchestration.md
+ * Product: security baseline = auto-applied assumptions (asset); never a hard Go blocker.
  */
 import type { MasterPlanCompletenessResult } from "./masterPlanCompleteness";
 
@@ -15,9 +16,8 @@ export function onlySecurityBlockGaps(result: MasterPlanCompletenessResult): boo
 }
 
 /**
- * Demote SEC_* block gaps to warn so Go can proceed.
- * Call after merging the industry-standard security baseline draft.
- * Non-security block gaps still pause Go under MASTER_PLAN_STRICT=strict.
+ * Safety net: demote any residual SEC_* blocks to warn and recompute allowGo.
+ * Primary contract is warn-at-source in masterPlanCompleteness; this catches older callers.
  */
 export function softenSecurityBlocksForMvpGo(
   result: MasterPlanCompletenessResult,
@@ -32,7 +32,7 @@ export function softenSecurityBlocksForMvpGo(
       ? {
           ...g,
           severity: "warn" as const,
-          remediation: `${g.remediation} (MVP: continuing with industry-standard draft — correct if wrong.)`,
+          remediation: `${g.remediation} (MVP: security is assumption polish — does not pause Go.)`,
         }
       : g,
   );
