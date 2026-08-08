@@ -78,6 +78,17 @@ Details: `nebulla-project/figma-library/README.md`. Runtime still uses env keys 
 
 ## Failure path (engine)
 
+When live Figma returns **429** (or fails), Generate UI does **not** jump straight to Nebulla seeds:
+
+1. Probe remaining FileKeys (no abort on first 429)
+2. Load offline `nebulla-project/figma-library/raw/<key>/document.json` if present (`npm run figma:download`)
+3. Apply scored **ui-resource-catalog** + **Stitch Design Brief** hints
+4. Internal seed patterns only as last resort
+
+---
+
+## Failure path (engine) — detail
+
 ```text
 missing FIGMA_API_KEY → missing_key → seed
 /me 401 → unauthorized → seed

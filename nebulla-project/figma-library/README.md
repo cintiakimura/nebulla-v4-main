@@ -2,7 +2,9 @@
 
 Batch-download **owned** Figma FileKeys, draft `UiResourceProfile` JSON, then publish reviewed kits into the UI Gen catalog.
 
-**Runtime Generate UI is not changed by these scripts.** Live generate still uses env keys / seed until you publish profiles.
+**Runtime:** Generate UI probes live Figma first. On 429 / API failure it now also reads
+`raw/<fileKey>/document.json` (this download) before falling back to catalog + Stitch Design Brief,
+then Nebulla seeds last. Publish profiles so scored catalog matching stays strong.
 
 ## Pipeline
 

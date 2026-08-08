@@ -7,17 +7,17 @@ export function figmaStatusLabel(status: string): string {
     case 'success':
       return 'Figma: matched';
     case 'weak_matches':
-      return 'Patterns: built-in (Figma weak)';
+      return 'Patterns: catalog + brief (Figma weak)';
     case 'missing_key':
-      return 'Patterns: built-in';
+      return 'Patterns: catalog + brief';
     case 'unauthorized':
-      return 'Patterns: built-in (Figma auth)';
+      return 'Patterns: catalog + brief (Figma auth)';
     case 'rate_limited':
-      return 'Patterns: built-in (Figma busy)';
+      return 'Patterns: catalog + brief (Figma busy)';
     case 'failed':
-      return 'Patterns: built-in (Figma skip)';
+      return 'Patterns: catalog + brief (Figma skip)';
     case 'skipped':
-      return 'Patterns: built-in';
+      return 'Patterns: catalog + brief';
     default:
       return status ? `Figma: ${status}` : '';
   }

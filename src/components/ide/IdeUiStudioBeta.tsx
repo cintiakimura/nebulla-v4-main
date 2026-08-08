@@ -1965,7 +1965,7 @@ export function IdeUiStudioBeta({
             <span className="line-clamp-2">
               {figmaStatusIsSoftFallback(figmaStatus)
                 ? figmaError ||
-                  'Continuing with built-in patterns — Figma is optional for MVP.'
+                  'Figma API skipped — using offline library / catalog + Stitch Design Brief (not Nebulla-only seeds).'
                 : [figmaError, figmaEnvGuidance].filter(Boolean).join(' — ')}
             </span>
           </div>

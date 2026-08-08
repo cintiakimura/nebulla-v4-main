@@ -236,6 +236,7 @@ Work **one step per Agent turn / PR** after constitution install. Fix the **earl
 | 2026-08-08 | Start home: remove inference/interview chooser; label Prompt; unify ide-glass-card; Continue = btn-cyan chips; missing goal/platform asked in chat | Markup on Start modal — simplify path; chat owns gaps |
 | 2026-08-08 | MVP soft-continue: Figma 429 → seed patterns (amber, not hard fail); Go auto-merges industry security baseline + demotes SEC_* blocks | Stop blocking first MVP on optional Figma / security docs polish |
 | 2026-08-08 | User "go" / "start coding" + assistant "Starting Foundation…" force Go pipeline even without START_CODING tag | Chat promised coding but never called runGoCodeAndApply |
+| 2026-08-08 | Figma 429: probe other keys → offline raw library → catalog+Stitch brief → seed last; stop Nebulla-seed-only short-circuit | UI was ignoring Figma DB / Stitch / Grok brief path |
 
 ---
 

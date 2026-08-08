@@ -749,10 +749,24 @@ export async function runUiGenerationCycleV2(
 
   // -------- Phase C — Figma --------
   stage("Fetching Figma references");
+  const catalogHints = [
+    ...(resourceMatch.profile?.strengths || []),
+    ...(resourceMatch.profile?.best_for || []).map((b) => `best_for:${b}`),
+    ...(resourceMatch.reasons || []).map((r) => r.detail),
+    ...(designBrief.component_rules || []),
+    ...(designBrief.dos || []),
+    `density=${designBrief.overview.density}`,
+    `personality=${designBrief.overview.personality.join(",")}`,
+  ]
+    .map((s) => String(s || "").trim())
+    .filter(Boolean)
+    .slice(0, 14);
   const figma = await retrieveFigmaReferences({
     classification,
     templateId: template.id,
     preferredFileKey: resourceMatch.figma_file_key,
+    catalogProfileId: resourceMatch.id || undefined,
+    catalogHints,
     seedState: {
       device: classification.device,
       page_type: mapPageTypeToLegacy(classification.page_type),
