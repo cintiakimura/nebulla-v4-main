@@ -64,7 +64,12 @@ import {
   isCodingIntent,
   runGoCodeAndApply,
 } from '../../lib/nebulaAiCodingPipeline';
-import { isShortCodingGoNudge, SHORT_CODING_GO_SUMMARY } from '../../lib/ideShortCodingNudge';
+import {
+  isAssistantCodingPromise,
+  isShortCodingGoNudge,
+  isUserExplicitCodingRequest,
+  SHORT_CODING_GO_SUMMARY,
+} from '../../lib/ideShortCodingNudge';
 import { setGrokCodingActive } from '../../lib/nebulaGrokCodingGate';
 import { runMasterPlanUiPipeline, runPostCodingWorkspaceSync } from '../../lib/ideArtifactSync';
 import {
@@ -1414,11 +1419,17 @@ export function AIChat() {
     setSending(true);
     setSendError(null);
     const discoveryCompleteAck = detectOnboardingBuildStart(rawText, prior);
-    // Product promise: "nothing more to add" starts coding — even if the toggle is still Chat.
-    if (discoveryCompleteAck && interactionModeRef.current === 'chat') {
+    /** Bare "go" / "start coding" — must launch Foundation even if the model omits START_CODING. */
+    const userForcedCoding = isUserExplicitCodingRequest(rawText);
+    // Product promise: "nothing more to add" / explicit "go" starts coding — even if still Chat.
+    if ((discoveryCompleteAck || userForcedCoding) && interactionModeRef.current === 'chat') {
       interactionModeRef.current = 'agent';
       setAssistantInteractionMode('agent');
-      setAccessoryHint('Discovery done — switching to Agent and starting the first coding slice.');
+      setAccessoryHint(
+        discoveryCompleteAck
+          ? 'Discovery done — switching to Agent and starting the first coding slice.'
+          : 'Switching to Agent — starting Foundation coding in your workspace.',
+      );
       window.setTimeout(() => setAccessoryHint(null), 4500);
     }
     if (discoveryCompleteAck) {
@@ -1426,6 +1437,10 @@ export function AIChat() {
       discoveryRequired = false;
       chatMode = 'coding';
       codingHint = 'discovery-complete-start-coding';
+    } else if (userForcedCoding) {
+      discoveryRequired = false;
+      chatMode = 'coding';
+      codingHint = codingHint || 'user-go-start-coding';
     }
     const lockedChat = interactionModeRef.current === 'chat';
     const onboardingBuildStart = discoveryCompleteAck;
@@ -1437,8 +1452,12 @@ export function AIChat() {
     const buildMode =
       !lockedChat &&
       !hasAppStatusPayload &&
-      (detectBuildModeIntent(rawText) || onboardingBuildStart || fastPrototypeTurn);
-    const showWorkActivity = buildMode || onboardingBuildStart || fastPrototypeTurn;
+      (detectBuildModeIntent(rawText) ||
+        userForcedCoding ||
+        onboardingBuildStart ||
+        fastPrototypeTurn);
+    const showWorkActivity =
+      buildMode || onboardingBuildStart || fastPrototypeTurn || userForcedCoding;
     try {
       console.info('[AIChat] turn', {
         interaction_mode: interactionModeRef.current,
@@ -1606,6 +1625,7 @@ export function AIChat() {
       }
 
       const shortCodingNudge = isShortCodingGoNudge(displayText || raw);
+      const assistantCodingPromise = isAssistantCodingPromise(displayText || raw);
       const willCode =
         agentAllowed &&
         (hadCodingTag ||
@@ -1613,7 +1633,9 @@ export function AIChat() {
           isCodingIntent(masterPlanSource) ||
           onboardingBuildStart ||
           fastPrototypeTurn ||
-          shortCodingNudge);
+          shortCodingNudge ||
+          userForcedCoding ||
+          assistantCodingPromise);
       const spoken = stripAssistantTagsForVoice(
         shortCodingNudge && !displayText.trim() ? SHORT_CODING_GO_SUMMARY : displayText,
       );
@@ -1802,9 +1824,17 @@ export function AIChat() {
 
       try {
         // Phase 7.5 — Foundation only after persisted mockup or explicit skip (no arch-doc false “coding”).
-        const foundationGate = willCode
+        let foundationGate = willCode
           ? await canStartFoundationCoding({ mockupSkippedOrFailed })
           : { ok: false as const, reason: 'blocked' as const };
+        // User said "go" / "start coding" — do not stall on mockup/security polish.
+        if (willCode && !foundationGate.ok && (userForcedCoding || assistantCodingPromise)) {
+          foundationGate = { ok: true, reason: 'explicit_skip' };
+          pushActivity(
+            'Starting Foundation coding now (user asked to code — mockup/security soft-continue)',
+            'info',
+          );
+        }
         if (willCode && !foundationGate.ok) {
           const persisted = await hasPersistedUiMockup();
           if (!persisted) {
@@ -1853,33 +1883,40 @@ export function AIChat() {
               onProgress: codingActivityRef.current ? pushActivity : undefined,
             })
           : { ran: false };
-        // No Go button: Discovery complete / Fast Prototype / legacy nudge starts coding.
-        if (
-          !coding.ran &&
-          agentAllowed &&
-          foundationGate.ok &&
-          (onboardingBuildStart || fastPrototypeTurn || shortCodingNudge)
-        ) {
+        // No Go button: user "go" / Discovery / Fast Prototype / assistant coding promise starts coding.
+        const forceGoPipeline =
+          onboardingBuildStart ||
+          fastPrototypeTurn ||
+          shortCodingNudge ||
+          userForcedCoding ||
+          assistantCodingPromise;
+        if (!coding.ran && agentAllowed && foundationGate.ok && forceGoPipeline) {
           if (!codingActivityRef.current) {
             beginCodingActivity('Starting code — first slice', goWorkSteps(), {
               subhead: onboardingBuildStart
                 ? 'Nothing more to add — Master Plan saved, Grok Code building files.'
-                : fastPrototypeTurn
-                  ? 'Fast Prototype draft ready — Grok Code building Foundation.'
-                  : 'Starting Grok Code for the next slice.',
+                : userForcedCoding
+                  ? 'You asked to code — Grok Code building Foundation now.'
+                  : fastPrototypeTurn
+                    ? 'Fast Prototype draft ready — Grok Code building Foundation.'
+                    : 'Starting Grok Code for the next slice.',
               initialLog: onboardingBuildStart
                 ? 'Discovery complete — auto START_CODING'
-                : fastPrototypeTurn
-                  ? 'Fast Prototype — auto START_CODING'
-                  : 'Auto coding pass (no Go button)',
+                : userForcedCoding
+                  ? 'User go / start coding — auto Foundation'
+                  : fastPrototypeTurn
+                    ? 'Fast Prototype — auto START_CODING'
+                    : 'Auto coding pass (no Go button)',
             });
           }
           pushActivity(
             onboardingBuildStart
               ? 'Nothing more to add — launching Go Code pipeline'
-              : fastPrototypeTurn
-                ? 'Fast Prototype — launching Go Code pipeline'
-                : 'START_CODING — launching Go Code pipeline',
+              : userForcedCoding
+                ? 'User asked to code — launching Go Code pipeline'
+                : fastPrototypeTurn
+                  ? 'Fast Prototype — launching Go Code pipeline'
+                  : 'START_CODING — launching Go Code pipeline',
             'info',
           );
           const goMessages = [
