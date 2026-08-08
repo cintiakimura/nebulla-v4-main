@@ -412,7 +412,7 @@ export function MyProjectsHome() {
           </p>
         </div>
 
-        <div className="rounded-2xl border border-border bg-black p-5">
+        <div className="ide-glass-card rounded-2xl border border-border p-5">
           <p className="text-sm text-foreground">How do you want to start?</p>
           <div className="mt-3 grid gap-2 sm:grid-cols-2">
             <button
@@ -423,8 +423,8 @@ export function MyProjectsHome() {
               className={cn(
                 'rounded-xl border px-3 py-3 text-left transition',
                 startMode === 'fast_prototype'
-                  ? 'border-foreground/40 bg-[#111111] text-foreground'
-                  : 'border-border text-muted-foreground hover:bg-[#111111] hover:text-foreground',
+                  ? 'ide-glass-card--selected border-foreground/40 text-foreground'
+                  : 'ide-glass-card--choice border-border text-muted-foreground',
               )}
             >
               <span className="block text-xs font-medium text-foreground">
@@ -442,8 +442,8 @@ export function MyProjectsHome() {
               className={cn(
                 'rounded-xl border px-3 py-3 text-left transition',
                 startMode === 'guided'
-                  ? 'border-foreground/40 bg-[#111111] text-foreground'
-                  : 'border-border text-muted-foreground hover:bg-[#111111] hover:text-foreground',
+                  ? 'ide-glass-card--selected border-foreground/40 text-foreground'
+                  : 'ide-glass-card--choice border-border text-muted-foreground',
               )}
             >
               <span className="block text-xs font-medium text-foreground">Full architecture interview</span>
@@ -471,7 +471,7 @@ export function MyProjectsHome() {
                 ? 'e.g. A mobile education app for kids to practice reading…'
                 : 'e.g. A mobile app for freelancers to track invoices and get paid reminders…'
             }
-            className="mt-3 w-full resize-y rounded-xl border border-border bg-[#0a0a0a] px-3 py-2.5 text-sm leading-relaxed text-foreground outline-none ring-primary/25 placeholder:text-muted-foreground/70 focus:ring disabled:opacity-60"
+            className="ide-glass-input mt-3 w-full resize-y rounded-xl border border-border px-3 py-2.5 text-sm leading-relaxed text-foreground outline-none ring-primary/25 placeholder:text-muted-foreground/70 focus:ring disabled:opacity-60"
           />
           <p className="mt-3 text-xs text-muted-foreground">
             {startMode === 'fast_prototype'
@@ -488,8 +488,8 @@ export function MyProjectsHome() {
                 className={cn(
                   'rounded-full border px-3 py-1.5 text-xs transition',
                   ideaType === t.id
-                    ? 'border-foreground/40 bg-[#111111] text-foreground'
-                    : 'border-border text-muted-foreground hover:bg-[#111111] hover:text-foreground',
+                    ? 'ide-glass-card--selected border-foreground/40 text-foreground'
+                    : 'ide-glass-card--choice border-border text-muted-foreground',
                 )}
               >
                 {t.title}

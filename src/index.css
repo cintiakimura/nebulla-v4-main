@@ -549,3 +549,38 @@
 .nebulla-ide-shell :is(.surface-base, .surface-active) {
   background-color: transparent !important;
 }
+
+/*
+ * Trial: foggy glass cards on Start / My Projects (readability over nebula).
+ * Revert: remove these rules + `ide-glass-*` classes from MyProjectsHome.tsx
+ */
+.nebulla-ide-shell .ide-glass-card {
+  background-color: rgba(0, 0, 0, 0.72) !important;
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border-color: rgba(255, 255, 255, 0.1) !important;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35);
+}
+
+.nebulla-ide-shell .ide-glass-card--choice {
+  background-color: rgba(0, 0, 0, 0.55) !important;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.nebulla-ide-shell .ide-glass-card--choice:hover {
+  background-color: rgba(0, 0, 0, 0.68) !important;
+}
+
+.nebulla-ide-shell .ide-glass-card--selected {
+  background-color: rgba(0, 0, 0, 0.78) !important;
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border-color: rgba(255, 255, 255, 0.22) !important;
+}
+
+.nebulla-ide-shell .ide-glass-input {
+  background-color: rgba(0, 0, 0, 0.7) !important;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
