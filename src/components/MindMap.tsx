@@ -226,24 +226,27 @@ export function MindMap({ pages, setPages, edges, setEdges, onSaveToMasterPlan }
         <Background color="#00ffff" gap={16} size={1} />
         <Controls className="bg-[#040f1a] border border-white/10 fill-cyan-300 text-cyan-300" />
         <Panel position="top-left" className="m-4 flex gap-2">
-          <button 
+          <button
+            type="button"
             onClick={() => setShowAddModal(true)}
-            className="flex items-center gap-2 px-3 py-1.5 bg-cyan-500/10 text-cyan-300 border border-cyan-500/20 rounded-md text-13 font-headline hover:bg-cyan-500/20 transition-all shadow-[0_0_10px_rgba(0,255,255,0.1)]"
+            className="btn-cyan inline-flex items-center gap-2 rounded-lg px-4 py-2 text-xs"
           >
             <Plus className="w-3.5 h-3.5" />
             Add Page
           </button>
-          <button 
+          <button
+            type="button"
             onClick={() => {
               void (window as Window & { syncMindMapFromMasterPlan?: () => Promise<void> })
                 .syncMindMapFromMasterPlan?.();
             }}
-            className="flex items-center gap-2 px-3 py-1.5 bg-purple-500/10 text-purple-300 border border-purple-500/20 rounded-md text-13 font-headline hover:bg-purple-500/20 transition-all shadow-[0_0_10px_rgba(168,85,247,0.1)]"
+            className="btn-cyan inline-flex items-center gap-2 rounded-lg px-4 py-2 text-xs"
           >
             <RefreshCw className="w-3.5 h-3.5" />
             Sync from Master Plan
           </button>
-          <button 
+          <button
+            type="button"
             onClick={() => {
               const pagesList = pages.map((p: any) => p.data.label).join(', ');
               const edgesList = edges.map((e: any) => {
@@ -258,7 +261,7 @@ Connections: ${edgesList}
 
 Please review this architecture and ensure the implementation is up to date.`);
             }}
-            className="flex items-center gap-2 px-3 py-1.5 bg-emerald-500/10 text-emerald-300 border border-emerald-500/20 rounded-md text-13 font-headline hover:bg-emerald-500/20 transition-all shadow-[0_0_10px_rgba(16,185,129,0.1)]"
+            className="btn-cyan inline-flex items-center gap-2 rounded-lg px-4 py-2 text-xs"
           >
             <Save className="w-3.5 h-3.5" />
             Push to AI

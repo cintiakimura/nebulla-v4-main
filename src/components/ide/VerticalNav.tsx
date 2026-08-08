@@ -82,10 +82,10 @@ export function VerticalNav({
       aria-label={item.label}
       aria-current={activeItem === item.id ? 'true' : undefined}
       className={cn(
-        'relative flex h-10 w-10 shrink-0 items-center justify-center rounded-lg transition-colors duration-300 ease-out',
+        'relative flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border transition-colors duration-300 ease-out',
         activeItem === item.id
-          ? 'text-cyan-200 ring-1 ring-cyan-500/35 bg-cyan-500/10'
-          : 'text-muted-foreground hover:bg-cyan-500/10 hover:text-cyan-100',
+          ? 'border-white/30 bg-cyan-500/10 text-white'
+          : 'border-transparent text-muted-foreground hover:border-white/15 hover:bg-cyan-500/10 hover:text-cyan-100',
       )}
     >
       {item.icon}
@@ -96,9 +96,6 @@ export function VerticalNav({
           aria-label={`${securityAlertCount} high-severity findings`}
         />
       ) : null}
-      {activeItem === item.id && (
-        <span className="absolute left-0 top-1/2 h-6 w-px -translate-y-1/2 rounded-r bg-cyan-400/70" />
-      )}
     </button>
   );
 

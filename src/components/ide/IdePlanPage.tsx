@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
 import { BookMarked, Network } from 'lucide-react';
-import { cn } from '@/lib/utils';
 import { MasterPlan } from '../MasterPlan';
 import { MindMapIdeRoute } from './MindMapIdeRoute';
 import {
@@ -97,27 +96,23 @@ export function IdePlanPage({ onClose }: { onClose: () => void }) {
               }
             }}
             placeholder="Name this project"
-            className="min-w-[12rem] flex-1 rounded-md border border-border bg-black px-2.5 py-1.5 text-sm text-foreground outline-none ring-primary/25 placeholder:text-muted-foreground/70 focus:ring"
+            className="min-w-[12rem] flex-1 rounded-lg border border-border bg-black px-2.5 py-1.5 text-sm text-foreground outline-none placeholder:text-muted-foreground/70"
           />
           <button
             type="button"
             onClick={() => commitName({ advanceRide: true })}
-            className="btn-cyan rounded-md px-2.5 py-1.5 text-[11px]"
+            className="btn-cyan inline-flex items-center rounded-lg px-4 py-2 text-xs"
           >
             Continue
           </button>
           <span className="text-[10px] text-muted-foreground">Git optional — Source Control</span>
         </div>
-        <div className="flex items-center gap-1 rounded-lg border border-border p-0.5">
+        <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"
             onClick={() => setView('plan')}
-            className={cn(
-              'inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-[11px] font-normal',
-              view === 'plan'
-                ? 'bg-[#111111] text-foreground'
-                : 'text-muted-foreground hover:text-foreground',
-            )}
+            aria-pressed={view === 'plan'}
+            className="btn-cyan inline-flex items-center gap-1.5 rounded-lg px-4 py-2 text-xs"
           >
             <BookMarked className="h-3.5 w-3.5" aria-hidden />
             Master Plan
@@ -125,12 +120,8 @@ export function IdePlanPage({ onClose }: { onClose: () => void }) {
           <button
             type="button"
             onClick={() => setView('mind-map')}
-            className={cn(
-              'inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-[11px] font-normal',
-              view === 'mind-map'
-                ? 'bg-[#111111] text-foreground'
-                : 'text-muted-foreground hover:text-foreground',
-            )}
+            aria-pressed={view === 'mind-map'}
+            className="btn-cyan inline-flex items-center gap-1.5 rounded-lg px-4 py-2 text-xs"
           >
             <Network className="h-3.5 w-3.5" aria-hidden />
             Mind Map

@@ -108,8 +108,11 @@ export function IdeStatusStrip({ variant = 'header' }: { variant?: 'header' | 'b
                 className={cn(
                   'inline-flex items-center gap-0.5 rounded-md font-normal transition-colors',
                   inHeader ? 'px-1.5 py-0.5 text-[10px] lg:px-2 lg:text-[11px]' : 'gap-1 px-2 py-1 text-[11px]',
-                  current && 'bg-[#111111] text-foreground ring-1 ring-primary/50',
-                  step === 'code' && codePulse && 'ring-1 ring-primary/60 bg-[#111111]/80',
+                  'border',
+                  current
+                    ? 'border-white/30 bg-[#111111] text-foreground'
+                    : 'border-transparent',
+                  step === 'code' && codePulse && !current && 'border-white/25 bg-[#111111]/80',
                   done && !current && 'text-foreground/80',
                   !done && !current && 'text-muted-foreground hover:text-foreground',
                   locked && 'opacity-50',

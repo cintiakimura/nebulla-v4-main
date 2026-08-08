@@ -203,7 +203,7 @@ export function MasterPlan({
             onClick={() => void handleExportDocs()}
             disabled={exportBusy}
             title="Markdown summary of plan, stack, pages, and security baseline"
-            className="flex items-center gap-1 rounded-full border border-border px-3 py-1.5 text-xs font-normal text-foreground transition-colors hover:bg-[#111111] disabled:opacity-45"
+            className="btn-cyan inline-flex items-center gap-1.5 rounded-lg px-4 py-2 text-xs disabled:opacity-45"
           >
             {exportBusy ? (
               <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
@@ -212,9 +212,10 @@ export function MasterPlan({
             )}
             Export technical documentation
           </button>
-          <button 
+          <button
+            type="button"
             onClick={handleSave}
-            className="flex items-center gap-1 rounded-full border border-border px-4 py-1.5 text-xs font-normal text-foreground transition-colors hover:bg-[#111111]"
+            className="btn-cyan inline-flex items-center gap-1.5 rounded-lg px-4 py-2 text-xs"
           >
             <Save className="h-3.5 w-3.5" />
             {isSaved ? 'Saved' : 'Save'}
@@ -244,10 +245,10 @@ export function MasterPlan({
             <button
               key={section.id}
               onClick={() => setActiveTab(section.id)}
-              className={`rounded-md border px-3 py-2.5 text-left text-13 font-normal tracking-wide transition-all ${
-                activeTab === section.id 
-                  ? 'border-border bg-[#111111] text-foreground shadow-[inset_2px_0_0_0_var(--primary)]' 
-                  : 'border-transparent text-muted-foreground hover:bg-[#111111] hover:text-foreground'
+              className={`rounded-lg border px-3 py-2.5 text-left text-13 font-normal tracking-wide transition-colors ${
+                activeTab === section.id
+                  ? 'border-white/30 bg-[#111111] text-foreground'
+                  : 'border-transparent text-muted-foreground hover:border-white/15 hover:bg-[#111111] hover:text-foreground'
               }`}
             >
               {section.title}
