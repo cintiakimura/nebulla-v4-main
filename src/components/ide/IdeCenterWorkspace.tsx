@@ -167,8 +167,11 @@ export function IdeCenterWorkspace() {
                 hideChrome
               />
             </PaneLayer>
+            {/* Unmount Plan/Mind Map when hidden — React Flow otherwise paints over App Preview / Studio. */}
             <PaneLayer visible={activePane === 'master-plan' || activePane === 'mind-map'}>
-              <IdePlanPage onClose={() => closeTab(panelTabId('master-plan'))} />
+              {activePane === 'master-plan' || activePane === 'mind-map' ? (
+                <IdePlanPage onClose={() => closeTab(panelTabId('master-plan'))} />
+              ) : null}
             </PaneLayer>
             {/* Legacy v0 Studio disabled — any stale ui-studio pane renders Beta. */}
             <PaneLayer visible={activePane === 'ui-studio' || activePane === 'ui-studio-beta'}>

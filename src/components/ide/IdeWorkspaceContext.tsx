@@ -162,6 +162,12 @@ export function IdeWorkspaceProvider({ children }: { children: ReactNode }) {
         .filter((p) => isUserAppProductPath(p))
         .sort((a, b) => a.localeCompare(b));
       setWorkspacePaths(paths);
+      // Drop confidential / platform tabs if still open (secrets, .env.d1, preview shells).
+      setTabs((prev) => {
+        const next = prev.filter((t) => isUserAppProductPath(t.path));
+        return next.length === prev.length ? prev : next;
+      });
+      setActivePath((cur) => (cur && !isUserAppProductPath(cur) ? null : cur));
       const b = data.git?.branch?.trim();
       setGitBranch(b && b !== 'unknown' && b !== '?' ? b : null);
     } catch (e) {

@@ -18,6 +18,15 @@ export function isNebulaOrchestrationPath(relPath: string): boolean {
   if (p === '.nebula-created-at' || p.startsWith('.nebula-')) return true;
   if (p.startsWith('.git/') || p === '.git') return true;
 
+  // Auto-provisioned secrets / D1 — confidential platform wiring, not app source.
+  if (p === '.env' || p === '.env.d1' || p.startsWith('.env.')) return true;
+  if (p === 'nebula-d1.json' || p === 'nebula-project-secrets.d1.json') return true;
+  if (/^nebula-project-secrets(\.|$)/i.test(p)) return true;
+
+  // Platform preview shells (App Preview uses public/index.html as the product entry).
+  if (/(^|\/)nebula-basic-preview\.html$/i.test(p)) return true;
+  if (/(^|\/)nebula-ui-gen-preview\.html$/i.test(p)) return true;
+
   const exact = new Set([
     'master-plan.json',
     'project-execution-rules.md',

@@ -1858,20 +1858,58 @@ export function AIChat() {
                 : 'START_CODING — launching Go Code pipeline',
             'info',
           );
-          const go = await runGoCodeAndApply({
+          const goMessages = [
+            { role: 'assistant' as const, content: masterPlanSource.slice(0, 12000) },
+            {
+              role: 'user' as const,
+              content:
+                'START_CODING — implement ONE coherent slice only (Build → Debug → Next). File blocks for this slice only — not the full §4 app.',
+            },
+          ];
+          let go = await runGoCodeAndApply({
             userId,
             projectName,
             userNote: text,
             onProgress: pushActivity,
-            messages: [
-              { role: 'assistant', content: masterPlanSource.slice(0, 12000) },
-              {
-                role: 'user',
-                content:
-                  'START_CODING — implement ONE coherent slice only (Build → Debug → Next). File blocks for this slice only — not the full §4 app.',
-              },
-            ],
+            messages: goMessages,
           });
+          // Strict Go often blocks on security/sign-in — re-accept baseline once, then retry.
+          if (
+            !go.ok &&
+            /MASTER_PLAN_INCOMPLETE|incomplete for Go|Go is paused|planning pieces/i.test(
+              go.statusMessage || '',
+            )
+          ) {
+            try {
+              const sec = await fetchJson<{ ok?: boolean; applied?: boolean }>(
+                withProjectQuery('/api/master-plan/accept-security-baseline'),
+                {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  credentials: 'include',
+                  body: JSON.stringify(withProjectBody({})),
+                },
+              );
+              if (sec.applied) {
+                pushActivity(
+                  'Filled missing security/sign-in baseline — retrying Foundation coding…',
+                  'info',
+                );
+                window.dispatchEvent(new CustomEvent('nebula-master-plan-updated'));
+              } else {
+                pushActivity('Retrying Foundation coding after Master Plan gate…', 'info');
+              }
+              go = await runGoCodeAndApply({
+                userId,
+                projectName,
+                userNote: text,
+                onProgress: pushActivity,
+                messages: goMessages,
+              });
+            } catch {
+              /* keep first go failure */
+            }
+          }
           coding = {
             ran: true,
             ok: go.ok,
