@@ -145,6 +145,19 @@ export function buildDesignTokens(
     };
   }
 
+  // Never use Nebulla IDE platform cyan as the full page canvas (cyan-only App Preview shell).
+  const platformCyan = new Set(["#00d4d4", "#22d3ee", "#06b6d4"]);
+  if (platformCyan.has((tokens.bg || "").toLowerCase())) {
+    tokens.bg = mostlyDark ? "#0A0B14" : base.bg;
+  }
+  if (platformCyan.has((tokens.surface || "").toLowerCase())) {
+    tokens.surface = mostlyDark ? "#11131F" : base.surface;
+  }
+  // Platform cyan may accent CTAs, but not replace a missing product primary as body wash.
+  if (platformCyan.has((tokens.primary || "").toLowerCase()) && /nebulla|cosmic|#080a14/i.test(blob)) {
+    tokens.primary = mostlyDark ? "#3B82F6" : base.primary;
+  }
+
   // Ensure primary contrast text usability via luminance check later in render
   return tokens;
 }

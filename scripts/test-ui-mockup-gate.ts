@@ -13,6 +13,13 @@ import {
   isArchitectureArtifactPath,
 } from '../src/lib/nebulaGrokCodingPipeline';
 import { isLoadableStudioModel } from '../lib/uiMockupArtifactHonesty';
+import {
+  clearFalseRegenBudgetIfEmptyMockup,
+  writeCyclePolicy,
+  defaultCyclePolicy,
+  readCyclePolicy,
+} from '../lib/uiGenerationEngine/cyclePolicy';
+import os from 'node:os';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const completePlan = JSON.parse(
@@ -89,5 +96,53 @@ assert.equal(
   }),
   true,
 );
+
+// Dark + cyan alone must not reject a real product mockup (false “already empty”).
+assert.equal(
+  isLoadableStudioModel({
+    pages: {
+      Home: {
+        nodes: {
+          root: {
+            text: 'Start practice',
+            style: { backgroundColor: '#080A14', color: '#00D4D4' },
+          },
+        },
+      },
+    },
+  }),
+  true,
+);
+assert.equal(
+  isLoadableStudioModel({
+    pages: {
+      Home: {
+        nodes: {
+          root: {
+            text: 'Nebulla Workspace Cosmic Night',
+            style: { backgroundColor: '#080A14', color: '#00D4D4' },
+          },
+        },
+      },
+    },
+  }),
+  false,
+);
+
+{
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'nebulla-cycle-'));
+  writeCyclePolicy(
+    tmp,
+    defaultCyclePolicy({
+      regeneration_count: 3,
+      final_status: 'failed',
+      user_visible_stage: 'Preference recovery needed',
+    }),
+  );
+  const cleared = clearFalseRegenBudgetIfEmptyMockup(tmp);
+  assert.equal(cleared.regeneration_count, 0);
+  assert.equal(cleared.final_status, 'pending');
+  assert.equal(readCyclePolicy(tmp).regeneration_count, 0);
+}
 
 console.log('test-ui-mockup-gate: ok');

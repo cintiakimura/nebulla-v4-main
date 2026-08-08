@@ -5,6 +5,8 @@
 
 import fs from "fs";
 import path from "path";
+import { isLoadableStudioModel } from "../uiMockupArtifactHonesty";
+import { readEnginePreviewModel } from "./previewModelIO";
 
 export type RecoveryPath =
   | "guided_improvement"
@@ -67,6 +69,42 @@ export function writeCyclePolicy(workspaceRoot: string, policy: UiGenCyclePolicy
   fs.mkdirSync(path.dirname(abs), { recursive: true });
   policy.updated_at = new Date().toISOString();
   fs.writeFileSync(abs, JSON.stringify(policy, null, 2), "utf8");
+}
+
+/** True when Studio can load a real engine preview model from disk (not Waiting / IDE shell). */
+export function workspaceHasLoadableMockup(workspaceRoot: string): boolean {
+  if (!workspaceRoot) return false;
+  try {
+    const { model } = readEnginePreviewModel(workspaceRoot);
+    return isLoadableStudioModel(model);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Phase 7.4: empty/failed cycles must not keep a false regen budget or preference-recovery lock.
+ * Call before auto/regenerate — if nothing loadable is on disk, reset counters so seed can succeed.
+ */
+export function clearFalseRegenBudgetIfEmptyMockup(workspaceRoot: string): UiGenCyclePolicy {
+  const policy = readCyclePolicy(workspaceRoot);
+  if (workspaceHasLoadableMockup(workspaceRoot)) return policy;
+  const locked =
+    policy.regeneration_count > 0 ||
+    policy.final_status === "failed" ||
+    policy.final_status === "rejected" ||
+    /preference recovery|regeneration limit|blocked/i.test(policy.user_visible_stage || "");
+  if (!locked) return policy;
+  const cleared = defaultCyclePolicy({
+    ...policy,
+    regeneration_count: 0,
+    final_status: "pending",
+    recovery_path: "none",
+    preference_feedback: "",
+    user_visible_stage: "Empty mockup — resetting cycle for seed generate",
+  });
+  writeCyclePolicy(workspaceRoot, cleared);
+  return cleared;
 }
 
 export function setUserVisibleStage(

@@ -202,8 +202,14 @@ function isNebullaIdePlaceholderShell(model: EditorModel | null | undefined): bo
   if (/Nebulla Workspace|Cosmic Night|0vgenerated-v2|inspired by 0vgenerated|Open Explorer/i.test(text)) {
     return true;
   }
-  // Classic Cosmic Night chrome tokens used only by the old IDE demo shell
-  if (/#080A14/i.test(text) && /#00D4D4/i.test(text)) return true;
+  // Classic Cosmic Night chrome — hex pair alone can appear in real app palettes
+  if (
+    /#080A14/i.test(text) &&
+    /#00D4D4/i.test(text) &&
+    /Nebulla|Cosmic Night|Workspace|Open Explorer/i.test(text)
+  ) {
+    return true;
+  }
   return false;
 }
 
@@ -633,13 +639,18 @@ export function IdeUiStudioBeta({
           return;
         }
         // False success path: Waiting canvas + stale flags/meta.
+        // regenerate:false — empty repair must not burn regen budget into preference recovery.
         mockupRepairAttemptedRef.current = true;
         clearUiMockupStageFlags();
+        setPreferenceRecovery(false);
+        setRegenCount(0);
+        setError('');
+        setEngineStage('Recovering empty mockup — seed generate');
         window.dispatchEvent(
           new CustomEvent('nebula-ui-studio-beta-run', {
             detail: {
               autoTriggered: true,
-              regenerate: true,
+              regenerate: false,
               projectName: getBrowserProjectName(),
             },
           }),

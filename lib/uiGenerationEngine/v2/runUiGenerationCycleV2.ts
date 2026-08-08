@@ -19,7 +19,12 @@ import {
 import { MASTER_PLAN_SECTION_KEYS } from "../../masterPlanSections";
 import { writePreviewModel } from "../../visualUiEditorPreview";
 import { appendStepLog, writeContextFile } from "../contextIO";
-import { readCyclePolicy, setUserVisibleStage, writeCyclePolicy } from "../cyclePolicy";
+import {
+  clearFalseRegenBudgetIfEmptyMockup,
+  setUserVisibleStage,
+  workspaceHasLoadableMockup,
+  writeCyclePolicy,
+} from "../cyclePolicy";
 import { writeEnginePreviewModel } from "../previewModelIO";
 import { cleanHumanTitle } from "../buildPreviewEditorModel";
 import {
@@ -175,15 +180,27 @@ function mergePages(a: PageDef[], b: PageDef[]): PageDef[] {
   return out;
 }
 
+function isAuthishPage(p: PageDef): boolean {
+  return /sign[\s_-]?in|sign[\s_-]?up|login|auth|register/i.test(`${p.name} ${p.route}`);
+}
+
+/** Prefer product home/practice over Login for first mockup (Phase 7.4 — avoid cyan auth-only shell). */
 function pickPage(pages: PageDef[], want?: string): PageDef | undefined {
   if (!pages.length) return undefined;
-  if (!want) return pages[0];
-  const w = want.toLowerCase();
-  return (
-    pages.find((p) => p.name.toLowerCase() === w) ||
-    pages.find((p) => p.name.toLowerCase().includes(w) || p.route.toLowerCase().includes(w)) ||
-    pages[0]
+  if (want) {
+    const w = want.toLowerCase();
+    return (
+      pages.find((p) => p.name.toLowerCase() === w) ||
+      pages.find((p) => p.name.toLowerCase().includes(w) || p.route.toLowerCase().includes(w)) ||
+      pages[0]
+    );
+  }
+  const homeish = pages.find((p) =>
+    /home|practice|lesson|today|dashboard|feed|tasks|overview/i.test(`${p.name} ${p.route}`),
   );
+  if (homeish) return homeish;
+  const nonAuth = pages.find((p) => !isAuthishPage(p));
+  return nonAuth || pages[0];
 }
 
 function hasUsableGoal(
@@ -291,7 +308,9 @@ export async function runUiGenerationCycleV2(
 ): Promise<RunUiGenerationResult> {
   const workspaceRoot = input.workspaceRoot;
   const state = emptyContextState();
-  const prevPolicy = readCyclePolicy(workspaceRoot);
+  // Phase 7.4: do not keep a false regen-limit / preference-recovery lock when no model landed.
+  const prevPolicy = clearFalseRegenBudgetIfEmptyMockup(workspaceRoot);
+  const hasLoadable = workspaceHasLoadableMockup(workspaceRoot);
   const pageKey = (input.pageName || prevPolicy.page_key || "").trim();
   const preferenceFeedback = (input.preferenceFeedback || "").trim();
   const guidedImprovement = Boolean(input.guidedImprovement && preferenceFeedback);
@@ -321,31 +340,37 @@ export async function runUiGenerationCycleV2(
     state.recovery_path = "guided_improvement";
     state.regeneration_count = Math.min(3, Math.max(1, prevPolicy.regeneration_count || 1));
   } else if (input.regenerate) {
-    const next = (prevPolicy.regeneration_count || 0) + 1;
-    if (next > 3) {
-      state.context_id = newContextId();
-      state.project_name = (input.projectName || "").trim() || "Untitled project";
-      state.created_at = nowIso();
-      state.regeneration_count = prevPolicy.regeneration_count;
-      state.failure_reason = "Regeneration limit reached — preference recovery";
-      stage("Preference recovery needed");
-      const contextPath = persist(workspaceRoot, state);
-      return {
-        ok: false,
-        status: "failed",
-        contextPath,
-        context: state,
-        error: state.failure_reason,
-        preference_recovery: true,
-        preference_recovery_question: PREFERENCE_RECOVERY_QUESTION,
-        regeneration_count: prevPolicy.regeneration_count,
-        max_regenerations: 3,
-        user_visible_stage: "Preference recovery needed",
-      };
+    // Empty mockup repair must not burn the regen budget into preference recovery.
+    if (!hasLoadable) {
+      state.regeneration_count = 1;
+      appendStepLog(state, "Empty mockup repair — regenerate treated as first seed cycle");
+    } else {
+      const next = (prevPolicy.regeneration_count || 0) + 1;
+      if (next > 3) {
+        state.context_id = newContextId();
+        state.project_name = (input.projectName || "").trim() || "Untitled project";
+        state.created_at = nowIso();
+        state.regeneration_count = prevPolicy.regeneration_count;
+        state.failure_reason = "Regeneration limit reached — preference recovery";
+        stage("Preference recovery needed");
+        const contextPath = persist(workspaceRoot, state);
+        return {
+          ok: false,
+          status: "failed",
+          contextPath,
+          context: state,
+          error: state.failure_reason,
+          preference_recovery: true,
+          preference_recovery_question: PREFERENCE_RECOVERY_QUESTION,
+          regeneration_count: prevPolicy.regeneration_count,
+          max_regenerations: 3,
+          user_visible_stage: "Preference recovery needed",
+        };
+      }
+      state.regeneration_count = next;
     }
-    state.regeneration_count = next;
   } else if (input.autoTriggered) {
-    if (prevPolicy.regeneration_count >= 3 && prevPolicy.final_status !== "pending") {
+    if (hasLoadable && prevPolicy.regeneration_count >= 3 && prevPolicy.final_status !== "pending") {
       state.context_id = newContextId();
       state.project_name = (input.projectName || "").trim() || "Untitled project";
       state.created_at = nowIso();

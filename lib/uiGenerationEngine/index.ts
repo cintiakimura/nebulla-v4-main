@@ -1,7 +1,13 @@
 export { runUiGenerationCycle, runUiGenerationCycleV2 } from "./runUiGenerationCycle";
 export type { RunUiGenerationInput, RunUiGenerationResult } from "./runUiGenerationCycle";
 export { CONTEXT_REL, contextAbsPath, writeContextFile } from "./contextIO";
-export { readCyclePolicy, writeCyclePolicy, CYCLE_POLICY_REL } from "./cyclePolicy";
+export {
+  readCyclePolicy,
+  writeCyclePolicy,
+  CYCLE_POLICY_REL,
+  workspaceHasLoadableMockup,
+  clearFalseRegenBudgetIfEmptyMockup,
+} from "./cyclePolicy";
 export {
   looksLikeUiRelevantPaths,
   hasMeaningfulUiFileGrounding,

@@ -27,7 +27,13 @@ export function isNebullaIdePlaceholderShell(model: unknown): boolean {
   if (/Nebulla Workspace|Cosmic Night|0vgenerated-v2|inspired by 0vgenerated|Open Explorer/i.test(text)) {
     return true;
   }
-  if (/#080A14/i.test(text) && /#00D4D4/i.test(text)) return true;
+  if (
+    /#080A14/i.test(text) &&
+    /#00D4D4/i.test(text) &&
+    /Nebulla|Cosmic Night|Workspace|Open Explorer/i.test(text)
+  ) {
+    return true;
+  }
   return false;
 }
 

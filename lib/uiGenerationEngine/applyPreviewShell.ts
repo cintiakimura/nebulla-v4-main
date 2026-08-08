@@ -59,6 +59,15 @@ export function applyUiGenerationToPreviewShell(options: {
       "";
     items.push({ title: esc(t), meta: esc(meta) });
   }
+  // Seed / rate-limit path: never leave App Preview as a single hero wash (cyan Login shell).
+  if (items.length === 0 && !/auth/i.test(templateId)) {
+    const fallbacks = [
+      { title: "Today’s lesson", meta: "Short practice for this session" },
+      { title: "Practice round", meta: "Build streak with quick reps" },
+      { title: "Progress", meta: "See what improved this week" },
+    ];
+    for (const f of fallbacks) items.push({ title: esc(f.title), meta: esc(f.meta) });
+  }
 
   const itemHtml = items
     .map(

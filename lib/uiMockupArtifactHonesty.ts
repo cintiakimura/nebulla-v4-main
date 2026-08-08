@@ -18,6 +18,14 @@ export function isLoadableStudioModel(model: StudioPreviewLike): boolean {
   if (/Nebulla Workspace|Cosmic Night|0vgenerated-v2|inspired by 0vgenerated|Open Explorer/i.test(text)) {
     return false;
   }
-  if (/#080A14/i.test(text) && /#00D4D4/i.test(text)) return false;
+  // Hex pair alone is not enough — real app palettes may use dark + teal/cyan.
+  // Only reject when Cosmic Night IDE chrome strings are also present.
+  if (
+    /#080A14/i.test(text) &&
+    /#00D4D4/i.test(text) &&
+    /Nebulla|Cosmic Night|Workspace|Open Explorer/i.test(text)
+  ) {
+    return false;
+  }
   return true;
 }
