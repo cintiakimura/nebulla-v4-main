@@ -18,6 +18,7 @@
 
 import fs from "fs";
 import path from "path";
+import { isLoadableStudioModel } from "./uiMockupArtifactHonesty";
 
 export type V0BaseManifest = {
   v0FirstGenerationComplete: boolean;
@@ -234,6 +235,21 @@ export function hasUiGenerationV2Ready(workspaceRoot: string): boolean {
       preview_applied?: boolean;
     };
     if (j.engine !== "v2") return false;
+    // Meta alone is not enough — Studio must have a loadable preview model on disk.
+    const previewPath = path.join(
+      workspaceRoot,
+      "nebulla-project",
+      "ui-generation-preview-model.json",
+    );
+    if (!fs.existsSync(previewPath)) return false;
+    try {
+      const model = JSON.parse(fs.readFileSync(previewPath, "utf8")) as {
+        pages?: Record<string, unknown>;
+      };
+      if (!isLoadableStudioModel(model)) return false;
+    } catch {
+      return false;
+    }
     if (j.preview_applied === true) return true;
     return j.quality_gate_result === "pass" || j.quality_gate_result === "repair";
   } catch {

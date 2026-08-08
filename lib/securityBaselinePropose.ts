@@ -47,10 +47,20 @@ export function buildSecurityBaselineProposal(plan: Record<string, unknown> | Re
   };
 }
 
-/** Append baseline to §2 if not already present. Returns new §2 text or null if skipped. */
+/** Auth-only draft when §2 already has RLS/isolation markers but no sign-in model. */
+export const SECURITY_AUTH_MODEL_DRAFT = `### Auth model (inference-first draft)
+- **Auth model:** Sign-in required for private routes (session or magic link / OAuth as appropriate). For kids/education: parent/teacher accounts; COPPA-aware consent when under-13 data applies.
+- **Public routes:** Explicitly list which routes stay public (marketing / login only).
+- *(Assumption: sign-in approach drafted because the goal implies accounts or private/child data — correct if wrong.)*`;
+
+/** Append baseline to §2 if not already complete. Returns new §2 text or null if skipped. */
 export function mergeSecurityBaselineIntoSection2(section2: string): string | null {
   const cur = String(section2 || "").trim();
-  if (SECURITY_MARKERS_RE.test(cur) && !SECURITY_NEGATED_RE.test(cur)) return null;
+  const hasMarkers = SECURITY_MARKERS_RE.test(cur) && !SECURITY_NEGATED_RE.test(cur);
+  const hasAuth = AUTH_MODEL_RE.test(cur) && !SECURITY_NEGATED_RE.test(cur);
+  // Need BOTH isolation markers and an auth/sign-in model for strict Go.
+  if (hasMarkers && hasAuth) return null;
   if (!cur) return SECURITY_BASELINE_DRAFT;
+  if (hasMarkers && !hasAuth) return `${cur}\n\n${SECURITY_AUTH_MODEL_DRAFT}`;
   return `${cur}\n\n${SECURITY_BASELINE_DRAFT}`;
 }

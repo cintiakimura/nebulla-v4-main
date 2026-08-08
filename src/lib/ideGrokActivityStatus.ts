@@ -239,5 +239,9 @@ export function startGrokActivityWaitTicker(
     const elapsed = formatGrokActivityElapsed(started);
     onTick(elapsed ? `${label} (${elapsed})` : label, 'wait', { currentOnly: true });
   }, intervalMs);
-  return () => window.clearInterval(id);
+  return () => {
+    window.clearInterval(id);
+    // Clear hung wait line so Live Activity does not spin forever after mind map already synced.
+    onTick(`${label} — done`, 'info', { currentOnly: true });
+  };
 }

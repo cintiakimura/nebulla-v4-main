@@ -8,6 +8,7 @@ import { isMasterPlanReadyForUiMockup } from './masterPlanSections';
 import { getBrowserProjectKey, withProjectQuery } from './nebulaProjectApi';
 import { readResponseJson } from './apiFetch';
 import { isFastPrototypeMode } from './ideStartMode';
+import { isLoadableStudioModel } from '../../lib/uiMockupArtifactHonesty';
 
 export type InferenceFirstStage =
   | 'research'
@@ -78,24 +79,28 @@ export function wasUiMockupStageStarted(projectKey?: string): boolean {
   }
 }
 
-/** True when disk meta says UI Gen produced a usable preview (not just a session flag). */
+/**
+ * True when UI Gen produced a **loadable Studio model** and meta is usable.
+ * preview_applied / gate alone are NOT enough (false “already on disk” left Studio Waiting).
+ */
 export async function hasPersistedUiMockup(): Promise<boolean> {
   try {
-    const r = await fetch(withProjectQuery('/api/ui-studio-beta/status'), {
+    const r = await fetch(withProjectQuery('/api/ui-studio-beta/preview'), {
       credentials: 'include',
       cache: 'no-store',
     });
     if (!r.ok) return false;
     const st = (await readResponseJson(r)) as {
+      model?: { pages?: Record<string, unknown> } | null;
       preview_applied?: boolean;
       quality_gate_result?: string;
       final_status?: string;
     };
-    if (st.preview_applied === true) return true;
+    if (!isLoadableStudioModel(st.model)) return false;
     const gate = String(st.quality_gate_result || '').toLowerCase();
-    if (gate === 'pass' || gate === 'repair') return true;
-    if (String(st.final_status || '').toLowerCase() === 'ready') return true;
-    return false;
+    const gateOk = gate === 'pass' || gate === 'repair';
+    const ready = String(st.final_status || '').toLowerCase() === 'ready';
+    return st.preview_applied === true || gateOk || ready;
   } catch {
     return false;
   }

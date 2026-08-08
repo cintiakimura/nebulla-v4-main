@@ -88,6 +88,7 @@ import {
 import { readUiBriefMarkdown } from "./lib/nebulaUiBrief";
 import { resolveMasterPlanStrictMode } from "./lib/masterPlanStrictPolicy";
 import { isUserAppProductPath } from "./lib/nebulaOrchestrationPaths";
+import { isLoadableStudioModel } from "./lib/uiMockupArtifactHonesty";
 import { assessMasterPlanCompletenessWithWorkspace } from "./lib/masterPlanCompletenessIo";
 import { buildTechnicalDocumentationMarkdown } from "./lib/technicalDocumentationExport";
 import { assessMindMapSubsetOfSection4 } from "./lib/mindMapFidelity";
@@ -4036,6 +4037,10 @@ ${modelJson}`;
       const { workspaceRoot } = projectPathsFor(req);
       const policy = readCyclePolicy(workspaceRoot);
       const meta = readUiGenerationV2PublicMeta(workspaceRoot);
+      const { model } = readEnginePreviewModel(workspaceRoot);
+      const has_loadable_model = isLoadableStudioModel(
+        model as { pages?: Record<string, unknown> } | null,
+      );
       return res.json({
         ok: true,
         user_visible_stage: policy.user_visible_stage,
@@ -4049,7 +4054,9 @@ ${modelJson}`;
         updated_at: policy.updated_at,
         patternMode: meta.pattern_mode,
         quality_gate_result: meta.quality_gate_result,
-        preview_applied: meta.preview_applied,
+        // Do not advertise preview_applied when Studio has nothing loadable (Phase 7.4 honesty).
+        preview_applied: has_loadable_model ? meta.preview_applied : false,
+        has_loadable_model,
         figma_used: meta.figma_used,
         figma_status: meta.figma_status,
         figma_error: meta.figma_error,
@@ -4074,11 +4081,15 @@ ${modelJson}`;
       const codePath = path.join(workspaceRoot, "nebulla-project", "ui-generation-output.tsx");
       const hasGeneratedCode = fs.existsSync(codePath) && fs.statSync(codePath).size > 0;
       const meta = readUiGenerationV2PublicMeta(workspaceRoot);
+      const has_loadable_model = isLoadableStudioModel(
+        model as { pages?: Record<string, unknown> } | null,
+      );
       return res.json({
         ok: true,
         model,
         source,
         hasGeneratedCode,
+        has_loadable_model,
         user_visible_stage: policy.user_visible_stage,
         regeneration_count: policy.regeneration_count,
         max_regenerations: policy.max_regenerations,
@@ -4086,7 +4097,7 @@ ${modelJson}`;
         page_key: policy.page_key,
         patternMode: meta.pattern_mode,
         quality_gate_result: meta.quality_gate_result,
-        preview_applied: meta.preview_applied,
+        preview_applied: has_loadable_model ? meta.preview_applied : false,
         figma_used: meta.figma_used,
         figma_status: meta.figma_status,
         figma_error: meta.figma_error,

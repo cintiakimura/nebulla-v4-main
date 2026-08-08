@@ -55,6 +55,11 @@ export async function runMasterPlanUiPipeline(options?: {
       onProgress?.(msg, kind, opts),
     );
     let result: MasterPlanUiPipelineResult;
+    const ac = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    const timeoutId =
+      ac && typeof window !== 'undefined'
+        ? window.setTimeout(() => ac.abort(), 90_000)
+        : null;
     try {
       result = await fetchJson<MasterPlanUiPipelineResult>(
         withProjectQuery('/api/ide/master-plan-ui-pipeline'),
@@ -62,6 +67,7 @@ export async function runMasterPlanUiPipeline(options?: {
           method: 'POST',
           headers: ideArtifactHeaders(),
           credentials: 'include',
+          signal: ac?.signal,
           body: JSON.stringify(
             withProjectBody({
               projectName: options?.projectName?.trim() || undefined,
@@ -72,10 +78,13 @@ export async function runMasterPlanUiPipeline(options?: {
         },
       );
     } finally {
+      if (timeoutId != null) window.clearTimeout(timeoutId);
       stopWait();
     }
     if ((result.mindMapPageCount ?? 0) > 0) {
       onProgress?.(`Mind map synced — ${result.mindMapPageCount} page node(s)`, 'success');
+    } else {
+      onProgress?.('Mind map sync finished', 'info');
     }
     return { ...result, v0Triggered: false };
   } catch (e) {

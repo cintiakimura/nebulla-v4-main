@@ -1698,9 +1698,10 @@ export function AIChat() {
       }
 
       // Auto-accept security baseline for inference-first so strict Go isn't stuck on Accept.
+      // Includes auth/sign-in when kids/teachers/parents + private data are already implied.
       if (agentAllowed && (fastPrototypeTurn || mpSaved > 0)) {
         try {
-          const sec = await fetchJson<{ ok?: boolean; applied?: boolean }>(
+          const sec = await fetchJson<{ ok?: boolean; applied?: boolean; reason?: string }>(
             withProjectQuery('/api/master-plan/accept-security-baseline'),
             {
               method: 'POST',
@@ -1710,8 +1711,13 @@ export function AIChat() {
             },
           );
           if (sec.applied) {
-            pushActivity('Security baseline drafted into §2 (assumption — correct if wrong)', 'info');
+            pushActivity(
+              'Security baseline + sign-in approach drafted into §2 (assumption — correct if wrong)',
+              'info',
+            );
             window.dispatchEvent(new CustomEvent('nebula-master-plan-updated'));
+          } else if (sec.reason === 'already_present') {
+            pushActivity('Security baseline already present in Master Plan §2', 'info');
           }
         } catch {
           /* non-fatal */
@@ -2654,11 +2660,21 @@ export function AIChat() {
               aria-live="polite"
             >
               <div className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center">
-                {message.statusKind === 'wait' || (sending && message.id === messages[messages.length - 1]?.id) ? (
-                  <Loader2 className="h-3 w-3 animate-spin text-muted-foreground/70" aria-hidden />
-                ) : (
-                  <Bot className="h-3 w-3 text-muted-foreground/50" aria-hidden />
-                )}
+                {(() => {
+                  const isLatest = message.id === messages[messages.length - 1]?.id;
+                  // Only the latest wait row spins while work is still in flight (Phase 7.4).
+                  const waitSpinning =
+                    message.statusKind === 'wait' &&
+                    isLatest &&
+                    (sending || grokActivity.tone === 'work');
+                  const sendingSpin =
+                    sending && isLatest && message.statusKind !== 'wait';
+                  return waitSpinning || sendingSpin ? (
+                    <Loader2 className="h-3 w-3 animate-spin text-muted-foreground/70" aria-hidden />
+                  ) : (
+                    <Bot className="h-3 w-3 text-muted-foreground/50" aria-hidden />
+                  );
+                })()}
               </div>
               <p
                 className={cn(

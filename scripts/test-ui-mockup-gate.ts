@@ -12,6 +12,7 @@ import {
   filterGrokContentToArchitectureFiles,
   isArchitectureArtifactPath,
 } from '../src/lib/nebulaGrokCodingPipeline';
+import { isLoadableStudioModel } from '../lib/uiMockupArtifactHonesty';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const completePlan = JSON.parse(
@@ -66,5 +67,27 @@ const mixed = [
 const archOnly = filterGrokContentToArchitectureFiles(mixed);
 assert.ok(archOnly.includes('ui-brief.md'));
 assert.ok(!archOnly.includes('app/page.tsx'));
+
+assert.equal(isLoadableStudioModel(null), false);
+assert.equal(
+  isLoadableStudioModel({
+    pages: {
+      Home: {
+        nodes: { t: { text: 'Waiting for UI generation' } },
+      },
+    },
+  }),
+  false,
+);
+assert.equal(
+  isLoadableStudioModel({
+    pages: {
+      Home: {
+        nodes: { t: { text: 'Teacher login' } },
+      },
+    },
+  }),
+  true,
+);
 
 console.log('test-ui-mockup-gate: ok');

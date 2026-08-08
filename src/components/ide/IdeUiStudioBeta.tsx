@@ -45,6 +45,8 @@ import {
   gateLabel,
   weakGateUserMessage,
 } from '../../lib/uiGenStatusLabels';
+import { clearUiMockupStageFlags } from '../../lib/uiMockupGate';
+import { isLoadableStudioModel } from '../../../lib/uiMockupArtifactHonesty';
 
 const V0_FETCH_TIMEOUT_MS = 360_000;
 
@@ -588,32 +590,60 @@ export function IdeUiStudioBeta({
     void loadEnginePreview();
   }, [loadEnginePreview]);
 
-  // Connect Studio → App Preview when meta already passed but index.html still scaffold.
+  // Phase 7.4: if meta claimed ready but Studio is still Waiting → clear false success + one Generate.
+  const mockupRepairAttemptedRef = useRef(false);
   useEffect(() => {
     let cancelled = false;
     void (async () => {
+      if (mockupRepairAttemptedRef.current) return;
       try {
-        const r = await fetch(withProjectQuery('/api/ui-studio-beta/status'), {
+        await loadEnginePreview();
+        if (cancelled) return;
+        const prevR = await fetch(withProjectQuery('/api/ui-studio-beta/preview'), {
           credentials: 'include',
           headers: getGrokRequestHeaders(),
+          cache: 'no-store',
         });
-        if (!r.ok || cancelled) return;
-        const st = (await r.json()) as {
-          preview_applied?: boolean;
+        if (!prevR.ok || cancelled) return;
+        const prev = (await prevR.json()) as {
+          model?: { pages?: Record<string, unknown> } | null;
+          has_loadable_model?: boolean;
           quality_gate_result?: string;
+          preview_applied?: boolean;
         };
-        const gate = String(st.quality_gate_result || '').toLowerCase();
-        if (st.preview_applied) return;
-        if (gate !== 'pass' && gate !== 'repair') return;
-        const apply = await fetch(withProjectQuery('/api/ui-studio-beta/apply-preview'), {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', ...getGrokRequestHeaders() },
-          credentials: 'include',
-          body: JSON.stringify(withProjectBody({})),
-        });
-        if (!apply.ok || cancelled) return;
-        setPreviewSynced(true);
-        window.dispatchEvent(new CustomEvent('nebula-reload-app-preview'));
+        const loadable =
+          prev.has_loadable_model === true || isLoadableStudioModel(prev.model);
+        if (loadable) {
+          // Connect Studio → App Preview when model exists but index.html still scaffold.
+          if (!prev.preview_applied) {
+            const gate = String(prev.quality_gate_result || '').toLowerCase();
+            if (gate === 'pass' || gate === 'repair') {
+              const apply = await fetch(withProjectQuery('/api/ui-studio-beta/apply-preview'), {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', ...getGrokRequestHeaders() },
+                credentials: 'include',
+                body: JSON.stringify(withProjectBody({})),
+              });
+              if (apply.ok && !cancelled) {
+                setPreviewSynced(true);
+                window.dispatchEvent(new CustomEvent('nebula-reload-app-preview'));
+              }
+            }
+          }
+          return;
+        }
+        // False success path: Waiting canvas + stale flags/meta.
+        mockupRepairAttemptedRef.current = true;
+        clearUiMockupStageFlags();
+        window.dispatchEvent(
+          new CustomEvent('nebula-ui-studio-beta-run', {
+            detail: {
+              autoTriggered: true,
+              regenerate: true,
+              projectName: getBrowserProjectName(),
+            },
+          }),
+        );
       } catch {
         /* ignore */
       }
@@ -621,7 +651,7 @@ export function IdeUiStudioBeta({
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [loadEnginePreview]);
 
   useEffect(() => {
     const onRefresh = () => void loadEnginePreview();

@@ -30,6 +30,17 @@ const merged = mergeSecurityBaselineIntoSection2(thin["2. Tech and Research"]);
 assert.ok(merged && /Security baseline/i.test(merged));
 assert.equal(mergeSecurityBaselineIntoSection2(merged!), null);
 
+// Markers without sign-in model must still merge (strict Go SEC_AUTH_MISSING).
+const partialSec = {
+  "1. Goal of the app": "Kids tutoring with teachers and parents dashboards",
+  "2. Tech and Research":
+    "Security baseline: use workspace_id / classroom_id with row-level security and deny by default.",
+};
+assert.equal(planNeedsSecurityBaseline(partialSec), true);
+const authFilled = mergeSecurityBaselineIntoSection2(partialSec["2. Tech and Research"]);
+assert.ok(authFilled && /sign-?in required|Auth model/i.test(authFilled));
+assert.equal(planNeedsSecurityBaseline({ ...partialSec, "2. Tech and Research": authFilled! }), false);
+
 const draft = draftSection4AmendmentsForRoutes(["/2fa", "/_secret"]);
 assert.match(draft, /`\/2fa`/);
 assert.match(draft, /`\/_secret`/);
