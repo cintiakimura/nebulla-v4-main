@@ -84,7 +84,9 @@ import {
 } from '../../lib/ideWorkspaceChatContext';
 import {
   assessUiMockupReadiness,
+  canStartFoundationCoding,
   clearUiMockupStageFlags,
+  hasPersistedUiMockup,
   markUiMockupStageStarted,
   markUiMockupSucceeded,
   setInferenceFirstStage,
@@ -1726,6 +1728,7 @@ export function AIChat() {
 
       // Stage B — UI mockup after plan + ui-brief, BEFORE coding (single API key queue).
       let uiMockupStarted = false;
+      let mockupSkippedOrFailed = false;
       if (agentAllowed && (fastPrototypeTurn || willCode || mpSaved > 0)) {
         const readiness = await assessUiMockupReadiness({ projectKey: diskProjectKey });
         if (readiness.ok) {
@@ -1781,31 +1784,50 @@ export function AIChat() {
         return next;
       });
           } else {
+            mockupSkippedOrFailed = true;
             clearUiMockupStageFlags(diskProjectKey);
             pushActivity(
-              `UI mockup: ${mockup.error || 'incomplete'} — will retry after coding if needed`,
+              `UI mockup: ${mockup.error || 'incomplete'} — Foundation coding continues (skip path); Studio can regenerate later`,
               'warn',
             );
           }
         } else if (fastPrototypeTurn || willCode) {
+          mockupSkippedOrFailed = true;
           pushActivity(
-            `UI mockup waiting — ${readiness.reasons.join('; ') || 'architecture inputs incomplete'}`,
+            `UI mockup waiting — ${readiness.reasons.join('; ') || 'architecture inputs incomplete'} — Foundation may still start`,
             'info',
           );
         }
       }
 
       try {
-        if (willCode && !codingActivityRef.current) {
+        // Phase 7.5 — Foundation only after persisted mockup or explicit skip (no arch-doc false “coding”).
+        const foundationGate = willCode
+          ? await canStartFoundationCoding({ mockupSkippedOrFailed })
+          : { ok: false as const, reason: 'blocked' as const };
+        if (willCode && !foundationGate.ok) {
+          const persisted = await hasPersistedUiMockup();
+          if (!persisted) {
+            pushActivity(
+              'Foundation coding waiting — finish UI mockup (or open UI Studio → Generate) so App Preview is not empty',
+              'warn',
+            );
+          }
+        }
+
+        if (willCode && foundationGate.ok && !codingActivityRef.current) {
           beginCodingActivity('Grok Code — writing files to workspace', goWorkSteps(), {
-            subhead: uiMockupStarted
-              ? 'UI mockup triggered — now Foundation coding slice.'
-              : 'Master Plan → Grok Code → files on disk.',
+            subhead:
+              foundationGate.reason === 'mockup_ready'
+                ? 'UI mockup on disk — Foundation coding slice next.'
+                : uiMockupStarted
+                  ? 'UI mockup triggered — now Foundation coding slice.'
+                  : 'Master Plan → Grok Code → files on disk.',
             initialLog: 'Coding stage — after architecture (and UI mockup when ready)',
           });
         }
 
-        if (willCode) {
+        if (willCode && foundationGate.ok) {
           setInferenceFirstStage('coding', diskProjectKey);
           setGrokActivity((prev) => {
             const mm =
@@ -1820,7 +1842,8 @@ export function AIChat() {
           });
         }
 
-        let coding = agentAllowed
+        let coding =
+          agentAllowed && willCode && foundationGate.ok
           ? await handlePostGrokCodingTurn({
               assistantContent: masterPlanSource,
               planningPhase,
@@ -1834,6 +1857,7 @@ export function AIChat() {
         if (
           !coding.ran &&
           agentAllowed &&
+          foundationGate.ok &&
           (onboardingBuildStart || fastPrototypeTurn || shortCodingNudge)
         ) {
           if (!codingActivityRef.current) {
@@ -1863,7 +1887,7 @@ export function AIChat() {
             {
               role: 'user' as const,
               content:
-                'START_CODING — implement ONE coherent slice only (Build → Debug → Next). File blocks for this slice only — not the full §4 app.',
+                'START_CODING — implement ONE coherent Foundation slice only (Build → Debug → Next). Prefer app/, src/, components/, pages/ — not master-plan/ui-brief only. File blocks for this slice only — not the full §4 app.',
             },
           ];
           let go = await runGoCodeAndApply({

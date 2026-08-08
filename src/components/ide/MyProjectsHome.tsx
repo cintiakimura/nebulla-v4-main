@@ -471,7 +471,7 @@ export function MyProjectsHome() {
                 ? 'e.g. A mobile education app for kids to practice reading…'
                 : 'e.g. A mobile app for freelancers to track invoices and get paid reminders…'
             }
-            className="ide-glass-input mt-3 w-full resize-y rounded-xl border border-border px-3 py-2.5 text-sm leading-relaxed text-foreground outline-none ring-primary/25 placeholder:text-muted-foreground/70 focus:ring disabled:opacity-60"
+            className="ide-glass-input mt-3 w-full resize-y rounded-xl border border-border px-3 py-2.5 text-sm leading-relaxed text-foreground outline-none placeholder:text-muted-foreground/70 disabled:opacity-60"
           />
           <p className="mt-3 text-xs text-muted-foreground">
             {startMode === 'fast_prototype'
@@ -484,13 +484,9 @@ export function MyProjectsHome() {
                 key={t.id}
                 type="button"
                 disabled={busyStarting}
+                aria-pressed={ideaType === t.id}
                 onClick={() => setIdeaType((prev) => (prev === t.id ? null : t.id))}
-                className={cn(
-                  'rounded-full border px-3 py-1.5 text-xs transition',
-                  ideaType === t.id
-                    ? 'ide-glass-card--selected border-foreground/40 text-foreground'
-                    : 'ide-glass-card--choice border-border text-muted-foreground',
-                )}
+                className="btn-cyan inline-flex items-center gap-1.5 rounded-lg px-4 py-2 text-xs disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {t.title}
               </button>
@@ -532,7 +528,7 @@ export function MyProjectsHome() {
                 disabled={busyStarting}
                 title={action.blurb}
                 onClick={() => void onStartTypedProject(action.id)}
-                className="inline-flex items-center gap-2 rounded-full border border-border bg-black px-3 py-2 text-xs font-normal text-foreground transition hover:bg-[#111111] disabled:cursor-wait disabled:opacity-60"
+                className="btn-cyan inline-flex items-center gap-2 rounded-lg px-4 py-2 text-xs disabled:cursor-wait disabled:opacity-50"
               >
                 {busy ? (
                   <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -562,7 +558,7 @@ export function MyProjectsHome() {
               type="button"
               onClick={action.onClick}
               title={action.blurb}
-              className="inline-flex items-center gap-2 rounded-full border border-border bg-transparent px-3 py-2 text-xs font-normal text-muted-foreground transition hover:bg-[#111111] hover:text-foreground"
+              className="btn-cyan inline-flex items-center gap-2 rounded-lg px-4 py-2 text-xs"
             >
               <Icon className="h-3.5 w-3.5" aria-hidden />
               {action.title}
@@ -628,7 +624,7 @@ export function MyProjectsHome() {
                 <button
                   type="button"
                   onClick={() => void onOpenProject(p)}
-                  className="rounded-full border border-border px-3 py-1.5 text-xs font-normal text-foreground hover:bg-[#111111]"
+                  className="btn-cyan inline-flex items-center rounded-lg px-4 py-2 text-xs"
                 >
                   Open
                 </button>
@@ -693,7 +689,7 @@ export function MyProjectsHome() {
               <button
                 type="button"
                 onClick={() => setFileModal(null)}
-                className="rounded-full px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground"
+                className="btn-cyan inline-flex items-center rounded-lg px-4 py-2 text-xs opacity-80"
               >
                 Close
               </button>
@@ -701,7 +697,7 @@ export function MyProjectsHome() {
                 type="button"
                 disabled={fileBusy}
                 onClick={() => void submitFileModal()}
-                className="btn-cyan inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs disabled:opacity-50"
+                className="btn-cyan inline-flex items-center gap-1.5 rounded-lg px-4 py-2 text-xs disabled:opacity-50"
               >
                 {fileBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
                 Open

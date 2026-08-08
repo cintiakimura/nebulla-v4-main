@@ -115,6 +115,30 @@ export function clearUiMockupStageFlags(projectKey?: string): void {
   }
 }
 
+export type FoundationCodingGateReason = 'mockup_ready' | 'explicit_skip' | 'blocked';
+
+/**
+ * Phase 7.5: Foundation coding starts after persisted mockup, or when mockup was skipped / failed.
+ * Does not start a second UI Gen — only answers whether Go may proceed.
+ */
+export async function canStartFoundationCoding(options?: {
+  /** True when Stage B could not run or returned failure (skip path). */
+  mockupSkippedOrFailed?: boolean;
+}): Promise<{ ok: boolean; reason: FoundationCodingGateReason }> {
+  if (await hasPersistedUiMockup()) {
+    return { ok: true, reason: 'mockup_ready' };
+  }
+  if (options?.mockupSkippedOrFailed) {
+    return { ok: true, reason: 'explicit_skip' };
+  }
+  // Mockup claimed in-session success but disk empty — still allow Go so spine does not stall;
+  // Studio mount repair (7.4) can recover the canvas separately.
+  if (wasUiMockupStageStarted()) {
+    return { ok: true, reason: 'explicit_skip' };
+  }
+  return { ok: false, reason: 'blocked' };
+}
+
 export type UiMockupReadiness = {
   ok: boolean;
   reasons: string[];

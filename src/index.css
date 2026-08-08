@@ -663,11 +663,9 @@
   background-color: var(--ide-glass-fill-strong) !important;
   backdrop-filter: var(--ide-glass-blur) !important;
   -webkit-backdrop-filter: var(--ide-glass-blur) !important;
-  border-color: color-mix(in srgb, var(--ide-cyan) 65%, rgba(255, 255, 255, 0.3)) !important;
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.18),
-    0 0 0 1px color-mix(in srgb, var(--ide-cyan) 45%, transparent),
-    0 0 24px color-mix(in srgb, var(--ide-cyan) 18%, transparent);
+  /* Selected = stronger border only — no cyan outer glow */
+  border-color: rgba(255, 255, 255, 0.32) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16);
 }
 
 .nebulla-ide-shell .ide-glass-input {
@@ -701,29 +699,72 @@
   color: var(--ide-cyan) !important;
 }
 
-.nebulla-ide-shell .border-primary,
+.nebulla-ide-shell .border-primary {
+  border-color: color-mix(in srgb, var(--ide-cyan) 45%, transparent);
+}
+
+/* No glow rings — thin outline only */
 .nebulla-ide-shell .ring-primary,
 .nebulla-ide-shell [class*='ring-primary'] {
-  --tw-ring-color: color-mix(in srgb, var(--ide-cyan) 45%, transparent);
+  --tw-ring-color: transparent;
+  --tw-ring-shadow: 0 0 0 1px color-mix(in srgb, var(--ide-cyan) 35%, transparent);
 }
 
-.nebulla-ide-shell .btn-cyan {
-  background-color: color-mix(in srgb, var(--ide-cyan) 22%, transparent);
-  color: #ffffff;
-  border: 1px solid color-mix(in srgb, var(--ide-cyan) 55%, transparent);
+/* Canonical IDE control — same look as Start “Continue” */
+.nebulla-ide-shell .btn-cyan,
+.nebulla-ide-shell .ide-btn {
+  background-color: color-mix(in srgb, var(--ide-cyan) 12%, transparent);
+  color: rgba(255, 255, 255, 0.92);
+  border: 1px solid color-mix(in srgb, var(--ide-cyan) 35%, transparent);
   font-weight: 400;
+  border-radius: 0.5rem;
+  box-shadow: none;
 }
 
-.nebulla-ide-shell .btn-cyan:hover:not(:disabled) {
-  background-color: color-mix(in srgb, var(--ide-cyan) 34%, transparent);
+.nebulla-ide-shell .btn-cyan:hover:not(:disabled),
+.nebulla-ide-shell .ide-btn:hover:not(:disabled) {
+  background-color: color-mix(in srgb, var(--ide-cyan) 22%, transparent);
+  border-color: color-mix(in srgb, var(--ide-cyan) 50%, transparent);
   color: #ffffff;
+  box-shadow: none;
 }
 
-/* Stage strip / active chrome — force cyan (overrides lingering purple) */
+.nebulla-ide-shell .ide-btn--pressed,
+.nebulla-ide-shell .btn-cyan[aria-pressed='true'] {
+  background-color: color-mix(in srgb, var(--ide-cyan) 20%, transparent);
+  border-color: color-mix(in srgb, var(--ide-cyan) 48%, transparent);
+  color: #ffffff;
+  box-shadow: none;
+}
+
+/* Kill cyan glow on IDE chrome */
+.nebulla-ide-shell :is(
+  .shadow-cyan-500\/20,
+  .shadow-cyan-500\/25,
+  .shadow-\[0_0_24px_rgba\(34\,211\,238\,0\.18\)\]
+) {
+  box-shadow: none !important;
+}
+
+.nebulla-ide-shell :is(button, [role='button'], a.btn-cyan, a.ide-btn):focus-visible {
+  outline: 1px solid color-mix(in srgb, var(--ide-cyan) 45%, transparent);
+  outline-offset: 2px;
+  box-shadow: none;
+}
+
+/* Soften focus rings — no glow wash */
+.nebulla-ide-shell .ide-glass-input:focus,
+.nebulla-ide-shell .ide-glass-input:focus-visible {
+  --tw-ring-shadow: 0 0 0 1px color-mix(in srgb, var(--ide-cyan) 35%, transparent);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), var(--tw-ring-shadow);
+}
+
+/* Stage strip / active chrome — thin cyan edge, no glow */
 .nebulla-ide-shell .ring-primary\/50,
 .nebulla-ide-shell .ring-primary\/60,
 .nebulla-ide-shell [class*='ring-primary'] {
-  --tw-ring-color: color-mix(in srgb, var(--ide-cyan) 55%, transparent) !important;
+  --tw-ring-color: transparent !important;
+  --tw-ring-shadow: 0 0 0 1px color-mix(in srgb, var(--ide-cyan) 40%, transparent) !important;
 }
 
 .nebulla-ide-shell .bg-primary {

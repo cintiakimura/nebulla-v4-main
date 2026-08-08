@@ -230,6 +230,7 @@ Work **one step per Agent turn / PR** after constitution install. Fix the **earl
 | 2026-08-08 | Phase 7.4: loadable-model honesty; Studio repair Generate; auth merge when SEC markers lack sign-in | Stop false “mockup already on disk”; unblock strict Go SEC_AUTH_MISSING |
 | 2026-08-08 | Hide D1/secrets/.env + nebula-*-preview.html from explorer; unmount Mind Map when leaving Plan | Confidential files + React Flow bleed over Preview/Studio |
 | 2026-08-08 | Phase 7.4: reset false regen/preference-recovery when no loadable model; mount repair without regenerate; prefer Home over Login; strip platform cyan canvas; seed preview cards | Figma rate-limit + empty cycles left Studio Waiting and cyan Login shell |
+| 2026-08-08 | Phase 7.5: arch-only ```file:``` no longer counts as coding; Foundation Go after persisted mockup or skip; `canStartFoundationCoding` | ui-brief apply skipped Foundation — explorer stuck on preview shell only |
 
 ---
 

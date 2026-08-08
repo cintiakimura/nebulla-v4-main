@@ -10,7 +10,10 @@ import { canStartUiMockup } from '../src/lib/uiMockupGate';
 import { isMasterPlanReadyForUiMockup } from '../lib/masterPlanCompleteness';
 import {
   filterGrokContentToArchitectureFiles,
+  filterGrokContentToAppCodeFiles,
+  hasOnlyArchitectureFileBlocks,
   isArchitectureArtifactPath,
+  isCodingIntent,
 } from '../src/lib/nebulaGrokCodingPipeline';
 import { isLoadableStudioModel } from '../lib/uiMockupArtifactHonesty';
 import {
@@ -74,6 +77,21 @@ const mixed = [
 const archOnly = filterGrokContentToArchitectureFiles(mixed);
 assert.ok(archOnly.includes('ui-brief.md'));
 assert.ok(!archOnly.includes('app/page.tsx'));
+
+const appOnly = filterGrokContentToAppCodeFiles(mixed);
+assert.ok(appOnly.includes('app/page.tsx'));
+assert.ok(!appOnly.includes('ui-brief.md'));
+
+const archPlusStart = [
+  '```file:nebula-ui-studio/ui-brief.md',
+  '# Brief',
+  '```',
+  '',
+  'START_CODING',
+].join('\n');
+assert.equal(hasOnlyArchitectureFileBlocks(archPlusStart), true);
+assert.equal(Boolean(filterGrokContentToAppCodeFiles(archPlusStart)), false);
+assert.equal(isCodingIntent(archPlusStart), true);
 
 assert.equal(isLoadableStudioModel(null), false);
 assert.equal(

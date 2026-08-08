@@ -42,23 +42,43 @@ export function isArchitectureArtifactPath(relPath: string): boolean {
   return false;
 }
 
+const GROK_FILE_BLOCK_RE =
+  /```(?:file|filepath)\s*:\s*([^\n`]+)\n([\s\S]*?)```/gi;
+
+function collectGrokFileBlocks(
+  content: string,
+  keep: (relPath: string) => boolean,
+): string {
+  const normalized = normalizeGrokFileBlockSyntax(content);
+  const blocks: string[] = [];
+  const re = new RegExp(GROK_FILE_BLOCK_RE.source, 'gi');
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(normalized)) !== null) {
+    const path = (m[1] || '').trim().replace(/^["'`]+|["'`]+$/g, '');
+    if (keep(path)) {
+      blocks.push(`\`\`\`file:${path}\n${m[2]}\`\`\``);
+    }
+  }
+  return blocks.join('\n\n').trim();
+}
+
 /**
  * Keep only architecture/doc file blocks so research + ui-brief land before mockup,
  * without applying foundation/app code in the same pass.
  */
 export function filterGrokContentToArchitectureFiles(content: string): string {
-  const normalized = normalizeGrokFileBlockSyntax(content);
-  const blocks: string[] = [];
-  const re =
-    /```(?:file|filepath)\s*:\s*([^\n`]+)\n([\s\S]*?)```/gi;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(normalized)) !== null) {
-    const path = (m[1] || '').trim().replace(/^["'`]+|["'`]+$/g, '');
-    if (isArchitectureArtifactPath(path)) {
-      blocks.push(`\`\`\`file:${path}\n${m[2]}\`\`\``);
-    }
-  }
-  return blocks.join('\n\n').trim();
+  return collectGrokFileBlocks(content, isArchitectureArtifactPath);
+}
+
+/** App / product source blocks only — Foundation coding handoff (not plan/ui-brief). */
+export function filterGrokContentToAppCodeFiles(content: string): string {
+  return collectGrokFileBlocks(content, (p) => !isArchitectureArtifactPath(p));
+}
+
+/** True when the reply has ```file:``` blocks but every path is architecture-only. */
+export function hasOnlyArchitectureFileBlocks(content: string): boolean {
+  if (!hasGrokFileBlocks(content)) return false;
+  return !filterGrokContentToAppCodeFiles(content);
 }
 
 export function isCodingIntent(text: string): boolean {
@@ -619,7 +639,9 @@ export async function runGoCodeAndApply(options: {
 }
 
 /**
- * After `/api/grok/chat`: apply file blocks from the coding handoff, or run Go Code when START_CODING fired.
+ * After `/api/grok/chat`: apply app file blocks from the coding handoff, or run Go Code when START_CODING fired.
+ * Phase 7.5: architecture-only ```file:``` (ui-brief / research) must NOT count as coding success —
+ * those land in Stage A before mockup; Foundation Go must still run.
  */
 export async function handlePostGrokCodingTurn(options: {
   assistantContent: string;
@@ -637,9 +659,10 @@ export async function handlePostGrokCodingTurn(options: {
 }> {
   const { assistantContent, planningPhase, userId, projectName, userNote, onProgress } = options;
 
-  if (hasGrokFileBlocks(assistantContent)) {
-    onProgress?.('Applying file blocks from Grok chat response', 'info');
-    const apply = await applyGeneratedFiles(assistantContent, { userNote, projectName, onProgress });
+  const appCodeBlocks = filterGrokContentToAppCodeFiles(assistantContent);
+  if (appCodeBlocks) {
+    onProgress?.('Applying app file blocks from Grok coding handoff', 'info');
+    const apply = await applyGeneratedFiles(appCodeBlocks, { userNote, projectName, onProgress });
     if (apply.ok) {
       await triggerUiStudioBetaAfterFilesApplied({
         writtenPaths: apply.writtenPaths,
@@ -663,6 +686,13 @@ export async function handlePostGrokCodingTurn(options: {
     };
   }
 
+  if (hasOnlyArchitectureFileBlocks(assistantContent)) {
+    onProgress?.(
+      'Architecture docs already applied before mockup — launching Foundation coding (not treating ui-brief as app code)',
+      'info',
+    );
+  }
+
   const planning = planningPhase.trim();
   // Only START_CODING / explicit coding tags launch Go — never ANSWER_Qn (tab approval ≠ implement).
   const wantsCoding = isCodingIntent(planning) || isCodingIntent(assistantContent);
@@ -683,7 +713,7 @@ export async function handlePostGrokCodingTurn(options: {
       {
         role: 'user',
         content:
-          'START_CODING — implement ONE coherent slice only (Build → Debug → Next). File blocks for this slice only — not the full §4 app.',
+          'START_CODING — implement ONE coherent Foundation slice only (Build → Debug → Next). Prefer app/, src/, components/, pages/ — not master-plan/ui-brief only. File blocks for this slice only — not the full §4 app.',
       },
     ],
   });
