@@ -113,6 +113,7 @@ CODING QUALITY CONTRACT (architecture-first — mandatory before any \`\`\`file:
 5) Clean, maintainable code: clear names, typed boundaries, explicit error handling on I/O; match existing stack conventions.
 6) UI must follow §2 research patterns + §5 + Project Type — never Nebulla IDE chrome.
 7) **Mockup non-authoritative:** Do not treat UI Studio mockup / preview-model as the spec. Implement screens and features from Master Plan sections and agreed architecture. Mockup is a temporary preview and may be wrong or partial. If mockup and plan disagree, plan wins. Do not reduce the app to what the mockup happened to draw.
+8) **No invented BaaS:** Do not add Supabase, Firebase, Clerk, Auth0, or similar unless Master Plan §2 or the user explicitly names that vendor. Security/RLS means in-app role gates + deny-by-default — not \`lib/supabase.ts\`. MVP login = mock/local session or role switch is enough.
 
 INCREMENTAL DEVELOPMENT (Build → Debug → Next — see nebulla-project/incremental-development.md):
 - **Never** generate the entire app in one pass when it can be sliced. Prefer: Build one coherent slice → Debug/Validate (NDM) → only then Next.

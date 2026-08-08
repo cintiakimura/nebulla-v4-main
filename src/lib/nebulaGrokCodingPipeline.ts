@@ -186,12 +186,19 @@ export async function applyGeneratedFiles(
       skipped?: string[];
       parsedBlocks?: number;
       usedFallbackPath?: string;
+      baasSkippedReason?: string;
       error?: string;
     }>(withProjectQuery('/api/files/apply-generated'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
-      body: JSON.stringify(withProjectBody({ content: clean })),
+      body: JSON.stringify(
+        withProjectBody({
+          content: clean,
+          userNote: artifactContext?.userNote?.trim() || undefined,
+          projectName: artifactContext?.projectName?.trim() || undefined,
+        }),
+      ),
     });
     if (apply.error) {
       onProgress?.(`Apply failed: ${apply.error}`, 'error');
@@ -209,6 +216,17 @@ export async function applyGeneratedFiles(
     const skippedCount = Array.isArray(apply.skipped) ? apply.skipped.length : 0;
     if (writtenCount > 0) {
       onProgress?.(`Wrote ${writtenCount} file(s) to workspace`, 'success');
+    }
+    if (apply.baasSkippedReason) {
+      onProgress?.(apply.baasSkippedReason, 'warn');
+    } else if (
+      skippedCount > 0 &&
+      (apply.skipped || []).some((p) => /supabase|firebase/i.test(p))
+    ) {
+      onProgress?.(
+        `Skipped unsolicited vendor file(s) (Supabase/Firebase not in plan)`,
+        'warn',
+      );
     }
     if (writtenCount > 0 && !artifactContext?.skipPostSync) {
       notifyWorkspaceFilesChanged();

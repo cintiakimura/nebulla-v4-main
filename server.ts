@@ -130,6 +130,10 @@ import {
 } from "./lib/uiGenerationEngine";
 import { MOCKUP_NON_AUTHORITATIVE_GO_BULLETS } from "./lib/codingMockupContract";
 import {
+  filterUnsolicitedBaaSBlocks,
+  MVP_STACK_GO_BULLETS,
+} from "./lib/mvpStackContract";
+import {
   masterPlanKeyForTabIndex,
   normalizeMasterPlanRecord,
   parseMasterPlanBlock,
@@ -2508,7 +2512,23 @@ No approved UI code yet.
       const skipped: string[] = [];
       const seen = new Set<string>();
 
-      for (const b of blocks) {
+      // Hard gate: no Supabase/Firebase files unless Master Plan / note names that vendor.
+      let planBlob = "";
+      try {
+        const ppGate = projectPathsFor(req);
+        if (fs.existsSync(ppGate.masterPlanPath)) {
+          planBlob = fs.readFileSync(ppGate.masterPlanPath, "utf8");
+        }
+      } catch {
+        /* ignore */
+      }
+      const userNoteGate =
+        typeof req.body?.userNote === "string" ? String(req.body.userNote) : "";
+      const baasFilter = filterUnsolicitedBaaSBlocks(blocks, `${planBlob}\n${userNoteGate}`);
+      const blocksToWrite = baasFilter.kept;
+      for (const p of baasFilter.skipped) skipped.push(p);
+
+      for (const b of blocksToWrite) {
         if (seen.has(b.relativePath)) continue;
         seen.add(b.relativePath);
 
@@ -2532,6 +2552,7 @@ No approved UI code yet.
         skipped,
         parsedBlocks: blocks.length,
         usedFallbackPath: fallbackPath || undefined,
+        baasSkippedReason: baasFilter.reason || undefined,
       });
 
       if (written.length > 0) {
@@ -4575,7 +4596,8 @@ Strict rules:
 - UI: §2 research patterns + §5 visuals + Project Type — NEVER Nebulla IDE chrome (#080A14 / #00D4D4).
 - Larger generation only if the slice is naturally tiny, the user explicitly asks for a broader pass, or risk is clearly low.
 MOCKUP VS FINAL UI (mandatory):
-${MOCKUP_NON_AUTHORITATIVE_GO_BULLETS}`;
+${MOCKUP_NON_AUTHORITATIVE_GO_BULLETS}
+${MVP_STACK_GO_BULLETS}`;
 
       const codeSystemPrompt = continuation
         ? `You are Grok Code (CONTINUATION pass). master-plan.json was updated but the **Foundation slice** (runnable shell) is still missing.

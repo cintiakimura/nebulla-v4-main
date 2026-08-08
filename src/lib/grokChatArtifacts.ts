@@ -262,6 +262,7 @@ ACTIVE MODE: CODING — Architecture-first + Incremental Development (Build → 
 6) After the slice: remind to Validate (NDM happy path) before the next Go / slice.
 7) Output only START_CODING and/or \`\`\`file:relative/path\` … \`\`\` — never casual code fences in chat.
 8) Do not treat UI Studio mockup / preview-model as the spec. Implement screens and features from Master Plan sections and agreed architecture. Mockup is a temporary preview and may be wrong or partial. If mockup and plan disagree, plan wins.
+9) Do not invent Supabase/Firebase/Clerk unless the plan or user names that vendor. MVP auth = mock/local role gates; RLS ≠ add @supabase/supabase-js.
 `.trim();
 
 /** Compact Chat personality — UNBREAKABLE when interactionMode is chat. Authority: chat-personality.md */

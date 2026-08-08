@@ -189,6 +189,9 @@ export async function runMasterPlanUiPipelineWithV0(options?: {
   return { ...base, ...v0 };
 }
 
+/** Client timeout — never leave Live Activity on "Syncing project artifacts…" forever. */
+export const ARTIFACT_SYNC_TIMEOUT_MS = 45_000;
+
 /** After coding / file apply: Master Plan bootstrap + mind map (no V0 status noise). */
 export async function syncIdeProjectArtifacts(options?: {
   userNote?: string;
@@ -197,6 +200,11 @@ export async function syncIdeProjectArtifacts(options?: {
   onProgress?: GrokActivityProgressFn;
 }): Promise<IdeArtifactSyncResult> {
   const onProgress = options?.onProgress;
+  const ac = typeof AbortController !== 'undefined' ? new AbortController() : null;
+  const timeoutId =
+    ac && typeof window !== 'undefined'
+      ? window.setTimeout(() => ac.abort(), ARTIFACT_SYNC_TIMEOUT_MS)
+      : null;
   try {
     onProgress?.('Syncing project artifacts (Master Plan, mind map)…', 'info');
     const sync = await fetchJson<IdeArtifactSyncResult>(
@@ -205,6 +213,7 @@ export async function syncIdeProjectArtifacts(options?: {
         method: 'POST',
         headers: ideArtifactHeaders(),
         credentials: 'include',
+        signal: ac?.signal,
         body: JSON.stringify(
           withProjectBody({
             userNote: options?.userNote?.trim() || undefined,
@@ -223,8 +232,19 @@ export async function syncIdeProjectArtifacts(options?: {
     return sync;
   } catch (e) {
     console.warn('[ideArtifactSync]', e);
-    onProgress?.('Artifact sync failed', 'error');
+    const msg = e instanceof Error ? e.message : String(e);
+    const timedOut =
+      (typeof DOMException !== 'undefined' && e instanceof DOMException && e.name === 'AbortError') ||
+      /aborted|abort|timeout/i.test(msg);
+    onProgress?.(
+      timedOut
+        ? 'Artifact sync timed out — continuing (files already applied; open Explorer / say continue building)'
+        : 'Artifact sync failed — continuing (files already applied)',
+      'warn',
+    );
     return {};
+  } finally {
+    if (timeoutId != null) window.clearTimeout(timeoutId);
   }
 }
 
@@ -235,6 +255,11 @@ export async function syncMindMapForProject(
   ok: boolean;
   pageCount: number;
 }> {
+  const ac = typeof AbortController !== 'undefined' ? new AbortController() : null;
+  const timeoutId =
+    ac && typeof window !== 'undefined'
+      ? window.setTimeout(() => ac.abort(), ARTIFACT_SYNC_TIMEOUT_MS)
+      : null;
   try {
     onProgress?.('Syncing mind map from Master Plan §4…', 'info');
     const data = await fetchJson<{ pages?: unknown[]; routeCount?: number }>(
@@ -243,6 +268,7 @@ export async function syncMindMapForProject(
         method: 'POST',
         headers: ideArtifactHeaders(),
         credentials: 'include',
+        signal: ac?.signal,
         body: JSON.stringify(withProjectBody({ projectName: projectName?.trim() || undefined })),
       },
     );
@@ -253,7 +279,10 @@ export async function syncMindMapForProject(
     return { ok: pageCount > 0, pageCount };
   } catch (e) {
     console.warn('[ideArtifactSync] mind map sync:', e);
+    onProgress?.('Mind map sync timed out or failed — continuing', 'warn');
     return { ok: false, pageCount: 0 };
+  } finally {
+    if (timeoutId != null) window.clearTimeout(timeoutId);
   }
 }
 
