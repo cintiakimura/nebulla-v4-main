@@ -466,40 +466,87 @@
 }
 
 /*
- * Trial: nebula photo behind IDE only.
- * Why v1 looked unchanged: every panel used stacked black → solid black
- * on an already near-black image. Fix: ONE image + ONE veil; panels transparent.
- * Revert: remove this block + nebulla-ide-shell class on NebullaIDE + public/images/ide-nebula-bg.png
+ * Trial: IDE foggy glass (shower-glass) — IDE shell only, not landing.
+ * - Nebula photo + 60% black veil
+ * - Cards/panels ~70% black + heavy blur (foggy, not clear glass)
+ * - White regular type (no bold); cyan accents
+ * Revert: delete this whole block; restore prior shell CSS from git if needed.
+ * Also optional: remove `ide-glass-*` classes from MyProjectsHome.tsx
  */
 .nebulla-ide-shell {
+  /* Shower-glass: denser fog on cards; chrome stays lighter so nebula shows through */
+  --ide-glass-fill: rgba(8, 12, 18, 0.7);
+  --ide-glass-fill-strong: rgba(8, 12, 18, 0.78);
+  --ide-glass-fill-soft: rgba(8, 12, 18, 0.55);
+  --ide-glass-chrome: rgba(0, 0, 0, 0.38);
+  --ide-glass-blur: blur(36px) saturate(1.35);
+  --ide-glass-blur-chrome: blur(22px) saturate(1.2);
+  --ide-cyan: #22d3ee;
+
   position: relative;
   isolation: isolate;
   background-color: #000000;
+  color: #ffffff;
 
-  /* Panels must stay transparent so the single veil is the only darkening */
-  --surface: transparent;
-  --surface-container: transparent;
-  --surface-bright: transparent;
-  --surface-container-highest: rgba(17, 17, 17, 0.35);
-  --secondary-container: transparent;
-  --elevated: rgba(17, 17, 17, 0.35);
+  /* Cyan accent + white type (IDE only) */
+  --primary: var(--ide-cyan);
+  --primary-container: #0891b2;
+  --on-primary-container: #ffffff;
+  --primary-foreground: #041016;
+  --ring: color-mix(in srgb, var(--ide-cyan) 42%, transparent);
+  --title: var(--ide-cyan);
+  --subtitle: #67e8f9;
+  --gradient-primary-cta: var(--ide-cyan);
+  --gradient-active-tab: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--ide-cyan) 16%, transparent) 0%,
+    transparent 70%
+  );
+
+  --foreground: #ffffff;
+  --card-foreground: #ffffff;
+  --popover-foreground: #ffffff;
+  --secondary-foreground: #ffffff;
+  --accent-foreground: #ffffff;
+  --sidebar-foreground: #ffffff;
+  --muted-foreground: rgba(255, 255, 255, 0.78);
+  --on-surface-variant: rgba(255, 255, 255, 0.72);
+
+  --border: rgba(255, 255, 255, 0.12);
+  --hairline: rgba(255, 255, 255, 0.1);
+  --outline-variant: rgba(255, 255, 255, 0.12);
+  --sidebar-border: rgba(255, 255, 255, 0.12);
+
+  /* Foggy glass tokens (panels pick these up via utilities below) */
+  --surface: var(--ide-glass-fill);
+  --surface-container: var(--ide-glass-fill);
+  --surface-bright: var(--ide-glass-fill-soft);
+  --surface-container-highest: var(--ide-glass-fill-strong);
+  --secondary-container: var(--ide-glass-fill-soft);
+  --elevated: var(--ide-glass-fill);
   --background: transparent;
-  --card: transparent;
-  --popover: rgba(10, 10, 10, 0.82);
-  --secondary: transparent;
-  --muted: transparent;
-  --accent: rgba(17, 17, 17, 0.35);
-  --input: rgba(10, 10, 10, 0.55);
-  --sidebar: transparent;
-  --sidebar-accent: rgba(17, 17, 17, 0.35);
+  --card: var(--ide-glass-fill);
+  --popover: var(--ide-glass-fill-strong);
+  --secondary: var(--ide-glass-fill-soft);
+  --muted: var(--ide-glass-fill-soft);
+  --accent: var(--ide-glass-fill-soft);
+  --input: var(--ide-glass-fill);
+  --sidebar: var(--ide-glass-fill-soft);
+  --sidebar-accent: var(--ide-glass-fill);
+  --sidebar-primary: var(--ide-cyan);
+
   --color-background: transparent;
-  --color-card: transparent;
-  --color-muted: transparent;
-  --color-secondary: transparent;
-  --color-sidebar: transparent;
-  --color-surface: transparent;
-  --color-surface-container: transparent;
-  --color-surface-bright: transparent;
+  --color-card: var(--ide-glass-fill);
+  --color-muted: var(--ide-glass-fill-soft);
+  --color-secondary: var(--ide-glass-fill-soft);
+  --color-sidebar: var(--ide-glass-fill-soft);
+  --color-surface: var(--ide-glass-fill);
+  --color-surface-container: var(--ide-glass-fill);
+  --color-surface-bright: var(--ide-glass-fill-soft);
+  --color-primary: var(--ide-cyan);
+  --color-foreground: #ffffff;
+  --color-muted-foreground: rgba(255, 255, 255, 0.78);
+  --color-border: rgba(255, 255, 255, 0.12);
 }
 
 .nebulla-ide-shell::before {
@@ -515,7 +562,7 @@
   background-repeat: no-repeat;
 }
 
-/* Single 60% black veil — same effect as “black at 60% opacity” without stacking */
+/* Global darkening under panels — keep moderate so glass cards stay readable */
 .nebulla-ide-shell::after {
   content: '';
   position: fixed;
@@ -530,57 +577,156 @@
   z-index: 1;
 }
 
-.nebulla-ide-shell :is(.bg-black, .bg-\[\#000\], .bg-\[\#000000\], .bg-background, .bg-card) {
-  background-color: transparent !important;
-}
-
-.nebulla-ide-shell :is(.bg-\[\#0a0a0a\], .bg-\[\#0A0A0A\], .bg-muted, .bg-secondary) {
-  background-color: transparent !important;
-}
-
-.nebulla-ide-shell :is(.bg-\[\#111111\], .bg-\[\#111\], .bg-accent) {
-  background-color: rgba(17, 17, 17, 0.35) !important;
-}
-
-.nebulla-ide-shell :is(.bg-\[\#050508\]) {
-  background-color: transparent !important;
-}
-
-.nebulla-ide-shell :is(.surface-base, .surface-active) {
-  background-color: transparent !important;
-}
-
 /*
- * Trial: foggy glass cards on Start / My Projects (readability over nebula).
- * Revert: remove these rules + `ide-glass-*` classes from MyProjectsHome.tsx
+ * Full-bleed pane backdrops must stay clear — otherwise cards only blur a black wall
+ * and never get the shower-glass fog of the nebula.
  */
+.nebulla-ide-shell :is(.bg-background) {
+  background-color: transparent !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+/* Side rails / chrome — light fog */
+.nebulla-ide-shell :is(
+  .bg-black,
+  .bg-\[\#000\],
+  .bg-\[\#000000\],
+  .bg-card,
+  .bg-\[\#0a0a0a\],
+  .bg-\[\#0A0A0A\],
+  .bg-muted,
+  .bg-secondary,
+  .bg-\[\#111111\],
+  .bg-\[\#111\],
+  .bg-accent,
+  .bg-\[\#050508\],
+  .surface-base,
+  .surface-active,
+  .surface-float,
+  .elevation-popover,
+  .glass-panel
+) {
+  background-color: var(--ide-glass-chrome) !important;
+  backdrop-filter: var(--ide-glass-blur-chrome);
+  -webkit-backdrop-filter: var(--ide-glass-blur-chrome);
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+/* Start / My Projects — true shower-glass fog over the nebula */
 .nebulla-ide-shell .ide-glass-card {
-  background-color: rgba(0, 0, 0, 0.72) !important;
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
-  border-color: rgba(255, 255, 255, 0.1) !important;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35);
+  position: relative;
+  overflow: hidden;
+  background-color: var(--ide-glass-fill) !important;
+  backdrop-filter: var(--ide-glass-blur) !important;
+  -webkit-backdrop-filter: var(--ide-glass-blur) !important;
+  border-color: rgba(255, 255, 255, 0.16) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.16),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.04),
+    0 12px 40px rgba(0, 0, 0, 0.45);
+}
+
+/* Soft white haze on top of the blur = “fogged shower glass” */
+.nebulla-ide-shell .ide-glass-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  border-radius: inherit;
+  background: linear-gradient(
+    160deg,
+    rgba(255, 255, 255, 0.14) 0%,
+    rgba(255, 255, 255, 0.03) 42%,
+    rgba(0, 0, 0, 0.12) 100%
+  );
+}
+
+.nebulla-ide-shell .ide-glass-card > * {
+  position: relative;
+  z-index: 1;
 }
 
 .nebulla-ide-shell .ide-glass-card--choice {
-  background-color: rgba(0, 0, 0, 0.55) !important;
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  background-color: var(--ide-glass-fill-soft) !important;
+  backdrop-filter: blur(28px) saturate(1.25) !important;
+  -webkit-backdrop-filter: blur(28px) saturate(1.25) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1);
 }
 
 .nebulla-ide-shell .ide-glass-card--choice:hover {
-  background-color: rgba(0, 0, 0, 0.68) !important;
+  background-color: var(--ide-glass-fill) !important;
 }
 
 .nebulla-ide-shell .ide-glass-card--selected {
-  background-color: rgba(0, 0, 0, 0.78) !important;
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
-  border-color: rgba(255, 255, 255, 0.22) !important;
+  background-color: var(--ide-glass-fill-strong) !important;
+  backdrop-filter: var(--ide-glass-blur) !important;
+  -webkit-backdrop-filter: var(--ide-glass-blur) !important;
+  border-color: color-mix(in srgb, var(--ide-cyan) 65%, rgba(255, 255, 255, 0.3)) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.18),
+    0 0 0 1px color-mix(in srgb, var(--ide-cyan) 45%, transparent),
+    0 0 24px color-mix(in srgb, var(--ide-cyan) 18%, transparent);
 }
 
 .nebulla-ide-shell .ide-glass-input {
-  background-color: rgba(0, 0, 0, 0.7) !important;
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
+  background-color: rgba(0, 0, 0, 0.55) !important;
+  backdrop-filter: blur(24px) saturate(1.2) !important;
+  -webkit-backdrop-filter: blur(24px) saturate(1.2) !important;
+  color: #ffffff !important;
+  border-color: rgba(255, 255, 255, 0.14) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+/* White type — regular weight only (keep status colors) */
+.nebulla-ide-shell :is(.font-bold, .font-semibold, .font-medium, .font-headline) {
+  font-weight: 400 !important;
+}
+
+.nebulla-ide-shell :is(.text-foreground, .text-card-foreground, .text-popover-foreground) {
+  color: #ffffff !important;
+}
+
+.nebulla-ide-shell .text-muted-foreground {
+  color: rgba(255, 255, 255, 0.78) !important;
+}
+
+.nebulla-ide-shell :is(.text-slate-200, .text-slate-300, .text-slate-400, .text-slate-500) {
+  color: rgba(255, 255, 255, 0.82) !important;
+}
+
+/* Cyan accents for interactive chrome */
+.nebulla-ide-shell :is(.text-primary, .text-cyan-300, .text-cyan-400, .text-cyan-200) {
+  color: var(--ide-cyan) !important;
+}
+
+.nebulla-ide-shell .border-primary,
+.nebulla-ide-shell .ring-primary,
+.nebulla-ide-shell [class*='ring-primary'] {
+  --tw-ring-color: color-mix(in srgb, var(--ide-cyan) 45%, transparent);
+}
+
+.nebulla-ide-shell .btn-cyan {
+  background-color: color-mix(in srgb, var(--ide-cyan) 22%, transparent);
+  color: #ffffff;
+  border: 1px solid color-mix(in srgb, var(--ide-cyan) 55%, transparent);
+  font-weight: 400;
+}
+
+.nebulla-ide-shell .btn-cyan:hover:not(:disabled) {
+  background-color: color-mix(in srgb, var(--ide-cyan) 34%, transparent);
+  color: #ffffff;
+}
+
+/* Stage strip / active chrome — force cyan (overrides lingering purple) */
+.nebulla-ide-shell .ring-primary\/50,
+.nebulla-ide-shell .ring-primary\/60,
+.nebulla-ide-shell [class*='ring-primary'] {
+  --tw-ring-color: color-mix(in srgb, var(--ide-cyan) 55%, transparent) !important;
+}
+
+.nebulla-ide-shell .bg-primary {
+  background-color: var(--ide-cyan) !important;
+  color: #041016 !important;
 }

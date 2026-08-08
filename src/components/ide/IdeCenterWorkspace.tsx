@@ -75,7 +75,7 @@ export function IdeCenterWorkspace() {
   };
 
   return (
-    <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background">
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-transparent">
       {openTabs.length > 0 ? (
         <div className="surface-active flex h-9 shrink-0 items-stretch overflow-hidden border-b border-border">
           <div className="flex min-w-0 flex-1 items-stretch overflow-x-auto border-l border-border">
