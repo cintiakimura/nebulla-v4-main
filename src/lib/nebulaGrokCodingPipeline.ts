@@ -656,6 +656,7 @@ export async function handlePostGrokCodingTurn(options: {
   statusMessage?: string;
   writtenCount?: number;
   writtenPaths?: string[];
+  sliceLabel?: string | null;
 }> {
   const { assistantContent, planningPhase, userId, projectName, userNote, onProgress } = options;
 
@@ -675,6 +676,7 @@ export async function handlePostGrokCodingTurn(options: {
         statusMessage: apply.message,
         writtenCount: apply.writtenCount,
         writtenPaths: apply.writtenPaths,
+        sliceLabel: parseGoSliceLabel(userNote) || parseGoSliceLabel(appCodeBlocks) || 'Foundation',
       };
     }
     return {
@@ -727,5 +729,6 @@ export async function handlePostGrokCodingTurn(options: {
     statusMessage: go.statusMessage,
     writtenCount: go.totalWritten,
     writtenPaths: undefined,
+    sliceLabel: go.sliceLabel ?? 'Foundation',
   };
 }

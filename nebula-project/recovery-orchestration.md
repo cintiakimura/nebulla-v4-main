@@ -244,6 +244,7 @@ Work **one step per Agent turn / PR** after constitution install. Fix the **earl
 | 2026-08-08 | Stitch-minimum enforcement: page-type slot binding, gate fails Email-on-Home / sparse shells; Preview only on pass | Logic existed; exam wasn’t grading it |
 | 2026-08-08 | Mockup ≠ final UI: coding ignores mockup pixels (plan wins); one post-code UI refresh after successful UI-relevant apply | Pre-code draft was treated as sticky / coding spec |
 | 2026-08-08 | Auth page_type is page-local only; global `/login` fileRoutes must not force Email onto Kid Home (post-code grounding exposed) | classifyPage joined workspace routes into every page |
+| 2026-08-09 | Fast Prototype auto-runs one Primary slice after Foundation (Step 9.2); further slices still need user continue | Pipeline stopped after Foundation with no Step 9.2 |
 
 ---
 

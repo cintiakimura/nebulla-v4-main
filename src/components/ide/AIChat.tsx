@@ -70,6 +70,11 @@ import {
   isUserExplicitCodingRequest,
   SHORT_CODING_GO_SUMMARY,
 } from '../../lib/ideShortCodingNudge';
+import {
+  FAST_PROTOTYPE_PRIMARY_SLICE_INSTRUCTION,
+  markFastPrototypePrimaryAutoRun,
+  shouldAutoRunPrimarySliceAfterFoundation,
+} from '../../lib/fastPrototypeNextSlice';
 import { setGrokCodingActive } from '../../lib/nebulaGrokCodingGate';
 import { runMasterPlanUiPipeline, runPostCodingWorkspaceSync } from '../../lib/ideArtifactSync';
 import {
@@ -1985,6 +1990,7 @@ export function AIChat() {
             ok: go.ok,
             statusMessage: go.statusMessage,
             writtenCount: go.totalWritten,
+            sliceLabel: go.sliceLabel ?? 'Foundation',
           };
         }
         if (!agentAllowed && (hadCodingTag || hasGrokFileBlocks(raw))) {
@@ -2090,6 +2096,64 @@ export function AIChat() {
                 'success',
               );
             }
+
+            // Fast Prototype Step 9.2: one automatic primary feature slice after Foundation (no user nudge).
+            const codingSliceLabel =
+              (coding as { sliceLabel?: string | null }).sliceLabel ?? 'Foundation';
+            if (
+              shouldAutoRunPrimarySliceAfterFoundation({
+                fastPrototypeTurn,
+                codingOk: coding.ok !== false,
+                projectKey: diskProjectKey || projectName,
+                sliceLabel: codingSliceLabel,
+              })
+            ) {
+              markFastPrototypePrimaryAutoRun(diskProjectKey || projectName);
+              pushActivity(
+                'Fast Prototype — Step 9.2 primary feature slice (auto after Foundation)…',
+                'info',
+              );
+              beginCodingActivity('Coding — primary feature slice', goWorkSteps(), {
+                subhead: 'Foundation landed — building the core user job next (one slice).',
+                initialLog: 'Auto primary slice after Foundation (max one per session)',
+              });
+              const primaryGo = await runGoCodeAndApply({
+                userId,
+                projectName,
+                userNote: 'SLICE: Primary — core feature after Foundation',
+                onProgress: pushActivity,
+                messages: [
+                  { role: 'assistant' as const, content: masterPlanSource.slice(0, 12000) },
+                  {
+                    role: 'user' as const,
+                    content: FAST_PROTOTYPE_PRIMARY_SLICE_INSTRUCTION,
+                  },
+                ],
+              });
+              if (primaryGo.ok) {
+                await runPostCodingWorkspaceSync({
+                  userNote: 'SLICE: Primary',
+                  projectName,
+                  seedBasicUi: false,
+                  openMindMap: true,
+                  onProgress: pushActivity,
+                });
+                pushActivity(
+                  primaryGo.statusMessage || 'Primary feature slice applied',
+                  'success',
+                );
+                setAccessoryHint(
+                  'Foundation + primary feature landed — say “continue building” for the next slice.',
+                );
+                window.setTimeout(() => setAccessoryHint(null), 10000);
+              } else {
+                pushActivity(
+                  primaryGo.statusMessage || 'Primary feature slice did not finish — say continue building',
+                  'warn',
+                );
+              }
+            }
+
             resetCodingActivity();
           }
         } else if (hasAppStatusPayload && agentAllowed && assistantSkippedNdmVerify(raw)) {

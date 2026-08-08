@@ -418,6 +418,8 @@ Record `stage=coding`.
 ### Step 9.2 — Build primary feature slice
 **Build** the next slice for the core user job only.
 
+In **Fast Prototype**, the product auto-runs **one** primary feature Go after a successful Foundation apply (max one auto continue per project session — no infinite loop). Further slices still need the user (“continue building” / next Go).
+
 Then **Validate** before expanding.
 
 **Output required:** primary feature slice applied and checked
