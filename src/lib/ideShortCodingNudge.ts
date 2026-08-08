@@ -9,14 +9,20 @@
 const GO_NUDGE_RE =
   /\b(press\s+go|click\s+go|hit\s+go|use\s+go|tap\s+go|run\s+go|start_coding|go\s+code)\b/i;
 
-/** User explicitly asked to code / Go — product must run Foundation, not only chat. */
+/** User explicitly asked to code / Go — product must run Foundation or next slice, not only chat. */
 export function isUserExplicitCodingRequest(text: string): boolean {
   const t = String(text || '').trim();
   if (!t) return false;
   if (t.length > 400) return false;
   if (/^(go|go\.|go!)$/i.test(t)) return true;
+  // Soft-gate copy: "Reply continue" / "build next"
+  if (/^(continue|continue\.|continue!|build\s+next|next\s+slice)$/i.test(t)) return true;
   if (/\bSTART_CODING\b/i.test(t)) return true;
   if (/\b(start|begin|continue|keep)\s+coding\b/i.test(t)) return true;
+  // "continue building" / "keep building the app" — common after Foundation stops
+  if (/\b(continue|keep)\s+(building|implementing)\b/i.test(t)) return true;
+  if (/\b(build|implement)\s+(next|the\s+next)\b/i.test(t)) return true;
+  if (/\bnext\s+slice\b/i.test(t)) return true;
   if (/\b(write|generate|apply)\s+(the\s+)?(code|files?|foundation)\b/i.test(t)) return true;
   if (/\b(foundation|coding)\s+slice\b/i.test(t) && /\b(start|run|do|please|now)\b/i.test(t)) {
     return true;
@@ -39,7 +45,10 @@ export function isAssistantCodingPromise(text: string): boolean {
     /\b(starting|launching|running|proceeding with|beginning)\b.{0,40}\b(coding|foundation|go\s*code|file apply)\b/i.test(
       t,
     ) ||
-    /\b(foundation\s+coding\s+slice|coding\s+slice\s+now)\b/i.test(t)
+    /\b(foundation\s+coding\s+slice|coding\s+slice\s+now)\b/i.test(t) ||
+    // Prose-only next-slice claims (no START_CODING tag) must still force Go
+    /\bnext\s+slice\b.{0,60}\b(landing|implement|building|writing|coding)\b/i.test(t) ||
+    /\b(landing|implementing|building)\b.{0,40}\b(next\s+slice|reading\s+exercise)\b/i.test(t)
   );
 }
 

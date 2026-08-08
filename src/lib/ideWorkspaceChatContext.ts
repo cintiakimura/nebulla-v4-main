@@ -131,8 +131,11 @@ export function detectBuildModeIntent(text: string): boolean {
   // Bare "go" / "start coding" — product has no Go button; these must enter build mode.
   if (/^(go|go\.|go!)$/i.test(t)) return true;
   if (/\b(start|begin|continue)\s+coding\b/i.test(t)) return true;
+  if (/\b(continue|keep)\s+(building|implementing)\b/i.test(t)) return true;
+  if (/\bnext\s+slice\b/i.test(t)) return true;
+  if (/^(continue|build\s+next)$/i.test(t)) return true;
   const buildRe =
-    /\b(build(?:\s+next)?|implement|scaffold|create (the |a )?(app|feature|page|api|component)|add (a |the )?(feature|page|route|endpoint)|fix (the |this )?bug|write (the )?code|generate files?|make (the )?changes?|update (the )?code|ship|deploy|start_coding|continue\s+anyway)\b/i;
+    /\b(build(?:ing)?(?:\s+next)?|implement|scaffold|create (the |a )?(app|feature|page|api|component)|add (a |the )?(feature|page|route|endpoint)|fix (the |this )?bug|write (the )?code|generate files?|make (the )?changes?|update (the )?code|ship|deploy|start_coding|continue\s+anyway)\b/i;
   return buildRe.test(t);
 }
 

@@ -1428,7 +1428,7 @@ export function AIChat() {
       setAccessoryHint(
         discoveryCompleteAck
           ? 'Discovery done — switching to Agent and starting the first coding slice.'
-          : 'Switching to Agent — starting Foundation coding in your workspace.',
+          : 'Switching to Agent — starting the next coding slice in your workspace.',
       );
       window.setTimeout(() => setAccessoryHint(null), 4500);
     }
@@ -1895,36 +1895,45 @@ export function AIChat() {
             beginCodingActivity('Starting code — first slice', goWorkSteps(), {
               subhead: onboardingBuildStart
                 ? 'Nothing more to add — Master Plan saved, Grok Code building files.'
-                : userForcedCoding
-                  ? 'You asked to code — Grok Code building Foundation now.'
+                : userForcedCoding || assistantCodingPromise || shortCodingNudge
+                  ? 'You asked to continue — Grok Code building the next incomplete slice now.'
                   : fastPrototypeTurn
                     ? 'Fast Prototype draft ready — Grok Code building Foundation.'
                     : 'Starting Grok Code for the next slice.',
               initialLog: onboardingBuildStart
                 ? 'Discovery complete — auto START_CODING'
-                : userForcedCoding
-                  ? 'User go / start coding — auto Foundation'
+                : userForcedCoding || assistantCodingPromise || shortCodingNudge
+                  ? 'User continue building / next slice — auto Go Code'
                   : fastPrototypeTurn
                     ? 'Fast Prototype — auto START_CODING'
                     : 'Auto coding pass (no Go button)',
             });
           }
+          // After Foundation exists, "continue building" must request the NEXT slice — not Foundation again.
+          const nextSliceGo =
+            (userForcedCoding || assistantCodingPromise || shortCodingNudge) &&
+            !onboardingBuildStart &&
+            !fastPrototypeTurn;
           pushActivity(
             onboardingBuildStart
               ? 'Nothing more to add — launching Go Code pipeline'
-              : userForcedCoding
-                ? 'User asked to code — launching Go Code pipeline'
-                : fastPrototypeTurn
-                  ? 'Fast Prototype — launching Go Code pipeline'
-                  : 'START_CODING — launching Go Code pipeline',
+              : nextSliceGo
+                ? 'Continue building — launching Go Code for the next incomplete slice'
+                : userForcedCoding
+                  ? 'User asked to code — launching Go Code pipeline'
+                  : fastPrototypeTurn
+                    ? 'Fast Prototype — launching Go Code pipeline'
+                    : 'START_CODING — launching Go Code pipeline',
             'info',
           );
+          const goSliceInstruction = nextSliceGo
+            ? 'START_CODING — implement the NEXT incomplete slice only (Build → Debug → Next). If Foundation shell already exists (app/_layout, routes), do NOT rewrite Foundation — prefer the next Master Plan page/feature (e.g. reading exercise, auth polish, teacher dashboard, parent progress). Prefer app/, src/, components/, pages/ — not master-plan/ui-brief only. File blocks for this slice only — not the full §4 app.'
+            : 'START_CODING — implement ONE coherent Foundation slice only (Build → Debug → Next). Prefer app/, src/, components/, pages/ — not master-plan/ui-brief only. File blocks for this slice only — not the full §4 app.';
           const goMessages = [
             { role: 'assistant' as const, content: masterPlanSource.slice(0, 12000) },
             {
               role: 'user' as const,
-              content:
-                'START_CODING — implement ONE coherent Foundation slice only (Build → Debug → Next). Prefer app/, src/, components/, pages/ — not master-plan/ui-brief only. File blocks for this slice only — not the full §4 app.',
+              content: goSliceInstruction,
             },
           ];
           let go = await runGoCodeAndApply({
@@ -2054,11 +2063,11 @@ export function AIChat() {
               setGrokActivity((prev) =>
                 advanceGrokActivity(prev, showWorkActivity ? 6 : 4, {
                   currentAction: uiMockupStarted
-                    ? 'Coding slice applied — UI mockup already generated from plan'
+                    ? 'Coding slice applied — post-code UI path runs with file apply'
                     : 'Grok Code finished — opening UI Studio Beta…',
                   log: {
                     message: uiMockupStarted
-                      ? 'Post-code UI auto-refresh skipped (plan-first mockup)'
+                      ? 'Post-code UI refresh is handled inside Go apply (one auto pass / session)'
                       : 'UI Studio Beta after coding (fallback)',
                     kind: 'info',
                   },
@@ -2076,7 +2085,10 @@ export function AIChat() {
               dispatchOpenUiStudioBeta();
               pushActivity('Coding pass finished — open UI Studio Beta to generate mockup', 'info');
             } else {
-              pushActivity('Coding slice done — UI mockup was already generated from the plan', 'success');
+              pushActivity(
+                'Coding slice done — post-code UI refresh already ran (or synced) with apply',
+                'success',
+              );
             }
             resetCodingActivity();
           }
