@@ -4,9 +4,17 @@ import { cn } from '@/lib/utils';
 import { fetchSessionUser, syncActiveCloudProjectFromSession, upsertCloudProject } from '../../lib/nebulaCloud';
 import {
   MAIN_AI_CHAT_SETUP_HINT,
-  resolveAiLimitUserMessage,
   serverReportsMainAiKey,
 } from '../../lib/grokKey';
+import {
+  classifyContinueFailure,
+  clearMainAiAuthRejected,
+  continueFailureActivityLine,
+  isKeyAuthFailureMessage,
+  isMainAiAuthRejected,
+  markMainAiAuthRejected,
+  userFacingContinueFailureMessage,
+} from '../../lib/continueFailureTaxonomy';
 import { fetchNebulaPublicConfig } from '../../lib/nebulaPublicConfig';
 import { fetchJson, readResponseJson } from '../../lib/apiFetch';
 import {
@@ -983,6 +991,8 @@ export function AIChat() {
   // Post-login: stay quiet until My Projects → New Project (or explicit guided event).
   useEffect(() => {
     if (serverHasGrokKey !== true) return;
+    // Phase 7.0: prior 401/403 — do not auto-stampede Start/Continue.
+    if (isMainAiAuthRejected(diskProjectKey)) return;
     if (!chatHistoryReady) return;
     if (bootstrapStartedRef.current || sendingRef.current) return;
     // Prefer pending idea from "Start with a prompt" even if chat log restored noise.
@@ -1273,6 +1283,33 @@ export function AIChat() {
     // Chat "Create a new project: …" — default inference-first (same as My Projects Continue).
     const projectCreation = detectProjectCreationIntent(rawText);
     if (projectCreation) {
+      // Phase 7.0: do not create + bootstrap a false pipeline when chat key is missing/rejected.
+      let hasKeyForCreate = serverHasGrokKey;
+      if (hasKeyForCreate === null) {
+        try {
+          const r = await fetch(withProjectQuery('/api/config'), { credentials: 'include' });
+          const cfg = (await readResponseJson(r)) as { hasMainAiApiKey?: boolean; hasGrokApiKey?: boolean };
+          hasKeyForCreate = r.ok && serverReportsMainAiKey(cfg);
+          setServerHasGrokKey(hasKeyForCreate);
+        } catch {
+          hasKeyForCreate = false;
+          setServerHasGrokKey(false);
+        }
+      }
+      if (hasKeyForCreate === false || isMainAiAuthRejected(diskProjectKey)) {
+        const failureClass = classifyContinueFailure({
+          message: 'Grok chat is unavailable: no valid API key on the server.',
+        });
+        setSendError(
+          userFacingContinueFailureMessage(
+            failureClass,
+            'Grok chat is unavailable: no valid API key on the server.',
+          ),
+        );
+        pushActivity(continueFailureActivityLine(failureClass), 'error');
+        return;
+      }
+
       const shortName = shortNameFromIdea(projectCreation.description);
       await createProjectForCurrentSession(shortName);
       clearIdeWorkspaceMetaCache();
@@ -1306,14 +1343,32 @@ export function AIChat() {
       return;
     }
 
-    if (serverHasGrokKey === null) {
+    let hasMainAiKey = serverHasGrokKey;
+    if (hasMainAiKey === null) {
       try {
         const r = await fetch(withProjectQuery('/api/config'), { credentials: 'include' });
         const cfg = (await readResponseJson(r)) as { hasMainAiApiKey?: boolean; hasGrokApiKey?: boolean };
-        setServerHasGrokKey(r.ok && serverReportsMainAiKey(cfg));
+        hasMainAiKey = r.ok && serverReportsMainAiKey(cfg);
+        setServerHasGrokKey(hasMainAiKey);
       } catch {
+        hasMainAiKey = false;
         setServerHasGrokKey(false);
       }
+    }
+
+    // Phase 7.0 Auth/API-key health precondition — fail fast before plan/mockup/coding stampede.
+    if (hasMainAiKey === false || isMainAiAuthRejected(diskProjectKey)) {
+      const failureClass = classifyContinueFailure({
+        message: 'Grok chat is unavailable: no valid API key on the server.',
+      });
+      setSendError(
+        userFacingContinueFailureMessage(
+          failureClass,
+          'Grok chat is unavailable: no valid API key on the server.',
+        ),
+      );
+      pushActivity(continueFailureActivityLine(failureClass), 'error');
+      return;
     }
 
     clearVoiceIdleTimer();
@@ -1495,6 +1550,8 @@ export function AIChat() {
           contentLocale: contentLocaleRef.current,
           contentMode: prefs.contentMode,
         }));
+        // Phase 7.0: a successful chat turn clears sticky key/auth rejection.
+        clearMainAiAuthRejected(diskProjectKey);
       } finally {
         stopGrokWait();
       }
@@ -1942,30 +1999,23 @@ export function AIChat() {
         resetCodingActivity();
       }
       const msg = e instanceof Error ? e.message : String(e);
-      const isKeyHelp =
-        msg.includes('Grok API key') ||
-        msg.includes('Main AI') ||
-        msg.includes('MAIN_API_KEY_GROK') ||
-        msg.includes('MAIN_AI_API_KEY') ||
-        msg.includes('GROK_API_KEY_LUMEN') ||
-        msg.includes('GROK_API_KEY') ||
-        msg.includes('Grok chat is unavailable') ||
-        msg.includes('Please add your Grok') ||
-        msg.includes('401') ||
-        msg.includes('rejected this API key');
-      const pubCfg = await fetchNebulaPublicConfig();
-      const limitMsg = resolveAiLimitUserMessage(msg, {
-        billingEnabled: pubCfg.billingEnabled,
-        freeTierTokenLimitDisabled: pubCfg.freeTierTokenLimitDisabled,
-        hasUserByok: pubCfg.hasUserByok,
-      });
-      if (limitMsg !== msg) {
-        setSendError(limitMsg);
-      } else if (isKeyHelp) {
-        setSendError(MAIN_AI_CHAT_SETUP_HINT);
+      const failureClass = classifyContinueFailure({ message: msg });
+      // Phase 7.0: on key/auth reject — surface clearly, clear false mockup flags, stop stampede.
+      if (failureClass === 'key/auth fail' || isKeyAuthFailureMessage(msg)) {
+        markMainAiAuthRejected(diskProjectKey);
+        clearUiMockupStageFlags(diskProjectKey);
+        pushActivity(continueFailureActivityLine('key/auth fail', msg), 'error');
       } else {
-        setSendError(msg);
+        pushActivity(continueFailureActivityLine(failureClass, msg), 'error');
       }
+      const pubCfg = await fetchNebulaPublicConfig();
+      setSendError(
+        userFacingContinueFailureMessage(failureClass, msg, {
+          billingEnabled: pubCfg.billingEnabled,
+          freeTierTokenLimitDisabled: pubCfg.freeTierTokenLimitDisabled,
+          hasUserByok: pubCfg.hasUserByok,
+        }),
+      );
     } finally {
       setSending(false);
       if (openTalkDesiredRef.current && !scheduledTts) {

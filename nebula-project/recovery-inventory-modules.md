@@ -7,6 +7,7 @@
 | Home events / pending idea | `src/lib/ideHomeEvents.ts` | Continue | idea, type, guided flag | localStorage | Start UI | AIChat bootstrap | partial | low | FIX |
 | Chat bootstrap | `src/lib/ideChatBootstrap.ts` | startGuidedDiscovery | idea, type | hidden user turn | start mode | Grok chat | partial | high | FIX |
 | AIChat orchestration | `src/components/ide/AIChat.tsx` | send / bootstrap | history, mode | plan save, mockup, code | detector, bootstrap | pipelines | partial | high | FIX |
+| Continue failure taxonomy | `src/lib/continueFailureTaxonomy.ts` | Start/Continue errors | error message / flags | failure class + sticky auth reject | AIChat catch / 7.0 | user error, stop stampede | new | high | FIX |
 | Chat mode detector | `src/lib/chatModeDetector.ts` | each turn | text, plan complete | mode, hints | smartChatHandler | system appendix | working | medium | KEEP |
 | Smart chat handler | `src/lib/smartChatHandler.ts` | non-bootstrap turns | text | mode / file preview | detector | AIChat | working | medium | KEEP |
 | Inference-first memory | `src/lib/inferenceFirstMemory.ts` | Grok turn | disk files | system appendix | batch memory API | model | partial | high | FIX |

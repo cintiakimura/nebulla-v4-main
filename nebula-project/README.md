@@ -16,7 +16,7 @@ When documentation in this folder refers to “the platform” or “the server,
 
 ### Key files in this folder
 
-- **`recovery-orchestration.md`** — Recovery conductor map (inventory index, KEEP/FIX/QUARANTINE, spine order). Does not replace domain rules.
+- **`recovery-orchestration.md`** — **Recovery conductor (single map of record).** Freeze, KEEP, Phase 7 spine + artifact contracts, golden brief, Decision Log. Amend this file only — no sibling recovery strategy trees. Does not replace domain rules.
 - **`recovery-inventory-*.md`** — Pages / documents / modules inventory sheets.
 - **`inference-first-rules.md`** — Default intake / stage sequence (inference-first).
 - **`project-execution-rules.md`** — Canonical law (Master Plan contract, security baseline, UI brief, Mind Map, Go slices). Wins on conflict vs non-orchestration domain docs.
