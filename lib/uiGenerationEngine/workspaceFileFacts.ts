@@ -223,7 +223,7 @@ export function collectWorkspaceFileFacts(
     extractFromText(text, facts);
     facts.page_names.push(...pageNamesFromRelPath(rel));
 
-    // Infer route from app/practice/page.tsx → /practice
+    // Infer route from app/practice/page.tsx → /practice (Next)
     const routeFromFile = rel.match(
       /(?:^|\/)(?:app|pages|src\/app|src\/pages)\/(.+)\/page\.(t|j)sx?$/i,
     );
@@ -233,6 +233,21 @@ export function collectWorkspaceFileFacts(
         .filter((p) => p && !p.startsWith("(") && !p.startsWith("_") && p !== "index");
       if (segs.length) facts.routes.push(`/${segs.join("/")}`);
       else facts.routes.push("/");
+    } else {
+      // Expo Router: app/login.tsx → /login, app/kid/home.tsx → /kid/home
+      const expoFile = rel.match(/(?:^|\/)app\/(.+)\.(t|j)sx?$/i);
+      if (expoFile?.[1]) {
+        const segs = expoFile[1]
+          .split("/")
+          .filter(
+            (p) =>
+              p &&
+              !p.startsWith("(") &&
+              !p.startsWith("_") &&
+              !/^(layout|_layout|globals|index)$/i.test(p),
+          );
+        if (segs.length) facts.routes.push(`/${segs.join("/")}`);
+      }
     }
   }
 

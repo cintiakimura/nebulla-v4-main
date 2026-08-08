@@ -18,10 +18,18 @@ export type ClassifyInput = {
   uiux: string;
   pageName: string;
   pagePurpose: string;
+  /** This page's route only — never the full workspace route list for auth. */
+  pageRoute?: string;
   filePaths: string[];
+  /** Workspace routes — device/nav/grounding only; NOT used for page_type auth. */
   fileRoutes: string[];
   hasBottomNav?: boolean;
 };
+
+const AUTH_PAGE_RE = /sign[\s_-]?in|sign[\s_-]?up|\blog[\s_-]?in\b|\bauth\b|\bregister\b/i;
+const AUTH_ROUTE_RE = /\/(login|signin|sign-in|sign-up|signup|register|auth)(\/|$)/i;
+const PRODUCT_HOME_NAME_RE =
+  /\b(home|practice|exercise|lesson|progress|dashboard|teacher|parent|today)\b/i;
 
 function detectDevice(input: ClassifyInput): V2Device {
   const blob = `${input.projectType}\n${input.goal}\n${input.filePaths.join("\n")}`.toLowerCase();
@@ -40,9 +48,28 @@ function detectDevice(input: ClassifyInput): V2Device {
   return "web";
 }
 
+/**
+ * Auth (and other page types) from THIS page only: name, purpose, pageRoute.
+ * Global fileRoutes must never force Email/Password onto Kid Home after Foundation.
+ */
+function isAuthPageLocal(input: ClassifyInput): boolean {
+  const name = (input.pageName || "").trim();
+  const purpose = (input.pagePurpose || "").trim();
+  const route = (input.pageRoute || "").trim();
+  if (AUTH_ROUTE_RE.test(route)) return true;
+  if (AUTH_PAGE_RE.test(name)) return true;
+  // Purpose may say "after login…" on product pages — do not treat those as auth screens.
+  if (PRODUCT_HOME_NAME_RE.test(name)) return false;
+  if (AUTH_PAGE_RE.test(purpose) && !/\bafter\s+(sign|log)[\s_-]?in\b/i.test(purpose)) {
+    return true;
+  }
+  return false;
+}
+
 function detectPageType(input: ClassifyInput, device: V2Device): V2PageType {
-  const blob = `${input.pageName} ${input.pagePurpose} ${input.fileRoutes.join(" ")}`.toLowerCase();
-  if (/sign[\s_-]?in|sign[\s_-]?up|login|auth|register/.test(blob)) return "auth";
+  // Page-local only — never join workspace fileRoutes into auth / page_type decisions.
+  const blob = `${input.pageName} ${input.pagePurpose} ${input.pageRoute || ""}`.toLowerCase();
+  if (isAuthPageLocal(input)) return "auth";
   if (/setting/.test(blob)) return "settings";
   if (/profile|account/.test(blob)) return "profile";
   if (/checkout|cart|payment/.test(blob)) return "checkout";
@@ -51,7 +78,7 @@ function detectPageType(input: ClassifyInput, device: V2Device): V2PageType {
   if (/dashboard|overview|metrics|home feed/.test(blob)) return "dashboard";
   if (/task|todo|list|feed|practice|catalog|browse/.test(blob)) return "list";
   if (/detail|lesson|item|show/.test(blob)) return "detail";
-  if (/^home$|home screen|start/.test(blob) || /\/$|\/home/.test(blob)) return "home";
+  if (/home screen|\bhome\b/.test(blob) || /\/$|\/home\b/.test(blob)) return "home";
   if (device === "landing") return "landing";
   if (device === "mobile" && /home|index/.test(blob)) return "home";
   return device === "mobile" ? "home" : "dashboard";
