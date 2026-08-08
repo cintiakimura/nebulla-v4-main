@@ -14,6 +14,7 @@ import {
   buildCodedAppPreviewBridgeHtml,
   isNebulaUiGenMockupHtml,
   resolveAppPreviewAuthority,
+  toHttpHeaderSafe,
   workspaceHasCodedAppUi,
 } from "../lib/workspaceCodedAppUi.ts";
 
@@ -135,6 +136,27 @@ section("built dist/index.html preferred as live entry");
   const auth = resolveAppPreviewAuthority(root);
   assert.equal(auth.mode, "live_app_static");
   assert.equal(auth.entryRel, "dist/index.html");
+  fs.rmSync(root, { recursive: true, force: true });
+}
+
+section("status labels / headers must not crash Node setHeader");
+{
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "nebulla-preview-hdr-"));
+  const mockup = buildUiGenerationPreviewHtml({
+    projectName: "Hdr",
+    templateId: "mobile_list_actions",
+    tokens,
+    slots: { hero_title: "Home", primary_cta: "Go" },
+  });
+  fs.writeFileSync(path.join(root, "index.html"), mockup, "utf8");
+  const auth = resolveAppPreviewAuthority(root);
+  assert.equal(auth.mode, "pre_code_mockup");
+  const unsafe = "Pre-code mockup only — not live app";
+  const safe = toHttpHeaderSafe(unsafe);
+  assert.equal(/[^\x20-\x7E]/.test(safe), false);
+  assert.equal(/—/.test(safe), false);
+  assert.equal(/[^\x20-\x7E]/.test(toHttpHeaderSafe(auth.statusLabel)), false);
+  assert.equal(/—/.test(auth.statusLabel), false);
   fs.rmSync(root, { recursive: true, force: true });
 }
 

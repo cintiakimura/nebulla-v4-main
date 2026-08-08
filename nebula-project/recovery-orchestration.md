@@ -248,6 +248,7 @@ Work **one step per Agent turn / PR** after constitution install. Fix the **earl
 | 2026-08-09 | Artifact sync 45s soft-timeout (no forever hang); hard-skip unsolicited Supabase/Firebase on apply unless plan names vendor | Same stuck sync + Supabase-by-default loop |
 | 2026-08-09 | Concrete §5/ui-brief (no Industry-appropriate filler); bare Go skips Phase-A LLM + client 55s kick abort→poll; Preview labeled shell/static | Same poor UI prompt + Go stuck ~42s + non-interactive preview |
 | 2026-08-09 | Preview authority: coded app UI detected → bootstrap does not serve UI Gen mockup as live product; mockup only at public/nebula-ui-gen-preview.html post-code | App Preview stuck on static mockup after Grok wrote real app/src files |
+| 2026-08-09 | Drop X-Nebulla-Preview-Status (em-dash crashed Node setHeader); Fast Prototype auto-Primary also after Auth/shell labels | Preview black-screen Invalid character in header; Go stopped at Auth-only |
 
 ---
 

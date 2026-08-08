@@ -25,7 +25,25 @@ export function looksLikeFoundationSlice(sliceLabel?: string | null): boolean {
 }
 
 /**
- * True when Fast Prototype should kick Step 9.2 (primary feature) once after Foundation.
+ * First Go often labels Foundation+Auth as "Auth". Still auto Primary once —
+ * do not stop Fast Prototype after shell/auth-only slices.
+ */
+export function looksLikePrePrimaryShellSlice(sliceLabel?: string | null): boolean {
+  const label = String(sliceLabel || '').trim();
+  if (!label) return true;
+  if (/\bprimary\b/i.test(label)) return false;
+  if (/\bsecondary\b/i.test(label)) return false;
+  if (/\bpolish\b/i.test(label)) return false;
+  return (
+    looksLikeFoundationSlice(label) ||
+    /\bauth\b/i.test(label) ||
+    /\bdata\+?api\b/i.test(label) ||
+    /\bshell\b/i.test(label)
+  );
+}
+
+/**
+ * True when Fast Prototype should kick Step 9.2 (primary feature) once after shell/auth.
  */
 export function shouldAutoRunPrimarySliceAfterFoundation(opts: {
   fastPrototypeTurn: boolean;
@@ -36,7 +54,7 @@ export function shouldAutoRunPrimarySliceAfterFoundation(opts: {
 }): boolean {
   if (!opts.fastPrototypeTurn || !opts.codingOk) return false;
   if (!opts.force && hasFastPrototypePrimaryAutoRun(opts.projectKey)) return false;
-  return looksLikeFoundationSlice(opts.sliceLabel);
+  return looksLikePrePrimaryShellSlice(opts.sliceLabel);
 }
 
 export const FAST_PROTOTYPE_PRIMARY_SLICE_INSTRUCTION =

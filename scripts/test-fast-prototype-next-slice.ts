@@ -59,6 +59,17 @@ assert.equal(
   false,
 );
 
+// First Go often returns Auth for shell+login — still auto Primary once.
+assert.equal(
+  shouldAutoRunPrimarySliceAfterFoundation({
+    fastPrototypeTurn: true,
+    codingOk: true,
+    projectKey: 'p-auth',
+    sliceLabel: 'Auth',
+  }),
+  true,
+);
+
 assert.match(FAST_PROTOTYPE_PRIMARY_SLICE_INSTRUCTION, /SLICE: Primary/);
 assert.match(FAST_PROTOTYPE_PRIMARY_SLICE_INSTRUCTION, /do NOT rewrite it/i);
 

@@ -169,7 +169,7 @@ export function resolveAppPreviewAuthority(workspaceRoot: string): AppPreviewAut
     if (indexHtml || mockupRel) {
       return {
         mode: "pre_code_mockup",
-        statusLabel: "Pre-code mockup only — not live app",
+        statusLabel: "Pre-code mockup only - not live app",
         codedApp: false,
         indexIsMockup: indexIsMockup || Boolean(mockupRel),
         entryRel: indexHtml ? "index.html" : mockupRel,
@@ -210,7 +210,7 @@ export function resolveAppPreviewAuthority(workspaceRoot: string): AppPreviewAut
     return {
       mode: needsBundler ? "post_code_bridge" : "live_app_static",
       statusLabel: needsBundler
-        ? "Post-code — product files (runtime limited)"
+        ? "Post-code - product files (runtime limited)"
         : "Live app preview",
       codedApp: true,
       indexIsMockup: false,
@@ -225,15 +225,23 @@ export function resolveAppPreviewAuthority(workspaceRoot: string): AppPreviewAut
 
   return {
     mode: "post_code_bridge",
-    statusLabel: "Post-code — product files (not mockup)",
+    statusLabel: "Post-code - product files (not mockup)",
     codedApp: true,
     indexIsMockup,
     entryRel: null,
     productFiles,
     mockupRel,
     limitation:
-      "App Preview cannot run the workspace Vite/Next/Expo bundler in the iframe yet. Product UI source was detected — open those files to validate features. Optional static mockup is kept at public/nebula-ui-gen-preview.html only.",
+      "App Preview cannot run the workspace Vite/Next/Expo bundler in the iframe yet. Product UI source was detected - open those files to validate features. Optional static mockup is kept at public/nebula-ui-gen-preview.html only.",
   };
+}
+
+/** ASCII-only header value (Node rejects em-dash etc. in setHeader). */
+export function toHttpHeaderSafe(value: string, max = 120): string {
+  return String(value || "")
+    .replace(/[—–]/g, "-")
+    .replace(/[^\x20-\x7E]/g, "")
+    .slice(0, max);
 }
 
 function esc(s: string): string {

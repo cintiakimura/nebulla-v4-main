@@ -2303,8 +2303,9 @@ No approved UI code yet.
       html = html.replace(/(src|href)=(["'])\/(?!\/)/gi, "$1=$2");
       // Early App Status capture — before parent onload inject (idempotent with client inject).
       html = wrapHtmlWithPreviewRuntimeBridge(html);
-      res.setHeader("X-Nebulla-Preview-Mode", authority.mode);
-      res.setHeader("X-Nebulla-Preview-Status", authority.statusLabel.slice(0, 120));
+      // HTTP headers must be ASCII — never put em-dashes / status prose here (crashes Node setHeader).
+      // Full label lives in /api/app-preview/meta for the IDE chrome.
+      res.setHeader("X-Nebulla-Preview-Mode", String(authority.mode).replace(/[^\x20-\x7E]/g, ""));
       res.type("html").send(html);
     } catch (err: unknown) {
       res.status(500).type("text/plain").send(err instanceof Error ? err.message : "bootstrap failed");
