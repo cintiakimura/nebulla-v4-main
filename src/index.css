@@ -466,10 +466,10 @@
 }
 
 /*
- * Trial: starfield behind IDE only.
- * Why v1 looked unchanged: every panel used 75% black → stacked to solid black
- * on an already near-black image. Fix: ONE image + ONE 75% veil; panels transparent.
- * Revert: remove this block + nebulla-ide-shell class on NebullaIDE + public/images/ide-starfield.png
+ * Trial: nebula photo behind IDE only.
+ * Why v1 looked unchanged: every panel used stacked black → solid black
+ * on an already near-black image. Fix: ONE image + ONE veil; panels transparent.
+ * Revert: remove this block + nebulla-ide-shell class on NebullaIDE + public/images/ide-nebula-bg.png
  */
 .nebulla-ide-shell {
   position: relative;
@@ -509,20 +509,20 @@
   z-index: 0;
   pointer-events: none;
   background-color: #000000;
-  background-image: url('/images/ide-starfield.png');
+  background-image: url('/images/ide-nebula-bg.png');
   background-size: cover;
   background-position: center;
   background-repeat: no-repeat;
 }
 
-/* Single 75% black veil — same effect as “black at 75% opacity” without stacking */
+/* Single 60% black veil — same effect as “black at 60% opacity” without stacking */
 .nebulla-ide-shell::after {
   content: '';
   position: fixed;
   inset: 0;
   z-index: 0;
   pointer-events: none;
-  background-color: rgba(0, 0, 0, 0.75);
+  background-color: rgba(0, 0, 0, 0.6);
 }
 
 .nebulla-ide-shell > * {

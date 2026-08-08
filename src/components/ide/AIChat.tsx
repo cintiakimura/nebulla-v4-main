@@ -468,9 +468,9 @@ export function AIChat() {
             credentials: 'include',
             body: JSON.stringify(withProjectBody({})),
           });
-        } catch {
-          /* ignore */
-        }
+  } catch {
+    /* ignore */
+  }
         emitChatV0Progress('v0 session cleared — use original UI Studio to generate manually if needed.');
         void refreshChatV0Status();
       })();
@@ -726,11 +726,11 @@ export function AIChat() {
       }
     }
 
-    const t = inputRef.current.trim();
+      const t = inputRef.current.trim();
     if (!t) return;
 
     resetHandsFreeSpeechTurn();
-    void sendChatRef.current(t);
+      void sendChatRef.current(t);
   }, []);
 
   const scheduleHandsFreeAutoSend = useCallback(() => {
@@ -779,8 +779,8 @@ export function AIChat() {
         liveHandsFreeRecognitionRef.current = null;
       }
     } else {
-      stopVoiceRecognition();
-      stopHandsFree();
+    stopVoiceRecognition();
+    stopHandsFree();
     }
     const SR = (window as unknown as { webkitSpeechRecognition: new () => IdeSpeechRecognition }).webkitSpeechRecognition;
     const recognition = new SR();
@@ -800,13 +800,13 @@ export function AIChat() {
         }
       }
       if (finalText) {
-        const next = `${inputRef.current}${inputRef.current ? ' ' : ''}${finalText}`.trim();
-        setInput(next);
-        inputRef.current = next;
+      const next = `${inputRef.current}${inputRef.current ? ' ' : ''}${finalText}`.trim();
+      setInput(next);
+      inputRef.current = next;
       }
       if (finalText || hasInterim) {
         noteHandsFreeSpeechActivity();
-        scheduleHandsFreeAutoSend();
+      scheduleHandsFreeAutoSend();
       }
     };
 
@@ -1001,7 +1001,7 @@ export function AIChat() {
     let guidedFlag = false;
     try {
       guidedFlag = localStorage.getItem(NEBULA_START_GUIDED_ON_READY_KEY) === '1';
-    } catch {
+      } catch {
       guidedFlag = false;
     }
     if (!guidedFlag && !pendingIdea) return;
@@ -1286,15 +1286,15 @@ export function AIChat() {
       // Phase 7.0: do not create + bootstrap a false pipeline when chat key is missing/rejected.
       let hasKeyForCreate = serverHasGrokKey;
       if (hasKeyForCreate === null) {
-        try {
-          const r = await fetch(withProjectQuery('/api/config'), { credentials: 'include' });
+      try {
+        const r = await fetch(withProjectQuery('/api/config'), { credentials: 'include' });
           const cfg = (await readResponseJson(r)) as { hasMainAiApiKey?: boolean; hasGrokApiKey?: boolean };
           hasKeyForCreate = r.ok && serverReportsMainAiKey(cfg);
           setServerHasGrokKey(hasKeyForCreate);
-        } catch {
+      } catch {
           hasKeyForCreate = false;
-          setServerHasGrokKey(false);
-        }
+        setServerHasGrokKey(false);
+      }
       }
       if (hasKeyForCreate === false || isMainAiAuthRejected(diskProjectKey)) {
         const failureClass = classifyContinueFailure({
@@ -1400,11 +1400,11 @@ export function AIChat() {
       timestamp: new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }),
     };
     if (!isBootstrapTrigger) {
-      setMessages((p) => {
-        const next = [...p, userMsg];
-        messagesRef.current = next;
-        return next;
-      });
+    setMessages((p) => {
+      const next = [...p, userMsg];
+      messagesRef.current = next;
+      return next;
+    });
     }
     setInput('');
     inputRef.current = '';
@@ -1504,9 +1504,9 @@ export function AIChat() {
     const historyForApi = [...prior, { ...userMsg, content: text }]
       .filter((m) => m.variant !== 'status')
       .map((m) => ({
-        role: m.role,
-        content: m.content,
-      })) as { role: 'user' | 'assistant'; content: string }[];
+      role: m.role,
+      content: m.content,
+    })) as { role: 'user' | 'assistant'; content: string }[];
 
     const session = await fetchSessionUser();
     const userId = session?.uid?.trim() || 'anonymous';
@@ -1533,11 +1533,11 @@ export function AIChat() {
       let planningPhase: string;
       try {
         ({ assistantContent, planningPhase } = await sendIdeAssistantGrokTurn({
-          textToSend: text,
-          history: historyForApi,
-          userId,
-          projectName,
-          ideAppendix,
+        textToSend: text,
+        history: historyForApi,
+        userId,
+        projectName,
+        ideAppendix,
           buildMode,
           chatModel,
           chatMode,
@@ -1619,8 +1619,8 @@ export function AIChat() {
       const toAppend: Message[] = [];
       if (displayText.trim()) {
         toAppend.push({
-          id: `a-${Date.now()}`,
-          role: 'assistant',
+        id: `a-${Date.now()}`,
+        role: 'assistant',
           content: displayText.trim(),
           timestamp: ts,
         });
@@ -1635,11 +1635,11 @@ export function AIChat() {
         });
       }
       if (toAppend.length > 0) {
-        setMessages((p) => {
+      setMessages((p) => {
           const next = [...p, ...toAppend];
-          messagesRef.current = next;
-          return next;
-        });
+        messagesRef.current = next;
+        return next;
+      });
       }
 
       // Start TTS as soon as spoken text exists — do not wait for UI pipeline / coding.
@@ -1763,23 +1763,23 @@ export function AIChat() {
                 : 'UI mockup ready in UI Studio Beta — open App Preview / Generate if shell still looks empty',
               applied.ok ? 'success' : 'warn',
             );
-            setMessages((p) => {
-              const next = [
-                ...p,
-                {
+      setMessages((p) => {
+        const next = [
+          ...p,
+          {
                   id: `a-mockup-${Date.now()}`,
-                  role: 'assistant' as const,
+            role: 'assistant' as const,
                   content:
                     'Architecture draft is ready. UI mockup is generated from researched patterns + your Master Plan — check UI Studio Beta and App Preview. Coding continues next in slices (foundation first).',
                   timestamp: new Date().toLocaleTimeString([], {
                     hour: 'numeric',
                     minute: '2-digit',
                   }),
-                },
-              ];
-              messagesRef.current = next;
-              return next;
-            });
+          },
+        ];
+        messagesRef.current = next;
+        return next;
+      });
           } else {
             clearUiMockupStageFlags(diskProjectKey);
             pushActivity(
@@ -2026,7 +2026,7 @@ export function AIChat() {
       setSending(false);
       if (openTalkDesiredRef.current && !scheduledTts) {
         resumeOpenTalkIfWanted();
-      }
+    }
     }
   }, [sending, activePath, activeTab?.content, serverHasGrokKey, micInputBlocked, workspaceRootLabel, gitBranch, tabs, pauseHandsFreeListening, resumeOpenTalkIfWanted, beginCodingActivity, pushActivity, resetCodingActivity, workspacePaths.length, noteUserMessageForMirror, prefs.contentMode, resolvedIdeLocale, t, localeLabels]);
 
@@ -2054,42 +2054,42 @@ export function AIChat() {
     setIsTtsPlaying(true);
 
     const resumeHandsFree = openTalkDesiredRef.current;
-    stopVoiceRecognition();
+      stopVoiceRecognition();
     pauseHandsFreeListening();
-    handsFreeResumeAfterTtsRef.current = resumeHandsFree;
+      handsFreeResumeAfterTtsRef.current = resumeHandsFree;
 
-    const finishPlayback = () => {
-      if (runId !== ttsRunIdRef.current) return;
-      setIsTtsPlaying(false);
-      const w = window as unknown as { nebula_ide_currentAudio?: HTMLAudioElement | null };
-      w.nebula_ide_currentAudio = null;
-      if (ttsObjectUrlRef.current) {
-        URL.revokeObjectURL(ttsObjectUrlRef.current);
-        ttsObjectUrlRef.current = null;
-      }
-      setMicCooldown(true);
-      clearMicCooldownTimer();
-      micCooldownTimerRef.current = window.setTimeout(() => {
-        micCooldownTimerRef.current = null;
-        setMicCooldown(false);
-        if (handsFreeResumeAfterTtsRef.current) {
-          handsFreeResumeAfterTtsRef.current = false;
-          resumeOpenTalkIfWanted();
+      const finishPlayback = () => {
+        if (runId !== ttsRunIdRef.current) return;
+        setIsTtsPlaying(false);
+        const w = window as unknown as { nebula_ide_currentAudio?: HTMLAudioElement | null };
+        w.nebula_ide_currentAudio = null;
+        if (ttsObjectUrlRef.current) {
+          URL.revokeObjectURL(ttsObjectUrlRef.current);
+          ttsObjectUrlRef.current = null;
         }
-      }, MIC_REENABLE_AFTER_TTS_MS);
-    };
+        setMicCooldown(true);
+        clearMicCooldownTimer();
+        micCooldownTimerRef.current = window.setTimeout(() => {
+          micCooldownTimerRef.current = null;
+          setMicCooldown(false);
+          if (handsFreeResumeAfterTtsRef.current) {
+            handsFreeResumeAfterTtsRef.current = false;
+          resumeOpenTalkIfWanted();
+          }
+        }, MIC_REENABLE_AFTER_TTS_MS);
+      };
 
     const t0 = performance.now();
     try {
       await playTtsText({
         text: plain,
         speakUrl: withProjectQuery('/api/speak'),
-        signal: controller.signal,
+            signal: controller.signal,
         credentials: 'include',
         language: contentLocaleRef.current,
         onAudio: (audio) => {
-          const w = window as unknown as { nebula_ide_currentAudio?: HTMLAudioElement | null };
-          w.nebula_ide_currentAudio = audio;
+            const w = window as unknown as { nebula_ide_currentAudio?: HTMLAudioElement | null };
+            w.nebula_ide_currentAudio = audio;
           if (audio) {
             // Interrupt path resolves via abort + audio.pause in interruptVoiceAndTts.
             ttsChunkResolveRef.current = () => {
@@ -2105,14 +2105,14 @@ export function AIChat() {
         },
       });
       console.debug(`[TTS] full turn ${Math.round(performance.now() - t0)}ms`);
-    } catch (e) {
-      const aborted = (e as { name?: string })?.name === 'AbortError';
-      if (!aborted && runId === ttsRunIdRef.current) {
-        console.warn('[AIChat] TTS', e);
-      }
+      } catch (e) {
+        const aborted = (e as { name?: string })?.name === 'AbortError';
+        if (!aborted && runId === ttsRunIdRef.current) {
+          console.warn('[AIChat] TTS', e);
+        }
     } finally {
       if (runId === ttsRunIdRef.current) finishPlayback();
-    }
+      }
   };
   playTtsForTextRef.current = playTtsForText;
 
@@ -2684,7 +2684,7 @@ export function AIChat() {
               >
                 {message.content}
               </p>
-            </div>
+          </div>
           ) : (
           <div
             key={message.id}
@@ -2858,10 +2858,10 @@ export function AIChat() {
               </ChatRoundButton>
             </div>
 
-            <ChatRoundButton
+              <ChatRoundButton
               size="sm"
               label={t('chat.sendMessage')}
-              onClick={() => {
+                onClick={() => {
                 stopVoiceRecognition();
                 setIsRecordingVoice(false);
                 void sendChat();
@@ -2869,7 +2869,7 @@ export function AIChat() {
               disabled={!input.trim() || sending || uploadBusy}
             >
               <Send className="h-3.5 w-3.5" />
-            </ChatRoundButton>
+              </ChatRoundButton>
           </div>
         </div>
       </div>
