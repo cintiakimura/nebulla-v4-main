@@ -259,9 +259,11 @@ section('applyPreviewShell writes only when called (pass path)');
     },
     patternMode: 'seed',
   });
-  assert.deepEqual(written, ['index.html', 'public/nebula-ui-gen-preview.html']);
+  assert.ok(written.includes('public/nebula-ui-gen-preview.html'));
+  assert.ok(written.includes('index.html'), 'pre-code still writes live mockup index');
   const html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
   assert.ok(html.includes('My Tasks'));
+  assert.ok(html.includes('nebulla-preview') && html.includes('ui-gen-mockup'), 'mockup marker present');
   assert.ok(html.includes('topbar') || html.includes('class="topbar"'), 'preview has top bar');
   assert.ok(html.includes('class="tabs"') || html.includes('tab--active'), 'mobile preview has bottom tabs');
   fs.rmSync(root, { recursive: true, force: true });

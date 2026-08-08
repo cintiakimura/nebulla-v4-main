@@ -96,19 +96,33 @@ export function AppPreviewPanel({
   >([]);
   const [filesError, setFilesError] = useState<string | null>(null);
   const [previewRev, setPreviewRev] = useState(0);
+  const [previewStatusLabel, setPreviewStatusLabel] = useState<string | null>(null);
+  const [previewMode, setPreviewMode] = useState<string | null>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
 
-  /** Health-check meta only — preview iframe is always workspace bootstrap (Phase 5). */
+  /** Preview authority meta — iframe always uses workspace bootstrap (never cross-origin v0). */
   const loadPreviewMeta = useCallback(async () => {
     try {
       const res = await fetch(withProjectQuery('/api/app-preview/meta'), { credentials: 'include' });
-      const data = await readResponseJson<{ error?: string }>(res);
+      const data = await readResponseJson<{
+        error?: string;
+        previewStatusLabel?: string;
+        previewMode?: string;
+        limitation?: string | null;
+      }>(res);
       if (!res.ok) {
         reportPreviewBootstrapFailure(
           typeof data.error === 'string' ? data.error : `Preview meta failed (${res.status})`,
         );
+        return;
       }
+      setPreviewStatusLabel(
+        typeof data.previewStatusLabel === 'string' && data.previewStatusLabel.trim()
+          ? data.previewStatusLabel.trim()
+          : null,
+      );
+      setPreviewMode(typeof data.previewMode === 'string' ? data.previewMode : null);
     } catch (e) {
       reportPreviewBootstrapFailure(
         e instanceof Error ? e.message : 'Preview meta request failed',
@@ -512,6 +526,27 @@ export function AppPreviewPanel({
           {fullscreen ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
         </button>
         <IdeAppStatusPreviewBadge />
+        <span
+          className="hidden max-w-[200px] truncate text-[9px] leading-tight text-slate-500 sm:inline"
+          title={
+            previewMode === 'pre_code_mockup'
+              ? 'Pre-code mockup only — static UI Gen shell, not the live coded app.'
+              : previewMode === 'post_code_bridge'
+                ? 'Product UI source detected. Static mockup is not the live product; iframe cannot run Vite/Next/Expo yet.'
+                : previewMode === 'live_app_static'
+                  ? 'Serving workspace app entry / built static output.'
+                  : 'App Preview authority from workspace bootstrap.'
+          }
+        >
+          {previewStatusLabel ||
+            (previewMode === 'pre_code_mockup'
+              ? 'Pre-code mockup'
+              : previewMode === 'post_code_bridge'
+                ? 'Post-code (not mockup)'
+                : previewMode === 'live_app_static'
+                  ? 'Live app preview'
+                  : 'Preview')}
+        </span>
       </div>
     </div>
   );

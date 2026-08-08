@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
+import os from "node:os";
 import {
   assessOversizedGoApply,
+  buildLocalPreCodingSummary,
+  isBareGoNote,
   parseGoSliceLabel,
+  shouldSkipPhaseALlm,
 } from "../lib/goSliceContract.ts";
 import {
   buildSecurityBaselineProposal,
@@ -59,5 +63,25 @@ assert.equal(planNeedsSecurityBaseline(tbdAuth), true);
 const draft = draftSection4AmendmentsForRoutes(["/2fa", "/_secret"]);
 assert.match(draft, /`\/2fa`/);
 assert.match(draft, /`\/_secret`/);
+
+assert.equal(isBareGoNote("go"), true);
+assert.equal(isBareGoNote("START_CODING"), true);
+assert.equal(isBareGoNote("continue building"), true);
+assert.equal(isBareGoNote("SLICE: Primary — kid practice"), false);
+assert.equal(shouldSkipPhaseALlm({ userNote: "go" }), true);
+assert.equal(
+  shouldSkipPhaseALlm({
+    userNote: "focus on auth screens carefully",
+    existingSummary: "SLICE: Auth\n- login only",
+  }),
+  false,
+);
+const localSum = buildLocalPreCodingSummary({
+  workspaceRoot: os.tmpdir(),
+  userNote: "go",
+  projectName: "tutor kids with ADHD",
+});
+assert.match(localSum, /^SLICE:/);
+assert.match(localSum, /ADHD|tutor|slice/i);
 
 console.log("\n✓ go-slice + security propose + mind-map amend tests passed\n");

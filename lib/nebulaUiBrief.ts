@@ -7,6 +7,12 @@ import fs from "fs";
 import path from "path";
 import { summarizeDesignReferencesForPrompt } from "./nebulaDesignReferences";
 import { readWorkspaceContentLocale } from "./contentLocaleWorkspace";
+import {
+  buildConcreteUiuxSection,
+  buildStitchChromeBriefSection,
+  inferUiDevice,
+  isGenericUiuxBoilerplate,
+} from "./uiuxSectionBuilder";
 
 export const UI_BRIEF_REL = "nebula-ui-studio/ui-brief.md";
 
@@ -93,6 +99,17 @@ export function buildUiBriefMarkdown(
         ? "Target device: **marketing landing page** (hero-first, single scroll, strong CTA)."
         : "Target device: **web app** (desktop + responsive; app shell / sidebar or top nav per §5).";
 
+  const device = inferUiDevice(goal, pages, tech);
+  const concreteTokens =
+    !uiux || isGenericUiuxBoilerplate(uiux)
+      ? buildConcreteUiuxSection({
+          goal,
+          pages,
+          tech,
+          projectName: oneLiner.slice(0, 48),
+        })
+      : uiux;
+
   const parts = [
     "# Nebula UI Brief (primary)",
     "",
@@ -117,9 +134,9 @@ export function buildUiBriefMarkdown(
     "",
     "## Design tokens (§5)",
     "",
-    uiux ||
-      "(missing — add mood, hex palette, typography, density, radius, motion, component style, nav pattern)",
+    concreteTokens,
     "",
+    buildStitchChromeBriefSection(device),
     "## Pages and navigation (§4 — full contracts)",
     "",
     "For **every** page below, implement: purpose, primary_actions, data_entities, authz, empty_state, error_state, nav_links.",

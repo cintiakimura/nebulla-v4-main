@@ -180,7 +180,12 @@ export async function applyUiStudioBetaToAppPreview(
   onProgress?: GrokActivityProgressFn,
 ): Promise<{ ok: boolean; error?: string }> {
   try {
-    const data = await fetchJson<{ ok?: boolean; error?: string }>(
+    const data = await fetchJson<{
+      ok?: boolean;
+      error?: string;
+      mockupOnlyArtifact?: boolean;
+      previewStatusLabel?: string;
+    }>(
       withProjectQuery('/api/ui-studio-beta/apply-preview'),
       {
         method: 'POST',
@@ -193,7 +198,14 @@ export async function applyUiStudioBetaToAppPreview(
       onProgress?.(data.error || 'Could not apply UI Gen to App Preview', 'warn');
       return { ok: false, error: data.error };
     }
-    onProgress?.('UI Studio Beta applied to App Preview', 'success');
+    onProgress?.(
+      data.mockupOnlyArtifact
+        ? 'Post-code mockup refresh — dedicated mockup artifact only (live Preview not overwritten)'
+        : data.previewStatusLabel?.includes('Pre-code')
+          ? 'Pre-code mockup applied to App Preview'
+          : 'UI Studio Beta applied to App Preview',
+      'success',
+    );
     try {
       window.dispatchEvent(new CustomEvent('nebula-files-applied'));
       window.dispatchEvent(new CustomEvent('nebula-reload-app-preview'));
@@ -237,13 +249,18 @@ export async function triggerUiStudioBetaAfterFilesApplied(options: {
   }
 
   if (action === 'sync_preview_only') {
-    const applied = await applyUiStudioBetaToAppPreview(options.onProgress);
+    // Do not reclaim live App Preview with mockup HTML after code exists.
+    // Bootstrap authority decides pre-code mockup vs post-code bridge / live entry.
     options.onProgress?.(
-      applied.ok
-        ? 'Post-code UI refresh already ran this session — synced App Preview (open Generate UI to refresh again)'
-        : 'Post-code UI refresh already ran this session — open UI Studio Beta → Generate to refresh',
+      'Post-code UI refresh already ran — reloading Preview (mockup does not own live entry; open Generate UI for Studio only)',
       'info',
     );
+    try {
+      window.dispatchEvent(new CustomEvent('nebula-reload-app-preview'));
+      window.dispatchEvent(new CustomEvent('nebula-open-app-preview'));
+    } catch {
+      /* ignore */
+    }
     return null;
   }
 

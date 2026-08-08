@@ -10,6 +10,10 @@ import {
 } from "./visualUiEditorWorkspace";
 
 import { MASTER_PLAN_ALL_KEYS, MASTER_PLAN_USER_SECTION_KEYS, normalizeMasterPlanRecord } from "./masterPlanSections";
+import {
+  buildConcreteUiuxSection,
+  isGenericUiuxBoilerplate,
+} from "./uiuxSectionBuilder";
 
 export const MASTER_PLAN_TAB_KEYS = MASTER_PLAN_ALL_KEYS;
 
@@ -32,9 +36,12 @@ export function masterPlanLooksEmpty(plan: Record<string, string>): boolean {
 const MIN_MASTER_PLAN_SECTION_CHARS = 48;
 
 export function listMissingMasterPlanSections(plan: Record<string, string>): string[] {
-  return MASTER_PLAN_USER_SECTION_KEYS.filter(
-    (k) => !String(plan[k] ?? "").trim() || String(plan[k] ?? "").trim().length < MIN_MASTER_PLAN_SECTION_CHARS,
-  );
+  return MASTER_PLAN_USER_SECTION_KEYS.filter((k) => {
+    const v = String(plan[k] ?? "").trim();
+    if (!v || v.length < MIN_MASTER_PLAN_SECTION_CHARS) return true;
+    if (k === "5. UI/UX design" && isGenericUiuxBoilerplate(v)) return true;
+    return false;
+  });
 }
 
 /** Fill empty §1–§5 from workspace routes, user note, and design refs (no LLM). */
@@ -96,21 +103,21 @@ export function fillMissingMasterPlanSectionsLocal(opts: {
   }
 
   if (missing.includes("5. UI/UX design")) {
-    const oneLiner = goal.split("\n").find((l) => l.trim())?.slice(0, 120) || name;
     const research = String(
       next["2. Tech and Research"] ??
         next["2. Text & Search"] ??
         plan["2. Tech Research"] ??
         "",
     ).trim();
+    const pages = String(next["4. Pages and navigation"] ?? plan["4. Pages and navigation"] ?? "");
+    const concrete = buildConcreteUiuxSection({
+      goal: String(next["1. Goal of the app"] ?? goal),
+      pages,
+      tech: research,
+      projectName: name,
+    });
     next["5. UI/UX design"] = [
-      "- **Theme:** Industry-appropriate palette from §2 competitor research and discovery — **not** Nebulla platform UI (#080A14 / #00D4D4).",
-      "- **Typography:** Clear sans-serif hierarchy; accessible contrast; spacing matched to product type",
-      "- **Components:** shadcn/ui + Tailwind; nav pattern from §4 (sidebar vs top nav per category norms)",
-      `- **Mood:** Purpose-built for **${oneLiner.replace(/\*\*/g, "")}** — mirror leading apps in this space`,
-      ...(research
-        ? ["- **Research anchor:** use patterns documented in §2 Tech and Research"]
-        : ["- **Research anchor:** fill §2 with competitor UX before finalizing colors"]),
+      concrete,
       ...(refHint ? ["", "**Brand references (user-provided):**", refHint] : []),
     ].join("\n");
     updated.push("5. UI/UX design");
@@ -399,22 +406,24 @@ export function hydrateMasterPlanDerivedSections(
   }
 
   const uiSection = String(out["5. UI/UX design"] ?? "").trim();
-  if (!uiSection) {
-    const prompt = extractNebulaUiStudioPrompt(workspaceRoot);
-    if (prompt) {
+  if (!uiSection || isGenericUiuxBoilerplate(uiSection)) {
+    const prompt = !uiSection ? extractNebulaUiStudioPrompt(workspaceRoot) : "";
+    if (prompt && !isGenericUiuxBoilerplate(prompt)) {
       out["5. UI/UX design"] = prompt;
       changed = true;
     } else {
       const goal = String(out["1. Goal of the app"] ?? "").trim();
-      const oneLiner =
-        goal.split(/\n/).find((l) => l.trim())?.replace(/\*\*/g, "").trim().slice(0, 120) ||
-        "App workspace";
+      const pages = String(out["4. Pages and navigation"] ?? "").trim();
+      const tech = String(out["2. Tech and Research"] ?? "").trim();
       const refHint = summarizeDesignReferencesForPrompt(workspaceRoot, 200);
+      const concrete = buildConcreteUiuxSection({
+        goal,
+        pages,
+        tech,
+        projectName: path.basename(workspaceRoot),
+      });
       out["5. UI/UX design"] = [
-        "- **Theme:** Industry-appropriate palette from §2 competitor research — **not** Nebulla platform UI (#080A14 / #00D4D4)",
-        "- **Typography:** Clear sans-serif hierarchy; accessible contrast; spacing matched to product type",
-        "- **Components:** shadcn/ui + Tailwind; nav pattern from §4 (sidebar vs top nav per category norms)",
-        `- **Mood:** Purpose-built for **${oneLiner}** — mirror leading apps in this space`,
+        concrete,
         ...(refHint ? ["", "**Brand references (uploaded):**", refHint] : []),
       ].join("\n");
       changed = true;

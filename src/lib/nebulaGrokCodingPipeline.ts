@@ -391,30 +391,65 @@ async function kickGoCodeJob(options: {
     await cancelProjectBackgroundJobs();
   }
 
-  const stopWait = startGrokActivityWaitTicker(
-    continuation ? 'Grok Code continuation on server' : 'Grok Code running on server',
-    (msg, kind, opts) => onProgress?.(msg, kind, opts),
+  let waitLabel = continuation
+    ? 'Grok Code continuation on server'
+    : 'Preparing Go (plan sync + summary)';
+  let stopWait = startGrokActivityWaitTicker(waitLabel, (msg, kind, opts) =>
+    onProgress?.(msg, kind, opts),
   );
+
+  const switchWaitLabel = (next: string) => {
+    stopWait();
+    waitLabel = next;
+    stopWait = startGrokActivityWaitTicker(waitLabel, (msg, kind, opts) =>
+      onProgress?.(msg, kind, opts),
+    );
+  };
 
   try {
     if (prePoll?.pending && prePoll.coding) {
+      switchWaitLabel('Grok Code running on server');
       return await pollGoCodeUntilDone(projectName, onProgress);
     }
 
-    const goRes = await fetch(withProjectQuery('/api/grok/go-code'), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', ...getGrokRequestHeaders() },
-      credentials: 'include',
-      body: JSON.stringify(
-        withProjectBody({
-          userId,
-          projectName,
-          userNote: userNote?.trim() || undefined,
-          messages,
-          continuation: continuation || undefined,
-        }),
-      ),
-    });
+    const GO_KICK_TIMEOUT_MS = 55_000;
+    const kickController = new AbortController();
+    const kickTimer = window.setTimeout(() => kickController.abort(), GO_KICK_TIMEOUT_MS);
+
+    let goRes: Response;
+    try {
+      goRes = await fetch(withProjectQuery('/api/grok/go-code'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...getGrokRequestHeaders() },
+        credentials: 'include',
+        signal: kickController.signal,
+        body: JSON.stringify(
+          withProjectBody({
+            userId,
+            projectName,
+            userNote: userNote?.trim() || undefined,
+            messages,
+            continuation: continuation || undefined,
+          }),
+        ),
+      });
+    } catch (err) {
+      const aborted =
+        (err instanceof DOMException && err.name === 'AbortError') ||
+        (err instanceof Error && /abort/i.test(err.message));
+      if (aborted) {
+        onProgress?.(
+          'Go kick still preparing — switching to poll (coding may already be running)',
+          'warn',
+        );
+        switchWaitLabel('Grok Code running on server');
+        return await pollGoCodeUntilDone(projectName, onProgress);
+      }
+      throw err;
+    } finally {
+      window.clearTimeout(kickTimer);
+    }
+
     const data = await readResponseJson<
       GoCodePayload & {
         code?: string;
@@ -438,6 +473,7 @@ async function kickGoCodeJob(options: {
     }
 
     if (data.pending && data.coding) {
+      switchWaitLabel('Grok Code running on server');
       onProgress?.(
         continuation
           ? 'Continuing Grok Code — Foundation slice (shell)…'

@@ -71,6 +71,8 @@ The pre-code mockup (UI Studio Beta / App Preview shell) is a **temporary engage
 | Foundation / Go coding (`app/`, `src/`, real components) | Real product implementation | Plan + coding rules — **NOT mockup pixels** |
 | Post-code UI | Updated preview after code exists | Prefer coded routes/screens; optional UI Gen re-run grounded on **files + plan**, not “copy the old mockup” |
 
+**Preview authority (runtime):** App Preview bootstrap must distinguish layers. Pre-code may serve the static UI Gen shell (`index.html` and/or `public/nebula-ui-gen-preview.html`) labeled **Pre-code mockup only**. After meaningful product UI source exists under `app/` / `src/` / `pages/` / `components/`, App Preview must **not** present that mockup as the live product — prefer a real app entry/build when available; otherwise an honest post-code bridge. Post-code UI Gen may refresh Studio + the dedicated mockup artifact; it must not permanently own live Preview.
+
 Normative rules:
 1. Mockup may change after coding finishes — that is expected and desired.
 2. Coding must **not** implement features by visually cloning the mockup.
@@ -79,6 +81,7 @@ Normative rules:
 5. After successful foundation file apply of UI-relevant paths, run UI generation **one more time** (or refresh preview from coded UI) grounded on plan + file facts — max one automatic post-code pass unless the user clicks Generate again.
 6. Pre-code mockup still must not be garbage (Stitch-minimum). “Temporary” ≠ “Email on Kid Home.”
 7. Post-code regen still uses local-first references + brief + **file grounding**; meta must record `phase: post_code` (or equivalent).
+8. Status copy must distinguish: **Pre-code mockup** | **Post-code mockup refresh** | **Live app preview** (or post-code bridge when bundler runtime is unavailable in the iframe).
 
 ---
 
@@ -504,7 +507,8 @@ If gate fails:
 
 Status copy must distinguish:
 - **Pre-code mockup** — first engagement preview before Foundation/Go lands
-- **Post-code UI refresh** — one automatic pass after successful UI-relevant file apply (plan + file grounding)
+- **Post-code mockup refresh** — one automatic Studio/artifact pass after UI-relevant file apply (does not own live Preview)
+- **Live app preview** / **post-code bridge** — product source detected; mockup is not the product surface
 
 ### H.3 Regeneration
 - max 3 (user-driven Generate again)

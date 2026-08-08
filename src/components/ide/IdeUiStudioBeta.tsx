@@ -181,7 +181,7 @@ function buildWaitingModel(stageHint?: string): EditorModel {
             type: 'text',
             text:
               stageHint?.trim() ||
-              'Press Generate UI when Master Plan + ui-brief are ready (inference-first runs this before coding). Preview shows engine output — not the Nebulla IDE shell.',
+              'Press Generate UI when Master Plan + ui-brief are ready (inference-first runs this before coding). This canvas is a static UI Gen mockup — not the live coded Expo/React app. Regenerate if chrome looks generic; Figma is optional (local catalog by default).',
             style: {
               ...defaultStyle(),
               backgroundColor: '#FAFAF9',

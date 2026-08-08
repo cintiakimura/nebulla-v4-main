@@ -74,6 +74,7 @@ const uiLogic = fs.readFileSync(
 );
 assert.match(uiLogic, /## 1\.1 Mockup vs final UI/);
 assert.match(uiLogic, /plan wins/);
+assert.match(uiLogic, /Preview authority/);
 
 const inference = fs.readFileSync(
   path.join(root, 'nebula-project/inference-first-rules.md'),

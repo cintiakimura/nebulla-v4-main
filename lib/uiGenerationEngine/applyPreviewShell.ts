@@ -1,14 +1,20 @@
 /**
- * Apply UI Generation v2 output into workspace App Preview (index.html).
- * Only call when quality gate is pass or repair — never on weak.
+ * Apply UI Generation v2 output into mockup preview artifacts.
+ * Only call when quality gate is pass — never on weak.
  *
- * Renders template-aware structure (top bar, hero, metrics/list/auth, bottom tabs)
- * so App Preview matches Studio richness — not a bare hero+cards skeleton.
+ * Pre-code: may write index.html as temporary mockup entry.
+ * Post-code (product UI source exists): writes only public/nebula-ui-gen-preview.html
+ * and must NOT reclaim live App Preview as the product.
  */
 
 import fs from "fs";
 import path from "path";
 import type { DesignTokens, SlotMap } from "./v2/types";
+import {
+  UI_GEN_MOCKUP_MARKER,
+  UI_GEN_MOCKUP_REL,
+  workspaceHasCodedAppUi,
+} from "../workspaceCodedAppUi";
 
 function esc(s: string): string {
   return String(s || "")
@@ -303,6 +309,7 @@ export function buildUiGenerationPreviewHtml(options: {
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="nebulla-preview" content="${UI_GEN_MOCKUP_MARKER}"/>
   <title>${docTitle} — Preview</title>
   <style>
     :root {
@@ -471,7 +478,10 @@ export function buildUiGenerationPreviewHtml(options: {
 }
 
 /**
- * Writes a self-contained preview HTML matching Beta slots/tokens.
+ * Writes mockup preview HTML.
+ * - Always writes public/nebula-ui-gen-preview.html (dedicated mockup artifact).
+ * - Writes index.html only when there is no coded product UI yet (pre-code),
+ *   unless forceLiveMockupEntry is true (explicit mockup-only mode).
  * Returns relative paths written.
  */
 export function applyUiGenerationToPreviewShell(options: {
@@ -483,21 +493,28 @@ export function applyUiGenerationToPreviewShell(options: {
   patternMode?: "seed" | "figma";
   classification?: PreviewClassificationHint;
   screens?: PreviewScreenInput[];
+  /** When true, overwrite index.html even if coded app UI exists (explicit mockup-only). */
+  forceLiveMockupEntry?: boolean;
 }): string[] {
   const { workspaceRoot } = options;
   const html = buildUiGenerationPreviewHtml(options);
 
   const written: string[] = [];
   fs.mkdirSync(workspaceRoot, { recursive: true });
-  const idx = path.join(workspaceRoot, "index.html");
-  fs.writeFileSync(idx, html, "utf8");
-  written.push("index.html");
 
   const pub = path.join(workspaceRoot, "public");
   fs.mkdirSync(pub, { recursive: true });
-  const copy = path.join(pub, "nebula-ui-gen-preview.html");
+  const copy = path.join(workspaceRoot, UI_GEN_MOCKUP_REL);
   fs.writeFileSync(copy, html, "utf8");
-  written.push("public/nebula-ui-gen-preview.html");
+  written.push(UI_GEN_MOCKUP_REL);
+
+  const coded = workspaceHasCodedAppUi(workspaceRoot);
+  const writeLiveIndex = options.forceLiveMockupEntry === true || !coded;
+  if (writeLiveIndex) {
+    const idx = path.join(workspaceRoot, "index.html");
+    fs.writeFileSync(idx, html, "utf8");
+    written.push("index.html");
+  }
 
   return written;
 }

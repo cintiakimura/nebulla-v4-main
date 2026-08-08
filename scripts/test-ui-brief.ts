@@ -33,6 +33,7 @@ section("ui-brief includes full §4 routes (not capped at 8)");
   assert.match(brief, /Nebula UI Brief \(primary\)/);
   assert.match(brief, /Pages and navigation/);
   assert.match(brief, /Design tokens/);
+  assert.match(brief, /Stitch-minimum chrome/);
   assert.match(brief, /\/app\/projects\/:id/);
   assert.match(brief, /\/app\/settings/);
   assert.match(brief, /authz/i);

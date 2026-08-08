@@ -130,6 +130,15 @@ import {
 } from "./lib/uiGenerationEngine";
 import { MOCKUP_NON_AUTHORITATIVE_GO_BULLETS } from "./lib/codingMockupContract";
 import {
+  buildLocalPreCodingSummary,
+  shouldSkipPhaseALlm,
+} from "./lib/goSliceContract";
+import {
+  buildCodedAppPreviewBridgeHtml,
+  resolveAppPreviewAuthority,
+  workspaceHasCodedAppUi,
+} from "./lib/workspaceCodedAppUi";
+import {
   filterUnsolicitedBaaSBlocks,
   MVP_STACK_GO_BULLETS,
 } from "./lib/mvpStackContract";
@@ -2212,12 +2221,22 @@ No approved UI code yet.
       const pp = projectPathsFor(req);
       const demoUrl = readV0DemoUrl(pp.workspaceRoot);
       const hasReal = hasRealV0ApiGeneration(pp.workspaceRoot);
+      const authority = resolveAppPreviewAuthority(pp.workspaceRoot);
       res.json({
         ok: true,
         v0DemoUrl: demoUrl,
         preferV0: false,
         hasRealV0: hasReal,
         previewSource: "workspace",
+        previewMode: authority.mode,
+        previewStatusLabel: authority.statusLabel,
+        codedApp: authority.codedApp,
+        indexIsMockup: authority.indexIsMockup,
+        entryRel: authority.entryRel,
+        mockupRel: authority.mockupRel,
+        productFileCount: authority.productFiles.length,
+        productFilesSample: authority.productFiles.slice(0, 8),
+        limitation: authority.limitation,
       });
     } catch (err: unknown) {
       res.status(500).json({ error: err instanceof Error ? err.message : "preview meta failed" });
@@ -2240,19 +2259,40 @@ No approved UI code yet.
       }
       issuePreviewGrantCookieMerging(req, res, pp.projectKey);
 
-      const idx = path.join(pp.workspaceRoot, "index.html");
-      if (!fs.existsSync(idx) || fs.statSync(idx).size < 80) {
-        const q = req.query as Record<string, unknown>;
-        const displayName =
-          (typeof q.projectName === "string" && q.projectName.trim()) ||
-          pp.projectKey ||
-          "Untitled Project";
-        ensurePreviewIndexHtml(pp.workspaceRoot, displayName);
+      const q = req.query as Record<string, unknown>;
+      const displayName =
+        (typeof q.projectName === "string" && q.projectName.trim()) ||
+        pp.projectKey ||
+        "Untitled Project";
+
+      const authority = resolveAppPreviewAuthority(pp.workspaceRoot);
+      let html = "";
+
+      if (authority.mode === "post_code_bridge" || (authority.codedApp && !authority.entryRel)) {
+        html = buildCodedAppPreviewBridgeHtml({
+          projectName: displayName,
+          productFiles: authority.productFiles,
+          mockupRel: authority.mockupRel,
+          limitation: authority.limitation,
+        });
+      } else if (authority.entryRel) {
+        const entryAbs = path.join(pp.workspaceRoot, authority.entryRel);
+        if (fs.existsSync(entryAbs)) {
+          html = fs.readFileSync(entryAbs, "utf8");
+        }
       }
-      if (!fs.existsSync(idx)) {
-        return res.status(200).type("html").send(emptyPreviewHtmlWithBridge());
+
+      if (!html) {
+        const idx = path.join(pp.workspaceRoot, "index.html");
+        if (!fs.existsSync(idx) || fs.statSync(idx).size < 80) {
+          ensurePreviewIndexHtml(pp.workspaceRoot, displayName);
+        }
+        if (!fs.existsSync(idx)) {
+          return res.status(200).type("html").send(emptyPreviewHtmlWithBridge());
+        }
+        html = fs.readFileSync(idx, "utf8");
       }
-      let html = fs.readFileSync(idx, "utf8");
+
       const xfProto = (req.headers["x-forwarded-proto"] as string | undefined)?.split(",")[0]?.trim();
       const proto = xfProto || req.protocol || "http";
       const host = req.get("host") || `localhost:${PORT}`;
@@ -2263,6 +2303,8 @@ No approved UI code yet.
       html = html.replace(/(src|href)=(["'])\/(?!\/)/gi, "$1=$2");
       // Early App Status capture — before parent onload inject (idempotent with client inject).
       html = wrapHtmlWithPreviewRuntimeBridge(html);
+      res.setHeader("X-Nebulla-Preview-Mode", authority.mode);
+      res.setHeader("X-Nebulla-Preview-Status", authority.statusLabel.slice(0, 120));
       res.type("html").send(html);
     } catch (err: unknown) {
       res.status(500).type("text/plain").send(err instanceof Error ? err.message : "bootstrap failed");
@@ -4090,6 +4132,7 @@ ${modelJson}`;
               classification: s.classification,
             }))
         : undefined;
+      const codedApp = workspaceHasCodedAppUi(workspaceRoot);
       const written = applyUiGenerationToPreviewShell({
         workspaceRoot,
         projectName: "App",
@@ -4099,11 +4142,19 @@ ${modelJson}`;
         patternMode: meta.pattern_mode === "figma" ? "figma" : "seed",
         classification: meta.classification,
         screens,
+        // Post-code: never reclaim live index.html as mockup-only product surface.
+        forceLiveMockupEntry: false,
       });
+      const authority = resolveAppPreviewAuthority(workspaceRoot);
       return res.json({
         ok: true,
         written,
         quality_gate_result: meta.quality_gate_result,
+        codedApp,
+        previewMode: authority.mode,
+        previewStatusLabel: authority.statusLabel,
+        liveIndexOverwritten: written.includes("index.html"),
+        mockupOnlyArtifact: codedApp && !written.includes("index.html"),
       });
     } catch (e) {
       console.error("[ui-studio-beta/apply-preview]", e instanceof Error ? e.message : "failed");
@@ -4482,6 +4533,28 @@ Rules:
       };
 
       if (!continuation) {
+      let plan: Record<string, unknown> = {};
+      if (fs.existsSync(masterPlanPath)) {
+        try {
+          plan = JSON.parse(fs.readFileSync(masterPlanPath, "utf8"));
+        } catch {
+          plan = {};
+        }
+      }
+      const existingSummary = String(plan[PRE_CODING_SUMMARY_KEY] ?? "").trim();
+      const skipPhaseA = shouldSkipPhaseALlm({ userNote: note, existingSummary });
+
+      if (skipPhaseA) {
+        summary = buildLocalPreCodingSummary({
+          workspaceRoot: ppGo.workspaceRoot,
+          userNote: note,
+          existingSummary,
+          projectName: convProject,
+        });
+        console.log(
+          `[go-code] Local ${PRE_CODING_SUMMARY_KEY} (skipped Grok-4 Phase A; ${summary.length} chars)`,
+        );
+      } else {
       const phaseASystem = `You are Grok 4 (planning only). The user pressed **Go** to run a coding pass with Grok Code.
 
 Your ONLY output for this turn: a **short** pre-coding summary for the Master Plan file.
@@ -4533,18 +4606,16 @@ Strict rules:
           .slice(0, 1200);
       }
       if (!summary) {
-        summary = "No summary generated; proceed from master plan tabs and project-execution-rules.md.";
+        summary = buildLocalPreCodingSummary({
+          workspaceRoot: ppGo.workspaceRoot,
+          userNote: note,
+          existingSummary,
+          projectName: convProject,
+        });
       }
       summary = summary.slice(0, 2000);
-
-      let plan: Record<string, unknown> = {};
-      if (fs.existsSync(masterPlanPath)) {
-        try {
-          plan = JSON.parse(fs.readFileSync(masterPlanPath, "utf8"));
-        } catch {
-          plan = {};
-        }
       }
+
       // Session notes belong only in PRE_CODING_SUMMARY — never pollute §1 Goal
       // (Project Type parsing + v0 one-liner depend on a clean goal).
       plan[PRE_CODING_SUMMARY_KEY] = summary;
