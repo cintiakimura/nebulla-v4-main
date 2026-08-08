@@ -3999,6 +3999,13 @@ ${modelJson}`;
         slots?: Record<string, string>;
         pattern_mode?: "seed" | "figma";
         quality_gate_result?: string;
+        classification?: {
+          device?: string;
+          page_type?: string;
+          navigation_mode?: string;
+          product_function?: string;
+          industry?: string;
+        };
       };
       if (!shouldApplyUiToPreview(meta.quality_gate_result)) {
         return res.status(422).json({
@@ -4017,6 +4024,7 @@ ${modelJson}`;
         tokens: meta.tokens,
         slots: meta.slots,
         patternMode: meta.pattern_mode === "figma" ? "figma" : "seed",
+        classification: meta.classification,
       });
       return res.json({
         ok: true,

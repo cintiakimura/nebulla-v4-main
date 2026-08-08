@@ -154,6 +154,26 @@ function stackContainer(
   };
 }
 
+function renderTopBar(
+  nodes: Record<string, V2Node>,
+  tokens: DesignTokens,
+  slots: SlotMap,
+): string {
+  const bar = "region-topbar";
+  addText(nodes, "topbar-title", "nav_bar", slots.nav_title || slots.hero_title || "Home", tokens, {
+    backgroundColor: tokens.surface,
+    color: tokens.text,
+    paddingTop: 10,
+    paddingBottom: 10,
+  });
+  stackContainer(nodes, bar, "top_bar", ["topbar-title"], tokens, tokens.surface, {
+    borderWidth: 1,
+    marginBottom: tokens.gap,
+    pad: 10,
+  });
+  return bar;
+}
+
 function renderBottomTabs(
   nodes: Record<string, V2Node>,
   tokens: DesignTokens,
@@ -162,7 +182,13 @@ function renderBottomTabs(
 ): string | null {
   if (classification.navigation_mode !== "bottom_tabs") return null;
   const nav = "bottom-tabs";
-  const labels = [slots.nav_title || "Home", "Learn", "Practice", "Profile"].slice(0, 4);
+  const course =
+    classification.product_function === "course" || classification.industry === "education";
+  const labels = (
+    course
+      ? [slots.nav_title || "Home", "Learn", "Practice", "Me"]
+      : [slots.nav_title || "Home", "Learn", "Practice", "Profile"]
+  ).slice(0, 4);
   const kids: string[] = [];
   labels.forEach((label, i) => {
     const id = `tab-${i + 1}`;
@@ -261,6 +287,14 @@ export function renderTemplateModel(input: {
     classification.navigation_mode === "sidebar" ||
     template.id === "web_dashboard_sidebar" ||
     template.id === "web_settings_two_column";
+  const needsTopBar =
+    /^mobile_/i.test(template.id) ||
+    classification.device === "mobile" ||
+    needsTabs;
+
+  if (needsTopBar && !/auth/i.test(template.id)) {
+    regionIds.push(renderTopBar(nodes, tokens, slots));
+  }
 
   // Content regions by template family
   if (

@@ -36,7 +36,9 @@ export { validateV2Quality } from "./v2/qualityGate";
 export {
   shouldApplyUiToPreview,
   applyUiGenerationToPreviewShell,
+  buildUiGenerationPreviewHtml,
 } from "./applyPreviewShell";
+export type { PreviewClassificationHint } from "./applyPreviewShell";
 export { polishSlotsForContentLocale } from "./polishSlotsLocale";
 export {
   compileDesignBrief,

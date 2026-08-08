@@ -1,6 +1,9 @@
 /**
  * Apply UI Generation v2 output into workspace App Preview (index.html).
  * Only call when quality gate is pass or repair — never on weak.
+ *
+ * Renders template-aware structure (top bar, hero, metrics/list/auth, bottom tabs)
+ * so App Preview matches Studio richness — not a bare hero+cards skeleton.
  */
 
 import fs from "fs";
@@ -19,20 +22,97 @@ export function shouldApplyUiToPreview(gate: string | undefined | null): boolean
   return gate === "pass" || gate === "repair";
 }
 
+export type PreviewClassificationHint = {
+  device?: string;
+  page_type?: string;
+  navigation_mode?: string;
+  product_function?: string;
+  industry?: string;
+};
+
+type ContentItem = { title: string; meta: string };
+
+function collectItems(slots: SlotMap, templateId: string): ContentItem[] {
+  const items: ContentItem[] = [];
+  const push = (title?: string, meta?: string) => {
+    if (!title?.trim()) return;
+    items.push({ title: title.trim(), meta: (meta || "").trim() });
+  };
+
+  if (/auth/i.test(templateId)) {
+    push(slots.field_1_label || "Email", slots.field_1_placeholder || "you@school.edu");
+    push(slots.field_2_label || "Password", slots.field_2_placeholder || "••••••••");
+    return items;
+  }
+
+  if (/settings/i.test(templateId)) {
+    for (let i = 1; i <= 4; i++) {
+      push(slots[`row_${i}_title`], slots[`row_${i}_meta`] || "Configure");
+    }
+    return items;
+  }
+
+  if (/list/i.test(templateId)) {
+    for (let i = 1; i <= 4; i++) {
+      push(slots[`item_${i}_title`], slots[`item_${i}_meta`]);
+    }
+  } else {
+    for (let i = 1; i <= 4; i++) {
+      push(
+        slots[`metric_${i}_title`] || slots[`card_${i}_title`] || slots[`item_${i}_title`],
+        slots[`metric_${i}_value`] || slots[`card_${i}_value`] || slots[`item_${i}_meta`],
+      );
+    }
+  }
+
+  if (items.length === 0 && !/auth/i.test(templateId)) {
+    items.push(
+      { title: "Today’s lesson", meta: "Short practice for this session" },
+      { title: "Practice round", meta: "Build streak with quick reps" },
+      { title: "Progress", meta: "See what improved this week" },
+    );
+  }
+  return items.slice(0, 4);
+}
+
+function isMobileTemplate(templateId: string, classification?: PreviewClassificationHint): boolean {
+  if (classification?.device === "mobile") return true;
+  if (classification?.navigation_mode === "bottom_tabs") return true;
+  return /^mobile_/i.test(templateId);
+}
+
+function wantsBottomTabs(templateId: string, classification?: PreviewClassificationHint): boolean {
+  if (classification?.navigation_mode === "bottom_tabs") return true;
+  if (/auth|landing|checkout/i.test(templateId)) return false;
+  return /^mobile_/i.test(templateId);
+}
+
+function tabLabels(slots: SlotMap, classification?: PreviewClassificationHint): string[] {
+  const home = slots.nav_title || "Home";
+  const fn = (classification?.product_function || "").toLowerCase();
+  const industry = (classification?.industry || "").toLowerCase();
+  if (fn === "course" || industry === "education") {
+    return [home, "Learn", "Practice", "Me"];
+  }
+  if (fn === "tasks") return [home, "Tasks", "Focus", "Me"];
+  return [home, "Explore", "Activity", "Me"];
+}
+
 /**
- * Writes a self-contained preview HTML matching Beta slots/tokens.
- * Returns relative paths written.
+ * Build self-contained preview HTML from template + slots + tokens.
+ * Exported for tests.
  */
-export function applyUiGenerationToPreviewShell(options: {
-  workspaceRoot: string;
+export function buildUiGenerationPreviewHtml(options: {
   projectName: string;
   templateId: string;
   tokens: DesignTokens;
   slots: SlotMap;
   patternMode?: "seed" | "figma";
-}): string[] {
-  const { workspaceRoot, tokens, slots, templateId } = options;
+  classification?: PreviewClassificationHint;
+}): string {
+  const { tokens, slots, templateId } = options;
   const title = esc(slots.hero_title || slots.nav_title || options.projectName || "App");
+  const navTitle = esc(slots.nav_title || slots.hero_title || options.projectName || "Home");
   const sub = esc(slots.hero_subtitle || "");
   const cta = esc(slots.primary_cta || "Continue");
   const cta2 = esc(slots.secondary_cta || "");
@@ -40,46 +120,73 @@ export function applyUiGenerationToPreviewShell(options: {
     options.patternMode === "figma"
       ? "Layout references Figma structure hints where available."
       : "Using Nebulla built-in layout patterns (Figma optional).";
+  const items = collectItems(slots, templateId);
+  const mobile = isMobileTemplate(templateId, options.classification);
+  const tabs = wantsBottomTabs(templateId, options.classification);
+  const auth = /auth/i.test(templateId);
+  const dashboard = /dashboard|metrics|home_hero/i.test(templateId);
+  const courseLike =
+    options.classification?.product_function === "course" ||
+    options.classification?.industry === "education" ||
+    /course|lesson|practice|learn/i.test(`${slots.hero_title} ${slots.hero_subtitle} ${templateId}`);
 
-  const items: { title: string; meta: string }[] = [];
-  for (let i = 1; i <= 4; i++) {
-    const t =
-      slots[`item_${i}_title`] ||
-      slots[`card_${i}_title`] ||
-      slots[`row_${i}_title`] ||
-      slots[`metric_${i}_title`] ||
-      slots[`section_${i}_title`];
-    if (!t) continue;
-    const meta =
-      slots[`item_${i}_meta`] ||
-      slots[`card_${i}_value`] ||
-      slots[`row_${i}_meta`] ||
-      slots[`metric_${i}_value`] ||
-      slots[`section_${i}_body`] ||
-      "";
-    items.push({ title: esc(t), meta: esc(meta) });
-  }
-  // Seed / rate-limit path: never leave App Preview as a single hero wash (cyan Login shell).
-  if (items.length === 0 && !/auth/i.test(templateId)) {
-    const fallbacks = [
-      { title: "Today’s lesson", meta: "Short practice for this session" },
-      { title: "Practice round", meta: "Build streak with quick reps" },
-      { title: "Progress", meta: "See what improved this week" },
-    ];
-    for (const f of fallbacks) items.push({ title: esc(f.title), meta: esc(f.meta) });
-  }
+  const metricRow =
+    dashboard || courseLike
+      ? items
+          .slice(0, 3)
+          .map(
+            (it, i) => `
+      <div class="metric">
+        <p class="metric-value">${esc(it.meta || (i === 0 ? "3" : i === 1 ? "12" : "85%"))}</p>
+        <p class="metric-label">${esc(it.title)}</p>
+      </div>`,
+          )
+          .join("\n")
+      : "";
 
-  const itemHtml = items
+  const listHtml = items
     .map(
-      (it) => `
-    <article class="card">
-      <h2>${it.title}</h2>
-      ${it.meta ? `<p>${it.meta}</p>` : ""}
+      (it, i) => `
+    <article class="card${i === 0 ? " card--accent" : ""}">
+      <div class="card-body">
+        <h2>${esc(it.title)}</h2>
+        ${it.meta ? `<p>${esc(it.meta)}</p>` : ""}
+      </div>
+      ${!auth ? `<span class="chev" aria-hidden>›</span>` : ""}
     </article>`,
     )
     .join("\n");
 
-  const html = `<!DOCTYPE html>
+  const tabHtml = tabs
+    ? tabLabels(slots, options.classification)
+        .map(
+          (label, i) =>
+            `<button type="button" class="tab${i === 0 ? " tab--active" : ""}">${esc(label)}</button>`,
+        )
+        .join("\n")
+    : "";
+
+  const progressHtml =
+    courseLike && !auth
+      ? `<section class="progress" aria-label="Progress">
+      <div class="progress-head">
+        <span>Weekly streak</span>
+        <strong>4 days</strong>
+      </div>
+      <div class="progress-track"><div class="progress-fill" style="width:62%"></div></div>
+    </section>`
+      : "";
+
+  const shellClass = [
+    "shell",
+    mobile ? "shell--phone" : "shell--web",
+    tabs ? "shell--tabs" : "",
+    auth ? "shell--auth" : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  return `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="utf-8"/>
@@ -101,47 +208,154 @@ export function applyUiGenerationToPreviewShell(options: {
     body {
       margin: 0; min-height: 100vh;
       font-family: system-ui, -apple-system, Segoe UI, sans-serif;
-      background: var(--bg); color: var(--text);
+      background: #0a0a0a;
+      color: var(--text);
+      display: flex; justify-content: center; align-items: stretch;
+      padding: 12px;
     }
-    .shell { max-width: 720px; margin: 0 auto; padding: var(--pad); display: flex; flex-direction: column; gap: var(--gap); }
+    .shell {
+      width: 100%;
+      background: var(--bg); color: var(--text);
+      display: flex; flex-direction: column;
+      border: 1px solid color-mix(in srgb, var(--border) 80%, #fff 10%);
+      border-radius: calc(var(--radius) + 4px);
+      overflow: hidden;
+      min-height: min(720px, 100vh - 24px);
+      position: relative;
+    }
+    .shell--phone { max-width: 390px; }
+    .shell--web { max-width: 920px; }
+    .topbar {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 12px var(--pad);
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      gap: 8px;
+    }
+    .topbar h1 { margin: 0; font-size: 1rem; font-weight: 600; letter-spacing: -0.02em; }
+    .topbar .badge {
+      font-size: .65rem; color: var(--muted);
+      border: 1px solid var(--border); border-radius: 999px; padding: .2rem .55rem;
+    }
+    .scroll {
+      flex: 1; overflow: auto;
+      padding: var(--pad);
+      padding-bottom: ${tabs ? "76px" : "var(--pad)"};
+      display: flex; flex-direction: column; gap: var(--gap);
+    }
     .hero {
       background: var(--surface); border: 1px solid var(--border);
-      border-radius: var(--radius); padding: calc(var(--pad) * 1.1);
+      border-radius: var(--radius); padding: calc(var(--pad) * 1.15);
     }
-    .hero h1 { margin: 0 0 .4rem; font-size: 1.45rem; letter-spacing: -0.02em; }
-    .hero .sub { margin: 0; color: var(--muted); line-height: 1.45; font-size: .95rem; }
-    .actions { display: flex; flex-wrap: wrap; gap: .6rem; margin-top: 1rem; }
+    .hero h2 { margin: 0 0 .4rem; font-size: 1.4rem; letter-spacing: -0.02em; font-weight: 650; }
+    .hero .sub { margin: 0; color: var(--muted); line-height: 1.45; font-size: .92rem; }
+    .actions { display: flex; flex-wrap: wrap; gap: .55rem; margin-top: 1rem; }
     .btn {
-      border: none; cursor: pointer; font-weight: 600; font-size: .9rem;
-      padding: .55rem 1rem; border-radius: var(--radius);
+      border: none; cursor: pointer; font-weight: 600; font-size: .88rem;
+      padding: .6rem 1.05rem; border-radius: var(--radius);
       background: var(--primary); color: #fff;
     }
-    .btn.secondary { background: transparent; color: var(--text); border: 1px solid var(--border); }
-    .grid { display: grid; gap: var(--gap); }
-    .card {
-      background: var(--surface); border: 1px solid var(--border);
-      border-radius: var(--radius); padding: var(--pad);
+    .btn.secondary {
+      background: transparent; color: var(--text);
+      border: 1px solid var(--border);
     }
-    .card h2 { margin: 0 0 .35rem; font-size: 1rem; }
-    .card p { margin: 0; color: var(--muted); font-size: .85rem; line-height: 1.4; }
-    .meta { font-size: .7rem; color: var(--muted); opacity: .85; margin-top: .5rem; }
+    .metrics {
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: calc(var(--gap) * .75);
+    }
+    .metric {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: .75rem .65rem; text-align: center;
+    }
+    .metric-value { margin: 0; font-size: 1.15rem; font-weight: 700; color: var(--primary); }
+    .metric-label { margin: .25rem 0 0; font-size: .68rem; color: var(--muted); line-height: 1.25; }
+    .progress {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: .85rem var(--pad);
+    }
+    .progress-head {
+      display: flex; justify-content: space-between; align-items: baseline;
+      font-size: .78rem; color: var(--muted); margin-bottom: .45rem;
+    }
+    .progress-head strong { color: var(--text); font-size: .85rem; }
+    .progress-track {
+      height: 8px; border-radius: 999px; background: color-mix(in srgb, var(--border) 70%, var(--bg));
+      overflow: hidden;
+    }
+    .progress-fill {
+      height: 100%; border-radius: inherit; background: var(--primary);
+    }
+    .section-label {
+      margin: .25rem 0 0; font-size: .72rem; font-weight: 600;
+      letter-spacing: .04em; text-transform: uppercase; color: var(--muted);
+    }
+    .list { display: flex; flex-direction: column; gap: calc(var(--gap) * .65); }
+    .card {
+      display: flex; align-items: center; gap: .75rem;
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: .9rem var(--pad);
+    }
+    .card--accent { border-color: color-mix(in srgb, var(--primary) 45%, var(--border)); }
+    .card-body { flex: 1; min-width: 0; }
+    .card h2 { margin: 0 0 .25rem; font-size: .95rem; font-weight: 600; }
+    .card p { margin: 0; color: var(--muted); font-size: .8rem; line-height: 1.35; }
+    .chev { color: var(--muted); font-size: 1.2rem; line-height: 1; }
+    .meta { font-size: .68rem; color: var(--muted); opacity: .85; margin: 0; }
+    .tabs {
+      position: absolute; left: 0; right: 0; bottom: 0;
+      display: grid; grid-template-columns: repeat(4, 1fr);
+      gap: 2px; padding: 8px 6px calc(8px + env(safe-area-inset-bottom, 0px));
+      background: var(--surface); border-top: 1px solid var(--border);
+    }
+    .tab {
+      border: none; background: transparent; color: var(--muted);
+      font-size: .68rem; padding: .45rem .2rem; border-radius: 8px; cursor: pointer;
+    }
+    .tab--active { color: var(--primary); font-weight: 650; background: color-mix(in srgb, var(--primary) 12%, transparent); }
+    .shell--auth .scroll { justify-content: center; }
   </style>
 </head>
 <body>
-  <div class="shell" data-template="${esc(templateId)}">
-    <header class="hero">
-      <h1>${title}</h1>
-      ${sub ? `<p class="sub">${sub}</p>` : ""}
-      <div class="actions">
-        <button type="button" class="btn">${cta}</button>
-        ${cta2 ? `<button type="button" class="btn secondary">${cta2}</button>` : ""}
-      </div>
-      <p class="meta">${esc(patternNote)}</p>
+  <div class="${shellClass}" data-template="${esc(templateId)}" data-nav="${esc(options.classification?.navigation_mode || (tabs ? "bottom_tabs" : "none"))}">
+    <header class="topbar">
+      <h1>${navTitle}</h1>
+      <span class="badge">${esc(mobile ? "Mobile" : "Web")}</span>
     </header>
-    <section class="grid">${itemHtml}</section>
+    <main class="scroll">
+      <section class="hero">
+        <h2>${title}</h2>
+        ${sub ? `<p class="sub">${sub}</p>` : ""}
+        <div class="actions">
+          <button type="button" class="btn">${cta}</button>
+          ${cta2 ? `<button type="button" class="btn secondary">${cta2}</button>` : ""}
+        </div>
+      </section>
+      ${progressHtml}
+      ${metricRow ? `<section class="metrics" aria-label="Highlights">${metricRow}</section>` : ""}
+      <p class="section-label">${auth ? "Sign in" : courseLike ? "Up next" : "Overview"}</p>
+      <section class="list">${listHtml}</section>
+      <p class="meta">${esc(patternNote)}</p>
+    </main>
+    ${tabs ? `<nav class="tabs" aria-label="Primary">${tabHtml}</nav>` : ""}
   </div>
 </body>
 </html>`;
+}
+
+/**
+ * Writes a self-contained preview HTML matching Beta slots/tokens.
+ * Returns relative paths written.
+ */
+export function applyUiGenerationToPreviewShell(options: {
+  workspaceRoot: string;
+  projectName: string;
+  templateId: string;
+  tokens: DesignTokens;
+  slots: SlotMap;
+  patternMode?: "seed" | "figma";
+  classification?: PreviewClassificationHint;
+}): string[] {
+  const { workspaceRoot } = options;
+  const html = buildUiGenerationPreviewHtml(options);
 
   const written: string[] = [];
   fs.mkdirSync(workspaceRoot, { recursive: true });

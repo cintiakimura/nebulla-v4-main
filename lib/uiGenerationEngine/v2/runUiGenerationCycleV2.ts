@@ -957,6 +957,13 @@ export async function runUiGenerationCycleV2(
         tokens,
         slots,
         patternMode,
+        classification: {
+          device: classification.device,
+          page_type: classification.page_type,
+          navigation_mode: classification.navigation_mode,
+          product_function: classification.product_function,
+          industry: classification.industry,
+        },
       });
       previewApplied = previewWritten.length > 0;
       appendStepLog(state, `Phase H preview sync — wrote ${previewWritten.join(", ")}`);

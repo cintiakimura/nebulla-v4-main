@@ -10,6 +10,7 @@ import {
   applyBriefRefinePatch,
   applyRematchPick,
   applyUiGenerationToPreviewShell,
+  buildUiGenerationPreviewHtml,
   catalogRootFromCwd,
   compileDesignBrief,
   listProfilesFs,
@@ -244,8 +245,58 @@ section('applyPreviewShell writes only when called (pass path)');
     patternMode: 'seed',
   });
   assert.deepEqual(written, ['index.html', 'public/nebula-ui-gen-preview.html']);
-  assert.ok(fs.readFileSync(path.join(root, 'index.html'), 'utf8').includes('My Tasks'));
+  const html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
+  assert.ok(html.includes('My Tasks'));
+  assert.ok(html.includes('topbar') || html.includes('class="topbar"'), 'preview has top bar');
+  assert.ok(html.includes('class="tabs"') || html.includes('tab--active'), 'mobile preview has bottom tabs');
   fs.rmSync(root, { recursive: true, force: true });
+}
+
+section('education preview: phone chrome + progress + tabs');
+{
+  const html = buildUiGenerationPreviewHtml({
+    projectName: 'Kids Reading',
+    templateId: 'mobile_home_hero_cards',
+    tokens: {
+      bg: '#F7F5F2',
+      surface: '#FFFFFF',
+      primary: '#0F766E',
+      accent: '#CA8A04',
+      text: '#1C1917',
+      mutedText: '#78716C',
+      border: '#E7E5E4',
+      radius: 12,
+      gap: 12,
+      pad: 16,
+      shadow: 'none',
+      tone: 'friendly',
+    },
+    slots: {
+      nav_title: 'Kid Home',
+      hero_title: 'Kid Home',
+      hero_subtitle: 'Keep your streak going',
+      primary_cta: 'Start practice',
+      card_1_title: "Today’s lesson",
+      card_1_value: 'Reading A',
+      card_2_title: 'Practice round',
+      card_2_value: '8 mins',
+      card_3_title: 'Progress',
+      card_3_value: '62%',
+    },
+    patternMode: 'seed',
+    classification: {
+      device: 'mobile',
+      page_type: 'home',
+      navigation_mode: 'bottom_tabs',
+      product_function: 'course',
+      industry: 'education',
+    },
+  });
+  assert.ok(html.includes('shell--phone'));
+  assert.ok(html.includes('Start practice'));
+  assert.ok(html.includes('Weekly streak') || html.includes('progress'));
+  assert.ok(html.includes('Practice'));
+  assert.ok(html.includes('class="tabs"'));
 }
 
 section('compileDesignBrief: roles from §5 + gaps when thin');
