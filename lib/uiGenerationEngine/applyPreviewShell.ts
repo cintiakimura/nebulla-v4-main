@@ -18,8 +18,12 @@ function esc(s: string): string {
     .replace(/"/g, "&quot;");
 }
 
+/**
+ * Ready / Preview overwrite only on hard pass.
+ * Repair must re-validate to pass before shipping pixels (Stitch-minimum).
+ */
 export function shouldApplyUiToPreview(gate: string | undefined | null): boolean {
-  return gate === "pass" || gate === "repair";
+  return gate === "pass";
 }
 
 export type PreviewClassificationHint = {

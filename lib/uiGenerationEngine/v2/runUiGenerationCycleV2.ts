@@ -41,7 +41,7 @@ import {
   parseStructureLayoutPlan,
 } from "./applyStructureHints";
 import { retrieveFigmaReferences } from "./figmaReferences";
-import { mapSlots } from "./mapSlots";
+import { mapSlots, sanitizeSlotsForPageType } from "./mapSlots";
 import { repairSlots, validateV2Quality } from "./qualityGate";
 import { renderTemplateCode, renderTemplateModel } from "./renderTemplateModel";
 import { getTemplateById, selectTemplate } from "./selectTemplate";
@@ -70,6 +70,8 @@ export type UiPreferenceHints = {
   moreContrast?: boolean;
 };
 
+export type UiGenerationPhase = "pre_code" | "post_code" | "manual";
+
 export type RunUiGenerationInput = {
   workspaceRoot: string;
   masterPlanPath: string;
@@ -81,6 +83,8 @@ export type RunUiGenerationInput = {
   preferenceFeedback?: string;
   guidedImprovement?: boolean;
   writtenPaths?: string[];
+  /** pre_code mockup vs post_code refresh after Foundation/Go apply. */
+  uiPhase?: UiGenerationPhase;
   /** Structured preference recovery (WP7). */
   preferenceHints?: UiPreferenceHints;
 };
@@ -418,7 +422,14 @@ export async function runUiGenerationCycleV2(
       state.regeneration_count = next;
     }
   } else if (input.autoTriggered) {
-    if (hasLoadable && prevPolicy.regeneration_count >= 3 && prevPolicy.final_status !== "pending") {
+    // Post-code one-shot refresh must not be blocked by the user Generate-again budget.
+    const isPostCode = (input.uiPhase || "") === "post_code";
+    if (
+      !isPostCode &&
+      hasLoadable &&
+      prevPolicy.regeneration_count >= 3 &&
+      prevPolicy.final_status !== "pending"
+    ) {
       state.context_id = newContextId();
       state.project_name = (input.projectName || "").trim() || "Untitled project";
       state.created_at = nowIso();
@@ -441,10 +452,20 @@ export async function runUiGenerationCycleV2(
         user_visible_stage: "Blocked — regeneration limit",
       };
     }
-    state.regeneration_count = 1;
+    state.regeneration_count = isPostCode
+      ? Math.max(1, prevPolicy.regeneration_count || 1)
+      : 1;
   } else {
     state.regeneration_count = Math.max(1, prevPolicy.regeneration_count || 1);
   }
+
+  const resolvedUiPhase: UiGenerationPhase =
+    input.uiPhase ||
+    (input.writtenPaths && input.writtenPaths.length > 0
+      ? "post_code"
+      : input.autoTriggered
+        ? "pre_code"
+        : "manual");
 
   state.context_id = newContextId();
   state.project_name = (input.projectName || "").trim() || "Untitled project";
@@ -452,8 +473,17 @@ export async function runUiGenerationCycleV2(
   state.created_at = nowIso();
   state.status = "in_progress";
   state.current_step = 1;
-  appendStepLog(state, `v2 Phase start — regen=${state.regeneration_count}/${state.max_regenerations}`);
-  stage("Classifying page");
+  appendStepLog(
+    state,
+    `v2 Phase start — phase=${resolvedUiPhase} regen=${state.regeneration_count}/${state.max_regenerations}`,
+  );
+  stage(
+    resolvedUiPhase === "post_code"
+      ? "Post-code UI refresh — classifying page"
+      : resolvedUiPhase === "pre_code"
+        ? "Pre-code mockup — classifying page"
+        : "Classifying page",
+  );
   persist(workspaceRoot, state);
 
   if (!workspaceRoot || !fs.existsSync(workspaceRoot)) {
@@ -911,6 +941,7 @@ export async function runUiGenerationCycleV2(
     classification.page_type,
     state.project_name,
   );
+  slots = sanitizeSlotsForPageType(slots, classification.page_type);
   // CONTENT_LOCALE microcopy (optional Grok) — layout unchanged
   const contentLocale = readWorkspaceContentLocale(workspaceRoot) || "en";
   if (input.apiKeyOverride?.trim()) {
@@ -968,10 +999,12 @@ export async function runUiGenerationCycleV2(
     pageType: classification.page_type,
     designBrief,
     selectionMode: figma.selection_mode,
+    navigationMode: classification.navigation_mode,
   });
   state.repair_pass_used = "no";
   if (gate.gate !== "pass") {
     state.repair_pass_used = "yes";
+    const beforeKeys = Object.keys(slots).sort().join(",");
     slots = repairSlots(slots, classification.page_type);
     slots = ensureSlotsForStructurePlan(
       slots,
@@ -979,6 +1012,8 @@ export async function runUiGenerationCycleV2(
       classification.page_type,
       state.project_name,
     );
+    slots = sanitizeSlotsForPageType(slots, classification.page_type);
+    const afterKeys = Object.keys(slots).sort().join(",");
     state.slot_content_json = JSON.stringify(slots);
     model = renderTemplateModel({
       template,
@@ -1000,8 +1035,12 @@ export async function runUiGenerationCycleV2(
       pageType: classification.page_type,
       designBrief,
       selectionMode: figma.selection_mode,
+      navigationMode: classification.navigation_mode,
     });
-    appendStepLog(state, `Phase G repair — gate=${gate.gate}; issues=${gate.issues.join("; ") || "none"}`);
+    appendStepLog(
+      state,
+      `Phase G repair — gate=${gate.gate}; slots ${beforeKeys === afterKeys ? "unchanged" : "rebound"}; issues=${gate.issues.join("; ") || "none"}`,
+    );
   }
   state.quality_gate_result = gate.gate;
   state.missing_required_sections = gate.issues;
@@ -1064,7 +1103,7 @@ export async function runUiGenerationCycleV2(
           hasBottomNav: /BottomNav|tab bar/i.test(fileFacts.scanned_files.join(" ")),
         });
         const pageTemplate = selectTemplate(pageClass);
-        const pageSlots = mapSlots({
+        let pageSlots = mapSlots({
           template: pageTemplate,
           classification: pageClass,
           pageName,
@@ -1077,15 +1116,20 @@ export async function runUiGenerationCycleV2(
           features: state.priority_features,
           preferenceFeedback,
         });
+        pageSlots = ensureSlotsForStructurePlan(
+          pageSlots,
+          parseStructureLayoutPlan([], pageClass.page_type, pageTemplate.id),
+          pageClass.page_type,
+          state.project_name,
+        );
+        pageSlots = sanitizeSlotsForPageType(pageSlots, pageClass.page_type);
         const pageModel = renderTemplateModel({
           template: pageTemplate,
           classification: pageClass,
           tokens,
           slots: pageSlots,
-          figmaStatus:
-            figma.figma_status === "success" || figma.figma_status === "offline"
-              ? "success"
-              : "skipped",
+          figmaStatus: figma.figma_status,
+          structureHints: figma.structure_hints,
         });
         const pageKey = uniquePageKey(
           pageSlots.hero_title || pageSlots.nav_title || pageName,
@@ -1120,14 +1164,25 @@ export async function runUiGenerationCycleV2(
   // -------- Phase H — Deliver --------
   const deliveredStage =
     gate.gate === "pass"
-      ? "Ready in preview"
+      ? resolvedUiPhase === "post_code"
+        ? "Post-code UI refresh — Ready in preview"
+        : resolvedUiPhase === "pre_code"
+          ? "Pre-code mockup — Ready in preview"
+          : "Ready in preview"
       : gate.gate === "repair"
-        ? "Preview ready — quality repair applied"
+        ? "Needs one more repair — Preview not updated yet"
         : "Weak quality — try Generate again";
   stage(deliveredStage);
 
   const editorModel = {
     pages: mergedPages,
+    meta: {
+      engine: "v2" as const,
+      template_id: template.id,
+      tokens,
+      slots,
+      figma_status: figma.figma_status,
+    },
   };
   try {
     writeEnginePreviewModel(workspaceRoot, editorModel);
@@ -1184,6 +1239,7 @@ export async function runUiGenerationCycleV2(
     JSON.stringify(
       {
         engine: "v2",
+        phase: resolvedUiPhase,
         template_id: template.id,
         classification,
         tokens,
@@ -1230,9 +1286,10 @@ export async function runUiGenerationCycleV2(
           structure_hints: figma.structure_hints.slice(0, 10),
         },
         quality_gate_result: gate.gate,
+        gate_issues: gate.issues,
         regeneration_count: state.regeneration_count,
         how_to_recheck:
-          "Generate UI → open nebulla-project/ui-generation-v2-meta.json → read design_brief_path / resource_match / pattern_mode / figma.figma_status / preview_applied",
+          "Generate UI → open nebulla-project/ui-generation-v2-meta.json → read design_brief_path / resource_match / pattern_mode / figma.figma_status / preview_applied / gate_issues",
       },
       null,
       2,

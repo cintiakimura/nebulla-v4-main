@@ -424,11 +424,18 @@ Then **Validate** before expanding.
 
 ---
 
-### Step 9.3 — Optional UI refresh
-**Optionally** regenerate/refine UI Gen if pages/labels changed during coding.  
-First mockup must not depend on this step.
+### Step 9.3 — Post-code UI refresh (one automatic pass)
+After **successful** Foundation/Go apply of UI-relevant files (`app/`, `src/`, pages/components, etc.), the product runs **one** post-code UI path:
+- Prefer refresh App Preview from coded entry routes when available
+- Also run **one** UI Gen cycle grounded on **plan + generated file facts** (routes, buttons, headings from disk) — not a blind clone of the pre-code mockup
 
-**Output required:** UI updated only when needed
+Rules:
+- Max **one** automatic post-code UI refresh/regen per project session unless the user clicks Generate again (no infinite loop).
+- Do **not** block coding on mockup perfection; do **not** skip post-code refresh when UI-relevant files actually landed.
+- Pre-code mockup (Step 8.3) must not depend on this step; post-code may replace that preview.
+- Coding still ignores mockup pixels — Master Plan / architecture / features win on conflict.
+
+**Output required:** status distinguishes pre-code mockup vs post-code UI refresh; meta records `phase: post_code` when that pass ran
 
 ---
 

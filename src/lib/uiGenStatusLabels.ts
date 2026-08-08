@@ -68,5 +68,5 @@ export function gateLabel(gate: string): string {
 }
 
 export function weakGateUserMessage(): string {
-  return 'Preview not updated — improve brief/tokens or retry Generate UI.';
+  return 'Preview not updated — layout below Stitch-minimum. Retry Generate UI (repair rebinds slots).';
 }

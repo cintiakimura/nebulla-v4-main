@@ -60,6 +60,28 @@ Never jump from Master Plan text directly to freeform boxes. Prefer page bodies 
 
 ---
 
+## 1.1 Mockup vs final UI
+
+The pre-code mockup (UI Studio Beta / App Preview shell) is a **temporary engagement / structure preview** so the user is not staring at a blank screen while plan/coding run. It is **not** the source of truth for the product.
+
+| Layer | Role | Source of truth |
+|-------|------|-----------------|
+| Pre-code mockup (UI Studio Beta / App Preview shell) | Fast draft to orient the user; may be incomplete; **must still meet Stitch-minimum structure** | Templates + local refs + brief — **preview only** |
+| Master Plan / inference / architecture / pages / features | What the product **is** | Plan + execution rules + coding contracts |
+| Foundation / Go coding (`app/`, `src/`, real components) | Real product implementation | Plan + coding rules — **NOT mockup pixels** |
+| Post-code UI | Updated preview after code exists | Prefer coded routes/screens; optional UI Gen re-run grounded on **files + plan**, not “copy the old mockup” |
+
+Normative rules:
+1. Mockup may change after coding finishes — that is expected and desired.
+2. Coding must **not** implement features by visually cloning the mockup.
+3. Coding follows Master Plan, architecture, page list, features, and project-execution / inference-first logic.
+4. If mockup and plan disagree, **plan wins**.
+5. After successful foundation file apply of UI-relevant paths, run UI generation **one more time** (or refresh preview from coded UI) grounded on plan + file facts — max one automatic post-code pass unless the user clicks Generate again.
+6. Pre-code mockup still must not be garbage (Stitch-minimum). “Temporary” ≠ “Email on Kid Home.”
+7. Post-code regen still uses local-first references + brief + **file grounding**; meta must record `phase: post_code` (or equivalent).
+
+---
+
 ## 2. Inputs
 
 Required inputs for each generation cycle:
@@ -480,10 +502,15 @@ If gate fails:
 - Validating
 - Ready in preview
 
+Status copy must distinguish:
+- **Pre-code mockup** — first engagement preview before Foundation/Go lands
+- **Post-code UI refresh** — one automatic pass after successful UI-relevant file apply (plan + file grounding)
+
 ### H.3 Regeneration
-- max 3
+- max 3 (user-driven Generate again)
 - each regeneration may change template only if previous template failed quality
 - after 3, preference recovery question
+- **Post-code automatic refresh** is separate: at most one auto pass per project session after successful UI-relevant apply; does not infinite-loop; user Generate again may still run
 
 ---
 

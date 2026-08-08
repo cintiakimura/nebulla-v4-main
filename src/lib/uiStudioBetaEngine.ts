@@ -1,7 +1,8 @@
 /**
  * UI Studio Beta engine client.
- * Default inference-first: mockup after Master Plan + ui-brief (before coding finishes).
- * Post-file-apply refresh remains optional and is skipped when early mockup already ran.
+ * Default inference-first: pre-code mockup after Master Plan + ui-brief (before coding finishes).
+ * After successful UI-relevant Foundation/Go apply: one automatic post-code UI refresh
+ * grounded on plan + file facts (not a sticky clone of the pre-code draft).
  *
  * Trigger flow: open Beta pane → dispatch run event → IdeUiStudioBeta owns the API call
  * (so stage UI stays in sync). Completes when nebula-ui-studio-beta-complete fires.
@@ -13,20 +14,18 @@ import { getGrokRequestHeaders } from './grokUserKey';
 import { withProjectBody, withProjectQuery } from './nebulaProjectApi';
 import { dispatchOpenCenterPanel } from '@/components/ide/IdeCenterTabsContext';
 import {
-  clearUiMockupStageFlags,
-  hasPersistedUiMockup,
-  wasUiMockupStageStarted,
-} from './uiMockupGate';
+  looksLikeUiRelevantPaths,
+  resolvePostCodeUiAction,
+  type PostCodeUiAction,
+} from './postCodeUiRefresh';
+
+export { looksLikeUiRelevantPaths, resolvePostCodeUiAction };
+export type { PostCodeUiAction };
 
 export const NEBULA_UI_STUDIO_BETA_RUN = 'nebula-ui-studio-beta-run';
 export const NEBULA_UI_STUDIO_BETA_COMPLETE = 'nebula-ui-studio-beta-complete';
 
-const UI_RELEVANT =
-  /\.(tsx|jsx|vue|html|css)$|^(app|src|pages|components|public)\//i;
-
-export function looksLikeUiRelevantPaths(writtenPaths: string[]): boolean {
-  return writtenPaths.some((p) => UI_RELEVANT.test(p.replace(/\\/g, '/')));
-}
+export type UiStudioUiPhase = 'pre_code' | 'post_code' | 'manual';
 
 export type UiStudioBetaGenerateOptions = {
   projectName?: string;
@@ -36,6 +35,8 @@ export type UiStudioBetaGenerateOptions = {
   preferenceFeedback?: string;
   guidedImprovement?: boolean;
   writtenPaths?: string[];
+  /** Distinguishes pre-code mockup vs post-code refresh vs user Generate. */
+  uiPhase?: UiStudioUiPhase;
   onProgress?: GrokActivityProgressFn;
   openPane?: boolean;
 };
@@ -56,6 +57,24 @@ export type UiStudioBetaGenerateResult = {
 let inFlight: Promise<UiStudioBetaGenerateResult> | null = null;
 let lastAutoKey = '';
 
+/** One automatic post-code UI refresh per project session (unless force / user Generate). */
+const postCodeAutoDoneKeys = new Set<string>();
+
+export function hasPostCodeUiRefreshRun(projectKey: string): boolean {
+  return postCodeAutoDoneKeys.has(projectKey || 'default');
+}
+
+export function markPostCodeUiRefreshDone(projectKey: string): void {
+  postCodeAutoDoneKeys.add(projectKey || 'default');
+}
+
+/** Test helper — clears one-shot post-code session state. */
+export function resetPostCodeUiRefreshForTests(): void {
+  postCodeAutoDoneKeys.clear();
+  lastAutoKey = '';
+  inFlight = null;
+}
+
 export function dispatchOpenUiStudioBeta(): void {
   dispatchOpenCenterPanel('ui-studio-beta');
 }
@@ -75,14 +94,19 @@ export async function runUiStudioBetaGeneration(
       dispatchOpenUiStudioBeta();
     }
 
+    const phase = options.uiPhase;
     onProgress?.(
       options.regenerate
         ? 'Generate again — UI Studio Beta engine…'
-        : options.autoTriggered
-          ? options.writtenPaths?.length
-            ? 'Files applied — refreshing UI Studio Beta…'
-            : 'Architecture ready — generating UI mockup (UI Gen v2)…'
-          : 'Running UI Generation Engine…',
+        : phase === 'post_code'
+          ? 'Post-code UI refresh — regenerating from plan + coded files…'
+          : phase === 'pre_code' || (options.autoTriggered && !options.writtenPaths?.length)
+            ? 'Pre-code mockup — generating UI Studio Beta (UI Gen v2)…'
+            : options.autoTriggered
+              ? options.writtenPaths?.length
+                ? 'Files applied — post-code UI refresh…'
+                : 'Architecture ready — generating UI mockup (UI Gen v2)…'
+              : 'Running UI Generation Engine…',
       'info',
     );
 
@@ -140,6 +164,7 @@ export async function runUiStudioBetaGeneration(
           preferenceFeedback: options.preferenceFeedback,
           guidedImprovement: options.guidedImprovement,
           writtenPaths: options.writtenPaths,
+          uiPhase: options.uiPhase,
         });
       }, 400);
     });
@@ -184,42 +209,26 @@ export async function applyUiStudioBetaToAppPreview(
   }
 }
 
-/** After successful apply-generated of UI-relevant files (optional refine). */
+/**
+ * After successful apply of UI-relevant files: one post-code UI Gen cycle
+ * (plan + file grounding). Max one automatic pass per project session.
+ */
 export async function triggerUiStudioBetaAfterFilesApplied(options: {
   writtenPaths: string[];
   projectName?: string;
   onProgress?: GrokActivityProgressFn;
-  /** Force refine even if plan-first mockup already ran. */
+  /** Force another post-code regen even if one already ran this session. */
   force?: boolean;
 }): Promise<UiStudioBetaGenerateResult | null> {
-  // Skip only when a real mockup exists on disk — session flag alone is not enough
-  // (false "already generated" left Studio on Waiting + cyan App Preview).
-  if (!options.force && wasUiMockupStageStarted()) {
-    const persisted = await hasPersistedUiMockup();
-    if (persisted) {
-      const applied = await applyUiStudioBetaToAppPreview(options.onProgress);
-      if (applied.ok) {
-        options.onProgress?.(
-          'UI mockup already on disk — synced to App Preview (skipped re-generation)',
-          'info',
-        );
-        return null;
-      }
-      options.onProgress?.(
-        'UI mockup meta exists — skipping re-generation (open UI Studio Beta → Generate if preview is empty)',
-        'info',
-      );
-      return null;
-    }
-    clearUiMockupStageFlags();
-    options.onProgress?.(
-      'Prior mockup flag was empty — regenerating UI Gen so Studio and App Preview connect',
-      'warn',
-    );
-  }
-
   const paths = options.writtenPaths || [];
-  if (!looksLikeUiRelevantPaths(paths)) {
+  const projectKey = options.projectName || 'default';
+  const action = resolvePostCodeUiAction({
+    writtenPaths: paths,
+    alreadyRanPostCode: hasPostCodeUiRefreshRun(projectKey),
+    force: options.force,
+  });
+
+  if (action === 'skip_no_ui_paths') {
     options.onProgress?.(
       'Files applied — UI Beta not started (no app/UI shell files in this slice)',
       'info',
@@ -227,16 +236,29 @@ export async function triggerUiStudioBetaAfterFilesApplied(options: {
     return null;
   }
 
-  const key = `${options.projectName || ''}:${paths.slice().sort().join('|')}`;
+  if (action === 'sync_preview_only') {
+    const applied = await applyUiStudioBetaToAppPreview(options.onProgress);
+    options.onProgress?.(
+      applied.ok
+        ? 'Post-code UI refresh already ran this session — synced App Preview (open Generate UI to refresh again)'
+        : 'Post-code UI refresh already ran this session — open UI Studio Beta → Generate to refresh',
+      'info',
+    );
+    return null;
+  }
+
+  const key = `post_code:${projectKey}:${paths.slice().sort().join('|')}`;
   if (key === lastAutoKey && inFlight) {
     return inFlight;
   }
   lastAutoKey = key;
+  markPostCodeUiRefreshDone(projectKey);
 
   return runUiStudioBetaGeneration({
     projectName: options.projectName,
     writtenPaths: paths,
     autoTriggered: true,
+    uiPhase: 'post_code',
     openPane: true,
     onProgress: options.onProgress,
   });
@@ -253,6 +275,7 @@ export async function triggerUiStudioBetaAfterPlanReady(options: {
     projectName: options.projectName,
     writtenPaths: [],
     autoTriggered: true,
+    uiPhase: 'pre_code',
     openPane: true,
     onProgress: options.onProgress,
   });

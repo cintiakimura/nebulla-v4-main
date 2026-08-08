@@ -10,7 +10,7 @@ import os from "node:os";
 import path from "node:path";
 
 assert.equal(shouldApplyUiToPreview("pass"), true);
-assert.equal(shouldApplyUiToPreview("repair"), true);
+assert.equal(shouldApplyUiToPreview("repair"), false);
 assert.equal(shouldApplyUiToPreview("weak"), false);
 
 const pending = computeIdeNextAction({

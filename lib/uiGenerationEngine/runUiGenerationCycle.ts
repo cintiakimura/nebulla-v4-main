@@ -4,6 +4,10 @@
  * Authority: nebulla-project/ui-generation-logic-v2.md
  */
 
-export type { RunUiGenerationInput, RunUiGenerationResult } from "./v2/runUiGenerationCycleV2";
+export type {
+  RunUiGenerationInput,
+  RunUiGenerationResult,
+  UiGenerationPhase,
+} from "./v2/runUiGenerationCycleV2";
 export { runUiGenerationCycleV2 as runUiGenerationCycle } from "./v2/runUiGenerationCycleV2";
 export { runUiGenerationCycleV2 } from "./v2/runUiGenerationCycleV2";

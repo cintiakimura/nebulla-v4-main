@@ -128,6 +128,7 @@ import {
   shouldApplyUiToPreview,
   applyUiGenerationToPreviewShell,
 } from "./lib/uiGenerationEngine";
+import { MOCKUP_NON_AUTHORITATIVE_GO_BULLETS } from "./lib/codingMockupContract";
 import {
   masterPlanKeyForTabIndex,
   normalizeMasterPlanRecord,
@@ -3861,6 +3862,7 @@ ${modelJson}`;
         preferenceFeedback?: string;
         guidedImprovement?: boolean;
         writtenPaths?: string[];
+        uiPhase?: "pre_code" | "post_code" | "manual";
         preferenceHints?: {
           denser?: boolean;
           looser?: boolean;
@@ -3869,6 +3871,11 @@ ${modelJson}`;
           moreContrast?: boolean;
         };
       };
+      const uiPhaseRaw = body.uiPhase;
+      const uiPhase =
+        uiPhaseRaw === "pre_code" || uiPhaseRaw === "post_code" || uiPhaseRaw === "manual"
+          ? uiPhaseRaw
+          : undefined;
       // Grok key optional — seed/template generate works without it; key enables locale polish.
       const apiKey = (await resolveMainGrokApiKey(req)) || undefined;
       const result = await runUiGenerationCycle({
@@ -3885,6 +3892,7 @@ ${modelJson}`;
         writtenPaths: Array.isArray(body.writtenPaths)
           ? body.writtenPaths.filter((p): p is string => typeof p === "string")
           : undefined,
+        uiPhase,
         preferenceHints:
           body.preferenceHints && typeof body.preferenceHints === "object"
             ? body.preferenceHints
@@ -4565,7 +4573,9 @@ Strict rules:
 - No hallucinated packages, APIs, env vars, or paths — create them explicitly in this response if needed.
 - Prefer smallest safe change over clever refactors. No temporary hacks. Explicit error handling on I/O.
 - UI: §2 research patterns + §5 visuals + Project Type — NEVER Nebulla IDE chrome (#080A14 / #00D4D4).
-- Larger generation only if the slice is naturally tiny, the user explicitly asks for a broader pass, or risk is clearly low.`;
+- Larger generation only if the slice is naturally tiny, the user explicitly asks for a broader pass, or risk is clearly low.
+MOCKUP VS FINAL UI (mandatory):
+${MOCKUP_NON_AUTHORITATIVE_GO_BULLETS}`;
 
       const codeSystemPrompt = continuation
         ? `You are Grok Code (CONTINUATION pass). master-plan.json was updated but the **Foundation slice** (runnable shell) is still missing.

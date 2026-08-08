@@ -151,11 +151,11 @@ section('runUiGenerationCycleV2 without live Figma / without Grok key');
   if (shouldApplyUiToPreview(result.quality_gate_result)) {
     assert.equal(result.ok, true);
     assert.equal(result.previewApplied, true);
-    assert.ok(fs.existsSync(path.join(tmp, 'index.html')), 'index.html written on pass/repair');
+    assert.ok(fs.existsSync(path.join(tmp, 'index.html')), 'index.html written on pass');
     const html = fs.readFileSync(path.join(tmp, 'index.html'), 'utf8');
     assert.ok(html.includes(title.slice(0, Math.min(12, title.length))) || html.includes(cta));
   } else {
-    assert.equal(result.ok, false);
+    // Cycle may still ok=true; Preview withheld until Stitch-minimum pass
     assert.notEqual(result.previewApplied, true);
   }
 }
@@ -163,7 +163,7 @@ section('runUiGenerationCycleV2 without live Figma / without Grok key');
 section('shouldApplyUiToPreview helper');
 {
   assert.equal(shouldApplyUiToPreview('pass'), true);
-  assert.equal(shouldApplyUiToPreview('repair'), true);
+  assert.equal(shouldApplyUiToPreview('repair'), false, 'repair must re-validate to pass before Preview');
   assert.equal(shouldApplyUiToPreview('weak'), false);
 }
 

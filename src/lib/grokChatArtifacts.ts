@@ -235,6 +235,7 @@ BUILD_MODE is active for this turn. Do not explain code in chat — emit file ar
 3) \`START_CODING\` on its own line when ready.
 4) One or more \`\`\`file:relative/path\` … \`\`\` blocks for the **current slice only** (Build → Debug → Next). Prefer foundation/auth/core feature slices over the entire §4 route map in one turn.
 5) Optional legacy only: \`\`\`file:nebula-ui-studio/v0-prompt.md\` … \`\`\` — concise distill (800–1200 chars) if V0 is configured. Prefer ui-brief for Beta UI Gen.
+6) Do not treat UI Studio mockup / preview-model as the spec — implement from Master Plan; mockup may be wrong or partial; plan wins on conflict.
 `.trim();
 }
 
@@ -260,6 +261,7 @@ ACTIVE MODE: CODING — Architecture-first + Incremental Development (Build → 
 5) No hallucinated APIs/packages/env/paths — create them explicitly if needed in the same response.
 6) After the slice: remind to Validate (NDM happy path) before the next Go / slice.
 7) Output only START_CODING and/or \`\`\`file:relative/path\` … \`\`\` — never casual code fences in chat.
+8) Do not treat UI Studio mockup / preview-model as the spec. Implement screens and features from Master Plan sections and agreed architecture. Mockup is a temporary preview and may be wrong or partial. If mockup and plan disagree, plan wins.
 `.trim();
 
 /** Compact Chat personality — UNBREAKABLE when interactionMode is chat. Authority: chat-personality.md */

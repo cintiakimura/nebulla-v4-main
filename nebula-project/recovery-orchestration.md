@@ -241,6 +241,8 @@ Work **one step per Agent turn / PR** after constitution install. Fix the **earl
 | 2026-08-08 | Security baseline = auto-applied §2 assumptions (asset); SEC_* warn-only; Accept optional; never hard-block Go/Foundation on MVP | Product: liability was treating security polish as Go gate |
 | 2026-08-08 | Single Figma model: Generate = local-first (offline→catalog→brief→seed); live only if FIGMA_LIVE_ON_GENERATE + key + local miss | Invert live-first dual logic; ingest scripts keep live |
 | 2026-08-08 | Ship structure/ shortlist + apply hints into slots/render; default bucket keys; honest offline/catalog/brief/seed status | Local-first was coded but Render empty + hints unused |
+| 2026-08-08 | Stitch-minimum enforcement: page-type slot binding, gate fails Email-on-Home / sparse shells; Preview only on pass | Logic existed; exam wasn’t grading it |
+| 2026-08-08 | Mockup ≠ final UI: coding ignores mockup pixels (plan wins); one post-code UI refresh after successful UI-relevant apply | Pre-code draft was treated as sticky / coding spec |
 
 ---
 

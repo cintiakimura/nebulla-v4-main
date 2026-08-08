@@ -786,6 +786,7 @@ export function IdeUiStudioBeta({
     guidedImprovement?: boolean;
     autoTriggered?: boolean;
     writtenPaths?: string[];
+    uiPhase?: 'pre_code' | 'post_code' | 'manual';
     preferenceHints?: {
       denser?: boolean;
       looser?: boolean;
@@ -820,9 +821,13 @@ export function IdeUiStudioBeta({
     setEngineStage(
       opts?.regenerate
         ? 'Generate again…'
-        : opts?.autoTriggered
-          ? 'Reading Master Plan'
-          : 'Reading Master Plan',
+        : opts?.uiPhase === 'post_code'
+          ? 'Post-code UI refresh…'
+          : opts?.uiPhase === 'pre_code'
+            ? 'Pre-code mockup…'
+            : opts?.autoTriggered
+              ? 'Reading Master Plan'
+              : 'Reading Master Plan',
     );
     const poll = window.setInterval(() => {
       void fetch(withProjectQuery('/api/ui-studio-beta/status'), { credentials: 'include' })
@@ -851,6 +856,7 @@ export function IdeUiStudioBeta({
             preferenceFeedback: opts?.preferenceFeedback,
             guidedImprovement: opts?.guidedImprovement === true,
             writtenPaths: opts?.writtenPaths,
+            uiPhase: opts?.uiPhase,
             preferenceHints: opts?.preferenceHints || undefined,
           }),
         ),
@@ -1117,6 +1123,7 @@ export function IdeUiStudioBeta({
         preferenceFeedback?: string;
         guidedImprovement?: boolean;
         writtenPaths?: string[];
+        uiPhase?: 'pre_code' | 'post_code' | 'manual';
       }>).detail;
       void runEngineGenerate({
         autoTriggered: detail?.autoTriggered,
@@ -1124,6 +1131,7 @@ export function IdeUiStudioBeta({
         preferenceFeedback: detail?.preferenceFeedback,
         guidedImprovement: detail?.guidedImprovement,
         writtenPaths: detail?.writtenPaths,
+        uiPhase: detail?.uiPhase,
       });
     };
     const onComplete = (ev: Event) => {

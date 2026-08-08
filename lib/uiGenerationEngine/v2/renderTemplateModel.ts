@@ -160,13 +160,21 @@ function renderTopBar(
   slots: SlotMap,
 ): string {
   const bar = "region-topbar";
+  addText(nodes, "topbar-brand", "identity", slots.nav_title || slots.hero_title || "Home", tokens, {
+    backgroundColor: tokens.primary,
+    color: luma(tokens.primary) < 0.55 ? "#FFFFFF" : "#111111",
+    paddingTop: 8,
+    paddingBottom: 8,
+    paddingLeft: 10,
+    paddingRight: 10,
+  });
   addText(nodes, "topbar-title", "nav_bar", slots.nav_title || slots.hero_title || "Home", tokens, {
     backgroundColor: tokens.surface,
     color: tokens.text,
     paddingTop: 10,
     paddingBottom: 10,
   });
-  stackContainer(nodes, bar, "top_bar", ["topbar-title"], tokens, tokens.surface, {
+  stackContainer(nodes, bar, "top_bar", ["topbar-brand", "topbar-title"], tokens, tokens.surface, {
     borderWidth: 1,
     marginBottom: tokens.gap,
     pad: 10,

@@ -112,6 +112,7 @@ CODING QUALITY CONTRACT (architecture-first — mandatory before any \`\`\`file:
 4) No hallucinated APIs, packages, env vars, or file paths — use only what exists in the workspace index / plan, or create them explicitly in the same response.
 5) Clean, maintainable code: clear names, typed boundaries, explicit error handling on I/O; match existing stack conventions.
 6) UI must follow §2 research patterns + §5 + Project Type — never Nebulla IDE chrome.
+7) **Mockup non-authoritative:** Do not treat UI Studio mockup / preview-model as the spec. Implement screens and features from Master Plan sections and agreed architecture. Mockup is a temporary preview and may be wrong or partial. If mockup and plan disagree, plan wins. Do not reduce the app to what the mockup happened to draw.
 
 INCREMENTAL DEVELOPMENT (Build → Debug → Next — see nebulla-project/incremental-development.md):
 - **Never** generate the entire app in one pass when it can be sliced. Prefer: Build one coherent slice → Debug/Validate (NDM) → only then Next.

@@ -1,6 +1,6 @@
 /**
  * Phase G — Hard quality gate for constrained v2 generation.
- * Authority: ui-generation-logic-v2.md §10
+ * Stitch-minimum must fail Ready when structure/binding is broken.
  */
 
 import type {
@@ -13,7 +13,8 @@ import type {
   V2PageType,
 } from "./types";
 import type { DesignBrief } from "../resources/types";
-import { isEmptyShellLayout } from "./applyStructureHints";
+import { stitchMinimumIssues } from "./applyStructureHints";
+import { sanitizeSlotsForPageType } from "./mapSlots";
 
 function luma(hex: string): number {
   const h = (hex || "").replace("#", "");
@@ -32,6 +33,10 @@ function isProseDump(s: string): boolean {
   return s.length > 42 || s.split(/\s+/).length > 6 || /[.!?]/.test(s);
 }
 
+function modelHasRole(nodes: { role?: string; id?: string }[], re: RegExp): boolean {
+  return nodes.some((n) => re.test(`${n.role || ""} ${n.id || ""}`));
+}
+
 export function validateV2Quality(input: {
   model: V2EditorModel;
   template: TemplateDef;
@@ -39,14 +44,22 @@ export function validateV2Quality(input: {
   slots: SlotMap;
   figmaStatus: FigmaStatusV2;
   pageType: V2PageType;
-  /** Optional compiled Design Brief — enables role/density guideline checks. */
   designBrief?: DesignBrief | null;
-  /** Figma selection_mode — used to refuse “Ready” on seed-only empty shells. */
   selectionMode?: string;
+  navigationMode?: string;
 }): QualityGateV2 {
   const issues: string[] = [];
-  const { model, template, tokens, slots, figmaStatus, pageType, designBrief, selectionMode } =
-    input;
+  const {
+    model,
+    template,
+    tokens,
+    slots,
+    figmaStatus,
+    pageType,
+    designBrief,
+    selectionMode,
+    navigationMode,
+  } = input;
 
   if (!model?.pages || !Object.keys(model.pages).length) {
     return { gate: "weak", issues: ["No editor model pages"] };
@@ -59,20 +72,31 @@ export function validateV2Quality(input: {
   const subtitle = (slots.hero_subtitle || "").trim();
   const containers = nodes.filter((n) => n.type === "container" || n.type === "box");
   const buttons = nodes.filter((n) => n.type === "button");
+  const hasIdentityRegion = modelHasRole(nodes, /top_bar|nav_bar|hero|identity|auth/i);
+  const hasNavRegion = modelHasRole(nodes, /bottom_tabs|nav-sidebar|nav-tab/i);
 
-  // G.0 Empty shell / incomplete auth — fail or repair even when labels say Ready
-  issues.push(
-    ...isEmptyShellLayout({
-      slots,
-      nodeCount: nodes.length,
-      containerCount: containers.length,
-      buttonCount: buttons.length,
-      pageType,
-      needsPrimaryCta: template.needsPrimaryCta,
-    }),
-  );
+  const stitch = stitchMinimumIssues({
+    slots,
+    nodeCount: nodes.length,
+    containerCount: containers.length,
+    buttonCount: buttons.length,
+    pageType,
+    needsPrimaryCta: template.needsPrimaryCta,
+    navigationMode,
+    hasIdentityRegion,
+    hasNavRegion,
+    templateId: template.id,
+  });
+  issues.push(...stitch);
 
-  // G.1 Structure
+  // Offline/library success without structure still failing stitch → call out honesty
+  if (
+    (figmaStatus === "offline" || figmaStatus === "success") &&
+    stitch.length > 0
+  ) {
+    issues.push("Library hit without Stitch-minimum structure (enforcement fail)");
+  }
+
   if (!title || isProseDump(title) || isRouteLike(title)) {
     issues.push("Title slot missing or looks like prose/route dump");
   }
@@ -85,32 +109,15 @@ export function validateV2Quality(input: {
     else if (isProseDump(cta) || isRouteLike(cta)) {
       issues.push("Primary CTA looks like prose/route dump (keep verb-led, short)");
     }
-    if (
-      buttons.length === 1 &&
-      /^get started$/i.test(buttons[0].text || "") &&
-      pageType !== "empty"
-    ) {
-      issues.push("Only generic Get started CTA");
-    }
   }
-  // Seed-only path: never treat sparse layout as a clean library success.
   if (
     (selectionMode?.includes(":seed:") || figmaStatus === "weak_matches") &&
     containers.length < 3
   ) {
     issues.push("Seed fallback layout still sparse — needs repair");
   }
-  // Seed-path: home/list should carry at least one content label (not empty skeleton)
-  if (pageType === "home" || pageType === "list" || pageType === "dashboard") {
-    const hasContent = Object.entries(slots).some(
-      ([k, v]) =>
-        /^(card|item|metric|row|section)_\d/i.test(k) && Boolean(String(v || "").trim()),
-    );
-    if (!hasContent) issues.push("No content region labels mapped");
-  }
   if (!model.meta?.template_id) issues.push("Template name not recorded on model");
 
-  // G.2 Visual / style safety
   for (const n of nodes) {
     if (!n.style || typeof n.style !== "object") {
       issues.push(`Style corruption on node ${n.id}`);
@@ -129,10 +136,10 @@ export function validateV2Quality(input: {
   const tokenColors = [tokens.bg, tokens.surface, tokens.primary, tokens.text].map((c) =>
     c.toLowerCase(),
   );
-  const appliedToken = tokenColors.some((c) => used.has(c));
-  if (!appliedToken) issues.push("Design tokens not applied to node styles");
+  if (!tokenColors.some((c) => used.has(c))) {
+    issues.push("Design tokens not applied to node styles");
+  }
 
-  // G.3 Content
   if (subtitle && (isRouteLike(subtitle) || isProseDump(subtitle))) {
     issues.push("Subtitle looks like route/prose dump");
   }
@@ -144,7 +151,6 @@ export function validateV2Quality(input: {
     }
   }
 
-  // G.4 Metadata
   if (!figmaStatus) issues.push("figma_status missing");
   if (
     (figmaStatus === "success" || figmaStatus === "offline") &&
@@ -154,9 +160,7 @@ export function validateV2Quality(input: {
     issues.push("library success claimed without model meta");
   }
 
-  // G.5 Design Brief guidelines (when present)
   if (designBrief) {
-    const buttons = nodes.filter((n) => n.type === "button");
     const primaryHex = designBrief.color_roles.primary.hex.toLowerCase();
     const primaryOnButton = buttons.some(
       (b) => (b.style?.backgroundColor || "").toLowerCase() === primaryHex,
@@ -191,7 +195,6 @@ export function validateV2Quality(input: {
     if (Math.abs(bgL - textL) < 0.25) {
       issues.push("Design Brief: weak text/background contrast (a11y minimum)");
     }
-    // CTA label must contrast against primary fill when button uses primary role.
     const primaryBtn = buttons.find(
       (b) => (b.style?.backgroundColor || "").toLowerCase() === primaryHex,
     );
@@ -204,16 +207,32 @@ export function validateV2Quality(input: {
     }
   }
 
-  if (issues.length === 0) return { gate: "pass", issues };
-  if (issues.length <= 2) return { gate: "repair", issues };
-  return { gate: "weak", issues };
+  const uniq = [...new Set(issues)];
+  const stitchRemain = uniq.filter(
+    (i) => i.startsWith("Stitch-minimum:") || i.includes("Library hit without"),
+  );
+
+  // Stitch-minimum is the exam: fail/repair until cleared. Soft brief polish does not block Ready.
+  if (stitchRemain.length > 0) {
+    if (uniq.length <= 2) return { gate: "repair", issues: uniq };
+    return { gate: "weak", issues: uniq };
+  }
+  return { gate: "pass", issues: uniq };
 }
 
-/** One controlled repair: re-clean slots that look like dumps. */
+/**
+ * Controlled repair: strip wrong-page slots, fix dumps, ensure minimum labels.
+ * Caller must re-render + re-validate before Ready.
+ */
 export function repairSlots(slots: SlotMap, pageType: V2PageType): SlotMap {
-  const next = { ...slots };
+  let next = sanitizeSlotsForPageType({ ...slots }, pageType);
   const titleKey = next.hero_title ? "hero_title" : "nav_title";
-  if (next[titleKey] && (isProseDump(next[titleKey]) || isRouteLike(next[titleKey]))) {
+  if (
+    !next[titleKey] ||
+    isProseDump(next[titleKey]) ||
+    isRouteLike(next[titleKey]) ||
+    /^web\s*app$/i.test(next[titleKey] || "")
+  ) {
     next[titleKey] =
       pageType === "settings"
         ? "Settings"
@@ -223,25 +242,50 @@ export function repairSlots(slots: SlotMap, pageType: V2PageType): SlotMap {
             ? "Tasks"
             : "Home";
   }
-  if (next.hero_subtitle && (isProseDump(next.hero_subtitle) || isRouteLike(next.hero_subtitle))) {
+  if (!(next.nav_title || "").trim()) next.nav_title = next.hero_title || next[titleKey] || "Home";
+  if (
+    !next.hero_subtitle ||
+    isProseDump(next.hero_subtitle) ||
+    isRouteLike(next.hero_subtitle) ||
+    /^web\s*app$/i.test(next.hero_subtitle)
+  ) {
     next.hero_subtitle =
-      pageType === "list"
-        ? "Today’s micro-tasks"
-        : pageType === "settings"
-          ? "Preferences and account"
-          : "Ready when you are";
+      pageType === "auth"
+        ? "Welcome back"
+        : pageType === "list"
+          ? "Today’s micro-tasks"
+          : pageType === "settings"
+            ? "Preferences and account"
+            : "Ready when you are";
   }
   if (
-    next.primary_cta &&
-    (/^get started$/i.test(next.primary_cta) ||
-      isProseDump(next.primary_cta) ||
-      isRouteLike(next.primary_cta))
+    !next.primary_cta ||
+    /^get started$/i.test(next.primary_cta) ||
+    isProseDump(next.primary_cta) ||
+    isRouteLike(next.primary_cta)
   ) {
     next.primary_cta = pageType === "auth" ? "Continue" : "Continue";
   }
-  // Strip any remaining path-like slot values
-  for (const [k, v] of Object.entries(next)) {
-    if (isRouteLike(v)) next[k] = k.includes("cta") ? "Continue" : "Details";
+  if (pageType === "auth") {
+    if (!(next.field_1_label || "").trim()) next.field_1_label = "Email";
+    if (!(next.field_2_label || "").trim()) next.field_2_label = "Password";
+    if (!(next.secondary_cta || "").trim()) next.secondary_cta = "Create account";
+  } else {
+    for (let i = 1; i <= 3; i++) {
+      if (!(next[`card_${i}_title`] || "").trim() && !(next[`metric_${i}_title`] || "").trim()) {
+        next[`card_${i}_title`] =
+          i === 1 ? "Today’s lesson" : i === 2 ? "Practice round" : "Review";
+        next[`card_${i}_value`] = i === 1 ? "Start" : i === 2 ? "5 min" : "Done";
+        next[`metric_${i}_title`] = next[`card_${i}_title`];
+        next[`metric_${i}_value`] = `${i * 12}%`;
+      }
+    }
+    if (!(next.section_title || "").trim()) next.section_title = "Up next";
+    if (!(next.secondary_cta || "").trim()) next.secondary_cta = "See all";
   }
+  for (const [k, v] of Object.entries(next)) {
+    if (v && isRouteLike(v)) next[k] = k.includes("cta") ? "Continue" : "Details";
+  }
+  next = sanitizeSlotsForPageType(next, pageType);
   return next;
 }

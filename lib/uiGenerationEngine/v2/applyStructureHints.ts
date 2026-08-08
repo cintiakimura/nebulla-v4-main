@@ -1,24 +1,18 @@
 /**
  * Map offline/catalog structure hints into slot density + render/preview flags.
- * Keeps the template system — strengthens hierarchy, cards, CTAs, auth fields.
+ * Stitch-minimum helpers for gate + repair.
  */
 
 import type { DesignTokens, SlotMap, V2PageType, V2TemplateId } from "./types";
+import { sanitizeSlotsForPageType } from "./mapSlots";
 
 export type StructureLayoutPlan = {
-  /** Prefer stacked card sections over a single sparse hero card. */
   preferCardStack: boolean;
-  /** Ensure ≥ N content cards/items after repair. */
   minContentCards: number;
-  /** Auth: require fields + primary + secondary link semantics. */
   authComplete: boolean;
-  /** Spacing rhythm extracted from hints (px), if any. */
   spacingPx: number | null;
-  /** Corner radius extracted from hints (px), if any. */
   radiusPx: number | null;
-  /** Vertical auto-layout detected. */
   verticalStack: boolean;
-  /** Human label for status / meta. */
   summary: string;
 };
 
@@ -31,10 +25,6 @@ export function parseStructureLayoutPlan(
   const verticalStack = /VERTICAL auto-layout/i.test(joined);
   const hasCards = /card|content block|list|feature|metric/i.test(joined);
   const hasCta = /cta|button|primary/i.test(joined);
-  const authComplete =
-    pageType === "auth" || /auth/i.test(templateId)
-      ? /field|form|password|email|cta|button/i.test(joined) || true
-      : false;
 
   let spacingPx: number | null = null;
   let radiusPx: number | null = null;
@@ -44,7 +34,6 @@ export function parseStructureLayoutPlan(
     const rad = h.match(/corner radius ≈ (\d+)/i);
     if (rad) {
       const n = Number(rad[1]);
-      // Ignore pill radii from buttons (e.g. 100)
       if (n <= 28) radiusPx = Math.min(24, Math.max(4, n));
     }
   }
@@ -58,7 +47,7 @@ export function parseStructureLayoutPlan(
     pageType === "landing";
 
   let minContentCards = preferCardStack ? 3 : 2;
-  if (pageType === "auth") minContentCards = 2; // fields
+  if (pageType === "auth") minContentCards = 2;
   if (pageType === "empty") minContentCards = 1;
   if (hasCta && preferCardStack) minContentCards = Math.max(minContentCards, 3);
 
@@ -71,7 +60,7 @@ export function parseStructureLayoutPlan(
   return {
     preferCardStack,
     minContentCards,
-    authComplete: pageType === "auth" ? true : authComplete,
+    authComplete: pageType === "auth",
     spacingPx,
     radiusPx,
     verticalStack,
@@ -79,12 +68,14 @@ export function parseStructureLayoutPlan(
   };
 }
 
-/** Soft-apply spacing/radius from plan within ±6 of brief tokens. */
 export function applyPlanToTokens(tokens: DesignTokens, plan: StructureLayoutPlan): DesignTokens {
   const next = { ...tokens };
   if (plan.spacingPx != null) {
     next.gap = Math.min(tokens.gap + 6, Math.max(tokens.gap - 6, plan.spacingPx));
-    next.pad = Math.min(tokens.pad + 6, Math.max(tokens.pad - 6, Math.max(tokens.pad, plan.spacingPx)));
+    next.pad = Math.min(
+      tokens.pad + 6,
+      Math.max(tokens.pad - 6, Math.max(tokens.pad, plan.spacingPx)),
+    );
   }
   if (plan.radiusPx != null) {
     next.radius = Math.min(tokens.radius + 6, Math.max(tokens.radius - 6, plan.radiusPx));
@@ -92,24 +83,23 @@ export function applyPlanToTokens(tokens: DesignTokens, plan: StructureLayoutPla
   return next;
 }
 
-/**
- * Ensure slots have enough real content regions for the layout plan.
- * Fills missing card/item/metric/field slots with short non-empty labels.
- */
 export function ensureSlotsForStructurePlan(
   slots: SlotMap,
   plan: StructureLayoutPlan,
   pageType: V2PageType,
   projectHint?: string,
 ): SlotMap {
-  const next = { ...slots };
+  let next = sanitizeSlotsForPageType({ ...slots }, pageType);
   const topic = (projectHint || next.hero_title || next.nav_title || "App").trim().slice(0, 28);
 
-  if (!(next.hero_title || "").trim()) {
+  if (!(next.hero_title || "").trim() || /^web\s*app$/i.test(next.hero_title || "")) {
     next.hero_title =
       pageType === "auth" ? "Sign in" : pageType === "landing" ? topic : topic || "Home";
   }
-  if (!(next.hero_subtitle || "").trim()) {
+  if (!(next.nav_title || "").trim()) {
+    next.nav_title = next.hero_title || topic || "Home";
+  }
+  if (!(next.hero_subtitle || "").trim() || /^web\s*app$/i.test(next.hero_subtitle || "")) {
     next.hero_subtitle =
       pageType === "auth"
         ? "Welcome back"
@@ -124,12 +114,15 @@ export function ensureSlotsForStructurePlan(
   if (pageType === "auth") {
     if (!(next.field_1_label || "").trim()) next.field_1_label = "Email";
     if (!(next.field_2_label || "").trim()) next.field_2_label = "Password";
+    if (!(next.field_1_placeholder || "").trim()) next.field_1_placeholder = "you@example.com";
+    if (!(next.field_2_placeholder || "").trim()) next.field_2_placeholder = "••••••••";
     if (!(next.secondary_cta || "").trim()) next.secondary_cta = "Create account";
-  } else if (!(next.secondary_cta || "").trim() && plan.preferCardStack) {
-    next.secondary_cta = "See all";
+    return next;
   }
 
-  if (pageType === "auth") return next;
+  if (!(next.secondary_cta || "").trim() && plan.preferCardStack) {
+    next.secondary_cta = "See all";
+  }
 
   const fill = (key: string, value: string) => {
     if (!(next[key] || "").trim()) next[key] = value;
@@ -139,7 +132,7 @@ export function ensureSlotsForStructurePlan(
     if (pageType === "dashboard" || pageType === "home") {
       fill(`metric_${i}_title`, i === 1 ? "Progress" : i === 2 ? "Activity" : "Focus");
       fill(`metric_${i}_value`, i === 1 ? "12%" : i === 2 ? "24%" : "36%");
-      fill(`card_${i}_title`, i === 1 ? "Today" : i === 2 ? "Practice" : "Review");
+      fill(`card_${i}_title`, i === 1 ? "Today’s lesson" : i === 2 ? "Practice" : "Review");
       fill(`card_${i}_value`, i === 1 ? "Start" : i === 2 ? "Continue" : "Done");
     } else if (pageType === "landing") {
       fill(`card_${i}_title`, i === 1 ? "Fast setup" : i === 2 ? "Clear results" : "Stay on track");
@@ -157,10 +150,98 @@ export function ensureSlotsForStructurePlan(
     next.section_title = pageType === "landing" ? "Why it works" : "Up next";
   }
 
+  next = sanitizeSlotsForPageType(next, pageType);
   return next;
 }
 
-/** Detect empty-shell / single blank card layouts for quality gate. */
+/** Stitch-minimum failures — must not Ready / pass while any remain. */
+export function stitchMinimumIssues(input: {
+  slots: SlotMap;
+  nodeCount: number;
+  containerCount: number;
+  buttonCount: number;
+  pageType: V2PageType;
+  needsPrimaryCta: boolean;
+  navigationMode?: string;
+  hasIdentityRegion?: boolean;
+  hasNavRegion?: boolean;
+  templateId?: string;
+}): string[] {
+  const issues: string[] = [];
+  const {
+    slots,
+    nodeCount,
+    containerCount,
+    buttonCount,
+    pageType,
+    needsPrimaryCta,
+    navigationMode,
+    hasIdentityRegion,
+    hasNavRegion,
+    templateId,
+  } = input;
+
+  const title = (slots.hero_title || slots.nav_title || "").trim();
+  const cta = (slots.primary_cta || "").trim();
+
+  if (!title || /^web\s*app$/i.test(title)) {
+    issues.push("Stitch-minimum: missing product title / identity");
+  }
+  if (hasIdentityRegion === false) {
+    issues.push("Stitch-minimum: missing header / identity region");
+  }
+  if (needsPrimaryCta && !cta) {
+    issues.push("Stitch-minimum: missing primary CTA");
+  }
+  if (needsPrimaryCta && buttonCount < 1) {
+    issues.push("Stitch-minimum: no CTA button in render");
+  }
+  if (containerCount < 3 || nodeCount < 10) {
+    issues.push("Stitch-minimum: sparse shell (need header + content + actions)");
+  }
+
+  if (pageType === "auth") {
+    if (!(slots.field_1_label || "").trim() || !(slots.field_2_label || "").trim()) {
+      issues.push("Stitch-minimum: auth missing fields");
+    }
+    if (!(slots.secondary_cta || "").trim()) {
+      issues.push("Stitch-minimum: auth missing secondary link");
+    }
+  } else {
+    // Wrong fields on non-auth (Email on Kid Home)
+    for (const [k, v] of Object.entries(slots)) {
+      if (/^field_\d+_/i.test(k) && String(v || "").trim()) {
+        issues.push("Stitch-minimum: auth fields on non-auth page");
+        break;
+      }
+      if (
+        /^(card|item|metric|section)_/i.test(k) &&
+        /^(email|password|e-?mail)$/i.test(String(v || "").trim())
+      ) {
+        issues.push("Stitch-minimum: wrong field label on product page");
+        break;
+      }
+    }
+    if (pageType === "home" || pageType === "dashboard" || pageType === "landing" || pageType === "list") {
+      const hasContent = Object.entries(slots).some(
+        ([k, v]) =>
+          /^(card|item|metric|section)_\d/i.test(k) && Boolean(String(v || "").trim()),
+      );
+      if (!hasContent) issues.push("Stitch-minimum: no primary content region labels");
+    }
+  }
+
+  const wantsTabs =
+    navigationMode === "bottom_tabs" ||
+    (/^mobile_/i.test(templateId || "") && pageType !== "auth" && pageType !== "landing");
+  if (wantsTabs && hasNavRegion === false && pageType !== "auth" && pageType !== "landing") {
+    issues.push("Stitch-minimum: missing nav / tabs for multi-page app");
+  }
+
+  return issues;
+}
+
+/** @deprecated use stitchMinimumIssues — kept for callers */
 export function isEmptyShellLayout(input: {
   slots: SlotMap;
   nodeCount: number;
@@ -169,31 +250,5 @@ export function isEmptyShellLayout(input: {
   pageType: V2PageType;
   needsPrimaryCta: boolean;
 }): string[] {
-  const issues: string[] = [];
-  const { slots, nodeCount, containerCount, buttonCount, pageType, needsPrimaryCta } = input;
-  const title = (slots.hero_title || slots.nav_title || "").trim();
-  const cta = (slots.primary_cta || "").trim();
-
-  if (!title) issues.push("Empty shell: missing title");
-  if (needsPrimaryCta && !cta) issues.push("Empty shell: missing primary CTA");
-  if (needsPrimaryCta && buttonCount < 1) issues.push("Empty shell: no CTA button node");
-  if (containerCount <= 1 && nodeCount < 10) {
-    issues.push("Empty shell: single blank card / sparse regions");
-  }
-  if (pageType === "auth") {
-    if (!(slots.field_1_label || "").trim() || !(slots.field_2_label || "").trim()) {
-      issues.push("Auth incomplete: missing fields");
-    }
-    if (!(slots.secondary_cta || "").trim()) {
-      issues.push("Auth incomplete: missing secondary link");
-    }
-  }
-  if (pageType === "home" || pageType === "dashboard" || pageType === "landing") {
-    const hasContent = Object.entries(slots).some(
-      ([k, v]) =>
-        /^(card|item|metric|section)_\d/i.test(k) && Boolean(String(v || "").trim()),
-    );
-    if (!hasContent) issues.push("Empty shell: no content cards/metrics");
-  }
-  return issues;
+  return stitchMinimumIssues(input);
 }

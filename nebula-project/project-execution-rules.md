@@ -301,6 +301,7 @@ Paths in ` ```file:…``` ` are relative to `workspaceRoot`.
 **Before ANY code change (coding / Go):**
 - Mentally complete `nebulla-project/code-review-checklist.md`.
 - Obey Incremental Development (this file + `incremental-development.md`).
+- **Mockup is non-authoritative:** Grok/coding implements from **plan + architecture + features** (Master Plan §§1–5, roles, pages, data, auth). UI Studio mockup / preview-model pixels, copy, and accidental feature set are **not** the spec. Do not reduce the app to what the mockup happened to draw. If mockup and plan disagree, **plan wins**.
 
 **On bug / test failure / runtime error:**
 1. Match category in `nebulla-project/full-bug-database.md` when useful.  
