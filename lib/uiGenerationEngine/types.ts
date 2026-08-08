@@ -46,7 +46,7 @@ export type NavigationType = "sidebar" | "topnav" | "tabs" | "none";
 export type Density = "spacious" | "medium" | "compact";
 export type Confidence = "high" | "medium" | "low";
 export type QualityGate = "pass" | "repair" | "weak";
-export type ReferenceSource = "figma" | "seed" | "mixed";
+export type ReferenceSource = "figma" | "catalog" | "brief" | "seed" | "mixed";
 export type FigmaStatus =
   | "success"
   | "offline"

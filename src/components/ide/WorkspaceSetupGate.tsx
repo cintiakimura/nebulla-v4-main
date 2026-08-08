@@ -25,7 +25,14 @@ export type WorkspaceContext = {
   mode: 'cloud' | 'guest';
 };
 
-export function WorkspaceSetupGate({ onReady }: { onReady: (ctx: WorkspaceContext) => void }) {
+export function WorkspaceSetupGate({
+  onReady,
+  onSetupBusyChange,
+}: {
+  onReady: (ctx: WorkspaceContext) => void;
+  /** True while ensure runs — parent shows top-bar throbber (no full-screen card). */
+  onSetupBusyChange?: (busy: boolean) => void;
+}) {
   const [phase, setPhase] = useState<WorkspaceReadyResult>({ status: 'loading' });
   const [config, setConfig] = useState<NebulaPublicConfig>({});
   const [projects, setProjects] = useState<CloudProjectRow[]>([]);
@@ -41,10 +48,16 @@ export function WorkspaceSetupGate({ onReady }: { onReady: (ctx: WorkspaceContex
 
   const finishReady = useCallback(
     (ctx: WorkspaceContext) => {
+      onSetupBusyChange?.(false);
       onReady(ctx);
     },
-    [onReady],
+    [onReady, onSetupBusyChange],
   );
+
+  useEffect(() => {
+    // Full-screen card only for needs_project / login / errors — loading is top-bar only.
+    onSetupBusyChange?.(phase.status === 'loading');
+  }, [phase.status, onSetupBusyChange]);
 
   const runEnsure = useCallback(async () => {
     setError(null);
@@ -255,6 +268,11 @@ export function WorkspaceSetupGate({ onReady }: { onReady: (ctx: WorkspaceContex
     return null;
   }
 
+  // Loading: no full-screen card — TopBar throbber only.
+  if (phase.status === 'loading') {
+    return null;
+  }
+
   const githubOk = Boolean(config.githubOAuthReady);
   const googleOk = Boolean(config.googleOAuthReady);
   const cloudOk = Boolean(config.cloudStorageReady);
@@ -270,15 +288,21 @@ export function WorkspaceSetupGate({ onReady }: { onReady: (ctx: WorkspaceContex
         <div className="mb-6 flex items-center gap-3">
           <Logo className="h-9 w-9 shrink-0" />
           <div>
-            <h1 className="font-headline text-lg text-slate-50">Workspace required</h1>
-            <p className="text-xs text-slate-500">Sign in and pick a project so Grok can write files.</p>
+            <h1 className="font-headline text-lg text-slate-50">
+              {phase.status === 'needs_project' ? 'Choose a project' : 'Workspace required'}
+            </h1>
+            <p className="text-xs text-slate-500">
+              {phase.status === 'needs_project'
+                ? 'Pick or create a project so Grok can write files.'
+                : 'Sign in and pick a project so Grok can write files.'}
+            </p>
           </div>
         </div>
 
-        {phase.status === 'loading' || busy ? (
-          <div className="flex items-center justify-center gap-2 py-8 text-sm text-slate-400">
+        {busy ? (
+          <div className="mb-4 flex items-center justify-center gap-2 py-2 text-sm text-slate-400">
             <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
-            Setting up workspace…
+            Working…
           </div>
         ) : null}
 

@@ -11,6 +11,7 @@
   "tags": ["web", "sidebar", "dashboard", "saas", "a11y"],
   "description": "Web app shell with sidebar navigation, header, metrics row, and content panel.",
   "template_id": "web_dashboard_sidebar",
+  "figma_file_key": "TgYmEqMwrWFHBxF2kAVOaF",
   "license": "Nebulla internal template",
   "source": "ui-generation-engine/v2/selectTemplate",
   "version": "1.0.0",

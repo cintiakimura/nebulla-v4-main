@@ -275,8 +275,13 @@ export function renderTemplateModel(input: {
   tokens: DesignTokens;
   slots: SlotMap;
   figmaStatus: FigmaStatusV2;
+  /** Offline/catalog hints — drive denser card stacks when present. */
+  structureHints?: string[];
 }): V2EditorModel {
   const { template, classification, tokens, slots, figmaStatus } = input;
+  const hintJoined = (input.structureHints || []).join("\n");
+  const forceCardStack = /VERTICAL auto-layout|card|content block|list/i.test(hintJoined);
+  const cardCount = forceCardStack || classification.page_type !== "empty" ? 3 : 2;
   const nodes: Record<string, V2Node> = {};
   const root = "root-page";
   const pageTitle = slots.hero_title || slots.nav_title || "Home";
@@ -304,7 +309,7 @@ export function renderTemplateModel(input: {
     regionIds.push(renderCommonHero(nodes, tokens, slots, true));
     const list = "region-list";
     const kids: string[] = [];
-    for (let i = 1; i <= 4; i++) {
+    for (let i = 1; i <= Math.max(3, cardCount + 1); i++) {
       const title = slots[`item_${i}_title`] || `Item ${i}`;
       const meta = slots[`item_${i}_meta`] || "";
       kids.push(addCard(nodes, `item-${i}`, title, meta, tokens));
@@ -321,7 +326,7 @@ export function renderTemplateModel(input: {
     regionIds.push(renderCommonHero(nodes, tokens, slots, true));
     const metrics = "region-metrics";
     const kids: string[] = [];
-    for (let i = 1; i <= 3; i++) {
+    for (let i = 1; i <= cardCount; i++) {
       const t =
         slots[`metric_${i}_title`] ||
         slots[`card_${i}_title`] ||
@@ -334,18 +339,38 @@ export function renderTemplateModel(input: {
     }
     stackContainer(nodes, metrics, "section", kids, tokens, tokens.bg, { pad: 0 });
     regionIds.push(metrics);
-    if (slots.section_title) {
+    // Always emit a content section when structure hints ask for card stacks.
+    if (slots.section_title || forceCardStack) {
       const sec = "region-section";
-      addText(nodes, "sec-title", "text_title", slots.section_title, tokens, {
-        backgroundColor: tokens.bg,
-        color: tokens.text,
-        paddingTop: tokens.gap,
-      });
+      addText(
+        nodes,
+        "sec-title",
+        "text_title",
+        slots.section_title || "Up next",
+        tokens,
+        {
+          backgroundColor: tokens.bg,
+          color: tokens.text,
+          paddingTop: tokens.gap,
+        },
+      );
       addText(nodes, "sec-body", "text_body", slots.section_body || "", tokens, {
         backgroundColor: tokens.bg,
         color: tokens.mutedText,
       });
-      stackContainer(nodes, sec, "section", ["sec-title", "sec-body"], tokens, tokens.bg, { pad: 0 });
+      const secKids = ["sec-title", "sec-body"];
+      for (let i = 1; i <= cardCount; i++) {
+        secKids.push(
+          addCard(
+            nodes,
+            `content-${i}`,
+            slots[`card_${i}_title`] || slots[`item_${i}_title`] || `Card ${i}`,
+            slots[`card_${i}_value`] || slots[`item_${i}_meta`] || "",
+            tokens,
+          ),
+        );
+      }
+      stackContainer(nodes, sec, "section", secKids, tokens, tokens.bg, { pad: 0 });
       regionIds.push(sec);
     }
   } else if (template.id === "mobile_settings_groups" || template.id === "web_settings_two_column") {

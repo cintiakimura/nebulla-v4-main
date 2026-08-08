@@ -13,6 +13,7 @@
   "suitability": "Landing Page / marketing project types with §5 spacious or medium density.",
   "limitations": "Do not use for mobile bottom-tab apps or admin dashboards.",
   "template_id": "landing_hero_features_cta",
+  "figma_file_key": "P6lA9sHTHVbnmUfoYbV9Ir",
   "license": "Nebulla internal template",
   "source": "ui-generation-engine/v2/selectTemplate",
   "version": "1.0.0",

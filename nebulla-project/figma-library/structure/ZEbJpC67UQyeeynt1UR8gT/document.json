@@ -1,0 +1,3153 @@
+{
+  "name": "Mobile UI kit (Community) (Copy)",
+  "document": {
+    "name": "Document",
+    "type": "DOCUMENT",
+    "children": [
+      {
+        "name": "Cover",
+        "type": "CANVAS",
+        "children": [
+          {
+            "name": "Cover",
+            "type": "FRAME",
+            "children": [
+              {
+                "name": "Group 1",
+                "type": "GROUP"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Mobile UI Kit",
+        "type": "CANVAS",
+        "children": [
+          {
+            "name": "Header/Design",
+            "type": "GROUP"
+          },
+          {
+            "name": "Sign Up",
+            "type": "FRAME",
+            "children": [
+              {
+                "name": "iOS/Status Bar/Black",
+                "type": "INSTANCE",
+                "children": [
+                  {
+                    "name": "BG",
+                    "type": "GROUP"
+                  },
+                  {
+                    "name": "Right Side",
+                    "type": "GROUP",
+                    "children": [
+                      {
+                        "name": "Battery",
+                        "type": "GROUP"
+                      }
+                    ]
+                  },
+                  {
+                    "name": "Left Side",
+                    "type": "GROUP"
+                  }
+                ]
+              },
+              {
+                "name": "Page Header",
+                "type": "INSTANCE",
+                "children": [
+                  {
+                    "name": "Icon/X",
+                    "type": "GROUP"
+                  }
+                ]
+              },
+              {
+                "name": "Input/Text",
+                "type": "INSTANCE"
+              },
+              {
+                "name": "Input/Text",
+                "type": "INSTANCE"
+              },
+              {
+                "name": "Input/Text",
+                "type": "INSTANCE"
+              },
+              {
+                "name": "Checkbox Option/Empty",
+                "type": "INSTANCE",
+                "children": [
+                  {
+                    "name": "Checkbox/Empty",
+                    "type": "INSTANCE",
+                    "children": [
+                      {
+                        "name": "Icon/Checkmark",
+                        "type": "INSTANCE"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "name": "iOS/Keyboard/Light/Alphabetic",
+                "type": "INSTANCE",
+                "children": [
+                  {
+                    "name": "Background",
+                    "type": "FRAME"
+                  },
+                  {
+                    "name": "Home Indicator",
+                    "type": "FRAME"
+                  },
+                  {
+                    "name": "Keys",
+                    "type": "GROUP",
+                    "children": [
+                      {
+                        "name": "Return",
+                        "type": "FRAME"
+                      },
+                      {
+                        "name": "Space",
+                        "type": "FRAME"
+                      },
+                      {
+                        "name": "123",
+                        "type": "FRAME"
+                      },
+                      {
+                        "name": "Delete",
+                        "type": "GROUP"
+                      },
+                      {
+                        "name": "Shift",
+                        "type": "GROUP"
+                      },
+                      {
+                        "name": "M",
+                        "type": "FRAME"
+                      },
+                      {
+                        "name": "N",
+                        "type": "FRAME"
+                      },
+                      {
+                        "name": "B",
+                        "type": "FRAME"
+                      },
+                      {
+                        "name": "V",
+                        "type": "FRAME"
+                      },
+                      {
+                        "name": "C",
+                        "type": "FRAME"
+                      },
+                      {
+                        "name": "X",
+                        "type": "FRAME"
+                      },
+                      {
+                        "name": "Z",
+                        "type": "FRAME"
+                      },
+                      {
+                        "name": "L",
+                        "type": "FRAME"
+                      },
+                      {
+                        "name": "K",
+                        "type": "FRAME"
+                      },
+                      {
+                        "name": "J",
+                        "type": "FRAME"
+                      },
+                      {
+                        "name": "H",
+                        "type": "FRAME"
+                      },
+                      {
+                        "name": "G",
+                        "type": "FRAME"
+                      },
+                      {
+                        "name": "F",
+                        "type": "FRAME"
+                      },
+                      {
+                        "name": "D",
+                        "type": "FRAME"
+                      },
+                      {
+                        "name": "S",
+                        "type": "FRAME"
+                      },
+                      {
+                        "name": "A",
+                        "type": "FRAME"
+                      },
+                      {
+                        "name": "P",
+                        "type": "FRAME"
+                      },
+                      {
+                        "name": "O",
+                        "type": "FRAME"
+                      },
+                      {
+                        "name": "I",
+                        "type": "FRAME"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "name": "Button/Primary",
+                "type": "INSTANCE",
+                "layoutMode": "VERTICAL",
+                "itemSpacing": 12,
+                "cornerRadius": 100
+              }
+            ]
+          },
+          {
+            "name": "Log In",
+            "type": "FRAME",
+            "children": [
+              {
+                "name": "iOS/Status Bar/Black",
+                "type": "INSTANCE",
+                "children": [
+                  {
+                    "name": "BG",
+                    "type": "GROUP"
+                  },
+                  {
+                    "name": "Right Side",
+                    "type": "GROUP",
+                    "children": [
+                      {
+                        "name": "Battery",
+                        "type": "GROUP"
+                      }
+                    ]
+                  },
+                  {
+                    "name": "Left Side",
+                    "type": "GROUP"
+                  }
+                ]
+              },
+              {
+                "name": "Page Header",
+                "type": "INSTANCE",
+                "children": [
+                  {
+                    "name": "Icon/X",
+                    "type": "GROUP"
+                  }
+                ]
+              },
+              {
+                "name": "Input/Text",
+                "type": "INSTANCE"
+              },
+              {
+                "name": "Input/Text",
+                "type": "INSTANCE"
+              },
+              {
+                "name": "Button/Primary",
+                "type": "INSTANCE",
+                "layoutMode": "VERTICAL",
+                "itemSpacing": 12,
+                "cornerRadius": 100
+              },
+              {
+                "name": "iOS/Keyboard/Light/Alphabetic",
+                "type": "INSTANCE",
+                "children": [
+                  {
+                    "name": "Background",
+                    "type": "FRAME"
+                  },
+                  {
+                    "name": "Home Indicator",
+                    "type": "FRAME"
+                  },
+                  {
+                    "name": "Keys",
+                    "type": "GROUP",
+                    "children": [
+                      {
+                        "name": "Return",
+                        "type": "FRAME"
+                      },
+                      {
+                        "name": "Space",
+                        "type": "FRAME"
+                      },
+                      {
+                        "name": "123",
+                        "type": "FRAME"
+                      },
+                      {
+                        "name": "Delete",
+                        "type": "GROUP"
+                      },
+                      {
+                        "name": "Shift",
+                        "type": "GROUP"
+                      },
+                      {
+                        "name": "M",
+                        "type": "FRAME"
+                      },
+                      {
+                        "name": "N",
+                        "type": "FRAME"
+                      },
+                      {
+                        "name": "B",
+                        "type": "FRAME"
+                      },
+                      {
+                        "name": "V",
+                        "type": "FRAME"
+                      },
+                      {
+                        "name": "C",
+                        "type": "FRAME"
+                      },
+                      {
+                        "name": "X",
+                        "type": "FRAME"
+                      },
+                      {
+                        "name": "Z",
+                        "type": "FRAME"
+                      },
+                      {
+                        "name": "L",
+                        "type": "FRAME"
+                      },
+                      {
+                        "name": "K",
+                        "type": "FRAME"
+                      },
+                      {
+                        "name": "J",
+                        "type": "FRAME"
+                      },
+                      {
+                        "name": "H",
+                        "type": "FRAME"
+                      },
+                      {
+                        "name": "G",
+                        "type": "FRAME"
+                      },
+                      {
+                        "name": "F",
+                        "type": "FRAME"
+                      },
+                      {
+                        "name": "D",
+                        "type": "FRAME"
+                      },
+                      {
+                        "name": "S",
+                        "type": "FRAME"
+                      },
+                      {
+                        "name": "A",
+                        "type": "FRAME"
+                      },
+                      {
+                        "name": "P",
+                        "type": "FRAME"
+                      },
+                      {
+                        "name": "O",
+                        "type": "FRAME"
+                      },
+                      {
+                        "name": "I",
+                        "type": "FRAME"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "name": "Feed",
+            "type": "FRAME",
+            "children": [
+              {
+                "name": "iOS/Status Bar/Black",
+                "type": "INSTANCE",
+                "children": [
+                  {
+                    "name": "BG",
+                    "type": "GROUP"
+                  },
+                  {
+                    "name": "Right Side",
+                    "type": "GROUP",
+                    "children": [
+                      {
+                        "name": "Battery",
+                        "type": "GROUP"
+                      }
+                    ]
+                  },
+                  {
+                    "name": "Left Side",
+                    "type": "GROUP"
+                  }
+                ]
+              },
+              {
+                "name": "Page Header",
+                "type": "INSTANCE",
+                "children": [
+                  {
+                    "name": "Icon/X",
+                    "type": "GROUP"
+                  }
+                ]
+              },
+              {
+                "name": "Input/Search",
+                "type": "INSTANCE",
+                "children": [
+                  {
+                    "name": "Icon/Send",
+                    "type": "GROUP"
+                  }
+                ]
+              },
+              {
+                "name": "Content Blocks",
+                "type": "GROUP",
+                "children": [
+                  {
+                    "name": "Content/Content Block/Small",
+                    "type": "INSTANCE"
+                  },
+                  {
+                    "name": "Content/Content Block/Small",
+                    "type": "INSTANCE"
+                  },
+                  {
+                    "name": "Content/Content Block/Small",
+                    "type": "INSTANCE"
+                  },
+                  {
+                    "name": "Content/Content Block/Small",
+                    "type": "INSTANCE"
+                  }
+                ]
+              },
+              {
+                "name": "iOS/Bottom Bar/5 Tabs",
+                "type": "INSTANCE",
+                "children": [
+                  {
+                    "name": "iPhone UI",
+                    "type": "GROUP",
+                    "children": [
+                      {
+                        "name": "Home Indicator",
+                        "type": "GROUP",
+                        "cornerRadius": 100
+                      }
+                    ]
+                  },
+                  {
+                    "name": "Tabs",
+                    "type": "GROUP",
+                    "cornerRadius": 100
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "name": "Content",
+            "type": "FRAME",
+            "children": [
+              {
+                "name": "iOS/Status Bar/Black",
+                "type": "INSTANCE",
+                "children": [
+                  {
+                    "name": "BG",
+                    "type": "GROUP"
+                  },
+                  {
+                    "name": "Right Side",
+                    "type": "GROUP",
+                    "children": [
+                      {
+                        "name": "Battery",
+                        "type": "GROUP"
+                      }
+                    ]
+                  },
+                  {
+                    "name": "Left Side",
+                    "type": "GROUP"
+                  }
+                ]
+              },
+              {
+                "name": "Page Header",
+                "type": "INSTANCE",
+                "children": [
+                  {
+                    "name": "Icon/X",
+                    "type": "GROUP"
+                  }
+                ]
+              },
+              {
+                "name": "Input/Search",
+                "type": "INSTANCE",
+                "children": [
+                  {
+                    "name": "Icon/Send",
+                    "type": "GROUP"
+                  }
+                ]
+              },
+              {
+                "name": "Content Blocks",
+                "type": "FRAME",
+                "layoutMode": "VERTICAL",
+                "itemSpacing": 16,
+                "children": [
+                  {
+                    "name": "Content/Content Block/Large",
+                    "type": "INSTANCE",
+                    "layoutMode": "VERTICAL",
+                    "itemSpacing": 8,
+                    "children": [
+                      {
+                        "name": "Text + Time",
+                        "type": "FRAME",
+                        "layoutMode": "VERTICAL",
+                        "itemSpacing": 8
+                      }
+                    ]
+                  },
+                  {
+                    "name": "Content/Content Block/Large",
+                    "type": "INSTANCE",
+                    "layoutMode": "VERTICAL",
+                    "itemSpacing": 8,
+                    "children": [
+                      {
+                        "name": "Text + Time",
+                        "type": "FRAME",
+                        "layoutMode": "VERTICAL",
+                        "itemSpacing": 8
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "name": "iOS/Bottom Bar/5 Tabs",
+                "type": "INSTANCE",
+                "children": [
+                  {
+                    "name": "iPhone UI",
+                    "type": "GROUP",
+                    "children": [
+                      {
+                        "name": "Home Indicator",
+                        "type": "GROUP",
+                        "cornerRadius": 100
+                      }
+                    ]
+                  },
+                  {
+                    "name": "Tabs",
+                    "type": "GROUP",
+                    "cornerRadius": 100
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "name": "Market",
+            "type": "FRAME",
+            "children": [
+              {
+                "name": "iOS/Status Bar/Black",
+                "type": "INSTANCE",
+                "children": [
+                  {
+                    "name": "BG",
+                    "type": "GROUP"
+                  },
+                  {
+                    "name": "Right Side",
+                    "type": "GROUP",
+                    "children": [
+                      {
+                        "name": "Battery",
+                        "type": "GROUP"
+                      }
+                    ]
+                  },
+                  {
+                    "name": "Left Side",
+                    "type": "GROUP"
+                  }
+                ]
+              },
+              {
+                "name": "Page Header",
+                "type": "INSTANCE",
+                "children": [
+                  {
+                    "name": "Icon/X",
+                    "type": "GROUP"
+                  }
+                ]
+              },
+              {
+                "name": "Input/Search",
+                "type": "INSTANCE",
+                "children": [
+                  {
+                    "name": "Icon/Send",
+                    "type": "GROUP"
+                  }
+                ]
+              },
+              {
+                "name": "Section/Hot Deals",
+                "type": "GROUP",
+                "children": [
+                  {
+                    "name": "Content/Market Block",
+                    "type": "INSTANCE"
+                  },
+                  {
+                    "name": "Content/Market Block",
+                    "type": "INSTANCE"
+                  },
+                  {
+                    "name": "Content/Market Block",
+                    "type": "INSTANCE"
+                  },
+                  {
+                    "name": "Content/Market Block",
+                    "type": "INSTANCE"
+                  }
+                ]
+              },
+              {
+                "name": "Section/Trending",
+                "type": "GROUP",
+                "children": [
+                  {
+                    "name": "Content/Market Block",
+                    "type": "INSTANCE"
+                  },
+                  {
+                    "name": "Content/Market Block",
+                    "type": "INSTANCE"
+                  },
+                  {
+                    "name": "Content/Market Block",
+                    "type": "INSTANCE"
+                  },
+                  {
+                    "name": "Content/Market Block",
+                    "type": "INSTANCE"
+                  }
+                ]
+              },
+              {
+                "name": "Section/Deals",
+                "type": "GROUP",
+                "children": [
+                  {
+                    "name": "Content/Market Block",
+                    "type": "INSTANCE"
+                  },
+                  {
+                    "name": "Content/Market Block",
+                    "type": "INSTANCE"
+                  },
+                  {
+                    "name": "Content/Market Block",
+                    "type": "INSTANCE"
+                  }
+                ]
+              },
+              {
+                "name": "iOS/Bottom Bar/5 Tabs",
+                "type": "INSTANCE",
+                "children": [
+                  {
+                    "name": "iPhone UI",
+                    "type": "GROUP",
+                    "children": [
+                      {
+                        "name": "Home Indicator",
+                        "type": "GROUP",
+                        "cornerRadius": 100
+                      }
+                    ]
+                  },
+                  {
+                    "name": "Tabs",
+                    "type": "GROUP",
+                    "cornerRadius": 100
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "name": "Congratulations",
+            "type": "FRAME",
+            "children": [
+              {
+                "name": "iOS/Status Bar/White",
+                "type": "INSTANCE",
+                "children": [
+                  {
+                    "name": "iOS/Status Bar/Black",
+                    "type": "INSTANCE",
+                    "children": [
+                      {
+                        "name": "BG",
+                        "type": "GROUP"
+                      },
+                      {
+                        "name": "Right Side",
+                        "type": "GROUP"
+                      },
+                      {
+                        "name": "Left Side",
+                        "type": "GROUP"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "name": "Popup",
+                "type": "GROUP",
+                "children": [
+                  {
+                    "name": "Button/Primary",
+                    "type": "INSTANCE",
+                    "layoutMode": "VERTICAL",
+                    "itemSpacing": 12,
+                    "cornerRadius": 100
+                  },
+                  {
+                    "name": "Text",
+                    "type": "GROUP"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "name": "Search",
+            "type": "FRAME",
+            "children": [
+              {
+                "name": "iOS/Status Bar/Black",
+                "type": "INSTANCE",
+                "children": [
+                  {
+                    "name": "BG",
+                    "type": "GROUP"
+                  },
+                  {
+                    "name": "Right Side",
+                    "type": "GROUP",
+                    "children": [
+                      {
+                        "name": "Battery",
+                        "type": "GROUP"
+                      }
+                    ]
+                  },
+                  {
+                    "name": "Left Side",
+                    "type": "GROUP"
+                  }
+                ]
+              },
+              {
+                "name": "Page Header",
+                "type": "INSTANCE",
+                "children": [
+                  {
+                    "name": "Icon/X",
+                    "type": "GROUP"
+                  }
+                ]
+              },
+              {
+                "name": "Input/Search",
+                "type": "INSTANCE",
+                "children": [
+                  {
+                    "name": "Icon/Send",
+                    "type": "GROUP"
+                  }
+                ]
+              },
+              {
+                "name": "Content/Search Result",
+                "type": "INSTANCE"
+              },
+              {
+                "name": "Content/Search Result",
+                "type": "INSTANCE"
+              },
+              {
+                "name": "Content/Search Result",
+                "type": "INSTANCE"
+              },
+              {
+                "name": "Content/Search Result",
+                "type": "INSTANCE"
+              },
+              {
+                "name": "Content/Search Result",
+                "type": "INSTANCE"
+              },
+              {
+                "name": "Content/Search Result",
+                "type": "INSTANCE"
+              },
+              {
+                "name": "iOS/Bottom Bar/5 Tabs",
+                "type": "INSTANCE",
+                "children": [
+                  {
+                    "name": "iPhone UI",
+                    "type": "GROUP",
+                    "children": [
+                      {
+                        "name": "Home Indicator",
+                        "type": "GROUP",
+                        "cornerRadius": 100
+                      }
+                    ]
+                  },
+                  {
+                    "name": "Tabs",
+                    "type": "GROUP",
+                    "cornerRadius": 100
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "name": "Blog Post",
+            "type": "FRAME",
+            "children": [
+              {
+                "name": "iOS/Status Bar/Black",
+                "type": "INSTANCE",
+                "children": [
+                  {
+                    "name": "BG",
+                    "type": "GROUP"
+                  },
+                  {
+                    "name": "Right Side",
+                    "type": "GROUP",
+                    "children": [
+                      {
+                        "name": "Battery",
+                        "type": "GROUP"
+                      }
+                    ]
+                  },
+                  {
+                    "name": "Left Side",
+                    "type": "GROUP"
+                  }
+                ]
+              },
+              {
+                "name": "Post Title + Text",
+                "type": "GROUP"
+              },
+              {
+                "name": "iOS/Bottom Bar/5 Tabs",
+                "type": "INSTANCE",
+                "children": [
+                  {
+                    "name": "iPhone UI",
+                    "type": "GROUP",
+                    "children": [
+                      {
+                        "name": "Home Indicator",
+                        "type": "GROUP",
+                        "cornerRadius": 100
+                      }
+                    ]
+                  },
+                  {
+                    "name": "Tabs",
+                    "type": "GROUP",
+                    "cornerRadius": 100
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "name": "Expenses",
+            "type": "FRAME",
+            "children": [
+              {
+                "name": "iOS/Status Bar/Black",
+                "type": "INSTANCE",
+                "children": [
+                  {
+                    "name": "BG",
+                    "type": "GROUP"
+                  },
+                  {
+                    "name": "Right Side",
+                    "type": "GROUP",
+                    "children": [
+                      {
+                        "name": "Battery",
+                        "type": "GROUP"
+                      }
+                    ]
+                  },
+                  {
+                    "name": "Left Side",
+                    "type": "GROUP"
+                  }
+                ]
+              },
+              {
+                "name": "Page Header",
+                "type": "INSTANCE",
+                "children": [
+                  {
+                    "name": "Icon/X",
+                    "type": "GROUP"
+                  }
+                ]
+              },
+              {
+                "name": "Data/Mobile Graph",
+                "type": "INSTANCE",
+                "children": [
+                  {
+                    "name": "Bars",
+                    "type": "GROUP",
+                    "children": [
+                      {
+                        "name": "Bar Line",
+                        "type": "GROUP"
+                      },
+                      {
+                        "name": "Bar Line",
+                        "type": "GROUP"
+                      },
+                      {
+                        "name": "Bar Line",
+                        "type": "GROUP"
+                      },
+                      {
+                        "name": "Bar Line",
+                        "type": "GROUP"
+                      },
+                      {
+                        "name": "Bar Line",
+                        "type": "GROUP"
+                      },
+                      {
+                        "name": "Bar Line",
+                        "type": "GROUP"
+                      },
+                      {
+                        "name": "Bar Line",
+                        "type": "GROUP"
+                      },
+                      {
+                        "name": "Bar Line",
+                        "type": "GROUP"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "name": "Data List",
+                "type": "GROUP",
+                "children": [
+                  {
+                    "name": "Data/Graph Result",
+                    "type": "INSTANCE"
+                  },
+                  {
+                    "name": "Data/Graph Result",
+                    "type": "INSTANCE"
+                  },
+                  {
+                    "name": "Data/Graph Result",
+                    "type": "INSTANCE"
+                  },
+                  {
+                    "name": "Data/Graph Result",
+                    "type": "INSTANCE"
+                  },
+                  {
+                    "name": "Data/Graph Result",
+                    "type": "INSTANCE"
+                  },
+                  {
+                    "name": "Data/Graph Result",
+                    "type": "INSTANCE"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "name": "Calendar",
+            "type": "FRAME",
+            "children": [
+              {
+                "name": "Calendar",
+                "type": "GROUP",
+                "children": [
+                  {
+                    "name": "Days of Week",
+                    "type": "GROUP"
+                  },
+                  {
+                    "name": "Calendar/Row 01",
+                    "type": "GROUP"
+                  },
+                  {
+                    "name": "Calendar/Row 02",
+                    "type": "GROUP"
+                  },
+                  {
+                    "name": "Calendar/Row 03",
+                    "type": "GROUP"
+                  },
+                  {
+                    "name": "Calendar/Row 04",
+                    "type": "GROUP"
+                  },
+                  {
+                    "name": "Calendar/Row 05",
+                    "type": "GROUP"
+                  },
+                  {
+                    "name": "Calendar Items",
+                    "type": "GROUP",
+                    "children": [
+                      {
+                        "name": "Data/Graph Result",
+                        "type": "INSTANCE"
+                      },
+                      {
+                        "name": "Data/Graph Result",
+                        "type": "INSTANCE"
+                      },
+                      {
+                        "name": "Data/Graph Result",
+                        "type": "INSTANCE"
+                      },
+                      {
+                        "name": "Data/Graph Result",
+                        "type": "INSTANCE"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "name": "iOS/Status Bar/White",
+                "type": "INSTANCE",
+                "children": [
+                  {
+                    "name": "iOS/Status Bar/Black",
+                    "type": "INSTANCE",
+                    "children": [
+                      {
+                        "name": "BG",
+                        "type": "GROUP"
+                      },
+                      {
+                        "name": "Right Side",
+                        "type": "GROUP"
+                      },
+                      {
+                        "name": "Left Side",
+                        "type": "GROUP"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "name": "Page Header",
+                "type": "INSTANCE",
+                "children": [
+                  {
+                    "name": "Icon/X",
+                    "type": "GROUP"
+                  }
+                ]
+              },
+              {
+                "name": "iOS/Bottom Bar/5 Tabs",
+                "type": "INSTANCE",
+                "children": [
+                  {
+                    "name": "iPhone UI",
+                    "type": "GROUP",
+                    "children": [
+                      {
+                        "name": "Home Indicator",
+                        "type": "GROUP",
+                        "cornerRadius": 100
+                      }
+                    ]
+                  },
+                  {
+                    "name": "Tabs",
+                    "type": "GROUP",
+                    "cornerRadius": 100
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "name": "Profile/Posts",
+            "type": "FRAME",
+            "children": [
+              {
+                "name": "iOS/Status Bar/White",
+                "type": "INSTANCE",
+                "children": [
+                  {
+                    "name": "iOS/Status Bar/Black",
+                    "type": "INSTANCE",
+                    "children": [
+                      {
+                        "name": "BG",
+                        "type": "GROUP"
+                      },
+                      {
+                        "name": "Right Side",
+                        "type": "GROUP"
+                      },
+                      {
+                        "name": "Left Side",
+                        "type": "GROUP"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "name": "Page Header",
+                "type": "INSTANCE",
+                "children": [
+                  {
+                    "name": "Icon/X",
+                    "type": "GROUP"
+                  }
+                ]
+              },
+              {
+                "name": "Name + Bio",
+                "type": "GROUP"
+              },
+              {
+                "name": "Segmented Control/Left",
+                "type": "INSTANCE",
+                "children": [
+                  {
+                    "name": "Segmented Control/Structure",
+                    "type": "INSTANCE",
+                    "children": [
+                      {
+                        "name": "Left Selected",
+                        "type": "GROUP",
+                        "cornerRadius": 100
+                      },
+                      {
+                        "name": "Right Selected",
+                        "type": "GROUP",
+                        "cornerRadius": 100
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "name": "Content/Content Block/Small",
+                "type": "INSTANCE"
+              },
+              {
+                "name": "Content/Content Block/Small",
+                "type": "INSTANCE"
+              },
+              {
+                "name": "Content/Content Block/Small",
+                "type": "INSTANCE"
+              },
+              {
+                "name": "Content/Content Block/Small",
+                "type": "INSTANCE"
+              },
+              {
+                "name": "iOS/Bottom Bar/5 Tabs",
+                "type": "INSTANCE",
+                "children": [
+                  {
+                    "name": "iPhone UI",
+                    "type": "GROUP",
+                    "children": [
+                      {
+                        "name": "Home Indicator",
+                        "type": "GROUP",
+                        "cornerRadius": 100
+                      }
+                    ]
+                  },
+                  {
+                    "name": "Tabs",
+                    "type": "GROUP",
+                    "cornerRadius": 100
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "name": "Profile/Posts",
+            "type": "FRAME",
+            "children": [
+              {
+                "name": "iOS/Status Bar/White",
+                "type": "INSTANCE",
+                "children": [
+                  {
+                    "name": "iOS/Status Bar/Black",
+                    "type": "INSTANCE",
+                    "children": [
+                      {
+                        "name": "BG",
+                        "type": "GROUP"
+                      },
+                      {
+                        "name": "Right Side",
+                        "type": "GROUP"
+                      },
+                      {
+                        "name": "Left Side",
+                        "type": "GROUP"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "name": "Page Header",
+                "type": "INSTANCE",
+                "children": [
+                  {
+                    "name": "Icon/X",
+                    "type": "GROUP"
+                  }
+                ]
+              },
+              {
+                "name": "Name + Bio",
+                "type": "GROUP"
+              },
+              {
+                "name": "Segmented Control/Left",
+                "type": "INSTANCE",
+                "children": [
+                  {
+                    "name": "Segmented Control/Structure",
+                    "type": "INSTANCE",
+                    "children": [
+                      {
+                        "name": "Left Selected",
+                        "type": "GROUP",
+                        "cornerRadius": 100
+                      },
+                      {
+                        "name": "Right Selected",
+                        "type": "GROUP",
+                        "cornerRadius": 100
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "name": "Content/Content Block/Small",
+                "type": "INSTANCE"
+              },
+              {
+                "name": "Content/Content Block/Small",
+                "type": "INSTANCE"
+              },
+              {
+                "name": "Content/Content Block/Small",
+                "type": "INSTANCE"
+              },
+              {
+                "name": "Content/Content Block/Small",
+                "type": "INSTANCE"
+              },
+              {
+                "name": "iOS/Bottom Bar/5 Tabs",
+                "type": "INSTANCE",
+                "children": [
+                  {
+                    "name": "iPhone UI",
+                    "type": "GROUP",
+                    "children": [
+                      {
+                        "name": "Home Indicator",
+                        "type": "GROUP",
+                        "cornerRadius": 100
+                      }
+                    ]
+                  },
+                  {
+                    "name": "Tabs",
+                    "type": "GROUP",
+                    "cornerRadius": 100
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "name": "Profile/Posts",
+            "type": "FRAME",
+            "children": [
+              {
+                "name": "Name + Bio",
+                "type": "GROUP"
+              },
+              {
+                "name": "Segmented Control/Right",
+                "type": "INSTANCE",
+                "children": [
+                  {
+                    "name": "Segmented Control/Structure",
+                    "type": "INSTANCE",
+                    "children": [
+                      {
+                        "name": "Left Selected",
+                        "type": "GROUP",
+                        "cornerRadius": 100
+                      },
+                      {
+                        "name": "Right Selected",
+                        "type": "GROUP",
+                        "cornerRadius": 100
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "name": "Scroll Container",
+                "type": "FRAME",
+                "children": [
+                  {
+                    "name": "Content/Content Block/Large",
+                    "type": "INSTANCE",
+                    "layoutMode": "VERTICAL",
+                    "itemSpacing": 8,
+                    "children": [
+                      {
+                        "name": "Text + Time",
+                        "type": "FRAME",
+                        "layoutMode": "VERTICAL",
+                        "itemSpacing": 8
+                      }
+                    ]
+                  },
+                  {
+                    "name": "Content/Content Block/Large",
+                    "type": "INSTANCE",
+                    "layoutMode": "VERTICAL",
+                    "itemSpacing": 8,
+                    "children": [
+                      {
+                        "name": "Text + Time",
+                        "type": "FRAME",
+                        "layoutMode": "VERTICAL",
+                        "itemSpacing": 8
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "name": "iOS/Bottom Bar/5 Tabs",
+                "type": "INSTANCE",
+                "children": [
+                  {
+                    "name": "iPhone UI",
+                    "type": "GROUP",
+                    "children": [
+                      {
+                        "name": "Home Indicator",
+                        "type": "GROUP",
+                        "cornerRadius": 100
+                      }
+                    ]
+                  },
+                  {
+                    "name": "Tabs",
+                    "type": "GROUP",
+                    "cornerRadius": 100
+                  }
+                ]
+              },
+              {
+                "name": "iOS/Status Bar/White",
+                "type": "INSTANCE",
+                "children": [
+                  {
+                    "name": "iOS/Status Bar/Black",
+                    "type": "INSTANCE",
+                    "children": [
+                      {
+                        "name": "BG",
+                        "type": "GROUP"
+                      },
+                      {
+                        "name": "Right Side",
+                        "type": "GROUP"
+                      },
+                      {
+                        "name": "Left Side",
+                        "type": "GROUP"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "name": "Page Header",
+                "type": "INSTANCE",
+                "children": [
+                  {
+                    "name": "Icon/X",
+                    "type": "GROUP"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "name": "Profile/Photos",
+            "type": "FRAME",
+            "children": [
+              {
+                "name": "iOS/Status Bar/White",
+                "type": "INSTANCE",
+                "children": [
+                  {
+                    "name": "iOS/Status Bar/Black",
+                    "type": "INSTANCE",
+                    "children": [
+                      {
+                        "name": "BG",
+                        "type": "GROUP"
+                      },
+                      {
+                        "name": "Right Side",
+                        "type": "GROUP"
+                      },
+                      {
+                        "name": "Left Side",
+                        "type": "GROUP"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "name": "Page Header",
+                "type": "INSTANCE",
+                "children": [
+                  {
+                    "name": "Icon/X",
+                    "type": "GROUP"
+                  }
+                ]
+              },
+              {
+                "name": "Name + Bio",
+                "type": "GROUP"
+              },
+              {
+                "name": "Segmented Control/Right",
+                "type": "INSTANCE",
+                "children": [
+                  {
+                    "name": "Segmented Control/Structure",
+                    "type": "INSTANCE",
+                    "children": [
+                      {
+                        "name": "Left Selected",
+                        "type": "GROUP",
+                        "cornerRadius": 100
+                      },
+                      {
+                        "name": "Right Selected",
+                        "type": "GROUP",
+                        "cornerRadius": 100
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "name": "Content/Content Block/Large",
+                "type": "INSTANCE",
+                "layoutMode": "VERTICAL",
+                "itemSpacing": 8,
+                "children": [
+                  {
+                    "name": "Text + Time",
+                    "type": "FRAME",
+                    "layoutMode": "VERTICAL",
+                    "itemSpacing": 8,
+                    "children": [
+                      {
+                        "name": "Pagination",
+                        "type": "GROUP"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "name": "Content/Content Block/Large",
+                "type": "INSTANCE",
+                "layoutMode": "VERTICAL",
+                "itemSpacing": 8,
+                "children": [
+                  {
+                    "name": "Text + Time",
+                    "type": "FRAME",
+                    "layoutMode": "VERTICAL",
+                    "itemSpacing": 8,
+                    "children": [
+                      {
+                        "name": "Pagination",
+                        "type": "GROUP"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "name": "iOS/Bottom Bar/5 Tabs",
+                "type": "INSTANCE",
+                "children": [
+                  {
+                    "name": "iPhone UI",
+                    "type": "GROUP",
+                    "children": [
+                      {
+                        "name": "Home Indicator",
+                        "type": "GROUP",
+                        "cornerRadius": 100
+                      }
+                    ]
+                  },
+                  {
+                    "name": "Tabs",
+                    "type": "GROUP",
+                    "cornerRadius": 100
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "name": "Market",
+            "type": "FRAME",
+            "children": [
+              {
+                "name": "iOS/Status Bar/Black",
+                "type": "INSTANCE",
+                "children": [
+                  {
+                    "name": "BG",
+                    "type": "GROUP"
+                  },
+                  {
+                    "name": "Right Side",
+                    "type": "GROUP",
+                    "children": [
+                      {
+                        "name": "Battery",
+                        "type": "GROUP"
+                      }
+                    ]
+                  },
+                  {
+                    "name": "Left Side",
+                    "type": "GROUP"
+                  }
+                ]
+              },
+              {
+                "name": "Page Header",
+                "type": "INSTANCE",
+                "children": [
+                  {
+                    "name": "Icon/X",
+                    "type": "GROUP"
+                  }
+                ]
+              },
+              {
+                "name": "Input/Search",
+                "type": "INSTANCE",
+                "children": [
+                  {
+                    "name": "Icon/Send",
+                    "type": "GROUP"
+                  }
+                ]
+              },
+              {
+                "name": "iOS/Bottom Bar/5 Tabs",
+                "type": "INSTANCE",
+                "children": [
+                  {
+                    "name": "iPhone UI",
+                    "type": "GROUP",
+                    "children": [
+                      {
+                        "name": "Home Indicator",
+                        "type": "GROUP",
+                        "cornerRadius": 100
+                      }
+                    ]
+                  },
+                  {
+                    "name": "Tabs",
+                    "type": "GROUP",
+                    "cornerRadius": 100
+                  }
+                ]
+              },
+              {
+                "name": "Message/Receive",
+                "type": "INSTANCE"
+              },
+              {
+                "name": "Message/Receive",
+                "type": "INSTANCE"
+              },
+              {
+                "name": "Message/Send",
+                "type": "INSTANCE"
+              },
+              {
+                "name": "Message/Send",
+                "type": "INSTANCE"
+              }
+            ]
+          },
+          {
+            "name": "Rating",
+            "type": "FRAME",
+            "children": [
+              {
+                "name": "iOS/Status Bar/White",
+                "type": "INSTANCE",
+                "children": [
+                  {
+                    "name": "iOS/Status Bar/Black",
+                    "type": "INSTANCE",
+                    "children": [
+                      {
+                        "name": "BG",
+                        "type": "GROUP"
+                      },
+                      {
+                        "name": "Right Side",
+                        "type": "GROUP"
+                      },
+                      {
+                        "name": "Left Side",
+                        "type": "GROUP"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "name": "Popup",
+                "type": "GROUP",
+                "children": [
+                  {
+                    "name": "Group 18",
+                    "type": "GROUP"
+                  },
+                  {
+                    "name": "Button/Primary",
+                    "type": "INSTANCE",
+                    "layoutMode": "VERTICAL",
+                    "itemSpacing": 12,
+                    "cornerRadius": 100
+                  },
+                  {
+                    "name": "Text",
+                    "type": "GROUP"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "name": "Radios",
+            "type": "FRAME",
+            "children": [
+              {
+                "name": "iOS/Status Bar/Black",
+                "type": "INSTANCE",
+                "children": [
+                  {
+                    "name": "BG",
+                    "type": "GROUP"
+                  },
+                  {
+                    "name": "Right Side",
+                    "type": "GROUP",
+                    "children": [
+                      {
+                        "name": "Battery",
+                        "type": "GROUP"
+                      }
+                    ]
+                  },
+                  {
+                    "name": "Left Side",
+                    "type": "GROUP"
+                  }
+                ]
+              },
+              {
+                "name": "Page Header",
+                "type": "INSTANCE",
+                "children": [
+                  {
+                    "name": "Icon/X",
+                    "type": "GROUP"
+                  }
+                ]
+              },
+              {
+                "name": "iOS/Bottom Bar/5 Tabs",
+                "type": "INSTANCE",
+                "children": [
+                  {
+                    "name": "iPhone UI",
+                    "type": "GROUP",
+                    "children": [
+                      {
+                        "name": "Home Indicator",
+                        "type": "GROUP",
+                        "cornerRadius": 100
+                      }
+                    ]
+                  },
+                  {
+                    "name": "Tabs",
+                    "type": "GROUP",
+                    "cornerRadius": 100
+                  }
+                ]
+              },
+              {
+                "name": "Radio/Selected",
+                "type": "INSTANCE",
+                "children": [
+                  {
+                    "name": "Radio",
+                    "type": "GROUP"
+                  }
+                ]
+              },
+              {
+                "name": "Radio/Unselected",
+                "type": "INSTANCE"
+              },
+              {
+                "name": "Radio/Selected",
+                "type": "INSTANCE",
+                "children": [
+                  {
+                    "name": "Radio",
+                    "type": "GROUP"
+                  }
+                ]
+              },
+              {
+                "name": "Radio/Unselected",
+                "type": "INSTANCE"
+              },
+              {
+                "name": "Radio/Unselected",
+                "type": "INSTANCE"
+              },
+              {
+                "name": "Radio/Selected",
+                "type": "INSTANCE",
+                "children": [
+                  {
+                    "name": "Radio",
+                    "type": "GROUP"
+                  }
+                ]
+              },
+              {
+                "name": "Button/Primary",
+                "type": "INSTANCE",
+                "layoutMode": "VERTICAL",
+                "itemSpacing": 12,
+                "cornerRadius": 100
+              }
+            ]
+          },
+          {
+            "name": "Drawer",
+            "type": "FRAME",
+            "children": [
+              {
+                "name": "Profile Photo",
+                "type": "GROUP"
+              },
+              {
+                "name": "Page Header",
+                "type": "INSTANCE",
+                "children": [
+                  {
+                    "name": "Icon/X",
+                    "type": "GROUP"
+                  }
+                ]
+              },
+              {
+                "name": "Name + Bio",
+                "type": "GROUP"
+              },
+              {
+                "name": "Segmented Control/Right",
+                "type": "INSTANCE",
+                "children": [
+                  {
+                    "name": "Segmented Control/Structure",
+                    "type": "INSTANCE",
+                    "children": [
+                      {
+                        "name": "Left Selected",
+                        "type": "GROUP",
+                        "cornerRadius": 100
+                      },
+                      {
+                        "name": "Right Selected",
+                        "type": "GROUP",
+                        "cornerRadius": 100
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "name": "Content/Content Block/Large",
+                "type": "INSTANCE",
+                "layoutMode": "VERTICAL",
+                "itemSpacing": 8,
+                "children": [
+                  {
+                    "name": "Text + Time",
+                    "type": "FRAME",
+                    "layoutMode": "VERTICAL",
+                    "itemSpacing": 8,
+                    "children": [
+                      {
+                        "name": "Pagination",
+                        "type": "GROUP"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "name": "Content/Content Block/Large",
+                "type": "INSTANCE",
+                "layoutMode": "VERTICAL",
+                "itemSpacing": 8,
+                "children": [
+                  {
+                    "name": "Text + Time",
+                    "type": "FRAME",
+                    "layoutMode": "VERTICAL",
+                    "itemSpacing": 8,
+                    "children": [
+                      {
+                        "name": "Pagination",
+                        "type": "GROUP"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "name": "iOS/Status Bar/White",
+                "type": "INSTANCE",
+                "children": [
+                  {
+                    "name": "iOS/Status Bar/Black",
+                    "type": "INSTANCE",
+                    "children": [
+                      {
+                        "name": "BG",
+                        "type": "GROUP"
+                      },
+                      {
+                        "name": "Right Side",
+                        "type": "GROUP"
+                      },
+                      {
+                        "name": "Left Side",
+                        "type": "GROUP"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "name": "Bottom Drawer",
+                "type": "GROUP",
+                "children": [
+                  {
+                    "name": "Actions",
+                    "type": "GROUP",
+                    "cornerRadius": 100,
+                    "children": [
+                      {
+                        "name": "Button/Primary",
+                        "type": "INSTANCE",
+                        "layoutMode": "VERTICAL",
+                        "itemSpacing": 12,
+                        "cornerRadius": 100
+                      }
+                    ]
+                  },
+                  {
+                    "name": "Text",
+                    "type": "GROUP"
+                  },
+                  {
+                    "name": "Header Elements",
+                    "type": "GROUP",
+                    "cornerRadius": 100
+                  }
+                ]
+              },
+              {
+                "name": "iOS/Bottom Bar/5 Tabs",
+                "type": "INSTANCE",
+                "children": [
+                  {
+                    "name": "iPhone UI",
+                    "type": "GROUP",
+                    "cornerRadius": 100,
+                    "children": [
+                      {
+                        "name": "Home Indicator",
+                        "type": "GROUP",
+                        "cornerRadius": 100
+                      }
+                    ]
+                  },
+                  {
+                    "name": "Tabs",
+                    "type": "GROUP",
+                    "cornerRadius": 100
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "name": "Compose",
+            "type": "FRAME",
+            "children": [
+              {
+                "name": "iOS/Status Bar/Black",
+                "type": "INSTANCE",
+                "children": [
+                  {
+                    "name": "BG",
+                    "type": "GROUP"
+                  },
+                  {
+                    "name": "Right Side",
+                    "type": "GROUP",
+                    "children": [
+                      {
+                        "name": "Battery",
+                        "type": "GROUP"
+                      }
+                    ]
+                  },
+                  {
+                    "name": "Left Side",
+                    "type": "GROUP"
+                  }
+                ]
+              },
+              {
+                "name": "Page Header",
+                "type": "INSTANCE",
+                "children": [
+                  {
+                    "name": "Icon/X",
+                    "type": "GROUP"
+                  }
+                ]
+              },
+              {
+                "name": "Button/Primary",
+                "type": "INSTANCE",
+                "layoutMode": "VERTICAL",
+                "itemSpacing": 12,
+                "cornerRadius": 100
+              },
+              {
+                "name": "iOS/Keyboard/Light/Alphabetic",
+                "type": "INSTANCE",
+                "children": [
+                  {
+                    "name": "Background",
+                    "type": "FRAME"
+                  },
+                  {
+                    "name": "Home Indicator",
+                    "type": "FRAME"
+                  },
+                  {
+                    "name": "Keys",
+                    "type": "GROUP",
+                    "children": [
+                      {
+                        "name": "Return",
+                        "type": "FRAME"
+                      },
+                      {
+                        "name": "Space",
+                        "type": "FRAME"
+                      },
+                      {
+                        "name": "123",
+                        "type": "FRAME"
+                      },
+                      {
+                        "name": "Delete",
+                        "type": "GROUP"
+                      },
+                      {
+                        "name": "Shift",
+                        "type": "GROUP"
+                      },
+                      {
+                        "name": "M",
+                        "type": "FRAME"
+                      },
+                      {
+                        "name": "N",
+                        "type": "FRAME"
+                      },
+                      {
+                        "name": "B",
+                        "type": "FRAME"
+                      },
+                      {
+                        "name": "V",
+                        "type": "FRAME"
+                      },
+                      {
+                        "name": "C",
+                        "type": "FRAME"
+                      },
+                      {
+                        "name": "X",
+                        "type": "FRAME"
+                      },
+                      {
+                        "name": "Z",
+                        "type": "FRAME"
+                      },
+                      {
+                        "name": "L",
+                        "type": "FRAME"
+                      },
+                      {
+                        "name": "K",
+                        "type": "FRAME"
+                      },
+                      {
+                        "name": "J",
+                        "type": "FRAME"
+                      },
+                      {
+                        "name": "H",
+                        "type": "FRAME"
+                      },
+                      {
+                        "name": "G",
+                        "type": "FRAME"
+                      },
+                      {
+                        "name": "F",
+                        "type": "FRAME"
+                      },
+                      {
+                        "name": "D",
+                        "type": "FRAME"
+                      },
+                      {
+                        "name": "S",
+                        "type": "FRAME"
+                      },
+                      {
+                        "name": "A",
+                        "type": "FRAME"
+                      },
+                      {
+                        "name": "P",
+                        "type": "FRAME"
+                      },
+                      {
+                        "name": "O",
+                        "type": "FRAME"
+                      },
+                      {
+                        "name": "I",
+                        "type": "FRAME"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "name": "Images",
+            "type": "FRAME",
+            "children": [
+              {
+                "name": "iOS/Status Bar/Black",
+                "type": "INSTANCE",
+                "children": [
+                  {
+                    "name": "BG",
+                    "type": "GROUP"
+                  },
+                  {
+                    "name": "Right Side",
+                    "type": "GROUP",
+                    "children": [
+                      {
+                        "name": "Battery",
+                        "type": "GROUP"
+                      }
+                    ]
+                  },
+                  {
+                    "name": "Left Side",
+                    "type": "GROUP"
+                  }
+                ]
+              },
+              {
+                "name": "Page Header",
+                "type": "INSTANCE",
+                "children": [
+                  {
+                    "name": "Icon/X",
+                    "type": "GROUP"
+                  }
+                ]
+              },
+              {
+                "name": "Image Blocks",
+                "type": "GROUP",
+                "cornerRadius": 8
+              },
+              {
+                "name": "iOS/Bottom Bar/5 Tabs",
+                "type": "INSTANCE",
+                "children": [
+                  {
+                    "name": "iPhone UI",
+                    "type": "GROUP",
+                    "children": [
+                      {
+                        "name": "Home Indicator",
+                        "type": "GROUP",
+                        "cornerRadius": 100
+                      }
+                    ]
+                  },
+                  {
+                    "name": "Tabs",
+                    "type": "GROUP",
+                    "cornerRadius": 100
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "name": "Images",
+            "type": "FRAME",
+            "children": [
+              {
+                "name": "Image Blocks",
+                "type": "FRAME"
+              },
+              {
+                "name": "iOS/Bottom Bar/5 Tabs",
+                "type": "INSTANCE",
+                "children": [
+                  {
+                    "name": "iPhone UI",
+                    "type": "GROUP",
+                    "children": [
+                      {
+                        "name": "Home Indicator",
+                        "type": "GROUP",
+                        "cornerRadius": 100
+                      }
+                    ]
+                  },
+                  {
+                    "name": "Tabs",
+                    "type": "GROUP",
+                    "cornerRadius": 100
+                  }
+                ]
+              },
+              {
+                "name": "iOS/Status Bar/Black",
+                "type": "INSTANCE",
+                "children": [
+                  {
+                    "name": "BG",
+                    "type": "GROUP"
+                  },
+                  {
+                    "name": "Right Side",
+                    "type": "GROUP",
+                    "children": [
+                      {
+                        "name": "Battery",
+                        "type": "GROUP"
+                      }
+                    ]
+                  },
+                  {
+                    "name": "Left Side",
+                    "type": "GROUP"
+                  }
+                ]
+              },
+              {
+                "name": "Page Header",
+                "type": "INSTANCE",
+                "children": [
+                  {
+                    "name": "Icon/X",
+                    "type": "GROUP"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "name": "Insights",
+            "type": "FRAME",
+            "children": [
+              {
+                "name": "iOS/Status Bar/Black",
+                "type": "INSTANCE",
+                "children": [
+                  {
+                    "name": "BG",
+                    "type": "GROUP"
+                  },
+                  {
+                    "name": "Right Side",
+                    "type": "GROUP",
+                    "children": [
+                      {
+                        "name": "Battery",
+                        "type": "GROUP"
+                      }
+                    ]
+                  },
+                  {
+                    "name": "Left Side",
+                    "type": "GROUP"
+                  }
+                ]
+              },
+              {
+                "name": "Page Header",
+                "type": "INSTANCE",
+                "children": [
+                  {
+                    "name": "Icon/X",
+                    "type": "GROUP"
+                  }
+                ]
+              },
+              {
+                "name": "iOS/Bottom Bar/5 Tabs",
+                "type": "INSTANCE",
+                "children": [
+                  {
+                    "name": "iPhone UI",
+                    "type": "GROUP",
+                    "children": [
+                      {
+                        "name": "Home Indicator",
+                        "type": "GROUP",
+                        "cornerRadius": 100
+                      }
+                    ]
+                  },
+                  {
+                    "name": "Tabs",
+                    "type": "GROUP",
+                    "cornerRadius": 100
+                  }
+                ]
+              },
+              {
+                "name": "Circular Graph",
+                "type": "GROUP"
+              },
+              {
+                "name": "Data List",
+                "type": "GROUP",
+                "children": [
+                  {
+                    "name": "Data/Graph Result",
+                    "type": "INSTANCE"
+                  },
+                  {
+                    "name": "Data/Graph Result",
+                    "type": "INSTANCE"
+                  },
+                  {
+                    "name": "Data/Graph Result",
+                    "type": "INSTANCE"
+                  },
+                  {
+                    "name": "Data/Graph Result",
+                    "type": "INSTANCE"
+                  },
+                  {
+                    "name": "Data/Graph Result",
+                    "type": "INSTANCE"
+                  },
+                  {
+                    "name": "Data/Graph Result",
+                    "type": "INSTANCE"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "name": "Calendar",
+            "type": "FRAME",
+            "children": [
+              {
+                "name": "iOS/Status Bar/White",
+                "type": "INSTANCE",
+                "children": [
+                  {
+                    "name": "iOS/Status Bar/Black",
+                    "type": "INSTANCE",
+                    "children": [
+                      {
+                        "name": "BG",
+                        "type": "GROUP"
+                      },
+                      {
+                        "name": "Right Side",
+                        "type": "GROUP"
+                      },
+                      {
+                        "name": "Left Side",
+                        "type": "GROUP"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "name": "Video Card",
+                "type": "GROUP",
+                "children": [
+                  {
+                    "name": "Icon/Play",
+                    "type": "GROUP"
+                  }
+                ]
+              },
+              {
+                "name": "Section/Hot Deals",
+                "type": "GROUP",
+                "children": [
+                  {
+                    "name": "Content/Market Block",
+                    "type": "INSTANCE"
+                  },
+                  {
+                    "name": "Content/Market Block",
+                    "type": "INSTANCE"
+                  },
+                  {
+                    "name": "Content/Market Block",
+                    "type": "INSTANCE"
+                  },
+                  {
+                    "name": "Content/Market Block",
+                    "type": "INSTANCE"
+                  }
+                ]
+              },
+              {
+                "name": "Section/Trending",
+                "type": "GROUP",
+                "children": [
+                  {
+                    "name": "Content/Market Block",
+                    "type": "INSTANCE"
+                  },
+                  {
+                    "name": "Content/Market Block",
+                    "type": "INSTANCE"
+                  },
+                  {
+                    "name": "Content/Market Block",
+                    "type": "INSTANCE"
+                  },
+                  {
+                    "name": "Content/Market Block",
+                    "type": "INSTANCE"
+                  }
+                ]
+              },
+              {
+                "name": "Page Header",
+                "type": "INSTANCE",
+                "children": [
+                  {
+                    "name": "Icon/X",
+                    "type": "GROUP"
+                  }
+                ]
+              },
+              {
+                "name": "iOS/Bottom Bar/5 Tabs",
+                "type": "INSTANCE",
+                "children": [
+                  {
+                    "name": "iPhone UI",
+                    "type": "GROUP",
+                    "children": [
+                      {
+                        "name": "Home Indicator",
+                        "type": "GROUP",
+                        "cornerRadius": 100
+                      }
+                    ]
+                  },
+                  {
+                    "name": "Tabs",
+                    "type": "GROUP",
+                    "cornerRadius": 100
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Components",
+        "type": "CANVAS",
+        "children": [
+          {
+            "name": "iOS Status Bar",
+            "type": "FRAME",
+            "children": [
+              {
+                "name": "iOS/Status Bar/Black",
+                "type": "GROUP",
+                "children": [
+                  {
+                    "name": "iOS/Status Bar/Black",
+                    "type": "COMPONENT",
+                    "children": [
+                      {
+                        "name": "BG",
+                        "type": "GROUP"
+                      },
+                      {
+                        "name": "Right Side",
+                        "type": "GROUP"
+                      },
+                      {
+                        "name": "Left Side",
+                        "type": "GROUP"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "name": "iOS/Status Bar/Black",
+                "type": "GROUP",
+                "children": [
+                  {
+                    "name": "iOS/Status Bar/White",
+                    "type": "COMPONENT",
+                    "children": [
+                      {
+                        "name": "iOS/Status Bar/Black",
+                        "type": "INSTANCE"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "name": "Header",
+                "type": "INSTANCE"
+              }
+            ]
+          },
+          {
+            "name": "iOS Navigation",
+            "type": "FRAME",
+            "children": [
+              {
+                "name": "iOS/Status Bar/Black",
+                "type": "GROUP",
+                "children": [
+                  {
+                    "name": "Page Header",
+                    "type": "COMPONENT",
+                    "children": [
+                      {
+                        "name": "Icon/X",
+                        "type": "GROUP"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "name": "Header",
+                "type": "INSTANCE"
+              },
+              {
+                "name": "iOS/Bottom Bar/5 Tabs",
+                "type": "GROUP",
+                "children": [
+                  {
+                    "name": "iOS/Bottom Bar/5 Tabs",
+                    "type": "COMPONENT",
+                    "children": [
+                      {
+                        "name": "iPhone UI",
+                        "type": "GROUP"
+                      },
+                      {
+                        "name": "Tabs",
+                        "type": "GROUP",
+                        "cornerRadius": 100
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "name": "Inputs",
+            "type": "FRAME",
+            "children": [
+              {
+                "name": "Input/Text",
+                "type": "GROUP",
+                "children": [
+                  {
+                    "name": "Input/Text",
+                    "type": "COMPONENT"
+                  }
+                ]
+              },
+              {
+                "name": "Input/Search",
+                "type": "GROUP",
+                "children": [
+                  {
+                    "name": "Input/Search",
+                    "type": "COMPONENT",
+                    "children": [
+                      {
+                        "name": "Icon/Send",
+                        "type": "GROUP"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "name": "Segmented Control/Structure",
+                "type": "GROUP",
+                "children": [
+                  {
+                    "name": "Segmented Control/Structure",
+                    "type": "COMPONENT",
+                    "children": [
+                      {
+                        "name": "Left Selected",
+                        "type": "GROUP",
+                        "cornerRadius": 100
+                      },
+                      {
+                        "name": "Right Selected",
+                        "type": "GROUP",
+                        "cornerRadius": 100
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "name": "Segmented Control/Left",
+                "type": "GROUP",
+                "children": [
+                  {
+                    "name": "Segmented Control/Left",
+                    "type": "COMPONENT",
+                    "children": [
+                      {
+                        "name": "Segmented Control/Structure",
+                        "type": "INSTANCE"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "name": "Segmented Control/Right",
+                "type": "GROUP",
+                "children": [
+                  {
+                    "name": "Segmented Control/Right",
+                    "type": "COMPONENT",
+                    "children": [
+                      {
+                        "name": "Segmented Control/Structure",
+                        "type": "INSTANCE"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "name": "Radio/Unselected",
+                "type": "GROUP",
+                "children": [
+                  {
+                    "name": "Radio/Unselected",
+                    "type": "COMPONENT"
+                  }
+                ]
+              },
+              {
+                "name": "Radio/Selected",
+                "type": "GROUP",
+                "children": [
+                  {
+                    "name": "Radio/Selected",
+                    "type": "COMPONENT",
+                    "children": [
+                      {
+                        "name": "Radio",
+                        "type": "GROUP"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "name": "Header",
+                "type": "INSTANCE"
+              }
+            ]
+          },
+          {
+            "name": "Inputs",
+            "type": "FRAME",
+            "children": [
+              {
+                "name": "Button/Primary",
+                "type": "GROUP",
+                "cornerRadius": 100,
+                "children": [
+                  {
+                    "name": "Button/Primary",
+                    "type": "COMPONENT",
+                    "layoutMode": "VERTICAL",
+                    "itemSpacing": 12,
+                    "cornerRadius": 100
+                  }
+                ]
+              },
+              {
+                "name": "Button/Secondary",
+                "type": "GROUP",
+                "cornerRadius": 100,
+                "children": [
+                  {
+                    "name": "Button/Secondary",
+                    "type": "COMPONENT",
+                    "layoutMode": "HORIZONTAL",
+                    "itemSpacing": 12,
+                    "cornerRadius": 100
+                  }
+                ]
+              },
+              {
+                "name": "Button/Disabled",
+                "type": "GROUP",
+                "cornerRadius": 100,
+                "children": [
+                  {
+                    "name": "Button/Disabled",
+                    "type": "COMPONENT",
+                    "layoutMode": "HORIZONTAL",
+                    "itemSpacing": 12,
+                    "cornerRadius": 100
+                  }
+                ]
+              },
+              {
+                "name": "Header",
+                "type": "INSTANCE"
+              }
+            ]
+          },
+          {
+            "name": "Inputs",
+            "type": "FRAME",
+            "children": [
+              {
+                "name": "Icon/Checkmark",
+                "type": "GROUP",
+                "children": [
+                  {
+                    "name": "Icon/Checkmark",
+                    "type": "COMPONENT"
+                  }
+                ]
+              },
+              {
+                "name": "Checkbox/Empty",
+                "type": "GROUP",
+                "children": [
+                  {
+                    "name": "Checkbox/Empty",
+                    "type": "COMPONENT",
+                    "children": [
+                      {
+                        "name": "Icon/Checkmark",
+                        "type": "INSTANCE"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "name": "Checkbox Option/Empty",
+                "type": "GROUP",
+                "children": [
+                  {
+                    "name": "Checkbox Option/Empty",
+                    "type": "COMPONENT",
+                    "children": [
+                      {
+                        "name": "Checkbox/Empty",
+                        "type": "INSTANCE"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "name": "Checkbox Option/Filled",
+                "type": "GROUP",
+                "children": [
+                  {
+                    "name": "Checkbox Option/Filled",
+                    "type": "COMPONENT",
+                    "children": [
+                      {
+                        "name": "Checkbox/Filled",
+                        "type": "INSTANCE"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "name": "Checkbox/Filled",
+                "type": "GROUP",
+                "children": [
+                  {
+                    "name": "Checkbox/Filled",
+                    "type": "COMPONENT",
+                    "children": [
+                      {
+                        "name": "Icon/Checkmark",
+                        "type": "INSTANCE"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "name": "Header",
+                "type": "INSTANCE"
+              }
+            ]
+          },
+          {
+            "name": "iOS/Keyboard",
+            "type": "FRAME",
+            "children": [
+              {
+                "name": "iOS/Keyboard/Light/Alphabetic",
+                "type": "GROUP",
+                "children": [
+                  {
+                    "name": "iOS/Keyboard/Light/Alphabetic",
+                    "type": "COMPONENT",
+                    "children": [
+                      {
+                        "name": "Background",
+                        "type": "FRAME"
+                      },
+                      {
+                        "name": "Home Indicator",
+                        "type": "FRAME"
+                      },
+                      {
+                        "name": "Keys",
+                        "type": "GROUP"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "name": "iOS/Keyboard/Light/Numeric",
+                "type": "GROUP",
+                "children": [
+                  {
+                    "name": "iOS/Keyboard/Light/Numeric",
+                    "type": "COMPONENT",
+                    "children": [
+                      {
+                        "name": "Background",
+                        "type": "FRAME"
+                      },
+                      {
+                        "name": "Home Indicator",
+                        "type": "FRAME"
+                      },
+                      {
+                        "name": "Keys",
+                        "type": "GROUP"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "name": "iOS/Keyboard/Light/Alphabetic",
+                "type": "GROUP",
+                "children": [
+                  {
+                    "name": "iOS/Keyboard/Light/Dictation",
+                    "type": "COMPONENT",
+                    "children": [
+                      {
+                        "name": "Background",
+                        "type": "FRAME"
+                      },
+                      {
+                        "name": "Home Indicator",
+                        "type": "FRAME"
+                      },
+                      {
+                        "name": "Waves",
+                        "type": "FRAME"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "name": "iOS/Keyboard/Light/Alphabetic",
+                "type": "GROUP",
+                "children": [
+                  {
+                    "name": "iOS/Keyboard/Light/Emoji",
+                    "type": "COMPONENT",
+                    "children": [
+                      {
+                        "name": "Background",
+                        "type": "FRAME"
+                      },
+                      {
+                        "name": "Home Indicator",
+                        "type": "FRAME"
+                      },
+                      {
+                        "name": "Categories",
+                        "type": "GROUP"
+                      },
+                      {
+                        "name": "Keyboard Emojis",
+                        "type": "FRAME"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "name": "Header",
+                "type": "INSTANCE"
+              }
+            ]
+          },
+          {
+            "name": "Content",
+            "type": "FRAME",
+            "children": [
+              {
+                "name": "Content/Content Block/Small",
+                "type": "GROUP",
+                "children": [
+                  {
+                    "name": "Content/Content Block/Small",
+                    "type": "COMPONENT"
+                  }
+                ]
+              },
+              {
+                "name": "Content/Content Block/Small",
+                "type": "GROUP",
+                "children": [
+                  {
+                    "name": "Content/Comment",
+                    "type": "COMPONENT"
+                  }
+                ]
+              },
+              {
+                "name": "Content/Search Result",
+                "type": "GROUP",
+                "children": [
+                  {
+                    "name": "Content/Search Result",
+                    "type": "COMPONENT"
+                  }
+                ]
+              },
+              {
+                "name": "Content/Content Block/Large",
+                "type": "GROUP",
+                "children": [
+                  {
+                    "name": "Content/Content Block/Large",
+                    "type": "COMPONENT",
+                    "layoutMode": "VERTICAL",
+                    "itemSpacing": 8,
+                    "children": [
+                      {
+                        "name": "Text + Time",
+                        "type": "FRAME",
+                        "layoutMode": "VERTICAL",
+                        "itemSpacing": 8
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "name": "Header",
+                "type": "INSTANCE"
+              },
+              {
+                "name": "Content/Market Block",
+                "type": "GROUP",
+                "children": [
+                  {
+                    "name": "Content/Market Block",
+                    "type": "COMPONENT"
+                  }
+                ]
+              },
+              {
+                "name": "Message/Receive",
+                "type": "GROUP",
+                "children": [
+                  {
+                    "name": "Message/Receive",
+                    "type": "COMPONENT"
+                  }
+                ]
+              },
+              {
+                "name": "Message/Send",
+                "type": "GROUP",
+                "children": [
+                  {
+                    "name": "Message/Send",
+                    "type": "COMPONENT"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "name": "Data",
+            "type": "FRAME",
+            "children": [
+              {
+                "name": "Data/Mobile Graph",
+                "type": "GROUP",
+                "children": [
+                  {
+                    "name": "Data/Mobile Graph",
+                    "type": "COMPONENT",
+                    "children": [
+                      {
+                        "name": "Bars",
+                        "type": "GROUP"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "name": "Data/Bar Chart/Fill",
+                "type": "GROUP",
+                "children": [
+                  {
+                    "name": "Data/Bar Chart/Fill",
+                    "type": "COMPONENT"
+                  }
+                ]
+              },
+              {
+                "name": "Data/Bar Chart/Background",
+                "type": "GROUP",
+                "children": [
+                  {
+                    "name": "Data/Bar Chart/Background",
+                    "type": "COMPONENT"
+                  }
+                ]
+              },
+              {
+                "name": "Header",
+                "type": "INSTANCE"
+              },
+              {
+                "name": "Content/Search Result",
+                "type": "GROUP",
+                "children": [
+                  {
+                    "name": "Data/Graph Result",
+                    "type": "COMPONENT"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "name": "Header",
+            "type": "COMPONENT"
+          }
+        ]
+      }
+    ]
+  }
+}

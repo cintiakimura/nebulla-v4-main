@@ -13,6 +13,7 @@ import type {
   V2PageType,
 } from "./types";
 import type { DesignBrief } from "../resources/types";
+import { isEmptyShellLayout } from "./applyStructureHints";
 
 function luma(hex: string): number {
   const h = (hex || "").replace("#", "");
@@ -40,9 +41,12 @@ export function validateV2Quality(input: {
   pageType: V2PageType;
   /** Optional compiled Design Brief — enables role/density guideline checks. */
   designBrief?: DesignBrief | null;
+  /** Figma selection_mode — used to refuse “Ready” on seed-only empty shells. */
+  selectionMode?: string;
 }): QualityGateV2 {
   const issues: string[] = [];
-  const { model, template, tokens, slots, figmaStatus, pageType, designBrief } = input;
+  const { model, template, tokens, slots, figmaStatus, pageType, designBrief, selectionMode } =
+    input;
 
   if (!model?.pages || !Object.keys(model.pages).length) {
     return { gate: "weak", issues: ["No editor model pages"] };
@@ -53,16 +57,28 @@ export function validateV2Quality(input: {
 
   const title = (slots.hero_title || slots.nav_title || "").trim();
   const subtitle = (slots.hero_subtitle || "").trim();
+  const containers = nodes.filter((n) => n.type === "container" || n.type === "box");
+  const buttons = nodes.filter((n) => n.type === "button");
+
+  // G.0 Empty shell / incomplete auth — fail or repair even when labels say Ready
+  issues.push(
+    ...isEmptyShellLayout({
+      slots,
+      nodeCount: nodes.length,
+      containerCount: containers.length,
+      buttonCount: buttons.length,
+      pageType,
+      needsPrimaryCta: template.needsPrimaryCta,
+    }),
+  );
 
   // G.1 Structure
   if (!title || isProseDump(title) || isRouteLike(title)) {
     issues.push("Title slot missing or looks like prose/route dump");
   }
-  const containers = nodes.filter((n) => n.type === "container" || n.type === "box");
   if (containers.length < 2) issues.push("Insufficient content regions");
   if (nodes.length < 8) issues.push("Skeleton node count too low");
   if (template.needsPrimaryCta) {
-    const buttons = nodes.filter((n) => n.type === "button");
     if (buttons.length < 1) issues.push("Missing primary action");
     const cta = (slots.primary_cta || "").trim();
     if (!cta) issues.push("Primary CTA slot empty");
@@ -76,6 +92,13 @@ export function validateV2Quality(input: {
     ) {
       issues.push("Only generic Get started CTA");
     }
+  }
+  // Seed-only path: never treat sparse layout as a clean library success.
+  if (
+    (selectionMode?.includes(":seed:") || figmaStatus === "weak_matches") &&
+    containers.length < 3
+  ) {
+    issues.push("Seed fallback layout still sparse — needs repair");
   }
   // Seed-path: home/list should carry at least one content label (not empty skeleton)
   if (pageType === "home" || pageType === "list" || pageType === "dashboard") {
@@ -123,8 +146,12 @@ export function validateV2Quality(input: {
 
   // G.4 Metadata
   if (!figmaStatus) issues.push("figma_status missing");
-  if (figmaStatus === "success" && model.meta?.figma_status !== "success") {
-    issues.push("figma success claimed without model meta");
+  if (
+    (figmaStatus === "success" || figmaStatus === "offline") &&
+    model.meta?.figma_status !== "success" &&
+    model.meta?.figma_status !== "offline"
+  ) {
+    issues.push("library success claimed without model meta");
   }
 
   // G.5 Design Brief guidelines (when present)

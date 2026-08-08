@@ -274,6 +274,7 @@ function NebullaIDEShell() {
   const [profileOpen, setProfileOpen] = useState(false);
   const [myServicesUser, setMyServicesUser] = useState<NebulaSessionUser | null>(null);
   const [workspaceCtx, setWorkspaceCtx] = useState<WorkspaceContext | null>(null);
+  const [workspaceSetupBusy, setWorkspaceSetupBusy] = useState(true);
   const [workspaceProjectKey, setWorkspaceProjectKey] = useState(() => getBrowserProjectKey());
   const [accountProjectName, setAccountProjectName] = useState(
     () => getBrowserProjectName().trim() || 'Untitled project',
@@ -309,6 +310,7 @@ function NebullaIDEShell() {
   }, [openLeftSidebar]);
 
   const handleWorkspaceReady = useCallback((ctx: WorkspaceContext) => {
+    setWorkspaceSetupBusy(false);
     setWorkspaceCtx(ctx);
     setWorkspaceProjectKey(ctx.projectKey);
     setCloudBannerDismissed(false);
@@ -498,7 +500,12 @@ function NebullaIDEShell() {
 
   return (
     <div className="nebulla-ide-shell flex h-screen flex-col overflow-hidden text-foreground">
-      {!workspaceCtx ? <WorkspaceSetupGate onReady={handleWorkspaceReady} /> : null}
+      {!workspaceCtx ? (
+        <WorkspaceSetupGate
+          onReady={handleWorkspaceReady}
+          onSetupBusyChange={setWorkspaceSetupBusy}
+        />
+      ) : null}
       <WelcomeOnboardingModal
         open={welcomeOpen && Boolean(workspaceCtx)}
         user={myServicesUser ?? workspaceCtx?.user ?? null}
@@ -525,8 +532,12 @@ function NebullaIDEShell() {
 
       <TopBar
         workspaceLabel={workspaceCtx?.projectName}
+        workspaceSetupBusy={workspaceSetupBusy && !workspaceCtx}
         onProjectNameCommit={handleProjectNameCommit}
-        onSwitchWorkspace={() => setWorkspaceCtx(null)}
+        onSwitchWorkspace={() => {
+          setWorkspaceSetupBusy(true);
+          setWorkspaceCtx(null);
+        }}
         onOpenAccount={() => setProfileOpen(true)}
         onLoggedOut={handleSessionEnded}
       />

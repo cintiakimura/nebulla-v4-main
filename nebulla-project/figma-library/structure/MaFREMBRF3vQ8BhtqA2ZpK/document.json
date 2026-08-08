@@ -1,0 +1,54 @@
+{
+  "name": "Auth kit (structure)",
+  "document": {
+    "name": "Document",
+    "type": "DOCUMENT",
+    "children": [
+      {
+        "name": "iPhone Auth Login",
+        "type": "FRAME",
+        "layoutMode": "VERTICAL",
+        "itemSpacing": 14,
+        "cornerRadius": 12,
+        "children": [
+          {
+            "name": "Header Auth Title",
+            "type": "FRAME",
+            "layoutMode": "VERTICAL",
+            "itemSpacing": 8
+          },
+          {
+            "name": "Form Card",
+            "type": "FRAME",
+            "layoutMode": "VERTICAL",
+            "itemSpacing": 12,
+            "cornerRadius": 12,
+            "children": [
+              {
+                "name": "Email Field",
+                "type": "FRAME",
+                "layoutMode": "HORIZONTAL"
+              },
+              {
+                "name": "Password Field",
+                "type": "FRAME",
+                "layoutMode": "HORIZONTAL"
+              },
+              {
+                "name": "Primary CTA Button",
+                "type": "FRAME",
+                "layoutMode": "HORIZONTAL",
+                "cornerRadius": 100
+              },
+              {
+                "name": "Secondary Link",
+                "type": "FRAME",
+                "layoutMode": "HORIZONTAL"
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

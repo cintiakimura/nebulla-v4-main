@@ -35,19 +35,33 @@ import type {
 
 const KNOWN_BUCKETS = new Set(["mobile", "landing", "dashboard", "auth", "web"]);
 
+/** Committed shortlist — used when env keys unset so structure/ still resolves on Render. */
+const DEFAULT_SHORTLIST_KEYS = [
+  "ZEbJpC67UQyeeynt1UR8gT", // mobile
+  "P6lA9sHTHVbnmUfoYbV9Ir", // landing
+  "TgYmEqMwrWFHBxF2kAVOaF", // dashboard
+  "MaFREMBRF3vQ8BhtqA2ZpK", // auth
+] as const;
+
+const DEFAULT_SHORTLIST_BUCKETS =
+  "mobile=ZEbJpC67UQyeeynt1UR8gT,landing=P6lA9sHTHVbnmUfoYbV9Ir,dashboard=TgYmEqMwrWFHBxF2kAVOaF,auth=MaFREMBRF3vQ8BhtqA2ZpK";
+
 function resolveLibraryKeys(): string[] {
-  return (process.env.FIGMA_REFERENCE_FILE_KEYS || "")
+  const fromEnv = (process.env.FIGMA_REFERENCE_FILE_KEYS || "")
     .split(",")
     .map((s) => s.trim())
     .filter(Boolean);
+  if (fromEnv.length) return fromEnv;
+  return [...DEFAULT_SHORTLIST_KEYS];
 }
 
 /** Parse `mobile=KEY,landing=KEY2` — unknown buckets ignored. */
 export function parseReferenceBuckets(
   raw: string = process.env.FIGMA_REFERENCE_BUCKETS || "",
 ): Map<string, string[]> {
+  const effective = raw.trim() ? raw : DEFAULT_SHORTLIST_BUCKETS;
   const map = new Map<string, string[]>();
-  for (const part of raw.split(",")) {
+  for (const part of effective.split(",")) {
     const t = part.trim();
     if (!t) continue;
     const eq = t.indexOf("=");
@@ -222,14 +236,20 @@ function mapSeedToTemplateHints(templateId: V2TemplateId, structure: string): st
   ];
 }
 
-/** Offline extract from `npm run figma:download` — Generate primary path. */
+/**
+ * Offline extract — Generate primary path.
+ * Prefer lean committed `structure/<key>/document.json`, then full `raw/` download.
+ */
 function loadOfflineFigmaFile(fileKey: string): {
   name?: string;
   document?: FigmaNode;
 } | null {
   const key = fileKey.trim();
   if (!key) return null;
-  const roots = [path.join(process.cwd(), "nebulla-project", "figma-library", "raw", key)];
+  const roots = [
+    path.join(process.cwd(), "nebulla-project", "figma-library", "structure", key),
+    path.join(process.cwd(), "nebulla-project", "figma-library", "raw", key),
+  ];
   const seen = new Set<string>();
   for (const dir of roots) {
     if (seen.has(dir)) continue;
@@ -247,6 +267,25 @@ function loadOfflineFigmaFile(fileKey: string): {
     }
   }
   return null;
+}
+
+/** True when catalog profile provides real structure guidance (not thin density tags). */
+function hasUsableCatalogStructure(input: {
+  catalogHints?: string[];
+  catalogProfileId?: string;
+  catalogScoredMatch?: boolean;
+}): boolean {
+  if (!input.catalogProfileId && !input.catalogScoredMatch) return false;
+  if (input.catalogScoredMatch) return true;
+  const hints = input.catalogHints || [];
+  return hints.some((h) => {
+    const t = String(h || "").trim();
+    if (!t) return false;
+    if (/^(density|personality|template|catalog_profile)=/i.test(t)) return false;
+    if (/^best_for:/i.test(t)) return true;
+    if (/card|cta|hero|form|stack|section|layout|spacing/i.test(t)) return true;
+    return t.length >= 12;
+  });
 }
 
 function catalogBriefHints(input: {
@@ -409,6 +448,8 @@ export async function retrieveFigmaReferences(input: {
   /** Scored catalog + Stitch brief hints — used before Nebulla seed last-resort. */
   catalogHints?: string[];
   catalogProfileId?: string;
+  /** True when resource match was a scored catalog hit (not below_threshold). */
+  catalogScoredMatch?: boolean;
 }): Promise<FigmaRecord> {
   const apiKey = (process.env.FIGMA_API_KEY || "").trim();
   const liveEnabled = isFigmaLiveOnGenerate();
@@ -452,18 +493,21 @@ export async function retrieveFigmaReferences(input: {
     catalogHints: input.catalogHints,
     catalogProfileId: input.catalogProfileId,
   });
-  const hasCatalogIntel =
-    Boolean(input.catalogProfileId) ||
-    Boolean(input.catalogHints && input.catalogHints.length > 0);
+  const hasCatalogStructure = hasUsableCatalogStructure({
+    catalogHints: input.catalogHints,
+    catalogProfileId: input.catalogProfileId,
+    catalogScoredMatch: input.catalogScoredMatch,
+  });
+  const hasBriefHints = Boolean(input.catalogHints && input.catalogHints.length > 0);
 
   const envGuidance =
     keysConfigured === 0 && bucketsConfigured === 0
-      ? "Populate offline library (npm run figma:download) and/or set FIGMA_REFERENCE_FILE_KEYS / BUCKETS. Live Generate needs FIGMA_LIVE_ON_GENERATE=1 + FIGMA_API_KEY. See docs/figma-reference-library.md"
+      ? "Populate shortlist: npm run figma:download && npm run figma:extract-structure (or ship structure/). Set FIGMA_REFERENCE_FILE_KEYS / BUCKETS. Live Generate optional via FIGMA_LIVE_ON_GENERATE=1."
       : !apiKey
         ? "Local library keys configured. FIGMA_API_KEY needed only for ingest (`figma:download`) or optional live Generate (FIGMA_LIVE_ON_GENERATE=1)."
         : liveEnabled
-          ? "FIGMA_LIVE_ON_GENERATE enabled — live probe runs only if offline + catalog miss. Prefer offline raw/ + published catalog on Render."
-          : "Local-first Generate (live off). Refresh library with npm run figma:download; optional FIGMA_LIVE_ON_GENERATE=1 for rare live probes.";
+          ? "FIGMA_LIVE_ON_GENERATE enabled — live probe only if offline + catalog miss. Prefer committed structure/ + catalog profiles on Render."
+          : "Local-first Generate (live off). Prefer nebulla-project/figma-library/structure/<key>/document.json; refresh via figma:download + figma:extract-structure.";
 
   const probe = resolveProbeKeys(input.classification, libraryKeys, buckets);
   const probeKeys =
@@ -516,14 +560,14 @@ export async function retrieveFigmaReferences(input: {
       candidates: [
         {
           id: `figma-offline:${fileKey}`,
-          reason: `Offline library "${offline.name || fileKey}" score=${extracted.score}`,
+          reason: `Offline library "${offline.name || fileKey}" bucket=${bucketForKey(fileKey, buckets) || preferredBucket || "—"} score=${extracted.score}`,
         },
         ...seedCandidates,
       ],
       selected_refs: [
         {
           id: `figma-offline:${fileKey}`,
-          why: `Offline Figma structure for ${input.templateId}`,
+          why: `Offline library hit key=${fileKey} bucket=${bucketForKey(fileKey, buckets) || preferredBucket || "—"} → ${input.templateId}`,
         },
       ],
       fallback_used: "no",
@@ -535,28 +579,72 @@ export async function retrieveFigmaReferences(input: {
     };
   }
 
-  // 2) Catalog + Stitch / ui-brief intelligence (usable guidance without live)
-  if (hasCatalogIntel) {
+  // 2) Published catalog profile (scored / structural) — before thin brief-only
+  if (hasCatalogStructure) {
+    const structural = [
+      `catalog_profile=${input.catalogProfileId || "match"}`,
+      `bucket=${preferredBucket || "none"}`,
+      "layout: header → content cards → primary CTA → nav when applicable",
+      "Prefer stacked regions with consistent card grouping and spacing",
+      ...intelligenceHints,
+    ];
+    if (preferredBucket === "auth" || /auth/i.test(input.templateId)) {
+      structural.push(
+        "auth: title, subtitle, email/password fields, primary button, secondary link",
+      );
+    }
     return {
       reference_file_keys_configured: keysConfigured,
       env_guidance: envGuidance,
       key_diagnostics: [],
-      selection_mode: `local:catalog_brief:${selectionModeBase}`,
+      selection_mode: `local:catalog:${selectionModeBase}`,
       preferred_bucket: preferredBucket,
       figma_used: "no",
       figma_status: "skipped",
-      figma_error: "Using scored catalog + Stitch Design Brief (offline raw miss; live not required)",
+      figma_error: `Catalog profile hit (${input.catalogProfileId || "match"}; offline miss for bucket ${preferredBucket || "—"})`,
       candidates: [
         {
-          id: `catalog:${input.catalogProfileId || "brief"}`,
-          reason: "Scored ui-resource-catalog + Stitch brief",
+          id: `catalog:${input.catalogProfileId || "match"}`,
+          reason: "Scored ui-resource-catalog structure",
         },
         ...seedCandidates,
       ],
       selected_refs: [
         {
-          id: `catalog:${input.catalogProfileId || "brief"}`,
-          why: "Catalog + Stitch Design Brief structure hints",
+          id: `catalog:${input.catalogProfileId || "match"}`,
+          why: `Catalog structure for ${preferredBucket || input.templateId}`,
+        },
+      ],
+      fallback_used: "yes",
+      structure_hints: structural.slice(0, 16),
+    };
+  }
+
+  // 3) Stitch / ui-brief only (thinner than catalog)
+  if (hasBriefHints) {
+    return {
+      reference_file_keys_configured: keysConfigured,
+      env_guidance:
+        keysConfigured === 0
+          ? `${envGuidance} Operator: run figma:download + figma:extract-structure for shortlist (or deploy structure/).`
+          : envGuidance,
+      key_diagnostics: [],
+      selection_mode: `local:brief:${selectionModeBase}`,
+      preferred_bucket: preferredBucket,
+      figma_used: "no",
+      figma_status: "skipped",
+      figma_error: `Brief-only guidance (offline miss; no scored catalog structure for bucket ${preferredBucket || "—"})`,
+      candidates: [
+        {
+          id: "brief:ui-brief",
+          reason: "Stitch Design Brief / Master Plan §5",
+        },
+        ...seedCandidates,
+      ],
+      selected_refs: [
+        {
+          id: "brief:ui-brief",
+          why: "Brief color/density guidance — layout from template + seed",
         },
         ...seedSelected.slice(0, 1),
       ],

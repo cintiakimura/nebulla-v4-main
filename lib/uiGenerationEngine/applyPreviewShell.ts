@@ -123,8 +123,8 @@ function buildScreenMarkup(input: {
   const cta2 = esc(slots.secondary_cta || "");
   const patternNote =
     input.patternMode === "figma"
-      ? "Layout references Figma structure hints where available."
-      : "Using Nebulla built-in layout patterns (Figma optional).";
+      ? "Layout from offline / Figma library structure."
+      : "Built-in seed patterns (library miss).";
   const items = collectItems(slots, templateId);
   const mobile = isMobileTemplate(templateId, input.classification);
   const tabs = wantsBottomTabs(templateId, input.classification);
@@ -134,9 +134,10 @@ function buildScreenMarkup(input: {
     input.classification?.product_function === "course" ||
     input.classification?.industry === "education" ||
     /course|lesson|practice|learn/i.test(`${slots.hero_title} ${slots.hero_subtitle} ${templateId}`);
+  const libraryHit = input.patternMode === "figma";
 
   const metricRow =
-    dashboard || courseLike
+    dashboard || courseLike || libraryHit
       ? items
           .slice(0, 3)
           .map(
@@ -149,18 +150,38 @@ function buildScreenMarkup(input: {
           .join("\n")
       : "";
 
-  const listHtml = items
-    .map(
-      (it, i) => `
+  const authFieldsHtml = auth
+    ? `
+      <section class="list" aria-label="Sign in form">
+        <article class="card">
+          <div class="card-body">
+            <h2>${esc(slots.field_1_label || "Email")}</h2>
+            <p>${esc(slots.field_1_placeholder || "you@example.com")}</p>
+          </div>
+        </article>
+        <article class="card">
+          <div class="card-body">
+            <h2>${esc(slots.field_2_label || "Password")}</h2>
+            <p>${esc(slots.field_2_placeholder || "••••••••")}</p>
+          </div>
+        </article>
+      </section>`
+    : "";
+
+  const listHtml = auth
+    ? ""
+    : items
+        .map(
+          (it, i) => `
     <article class="card${i === 0 ? " card--accent" : ""}">
       <div class="card-body">
         <h2>${esc(it.title)}</h2>
         ${it.meta ? `<p>${esc(it.meta)}</p>` : ""}
       </div>
-      ${!auth ? `<span class="chev" aria-hidden>›</span>` : ""}
+      <span class="chev" aria-hidden>›</span>
     </article>`,
-    )
-    .join("\n");
+        )
+        .join("\n");
 
   const tabHtml = tabs
     ? tabLabels(slots, input.classification)
@@ -209,8 +230,9 @@ function buildScreenMarkup(input: {
       </section>
       ${progressHtml}
       ${metricRow ? `<section class="metrics" aria-label="Highlights">${metricRow}</section>` : ""}
-      <p class="section-label">${auth ? "Sign in" : courseLike ? "Up next" : "Overview"}</p>
-      <section class="list">${listHtml}</section>
+      ${auth ? authFieldsHtml : ""}
+      <p class="section-label">${auth ? "Account" : courseLike ? "Up next" : "Overview"}</p>
+      ${listHtml ? `<section class="list">${listHtml}</section>` : ""}
       <p class="meta">${esc(patternNote)}</p>
     </main>
     ${tabs ? `<nav class="tabs" aria-label="Primary">${tabHtml}</nav>` : ""}

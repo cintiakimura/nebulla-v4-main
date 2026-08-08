@@ -35,6 +35,11 @@ import {
 import { emptyContextState, type UiGenContextState } from "../types";
 import { classifyPage } from "./classifyPage";
 import { buildDesignTokens } from "./designTokens";
+import {
+  applyPlanToTokens,
+  ensureSlotsForStructurePlan,
+  parseStructureLayoutPlan,
+} from "./applyStructureHints";
 import { retrieveFigmaReferences } from "./figmaReferences";
 import { mapSlots } from "./mapSlots";
 import { repairSlots, validateV2Quality } from "./qualityGate";
@@ -767,6 +772,7 @@ export async function runUiGenerationCycleV2(
     preferredFileKey: resourceMatch.figma_file_key,
     catalogProfileId: resourceMatch.id || undefined,
     catalogHints,
+    catalogScoredMatch: resourceMatch.selection_mode === "scored_match",
     seedState: {
       device: classification.device,
       page_type: mapPageTypeToLegacy(classification.page_type),
@@ -777,33 +783,55 @@ export async function runUiGenerationCycleV2(
       density: classification.density,
     },
   });
+  const structurePlan = parseStructureLayoutPlan(
+    figma.structure_hints,
+    classification.page_type,
+    template.id,
+  );
   state.figma_used = figma.figma_used;
   state.figma_status = figma.figma_status;
   state.figma_error = figma.figma_error;
   state.fallback_used = figma.fallback_used;
   state.reference_source =
-    figma.figma_used === "yes" ? "figma" : figma.fallback_used === "yes" ? "seed" : "mixed";
+    figma.figma_used === "yes"
+      ? "figma"
+      : figma.selection_mode.includes(":catalog:")
+        ? "catalog"
+        : figma.selection_mode.includes(":brief:")
+          ? "brief"
+          : figma.fallback_used === "yes"
+            ? "seed"
+            : "mixed";
   state.candidates = figma.candidates;
   state.selected_refs = figma.selected_refs;
   if (figma.figma_error) {
     state.generation_warnings.push(`Figma: ${figma.figma_status} — ${figma.figma_error}`);
+  }
+  if (
+    figma.figma_status !== "offline" &&
+    figma.figma_status !== "success" &&
+    figma.reference_file_keys_configured === 0
+  ) {
+    state.generation_warnings.push(
+      "Offline shortlist empty — run npm run figma:download && npm run figma:extract-structure (or deploy structure/).",
+    );
   }
   state.adapt_kept = [...figma.selected_refs.map((r) => r.why), ...figma.structure_hints.slice(0, 6)]
     .filter(Boolean)
     .join(" | ");
   state.adapt_discarded =
     "Decorative Figma chrome, unrelated marketing blobs, absolute-position noise.";
-  state.adapt_replaced = `Template ${template.id} + structure hints (${figma.structure_hints.length}) mapped into slots from Master Plan + files.`;
+  state.adapt_replaced = `Template ${template.id} + structure plan (${structurePlan.summary}) mapped into slots/regions.`;
   appendStepLog(
     state,
-    `Phase C figma — used=${figma.figma_used} status=${figma.figma_status} fallback=${figma.fallback_used} hints=${figma.structure_hints.length}`,
+    `Phase C figma — used=${figma.figma_used} status=${figma.figma_status} mode=${figma.selection_mode} plan=${structurePlan.summary} hints=${figma.structure_hints.length}`,
   );
   state.current_step = 4;
   persist(workspaceRoot, state);
 
   // -------- Phase D — Tokens --------
   stage("Applying design tokens");
-  const tokens = buildDesignTokens(uiux, state.palette, classification.density);
+  let tokens = buildDesignTokens(uiux, state.palette, classification.density);
   // Align spacing with compiled Design Brief roles (before preference nudges).
   tokens.gap = designBrief.spacing_radius.gap;
   tokens.pad = designBrief.spacing_radius.pad;
@@ -815,23 +843,8 @@ export async function runUiGenerationCycleV2(
   tokens.mutedText = designBrief.color_roles.muted.hex;
   tokens.border = designBrief.color_roles.border.hex;
   if (designBrief.color_roles.accent) tokens.accent = designBrief.color_roles.accent.hex;
-  // Soft-apply Figma/seed spacing only within ±4 of Design Brief (do not clobber density roles).
-  const briefGap = designBrief.spacing_radius.gap;
-  const briefPad = designBrief.spacing_radius.pad;
-  const briefRadius = designBrief.spacing_radius.radius;
-  for (const h of figma.structure_hints) {
-    const sp = h.match(/spacing rhythm ≈ (\d+)/i);
-    if (sp) {
-      const n = Math.min(24, Math.max(8, Number(sp[1])));
-      tokens.gap = Math.min(briefGap + 4, Math.max(briefGap - 4, n));
-      tokens.pad = Math.min(briefPad + 4, Math.max(briefPad - 4, Math.max(tokens.pad, n)));
-    }
-    const rad = h.match(/corner radius ≈ (\d+)/i);
-    if (rad) {
-      const n = Math.min(24, Math.max(4, Number(rad[1])));
-      tokens.radius = Math.min(briefRadius + 4, Math.max(briefRadius - 4, n));
-    }
-  }
+  // Apply offline/catalog spacing rhythm within a bounded window of the brief.
+  tokens = applyPlanToTokens(tokens, structurePlan);
   const hints = input.preferenceHints || {};
   if (hints.denser) {
     tokens.gap = Math.max(6, tokens.gap - 4);
@@ -891,6 +904,13 @@ export async function runUiGenerationCycleV2(
             : "Get started free";
     }
   }
+  // Apply offline/catalog structure plan into slots (cards/fields/CTAs) before render.
+  slots = ensureSlotsForStructurePlan(
+    slots,
+    structurePlan,
+    classification.page_type,
+    state.project_name,
+  );
   // CONTENT_LOCALE microcopy (optional Grok) — layout unchanged
   const contentLocale = readWorkspaceContentLocale(workspaceRoot) || "en";
   if (input.apiKeyOverride?.trim()) {
@@ -911,7 +931,10 @@ export async function runUiGenerationCycleV2(
   state.secondary_ctas = slots.secondary_cta ? [slots.secondary_cta] : [];
   state.slot_content_json = JSON.stringify(slots);
   state.page_name = slots.hero_title || slots.nav_title || state.page_name;
-  appendStepLog(state, `Phase E slots — title="${slots.hero_title}" cta="${slots.primary_cta}"`);
+  appendStepLog(
+    state,
+    `Phase E slots — title="${slots.hero_title}" cta="${slots.primary_cta}" plan=${structurePlan.summary}`,
+  );
   state.current_step = 6;
   persist(workspaceRoot, state);
 
@@ -923,6 +946,7 @@ export async function runUiGenerationCycleV2(
     tokens,
     slots,
     figmaStatus: figma.figma_status,
+    structureHints: figma.structure_hints,
   });
   let code = renderTemplateCode({ template, tokens, slots });
   state.model_used = "ui-generation-logic-v2";
@@ -943,11 +967,18 @@ export async function runUiGenerationCycleV2(
     figmaStatus: figma.figma_status,
     pageType: classification.page_type,
     designBrief,
+    selectionMode: figma.selection_mode,
   });
   state.repair_pass_used = "no";
   if (gate.gate !== "pass") {
     state.repair_pass_used = "yes";
     slots = repairSlots(slots, classification.page_type);
+    slots = ensureSlotsForStructurePlan(
+      slots,
+      structurePlan,
+      classification.page_type,
+      state.project_name,
+    );
     state.slot_content_json = JSON.stringify(slots);
     model = renderTemplateModel({
       template,
@@ -955,6 +986,7 @@ export async function runUiGenerationCycleV2(
       tokens,
       slots,
       figmaStatus: figma.figma_status,
+      structureHints: figma.structure_hints,
     });
     code = renderTemplateCode({ template, tokens, slots });
     state.generated_code = code;
@@ -967,6 +999,7 @@ export async function runUiGenerationCycleV2(
       figmaStatus: figma.figma_status,
       pageType: classification.page_type,
       designBrief,
+      selectionMode: figma.selection_mode,
     });
     appendStepLog(state, `Phase G repair — gate=${gate.gate}; issues=${gate.issues.join("; ") || "none"}`);
   }

@@ -1,0 +1,66 @@
+{
+  "name": "Dashboard SaaS (structure)",
+  "document": {
+    "name": "Document",
+    "type": "DOCUMENT",
+    "children": [
+      {
+        "name": "Desktop Dashboard",
+        "type": "FRAME",
+        "layoutMode": "HORIZONTAL",
+        "itemSpacing": 16,
+        "children": [
+          {
+            "name": "Sidebar Nav",
+            "type": "FRAME",
+            "layoutMode": "VERTICAL",
+            "itemSpacing": 12
+          },
+          {
+            "name": "Main Content",
+            "type": "FRAME",
+            "layoutMode": "VERTICAL",
+            "itemSpacing": 16,
+            "children": [
+              {
+                "name": "Page Header",
+                "type": "FRAME",
+                "layoutMode": "HORIZONTAL"
+              },
+              {
+                "name": "Metric Card Row",
+                "type": "FRAME",
+                "layoutMode": "HORIZONTAL",
+                "itemSpacing": 12,
+                "children": [
+                  {
+                    "name": "Metric Card",
+                    "type": "FRAME",
+                    "layoutMode": "VERTICAL"
+                  },
+                  {
+                    "name": "Metric Card",
+                    "type": "FRAME",
+                    "layoutMode": "VERTICAL"
+                  },
+                  {
+                    "name": "Metric Card",
+                    "type": "FRAME",
+                    "layoutMode": "VERTICAL"
+                  }
+                ]
+              },
+              {
+                "name": "List Card Group",
+                "type": "FRAME",
+                "layoutMode": "VERTICAL",
+                "itemSpacing": 10,
+                "cornerRadius": 16
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

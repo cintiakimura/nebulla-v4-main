@@ -11,6 +11,7 @@
   "tags": ["web", "auth", "a11y"],
   "description": "Centered web authentication card with email/password fields and primary continue CTA.",
   "template_id": "web_auth_center_card",
+  "figma_file_key": "MaFREMBRF3vQ8BhtqA2ZpK",
   "license": "Nebulla internal template",
   "source": "ui-generation-engine/v2/selectTemplate",
   "version": "1.0.0"

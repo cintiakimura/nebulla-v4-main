@@ -1,0 +1,68 @@
+{
+  "name": "Landing SaaS (structure)",
+  "document": {
+    "name": "Document",
+    "type": "DOCUMENT",
+    "children": [
+      {
+        "name": "Desktop Landing Hero",
+        "type": "FRAME",
+        "layoutMode": "VERTICAL",
+        "itemSpacing": 24,
+        "cornerRadius": 16,
+        "children": [
+          {
+            "name": "Nav Header",
+            "type": "FRAME",
+            "layoutMode": "HORIZONTAL",
+            "itemSpacing": 16
+          },
+          {
+            "name": "Hero CTA",
+            "type": "FRAME",
+            "layoutMode": "VERTICAL",
+            "itemSpacing": 16,
+            "children": [
+              {
+                "name": "Hero Title",
+                "type": "FRAME",
+                "layoutMode": "VERTICAL"
+              },
+              {
+                "name": "Primary CTA Button",
+                "type": "FRAME",
+                "layoutMode": "HORIZONTAL"
+              }
+            ]
+          },
+          {
+            "name": "Feature Card Group",
+            "type": "FRAME",
+            "layoutMode": "HORIZONTAL",
+            "itemSpacing": 16,
+            "children": [
+              {
+                "name": "Feature Card",
+                "type": "FRAME",
+                "layoutMode": "VERTICAL",
+                "itemSpacing": 8
+              },
+              {
+                "name": "Feature Card",
+                "type": "FRAME",
+                "layoutMode": "VERTICAL",
+                "itemSpacing": 8
+              },
+              {
+                "name": "Feature Card",
+                "type": "FRAME",
+                "layoutMode": "VERTICAL",
+                "itemSpacing": 8
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

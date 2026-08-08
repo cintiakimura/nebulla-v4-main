@@ -19,7 +19,7 @@ export function figmaStatusLabel(status: string): string {
     case 'failed':
       return 'Patterns: seed fallback (Figma skip)';
     case 'skipped':
-      return 'Patterns: catalog + brief';
+      return 'Patterns: catalog / brief';
     default:
       return status ? `Figma: ${status}` : '';
   }
@@ -41,6 +41,17 @@ export function patternModeLabel(mode: string): string {
   if (mode === 'seed') return 'Built-in patterns (seed fallback)';
   if (mode === 'figma') return 'Offline / Figma library';
   return '';
+}
+
+/** Prefer selection_mode when present for precise operator copy. */
+export function referenceDriveLabel(selectionMode: string, figmaStatus: string): string {
+  const m = selectionMode || '';
+  if (m.startsWith('offline:') || figmaStatus === 'offline') return 'Offline library hit';
+  if (m.startsWith('live:') || figmaStatus === 'success') return 'Live Figma hit';
+  if (m.includes(':catalog:')) return 'Catalog profile hit';
+  if (m.includes(':brief:')) return 'Brief-only guidance';
+  if (m.includes(':seed:') || figmaStatus === 'weak_matches') return 'Seed fallback';
+  return figmaStatusLabel(figmaStatus);
 }
 
 export function gateLabel(gate: string): string {

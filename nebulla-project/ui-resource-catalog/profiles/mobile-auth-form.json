@@ -11,6 +11,7 @@
   "tags": ["mobile", "auth", "a11y"],
   "description": "Mobile auth form with hero copy, two fields, and primary/secondary CTAs.",
   "template_id": "mobile_auth_form",
+  "figma_file_key": "MaFREMBRF3vQ8BhtqA2ZpK",
   "license": "Nebulla internal template",
   "source": "ui-generation-engine/v2/selectTemplate",
   "version": "1.0.0"

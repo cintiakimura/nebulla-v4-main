@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Check, ChevronDown, LogOut, MonitorPlay, Search, X } from 'lucide-react';
+import { Check, ChevronDown, Loader2, LogOut, MonitorPlay, Search, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Logo } from '@/components/Logo';
 import { getBrowserProjectName } from '../../lib/nebulaProjectApi';
@@ -21,6 +21,7 @@ const models: { id: IdeChatModelId; name: string; badge: string | null }[] = AI_
 
 export function TopBar({
   workspaceLabel,
+  workspaceSetupBusy,
   onProjectNameCommit,
   onSwitchWorkspace,
   onOpenAccount,
@@ -28,6 +29,8 @@ export function TopBar({
 }: {
   /** Active cloud/local project name from workspace gate. */
   workspaceLabel?: string;
+  /** Compact top throbber while workspace ensure runs (no full-screen card). */
+  workspaceSetupBusy?: boolean;
   /** Persist renamed project into user projects (guest index / cloud). */
   onProjectNameCommit?: (name: string) => void | Promise<void>;
   /** Re-open project picker (sign-in / switch project). */
@@ -192,6 +195,17 @@ export function TopBar({
         <IdeStatusStrip variant="header" />
 
         <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
+          {workspaceSetupBusy ? (
+            <span
+              className="inline-flex max-w-[9rem] items-center gap-1.5 truncate rounded-md border border-border/60 bg-secondary/40 px-2 py-1 text-[10px] text-muted-foreground sm:max-w-none"
+              role="status"
+              aria-live="polite"
+              title="Setting up workspace…"
+            >
+              <Loader2 className="h-3 w-3 shrink-0 animate-spin text-cyan-300/90" aria-hidden />
+              <span className="hidden sm:inline">Setting up…</span>
+            </span>
+          ) : null}
           <button
             type="button"
             title={t('ide.topbar.previewTitle')}
