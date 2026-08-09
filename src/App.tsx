@@ -8,7 +8,8 @@ import { ResetPasswordPage } from './pages/ResetPasswordPage';
 import { LoginPage } from './pages/LoginPage';
 import { PricingPage } from './pages/PricingPage';
 import { PaymentPage } from './pages/PaymentPage';
-import { goToTryFree } from './lib/authNavigate';
+import { goToApp, goToTryFree } from './lib/authNavigate';
+import { FORCE_GUEST_MODE } from './lib/testingBranch';
 
 function usePathname(): string {
   return useMemo(() => {
@@ -20,8 +21,12 @@ function usePathname(): string {
 export default function App() {
   const path = usePathname();
 
-  /** Always open signup (do not skip to IDE when already signed in). */
+  /** Try-free CTA — testing branch skips signup and opens the IDE as guest. */
   const enterTryFree = useCallback(() => {
+    if (FORCE_GUEST_MODE) {
+      goToApp();
+      return;
+    }
     goToTryFree('/app');
   }, []);
 
@@ -29,7 +34,11 @@ export default function App() {
   if (path === '/terms') return <TermsOfServicePage />;
   if (path === '/legal/dpa' || path === '/dpa') return <DpaPage />;
   if (path === '/reset-password') return <ResetPasswordPage />;
-  if (path === '/login' || path === '/signup') return <LoginPage />;
+  // Testing branch: no login / signup — always open the IDE in guest mode.
+  if (path === '/login' || path === '/signup') {
+    if (FORCE_GUEST_MODE) return <NebullaIDE />;
+    return <LoginPage />;
+  }
   if (path === '/payment') return <PaymentPage />;
   if (path === '/pricing') return <PricingPage />;
   if (path === '/app' || path === '/ide') return <NebullaIDE />;

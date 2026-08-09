@@ -17,6 +17,7 @@ import {
 } from '../../lib/nebulaCloud';
 import { fetchNebulaPublicConfig, type NebulaPublicConfig } from '../../lib/nebulaPublicConfig';
 import { getBrowserProjectKey, getBrowserProjectName } from '../../lib/nebulaProjectApi';
+import { FORCE_GUEST_MODE } from '../../lib/testingBranch';
 
 export type WorkspaceContext = {
   projectName: string;
@@ -97,8 +98,10 @@ export function WorkspaceSetupGate({
       }
       // Only auto-enter guest when the user last chose guest.
       // Never silently drop a cloud login into guest — that felt like "logged out on refresh".
+      // Testing branch: always guest (no login redirect).
       if (result.status === 'needs_login') {
-        if (getWorkspaceModePreference() === 'guest') {
+        if (FORCE_GUEST_MODE || getWorkspaceModePreference() === 'guest') {
+          setWorkspaceModePreference('guest');
           const g = bindGuestWorkspace();
           finishReady({
             projectName: g.projectName,

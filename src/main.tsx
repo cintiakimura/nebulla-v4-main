@@ -9,8 +9,10 @@ import { setBrowserProjectKey, setBrowserProjectName } from './lib/nebulaProject
 import {
   getWorkspaceModePreference,
   restorePersistedCloudProjectHint,
+  setWorkspaceModePreference,
 } from './lib/nebulaCloud';
 import { readActiveGuestProjectId, readGuestIndex } from './lib/nebulaProjectStore';
+import { FORCE_GUEST_MODE } from './lib/testingBranch';
 
 /**
  * Restore active project before any API calls.
@@ -18,8 +20,11 @@ import { readActiveGuestProjectId, readGuestIndex } from './lib/nebulaProjectSto
  * - Cloud: last cloud name/key hint (session sync confirms after login)
  * nebulaProjectApi also restores its own key/name from localStorage on import.
  */
+if (FORCE_GUEST_MODE) {
+  setWorkspaceModePreference('guest');
+}
 const mode = getWorkspaceModePreference();
-if (mode === 'cloud' || mode === null) {
+if (!FORCE_GUEST_MODE && (mode === 'cloud' || mode === null)) {
   restorePersistedCloudProjectHint();
 }
 const activeGuestId = readActiveGuestProjectId();

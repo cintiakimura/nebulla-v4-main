@@ -10,6 +10,7 @@ import {
 import { LanguageSettingsPanel } from '@/components/settings/LanguageSettingsPanel';
 import { AccountProjectSettings } from '@/components/account/AccountProjectSettings';
 import { dispatchOpenCenterPanel } from '@/components/ide/IdeCenterTabsContext';
+import { FORCE_GUEST_MODE } from '../lib/testingBranch';
 
 function formatIso(iso: string | null | undefined): string {
   if (!iso) return '—';
@@ -157,17 +158,25 @@ export function UserProfilePage({
           {!loading && !user ? (
             <section className="space-y-3 rounded-xl border border-border bg-black/40 p-5">
               {loadErr ? <p className="text-sm text-red-300">{loadErr}</p> : null}
-              <p className="text-sm text-muted-foreground">Sign in to manage your session and billing.</p>
-              <button
-                type="button"
-                onClick={() => {
-                  onClose?.();
-                  onRequestSignIn?.();
-                }}
-                className="btn-cyan inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm"
-              >
-                Sign in
-              </button>
+              {FORCE_GUEST_MODE ? (
+                <p className="text-sm text-muted-foreground">
+                  Guest mode (testing branch) — auth and billing are disabled.
+                </p>
+              ) : (
+                <>
+                  <p className="text-sm text-muted-foreground">Sign in to manage your session and billing.</p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onClose?.();
+                      onRequestSignIn?.();
+                    }}
+                    className="btn-cyan inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm"
+                  >
+                    Sign in
+                  </button>
+                </>
+              )}
             </section>
           ) : null}
 

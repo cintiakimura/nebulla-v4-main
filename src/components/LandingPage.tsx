@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Logo } from './Logo';
 import { Rocket, ArrowRight, CheckCircle, Terminal, LayoutGrid, Handshake, Network, Palette, Bug, Cpu, Globe, MoreHorizontal, PlusCircle, Save, Trash2, CreditCard, Camera, List, Code, User } from 'lucide-react';
+import { FORCE_GUEST_MODE } from '../lib/testingBranch';
 
 interface LandingPageProps {
   onEnter: () => void;
@@ -47,18 +48,27 @@ export function LandingPage({ onEnter }: LandingPageProps) {
           <span className="font-headline text-lg font-normal">nebulla</span>
         </div>
         <div className="flex items-center gap-2">
-          <a
-            href="/login"
-            className="px-3 py-2 text-slate-400 hover:text-cyan-200 transition-all font-headline text-sm font-normal"
-          >
-            Sign in
-          </a>
+          {FORCE_GUEST_MODE ? (
+            <a
+              href="/app"
+              className="px-3 py-2 text-slate-400 hover:text-cyan-200 transition-all font-headline text-sm font-normal"
+            >
+              Open IDE
+            </a>
+          ) : (
+            <a
+              href="/login"
+              className="px-3 py-2 text-slate-400 hover:text-cyan-200 transition-all font-headline text-sm font-normal"
+            >
+              Sign in
+            </a>
+          )}
           <button
             type="button"
             onClick={onEnter}
             className="px-4 py-2 bg-cyan-500/10 text-cyan-300 border border-cyan-500/30 rounded-md hover:bg-cyan-500/20 transition-all font-headline text-sm font-normal"
           >
-            Closed beta
+            {FORCE_GUEST_MODE ? 'Open app' : 'Closed beta'}
           </button>
         </div>
       </header>
