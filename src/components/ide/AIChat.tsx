@@ -1001,23 +1001,25 @@ export function AIChat() {
     return () => window.removeEventListener('nebula-project-reset', onReset);
   }, [diskProjectKey]);
 
-  // Post-login: stay quiet until My Projects → New Project (or explicit guided event).
+  // Post-login / landing handoff: stay quiet until New Project or pending goal idea.
   useEffect(() => {
-    if (serverHasGrokKey !== true) return;
     // Phase 7.0: prior 401/403 — do not auto-stampede Start/Continue.
     if (isMainAiAuthRejected(diskProjectKey)) return;
     if (!chatHistoryReady) return;
     if (bootstrapStartedRef.current || sendingRef.current) return;
-    // Prefer pending idea from "Start with a prompt" even if chat log restored noise.
+    // Prefer pending idea from landing / "Start with a prompt" even if chat log restored noise.
     const pendingIdea = peekPendingProjectIdea();
     // Peek-only until we commit — do not burn the flag on a skipped turn.
     let guidedFlag = false;
     try {
       guidedFlag = localStorage.getItem(NEBULA_START_GUIDED_ON_READY_KEY) === '1';
-      } catch {
+    } catch {
       guidedFlag = false;
     }
     if (!guidedFlag && !pendingIdea) return;
+    // Without a confirmed key, still bootstrap when a landing goal is pending so the
+    // visible user turn is stamped; send may fail until a key is available.
+    if (serverHasGrokKey !== true && !pendingIdea) return;
     if (!pendingIdea && messagesRef.current.length > 0) return;
     bootstrapStartedRef.current = true;
     consumeGuidedStartOnReady();

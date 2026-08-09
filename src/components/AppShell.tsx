@@ -1,7 +1,8 @@
 import type { ReactNode } from 'react';
 
 /**
- * Global glass UI shell (testing branch look): wallpaper + veil + frosted chrome.
+ * Global UI shell wrapper. Theme tokens live on `.nebulla-ide-shell` in index.css
+ * (temporary Decision 4: monochrome architecture mode).
  * Wraps every route so landing, legal, login, payment, and IDE share one theme.
  */
 export function AppShell({ children }: { children: ReactNode }) {

@@ -43,6 +43,9 @@ import { ChatFilePreview } from './ChatFilePreview';
 import { openGitHubFile, openLocalFile } from '../../lib/fileOperations';
 import type { SmartChatFilePreview } from '../../lib/smartChatHandler';
 import { useIdeWorkspace } from './IdeWorkspaceContext';
+import { markEnterBuildScreen } from '../../lib/ideShellScreens';
+import { readStoredWorkspaceLiveUrl } from '../../lib/workspaceLiveUrl';
+import { resetGuidedCycle } from '../../lib/guidedFunnel';
 
 export { shortNameFromIdea } from '../../lib/projectNameFromIdea';
 
@@ -98,9 +101,15 @@ const PROJECT_TYPES: {
 ];
 
 /**
- * Default post-login home — My Projects + quick actions.
+ * My Projects — IDE center pane (`ide`) or client Dashboard (`dashboard`).
  */
-export function MyProjectsHome() {
+export function MyProjectsHome({
+  variant = 'ide',
+}: {
+  /** `dashboard` = projects home (new project + list). `ide` keeps file/chat continue actions. */
+  variant?: 'ide' | 'dashboard';
+}) {
+  const isDashboard = variant === 'dashboard';
   const { workspacePaths, tabs: openFileTabs } = useIdeWorkspace();
   const [projects, setProjects] = useState<ListedProject[]>([]);
   const [loadingList, setLoadingList] = useState(true);
@@ -123,12 +132,20 @@ export function MyProjectsHome() {
   const isPlaceholderWorkspace = /^untitled(\s+project)?$/i.test(activeName || '');
   /** Real product work in progress → demote New Project so Code / explorer stay primary. */
   const hasExistingWork =
+    !isDashboard &&
     !isPlaceholderWorkspace &&
     (workspacePaths.length > 0 ||
       openFileTabs.length > 0 ||
       (Boolean(activeKey) && activeKey !== 'default' && projects.length > 0));
   /** Always show goal-first hero for Untitled shells (deployed fix is behavioral + this UX). */
-  const showStartHeroFirst = !hasExistingWork || isPlaceholderWorkspace;
+  const showStartHeroFirst = isDashboard || !hasExistingWork || isPlaceholderWorkspace;
+  const activeLiveUrl = readStoredWorkspaceLiveUrl();
+
+  const enterBuild = useCallback(() => {
+    resetGuidedCycle();
+    markEnterBuildScreen();
+    window.location.reload();
+  }, []);
 
   const refreshList = useCallback(async () => {
     setLoadingList(true);
@@ -195,26 +212,29 @@ export function MyProjectsHome() {
     void refreshList();
   }, [refreshList]);
 
-  const onOpenProject = useCallback(async (p: ListedProject) => {
-    if (p.source === 'cloud') {
-      const ok = await selectCloudProjectByName(p.name);
-      if (!ok) {
-        setBrowserProjectName(p.name);
-        setWorkspaceModePreference('cloud');
-        try {
-          localStorage.setItem('nebula_active_cloud_project_name_v1', p.name);
-        } catch {
-          /* ignore */
+  const onOpenProject = useCallback(
+    async (p: ListedProject) => {
+      if (p.source === 'cloud') {
+        const ok = await selectCloudProjectByName(p.name);
+        if (!ok) {
+          setBrowserProjectName(p.name);
+          setWorkspaceModePreference('cloud');
+          try {
+            localStorage.setItem('nebula_active_cloud_project_name_v1', p.name);
+          } catch {
+            /* ignore */
+          }
         }
+      } else {
+        setWorkspaceModePreference('guest');
+        setBrowserProjectKey(p.key);
+        writeActiveGuestProjectId(p.key);
+        setBrowserProjectName(p.name);
       }
-    } else {
-      setWorkspaceModePreference('guest');
-      setBrowserProjectKey(p.key);
-      writeActiveGuestProjectId(p.key);
-      setBrowserProjectName(p.name);
-    }
-    window.location.reload();
-  }, []);
+      enterBuild();
+    },
+    [enterBuild],
+  );
 
   /** Free plan: 1 project — if create fails, reuse + rename so the idea isn't stuck as Untitled. */
   const ensureProjectOrReuse = useCallback(async (label: string) => {
@@ -254,7 +274,7 @@ export function MyProjectsHome() {
         await ensureProjectOrReuse(type);
         // Persist after reset/create so projectKey is current (UI Studio device framing).
         setPendingProjectType(type);
-        window.location.reload();
+        enterBuild();
       } catch (err) {
         console.error('[MyProjectsHome] start typed project failed', err);
         setStartingType(null);
@@ -262,7 +282,7 @@ export function MyProjectsHome() {
         setStartError(msg);
       }
     },
-    [busyStarting, ensureProjectOrReuse],
+    [busyStarting, ensureProjectOrReuse, enterBuild],
   );
 
   const onStartFromIdea = useCallback(async () => {
@@ -280,14 +300,14 @@ export function MyProjectsHome() {
       await ensureProjectOrReuse(label);
       // After reset/create so projectKey is current (same order as typed-chip start).
       if (ideaType) setPendingProjectType(ideaType);
-      window.location.reload();
+      enterBuild();
     } catch (err) {
       console.error('[MyProjectsHome] start from idea failed', err);
       setStartingIdea(false);
       const msg = err instanceof Error ? err.message : 'Could not start the project. Try again.';
       setStartError(msg);
     }
-  }, [busyStarting, ideaInput, ideaType, ensureProjectOrReuse]);
+  }, [busyStarting, ideaInput, ideaType, ensureProjectOrReuse, enterBuild]);
 
   const onJustChat = useCallback(() => {
     dispatchStartFreeChat();
@@ -385,25 +405,29 @@ export function MyProjectsHome() {
       <section className="space-y-5">
         <div className="space-y-2">
           <h2 className="text-base font-normal tracking-tight text-foreground">
-            {isPlaceholderWorkspace
-              ? 'Start with a prompt'
-              : hasExistingWork
-                ? 'Start another project'
-                : 'New Project'}
+            {isDashboard
+              ? 'New project'
+              : isPlaceholderWorkspace
+                ? 'Start with a prompt'
+                : hasExistingWork
+                  ? 'Start another project'
+                  : 'New Project'}
           </h2>
           <p className="max-w-xl text-sm leading-relaxed text-muted-foreground">
-            {isPlaceholderWorkspace
-              ? 'This workspace is still an empty Untitled shell. Add a prompt (optional platform), then Continue — research → Master Plan → UI mockup → code. Anything missing is asked in chat. Free plan reuses this project slot and renames it.'
-              : hasExistingWork
-                ? 'Create a separate project when you are ready. Your current workspace stays in the explorer and Code tab.'
-                : 'Describe what you want to build. Missing details are asked in chat.'}
+            {isDashboard
+              ? 'Describe what you want to build, pick a type, then Start — opens Build for that workspace.'
+              : isPlaceholderWorkspace
+                ? 'This workspace is still an empty Untitled shell. Add a prompt (optional platform), then Continue — research → Master Plan → UI mockup → code. Anything missing is asked in chat. Free plan reuses this project slot and renames it.'
+                : hasExistingWork
+                  ? 'Create a separate project when you are ready. Your current workspace stays in the explorer and Code tab.'
+                  : 'Describe what you want to build. Missing details are asked in chat.'}
           </p>
         </div>
 
         <div className="ide-glass-card rounded-2xl border border-border p-5">
           <label htmlFor="nebula-project-idea" className="flex items-center gap-2 text-sm text-foreground">
             <Sparkles className="h-4 w-4 text-foreground/60" aria-hidden />
-            Prompt
+            {isDashboard ? 'Goal / brief' : 'Prompt'}
           </label>
           <textarea
             id="nebula-project-idea"
@@ -418,7 +442,9 @@ export function MyProjectsHome() {
             className="ide-glass-input mt-3 w-full resize-y rounded-xl border border-border px-3 py-2.5 text-sm leading-relaxed text-foreground outline-none placeholder:text-muted-foreground/70 disabled:opacity-60"
           />
           <p className="mt-3 text-xs text-muted-foreground">
-            Optional platform chip. If the goal or platform is missing, chat will ask after Continue.
+            {isDashboard
+              ? 'Optional type chip. Missing details are asked in Build chat.'
+              : 'Optional platform chip. If the goal or platform is missing, chat will ask after Continue.'}
           </p>
           <div className="mt-2 flex flex-wrap gap-2">
             {PROJECT_TYPES.map((t) => (
@@ -428,9 +454,12 @@ export function MyProjectsHome() {
                 disabled={busyStarting}
                 aria-pressed={ideaType === t.id}
                 onClick={() => setIdeaType((prev) => (prev === t.id ? null : t.id))}
-                className="btn-cyan inline-flex items-center gap-1.5 rounded-lg px-4 py-2 text-xs disabled:cursor-not-allowed disabled:opacity-50"
+                className={cn(
+                  'inline-flex items-center gap-1.5 rounded-lg px-4 py-2 text-xs disabled:cursor-not-allowed disabled:opacity-50',
+                  ideaType === t.id ? 'btn-cyan' : 'btn-secondary-surface text-muted-foreground',
+                )}
               >
-                {t.title}
+                {t.title === 'Landing Page' ? 'Landing' : t.title}
               </button>
             ))}
           </div>
@@ -443,46 +472,48 @@ export function MyProjectsHome() {
               className="btn-cyan inline-flex items-center gap-1.5 rounded-lg px-4 py-2 text-xs disabled:cursor-not-allowed disabled:opacity-50"
             >
               {startingIdea ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
-              Continue
+              {isDashboard ? 'Start' : 'Continue'}
             </button>
           </div>
         </div>
       </section>
 
-      <section className="ide-glass-card space-y-4 rounded-2xl border border-border p-5">
-        <div className="space-y-1">
-          <h2 className="text-base font-normal text-foreground">
-            {hasExistingWork ? 'Or choose a type for a new project' : 'Or choose a type'}
-          </h2>
-          <p className="max-w-xl text-sm leading-relaxed text-muted-foreground">
-            Pick a platform to start. Chat asks for the goal if you have not written a prompt yet.
-          </p>
-        </div>
+      {!isDashboard ? (
+        <section className="ide-glass-card space-y-4 rounded-2xl border border-border p-5">
+          <div className="space-y-1">
+            <h2 className="text-base font-normal text-foreground">
+              {hasExistingWork ? 'Or choose a type for a new project' : 'Or choose a type'}
+            </h2>
+            <p className="max-w-xl text-sm leading-relaxed text-muted-foreground">
+              Pick a platform to start. Chat asks for the goal if you have not written a prompt yet.
+            </p>
+          </div>
 
-        <div className="flex flex-wrap gap-2">
-          {PROJECT_TYPES.map((action) => {
-            const Icon = action.icon;
-            const busy = startingType === action.id;
-            return (
-              <button
-                key={action.id}
-                type="button"
-                disabled={busyStarting}
-                title={action.blurb}
-                onClick={() => void onStartTypedProject(action.id)}
-                className="btn-cyan inline-flex items-center gap-2 rounded-lg px-4 py-2 text-xs disabled:cursor-wait disabled:opacity-50"
-              >
-                {busy ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                ) : (
-                  <Icon className="h-3.5 w-3.5 text-foreground/60" />
-                )}
-                {action.title}
-              </button>
-            );
-          })}
-        </div>
-      </section>
+          <div className="flex flex-wrap gap-2">
+            {PROJECT_TYPES.map((action) => {
+              const Icon = action.icon;
+              const busy = startingType === action.id;
+              return (
+                <button
+                  key={action.id}
+                  type="button"
+                  disabled={busyStarting}
+                  title={action.blurb}
+                  onClick={() => void onStartTypedProject(action.id)}
+                  className="btn-cyan inline-flex items-center gap-2 rounded-lg px-4 py-2 text-xs disabled:cursor-wait disabled:opacity-50"
+                >
+                  {busy ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <Icon className="h-3.5 w-3.5 text-foreground/60" />
+                  )}
+                  {action.title}
+                </button>
+              );
+            })}
+          </div>
+        </section>
+      ) : null}
     </>
   );
 
@@ -560,8 +591,28 @@ export function MyProjectsHome() {
                   </p>
                   <p className="mt-0.5 text-xs text-muted-foreground">
                     Last modified {formatWhen(p.updatedAt)}
-                    {p.source === 'cloud' ? ' · Cloud' : p.source === 'guest' ? ' · Local' : ''}
+                    {p.source === 'cloud'
+                      ? ' · Cloud'
+                      : p.source === 'guest'
+                        ? ' · Local'
+                        : p.source === 'current'
+                          ? ' · Local'
+                          : ''}
                   </p>
+                  {isDashboard &&
+                  activeLiveUrl &&
+                  (p.key === activeKey || p.name === activeName) ? (
+                    <a
+                      href={activeLiveUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="mt-1 inline-block max-w-full truncate text-[11px] text-muted-foreground underline-offset-2 hover:underline"
+                      title={activeLiveUrl}
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      Live URL
+                    </a>
+                  ) : null}
                 </div>
                 <button
                   type="button"
@@ -580,23 +631,28 @@ export function MyProjectsHome() {
 
   return (
     <div className="min-h-0 flex-1 overflow-auto bg-transparent">
-      <div className="mx-auto flex w-full max-w-3xl flex-col gap-8 px-6 py-4 sm:px-10 sm:py-6">
+      <div
+        className={cn(
+          'mx-auto flex w-full flex-col gap-8 px-6 py-4 sm:px-10 sm:py-6',
+          isDashboard ? 'max-w-2xl' : 'max-w-3xl',
+        )}
+      >
         {showStartHeroFirst ? (
           <>
             {newProjectSection}
-            {continueSection}
+            {!isDashboard ? continueSection : null}
             {projectsSection}
           </>
         ) : (
           <>
             {projectsSection}
-            {continueSection}
+            {!isDashboard ? continueSection : null}
             {newProjectSection}
           </>
         )}
       </div>
 
-      {fileModal ? (
+      {!isDashboard && fileModal ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm">
           <div className="ide-glass-card w-full max-w-lg rounded-2xl border border-border p-5">
             <h3 className="text-base font-normal text-foreground">

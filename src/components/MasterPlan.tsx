@@ -186,7 +186,7 @@ export function MasterPlan({
   };
 
   return (
-    <div className="flex h-full flex-col overflow-hidden border border-border bg-black shadow-2xl">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden border border-border bg-black shadow-2xl">
       {/* Header */}
       <div className="flex h-12 items-center justify-between border-b border-border bg-black px-4">
         <div className="flex items-center gap-3 text-foreground">

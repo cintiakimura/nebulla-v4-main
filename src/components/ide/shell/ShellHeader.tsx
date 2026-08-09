@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { GitBranch, LayoutDashboard, Loader2, Rocket } from 'lucide-react';
+import { LayoutGrid, Loader2, Rocket, Settings } from 'lucide-react';
 import { Logo } from '@/components/Logo';
-import { IdeStatusStrip } from '@/components/ide/IdeStatusStrip';
 import { getBrowserProjectName } from '../../../lib/nebulaProjectApi';
 import { sessionInitials } from '../../../lib/sessionInitials';
 import { fetchSessionUser, type NebulaSessionUser } from '../../../lib/nebulaCloud';
@@ -9,6 +8,8 @@ import {
   fetchRunnableStatus,
   runWorkspaceDeployOrBuildCheck,
 } from '../../../lib/workspaceDeployClient';
+import { readStoredWorkspaceLiveUrl } from '../../../lib/workspaceLiveUrl';
+import { tryGuidedOpenLiveUrlPopup } from '../../../lib/guidedFunnel';
 import { useIdeShellNav } from './IdeShellNavContext';
 import { cn } from '@/lib/utils';
 
@@ -21,9 +22,14 @@ export function ShellHeader({
   workspaceLabel?: string;
   workspaceSetupBusy?: boolean;
   onProjectNameCommit?: (name: string) => void | Promise<void>;
+  /** @deprecated Prefer goToSettings from nav — kept as alias for Settings. */
   onOpenAccount?: () => void;
 }) {
-  const { activeScreen, goToDashboard, goToBuild } = useIdeShellNav();
+  const { activeScreen, goToSettings, goToDashboard } = useIdeShellNav();
+  const openSettings = () => {
+    if (onOpenAccount) onOpenAccount();
+    else goToSettings();
+  };
   const [draftName, setDraftName] = useState(
     () => workspaceLabel?.trim() || getBrowserProjectName().trim() || '',
   );
@@ -31,6 +37,7 @@ export function ShellHeader({
   const [deployBusy, setDeployBusy] = useState(false);
   const [deployHint, setDeployHint] = useState<string | null>(null);
   const [runnableOk, setRunnableOk] = useState<boolean | null>(null);
+  const [deployPulse, setDeployPulse] = useState(false);
   const nameInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -63,16 +70,41 @@ export function ShellHeader({
     void onProjectNameCommit?.(trimmed);
   }, [draftName, onProjectNameCommit, workspaceLabel]);
 
+  useEffect(() => {
+    const onPulse = (ev: Event) => {
+      const kind = (ev as CustomEvent<{ kind?: string }>).detail?.kind;
+      if (kind !== 'deploy') return;
+      setDeployPulse(true);
+      window.setTimeout(() => setDeployPulse(false), 2400);
+    };
+    window.addEventListener('nebula-guided-pulse', onPulse);
+    return () => window.removeEventListener('nebula-guided-pulse', onPulse);
+  }, []);
+
   const runDeploy = useCallback(async () => {
     if (deployBusy) return;
     setDeployBusy(true);
-    setDeployHint('Build check…');
+    setDeployHint('Deploying…');
     try {
       const result = await runWorkspaceDeployOrBuildCheck({});
-      setDeployHint(result.ok ? 'Build check OK' : result.error || 'Build check failed');
+      if (!result.ok) {
+        setDeployHint(result.error || 'Deploy failed');
+        window.setTimeout(() => setDeployHint(null), 12000);
+        return;
+      }
+      const url = (result.url || readStoredWorkspaceLiveUrl() || '').trim();
+      if (url && /^https?:\/\//i.test(url)) {
+        setDeployHint('Live URL ready');
+        tryGuidedOpenLiveUrlPopup(url);
+      } else {
+        // Safe stub when deploy OK but no Render URL yet
+        const stub = 'https://your-app.onrender.com';
+        setDeployHint('Deploy OK — using placeholder URL');
+        tryGuidedOpenLiveUrlPopup(stub);
+      }
       window.setTimeout(() => setDeployHint(null), 12000);
     } catch {
-      setDeployHint('Build check failed');
+      setDeployHint('Deploy failed');
       window.setTimeout(() => setDeployHint(null), 12000);
     } finally {
       setDeployBusy(false);
@@ -80,58 +112,57 @@ export function ShellHeader({
   }, [deployBusy]);
 
   const initials = sessionInitials(sessionUser);
-  const isStart = activeScreen === 'start';
 
   return (
     <header className="ide-glass-chrome flex min-h-12 shrink-0 flex-col border-b border-border">
       <div className="flex min-h-12 items-center gap-2 px-3 py-1">
         <div className="flex min-w-0 shrink-0 items-center gap-2 sm:gap-3">
-          <Logo
-            className={cn(
-              'max-h-[90%] shrink-0 object-contain opacity-95',
-              isStart ? 'h-12 w-12' : 'h-10 w-10',
-            )}
-          />
-          <span
-            className={cn(
-              'app-logotype',
-              isStart
-                ? 'inline text-[1.35rem] tracking-[0.06rem] leading-none'
-                : 'hidden md:inline',
-            )}
+          <button
+            type="button"
+            title="Projects"
+            aria-label="Go to projects Dashboard"
+            onClick={() => goToDashboard()}
+            className="inline-flex items-center gap-2 rounded-md outline-none focus-visible:ring-1 focus-visible:ring-border"
           >
-            Nebulla.beta
-          </span>
-          {!isStart ? (
-            <input
-              ref={nameInputRef}
-              type="text"
-              value={draftName}
-              onChange={(e) => setDraftName(e.target.value)}
-              onBlur={() => commitName()}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  e.preventDefault();
-                  commitName();
-                  nameInputRef.current?.blur();
-                }
-                if (e.key === 'Escape') {
-                  setDraftName(workspaceLabel?.trim() || getBrowserProjectName().trim() || '');
-                  nameInputRef.current?.blur();
-                }
-              }}
-              placeholder="Project name"
-              aria-label="Project name"
-              title="Project name"
-              className="btn-secondary-surface type-title-sm hidden w-full min-w-0 max-w-[10rem] truncate rounded-md px-2 py-1 text-muted-foreground outline-none placeholder:text-muted-foreground/50 focus:text-foreground lg:block xl:max-w-[14rem]"
-            />
-          ) : null}
+            <Logo className="h-10 w-10 max-h-[90%] shrink-0 object-contain opacity-95" />
+            <span className="app-logotype hidden md:inline">Nebulla.beta</span>
+          </button>
+          <button
+            type="button"
+            title="Projects"
+            aria-label="Projects"
+            onClick={() => goToDashboard()}
+            className="btn-secondary-surface inline-flex h-8 items-center gap-1 rounded-md px-2.5 text-xs text-muted-foreground"
+          >
+            <LayoutGrid className="h-3.5 w-3.5" aria-hidden />
+            <span className="hidden sm:inline">Projects</span>
+          </button>
+          <input
+            ref={nameInputRef}
+            type="text"
+            value={draftName}
+            onChange={(e) => setDraftName(e.target.value)}
+            onBlur={() => commitName()}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                commitName();
+                nameInputRef.current?.blur();
+              }
+              if (e.key === 'Escape') {
+                setDraftName(workspaceLabel?.trim() || getBrowserProjectName().trim() || '');
+                nameInputRef.current?.blur();
+              }
+            }}
+            placeholder="Project name"
+            aria-label="Project name"
+            title="Project name"
+            className="btn-secondary-surface type-title-sm hidden w-full min-w-0 max-w-[10rem] truncate rounded-md px-2 py-1 text-muted-foreground outline-none placeholder:text-muted-foreground/50 focus:text-foreground lg:block xl:max-w-[14rem]"
+          />
         </div>
 
-        {!isStart ? <IdeStatusStrip variant="header" /> : null}
-
         <div className="ml-auto flex shrink-0 items-center gap-1.5">
-          {!isStart && workspaceSetupBusy ? (
+          {workspaceSetupBusy ? (
             <span
               className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-[10px] text-muted-foreground"
               role="status"
@@ -141,72 +172,57 @@ export function ShellHeader({
             </span>
           ) : null}
 
-          {!isStart && activeScreen === 'build' ? (
-            <button
-              type="button"
-              title="Open Dashboard"
-              aria-label="Open Dashboard"
-              onClick={() => goToDashboard()}
-              className="btn-secondary-surface inline-flex h-9 w-9 items-center justify-center rounded-md text-muted-foreground hover:text-foreground"
-            >
-              <LayoutDashboard className="h-4 w-4" aria-hidden />
-            </button>
-          ) : null}
-
-          {!isStart && activeScreen === 'dashboard' ? (
-            <button
-              type="button"
-              title="Back to Build"
-              aria-label="Back to Build"
-              onClick={() => goToBuild()}
-              className="btn-cyan hidden h-9 items-center rounded-md px-3 text-xs sm:inline-flex"
-            >
-              Back to Build
-            </button>
-          ) : null}
-
-          {!isStart ? (
-            <>
-              <button
-                type="button"
-                title="Source control"
-                aria-label="Source control"
-                onClick={() => goToDashboard('files')}
-                className="btn-secondary-surface inline-flex h-9 w-9 items-center justify-center rounded-md text-muted-foreground hover:text-foreground"
-              >
-                <GitBranch className="h-4 w-4" aria-hidden />
-              </button>
-
-              <button
-                type="button"
-                title={
-                  runnableOk === false
-                    ? 'Needs runnable root — run a coding slice first'
-                    : deployHint || 'Deploy / Build check'
-                }
-                aria-label="Deploy"
-                disabled={deployBusy}
-                onClick={() => void runDeploy()}
-                className={cn(
-                  'btn-secondary-surface inline-flex h-9 w-9 items-center justify-center rounded-md text-muted-foreground hover:text-foreground disabled:opacity-40',
-                  runnableOk === false && 'opacity-70',
-                )}
-              >
-                {deployBusy ? (
-                  <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
-                ) : (
-                  <Rocket className="h-4 w-4" aria-hidden />
-                )}
-              </button>
-            </>
-          ) : null}
+          <button
+            type="button"
+            title={
+              runnableOk === false
+                ? 'Needs runnable root — run a coding slice first'
+                : deployHint || 'Deploy / Build check'
+            }
+            aria-label="Deploy"
+            disabled={deployBusy}
+            onClick={() => void runDeploy()}
+            className={cn(
+              'btn-secondary-surface inline-flex h-9 w-9 items-center justify-center rounded-md text-muted-foreground hover:text-foreground disabled:opacity-40',
+              runnableOk === false && 'opacity-70',
+              deployPulse && 'nebulla-guided-pulse',
+            )}
+          >
+            {deployBusy ? (
+              <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+            ) : (
+              <Rocket className="h-4 w-4" aria-hidden />
+            )}
+          </button>
 
           <button
             type="button"
-            title="Account"
-            aria-label="Account"
-            onClick={() => onOpenAccount?.()}
-            className="btn-secondary-surface flex h-9 w-9 items-center justify-center rounded-full text-[11px] text-foreground"
+            title="Settings"
+            aria-label="Settings"
+            aria-current={activeScreen === 'settings' ? 'page' : undefined}
+            onClick={openSettings}
+            className={cn(
+              'inline-flex h-9 w-9 items-center justify-center rounded-md',
+              activeScreen === 'settings'
+                ? 'btn-cyan'
+                : 'btn-secondary-surface text-muted-foreground hover:text-foreground',
+            )}
+          >
+            <Settings className="h-4 w-4" aria-hidden />
+          </button>
+
+          <button
+            type="button"
+            title="Settings"
+            aria-label="Open Settings"
+            aria-current={activeScreen === 'settings' ? 'page' : undefined}
+            onClick={openSettings}
+            className={cn(
+              'flex h-9 w-9 items-center justify-center rounded-full text-[11px]',
+              activeScreen === 'settings'
+                ? 'btn-cyan'
+                : 'btn-secondary-surface text-foreground',
+            )}
           >
             {initials || 'NB'}
           </button>

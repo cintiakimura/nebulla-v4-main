@@ -3,7 +3,6 @@ import {
   dispatchOpenCenterPanel,
   IdeCenterTabsProvider,
 } from '@/components/ide/IdeCenterTabsContext';
-import { UserProfilePage } from '@/components/UserProfilePage';
 import { WelcomeOnboardingModal } from '@/components/ide/WelcomeOnboardingModal';
 import { IdeWorkspaceProvider } from '@/components/ide/IdeWorkspaceContext';
 import {
@@ -23,12 +22,19 @@ import { shouldShowWelcomeOnboarding } from '../../lib/nebulaWelcomeOnboarding';
 import { cloudBlockedBannerMessage } from '../../lib/ideCloudStatus';
 import { installOnboardingRideListeners } from '../../lib/ideOnboardingRide';
 import { UI_SHELL_ONLY } from '../../lib/testingBranch';
-import { openGitHubFile, openLocalFile } from '../../lib/fileOperations';
 import { IdeShellNavProvider, useIdeShellNav } from '@/components/ide/shell/IdeShellNavContext';
 import { ShellHeader } from '@/components/ide/shell/ShellHeader';
-import { StartScreen } from '@/components/ide/shell/StartScreen';
+import { ShellBottomNav } from '@/components/ide/shell/ShellBottomNav';
+import { GuidedFunnelOverlays } from '@/components/ide/shell/GuidedFunnelOverlays';
 import { BuildScreen } from '@/components/ide/shell/BuildScreen';
+import { CodeScreen } from '@/components/ide/shell/CodeScreen';
+import { PlanScreen } from '@/components/ide/shell/PlanScreen';
+import { SettingsScreen } from '@/components/ide/shell/SettingsScreen';
 import { DashboardScreen } from '@/components/ide/shell/DashboardScreen';
+import {
+  consumeForceDashboardOnce,
+  consumeGuidedEnterBuild,
+} from '../../lib/guidedFunnel';
 
 export function NebullaIDE() {
   return (
@@ -43,15 +49,18 @@ export function NebullaIDE() {
 }
 
 function NebullaIDEShell() {
-  const { activeScreen } = useIdeShellNav();
-  const [profileOpen, setProfileOpen] = useState(false);
+  const {
+    activeScreen,
+    goToSettings,
+    goToBuild,
+    goToCode,
+    goToPlan,
+    goToDashboard,
+  } = useIdeShellNav();
   const [myServicesUser, setMyServicesUser] = useState<NebulaSessionUser | null>(null);
   const [workspaceCtx, setWorkspaceCtx] = useState<WorkspaceContext | null>(null);
   const [workspaceSetupBusy, setWorkspaceSetupBusy] = useState(true);
   const [workspaceProjectKey, setWorkspaceProjectKey] = useState(() => getBrowserProjectKey());
-  const [accountProjectName, setAccountProjectName] = useState(
-    () => getBrowserProjectName().trim() || 'Untitled project',
-  );
   const [welcomeOpen, setWelcomeOpen] = useState(false);
   const [cloudBanner, setCloudBanner] = useState<string | null>(null);
   const [cloudBannerDismissed, setCloudBannerDismissed] = useState(false);
@@ -64,13 +73,32 @@ function NebullaIDEShell() {
   }, []);
 
   useEffect(() => {
-    const name = workspaceCtx?.projectName?.trim() || getBrowserProjectName().trim();
-    if (name) setAccountProjectName(name);
-  }, [workspaceCtx?.projectName, workspaceProjectKey]);
-
-  useEffect(() => {
     document.title = 'Nebulla.beta — Workspace';
   }, []);
+
+  /** T1 enter Build / T8 force Dashboard — one-shot on app mount. */
+  useEffect(() => {
+    if (consumeGuidedEnterBuild()) {
+      goToBuild();
+      return;
+    }
+    if (consumeForceDashboardOnce()) {
+      goToDashboard();
+    }
+  }, [goToBuild, goToDashboard]);
+
+  /** Guided nav events from funnel helpers (T2/T4/T7). */
+  useEffect(() => {
+    const onNav = (ev: Event) => {
+      const screen = (ev as CustomEvent<{ screen?: string }>).detail?.screen;
+      if (screen === 'build') goToBuild();
+      else if (screen === 'code') goToCode();
+      else if (screen === 'plan') goToPlan();
+      else if (screen === 'dashboard') goToDashboard();
+    };
+    window.addEventListener('nebula-guided-nav', onNav);
+    return () => window.removeEventListener('nebula-guided-nav', onNav);
+  }, [goToBuild, goToCode, goToPlan, goToDashboard]);
 
   useEffect(() => installOnboardingRideListeners(), []);
 
@@ -137,17 +165,11 @@ function NebullaIDEShell() {
   }, []);
 
   useEffect(() => {
-    if (!profileOpen) return;
-    void refreshMyServicesContext();
-  }, [profileOpen, refreshMyServicesContext]);
-
-  useEffect(() => {
     const openSecrets = () => {
-      setProfileOpen(false);
       dispatchOpenCenterPanel('secrets');
     };
     const openProfile = () => {
-      setProfileOpen(true);
+      goToSettings();
     };
     window.addEventListener('nebula-open-my-services', openSecrets);
     window.addEventListener('nebula-open-user-profile', openProfile);
@@ -155,23 +177,14 @@ function NebullaIDEShell() {
       window.removeEventListener('nebula-open-my-services', openSecrets);
       window.removeEventListener('nebula-open-user-profile', openProfile);
     };
-  }, []);
+  }, [goToSettings]);
 
   const handleSessionEnded = useCallback(() => {
-    setProfileOpen(false);
     setMyServicesUser(null);
     setWorkspaceCtx(null);
     welcomeCheckedRef.current = false;
     window.location.assign('/');
   }, []);
-
-  const handleAccountProjectNameChange = useCallback(
-    (name: string) => {
-      setAccountProjectName(name);
-      void handleProjectNameCommit(name);
-    },
-    [handleProjectNameCommit],
-  );
 
   useEffect(() => {
     const onMsg = (ev: MessageEvent) => {
@@ -234,18 +247,6 @@ function NebullaIDEShell() {
     });
   }, []);
 
-  const handleOpenLocalFile = useCallback(() => {
-    const path = window.prompt('Open workspace file path (relative):');
-    if (!path?.trim()) return;
-    void openLocalFile(path.trim());
-  }, []);
-
-  const handleOpenGitHub = useCallback(() => {
-    const url = window.prompt('GitHub file URL:');
-    if (!url?.trim()) return;
-    void openGitHubFile(url.trim());
-  }, []);
-
   return (
     /* Wallpaper/glass come from AppShell — this is layout only */
     <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden text-foreground">
@@ -260,31 +261,14 @@ function NebullaIDEShell() {
         user={myServicesUser ?? workspaceCtx?.user ?? null}
         onClose={() => setWelcomeOpen(false)}
       />
-      {profileOpen ? (
-        <div
-          className="fixed inset-0 z-[200] flex flex-col overflow-hidden"
-          role="dialog"
-          aria-modal="true"
-          aria-label="Account"
-        >
-          <UserProfilePage
-            onClose={() => setProfileOpen(false)}
-            onLoggedOut={handleSessionEnded}
-            onAccountDeleted={handleSessionEnded}
-            onRequestSignIn={handleSessionEnded}
-            projectName={accountProjectName}
-            onProjectNameChange={handleAccountProjectNameChange}
-            activeProjectKey={workspaceProjectKey}
-          />
-        </div>
+      {activeScreen !== 'dashboard' ? (
+        <ShellHeader
+          workspaceLabel={workspaceCtx?.projectName}
+          workspaceSetupBusy={workspaceSetupBusy && !workspaceCtx}
+          onProjectNameCommit={handleProjectNameCommit}
+          onOpenAccount={() => goToSettings()}
+        />
       ) : null}
-
-      <ShellHeader
-        workspaceLabel={workspaceCtx?.projectName}
-        workspaceSetupBusy={workspaceSetupBusy && !workspaceCtx}
-        onProjectNameCommit={handleProjectNameCommit}
-        onOpenAccount={() => setProfileOpen(true)}
-      />
 
       {!UI_SHELL_ONLY && cloudBanner && !cloudBannerDismissed && workspaceCtx ? (
         <div
@@ -302,13 +286,58 @@ function NebullaIDEShell() {
         </div>
       ) : null}
 
-      {activeScreen === 'start' ? (
-        <StartScreen onOpenLocalFile={handleOpenLocalFile} onOpenGitHub={handleOpenGitHub} />
-      ) : null}
-      {activeScreen === 'build' ? <BuildScreen /> : null}
-      {activeScreen === 'dashboard' ? (
-        <DashboardScreen onOpenAccount={() => setProfileOpen(true)} />
-      ) : null}
+      {/* Body + floating bottom nav. Workspace tabs stay mounted so Build↔Code↔Plan keeps UI state. */}
+      <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+          {activeScreen === 'dashboard' ? (
+            <DashboardScreen onOpenAccount={() => goToSettings()} />
+          ) : null}
+          {activeScreen === 'settings' ? (
+            <SettingsScreen onLoggedOut={handleSessionEnded} />
+          ) : null}
+          {(activeScreen === 'build' ||
+            activeScreen === 'code' ||
+            activeScreen === 'plan') && (
+            <>
+              {/* pb clears the floating capsule nav; each page owns its scroll */}
+              <div
+                className={
+                  activeScreen === 'build'
+                    ? 'flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden pb-16'
+                    : 'hidden'
+                }
+                aria-hidden={activeScreen !== 'build'}
+              >
+                <BuildScreen />
+              </div>
+              <div
+                className={
+                  activeScreen === 'code'
+                    ? 'flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden pb-16'
+                    : 'hidden'
+                }
+                aria-hidden={activeScreen !== 'code'}
+              >
+                <CodeScreen />
+              </div>
+              <div
+                className={
+                  activeScreen === 'plan'
+                    ? 'flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden pb-16'
+                    : 'hidden'
+                }
+                aria-hidden={activeScreen !== 'plan'}
+              >
+                <PlanScreen />
+              </div>
+            </>
+          )}
+        </div>
+        {/* Bottom menu: Build · Code · Plan only (hidden on Dashboard / Settings). */}
+        <ShellBottomNav />
+      </div>
+
+      <GuidedFunnelOverlays />
     </div>
   );
 }

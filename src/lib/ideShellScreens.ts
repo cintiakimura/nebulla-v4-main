@@ -1,6 +1,6 @@
-/** Three-screen IDE shell IA (Start → Build → Dashboard). UI lab only. */
+/** Shell IA: Landing (`/`) → Dashboard (projects) → Build / Code / Plan / Settings. */
 
-export type IdeShellScreen = 'start' | 'build' | 'dashboard';
+export type IdeShellScreen = 'build' | 'code' | 'plan' | 'settings' | 'dashboard';
 
 export type IdeDashboardPanel =
   | 'projects'
@@ -33,15 +33,29 @@ function writeLs(key: string, value: string): void {
   }
 }
 
+/**
+ * IDE workspace screens only.
+ * Restores last screen when set; first entry / unknown → Dashboard (projects home).
+ * Landing goal handoff still writes `'build'` explicitly.
+ */
 export function readStoredShellScreen(): IdeShellScreen {
-  const goal = readLs(GOAL_KEY)?.trim();
   const raw = readLs(SCREEN_KEY);
-  if (raw === 'start' || raw === 'build' || raw === 'dashboard') {
-    // Empty workspace prefers Start even if last screen was Build.
-    if (!goal && raw !== 'start') return 'start';
+  if (
+    raw === 'dashboard' ||
+    raw === 'plan' ||
+    raw === 'code' ||
+    raw === 'build' ||
+    raw === 'settings'
+  ) {
     return raw;
   }
-  return goal ? 'build' : 'start';
+  // 'start' | missing → Dashboard
+  return 'dashboard';
+}
+
+/** Persist Build before reload when opening/starting a project from Dashboard. */
+export function markEnterBuildScreen(): void {
+  writeStoredShellScreen('build');
 }
 
 export function writeStoredShellScreen(screen: IdeShellScreen): void {
@@ -99,4 +113,17 @@ export function writeStoredStartType(t: IdeStartProjectType): void {
     return;
   }
   writeLs(TYPE_KEY, t);
+}
+
+/** Persist goal from Landing and mark Build as the next workspace screen. */
+export function persistLandingGoalForBuild(
+  goal: string,
+  startType?: IdeStartProjectType,
+): boolean {
+  const next = goal.trim();
+  if (!next) return false;
+  writeStoredShellGoal(next);
+  writeStoredShellScreen('build');
+  if (startType !== undefined) writeStoredStartType(startType);
+  return true;
 }

@@ -13,13 +13,14 @@ import {
   readStoredShellScreen,
   readStoredStartType,
   writeStoredDashboardPanel,
-  writeStoredShellGoal,
   writeStoredShellScreen,
   writeStoredStartType,
   type IdeDashboardPanel,
   type IdeShellScreen,
   type IdeStartProjectType,
 } from '../../../lib/ideShellScreens';
+import { goToLanding } from '../../../lib/authNavigate';
+import { commitLandingGoalHandoff } from '../../../lib/landingGoalHandoff';
 
 type IdeShellNavContextValue = {
   activeScreen: IdeShellScreen;
@@ -31,8 +32,12 @@ type IdeShellNavContextValue = {
   setStartType: (t: IdeStartProjectType) => void;
   /** Validate + persist goal, then go to Build. Returns false if goal empty. */
   submitGoal: (goal: string) => boolean;
-  goToStart: (opts?: { clearGoal?: boolean }) => void;
+  /** Clear goal and return to the kept Landing page (`/`). */
+  goToLandingHome: (opts?: { clearGoal?: boolean }) => void;
   goToBuild: () => void;
+  goToCode: () => void;
+  goToPlan: () => void;
+  goToSettings: () => void;
   goToDashboard: (panel?: IdeDashboardPanel) => void;
 };
 
@@ -63,37 +68,55 @@ export function IdeShellNavProvider({ children }: { children: ReactNode }) {
 
   const submitGoal = useCallback(
     (raw: string) => {
-      const next = raw.trim();
-      if (!next) return false;
-      setGoal(next);
-      writeStoredShellGoal(next);
+      if (!commitLandingGoalHandoff(raw, startType)) return false;
+      setGoal(raw.trim());
       setActiveScreen('build');
       return true;
     },
-    [setActiveScreen],
+    [setActiveScreen, startType],
   );
 
-  const goToStart = useCallback(
-    (opts?: { clearGoal?: boolean }) => {
-      if (opts?.clearGoal) {
-        setGoal('');
-        clearStoredShellGoal();
-      }
-      setActiveScreen('start');
-    },
-    [setActiveScreen],
-  );
+  const goToLandingHome = useCallback((opts?: { clearGoal?: boolean }) => {
+    if (opts?.clearGoal) {
+      setGoal('');
+      clearStoredShellGoal();
+    }
+    writeStoredShellScreen('build');
+    goToLanding();
+  }, []);
 
   const goToBuild = useCallback(() => {
     setActiveScreen('build');
   }, [setActiveScreen]);
 
+  const goToCode = useCallback(() => {
+    setActiveScreen('code');
+  }, [setActiveScreen]);
+
+  const goToPlan = useCallback(() => {
+    setDashboardPanel('plan');
+    setActiveScreen('plan');
+  }, [setActiveScreen, setDashboardPanel]);
+
+  const goToSettings = useCallback(() => {
+    setActiveScreen('settings');
+  }, [setActiveScreen]);
+
   const goToDashboard = useCallback(
     (panel?: IdeDashboardPanel) => {
+      // Legacy panel ids that now live outside the projects Dashboard.
+      if (panel === 'plan' || panel === 'mindmap') {
+        goToPlan();
+        return;
+      }
+      if (panel === 'settings') {
+        goToSettings();
+        return;
+      }
       if (panel) setDashboardPanel(panel);
       setActiveScreen('dashboard');
     },
-    [setActiveScreen, setDashboardPanel],
+    [goToPlan, goToSettings, setActiveScreen, setDashboardPanel],
   );
 
   const value = useMemo(
@@ -106,8 +129,11 @@ export function IdeShellNavProvider({ children }: { children: ReactNode }) {
       setDashboardPanel,
       setStartType,
       submitGoal,
-      goToStart,
+      goToLandingHome,
       goToBuild,
+      goToCode,
+      goToPlan,
+      goToSettings,
       goToDashboard,
     }),
     [
@@ -119,8 +145,11 @@ export function IdeShellNavProvider({ children }: { children: ReactNode }) {
       setDashboardPanel,
       setStartType,
       submitGoal,
-      goToStart,
+      goToLandingHome,
       goToBuild,
+      goToCode,
+      goToPlan,
+      goToSettings,
       goToDashboard,
     ],
   );

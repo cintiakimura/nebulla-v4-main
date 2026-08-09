@@ -466,113 +466,118 @@
 }
 
 /*
- * Trial: IDE look playground — IDE shell only, not landing.
- * Tweak the PLAYGROUND vars below (background / cards / buttons).
- * Revert: delete this whole block; restore prior shell CSS from git if needed.
- * Also optional: remove `ide-glass-*` classes from MyProjectsHome.tsx
+ * TEMPORARY — Decision 4: monochrome architecture mode (structure only).
+ * No branding, starfield, glass, or accent colors. Revert via git / prior lock.
+ * Tokens below drive the whole AppShell (landing + IDE chrome). Preview iframes
+ * are separate documents and keep their own product colors.
  */
 .nebulla-ide-shell {
-  /* ========== IDE LOOK PLAYGROUND (dev only) ========== */
+  /* ========== MONOCHROME SHELL TOKENS ========== */
+  --ide-bg: #000000;
+  --ide-surface: #141414;
+  --ide-surface-raised: #1a1a1a;
+  --ide-surface-soft: #101010;
+  --ide-ink: #e8e8e8;
+  --ide-ink-muted: #d0d0d0;
+  --ide-ink-dim: #a8a8a8;
+  --ide-border: #2a2a2a;
+  --ide-border-strong: #3a3a3a;
 
-  /* BACKGROUND */
-  --ide-bg-image: url('/images/background_nebulla_blue.png');
-  --ide-bg-overlay: 0.5; /* 0 = full photo, 1 = pure black */
+  /* Keep old token names so existing rules remap without scattered edits */
+  --ide-bg-image: none;
+  --ide-bg-overlay: 1;
+  --ide-glass-fill: var(--ide-surface);
+  --ide-glass-fill-strong: var(--ide-surface-raised);
+  --ide-glass-fill-soft: var(--ide-surface-soft);
+  --ide-glass-chrome: var(--ide-surface);
+  --ide-glass-blur: none;
+  --ide-glass-blur-chrome: none;
 
-  /* CARDS / CHROME — frosted over wallpaper; 7px blur everywhere */
-  --ide-glass-fill: rgba(0, 0, 0, 0.28);
-  --ide-glass-fill-strong: rgba(0, 0, 0, 0.4);
-  --ide-glass-fill-soft: rgba(0, 0, 0, 0.18);
-  --ide-glass-chrome: rgba(0, 0, 0, 0.28);
-  --ide-glass-blur: blur(7px) saturate(1.2);
-  --ide-glass-blur-chrome: blur(7px) saturate(1.2);
+  --ide-btn-color: #d0d0d0;
+  --ide-btn-fill: 12%;
+  --ide-btn-border: 0%;
+  --ide-btn-fill-hover: 20%;
+  --ide-btn-border-hover: 0%;
+  --ide-btn-border-width: 1px;
+  --ide-btn-text: #e8e8e8;
+  --ide-cyan: var(--ide-ink-muted); /* neutralized accent alias */
 
-  /* BUTTONS — very subtle cyan wash */
-  --ide-btn-color: #22d3ee; /* cyan */
-  --ide-btn-fill: 5%;
-  --ide-btn-border: 50%;
-  --ide-btn-fill-hover: 10%;
-  --ide-btn-border-hover: 55%;
-  --ide-btn-border-width: 0; /* no border */
-  --ide-btn-text: #ffffff;
-
-  /* Alias used across accents */
-  --ide-cyan: var(--ide-btn-color);
-
-  /* ========== end playground ========== */
+  /* ========== end monochrome tokens ========== */
 
   position: relative;
-  /* Wallpaper is painted below (second .nebulla-ide-shell rule + __bg layer) */
-  color: #ffffff;
+  color: var(--ide-ink);
+  background-color: var(--ide-bg) !important;
+  background-image: none !important;
 
-  /* Cyan accent + white type (IDE only) */
-  --primary: var(--ide-cyan);
-  --primary-container: #0891b2;
-  --on-primary-container: #ffffff;
-  --primary-foreground: #041016;
-  --ring: color-mix(in srgb, var(--ide-cyan) 42%, transparent);
-  --title: var(--ide-cyan);
-  --subtitle: #67e8f9;
-  --gradient-primary-cta: var(--ide-cyan);
-  /* No sheen gradient on tabs/toggles — flat glass only */
+  --primary: var(--ide-ink-muted);
+  --primary-container: var(--ide-surface-raised);
+  --on-primary-container: var(--ide-ink);
+  --primary-foreground: #000000;
+  --ring: var(--ide-border-strong);
+  --title: var(--ide-ink);
+  --subtitle: var(--ide-ink-muted);
+  --misc: var(--ide-ink-dim);
+  --gradient-primary-cta: var(--ide-surface-raised);
   --gradient-active-tab: none;
+  --shadow-ambient-popover: none;
+  --success: var(--ide-ink-dim);
+  --destructive: #b0b0b0;
+  --destructive-foreground: #000000;
+  --chart-1: var(--ide-ink-muted);
+  --chart-2: var(--ide-ink-dim);
+  --chart-3: var(--ide-ink);
+  --chart-4: var(--ide-ink-muted);
+  --chart-5: var(--ide-ink-dim);
 
-  --foreground: #ffffff;
-  --card-foreground: #ffffff;
-  --popover-foreground: #ffffff;
-  --secondary-foreground: #ffffff;
-  --accent-foreground: #ffffff;
-  --sidebar-foreground: #ffffff;
-  --muted-foreground: rgba(255, 255, 255, 0.78);
-  --on-surface-variant: rgba(255, 255, 255, 0.72);
+  --foreground: var(--ide-ink);
+  --card-foreground: var(--ide-ink);
+  --popover-foreground: var(--ide-ink);
+  --secondary-foreground: var(--ide-ink);
+  --accent-foreground: var(--ide-ink);
+  --sidebar-foreground: var(--ide-ink);
+  --muted-foreground: var(--ide-ink-dim);
+  --on-surface-variant: var(--ide-ink-dim);
 
-  --border: rgba(255, 255, 255, 0.12);
-  --hairline: rgba(255, 255, 255, 0.1);
-  --outline-variant: rgba(255, 255, 255, 0.12);
-  --sidebar-border: rgba(255, 255, 255, 0.12);
+  --border: var(--ide-border);
+  --hairline: var(--ide-border);
+  --outline-variant: var(--ide-border);
+  --sidebar-border: var(--ide-border);
 
-  /* Foggy glass tokens (panels pick these up via utilities below) */
-  --surface: var(--ide-glass-fill);
-  --surface-container: var(--ide-glass-fill);
-  --surface-bright: var(--ide-glass-fill-soft);
-  --surface-container-highest: var(--ide-glass-fill-strong);
-  --secondary-container: var(--ide-glass-fill-soft);
-  --elevated: var(--ide-glass-fill);
-  --background: transparent;
-  --card: var(--ide-glass-fill);
-  --popover: var(--ide-glass-fill-strong);
-  --secondary: var(--ide-glass-fill-soft);
-  --muted: var(--ide-glass-fill-soft);
-  --accent: var(--ide-glass-fill-soft);
-  --input: var(--ide-glass-fill);
-  --sidebar: var(--ide-glass-fill-soft);
-  --sidebar-accent: var(--ide-glass-fill);
-  --sidebar-primary: var(--ide-cyan);
+  --surface: var(--ide-surface);
+  --surface-container: var(--ide-surface);
+  --surface-bright: var(--ide-surface-soft);
+  --surface-container-highest: var(--ide-surface-raised);
+  --secondary-container: var(--ide-surface-soft);
+  --elevated: var(--ide-surface-raised);
+  --background: var(--ide-bg);
+  --card: var(--ide-surface);
+  --popover: var(--ide-surface-raised);
+  --secondary: var(--ide-surface-soft);
+  --muted: var(--ide-surface-soft);
+  --accent: var(--ide-surface-raised);
+  --input: var(--ide-surface-raised);
+  --sidebar: var(--ide-surface-soft);
+  --sidebar-accent: var(--ide-surface);
+  --sidebar-primary: var(--ide-ink-muted);
 
-  --color-background: transparent;
-  --color-card: var(--ide-glass-fill);
-  --color-muted: var(--ide-glass-fill-soft);
-  --color-secondary: var(--ide-glass-fill-soft);
-  --color-sidebar: var(--ide-glass-fill-soft);
-  --color-surface: var(--ide-glass-fill);
-  --color-surface-container: var(--ide-glass-fill);
-  --color-surface-bright: var(--ide-glass-fill-soft);
-  --color-primary: var(--ide-cyan);
-  --color-foreground: #ffffff;
-  --color-muted-foreground: rgba(255, 255, 255, 0.78);
-  --color-border: rgba(255, 255, 255, 0.12);
+  --color-background: var(--ide-bg);
+  --color-card: var(--ide-surface);
+  --color-muted: var(--ide-surface-soft);
+  --color-secondary: var(--ide-surface-soft);
+  --color-sidebar: var(--ide-surface-soft);
+  --color-surface: var(--ide-surface);
+  --color-surface-container: var(--ide-surface);
+  --color-surface-bright: var(--ide-surface-soft);
+  --color-primary: var(--ide-ink-muted);
+  --color-foreground: var(--ide-ink);
+  --color-muted-foreground: var(--ide-ink-dim);
+  --color-border: var(--ide-border);
 }
 
-/*
- * Wallpaper + veil (real DOM nodes in NebullaIDE).
- * Also paint wallpaper on the shell itself so transparent gaps always show stars.
- */
+/* Solid black stack — wallpaper/veil layers inert */
 .nebulla-ide-shell {
-  background-color: #000000 !important;
-  background-image: var(--ide-bg-image) !important;
-  background-size: cover !important;
-  background-position: center !important;
-  background-repeat: no-repeat !important;
-  background-attachment: fixed !important;
+  background-color: var(--ide-bg) !important;
+  background-image: none !important;
 }
 
 .nebulla-ide-shell__bg {
@@ -580,12 +585,8 @@
   inset: 0;
   z-index: 0;
   pointer-events: none;
-  background-color: #000000;
-  background-image: var(--ide-bg-image);
-  background-size: cover;
-  background-position: center;
-  background-repeat: no-repeat;
-  background-attachment: fixed;
+  background-color: var(--ide-bg);
+  background-image: none;
 }
 
 .nebulla-ide-shell__veil {
@@ -593,84 +594,56 @@
   inset: 0;
   z-index: 1;
   pointer-events: none;
-  background-color: rgb(0 0 0 / var(--ide-bg-overlay));
+  background-color: var(--ide-bg);
+  opacity: 0;
 }
 
 .nebulla-ide-shell__content {
   position: relative;
   z-index: 2;
   min-height: 0;
-  background: transparent !important;
+  background: var(--ide-bg) !important;
 }
 
-/* Center / clear panes — wallpaper shows through */
 .nebulla-ide-shell :is(.bg-background, .bg-transparent) {
-  background-color: transparent !important;
+  background-color: var(--ide-bg) !important;
   background-image: none !important;
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
 }
 
-/*
- * Frosted glass — does NOT rely on backdrop-filter sampling (often broken with overflow).
- * Each pane draws the fixed wallpaper, blurs it 7px, then tints with a light black wash.
- */
+/* Flat panels — no frost, blur, or wallpaper slices */
 .nebulla-ide-shell .ide-glass-chrome,
 .nebulla-ide-shell .ide-glass-card {
   position: relative !important;
   isolation: isolate;
-  background-color: transparent !important;
+  background-color: var(--ide-surface) !important;
   background-image: none !important;
-  backdrop-filter: var(--ide-glass-blur) !important;
-  -webkit-backdrop-filter: var(--ide-glass-blur) !important;
-  border-color: rgba(255, 255, 255, 0.14) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  border-color: var(--ide-border) !important;
   box-shadow: none !important;
 }
 
-/* Cards clip frost edges; chrome stays overflow-visible so menus/dropdowns work */
 .nebulla-ide-shell .ide-glass-card {
   overflow: hidden !important;
+  background-color: var(--ide-surface-raised) !important;
 }
 
-/* Blurred wallpaper slice (fixed attachment = aligned across all panes) */
 .nebulla-ide-shell .ide-glass-chrome::before,
-.nebulla-ide-shell .ide-glass-card::before {
-  content: '' !important;
-  display: block !important;
-  position: absolute !important;
-  inset: 0 !important;
-  z-index: 0 !important;
-  pointer-events: none !important;
-  background-color: #000000 !important;
-  background-image: var(--ide-bg-image) !important;
-  background-size: cover !important;
-  background-position: center !important;
-  background-repeat: no-repeat !important;
-  background-attachment: fixed !important;
-  /* No transform here — it breaks background-attachment: fixed */
-  filter: var(--ide-glass-blur) !important;
-}
-
-/* Dim wash over the blurred photo */
+.nebulla-ide-shell .ide-glass-card::before,
 .nebulla-ide-shell .ide-glass-chrome::after,
 .nebulla-ide-shell .ide-glass-card::after {
-  content: '' !important;
-  display: block !important;
-  position: absolute !important;
-  inset: 0 !important;
-  z-index: 1 !important;
-  pointer-events: none !important;
-  background: rgb(0 0 0 / 0.35) !important;
+  content: none !important;
+  display: none !important;
 }
 
-/* Keep real UI above the frost layers */
 .nebulla-ide-shell .ide-glass-chrome > *,
 .nebulla-ide-shell .ide-glass-card > * {
   position: relative;
   z-index: 2;
 }
 
-/* Nested full-panel shells must stay clear or they paint solid over frost */
 .nebulla-ide-shell .ide-glass-chrome :is(
   .surface-base,
   .surface-active,
@@ -682,190 +655,193 @@
   .bg-muted,
   .bg-secondary,
   .bg-accent,
-  .bg-background,
-  .bg-\[\#000\],
-  .bg-\[\#000000\],
-  .bg-\[\#0a0a0a\],
-  .bg-\[\#0A0A0A\],
-  .bg-\[\#111111\],
-  .bg-\[\#111\],
-  .bg-\[\#050508\]
-),
-.nebulla-ide-shell .ide-glass-chrome [class*='bg-black/'],
-.nebulla-ide-shell .ide-glass-chrome [class*='bg-muted/'],
-.nebulla-ide-shell .ide-glass-chrome [class*='bg-secondary/'],
-.nebulla-ide-shell .ide-glass-chrome [class*='bg-card/'],
-.nebulla-ide-shell .ide-glass-chrome [class*='bg-\[\#0a0a0a\]'],
-.nebulla-ide-shell .ide-glass-chrome [class*='bg-\[var(--surface'] {
+  .bg-background
+) {
   background-color: transparent !important;
   background-image: none !important;
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
 }
 
-.nebulla-ide-shell .ide-glass-card--choice {
-  /* inherits frost from .ide-glass-card */
-}
-
-.nebulla-ide-shell .ide-glass-card--choice:hover::after {
-  background: rgb(0 0 0 / 0.28) !important;
-}
-
-.nebulla-ide-shell .ide-glass-card--selected::after {
-  background: rgb(0 0 0 / 0.45) !important;
-}
-
 .nebulla-ide-shell .ide-glass-card--selected {
-  border-color: rgba(255, 255, 255, 0.32) !important;
+  border-color: var(--ide-border-strong) !important;
 }
 
 .nebulla-ide-shell .ide-glass-input {
   position: relative;
   isolation: isolate;
   overflow: hidden;
-  background-color: rgb(0 0 0 / 0.35) !important;
-  color: #ffffff !important;
-  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  background-color: var(--ide-surface-raised) !important;
+  color: var(--ide-ink) !important;
+  border: 1px solid var(--ide-border) !important;
   box-shadow: none !important;
-  backdrop-filter: var(--ide-glass-blur) !important;
-  -webkit-backdrop-filter: var(--ide-glass-blur) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
 }
 
 .nebulla-ide-shell .ide-glass-input:focus,
 .nebulla-ide-shell .ide-glass-input:focus-visible {
-  outline: 1px solid color-mix(in srgb, var(--ide-cyan) 40%, transparent);
+  outline: 1px solid var(--ide-border-strong);
   outline-offset: 1px;
   box-shadow: none !important;
   --tw-ring-shadow: 0 0 #0000 !important;
 }
 
-/* White type — regular weight only (keep status colors) */
 .nebulla-ide-shell :is(.font-bold, .font-semibold, .font-medium, .font-headline) {
   font-weight: 400 !important;
 }
 
 .nebulla-ide-shell :is(.text-foreground, .text-card-foreground, .text-popover-foreground) {
-  color: #ffffff !important;
+  color: var(--ide-ink) !important;
 }
 
 .nebulla-ide-shell .text-muted-foreground {
-  color: rgba(255, 255, 255, 0.78) !important;
+  color: var(--ide-ink-dim) !important;
 }
 
-.nebulla-ide-shell :is(.text-slate-200, .text-slate-300, .text-slate-400, .text-slate-500) {
-  color: rgba(255, 255, 255, 0.82) !important;
+.nebulla-ide-shell :is(
+  .text-slate-100,
+  .text-slate-200,
+  .text-slate-300,
+  .text-slate-400,
+  .text-slate-500,
+  .text-slate-600
+) {
+  color: var(--ide-ink-muted) !important;
 }
 
-/* Cyan accents for interactive chrome */
-.nebulla-ide-shell :is(.text-primary, .text-cyan-300, .text-cyan-400, .text-cyan-200) {
-  color: var(--ide-cyan) !important;
+/* Neutralize former accent utilities (chrome only; not iframe docs) */
+.nebulla-ide-shell :is(
+  .text-primary,
+  .text-cyan-100,
+  .text-cyan-200,
+  .text-cyan-300,
+  .text-cyan-400,
+  .text-cyan-500,
+  .text-sky-300,
+  .text-sky-400,
+  .text-blue-400,
+  .text-purple-400,
+  .text-emerald-400,
+  .text-green-300,
+  .text-green-400,
+  .text-amber-50,
+  .text-amber-100,
+  .text-amber-200,
+  .text-rose-300,
+  .text-red-400,
+  .text-yellow-500
+) {
+  color: var(--ide-ink-muted) !important;
 }
 
-.nebulla-ide-shell .border-primary {
-  border-color: color-mix(in srgb, var(--ide-cyan) 45%, transparent);
+.nebulla-ide-shell :is(
+  [class*='bg-cyan-'],
+  [class*='bg-sky-'],
+  [class*='bg-blue-'],
+  [class*='bg-purple-'],
+  [class*='bg-emerald-'],
+  [class*='bg-amber-'],
+  [class*='bg-rose-'],
+  [class*='from-cyan'],
+  [class*='to-cyan'],
+  [class*='from-purple'],
+  [class*='to-indigo']
+) {
+  background-color: var(--ide-surface-raised) !important;
+  background-image: none !important;
 }
 
-/* No glow rings — thin outline only */
+.nebulla-ide-shell :is(
+  [class*='border-cyan'],
+  [class*='border-sky'],
+  [class*='border-amber'],
+  [class*='border-emerald'],
+  [class*='border-purple'],
+  .border-primary
+) {
+  border-color: var(--ide-border) !important;
+}
+
 .nebulla-ide-shell .ring-primary,
 .nebulla-ide-shell [class*='ring-primary'] {
   --tw-ring-color: transparent;
-  --tw-ring-shadow: 0 0 0 1px color-mix(in srgb, var(--ide-cyan) 35%, transparent);
+  --tw-ring-shadow: 0 0 0 1px var(--ide-border-strong);
 }
 
-/* Canonical IDE control — same look as Start “Continue” */
 .nebulla-ide-shell .btn-cyan,
-.nebulla-ide-shell .ide-btn {
-  background-color: color-mix(in srgb, var(--ide-btn-color) var(--ide-btn-fill), transparent);
-  color: var(--ide-btn-text);
-  border: none;
-  border-width: var(--ide-btn-border-width);
+.nebulla-ide-shell .ide-btn,
+.nebulla-ide-shell .btn-primary-cta {
+  background-color: var(--ide-surface-raised) !important;
+  color: var(--ide-btn-text) !important;
+  border: 1px solid var(--ide-border) !important;
+  border-width: 1px !important;
   font-weight: 400;
   border-radius: 0.5rem;
-  box-shadow: none;
+  box-shadow: none !important;
 }
 
 .nebulla-ide-shell .btn-cyan:hover:not(:disabled),
-.nebulla-ide-shell .ide-btn:hover:not(:disabled) {
-  background-color: color-mix(in srgb, var(--ide-btn-color) var(--ide-btn-fill-hover), transparent);
-  border: none;
-  color: var(--ide-btn-text);
-  box-shadow: none;
+.nebulla-ide-shell .ide-btn:hover:not(:disabled),
+.nebulla-ide-shell .btn-primary-cta:hover:not(:disabled) {
+  background-color: #222222 !important;
+  border-color: var(--ide-border-strong) !important;
+  color: var(--ide-btn-text) !important;
+  box-shadow: none !important;
 }
 
 .nebulla-ide-shell .ide-btn--pressed,
 .nebulla-ide-shell .btn-cyan[aria-pressed='true'] {
-  background-color: color-mix(in srgb, var(--ide-btn-color) var(--ide-btn-fill-hover), transparent);
-  border: none;
-  color: var(--ide-btn-text);
-  box-shadow: none;
-}
-
-/* Kill leftover Tailwind / global border utility on IDE buttons */
-.nebulla-ide-shell :is(button, [role='button'], a.btn-cyan, a.ide-btn).border,
-.nebulla-ide-shell :is(button, [role='button']).btn-cyan,
-.nebulla-ide-shell :is(button, [role='button']).btn-secondary-surface,
-.nebulla-ide-shell :is(button, [role='button']).ide-btn {
-  border-style: none !important;
-  border-width: 0 !important;
-  border-color: transparent !important;
-}
-
-/* Kill cyan glow on IDE chrome */
-.nebulla-ide-shell :is(
-  .shadow-cyan-500\/20,
-  .shadow-cyan-500\/25,
-  .shadow-\[0_0_24px_rgba\(34\,211\,238\,0\.18\)\]
-) {
+  background-color: #222222 !important;
+  border-color: var(--ide-border-strong) !important;
+  color: var(--ide-btn-text) !important;
   box-shadow: none !important;
 }
 
-.nebulla-ide-shell :is(button, [role='button'], a.btn-cyan, a.ide-btn):focus-visible {
-  outline: 1px solid color-mix(in srgb, var(--ide-cyan) 45%, transparent);
-  outline-offset: 2px;
-  box-shadow: none;
-}
-
-/* Stage strip / active chrome — thin cyan edge, no glow */
-.nebulla-ide-shell .ring-primary\/50,
-.nebulla-ide-shell .ring-primary\/60,
-.nebulla-ide-shell [class*='ring-primary'] {
-  --tw-ring-color: transparent !important;
-  --tw-ring-shadow: 0 0 0 1px color-mix(in srgb, var(--ide-cyan) 40%, transparent) !important;
-}
-
-.nebulla-ide-shell .bg-primary {
-  background-color: var(--ide-cyan) !important;
-  color: #041016 !important;
-}
-
-/*
- * IDE chrome only (not App Preview iframe / generated app):
- * — no cyan bloom on borders
- * — text actions match Start “Continue” (btn-cyan)
- */
 .nebulla-ide-shell .btn-secondary-surface {
-  background-color: color-mix(in srgb, var(--ide-btn-color) var(--ide-btn-fill), transparent) !important;
+  background-color: var(--ide-surface) !important;
   color: var(--ide-btn-text) !important;
-  border: none !important;
-  border-width: var(--ide-btn-border-width) !important;
+  border: 1px solid var(--ide-border) !important;
   font-weight: 400;
   border-radius: 0.5rem;
   box-shadow: none !important;
 }
 
 .nebulla-ide-shell .btn-secondary-surface:hover:not(:disabled) {
-  background-color: color-mix(in srgb, var(--ide-btn-color) var(--ide-btn-fill-hover), transparent) !important;
-  border: none !important;
+  background-color: var(--ide-surface-raised) !important;
+  border-color: var(--ide-border-strong) !important;
   color: var(--ide-btn-text) !important;
   box-shadow: none !important;
 }
 
-/* Diffuse outer glows (cyan / purple / emerald / generic 0 0 Npx) */
+.nebulla-ide-shell :is(
+  .shadow-cyan-500\/20,
+  .shadow-cyan-500\/25,
+  .shadow-\[0_0_24px_rgba\(34\,211\,238\,0\.18\)\]
+),
 .nebulla-ide-shell [class*='shadow-[0_0'],
 .nebulla-ide-shell [class*='shadow-cyan'],
 .nebulla-ide-shell [class*='shadow-purple'],
 .nebulla-ide-shell [class*='shadow-emerald'] {
   box-shadow: none !important;
+}
+
+.nebulla-ide-shell :is(button, [role='button'], a.btn-cyan, a.ide-btn):focus-visible {
+  outline: 1px solid var(--ide-border-strong);
+  outline-offset: 2px;
+  box-shadow: none;
+}
+
+.nebulla-ide-shell .ring-primary\/50,
+.nebulla-ide-shell .ring-primary\/60,
+.nebulla-ide-shell [class*='ring-primary'] {
+  --tw-ring-color: transparent !important;
+  --tw-ring-shadow: 0 0 0 1px var(--ide-border-strong) !important;
+}
+
+.nebulla-ide-shell .bg-primary {
+  background-color: var(--ide-surface-raised) !important;
+  color: var(--ide-ink) !important;
 }
 
 .nebulla-ide-shell :is(button, [role='button'], a) {
@@ -876,24 +852,33 @@
 .nebulla-ide-shell :is(button, [role='button']).ring-1,
 .nebulla-ide-shell :is(button, [role='button']).ring-2,
 .nebulla-ide-shell nav button[aria-current='true'] {
-  --tw-ring-shadow: 0 0 0 1px color-mix(in srgb, var(--ide-cyan) 40%, transparent) !important;
+  --tw-ring-shadow: 0 0 0 1px var(--ide-border-strong) !important;
   box-shadow: none !important;
 }
 
-/* Active left-rail icon — flat edge, no bloom */
 .nebulla-ide-shell nav button[aria-current='true'] {
-  background-color: color-mix(in srgb, var(--ide-btn-color) var(--ide-btn-fill), transparent) !important;
-  color: var(--ide-btn-text) !important;
+  background-color: var(--ide-surface-raised) !important;
+  color: var(--ide-ink) !important;
 }
 
-/* Master Plan section list / content cards — hairline only */
 .nebulla-ide-shell .shadow-lg,
 .nebulla-ide-shell .shadow-xl,
 .nebulla-ide-shell .shadow-2xl {
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08) !important;
+  box-shadow: none !important;
 }
 
-/* Compact Live Activity throbber — Nebulla mark pulse (no giant card) */
+.nebulla-ide-shell .ide-resize-hit:hover,
+.nebulla-ide-shell .ide-resize-hit:active,
+.nebulla-ide-shell .ide-resize-hit-row:hover,
+.nebulla-ide-shell .ide-resize-hit-row:active {
+  background-color: var(--ide-border-strong) !important;
+}
+
+.nebulla-ide-shell .glass-panel {
+  background: var(--ide-surface) !important;
+  backdrop-filter: none !important;
+}
+
 @keyframes nebulla-throbber-pulse {
   0%,
   100% {
@@ -906,10 +891,36 @@
   }
 }
 
+/* Guided funnel attention pulse (git / deploy icons) */
+@keyframes nebulla-guided-pulse-kf {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(232, 232, 232, 0.35);
+    transform: scale(1);
+  }
+  40% {
+    box-shadow: 0 0 0 6px rgba(232, 232, 232, 0);
+    transform: scale(1.08);
+  }
+}
+
+.nebulla-guided-pulse {
+  animation: nebulla-guided-pulse-kf 0.7s ease-in-out 3;
+  border-radius: 0.375rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nebulla-guided-pulse {
+    animation: none;
+    outline: 1px solid rgba(232, 232, 232, 0.5);
+  }
+}
+
 .nebulla-throbber {
   animation: nebulla-throbber-pulse 1.35s ease-in-out infinite;
   transform-origin: center center;
   will-change: transform, opacity;
+  filter: grayscale(1);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -919,12 +930,8 @@
   }
 }
 
-/*
- * All routes share AppShell glass — clear leftover solid page paints
- * (login / payment / landing mock chrome / legal).
- */
 .nebulla-ide-shell .nebula-landing-page {
-  background: transparent !important;
+  background: var(--ide-bg) !important;
   isolation: auto;
   height: auto;
   min-height: 100vh;
@@ -943,11 +950,23 @@
 .nebulla-ide-shell [class*='bg-[#020C17]'],
 .nebulla-ide-shell [class*='bg-[#040f1a]'],
 .nebulla-ide-shell [class*='bg-[#050508]'] {
-  background-color: transparent !important;
+  background-color: var(--ide-surface) !important;
   background-image: none !important;
 }
 
-/* Landing mock IDE chrome inside the hero mockup — soft glass, not solid navy */
+/* Landing mock IDE chrome — flat mono surfaces */
 .nebulla-ide-shell .nebula-landing-page [class*='bg-[#'] {
-  background-color: rgb(0 0 0 / 0.25) !important;
+  background-color: var(--ide-surface-raised) !important;
+}
+
+/* Logo keeps original brand color (do not grayscale) */
+.nebulla-ide-shell img[alt*='Nebulla'],
+.nebulla-ide-shell img[src*='nebulla-logo'] {
+  filter: none;
+  opacity: 1;
+}
+
+/* Status / success / warning chips in chrome → gray */
+.nebulla-ide-shell :is(.text-green-400, .text-red-500, .text-yellow-400, .text-orange-400) {
+  color: var(--ide-ink-muted) !important;
 }

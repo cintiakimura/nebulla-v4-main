@@ -1,7 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { Logo } from './Logo';
-import { Rocket, ArrowRight, CheckCircle, Terminal, LayoutGrid, Handshake, Network, Palette, Bug, Cpu, Globe, MoreHorizontal, PlusCircle, Save, Trash2, CreditCard, Camera, List, Code, User } from 'lucide-react';
+import { Rocket, CheckCircle, Terminal, LayoutGrid, Handshake, Network, Palette, Bug, Cpu, Globe, List, Code } from 'lucide-react';
 import { FORCE_GUEST_MODE } from '../lib/testingBranch';
+import { LandingHeroPrompt } from './LandingHeroPrompt';
+import { fetchSessionUser } from '../lib/nebulaCloud';
+import { goToApp } from '../lib/authNavigate';
+import { markForceDashboardOnce } from '../lib/guidedFunnel';
 
 interface LandingPageProps {
   onEnter: () => void;
@@ -19,6 +23,20 @@ export function LandingPage({ onEnter }: LandingPageProps) {
     }
   }, []);
 
+  /** T8 — signed-in users skip marketing landing → Dashboard. */
+  useEffect(() => {
+    if (FORCE_GUEST_MODE) return;
+    let cancelled = false;
+    void fetchSessionUser().then((u) => {
+      if (cancelled || !u) return;
+      markForceDashboardOnce();
+      goToApp();
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   useEffect(() => {
     const query = new URLSearchParams(window.location.search);
     if (query.get('success')) {
@@ -32,6 +50,7 @@ export function LandingPage({ onEnter }: LandingPageProps) {
   }, [onEnter]);
 
   const handleTryFree = () => {
+    markForceDashboardOnce();
     onEnter();
   };
 
@@ -49,6 +68,7 @@ export function LandingPage({ onEnter }: LandingPageProps) {
           {FORCE_GUEST_MODE ? (
             <a
               href="/app"
+              onClick={() => markForceDashboardOnce()}
               className="px-3 py-2 text-slate-400 hover:text-cyan-200 transition-all font-headline text-sm font-normal"
             >
               Open IDE
@@ -63,7 +83,7 @@ export function LandingPage({ onEnter }: LandingPageProps) {
           )}
           <button
             type="button"
-            onClick={onEnter}
+            onClick={handleTryFree}
             className="btn-cyan rounded-md px-4 py-2 font-headline text-sm"
           >
             {FORCE_GUEST_MODE ? 'Open app' : 'Closed beta'}
@@ -71,43 +91,23 @@ export function LandingPage({ onEnter }: LandingPageProps) {
         </div>
       </header>
 
-      {/* Main Content */}
-      <main className="flex-1 p-8 md:p-16 lg:p-24 flex flex-col gap-24">
-        {/* Hero */}
-        <section className="grid grid-cols-1 lg:grid-cols-2 gap-12 lg:gap-8 items-center">
-          <div className="flex flex-col gap-6 text-left max-w-2xl">
+      {/* Main Content — prompt on top, full landing below */}
+      <main className="flex flex-1 flex-col gap-24 p-8 md:p-16 lg:p-24">
+        {/* Hero: goal prompt (handoff kept); marketing continues below */}
+        <section className="flex min-h-[calc(100vh-8rem)] flex-col items-center justify-center gap-8 py-10 text-center md:gap-10 md:py-14">
+          <div className="flex max-w-3xl flex-col items-center gap-4">
             <div className="inline-flex w-fit items-center gap-2 rounded-full bg-cyan-500/10 px-3 py-1 font-headline text-xs font-normal text-cyan-300">
               <Rocket className="h-3.5 w-3.5" aria-hidden />
               Free closed beta · invite only
             </div>
-            <h1 className="text-4xl md:text-6xl font-headline text-slate-100 font-normal leading-tight">
-              The first architecture-focused<br/>AI builder.
+            <h1 className="font-headline text-4xl font-normal leading-tight text-slate-100 md:text-6xl lg:text-7xl">
+              What are we building?
             </h1>
-            <p className="text-lg md:text-xl text-slate-300 font-normal max-w-2xl leading-relaxed">
-              Plan → UI Studio Beta → code → preview in one workspace. Free during closed beta — no payment required.
-            </p>
-            <div className="flex flex-col gap-8 mt-4">
-              <button
-                type="button"
-                onClick={onEnter}
-                className="btn-cyan inline-flex w-fit items-center gap-2 rounded-lg px-6 py-3 font-headline text-base"
-              >
-                Enter workspace
-                <ArrowRight className="h-4.5 w-4.5" aria-hidden />
-              </button>
-            </div>
-          </div>
-          
-          <div className="ide-glass-card flex flex-col justify-center items-start lg:items-end p-8 lg:p-12">
-            <div className="text-4xl md:text-5xl lg:text-6xl font-headline text-cyan-300 font-normal tracking-tight mb-6">
-              Free beta
-            </div>
-            <p className="text-xl md:text-2xl text-slate-200 font-normal max-w-sm text-left lg:text-right leading-snug">
-              Invite-only closed beta<br/>
-              <span className="text-cyan-400/80">Core ride only</span><br/>
-              <span className="text-slate-400">Paid plan after beta (€19.99)</span>
+            <p className="max-w-2xl text-base font-normal leading-relaxed text-slate-300 md:text-xl">
+              Just goal of your idea is enough — type in a few words or brainstorm using the mic
             </p>
           </div>
+          <LandingHeroPrompt className="w-full" />
         </section>
 
         {/* Features Grid */}
