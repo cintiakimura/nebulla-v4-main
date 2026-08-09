@@ -301,3 +301,9 @@ Before quote (force dropped as spine): “Immediately trigger the V0 API… Do n
 - North-star candidate: `recovery-lab/proposed/project-workflow.proposed.md`
 - Assembled from this catalog Steps 1–14 (no merges)
 - Next: Phase D human review — no promote until explicit approval
+
+## Phase F link
+
+- Depth candidate: `recovery-lab/proposed/project-execution-rules.proposed.md`
+- Aligned to live workflow Steps 1–14; not promoted
+- Next: Phase G human review → Phase H promote execution-rules only
