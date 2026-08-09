@@ -37,6 +37,7 @@ import { shouldShowWelcomeOnboarding } from '../../lib/nebulaWelcomeOnboarding';
 import { cloudBlockedBannerMessage } from '../../lib/ideCloudStatus';
 import { installOnboardingRideListeners } from '../../lib/ideOnboardingRide';
 import { markUserJumpedPhase } from '../../lib/ideProjectPhase';
+import { UI_SHELL_ONLY } from '../../lib/testingBranch';
 
 const EXPLORER_MIN = 160;
 const EXPLORER_MAX = 480;
@@ -334,6 +335,12 @@ function NebullaIDEShell() {
   useEffect(() => {
     if (!workspaceCtx || welcomeCheckedRef.current) return;
     welcomeCheckedRef.current = true;
+    // UI redesign branch: skip Grok/cloud setup banners and BYOK welcome.
+    if (UI_SHELL_ONLY) {
+      setCloudBanner(null);
+      setWelcomeOpen(false);
+      return;
+    }
     const projectKey = workspaceCtx.projectKey || getBrowserProjectKey();
     void (async () => {
       const { cfg, u } = await refreshMyServicesContext();
@@ -547,7 +554,7 @@ function NebullaIDEShell() {
           onLoggedOut={handleSessionEnded}
         />
 
-        {cloudBanner && !cloudBannerDismissed && workspaceCtx ? (
+        {!UI_SHELL_ONLY && cloudBanner && !cloudBannerDismissed && workspaceCtx ? (
           <div
             className="flex shrink-0 items-start gap-3 border-b border-amber-500/25 bg-amber-500/10 px-4 py-2.5 text-xs leading-relaxed text-amber-50/95 sm:items-center sm:text-[13px]"
             role="status"

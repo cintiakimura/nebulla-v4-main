@@ -499,11 +499,11 @@ export function MyProjectsHome() {
               key={action.id}
               type="button"
               onClick={action.onClick}
-              title={action.blurb}
-              className="btn-cyan inline-flex items-center gap-2 rounded-lg px-4 py-2 text-xs"
+              title={action.title}
+              aria-label={action.title}
+              className="btn-cyan inline-flex h-9 w-9 items-center justify-center rounded-lg"
             >
-              <Icon className="h-3.5 w-3.5" aria-hidden />
-              {action.title}
+              <Icon className="h-4 w-4" aria-hidden />
             </button>
           );
         })}
@@ -538,7 +538,7 @@ export function MyProjectsHome() {
           </p>
         </div>
       ) : (
-        <ul className="divide-y divide-border overflow-hidden rounded-xl border border-border/60">
+        <ul className="ide-glass-card divide-y divide-border overflow-hidden rounded-xl border border-border/60">
           {projects.map((p) => {
             const isActive = p.key === activeKey || p.name === getBrowserProjectName();
             return (

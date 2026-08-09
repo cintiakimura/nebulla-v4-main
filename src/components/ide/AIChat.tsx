@@ -6,6 +6,7 @@ import {
   MAIN_AI_CHAT_SETUP_HINT,
   serverReportsMainAiKey,
 } from '../../lib/grokKey';
+import { UI_SHELL_ONLY } from '../../lib/testingBranch';
 import {
   classifyContinueFailure,
   clearMainAiAuthRejected,
@@ -2384,7 +2385,8 @@ export function AIChat() {
     };
   }, [interruptVoiceAndTts]);
 
-  const showGrokKeyBanner = serverHasGrokKey === false;
+  // UI redesign branch: no backend / BYOK nags in the chat rail.
+  const showGrokKeyBanner = !UI_SHELL_ONLY && serverHasGrokKey === false;
 
   /** Manual / Agent-switch coding pass (replaces the removed Go button). */
   const runCodingPass = useCallback(async (opts?: { force?: boolean; note?: string }) => {

@@ -500,8 +500,7 @@
   /* ========== end playground ========== */
 
   position: relative;
-  /* No isolation — backdrop-filter must sample the fixed wallpaper layers */
-  background-color: transparent;
+  /* Wallpaper is painted below (second .nebulla-ide-shell rule + __bg layer) */
   color: #ffffff;
 
   /* Cyan accent + white type (IDE only) */
@@ -562,7 +561,19 @@
   --color-border: rgba(255, 255, 255, 0.12);
 }
 
-/* Wallpaper + veil — same layering as landing page (real DOM nodes in NebullaIDE) */
+/*
+ * Wallpaper + veil (real DOM nodes in NebullaIDE).
+ * Also paint wallpaper on the shell itself so transparent gaps always show stars.
+ */
+.nebulla-ide-shell {
+  background-color: #000000 !important;
+  background-image: var(--ide-bg-image) !important;
+  background-size: cover !important;
+  background-position: center !important;
+  background-repeat: no-repeat !important;
+  background-attachment: fixed !important;
+}
+
 .nebulla-ide-shell__bg {
   position: fixed;
   inset: 0;
@@ -573,6 +584,7 @@
   background-size: cover;
   background-position: center;
   background-repeat: no-repeat;
+  background-attachment: fixed;
 }
 
 .nebulla-ide-shell__veil {
@@ -587,118 +599,135 @@
   position: relative;
   z-index: 2;
   min-height: 0;
+  background: transparent !important;
 }
 
-/*
- * Full-bleed center panes stay clear so wallpaper shows (like the preview area).
- */
+/* Center / clear panes — wallpaper shows through */
 .nebulla-ide-shell :is(.bg-background, .bg-transparent) {
   background-color: transparent !important;
+  background-image: none !important;
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
 }
 
 /*
- * Chrome glass — header, nav toggles, explorer, chat, terminal, tabs.
- * Frosted wallpaper (same idea as landing header).
+ * Frosted glass — does NOT rely on backdrop-filter sampling (often broken with overflow).
+ * Each pane draws the fixed wallpaper, blurs it 16px, then tints with a light black wash.
  */
 .nebulla-ide-shell .ide-glass-chrome,
-.nebulla-ide-shell :is(
-  .bg-black,
-  .bg-\[\#000\],
-  .bg-\[\#000000\],
-  .bg-card,
-  .bg-\[\#0a0a0a\],
-  .bg-\[\#0A0A0A\],
-  .bg-muted,
-  .bg-secondary,
-  .bg-\[\#111111\],
-  .bg-\[\#111\],
-  .bg-accent,
-  .bg-\[\#050508\],
+.nebulla-ide-shell .ide-glass-card {
+  position: relative !important;
+  isolation: isolate;
+  background-color: transparent !important;
+  background-image: none !important;
+  backdrop-filter: blur(16px) saturate(1.2) !important;
+  -webkit-backdrop-filter: blur(16px) saturate(1.2) !important;
+  border-color: rgba(255, 255, 255, 0.14) !important;
+  box-shadow: none !important;
+}
+
+/* Cards clip frost edges; chrome stays overflow-visible so menus/dropdowns work */
+.nebulla-ide-shell .ide-glass-card {
+  overflow: hidden !important;
+}
+
+/* Blurred wallpaper slice (fixed attachment = aligned across all panes) */
+.nebulla-ide-shell .ide-glass-chrome::before,
+.nebulla-ide-shell .ide-glass-card::before {
+  content: '' !important;
+  display: block !important;
+  position: absolute !important;
+  inset: 0 !important;
+  z-index: 0 !important;
+  pointer-events: none !important;
+  background-color: #000000 !important;
+  background-image: var(--ide-bg-image) !important;
+  background-size: cover !important;
+  background-position: center !important;
+  background-repeat: no-repeat !important;
+  background-attachment: fixed !important;
+  /* No transform here — it breaks background-attachment: fixed */
+  filter: blur(16px) saturate(1.15) !important;
+}
+
+/* Dim wash over the blurred photo */
+.nebulla-ide-shell .ide-glass-chrome::after,
+.nebulla-ide-shell .ide-glass-card::after {
+  content: '' !important;
+  display: block !important;
+  position: absolute !important;
+  inset: 0 !important;
+  z-index: 1 !important;
+  pointer-events: none !important;
+  background: rgb(0 0 0 / 0.35) !important;
+}
+
+/* Keep real UI above the frost layers */
+.nebulla-ide-shell .ide-glass-chrome > *,
+.nebulla-ide-shell .ide-glass-card > * {
+  position: relative;
+  z-index: 2;
+}
+
+/* Nested full-panel shells must stay clear or they paint solid over frost */
+.nebulla-ide-shell .ide-glass-chrome :is(
   .surface-base,
   .surface-active,
   .surface-float,
   .elevation-popover,
-  .glass-panel
+  .glass-panel,
+  .bg-black,
+  .bg-card,
+  .bg-muted,
+  .bg-secondary,
+  .bg-accent,
+  .bg-background,
+  .bg-\[\#000\],
+  .bg-\[\#000000\],
+  .bg-\[\#0a0a0a\],
+  .bg-\[\#0A0A0A\],
+  .bg-\[\#111111\],
+  .bg-\[\#111\],
+  .bg-\[\#050508\]
 ),
-.nebulla-ide-shell [class*='bg-black/'],
-.nebulla-ide-shell [class*='bg-muted/'],
-.nebulla-ide-shell [class*='bg-secondary/'],
-.nebulla-ide-shell [class*='bg-card/'],
-.nebulla-ide-shell [class*='bg-\[\#0a0a0a\]'],
-.nebulla-ide-shell [class*='bg-\[var(--surface'] {
-  background-color: var(--ide-glass-chrome) !important;
-  background-image: none !important;
-  backdrop-filter: var(--ide-glass-blur-chrome) !important;
-  -webkit-backdrop-filter: var(--ide-glass-blur-chrome) !important;
-  border-color: rgba(255, 255, 255, 0.12);
-}
-
-/*
- * Full nested panel shells inside chrome stay clear so only the outer frost shows.
- * Small widgets (surface-float, chips) keep a light fill.
- */
-.nebulla-ide-shell .ide-glass-chrome :is(.surface-base, .surface-active) {
+.nebulla-ide-shell .ide-glass-chrome [class*='bg-black/'],
+.nebulla-ide-shell .ide-glass-chrome [class*='bg-muted/'],
+.nebulla-ide-shell .ide-glass-chrome [class*='bg-secondary/'],
+.nebulla-ide-shell .ide-glass-chrome [class*='bg-card/'],
+.nebulla-ide-shell .ide-glass-chrome [class*='bg-\[\#0a0a0a\]'],
+.nebulla-ide-shell .ide-glass-chrome [class*='bg-\[var(--surface'] {
   background-color: transparent !important;
   background-image: none !important;
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
 }
 
-/* Compact widgets inside chrome — soft glass, no solid black wall */
-.nebulla-ide-shell .ide-glass-chrome :is(.surface-float, .elevation-popover),
-.nebulla-ide-shell .ide-glass-chrome [class*='bg-black/'],
-.nebulla-ide-shell .ide-glass-chrome [class*='bg-\[\#0a0a0a\]'] {
-  background-color: var(--ide-glass-fill-soft) !important;
-  background-image: none !important;
-  backdrop-filter: var(--ide-glass-blur) !important;
-  -webkit-backdrop-filter: var(--ide-glass-blur) !important;
-}
-
-/* Cards — glass only (no gradient), 16px blur over wallpaper */
-.nebulla-ide-shell .ide-glass-card {
-  position: relative;
-  overflow: hidden;
-  background-color: var(--ide-glass-fill) !important;
-  background-image: none !important;
-  backdrop-filter: var(--ide-glass-blur) !important;
-  -webkit-backdrop-filter: var(--ide-glass-blur) !important;
-  border-color: rgba(255, 255, 255, 0.16) !important;
-  box-shadow: none;
-}
-
-.nebulla-ide-shell .ide-glass-card::before {
-  content: none !important;
-  display: none !important;
-}
-
 .nebulla-ide-shell .ide-glass-card--choice {
-  background-color: var(--ide-glass-fill-soft) !important;
-  backdrop-filter: var(--ide-glass-blur) !important;
-  -webkit-backdrop-filter: var(--ide-glass-blur) !important;
-  box-shadow: none;
+  /* inherits frost from .ide-glass-card */
 }
 
-.nebulla-ide-shell .ide-glass-card--choice:hover {
-  background-color: var(--ide-glass-fill) !important;
+.nebulla-ide-shell .ide-glass-card--choice:hover::after {
+  background: rgb(0 0 0 / 0.28) !important;
+}
+
+.nebulla-ide-shell .ide-glass-card--selected::after {
+  background: rgb(0 0 0 / 0.45) !important;
 }
 
 .nebulla-ide-shell .ide-glass-card--selected {
-  background-color: var(--ide-glass-fill-strong) !important;
-  backdrop-filter: var(--ide-glass-blur) !important;
-  -webkit-backdrop-filter: var(--ide-glass-blur) !important;
   border-color: rgba(255, 255, 255, 0.32) !important;
-  box-shadow: none;
 }
 
 .nebulla-ide-shell .ide-glass-input {
-  background-color: var(--ide-glass-fill-soft) !important;
-  backdrop-filter: var(--ide-glass-blur) !important;
-  -webkit-backdrop-filter: var(--ide-glass-blur) !important;
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  background-color: rgb(0 0 0 / 0.35) !important;
   color: #ffffff !important;
   border-color: rgba(255, 255, 255, 0.14) !important;
   box-shadow: none;
+  backdrop-filter: blur(16px) !important;
+  -webkit-backdrop-filter: blur(16px) !important;
 }
 
 /* White type — regular weight only (keep status colors) */

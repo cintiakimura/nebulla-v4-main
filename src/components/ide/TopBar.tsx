@@ -279,11 +279,11 @@ export function TopBar({
           <button
             type="button"
             title={t('ide.topbar.previewTitle')}
+            aria-label={t('ide.topbar.preview')}
             onClick={() => window.dispatchEvent(new CustomEvent('nebula-open-app-preview'))}
-            className="btn-secondary-surface type-label-sm hidden h-9 items-center gap-1.5 rounded-md px-2.5 text-muted-foreground hover:text-foreground sm:inline-flex"
+            className="btn-secondary-surface hidden h-9 w-9 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:text-foreground sm:inline-flex"
           >
             <MonitorPlay className="h-4 w-4" aria-hidden />
-            {t('ide.topbar.preview')}
           </button>
           <button
             type="button"
@@ -292,10 +292,11 @@ export function TopBar({
                 ? 'Needs runnable root (package.json + build scripts). Run a coding slice first.'
                 : 'Deploy / Build check — npm install + npm run build on the product workspace root'
             }
+            aria-label="Deploy"
             disabled={deployBusy}
             onClick={() => void runDeploy()}
             className={cn(
-              'btn-secondary-surface type-label-sm hidden h-9 items-center gap-1.5 rounded-md px-2.5 text-muted-foreground hover:text-foreground disabled:opacity-40 sm:inline-flex',
+              'btn-secondary-surface hidden h-9 w-9 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:text-foreground disabled:opacity-40 sm:inline-flex',
               runnableOk === false && 'opacity-70',
             )}
           >
@@ -304,7 +305,6 @@ export function TopBar({
             ) : (
               <Rocket className="h-4 w-4" aria-hidden />
             )}
-            Deploy
           </button>
           {deployHint ? (
             <span
