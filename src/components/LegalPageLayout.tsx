@@ -11,39 +11,39 @@ export function LegalPageLayout({
   children: ReactNode;
 }) {
   return (
-    <div className="min-h-screen bg-background text-on-surface font-body flex flex-col overflow-y-auto">
-      <header className="sticky top-0 z-20 h-14 shrink-0 border-b border-white/5 flex items-center justify-between px-6 glass-panel">
-        <a href="/" className="flex items-center gap-2 text-cyan-300 no-underline hover:opacity-90 transition-opacity">
-          <Logo className="w-7 h-7" />
+    <div className="flex min-h-screen flex-col overflow-y-auto bg-transparent text-on-surface font-body">
+      <header className="ide-glass-chrome sticky top-0 z-20 flex h-14 shrink-0 items-center justify-between border-b border-border px-6">
+        <a href="/" className="flex items-center gap-2 text-cyan-300 no-underline transition-opacity hover:opacity-90">
+          <Logo className="h-7 w-7" />
           <span className="font-headline text-lg font-normal">nebulla</span>
         </a>
         <nav className="flex items-center gap-5 text-13 text-slate-400">
-          <a href="/privacy" className="hover:text-cyan-300 transition-colors no-underline">
+          <a href="/privacy" className="no-underline transition-colors hover:text-cyan-300">
             Privacy
           </a>
-          <a href="/terms" className="hover:text-cyan-300 transition-colors no-underline">
+          <a href="/terms" className="no-underline transition-colors hover:text-cyan-300">
             Terms
           </a>
-          <a href="/legal/dpa" className="hover:text-cyan-300 transition-colors no-underline">
+          <a href="/legal/dpa" className="no-underline transition-colors hover:text-cyan-300">
             DPA
           </a>
         </nav>
       </header>
 
-      <main className="flex-1 w-full max-w-3xl mx-auto px-6 py-12 md:py-16">
-        <h1 className="text-3xl md:text-4xl font-headline text-cyan-300 font-normal tracking-tight mb-2">{title}</h1>
+      <main className="ide-glass-card mx-auto my-10 w-full max-w-3xl flex-1 rounded-2xl border border-border px-6 py-12 md:px-10 md:py-16">
+        <h1 className="mb-2 font-headline text-3xl font-normal tracking-tight text-cyan-300 md:text-4xl">{title}</h1>
         {subtitle ? (
-          <p className="text-sm text-slate-500 mb-10 border-b border-white/5 pb-8">{subtitle}</p>
+          <p className="mb-10 border-b border-border pb-8 text-sm text-slate-500">{subtitle}</p>
         ) : (
-          <div className="mb-10 border-b border-white/5 pb-8" />
+          <div className="mb-10 border-b border-border pb-8" />
         )}
-        <div className="space-y-8 text-13 text-slate-300 leading-relaxed">{children}</div>
+        <div className="space-y-8 text-13 leading-relaxed text-slate-300">{children}</div>
       </main>
 
-      <footer className="shrink-0 border-t border-white/5 py-8 text-center">
+      <footer className="ide-glass-chrome shrink-0 border-t border-border py-8 text-center">
         <a
           href="/"
-          className="text-13 text-cyan-400/90 hover:text-cyan-300 no-underline font-headline font-normal"
+          className="font-headline text-13 font-normal text-cyan-400/90 no-underline hover:text-cyan-300"
         >
           ← Back to nebulla
         </a>

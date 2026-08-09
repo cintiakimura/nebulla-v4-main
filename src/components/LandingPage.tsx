@@ -36,13 +36,11 @@ export function LandingPage({ onEnter }: LandingPageProps) {
   };
 
   return (
-    <div className="nebula-landing-page min-h-screen text-on-surface font-body font-normal">
-      <div className="nebula-landing-page__bg" aria-hidden="true" />
-      <div className="nebula-landing-page__veil" aria-hidden="true" />
-
-      <div className="nebula-landing-page__content">
+    <div className="nebula-landing-page flex min-h-screen flex-col text-on-surface font-body font-normal">
+      {/* Wallpaper comes from AppShell — content only here */}
+      <div className="nebula-landing-page__content relative z-[2] flex min-h-screen flex-col">
       {/* Header */}
-      <header className="nebula-landing-header h-16 border-b border-cyan-500/10 flex items-center px-8 justify-between shrink-0">
+      <header className="ide-glass-chrome h-16 border-b border-border flex items-center px-8 justify-between shrink-0">
         <div className="flex items-center gap-2 text-cyan-300">
           <Logo className="w-8 h-8" />
           <span className="font-headline text-lg font-normal">nebulla</span>
@@ -99,7 +97,7 @@ export function LandingPage({ onEnter }: LandingPageProps) {
             </div>
           </div>
           
-          <div className="nebula-landing-card nebula-landing-card--hero flex flex-col justify-center items-start lg:items-end p-8 lg:p-12">
+          <div className="ide-glass-card flex flex-col justify-center items-start lg:items-end p-8 lg:p-12">
             <div className="text-4xl md:text-5xl lg:text-6xl font-headline text-cyan-300 font-normal tracking-tight mb-6">
               Free beta
             </div>
@@ -150,7 +148,7 @@ export function LandingPage({ onEnter }: LandingPageProps) {
               />
             </div>
             
-            <div className="nebula-landing-card lg:col-span-1 flex flex-col gap-6 p-8">
+            <div className="ide-glass-card lg:col-span-1 flex flex-col gap-6 p-8">
               <h3 className="text-xl font-headline text-cyan-300 font-normal mb-2">All Features Included</h3>
               <ul className="flex flex-col gap-4">
                 {[
@@ -187,9 +185,9 @@ export function LandingPage({ onEnter }: LandingPageProps) {
           </div>
           
           {/* Full IDE Mockup */}
-          <div className="nebula-landing-card nebula-landing-card--subtle overflow-hidden flex flex-col aspect-[16/10] md:aspect-[16/9] w-full bg-[#020617]">
+          <div className="ide-glass-card overflow-hidden flex flex-col aspect-[16/10] md:aspect-[16/9] w-full">
             {/* Header */}
-            <div className="h-8 md:h-10 bg-[#161b22] border-b border-white/5 flex items-center px-4 gap-2 shrink-0">
+            <div className="h-8 md:h-10 border-b border-white/5 flex items-center px-4 gap-2 shrink-0 bg-black/30">
               <div className="w-2.5 h-2.5 md:w-3 md:h-3 rounded-full bg-red-500/80"></div>
               <div className="w-2.5 h-2.5 md:w-3 md:h-3 rounded-full bg-yellow-500/80"></div>
               <div className="w-2.5 h-2.5 md:w-3 md:h-3 rounded-full bg-green-500/80"></div>
@@ -309,7 +307,7 @@ export function LandingPage({ onEnter }: LandingPageProps) {
         </section>
 
         {/* Beta CTA */}
-        <section className="nebula-landing-card nebula-landing-card--hero p-8 md:p-12 flex flex-col md:flex-row items-start md:items-center justify-between gap-8 text-left">
+        <section className="ide-glass-card p-8 md:p-12 flex flex-col md:flex-row items-start md:items-center justify-between gap-8 text-left">
           <div className="flex flex-col gap-4">
             <h2 className="text-base font-normal text-cyan-300">
               Closed beta — invite only.
@@ -328,7 +326,7 @@ export function LandingPage({ onEnter }: LandingPageProps) {
         </section>
       </main>
 
-      <footer className="nebula-landing-footer shrink-0 border-t border-cyan-500/10 py-6 px-8 flex flex-wrap items-center justify-center gap-6 text-13 text-slate-500">
+      <footer className="ide-glass-chrome shrink-0 border-t border-border py-6 px-8 flex flex-wrap items-center justify-center gap-6 text-13 text-slate-500">
         <a href="/payment" className="text-slate-400 hover:text-cyan-300 transition-colors no-underline">
           Payment
         </a>
@@ -358,7 +356,7 @@ export function LandingPage({ onEnter }: LandingPageProps) {
 
 function FeatureCard({ icon, title, description }: { icon: React.ReactNode, title: string, description: string }) {
   return (
-    <div className="nebula-landing-card nebula-landing-card--hover p-6 flex flex-col gap-4 text-left">
+    <div className="ide-glass-card p-6 flex flex-col gap-4 text-left">
       <div className="w-12 h-12 rounded-lg bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center text-cyan-400">
         {icon}
       </div>

@@ -478,20 +478,21 @@
   --ide-bg-image: url('/images/background_nebulla_blue.png');
   --ide-bg-overlay: 0.5; /* 0 = full photo, 1 = pure black */
 
-  /* CARDS / CHROME — frosted over wallpaper; 16px blur everywhere */
+  /* CARDS / CHROME — frosted over wallpaper; 7px blur everywhere */
   --ide-glass-fill: rgba(0, 0, 0, 0.28);
   --ide-glass-fill-strong: rgba(0, 0, 0, 0.4);
   --ide-glass-fill-soft: rgba(0, 0, 0, 0.18);
   --ide-glass-chrome: rgba(0, 0, 0, 0.28);
-  --ide-glass-blur: blur(16px) saturate(1.2);
-  --ide-glass-blur-chrome: blur(16px) saturate(1.2);
+  --ide-glass-blur: blur(7px) saturate(1.2);
+  --ide-glass-blur-chrome: blur(7px) saturate(1.2);
 
-  /* BUTTONS */
+  /* BUTTONS — very subtle cyan wash */
   --ide-btn-color: #22d3ee; /* cyan */
-  --ide-btn-fill: 12%;
+  --ide-btn-fill: 5%;
   --ide-btn-border: 50%;
-  --ide-btn-fill-hover: 22%;
+  --ide-btn-fill-hover: 10%;
   --ide-btn-border-hover: 55%;
+  --ide-btn-border-width: 0; /* no border */
   --ide-btn-text: #ffffff;
 
   /* Alias used across accents */
@@ -612,7 +613,7 @@
 
 /*
  * Frosted glass — does NOT rely on backdrop-filter sampling (often broken with overflow).
- * Each pane draws the fixed wallpaper, blurs it 16px, then tints with a light black wash.
+ * Each pane draws the fixed wallpaper, blurs it 7px, then tints with a light black wash.
  */
 .nebulla-ide-shell .ide-glass-chrome,
 .nebulla-ide-shell .ide-glass-card {
@@ -620,8 +621,8 @@
   isolation: isolate;
   background-color: transparent !important;
   background-image: none !important;
-  backdrop-filter: blur(16px) saturate(1.2) !important;
-  -webkit-backdrop-filter: blur(16px) saturate(1.2) !important;
+  backdrop-filter: var(--ide-glass-blur) !important;
+  -webkit-backdrop-filter: var(--ide-glass-blur) !important;
   border-color: rgba(255, 255, 255, 0.14) !important;
   box-shadow: none !important;
 }
@@ -647,7 +648,7 @@
   background-repeat: no-repeat !important;
   background-attachment: fixed !important;
   /* No transform here — it breaks background-attachment: fixed */
-  filter: blur(16px) saturate(1.15) !important;
+  filter: var(--ide-glass-blur) !important;
 }
 
 /* Dim wash over the blurred photo */
@@ -726,8 +727,8 @@
   color: #ffffff !important;
   border-color: rgba(255, 255, 255, 0.14) !important;
   box-shadow: none;
-  backdrop-filter: blur(16px) !important;
-  -webkit-backdrop-filter: blur(16px) !important;
+  backdrop-filter: var(--ide-glass-blur) !important;
+  -webkit-backdrop-filter: var(--ide-glass-blur) !important;
 }
 
 /* White type — regular weight only (keep status colors) */
@@ -768,7 +769,8 @@
 .nebulla-ide-shell .ide-btn {
   background-color: color-mix(in srgb, var(--ide-btn-color) var(--ide-btn-fill), transparent);
   color: var(--ide-btn-text);
-  border: 1px solid color-mix(in srgb, var(--ide-btn-color) var(--ide-btn-border), transparent);
+  border: none;
+  border-width: var(--ide-btn-border-width);
   font-weight: 400;
   border-radius: 0.5rem;
   box-shadow: none;
@@ -777,7 +779,7 @@
 .nebulla-ide-shell .btn-cyan:hover:not(:disabled),
 .nebulla-ide-shell .ide-btn:hover:not(:disabled) {
   background-color: color-mix(in srgb, var(--ide-btn-color) var(--ide-btn-fill-hover), transparent);
-  border-color: color-mix(in srgb, var(--ide-btn-color) var(--ide-btn-border-hover), transparent);
+  border: none;
   color: var(--ide-btn-text);
   box-shadow: none;
 }
@@ -785,9 +787,19 @@
 .nebulla-ide-shell .ide-btn--pressed,
 .nebulla-ide-shell .btn-cyan[aria-pressed='true'] {
   background-color: color-mix(in srgb, var(--ide-btn-color) var(--ide-btn-fill-hover), transparent);
-  border-color: color-mix(in srgb, var(--ide-btn-color) var(--ide-btn-border), transparent);
+  border: none;
   color: var(--ide-btn-text);
   box-shadow: none;
+}
+
+/* Kill leftover Tailwind / global border utility on IDE buttons */
+.nebulla-ide-shell :is(button, [role='button'], a.btn-cyan, a.ide-btn).border,
+.nebulla-ide-shell :is(button, [role='button']).btn-cyan,
+.nebulla-ide-shell :is(button, [role='button']).btn-secondary-surface,
+.nebulla-ide-shell :is(button, [role='button']).ide-btn {
+  border-style: none !important;
+  border-width: 0 !important;
+  border-color: transparent !important;
 }
 
 /* Kill cyan glow on IDE chrome */
@@ -833,7 +845,8 @@
 .nebulla-ide-shell .btn-secondary-surface {
   background-color: color-mix(in srgb, var(--ide-btn-color) var(--ide-btn-fill), transparent) !important;
   color: var(--ide-btn-text) !important;
-  border: 1px solid color-mix(in srgb, var(--ide-btn-color) var(--ide-btn-border), transparent) !important;
+  border: none !important;
+  border-width: var(--ide-btn-border-width) !important;
   font-weight: 400;
   border-radius: 0.5rem;
   box-shadow: none !important;
@@ -841,7 +854,7 @@
 
 .nebulla-ide-shell .btn-secondary-surface:hover:not(:disabled) {
   background-color: color-mix(in srgb, var(--ide-btn-color) var(--ide-btn-fill-hover), transparent) !important;
-  border-color: color-mix(in srgb, var(--ide-btn-color) var(--ide-btn-border-hover), transparent) !important;
+  border: none !important;
   color: var(--ide-btn-text) !important;
   box-shadow: none !important;
 }
@@ -903,4 +916,37 @@
     animation: none;
     opacity: 1;
   }
+}
+
+/*
+ * All routes share AppShell glass — clear leftover solid page paints
+ * (login / payment / landing mock chrome / legal).
+ */
+.nebulla-ide-shell .nebula-landing-page {
+  background: transparent !important;
+  isolation: auto;
+  height: auto;
+  min-height: 100vh;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+.nebulla-ide-shell :is(
+  .bg-\[\#020C17\],
+  .bg-\[\#040f1a\],
+  .bg-\[\#050508\],
+  .bg-\[\#020617\],
+  .bg-\[\#0d1117\],
+  .bg-\[\#161b22\]
+),
+.nebulla-ide-shell [class*='bg-[#020C17]'],
+.nebulla-ide-shell [class*='bg-[#040f1a]'],
+.nebulla-ide-shell [class*='bg-[#050508]'] {
+  background-color: transparent !important;
+  background-image: none !important;
+}
+
+/* Landing mock IDE chrome inside the hero mockup — soft glass, not solid navy */
+.nebulla-ide-shell .nebula-landing-page [class*='bg-[#'] {
+  background-color: rgb(0 0 0 / 0.25) !important;
 }

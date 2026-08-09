@@ -506,126 +506,121 @@ function NebullaIDEShell() {
         : activeNavId;
 
   return (
-    <div className="nebulla-ide-shell flex h-screen flex-col overflow-hidden text-foreground">
-      {/* Real DOM wallpaper layers (landing-page pattern) so backdrop-filter can sample them */}
-      <div className="nebulla-ide-shell__bg" aria-hidden="true" />
-      <div className="nebulla-ide-shell__veil" aria-hidden="true" />
-
-      <div className="nebulla-ide-shell__content flex min-h-0 flex-1 flex-col overflow-hidden">
-        {!workspaceCtx ? (
-          <WorkspaceSetupGate
-            onReady={handleWorkspaceReady}
-            onSetupBusyChange={setWorkspaceSetupBusy}
+    /* Wallpaper/glass come from AppShell — this is layout only */
+    <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden text-foreground">
+      {!workspaceCtx ? (
+        <WorkspaceSetupGate
+          onReady={handleWorkspaceReady}
+          onSetupBusyChange={setWorkspaceSetupBusy}
+        />
+      ) : null}
+      <WelcomeOnboardingModal
+        open={welcomeOpen && Boolean(workspaceCtx)}
+        user={myServicesUser ?? workspaceCtx?.user ?? null}
+        onClose={() => setWelcomeOpen(false)}
+      />
+      {profileOpen ? (
+        <div
+          className="fixed inset-0 z-[200] flex flex-col overflow-hidden"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Account"
+        >
+          <UserProfilePage
+            onClose={() => setProfileOpen(false)}
+            onLoggedOut={handleSessionEnded}
+            onAccountDeleted={handleSessionEnded}
+            onRequestSignIn={handleSessionEnded}
+            projectName={accountProjectName}
+            onProjectNameChange={handleAccountProjectNameChange}
+            activeProjectKey={workspaceProjectKey}
           />
-        ) : null}
-        <WelcomeOnboardingModal
-          open={welcomeOpen && Boolean(workspaceCtx)}
-          user={myServicesUser ?? workspaceCtx?.user ?? null}
-          onClose={() => setWelcomeOpen(false)}
-        />
-        {profileOpen ? (
-          <div
-            className="fixed inset-0 z-[200] flex flex-col overflow-hidden"
-            role="dialog"
-            aria-modal="true"
-            aria-label="Account"
-          >
-            <UserProfilePage
-              onClose={() => setProfileOpen(false)}
-              onLoggedOut={handleSessionEnded}
-              onAccountDeleted={handleSessionEnded}
-              onRequestSignIn={handleSessionEnded}
-              projectName={accountProjectName}
-              onProjectNameChange={handleAccountProjectNameChange}
-              activeProjectKey={workspaceProjectKey}
-            />
-          </div>
-        ) : null}
+        </div>
+      ) : null}
 
-        <TopBar
-          workspaceLabel={workspaceCtx?.projectName}
-          workspaceSetupBusy={workspaceSetupBusy && !workspaceCtx}
-          onProjectNameCommit={handleProjectNameCommit}
-          onSwitchWorkspace={() => {
-            setWorkspaceSetupBusy(true);
-            setWorkspaceCtx(null);
-          }}
-          onOpenAccount={() => setProfileOpen(true)}
-          onLoggedOut={handleSessionEnded}
+      <TopBar
+        workspaceLabel={workspaceCtx?.projectName}
+        workspaceSetupBusy={workspaceSetupBusy && !workspaceCtx}
+        onProjectNameCommit={handleProjectNameCommit}
+        onSwitchWorkspace={() => {
+          setWorkspaceSetupBusy(true);
+          setWorkspaceCtx(null);
+        }}
+        onOpenAccount={() => setProfileOpen(true)}
+        onLoggedOut={handleSessionEnded}
+      />
+
+      {!UI_SHELL_ONLY && cloudBanner && !cloudBannerDismissed && workspaceCtx ? (
+        <div
+          className="flex shrink-0 items-start gap-3 border-b border-amber-500/25 bg-amber-500/10 px-4 py-2.5 text-xs leading-relaxed text-amber-50/95 sm:items-center sm:text-[13px]"
+          role="status"
+        >
+          <p className="min-w-0 flex-1">{cloudBanner}</p>
+          <button
+            type="button"
+            onClick={() => setCloudBannerDismissed(true)}
+            className="shrink-0 rounded-md border border-amber-500/30 px-2 py-1 text-[11px] text-amber-100/90 hover:bg-amber-500/15"
+          >
+            Dismiss
+          </button>
+        </div>
+      ) : null}
+
+      <div className="flex min-h-0 flex-1 overflow-hidden">
+        <VerticalNav
+          activeItem={navActiveItem}
+          onSelectItem={selectNavItem}
+          securityAlertCount={securityAlertCount}
         />
 
-        {!UI_SHELL_ONLY && cloudBanner && !cloudBannerDismissed && workspaceCtx ? (
-          <div
-            className="flex shrink-0 items-start gap-3 border-b border-amber-500/25 bg-amber-500/10 px-4 py-2.5 text-xs leading-relaxed text-amber-50/95 sm:items-center sm:text-[13px]"
-            role="status"
-          >
-            <p className="min-w-0 flex-1">{cloudBanner}</p>
-            <button
-              type="button"
-              onClick={() => setCloudBannerDismissed(true)}
-              className="shrink-0 rounded-md border border-amber-500/30 px-2 py-1 text-[11px] text-amber-100/90 hover:bg-amber-500/15"
+        {leftSidebarOpen ? (
+          <>
+            <div
+              className="ide-glass-chrome hidden shrink-0 overflow-hidden border-r border-border md:block"
+              style={{ width: explorer.size }}
             >
-              Dismiss
-            </button>
-          </div>
+              {leftSidebarView === 'source-control' ? (
+                <SourceControlPanel
+                  projectKey={workspaceProjectKey}
+                  projectName={workspaceCtx?.projectName || getBrowserProjectName()}
+                  compact
+                />
+              ) : (
+                <IdeExplorerSidebar />
+              )}
+            </div>
+
+            <ResizeHandle onMouseDown={explorer.onMouseDown} orientation="horizontal" />
+          </>
         ) : null}
 
-        <div className="flex min-h-0 flex-1 overflow-hidden">
-          <VerticalNav
-            activeItem={navActiveItem}
-            onSelectItem={selectNavItem}
-            securityAlertCount={securityAlertCount}
-          />
+        <div className="flex min-w-0 flex-1 flex-col overflow-hidden bg-transparent">
+          <div className="flex min-h-0 flex-1 overflow-hidden bg-transparent">
+            <IdeCenterWorkspace />
+          </div>
 
-          {leftSidebarOpen ? (
-            <>
-              <div
-                className="ide-glass-chrome hidden shrink-0 overflow-hidden border-r border-border md:block"
-                style={{ width: explorer.size }}
-              >
-                {leftSidebarView === 'source-control' ? (
-                  <SourceControlPanel
-                    projectKey={workspaceProjectKey}
-                    projectName={workspaceCtx?.projectName || getBrowserProjectName()}
-                    compact
-                  />
-                ) : (
-                  <IdeExplorerSidebar />
-                )}
-              </div>
-
-              <ResizeHandle onMouseDown={explorer.onMouseDown} orientation="horizontal" />
-            </>
+          {!terminalCollapsed ? (
+            <ResizeHandle onMouseDown={terminal.onMouseDown} orientation="vertical" />
           ) : null}
 
-          <div className="flex min-w-0 flex-1 flex-col overflow-hidden bg-transparent">
-            <div className="flex min-h-0 flex-1 overflow-hidden bg-transparent">
-              <IdeCenterWorkspace />
-            </div>
-
-            {!terminalCollapsed ? (
-              <ResizeHandle onMouseDown={terminal.onMouseDown} orientation="vertical" />
-            ) : null}
-
-            <div
-              className="ide-glass-chrome shrink-0 overflow-hidden"
-              style={{ height: terminalCollapsed ? 32 : terminal.size }}
-            >
-              <TerminalPanel
-                collapsed={terminalCollapsed}
-                onToggleCollapse={() => setTerminalCollapsed((c) => !c)}
-              />
-            </div>
-          </div>
-
-          <ResizeHandle onMouseDown={chat.onMouseDown} orientation="horizontal" />
-
           <div
-            className="ide-glass-chrome flex h-full min-h-0 shrink-0 flex-col overflow-hidden border-l border-border"
-            style={{ width: chat.size, minWidth: 280, maxWidth: 420 }}
+            className="ide-glass-chrome shrink-0 overflow-hidden"
+            style={{ height: terminalCollapsed ? 32 : terminal.size }}
           >
-            <AIChat />
+            <TerminalPanel
+              collapsed={terminalCollapsed}
+              onToggleCollapse={() => setTerminalCollapsed((c) => !c)}
+            />
           </div>
+        </div>
+
+        <ResizeHandle onMouseDown={chat.onMouseDown} orientation="horizontal" />
+
+        <div
+          className="ide-glass-chrome flex h-full min-h-0 shrink-0 flex-col overflow-hidden border-l border-border"
+          style={{ width: chat.size, minWidth: 280, maxWidth: 420 }}
+        >
+          <AIChat />
         </div>
       </div>
     </div>

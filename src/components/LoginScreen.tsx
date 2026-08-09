@@ -182,8 +182,8 @@ export function LoginScreen({
   };
 
   return (
-    <div className="h-screen overflow-y-auto bg-[#020C17] text-slate-100 flex flex-col font-body">
-      <header className="shrink-0 border-b border-white/10 px-6 py-4 flex items-center justify-between bg-[#040f1a]/80 backdrop-blur">
+    <div className="flex h-screen flex-col overflow-y-auto bg-transparent text-slate-100 font-body">
+      <header className="ide-glass-chrome flex shrink-0 items-center justify-between border-b border-border px-6 py-4">
         <button
           type="button"
           onClick={onBack}
@@ -231,7 +231,7 @@ export function LoginScreen({
             </div>
           ) : null}
 
-          <div className="rounded-2xl border border-white/10 bg-[#040f1a]/90 backdrop-blur-sm shadow-2xl shadow-black/40 p-8 flex flex-col gap-4">
+          <div className="ide-glass-card flex flex-col gap-4 rounded-2xl border border-border p-8">
             <button
               type="button"
               onClick={() => void openGitHubOAuth()}

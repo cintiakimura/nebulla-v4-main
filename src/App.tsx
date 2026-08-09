@@ -1,6 +1,7 @@
 import { useCallback, useMemo } from 'react';
 import { NebullaIDE } from '@/components/ide/NebullaIDE';
 import { LandingPage } from '@/components/LandingPage';
+import { AppShell } from '@/components/AppShell';
 import { PrivacyPolicyPage } from './pages/PrivacyPolicyPage';
 import { TermsOfServicePage } from './pages/TermsOfServicePage';
 import { DpaPage } from './pages/DpaPage';
@@ -18,7 +19,7 @@ function usePathname(): string {
   }, []);
 }
 
-export default function App() {
+function AppRoutes() {
   const path = usePathname();
 
   /** Try-free CTA — testing branch skips signup and opens the IDE as guest. */
@@ -44,4 +45,12 @@ export default function App() {
   if (path === '/app' || path === '/ide') return <NebullaIDE />;
 
   return <LandingPage onEnter={enterTryFree} />;
+}
+
+export default function App() {
+  return (
+    <AppShell>
+      <AppRoutes />
+    </AppShell>
+  );
 }

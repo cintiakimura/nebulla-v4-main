@@ -71,8 +71,8 @@ export function PaymentPage() {
   const alreadyPaid = tier === 'pro' || tier === 'power' || tier === 'paid';
 
   return (
-    <div className="min-h-screen bg-[#050508] text-[#f2f2f2] font-body font-normal">
-      <header className="flex h-16 items-center justify-between border-b border-white/10 px-6 md:px-10">
+    <div className="min-h-screen bg-transparent text-[#f2f2f2] font-body font-normal">
+      <header className="ide-glass-chrome flex h-16 items-center justify-between border-b border-border px-6 md:px-10">
         <button type="button" onClick={goToLanding} className="flex items-center gap-2.5">
           <Logo className="h-8 w-8" />
           <span className="text-base font-normal tracking-tight">Nebulla</span>
@@ -113,7 +113,7 @@ export function PaymentPage() {
           </p>
         ) : null}
 
-        <div className="mt-10 rounded-xl border border-white/10 bg-black/40 px-6 py-8">
+        <div className="ide-glass-card mt-10 rounded-xl border border-border px-6 py-8">
           <p className="text-sm text-[#b8b8b8]">Nebulla</p>
           <p className="mt-2 text-2xl tracking-tight text-[#f2f2f2]">
             {billingEnabled ? PLAN_PRICE : 'Free'}
