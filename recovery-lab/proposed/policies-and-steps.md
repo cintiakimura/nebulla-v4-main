@@ -295,3 +295,9 @@ Before quote (force dropped as spine): “Immediately trigger the V0 API… Do n
 - [x] Zero edits under `nebula-project/` and `nebulla-project/`
 - [x] Zero code changes
 - [x] No `project-workflow.proposed.md` this turn
+
+## Phase C link
+
+- North-star candidate: `recovery-lab/proposed/project-workflow.proposed.md`
+- Assembled from this catalog Steps 1–14 (no merges)
+- Next: Phase D human review — no promote until explicit approval
