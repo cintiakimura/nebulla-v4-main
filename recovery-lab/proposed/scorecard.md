@@ -190,3 +190,10 @@ After a usable goal exists:
 - [x] Zero edits under `nebula-project/` and `nebulla-project/`
 - [x] Zero code changes
 - [x] No proposed workflow/execution files created this turn
+
+## Phase B link
+
+- Policies + step catalog (not workflow): `recovery-lab/proposed/policies-and-steps.md`
+- Phase C next: assemble `project-workflow.proposed.md` only from that catalog
+- Note: Phase A §7 “Phase B = workflow.proposed” is superseded — workflow assembly is Phase C
+- `from-before/*` archive bodies were populated after Phase A (no longer empty)
