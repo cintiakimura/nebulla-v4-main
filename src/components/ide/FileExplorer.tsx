@@ -129,7 +129,7 @@ export function FileExplorer() {
   const projectLabel = getBrowserProjectName().trim() || t('ide.explorer.projectFallback');
 
   return (
-    <div className="surface-active flex h-full flex-col">
+    <div className="flex h-full flex-col bg-transparent">
       <div className="flex h-8 items-center justify-between border-b border-border px-3">
         <span className="text-[10px] font-normal uppercase tracking-[0.12em] text-muted-foreground/80">
           {t('ide.explorer.title')}

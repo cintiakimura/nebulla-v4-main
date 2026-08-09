@@ -144,12 +144,12 @@ export function TerminalPanel({ collapsed = false, onToggleCollapse }: TerminalP
 
   if (collapsed) {
     return (
-      <div className="surface-active flex h-full min-h-8 flex-col border-t border-border">{header}</div>
+      <div className="flex h-full min-h-8 flex-col border-t border-border bg-transparent">{header}</div>
     );
   }
 
   return (
-    <div className="surface-active flex h-full min-h-0 flex-col border-t border-border">
+    <div className="flex h-full min-h-0 flex-col border-t border-border bg-transparent">
       {header}
 
       <div

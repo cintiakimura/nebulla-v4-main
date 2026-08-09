@@ -478,11 +478,11 @@
   --ide-bg-image: url('/images/background_nebulla_blue.png');
   --ide-bg-overlay: 0.5; /* 0 = full photo, 1 = pure black */
 
-  /* CARDS / CHROME — light fill so wallpaper shows; 16px blur everywhere */
-  --ide-glass-fill: rgba(0, 0, 0, 0.16);
-  --ide-glass-fill-strong: rgba(0, 0, 0, 0.28);
-  --ide-glass-fill-soft: rgba(0, 0, 0, 0.12);
-  --ide-glass-chrome: rgba(0, 0, 0, 0.16);
+  /* CARDS / CHROME — frosted over wallpaper; 16px blur everywhere */
+  --ide-glass-fill: rgba(0, 0, 0, 0.28);
+  --ide-glass-fill-strong: rgba(0, 0, 0, 0.4);
+  --ide-glass-fill-soft: rgba(0, 0, 0, 0.18);
+  --ide-glass-chrome: rgba(0, 0, 0, 0.28);
   --ide-glass-blur: blur(16px) saturate(1.2);
   --ide-glass-blur-chrome: blur(16px) saturate(1.2);
 
@@ -500,8 +500,8 @@
   /* ========== end playground ========== */
 
   position: relative;
-  isolation: isolate;
-  background-color: #000000;
+  /* No isolation — backdrop-filter must sample the fixed wallpaper layers */
+  background-color: transparent;
   color: #ffffff;
 
   /* Cyan accent + white type (IDE only) */
@@ -562,8 +562,8 @@
   --color-border: rgba(255, 255, 255, 0.12);
 }
 
-.nebulla-ide-shell::before {
-  content: '';
+/* Wallpaper + veil — same layering as landing page (real DOM nodes in NebullaIDE) */
+.nebulla-ide-shell__bg {
   position: fixed;
   inset: 0;
   z-index: 0;
@@ -575,35 +575,34 @@
   background-repeat: no-repeat;
 }
 
-/* Global darkening under panels — driven by --ide-bg-overlay */
-.nebulla-ide-shell::after {
-  content: '';
+.nebulla-ide-shell__veil {
   position: fixed;
   inset: 0;
-  z-index: 0;
+  z-index: 1;
   pointer-events: none;
   background-color: rgb(0 0 0 / var(--ide-bg-overlay));
 }
 
-.nebulla-ide-shell > * {
+.nebulla-ide-shell__content {
   position: relative;
-  z-index: 1;
+  z-index: 2;
+  min-height: 0;
 }
 
 /*
- * Full-bleed pane backdrops must stay clear — otherwise cards only blur a black wall
- * and never get the shower-glass fog of the nebula.
+ * Full-bleed center panes stay clear so wallpaper shows (like the preview area).
  */
-.nebulla-ide-shell :is(.bg-background) {
+.nebulla-ide-shell :is(.bg-background, .bg-transparent) {
   background-color: transparent !important;
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
 }
 
 /*
- * Headers, chat, side rails, toggles — same glass: wallpaper shows through + 16px blur.
- * Includes common opacity variants (bg-black/40, bg-muted/25, …).
+ * Chrome glass — header, nav toggles, explorer, chat, terminal, tabs.
+ * Frosted wallpaper (same idea as landing header).
  */
+.nebulla-ide-shell .ide-glass-chrome,
 .nebulla-ide-shell :is(
   .bg-black,
   .bg-\[\#000\],
@@ -627,18 +626,42 @@
 .nebulla-ide-shell [class*='bg-muted/'],
 .nebulla-ide-shell [class*='bg-secondary/'],
 .nebulla-ide-shell [class*='bg-card/'],
-.nebulla-ide-shell [class*='bg-background/'] {
+.nebulla-ide-shell [class*='bg-\[\#0a0a0a\]'],
+.nebulla-ide-shell [class*='bg-\[var(--surface'] {
   background-color: var(--ide-glass-chrome) !important;
+  background-image: none !important;
   backdrop-filter: var(--ide-glass-blur-chrome) !important;
   -webkit-backdrop-filter: var(--ide-glass-blur-chrome) !important;
   border-color: rgba(255, 255, 255, 0.12);
 }
 
-/* Cards — glass only (no gradient wash), 16px blur */
+/*
+ * Full nested panel shells inside chrome stay clear so only the outer frost shows.
+ * Small widgets (surface-float, chips) keep a light fill.
+ */
+.nebulla-ide-shell .ide-glass-chrome :is(.surface-base, .surface-active) {
+  background-color: transparent !important;
+  background-image: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+/* Compact widgets inside chrome — soft glass, no solid black wall */
+.nebulla-ide-shell .ide-glass-chrome :is(.surface-float, .elevation-popover),
+.nebulla-ide-shell .ide-glass-chrome [class*='bg-black/'],
+.nebulla-ide-shell .ide-glass-chrome [class*='bg-\[\#0a0a0a\]'] {
+  background-color: var(--ide-glass-fill-soft) !important;
+  background-image: none !important;
+  backdrop-filter: var(--ide-glass-blur) !important;
+  -webkit-backdrop-filter: var(--ide-glass-blur) !important;
+}
+
+/* Cards — glass only (no gradient), 16px blur over wallpaper */
 .nebulla-ide-shell .ide-glass-card {
   position: relative;
   overflow: hidden;
   background-color: var(--ide-glass-fill) !important;
+  background-image: none !important;
   backdrop-filter: var(--ide-glass-blur) !important;
   -webkit-backdrop-filter: var(--ide-glass-blur) !important;
   border-color: rgba(255, 255, 255, 0.16) !important;
@@ -646,8 +669,8 @@
 }
 
 .nebulla-ide-shell .ide-glass-card::before {
-  content: none;
-  display: none;
+  content: none !important;
+  display: none !important;
 }
 
 .nebulla-ide-shell .ide-glass-card--choice {

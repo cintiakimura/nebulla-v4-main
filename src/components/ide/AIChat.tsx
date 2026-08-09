@@ -2723,7 +2723,7 @@ export function AIChat() {
   }, []);
 
   return (
-    <div className="surface-active flex h-full min-h-0 flex-col overflow-hidden">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-transparent">
       <IdeAppStatusMenuButton
         onFixWithAgent={handleFixWithAgent}
         onVoiceNudge={onAppStatusVoiceNudge}

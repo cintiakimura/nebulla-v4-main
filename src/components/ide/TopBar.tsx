@@ -228,7 +228,7 @@ export function TopBar({
   }, [draftName, onProjectNameCommit, workspaceLabel]);
 
   return (
-    <div className="surface-active flex min-h-12 flex-col border-b border-border">
+    <div className="ide-glass-chrome flex min-h-12 flex-col border-b border-border">
       <div className="flex min-h-12 items-center gap-2 px-3 py-1">
         <div className="flex min-w-0 shrink-0 items-center gap-2 sm:gap-3 sm:max-w-[min(40%,22rem)]">
           <div className="flex h-full max-h-14 shrink-0 items-center gap-2.5">
