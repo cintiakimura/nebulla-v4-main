@@ -3,6 +3,31 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* Akkurat — Light / Regular / Mono only (no Bold) */
+@font-face {
+  font-family: "Akkurat";
+  src: url("/fonts/Akkurat-Light.ttf") format("truetype");
+  font-weight: 300;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Akkurat";
+  src: url("/fonts/Akkurat.ttf") format("truetype");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Akkurat Mono";
+  src: url("/fonts/Akkurat-Mono.ttf") format("truetype");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
 /*
  * Nebulla IDE — refined / delicate black theme (colors only).
  * Inspired by calm AI chat UIs: true black, hairline seams, rare accents.
@@ -120,10 +145,14 @@
   --color-subtitle: var(--subtitle);
   --color-misc: var(--misc);
 
-  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-sans: "Akkurat", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   --font-body: var(--font-sans);
   --font-headline: var(--font-sans);
   --font-label: var(--font-sans);
+  /* UI mono labels stay Akkurat Mono; code editors use JetBrains Mono via .font-code */
+  --font-mono: "Akkurat Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  --font-code: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
+    monospace;
 }
 
 @layer base {
@@ -138,12 +167,18 @@
     letter-spacing: 0.01em;
   }
 
-  b,
-  strong,
+  /* Akkurat: 300 Light · 400 Regular only — never Bold */
+  .font-light {
+    font-weight: 300 !important;
+  }
+
+  .font-normal,
   .font-medium,
   .font-semibold,
   .font-bold,
-  .font-extrabold {
+  .font-extrabold,
+  b,
+  strong {
     font-weight: 400 !important;
   }
 
@@ -167,6 +202,12 @@
 }
 
 @layer utilities {
+  /* Industry coding face — Monaco / Code screen / inline code samples */
+  .font-code {
+    font-family: var(--font-code);
+    font-variant-ligatures: contextual;
+  }
+
   /* Nebulla type scale — tight; titles never steal the work area */
   .type-body-md {
     font-size: 0.8125rem; /* 13 */
@@ -193,7 +234,7 @@
   .type-title-sm {
     font-size: 0.875rem; /* 14 */
     line-height: 1.35;
-    font-weight: 500;
+    font-weight: 400;
     letter-spacing: 0;
     color: var(--foreground);
   }
@@ -201,7 +242,7 @@
   .type-section {
     font-size: 0.875rem; /* 14 */
     line-height: 1.35;
-    font-weight: 500;
+    font-weight: 400;
     letter-spacing: 0;
     color: var(--foreground);
   }
@@ -209,7 +250,7 @@
   .type-page {
     font-size: 1.125rem; /* 18 */
     line-height: 1.3;
-    font-weight: 500;
+    font-weight: 400;
     letter-spacing: -0.01em;
     color: var(--foreground);
   }
@@ -225,7 +266,7 @@
   .kyn-logotype {
     font-size: 0.8125rem;
     line-height: 1.25;
-    font-weight: 500;
+    font-weight: 400;
     letter-spacing: 0.02em;
     text-transform: lowercase;
     color: var(--foreground);
@@ -234,7 +275,7 @@
   .app-logotype {
     font-size: 0.8125rem; /* 13 */
     line-height: 1.25;
-    font-weight: 500;
+    font-weight: 400;
     letter-spacing: 0.02em;
     text-transform: none;
     color: var(--foreground);
@@ -571,7 +612,7 @@
   color: var(--ide-ink);
   background-color: var(--ide-bg) !important;
   background-image: none !important;
-  font-family: "Inter", ui-sans-serif, system-ui, sans-serif;
+  font-family: "Akkurat", ui-sans-serif, system-ui, sans-serif;
   font-size: var(--text-body);
   line-height: 1.45;
   -webkit-font-smoothing: antialiased;
@@ -754,13 +795,26 @@
   --tw-ring-shadow: 0 0 #0000 !important;
 }
 
-/* Default soft; allow 500 for section titles / logotype */
-.nebulla-ide-shell :is(.font-bold, .font-semibold, .font-headline) {
+/* Shell chrome: Light (300) or Regular (400) only — no Bold */
+.nebulla-ide-shell :is(
+  .font-semibold,
+  .font-headline,
+  .font-medium,
+  .font-bold,
+  .font-extrabold,
+  .type-section,
+  .type-title-sm,
+  .type-page,
+  .app-logotype,
+  .kyn-logotype,
+  b,
+  strong
+) {
   font-weight: 400 !important;
 }
 
-.nebulla-ide-shell :is(.font-medium, .type-section, .type-title-sm, .type-page, .app-logotype, .kyn-logotype) {
-  font-weight: 500 !important;
+.nebulla-ide-shell .font-light {
+  font-weight: 300 !important;
 }
 
 .nebulla-ide-shell h1,
@@ -768,8 +822,18 @@
 .nebulla-ide-shell h3 {
   font-size: var(--text-section);
   line-height: 1.35;
-  font-weight: 500;
+  font-weight: 400;
   letter-spacing: 0;
+}
+
+/* Landing may use real display sizes + Light/Bold (Linear-style weight play) */
+.nebulla-ide-shell .nebula-landing-page h1,
+.nebulla-ide-shell .nebula-landing-page h2,
+.nebulla-ide-shell .nebula-landing-page h3 {
+  font-size: unset;
+  line-height: unset;
+  font-weight: unset;
+  letter-spacing: unset;
 }
 
 .nebulla-ide-shell :is(.text-foreground, .text-card-foreground, .text-popover-foreground) {
@@ -864,7 +928,7 @@
   border: 1px solid var(--cta-fill) !important;
   border-width: 1px !important;
   font-size: var(--text-dense);
-  font-weight: 500;
+  font-weight: 400;
   line-height: 1.2;
   min-height: var(--control-h);
   padding: 0 14px;

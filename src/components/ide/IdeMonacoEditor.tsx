@@ -8,6 +8,7 @@ import { Loader2 } from 'lucide-react';
 import { useCallback, useEffect, useRef } from 'react';
 import { monacoLanguageFromPath } from '../../lib/monacoLanguageFromPath';
 import {
+  NEBULLA_CODE_FONT,
   NEBULLA_MONACO_THEME,
   registerNebullaMonacoTheme,
 } from '../../lib/monacoNebullaTheme';
@@ -79,7 +80,9 @@ export function IdeMonacoEditor({
         }}
         options={{
           fontSize: 13,
-          fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+          fontFamily: NEBULLA_CODE_FONT,
+          fontLigatures: true,
+          fontWeight: '400',
           minimap: { enabled: false },
           scrollBeyondLastLine: false,
           wordWrap: 'on',
@@ -89,6 +92,7 @@ export function IdeMonacoEditor({
           lineNumbers: 'on',
           renderLineHighlight: 'line',
           tabSize: 2,
+          bracketPairColorization: { enabled: true },
           scrollbar: {
             verticalScrollbarSize: 10,
             horizontalScrollbarSize: 10,

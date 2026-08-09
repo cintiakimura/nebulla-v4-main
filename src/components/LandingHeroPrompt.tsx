@@ -92,8 +92,8 @@ export function LandingHeroPrompt({ className }: { className?: string }) {
   }, [listening]);
 
   return (
-    <div className={cn('mx-auto flex w-full max-w-2xl flex-col items-center gap-4', className)}>
-      <div className="ide-glass-card w-full overflow-hidden rounded-lg border border-border">
+    <div className={cn('mx-auto flex w-full max-w-2xl flex-col items-center gap-3 md:max-w-3xl', className)}>
+      <div className="w-full overflow-hidden rounded-lg border border-border text-left shadow-none">
         <textarea
           value={draft}
           onChange={(e) => {
@@ -106,10 +106,10 @@ export function LandingHeroPrompt({ className }: { className?: string }) {
               void onContinue();
             }
           }}
-          rows={5}
+          rows={4}
           placeholder="Describe what you want to build…"
           disabled={busy}
-          className="ide-glass-input type-body-md min-h-[8rem] w-full resize-none border-0 bg-transparent px-4 py-4 leading-relaxed outline-none placeholder:text-muted-foreground/70 md:min-h-[9rem]"
+          className="ide-glass-input min-h-[7.5rem] w-full resize-none border-0 bg-transparent px-5 py-5 text-[15px] leading-relaxed text-foreground outline-none placeholder:text-muted-foreground/60 md:min-h-[8.5rem] md:text-base"
           aria-label="Project goal"
         />
 
@@ -140,7 +140,7 @@ export function LandingHeroPrompt({ className }: { className?: string }) {
               disabled={busy}
               className={cn(
                 'btn-secondary-surface btn-icon',
-                listening && 'border-[rgba(255,255,255,0.28)] text-foreground',
+                listening && 'border-[var(--shell-border-strong)] text-foreground',
               )}
             >
               <Mic className="h-4 w-4" aria-hidden />
@@ -160,7 +160,7 @@ export function LandingHeroPrompt({ className }: { className?: string }) {
         </div>
       </div>
 
-      {error ? <p className="type-label-sm text-center">{error}</p> : null}
+      {error ? <p className="text-center text-[13px] text-muted-foreground">{error}</p> : null}
     </div>
   );
 }

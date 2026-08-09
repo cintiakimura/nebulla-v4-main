@@ -308,7 +308,7 @@ export function CodeScreen() {
               value={activeTab?.content ?? ''}
               onChange={(e) => updateActiveContent(e.target.value)}
               spellCheck={false}
-              className="h-full min-h-full w-full resize-none bg-transparent px-4 py-3 font-mono text-xs leading-relaxed text-foreground outline-none"
+              className="font-code h-full min-h-full w-full resize-none bg-transparent px-4 py-3 text-[13px] leading-relaxed text-[#D4D4D4] outline-none"
               aria-label="File content"
             />
           )}
