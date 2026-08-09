@@ -64,7 +64,7 @@ export function LandingPage({ onEnter }: LandingPageProps) {
           <button
             type="button"
             onClick={onEnter}
-            className="px-4 py-2 bg-cyan-500/10 text-cyan-300 border border-cyan-500/30 rounded-md hover:bg-cyan-500/20 transition-all font-headline text-sm font-normal"
+            className="btn-cyan rounded-md px-4 py-2 font-headline text-sm"
           >
             {FORCE_GUEST_MODE ? 'Open app' : 'Closed beta'}
           </button>
@@ -76,8 +76,8 @@ export function LandingPage({ onEnter }: LandingPageProps) {
         {/* Hero */}
         <section className="grid grid-cols-1 lg:grid-cols-2 gap-12 lg:gap-8 items-center">
           <div className="flex flex-col gap-6 text-left max-w-2xl">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-cyan-500/10 border border-cyan-500/20 text-cyan-300 text-xs font-headline font-normal w-fit">
-              <Rocket className="w-3.5 h-3.5" />
+            <div className="inline-flex w-fit items-center gap-2 rounded-full bg-cyan-500/10 px-3 py-1 font-headline text-xs font-normal text-cyan-300">
+              <Rocket className="h-3.5 w-3.5" aria-hidden />
               Free closed beta · invite only
             </div>
             <h1 className="text-4xl md:text-6xl font-headline text-slate-100 font-normal leading-tight">
@@ -87,12 +87,13 @@ export function LandingPage({ onEnter }: LandingPageProps) {
               Plan → UI Studio Beta → code → preview in one workspace. Free during closed beta — no payment required.
             </p>
             <div className="flex flex-col gap-8 mt-4">
-              <button 
+              <button
+                type="button"
                 onClick={onEnter}
-                className="px-6 py-3 bg-cyan-500/20 text-cyan-300 border border-cyan-500/50 rounded-lg hover:bg-cyan-500/30 transition-all font-headline text-base font-normal flex items-center gap-2 w-fit"
+                className="btn-cyan inline-flex w-fit items-center gap-2 rounded-lg px-6 py-3 font-headline text-base"
               >
                 Enter workspace
-                <ArrowRight className="w-4.5 h-4.5" />
+                <ArrowRight className="h-4.5 w-4.5" aria-hidden />
               </button>
             </div>
           </div>
@@ -200,79 +201,78 @@ export function LandingPage({ onEnter }: LandingPageProps) {
             {/* Main Workspace */}
             <div className="flex flex-1 overflow-hidden">
               {/* Left Sidebar (Assistant) */}
-              <div className="hidden md:flex w-1/4 max-w-[240px] border-r border-white/5 bg-surface/50 flex-col">
-                <div className="p-2 md:p-3 border-b border-white/5 text-[10px] md:text-xs font-headline text-cyan-300 flex items-center gap-2">
-                  <Cpu className="w-3.5 h-3.5" />
+              <div className="hidden md:flex w-1/4 max-w-[240px] flex-col border-r border-border bg-black/20">
+                <div className="flex items-center gap-2 border-b border-border p-2 font-headline text-[10px] text-cyan-300 md:p-3 md:text-xs">
+                  <Cpu className="h-3.5 w-3.5" aria-hidden />
                   AI Assistant
                 </div>
-                <div className="flex-1 p-3 flex flex-col gap-3 overflow-hidden">
-                  <div className="bg-cyan-500/10 border border-cyan-500/20 rounded-lg p-2 text-[10px] text-slate-300">
+                <div className="flex flex-1 flex-col gap-3 overflow-hidden p-3">
+                  <div className="rounded-lg bg-cyan-500/10 p-2 text-[10px] text-slate-300">
                     I've generated the authentication flow. Would you like to review the mind map?
                   </div>
-                  <div className="bg-white/5 rounded-lg p-2 text-[10px] text-slate-400 self-end">
+                  <div className="self-end rounded-lg bg-white/5 p-2 text-[10px] text-slate-400">
                     Yes, show me the architecture.
                   </div>
-                  <div className="bg-cyan-500/10 border border-cyan-500/20 rounded-lg p-2 text-[10px] text-slate-300">
+                  <div className="rounded-lg bg-cyan-500/10 p-2 text-[10px] text-slate-300">
                     Here is the updated structure with the new nodes connected.
                   </div>
                 </div>
               </div>
               
-              {/* Center (Mind Map) */}
-              <div className="flex-1 relative bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-slate-800/30 to-background overflow-hidden flex flex-col">
-                <div className="absolute inset-0" style={{ backgroundImage: 'radial-gradient(#334155 1px, transparent 1px)', backgroundSize: '24px 24px', opacity: 0.2 }}></div>
+              {/* Center (Mind Map) — decorative mock only */}
+              <div className="relative flex flex-1 flex-col overflow-hidden bg-transparent">
+                <div
+                  className="absolute inset-0 opacity-20"
+                  style={{ backgroundImage: 'radial-gradient(#334155 1px, transparent 1px)', backgroundSize: '24px 24px' }}
+                  aria-hidden
+                />
                 
                 {/* Tabs */}
-                <div className="h-8 border-b border-white/5 flex items-center px-2 z-10 bg-background/50 backdrop-blur-sm shrink-0">
-                  <div className="px-3 py-1 text-[10px] text-cyan-300 border-b-2 border-cyan-400 bg-cyan-500/10 flex items-center gap-1">
-                    <Network className="w-3 h-3" />
+                <div className="z-10 flex h-8 shrink-0 items-center border-b border-border bg-black/20 px-2">
+                  <div className="flex items-center gap-1 bg-cyan-500/10 px-3 py-1 text-[10px] text-cyan-300">
+                    <Network className="h-3 w-3" aria-hidden />
                     Mind Map
                   </div>
-                  <div className="px-3 py-1 text-[10px] text-slate-500 flex items-center gap-1">
-                    <List className="w-3 h-3" />
+                  <div className="flex items-center gap-1 px-3 py-1 text-[10px] text-slate-500">
+                    <List className="h-3 w-3" aria-hidden />
                     Master Plan
                   </div>
                 </div>
                 
                 {/* Nodes & Edges */}
-                <div className="flex-1 relative min-h-0">
-                  <svg className="absolute inset-0 w-full h-full pointer-events-none z-0" viewBox="0 0 100 100" preserveAspectRatio="none">
-                    {/* Main to Auth */}
-                    <path d="M 30 50 Q 45 30 60 30" fill="none" stroke="#06b6d4" strokeWidth="2" className="opacity-60" />
-                    {/* Main to Dashboard */}
-                    <path d="M 30 50 L 60 50" fill="none" stroke="#06b6d4" strokeWidth="2" className="opacity-60" />
-                    {/* Main to Settings */}
-                    <path d="M 30 50 Q 45 70 60 70" fill="none" stroke="#06b6d4" strokeWidth="2" className="opacity-60" />
+                <div className="relative min-h-0 flex-1">
+                  <svg className="pointer-events-none absolute inset-0 z-0 h-full w-full" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden>
+                    <path d="M 30 50 Q 45 30 60 30" fill="none" stroke="#22d3ee" strokeWidth="1.5" className="opacity-50" />
+                    <path d="M 30 50 L 60 50" fill="none" stroke="#22d3ee" strokeWidth="1.5" className="opacity-50" />
+                    <path d="M 30 50 Q 45 70 60 70" fill="none" stroke="#22d3ee" strokeWidth="1.5" className="opacity-50" />
                   </svg>
                   
-                  {/* Root Node */}
-                  <div className="absolute left-[15%] md:left-[20%] top-[45%] bg-slate-800 border-2 border-cyan-500 rounded-lg p-2 md:p-3 shadow-[0_0_20px_rgba(6,182,212,0.2)] z-10 w-24 md:w-32 transform -translate-y-1/2">
-                    <div className="text-cyan-300 font-headline text-[10px] md:text-xs truncate">App.tsx</div>
-                    <div className="text-slate-400 text-[8px] md:text-[10px] mt-1 truncate">Main Application</div>
+                  <div className="absolute left-[15%] top-[45%] z-10 w-24 -translate-y-1/2 rounded-lg border border-border bg-black/40 p-2 md:left-[20%] md:w-32 md:p-3">
+                    <div className="truncate font-headline text-[10px] font-normal text-cyan-300 md:text-xs">App.tsx</div>
+                    <div className="mt-1 truncate text-[8px] text-slate-400 md:text-[10px]">Main Application</div>
                   </div>
                   
-                  {/* Child Nodes */}
-                  <div className="absolute left-[55%] md:left-[60%] top-[30%] bg-slate-800 border border-white/10 rounded-lg p-2 md:p-3 shadow-lg z-10 w-24 md:w-32 transform -translate-y-1/2">
-                    <div className="text-slate-200 font-headline text-[10px] md:text-xs truncate">Auth Flow</div>
-                    <div className="text-slate-400 text-[8px] md:text-[10px] mt-1 truncate">Firebase Integration</div>
+                  <div className="absolute left-[55%] top-[30%] z-10 w-24 -translate-y-1/2 rounded-lg border border-border bg-black/35 p-2 md:left-[60%] md:w-32 md:p-3">
+                    <div className="truncate font-headline text-[10px] font-normal text-slate-200 md:text-xs">Auth Flow</div>
+                    <div className="mt-1 truncate text-[8px] text-slate-400 md:text-[10px]">Firebase Integration</div>
                   </div>
                   
-                  <div className="absolute left-[55%] md:left-[60%] top-[50%] bg-slate-800 border border-white/10 rounded-lg p-2 md:p-3 shadow-lg z-10 w-24 md:w-32 transform -translate-y-1/2">
-                    <div className="text-slate-200 font-headline text-[10px] md:text-xs truncate">Dashboard</div>
-                    <div className="text-slate-400 text-[8px] md:text-[10px] mt-1 truncate">User Projects</div>
+                  <div className="absolute left-[55%] top-[50%] z-10 w-24 -translate-y-1/2 rounded-lg border border-border bg-black/35 p-2 md:left-[60%] md:w-32 md:p-3">
+                    <div className="truncate font-headline text-[10px] font-normal text-slate-200 md:text-xs">Dashboard</div>
+                    <div className="mt-1 truncate text-[8px] text-slate-400 md:text-[10px]">User Projects</div>
                   </div>
                   
-                  <div className="absolute left-[55%] md:left-[60%] top-[70%] bg-slate-800 border border-white/10 rounded-lg p-2 md:p-3 shadow-lg z-10 w-24 md:w-32 transform -translate-y-1/2">
-                    <div className="text-slate-200 font-headline text-[10px] md:text-xs truncate">Settings</div>
-                    <div className="text-slate-400 text-[8px] md:text-[10px] mt-1 truncate">Preferences</div>
+                  <div className="absolute left-[55%] top-[70%] z-10 w-24 -translate-y-1/2 rounded-lg border border-border bg-black/35 p-2 md:left-[60%] md:w-32 md:p-3">
+                    <div className="truncate font-headline text-[10px] font-normal text-slate-200 md:text-xs">Settings</div>
+                    <div className="mt-1 truncate text-[8px] text-slate-400 md:text-[10px]">Preferences</div>
                   </div>
                 </div>
               </div>
               
               {/* Right Sidebar (Code) */}
-              <div className="hidden lg:flex w-1/3 max-w-[320px] border-l border-white/5 bg-[#0d1117] flex-col">
-                <div className="h-8 border-b border-white/5 flex items-center px-3 text-[10px] text-slate-400 font-mono bg-[#161b22] shrink-0 gap-2">
-                  <Code className="w-3 h-3 text-blue-400" />
+              <div className="hidden max-w-[320px] w-1/3 flex-col border-l border-border bg-black/25 lg:flex">
+                <div className="flex h-8 shrink-0 items-center gap-2 border-b border-border px-3 font-mono text-[10px] text-slate-400">
+                  <Code className="h-3 w-3 text-cyan-400" aria-hidden />
                   App.tsx
                 </div>
                 <div className="p-4 font-mono text-[10px] text-slate-300 flex flex-col gap-1.5 overflow-hidden">
@@ -292,9 +292,9 @@ export function LandingPage({ onEnter }: LandingPageProps) {
             </div>
             
             {/* Bottom Terminal */}
-            <div className="h-20 md:h-24 border-t border-white/5 bg-[#0d1117] flex flex-col shrink-0">
-              <div className="h-6 border-b border-white/5 flex items-center px-3 text-[10px] text-slate-500 font-mono bg-[#161b22] gap-2">
-                <Terminal className="w-3 h-3" />
+            <div className="flex h-20 shrink-0 flex-col border-t border-border bg-black/25 md:h-24">
+              <div className="flex h-6 items-center gap-2 border-b border-border px-3 font-mono text-[10px] text-slate-500">
+                <Terminal className="h-3 w-3" aria-hidden />
                 Terminal
               </div>
               <div className="p-2 font-mono text-[10px] text-slate-400 flex flex-col gap-1 overflow-hidden">
@@ -319,7 +319,7 @@ export function LandingPage({ onEnter }: LandingPageProps) {
           <button
             type="button"
             onClick={handleTryFree}
-            className="px-6 py-3 bg-cyan-500/20 text-cyan-300 border border-cyan-500/50 rounded-xl hover:bg-cyan-500/30 transition-all text-sm font-normal whitespace-nowrap"
+            className="btn-cyan whitespace-nowrap rounded-xl px-6 py-3 text-sm"
           >
             Enter workspace
           </button>
@@ -357,7 +357,7 @@ export function LandingPage({ onEnter }: LandingPageProps) {
 function FeatureCard({ icon, title, description }: { icon: React.ReactNode, title: string, description: string }) {
   return (
     <div className="ide-glass-card p-6 flex flex-col gap-4 text-left">
-      <div className="w-12 h-12 rounded-lg bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center text-cyan-400">
+      <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-cyan-500/10 text-cyan-400">
         {icon}
       </div>
       <h3 className="text-xl font-headline text-slate-100 font-normal">{title}</h3>

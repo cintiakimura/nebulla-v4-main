@@ -54,10 +54,7 @@ export function ResetPasswordPage() {
       {done ? (
         <div className="space-y-4 not-prose">
           <p className="text-slate-300">Your password has been updated. You can sign in with your email and new password.</p>
-          <a
-            href="/"
-            className="inline-flex items-center justify-center px-4 py-2 rounded-xl bg-cyan-500/15 text-cyan-300 border border-cyan-500/30 hover:bg-cyan-500/25 font-headline text-sm no-underline"
-          >
+          <a href="/" className="btn-cyan inline-flex items-center justify-center rounded-xl px-4 py-2 font-headline text-sm no-underline">
             Back to nebulla
           </a>
         </div>
@@ -75,12 +72,12 @@ export function ResetPasswordPage() {
               autoComplete="new-password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full bg-black/30 border border-white/10 rounded-lg px-3 py-2 text-sm text-slate-200 focus:border-cyan-500/40 outline-none"
+              className="ide-glass-input w-full rounded-lg px-3 py-2 text-sm outline-none"
               placeholder="At least 8 characters, letters + numbers"
             />
           </div>
           <div>
-            <label className="block text-[10px] uppercase tracking-wider text-slate-500 font-headline mb-1">
+            <label className="mb-1 block font-headline text-[10px] uppercase tracking-wider text-slate-500">
               Confirm password
             </label>
             <input
@@ -88,14 +85,14 @@ export function ResetPasswordPage() {
               autoComplete="new-password"
               value={confirm}
               onChange={(e) => setConfirm(e.target.value)}
-              className="w-full bg-black/30 border border-white/10 rounded-lg px-3 py-2 text-sm text-slate-200 focus:border-cyan-500/40 outline-none"
+              className="ide-glass-input w-full rounded-lg px-3 py-2 text-sm outline-none"
             />
           </div>
           {error ? <p className="text-sm text-red-400/95">{error}</p> : null}
           <button
             type="submit"
             disabled={busy || !token}
-            className="w-full py-2.5 rounded-xl bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 hover:bg-cyan-500/30 font-headline text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+            className="btn-cyan w-full rounded-xl py-2.5 font-headline text-sm disabled:cursor-not-allowed disabled:opacity-50"
           >
             {busy ? 'Saving…' : 'Update password'}
           </button>

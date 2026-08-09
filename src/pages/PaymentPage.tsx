@@ -94,7 +94,7 @@ export function PaymentPage() {
         </p>
 
         {!billingEnabled ? (
-          <p className="mt-4 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-[#c8c8c8]">
+          <p className="mt-4 rounded-lg border border-border bg-black/25 px-3 py-2 text-sm text-[#c8c8c8]">
             {BETA_FREE_BANNER}
           </p>
         ) : null}
@@ -108,7 +108,7 @@ export function PaymentPage() {
 
         {error ? <p className="mt-4 text-sm text-red-300">{error}</p> : null}
         {info ? (
-          <p className="mt-4 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-[#c8c8c8]">
+          <p className="mt-4 rounded-lg border border-border bg-black/25 px-3 py-2 text-sm text-[#c8c8c8]">
             {info}
           </p>
         ) : null}
@@ -135,11 +135,7 @@ export function PaymentPage() {
           </ul>
 
           {alreadyPaid ? (
-            <button
-              type="button"
-              onClick={goToApp}
-              className="mt-8 w-full rounded-lg bg-[#f2f2f2] px-4 py-2.5 text-sm text-[#0a0a0a] hover:bg-white"
-            >
+            <button type="button" onClick={goToApp} className="btn-cyan mt-8 w-full rounded-lg px-4 py-2.5 text-sm">
               Open workspace
             </button>
           ) : (
@@ -149,7 +145,7 @@ export function PaymentPage() {
                   type="button"
                   disabled={busy}
                   onClick={() => void startCheckout()}
-                  className="w-full rounded-lg bg-[#f2f2f2] px-4 py-2.5 text-sm text-[#0a0a0a] hover:bg-white disabled:opacity-50"
+                  className="btn-cyan w-full rounded-lg px-4 py-2.5 text-sm disabled:opacity-50"
                 >
                   {busy ? '…' : user ? 'Continue to checkout' : 'Sign in to pay'}
                 </button>
@@ -157,7 +153,7 @@ export function PaymentPage() {
                 <button
                   type="button"
                   disabled
-                  className="w-full cursor-not-allowed rounded-lg border border-white/15 px-4 py-2.5 text-sm text-[#8a8a8a] opacity-70"
+                  className="btn-secondary-surface w-full cursor-not-allowed rounded-lg px-4 py-2.5 text-sm opacity-70"
                 >
                   Checkout coming after beta
                 </button>
@@ -166,16 +162,12 @@ export function PaymentPage() {
                 <button
                   type="button"
                   onClick={() => goToTryFree('/app')}
-                  className="w-full rounded-lg bg-[#f2f2f2] px-4 py-2.5 text-sm text-[#0a0a0a] hover:bg-white"
+                  className="btn-cyan w-full rounded-lg px-4 py-2.5 text-sm"
                 >
                   Start free beta
                 </button>
               ) : (
-                <button
-                  type="button"
-                  onClick={goToApp}
-                  className="w-full rounded-lg bg-[#f2f2f2] px-4 py-2.5 text-sm text-[#0a0a0a] hover:bg-white"
-                >
+                <button type="button" onClick={goToApp} className="btn-cyan w-full rounded-lg px-4 py-2.5 text-sm">
                   Open workspace
                 </button>
               )}

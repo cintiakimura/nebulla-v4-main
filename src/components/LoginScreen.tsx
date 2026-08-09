@@ -213,7 +213,7 @@ export function LoginScreen({
           </div>
 
           {existingUser ? (
-            <div className="rounded-2xl border border-cyan-500/30 bg-cyan-500/10 p-6 flex flex-col gap-3 text-center">
+            <div className="ide-glass-card flex flex-col gap-3 rounded-2xl border border-border p-6 text-center">
               <p className="text-sm text-slate-300">
                 You&apos;re already signed in as{' '}
                 <span className="text-cyan-200">
@@ -224,7 +224,7 @@ export function LoginScreen({
               <button
                 type="button"
                 onClick={onAuthenticated}
-                className="w-full py-3.5 px-4 rounded-xl bg-cyan-500/20 text-cyan-200 border border-cyan-500/40 font-headline text-[15px] font-medium hover:bg-cyan-500/30 transition-colors"
+                className="btn-cyan w-full rounded-xl px-4 py-3.5 font-headline text-[15px]"
               >
                 Open workspace
               </button>
@@ -236,9 +236,9 @@ export function LoginScreen({
               type="button"
               onClick={() => void openGitHubOAuth()}
               disabled={!cloudOk || !githubOk || busy}
-              className="w-full py-3.5 px-4 rounded-xl bg-white text-[#0d1117] font-headline text-[15px] font-medium flex items-center justify-center gap-3 border border-white/20 shadow-lg shadow-black/20 hover:bg-slate-100 transition-colors disabled:opacity-45 disabled:cursor-not-allowed disabled:shadow-none"
+              className="btn-cyan flex w-full items-center justify-center gap-3 rounded-xl px-4 py-3.5 font-headline text-[15px] disabled:cursor-not-allowed disabled:opacity-45"
             >
-              <Github className="w-6 h-6 shrink-0" aria-hidden />
+              <Github className="h-6 w-6 shrink-0" aria-hidden />
               Continue with GitHub
             </button>
 
@@ -246,9 +246,9 @@ export function LoginScreen({
               type="button"
               onClick={() => void openGoogleOAuth()}
               disabled={!cloudOk || !googleOk || busy}
-              className="w-full py-3.5 px-4 rounded-xl bg-white text-[#0d1117] font-headline text-[15px] font-medium flex items-center justify-center gap-3 border border-white/20 shadow-lg shadow-black/20 hover:bg-slate-100 transition-colors disabled:opacity-45 disabled:cursor-not-allowed disabled:shadow-none"
+              className="btn-cyan flex w-full items-center justify-center gap-3 rounded-xl px-4 py-3.5 font-headline text-[15px] disabled:cursor-not-allowed disabled:opacity-45"
             >
-              <GoogleIcon className="w-5 h-5 shrink-0" />
+              <GoogleIcon className="h-5 w-5 shrink-0" />
               Continue with Google
             </button>
 
@@ -282,7 +282,7 @@ export function LoginScreen({
                 <div className="w-full border-t border-white/10" />
               </div>
               <div className="relative flex justify-center">
-                <span className="bg-[#040f1a] px-3 text-[11px] uppercase tracking-widest text-slate-500 font-headline">
+                <span className="bg-transparent px-3 font-headline text-[11px] uppercase tracking-widest text-slate-500">
                   or
                 </span>
               </div>
@@ -295,23 +295,23 @@ export function LoginScreen({
                 setError('');
               }}
               disabled={!cloudOk || busy}
-              className="w-full py-2.5 rounded-xl border border-white/10 text-slate-300 text-sm font-headline hover:bg-white/5 hover:border-white/15 transition-colors flex items-center justify-center gap-2 disabled:opacity-45 disabled:cursor-not-allowed"
+              className="btn-secondary-surface flex w-full items-center justify-center gap-2 rounded-xl py-2.5 font-headline text-sm disabled:cursor-not-allowed disabled:opacity-45"
             >
-              <Mail className="w-4 h-4 text-slate-500" aria-hidden />
+              <Mail className="h-4 w-4 text-slate-500" aria-hidden />
               {emailOpen ? 'Hide email sign-in' : 'Continue with email'}
             </button>
 
             {emailOpen ? (
               <form onSubmit={(e) => void submitEmail(e)} className="flex flex-col gap-4 pt-1">
-                <div className="flex rounded-lg border border-white/10 p-0.5 bg-black/25">
+                <div className="flex rounded-lg border border-border bg-black/25 p-0.5">
                   <button
                     type="button"
                     onClick={() => {
                       setEmailMode('signin');
                       setError('');
                     }}
-                    className={`flex-1 py-2 text-xs font-headline rounded-md transition-colors ${
-                      emailMode === 'signin' ? 'bg-cyan-500/20 text-cyan-300' : 'text-slate-500 hover:text-slate-300'
+                    className={`flex-1 rounded-md py-2 font-headline text-xs transition-colors ${
+                      emailMode === 'signin' ? 'bg-cyan-500/10 text-white' : 'text-slate-500 hover:text-slate-300'
                     }`}
                   >
                     Sign in
@@ -322,15 +322,15 @@ export function LoginScreen({
                       setEmailMode('signup');
                       setError('');
                     }}
-                    className={`flex-1 py-2 text-xs font-headline rounded-md transition-colors ${
-                      emailMode === 'signup' ? 'bg-cyan-500/20 text-cyan-300' : 'text-slate-500 hover:text-slate-300'
+                    className={`flex-1 rounded-md py-2 font-headline text-xs transition-colors ${
+                      emailMode === 'signup' ? 'bg-cyan-500/10 text-white' : 'text-slate-500 hover:text-slate-300'
                     }`}
                   >
                     Create account
                   </button>
                 </div>
                 <div>
-                  <label className="block text-[10px] uppercase tracking-wider text-slate-500 font-headline mb-1.5">
+                  <label className="mb-1.5 block font-headline text-[10px] uppercase tracking-wider text-slate-500">
                     Email
                   </label>
                   <input
@@ -338,13 +338,13 @@ export function LoginScreen({
                     autoComplete="email"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    className="w-full bg-black/35 border border-white/10 rounded-lg px-3 py-2.5 text-sm text-slate-200 placeholder:text-slate-600 focus:border-cyan-500/40 focus:ring-1 focus:ring-cyan-500/20 outline-none"
+                    className="ide-glass-input w-full rounded-lg px-3 py-2.5 text-sm outline-none placeholder:text-slate-600"
                     placeholder="you@example.com"
                     required
                   />
                 </div>
                 <div>
-                  <label className="block text-[10px] uppercase tracking-wider text-slate-500 font-headline mb-1.5">
+                  <label className="mb-1.5 block font-headline text-[10px] uppercase tracking-wider text-slate-500">
                     Password
                   </label>
                   <input
@@ -352,7 +352,7 @@ export function LoginScreen({
                     autoComplete={emailMode === 'signup' ? 'new-password' : 'current-password'}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    className="w-full bg-black/35 border border-white/10 rounded-lg px-3 py-2.5 text-sm text-slate-200 placeholder:text-slate-600 focus:border-cyan-500/40 focus:ring-1 focus:ring-cyan-500/20 outline-none"
+                    className="ide-glass-input w-full rounded-lg px-3 py-2.5 text-sm outline-none placeholder:text-slate-600"
                     placeholder={emailMode === 'signup' ? '8+ chars, letters and numbers' : 'Your password'}
                     required
                     minLength={emailMode === 'signup' ? 8 : undefined}
@@ -372,22 +372,22 @@ export function LoginScreen({
                   </button>
                 ) : null}
                 {forgotOpen && emailMode === 'signin' ? (
-                  <div className="rounded-lg border border-white/10 bg-black/25 p-3 space-y-3">
+                  <div className="space-y-3 rounded-lg border border-border bg-black/25 p-3">
                     {forgotSent ? (
-                      <p className="text-xs text-slate-300 leading-relaxed">
+                      <p className="text-xs leading-relaxed text-slate-300">
                         If an account exists for that email, a reset link was sent (or logged on the server in
                         development).
                       </p>
                     ) : (
                       <div className="space-y-3">
-                        <p className="text-xs text-slate-500 leading-relaxed">
+                        <p className="text-xs leading-relaxed text-slate-500">
                           We will email a reset link for email/password accounts.
                         </p>
                         <button
                           type="button"
                           onClick={() => void submitForgot()}
                           disabled={busy || !cloudOk || !email.trim()}
-                          className="w-full py-2 rounded-lg border border-cyan-500/30 text-cyan-200 text-xs font-headline hover:bg-cyan-500/15 disabled:opacity-50"
+                          className="btn-cyan w-full rounded-lg py-2 font-headline text-xs disabled:opacity-50"
                         >
                           {busy ? 'Sending…' : 'Send reset link'}
                         </button>
@@ -399,7 +399,7 @@ export function LoginScreen({
                 <button
                   type="submit"
                   disabled={busy || !cloudOk}
-                  className="w-full py-3 rounded-xl bg-cyan-500/15 text-cyan-200 border border-cyan-500/35 font-headline text-sm hover:bg-cyan-500/25 transition-colors disabled:opacity-50"
+                  className="btn-cyan w-full rounded-xl py-3 font-headline text-sm disabled:opacity-50"
                 >
                   {busy ? 'Please wait…' : emailMode === 'signin' ? 'Sign in with email' : 'Create account'}
                 </button>
