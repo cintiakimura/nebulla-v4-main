@@ -92,8 +92,8 @@ export function LandingHeroPrompt({ className }: { className?: string }) {
   }, [listening]);
 
   return (
-    <div className={cn('mx-auto flex w-full max-w-3xl flex-col items-center gap-5', className)}>
-      <div className="ide-glass-card w-full overflow-hidden rounded-2xl">
+    <div className={cn('mx-auto flex w-full max-w-2xl flex-col items-center gap-4', className)}>
+      <div className="ide-glass-card w-full overflow-hidden rounded-lg border border-border">
         <textarea
           value={draft}
           onChange={(e) => {
@@ -109,11 +109,11 @@ export function LandingHeroPrompt({ className }: { className?: string }) {
           rows={5}
           placeholder="Describe what you want to build…"
           disabled={busy}
-          className="ide-glass-input min-h-[9rem] w-full resize-none border-0 bg-transparent px-5 py-5 text-base leading-relaxed text-foreground outline-none placeholder:text-muted-foreground/70 md:min-h-[11rem] md:px-6 md:py-6 md:text-lg"
+          className="ide-glass-input type-body-md min-h-[8rem] w-full resize-none border-0 bg-transparent px-4 py-4 leading-relaxed outline-none placeholder:text-muted-foreground/70 md:min-h-[9rem]"
           aria-label="Project goal"
         />
 
-        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border px-4 py-3 md:px-5">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border px-3 py-2.5 md:px-4">
           <div className="flex flex-wrap items-center gap-2">
             {TYPES.map((t) => (
               <button
@@ -122,8 +122,8 @@ export function LandingHeroPrompt({ className }: { className?: string }) {
                 aria-pressed={startType === t.id}
                 onClick={() => toggleType(t.id)}
                 className={cn(
-                  'btn-cyan rounded-lg px-3 py-1.5 text-xs',
-                  startType === t.id ? 'opacity-100' : 'opacity-65',
+                  'h-8 rounded-md px-3 text-xs',
+                  startType === t.id ? 'btn-cyan' : 'btn-secondary-surface',
                 )}
               >
                 {t.label}
@@ -139,8 +139,8 @@ export function LandingHeroPrompt({ className }: { className?: string }) {
               onClick={toggleMic}
               disabled={busy}
               className={cn(
-                'btn-secondary-surface inline-flex h-10 w-10 items-center justify-center rounded-lg',
-                listening && 'text-cyan-300',
+                'btn-secondary-surface btn-icon',
+                listening && 'border-[rgba(255,255,255,0.28)] text-foreground',
               )}
             >
               <Mic className="h-4 w-4" aria-hidden />
@@ -151,16 +151,16 @@ export function LandingHeroPrompt({ className }: { className?: string }) {
               aria-label="Build"
               disabled={busy}
               onClick={() => void onContinue()}
-              className="btn-cyan inline-flex h-10 items-center gap-2 rounded-lg px-5 text-sm disabled:opacity-50"
+              className="btn-cyan inline-flex h-9 items-center gap-2 px-4 disabled:opacity-50"
             >
-              <Send className="h-4 w-4" aria-hidden />
+              <Send className="h-3.5 w-3.5" aria-hidden />
               {busy ? 'Starting…' : 'Build'}
             </button>
           </div>
         </div>
       </div>
 
-      {error ? <p className="text-center text-xs text-muted-foreground">{error}</p> : null}
+      {error ? <p className="type-label-sm text-center">{error}</p> : null}
     </div>
   );
 }

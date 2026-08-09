@@ -2,7 +2,6 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { MasterPlan } from '@/components/MasterPlan';
 import { MindMapIdeRoute } from '@/components/ide/MindMapIdeRoute';
 import { getBrowserProjectKey } from '../../../lib/nebulaProjectApi';
-import { useIdeShellNav } from './IdeShellNavContext';
 import { PlanDeployDnsSection } from './PlanDeployDnsSection';
 
 const SPLIT_KEY = 'nebula_plan_split_pct_v1';
@@ -34,10 +33,9 @@ function useIsLarge(): boolean {
 }
 
 /**
- * Plan page: scrolls as a whole — Master Plan | Mind Map, then Live URL + DNS.
+ * Plan page: Master Plan | Mind Map, then deploy / domain / DNS fields.
  */
 export function PlanScreen() {
-  const { goToBuild } = useIdeShellNav();
   const projectKey = getBrowserProjectKey();
   const isLarge = useIsLarge();
   const [leftPct, setLeftPct] = useState(readSplit);
@@ -85,17 +83,17 @@ export function PlanScreen() {
 
   return (
     <div className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain">
-      <div className="flex w-full flex-col pb-6">
+      <div className="flex w-full flex-col pb-20">
         <div
           ref={rowRef}
-          className="flex min-h-[min(72vh,720px)] w-full shrink-0 flex-col lg:flex-row"
+          className="flex min-h-[min(68vh,680px)] w-full shrink-0 flex-col lg:flex-row"
         >
           <section
-            className="flex min-h-[24rem] min-w-0 flex-col overflow-hidden border-b border-border lg:min-h-0 lg:border-b-0 lg:border-r"
+            className="flex min-h-[22rem] min-w-0 flex-col overflow-hidden border-b border-border lg:min-h-0 lg:border-b-0 lg:border-r"
             style={isLarge ? { width: `${leftPct}%` } : { width: '100%' }}
             aria-label="Master Plan"
           >
-            <MasterPlan projectKey={projectKey} onClose={() => goToBuild()} />
+            <MasterPlan projectKey={projectKey} />
           </section>
 
           {isLarge ? (
@@ -105,15 +103,20 @@ export function PlanScreen() {
               aria-label="Resize Master Plan and Mind Map"
               title="Drag to resize"
               onMouseDown={onHandleDown}
-              className="ide-resize-hit z-10 w-1 shrink-0 cursor-col-resize bg-border hover:bg-[#3a3a3a]"
+              className="ide-resize-hit z-10 w-px shrink-0 cursor-col-resize bg-border hover:bg-[#3a3a3a]"
             />
           ) : null}
 
           <section
-            className="flex min-h-[24rem] min-w-0 flex-1 flex-col overflow-hidden lg:min-h-0"
+            className="flex min-h-[22rem] min-w-0 flex-1 flex-col overflow-hidden lg:min-h-0"
             aria-label="Mind Map"
           >
-            <MindMapIdeRoute />
+            <div className="flex h-10 shrink-0 items-center border-b border-border px-4">
+              <h2 className="type-section">Mind Map</h2>
+            </div>
+            <div className="min-h-0 flex-1 overflow-hidden">
+              <MindMapIdeRoute />
+            </div>
           </section>
         </div>
 

@@ -235,10 +235,10 @@ export function SettingsScreen({ onLoggedOut }: { onLoggedOut?: () => void }) {
   return (
     <div className="flex min-h-0 flex-1 overflow-hidden">
       <nav
-        className="ide-glass-chrome flex w-44 shrink-0 flex-col gap-0.5 overflow-y-auto border-r border-border p-2 sm:w-52"
+        className="ide-glass-chrome flex w-44 shrink-0 flex-col gap-1 overflow-y-auto border-r border-border p-2 sm:w-52"
         aria-label="Settings sections"
       >
-        <p className="px-2 py-2 text-[11px] text-muted-foreground">Settings</p>
+        <p className="type-label-sm px-2 py-2">Settings</p>
         {SECTIONS.map(({ id, label, icon: Icon }) => (
           <button
             key={id}
@@ -246,7 +246,7 @@ export function SettingsScreen({ onLoggedOut }: { onLoggedOut?: () => void }) {
             onClick={() => selectSection(id)}
             aria-current={section === id ? 'page' : undefined}
             className={cn(
-              'inline-flex items-center gap-2 rounded-md px-2.5 py-2 text-left text-xs',
+              'inline-flex h-8 items-center gap-2 rounded-md px-2.5 text-left text-xs',
               section === id ? 'btn-cyan' : 'btn-secondary-surface text-muted-foreground',
             )}
           >
@@ -256,13 +256,13 @@ export function SettingsScreen({ onLoggedOut }: { onLoggedOut?: () => void }) {
         ))}
       </nav>
 
-      <div className="min-h-0 min-w-0 flex-1 overflow-y-auto p-4 sm:p-6">
+      <div className="min-h-0 min-w-0 flex-1 overflow-y-auto p-5">
         <div className="mx-auto max-w-lg space-y-5">
-          {loading ? <p className="text-sm text-muted-foreground">Loading…</p> : null}
+          {loading ? <p className="type-body-md text-muted-foreground">Loading…</p> : null}
 
           {section === 'account' ? (
-            <section className="space-y-4" aria-label="Account">
-              <h2 className="text-base text-foreground">Account</h2>
+            <section className="space-y-3" aria-label="Account">
+              <h2 className="type-page">Account</h2>
               {FORCE_GUEST_MODE && !user ? (
                 <p className="text-xs text-muted-foreground">
                   Guest mode — auth is optional on this branch. Display name saves locally.
@@ -333,7 +333,7 @@ export function SettingsScreen({ onLoggedOut }: { onLoggedOut?: () => void }) {
 
           {section === 'ai' ? (
             <section className="space-y-4" aria-label="AI keys">
-              <h2 className="text-base text-foreground">AI keys</h2>
+              <h2 className="type-page">AI keys</h2>
               <p className="text-xs text-muted-foreground">
                 Provider: <span className="text-foreground">Grok</span> (primary)
               </p>
@@ -416,7 +416,7 @@ export function SettingsScreen({ onLoggedOut }: { onLoggedOut?: () => void }) {
 
           {section === 'github' ? (
             <section className="space-y-4" aria-label="GitHub">
-              <h2 className="text-base text-foreground">GitHub</h2>
+              <h2 className="type-page">GitHub</h2>
               <p className="text-sm text-foreground">{formatGithubConnectionStatus(user)}</p>
               {!githubOAuthReady ? (
                 <p className="text-xs text-muted-foreground">
@@ -461,7 +461,7 @@ export function SettingsScreen({ onLoggedOut }: { onLoggedOut?: () => void }) {
 
           {section === 'billing' ? (
             <section className="space-y-4" aria-label="Billing">
-              <h2 className="text-base text-foreground">Billing</h2>
+              <h2 className="type-page">Billing</h2>
               <dl className="space-y-3 text-sm">
                 <div className="flex justify-between gap-3">
                   <dt className="text-muted-foreground">Current plan</dt>

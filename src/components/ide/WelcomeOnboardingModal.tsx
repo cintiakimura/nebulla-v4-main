@@ -114,21 +114,12 @@ export function WelcomeOnboardingModal({ open, user, onClose }: Props) {
       aria-modal="true"
       aria-labelledby="welcome-onboarding-title"
     >
-      <div className="relative flex max-h-[min(92vh,720px)] w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-border bg-[var(--surface-bright)] shadow-2xl shadow-black/50">
-        <div
-          className="pointer-events-none absolute inset-0 opacity-40"
-          aria-hidden
-          style={{
-            background:
-              'radial-gradient(ellipse 90% 55% at 50% -15%, rgba(108,99,255,0.22), transparent 55%)',
-          }}
-        />
-
+      <div className="ide-glass-card relative flex max-h-[min(92vh,720px)] w-full max-w-lg flex-col overflow-hidden rounded-lg border border-border shadow-none">
         {step > 1 && step < 4 ? (
           <button
             type="button"
             onClick={skipSession}
-            className="absolute right-3 top-3 z-10 rounded-lg p-1.5 text-muted-foreground transition hover:bg-white/5 hover:text-foreground"
+            className="btn-secondary-surface btn-icon absolute right-3 top-3 z-10 text-muted-foreground"
             aria-label={t('ide.welcome.close')}
             title={t('ide.welcome.closeTitle')}
           >
@@ -138,7 +129,7 @@ export function WelcomeOnboardingModal({ open, user, onClose }: Props) {
 
         <div className="relative shrink-0 border-b border-border px-6 py-3 sm:px-8">
           <div className="flex items-center justify-between gap-3">
-            <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-primary/90">
+            <p className="type-micro uppercase tracking-[0.14em] text-foreground">
               {progressLabel}
             </p>
             {step >= 2 && step <= 4 ? (
@@ -147,15 +138,15 @@ export function WelcomeOnboardingModal({ open, user, onClose }: Props) {
                   <span
                     key={n}
                     className={cn(
-                      'h-1.5 w-6 rounded-full transition-colors',
-                      step >= n ? 'bg-primary' : 'bg-white/10',
+                      'h-1.5 w-6 rounded-full border border-border transition-colors',
+                      step >= n ? 'bg-[var(--cta-fill)]' : 'bg-transparent',
                     )}
                   />
                 ))}
               </div>
             ) : null}
           </div>
-          <p className="mt-1 text-[11px] text-muted-foreground">One-time setup · about 2 minutes</p>
+          <p className="type-label-sm mt-1">One-time setup · about 2 minutes</p>
         </div>
 
         <div className="relative min-h-0 flex-1 overflow-y-auto px-6 py-6 sm:px-8">

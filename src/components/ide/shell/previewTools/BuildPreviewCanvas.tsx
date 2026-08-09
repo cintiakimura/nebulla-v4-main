@@ -14,7 +14,7 @@ export function BuildPreviewCanvas() {
   const src = withProjectQuery(`/api/app-preview/bootstrap?_rev=${rev}`);
 
   return (
-    <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-[#0a0a0a]">
+    <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
       <PreviewEditToolbar
         hasSelection={hasSelection}
         onApplyToAll={(_state: PreviewToolbarState) => {

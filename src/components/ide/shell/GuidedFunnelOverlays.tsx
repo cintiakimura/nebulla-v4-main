@@ -85,17 +85,17 @@ export function GuidedFunnelOverlays() {
   if (!liveUrl && !docsOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-[220] flex items-center justify-center bg-black/70 p-4">
+    <div className="fixed inset-0 z-[220] flex items-center justify-center bg-black/65 p-4">
       {liveUrl ? (
         <div
-          className="ide-glass-card w-full max-w-md rounded-2xl border border-border p-5 shadow-none"
+          className="ide-glass-card w-full max-w-md rounded-lg border border-border p-5 shadow-none"
           role="dialog"
           aria-modal="true"
           aria-label="Temporary live URL"
         >
-          <p className="text-sm text-foreground">Temporary live URL</p>
-          <p className="mt-1 text-xs text-muted-foreground">
-            Your app is reachable at this URL while you use the Render hostname.
+          <p className="type-section">Your live URL is ready</p>
+          <p className="type-label-sm mt-1">
+            Temporary Render hostname until a custom domain is configured.
           </p>
           <div className="mt-4 flex min-w-0 items-center gap-2">
             <a
@@ -138,14 +138,14 @@ export function GuidedFunnelOverlays() {
 
       {docsOpen && !liveUrl ? (
         <div
-          className="ide-glass-card w-full max-w-md rounded-2xl border border-border p-5 shadow-none"
+          className="ide-glass-card w-full max-w-md rounded-lg border border-border p-5 shadow-none"
           role="dialog"
           aria-modal="true"
           aria-label="Download technical documentation"
         >
-          <p className="text-sm text-foreground">Download technical documentation?</p>
-          <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-            Nebulla can export a Markdown summary of your Master Plan and stack notes.
+          <p className="type-section">Download technical documentation?</p>
+          <p className="type-label-sm mt-1 leading-relaxed">
+            Export a Markdown summary of your Master Plan and stack notes.
           </p>
           {docsNote ? (
             <p className="mt-2 text-[11px] text-muted-foreground" role="status">

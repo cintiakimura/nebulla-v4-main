@@ -54,17 +54,17 @@ export function ResetPasswordPage() {
       {done ? (
         <div className="space-y-4 not-prose">
           <p className="text-slate-300">Your password has been updated. You can sign in with your email and new password.</p>
-          <a href="/" className="btn-cyan inline-flex items-center justify-center rounded-xl px-4 py-2 font-headline text-sm no-underline">
-            Back to nebulla
+          <a href="/" className="btn-cyan inline-flex items-center justify-center no-underline">
+            Back to Nebulla
           </a>
         </div>
       ) : (
-        <form onSubmit={(e) => void submit(e)} className="space-y-5 not-prose max-w-md">
+        <form onSubmit={(e) => void submit(e)} className="not-prose max-w-md space-y-5">
           {!token ? (
-            <p className="text-amber-400/95 text-sm">This page needs a valid token in the URL. Request a new reset link from the sign-in screen.</p>
+            <p className="type-body-dense text-muted-foreground">This page needs a valid token in the URL. Request a new reset link from the sign-in screen.</p>
           ) : null}
           <div>
-            <label className="block text-[10px] uppercase tracking-wider text-slate-500 font-headline mb-1">
+            <label className="type-micro mb-1 block uppercase tracking-wider">
               New password
             </label>
             <input
@@ -72,12 +72,12 @@ export function ResetPasswordPage() {
               autoComplete="new-password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="ide-glass-input w-full rounded-lg px-3 py-2 text-sm outline-none"
+              className="ide-glass-input w-full rounded-md px-3 py-2 text-sm outline-none"
               placeholder="At least 8 characters, letters + numbers"
             />
           </div>
           <div>
-            <label className="mb-1 block font-headline text-[10px] uppercase tracking-wider text-slate-500">
+            <label className="type-micro mb-1 block uppercase tracking-wider">
               Confirm password
             </label>
             <input
@@ -85,14 +85,14 @@ export function ResetPasswordPage() {
               autoComplete="new-password"
               value={confirm}
               onChange={(e) => setConfirm(e.target.value)}
-              className="ide-glass-input w-full rounded-lg px-3 py-2 text-sm outline-none"
+              className="ide-glass-input w-full rounded-md px-3 py-2 text-sm outline-none"
             />
           </div>
-          {error ? <p className="text-sm text-red-400/95">{error}</p> : null}
+          {error ? <p className="type-body-dense text-destructive">{error}</p> : null}
           <button
             type="submit"
             disabled={busy || !token}
-            className="btn-cyan w-full rounded-xl py-2.5 font-headline text-sm disabled:cursor-not-allowed disabled:opacity-50"
+            className="btn-cyan w-full disabled:cursor-not-allowed disabled:opacity-50"
           >
             {busy ? 'Saving…' : 'Update password'}
           </button>

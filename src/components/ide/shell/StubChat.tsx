@@ -108,9 +108,9 @@ export function StubChat({
             <div
               key={m.id}
               className={cn(
-                'max-w-[95%] rounded-2xl px-3 py-2 text-sm',
+                'type-body-md max-w-[95%] rounded-lg px-3 py-2',
                 m.role === 'user'
-                  ? 'ml-auto bg-cyan-500/10 text-foreground'
+                  ? 'ml-auto border border-border text-foreground'
                   : 'mr-auto text-muted-foreground',
               )}
             >
@@ -134,7 +134,7 @@ export function StubChat({
             }}
             rows={2}
             placeholder="Message Nebulla…"
-            className="ide-glass-input min-h-[2.75rem] w-full resize-none rounded-lg px-3 py-2 text-sm outline-none"
+            className="ide-glass-input min-h-[2.75rem] w-full resize-none rounded-md px-3 py-2 text-sm outline-none"
           />
           <button
             type="button"
@@ -142,8 +142,8 @@ export function StubChat({
             aria-label={listening ? 'Stop listening' : 'Voice input'}
             onClick={toggleMic}
             className={cn(
-              'btn-secondary-surface inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md',
-              listening && 'text-cyan-300',
+              'btn-secondary-surface btn-icon shrink-0',
+              listening && 'border-[var(--shell-border-strong)] text-foreground',
             )}
           >
             <Mic className="h-4 w-4" aria-hidden />
@@ -153,7 +153,7 @@ export function StubChat({
             title="Send"
             aria-label="Send"
             onClick={send}
-            className="btn-cyan inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md"
+            className="btn-cyan btn-icon shrink-0"
           >
             <Send className="h-4 w-4" aria-hidden />
           </button>

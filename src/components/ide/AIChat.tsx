@@ -2787,7 +2787,7 @@ export function AIChat() {
       <div
         ref={scrollContainerRef}
         onScroll={onChatScroll}
-        className="min-h-0 flex-1 space-y-3 overflow-auto p-3"
+        className="min-h-0 flex-1 space-y-4 overflow-auto px-4 py-4"
       >
         {messages.length === 0 && !sending ? (
           <div className="px-1 pt-2 pb-4 text-left">
@@ -2857,8 +2857,8 @@ export function AIChat() {
             <div className={cn('max-w-[85%]', message.role === 'user' ? 'text-right' : 'text-left')}>
               <div
                 className={cn(
-                  'type-body-md inline-block rounded-2xl px-3 py-2',
-                  message.role === 'user' ? 'bg-[#111111] text-foreground' : 'bg-transparent text-foreground',
+                  'type-body-md inline-block rounded-lg px-3 py-2',
+                  message.role === 'user' ? 'border border-border text-foreground' : 'bg-transparent text-foreground',
                 )}
               >
                 <p className="whitespace-pre-wrap">

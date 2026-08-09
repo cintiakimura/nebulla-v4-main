@@ -35,9 +35,9 @@ export function ShellBottomNav() {
   ];
 
   return (
-    <div className="pointer-events-none absolute inset-x-0 bottom-0 z-40 flex justify-center px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2">
+    <div className="pointer-events-none absolute inset-x-0 bottom-0 z-40 flex justify-center pb-[max(0px,env(safe-area-inset-bottom))]">
       <nav
-        className="pointer-events-auto flex items-center gap-0.5 rounded-full border border-white/10 bg-[#141414]/92 px-1.5 py-1 shadow-[0_8px_32px_rgba(0,0,0,0.45)] backdrop-blur-md"
+        className="pointer-events-auto mb-3 flex items-center gap-0.5 rounded-full border border-[var(--shell-border)] bg-[var(--shell-bg)]/95 px-1.5 py-1 shadow-none backdrop-blur-sm"
         aria-label="Workspace"
       >
         {items.map(({ id, label, icon: Icon, onClick }) => {
@@ -51,13 +51,13 @@ export function ShellBottomNav() {
               aria-current={active ? 'page' : undefined}
               onClick={onClick}
               className={cn(
-                'relative inline-flex items-center gap-2 rounded-full px-3.5 py-2 text-xs transition-colors',
+                'relative inline-flex items-center gap-2 rounded-full px-3.5 py-2 text-[11px] transition-colors',
                 active
-                  ? 'bg-[#2a2a2a] text-foreground'
-                  : 'text-muted-foreground hover:text-foreground',
+                  ? 'border border-[var(--shell-border-strong)] text-foreground'
+                  : 'border border-transparent text-muted-foreground hover:text-foreground',
               )}
             >
-              <Icon className="h-4 w-4 shrink-0 opacity-90" strokeWidth={1.75} aria-hidden />
+              <Icon className="h-4 w-4 shrink-0" strokeWidth={1.75} aria-hidden />
               <span className="whitespace-nowrap">{label}</span>
               {active ? (
                 <span

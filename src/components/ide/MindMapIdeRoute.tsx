@@ -187,7 +187,7 @@ export function MindMapIdeRoute() {
   );
 
   return (
-    <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background p-3">
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden p-2 md:p-3">
       {extraRoutes.length > 0 ? (
         <div className="mb-2 shrink-0 rounded-lg border border-amber-500/35 bg-amber-500/10 px-3 py-2 text-[12px] text-amber-50/95">
           <p className="font-medium">Mind Map has pages not in the Master Plan</p>

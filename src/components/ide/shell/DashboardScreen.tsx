@@ -34,10 +34,10 @@ export function DashboardScreen({ onOpenAccount }: { onOpenAccount?: () => void 
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden overscroll-y-contain">
-      <header className="ide-glass-chrome flex min-h-12 shrink-0 items-center gap-2 border-b border-border px-3 py-1 sm:px-4">
-        <div className="flex min-w-0 items-center gap-2 sm:gap-3">
-          <Logo className="h-10 w-10 max-h-[90%] shrink-0 object-contain opacity-95" />
-          <span className="app-logotype hidden sm:inline">Nebulla.beta</span>
+      <header className="ide-glass-chrome flex h-14 shrink-0 items-center gap-2 border-b border-border px-3 md:px-4">
+        <div className="flex min-w-0 items-center gap-2.5">
+          <Logo className="h-10 w-10 shrink-0 object-contain md:h-11 md:w-11" />
+          <span className="app-logotype text-[15px] tracking-[0.03em] md:text-base">Nebulla.beta</span>
         </div>
         <div className="ml-auto flex shrink-0 items-center gap-1.5">
           <button
@@ -45,7 +45,7 @@ export function DashboardScreen({ onOpenAccount }: { onOpenAccount?: () => void 
             title="Settings"
             aria-label="Settings"
             onClick={openSettings}
-            className="btn-secondary-surface inline-flex h-9 w-9 items-center justify-center rounded-md text-muted-foreground hover:text-foreground"
+            className="btn-secondary-surface btn-icon text-muted-foreground hover:text-foreground"
           >
             <Settings className="h-4 w-4" aria-hidden />
           </button>
@@ -55,14 +55,14 @@ export function DashboardScreen({ onOpenAccount }: { onOpenAccount?: () => void 
             aria-label="Open Settings"
             onClick={openSettings}
             className={cn(
-              'btn-secondary-surface flex h-9 w-9 items-center justify-center rounded-full text-[11px] text-foreground',
+              'btn-secondary-surface flex h-8 w-8 items-center justify-center rounded-full text-[11px] text-foreground',
             )}
           >
             {sessionUser?.photoURL ? (
               <img
                 src={sessionUser.photoURL}
                 alt=""
-                className="h-9 w-9 rounded-full object-cover"
+                className="h-8 w-8 rounded-full object-cover"
               />
             ) : (
               initials || 'NB'

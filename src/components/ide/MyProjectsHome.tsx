@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   FolderOpen,
   Github,
@@ -6,6 +6,7 @@ import {
   LayoutTemplate,
   Loader2,
   MessageCircle,
+  Mic,
   Sparkles,
   Smartphone,
 } from 'lucide-react';
@@ -15,6 +16,7 @@ import {
   getBrowserProjectName,
   setBrowserProjectKey,
   setBrowserProjectName,
+  withProjectQuery,
 } from '../../lib/nebulaProjectApi';
 import {
   readGuestIndex,
@@ -55,6 +57,23 @@ type ListedProject = {
   updatedAt: string;
   source: 'guest' | 'cloud' | 'current';
 };
+
+type SpeechRecognitionLike = {
+  lang: string;
+  interimResults: boolean;
+  onresult: ((ev: { results: ArrayLike<ArrayLike<{ transcript?: string }>> }) => void) | null;
+  onerror: (() => void) | null;
+  onend: (() => void) | null;
+  start: () => void;
+  stop: () => void;
+};
+
+function projectInitials(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return 'N';
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return `${parts[0][0] || ''}${parts[1][0] || ''}`.toUpperCase();
+}
 
 function formatWhen(iso: string): string {
   try {
@@ -124,8 +143,49 @@ export function MyProjectsHome({
   const [ideaType, setIdeaType] = useState<NebulaProjectType | null>(null);
   const [startError, setStartError] = useState('');
   const [startingIdea, setStartingIdea] = useState(false);
+  const [listening, setListening] = useState(false);
+  const recognitionRef = useRef<{ stop: () => void } | null>(null);
 
   const busyStarting = Boolean(startingType) || startingIdea;
+
+  const toggleMic = useCallback(() => {
+    const w = window as Window & {
+      SpeechRecognition?: new () => SpeechRecognitionLike;
+      webkitSpeechRecognition?: new () => SpeechRecognitionLike;
+    };
+    const SR = w.SpeechRecognition || w.webkitSpeechRecognition;
+    if (!SR) {
+      setStartError('Voice input is not supported in this browser.');
+      return;
+    }
+    if (listening && recognitionRef.current) {
+      recognitionRef.current.stop();
+      setListening(false);
+      return;
+    }
+    const rec = new SR();
+    recognitionRef.current = rec;
+    rec.lang = 'en-US';
+    rec.interimResults = false;
+    rec.onresult = (ev) => {
+      const transcript = ev.results[0]?.[0]?.transcript?.trim();
+      if (transcript) {
+        setIdeaInput((prev) => (prev ? `${prev} ${transcript}` : transcript));
+        setStartError('');
+      }
+    };
+    rec.onerror = () => setListening(false);
+    rec.onend = () => setListening(false);
+    setListening(true);
+    setStartError('');
+    rec.start();
+  }, [listening]);
+
+  useEffect(() => {
+    return () => {
+      recognitionRef.current?.stop();
+    };
+  }, []);
   const activeKey = getBrowserProjectKey();
   const activeName = getBrowserProjectName().trim();
   /** Empty free-tier / default shell — keep Start prompt as the primary action. */
@@ -402,9 +462,9 @@ export function MyProjectsHome({
 
   const newProjectSection = (
     <>
-      <section className="space-y-5">
-        <div className="space-y-2">
-          <h2 className="text-base font-normal tracking-tight text-foreground">
+      <section className="space-y-3">
+        <div className="space-y-1.5">
+          <h2 className="type-section">
             {isDashboard
               ? 'New project'
               : isPlaceholderWorkspace
@@ -413,7 +473,7 @@ export function MyProjectsHome({
                   ? 'Start another project'
                   : 'New Project'}
           </h2>
-          <p className="max-w-xl text-sm leading-relaxed text-muted-foreground">
+          <p className="type-body-md max-w-xl text-muted-foreground">
             {isDashboard
               ? 'Describe what you want to build, pick a type, then Start — opens Build for that workspace.'
               : isPlaceholderWorkspace
@@ -424,10 +484,10 @@ export function MyProjectsHome({
           </p>
         </div>
 
-        <div className="ide-glass-card rounded-2xl border border-border p-5">
-          <label htmlFor="nebula-project-idea" className="flex items-center gap-2 text-sm text-foreground">
-            <Sparkles className="h-4 w-4 text-foreground/60" aria-hidden />
-            {isDashboard ? 'Goal / brief' : 'Prompt'}
+        <div className="ide-glass-card overflow-hidden rounded-lg border border-border">
+          <label htmlFor="nebula-project-idea" className="type-label-sm flex items-center gap-2 px-4 pt-4">
+            <Sparkles className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden />
+            <span className="text-foreground">{isDashboard ? 'Goal / brief' : 'Prompt'}</span>
           </label>
           <textarea
             id="nebula-project-idea"
@@ -438,53 +498,65 @@ export function MyProjectsHome({
             }}
             rows={hasExistingWork ? 3 : 4}
             disabled={busyStarting}
-            placeholder="e.g. A mobile education app for kids to practice reading…"
-            className="ide-glass-input mt-3 w-full resize-y rounded-xl border border-border px-3 py-2.5 text-sm leading-relaxed text-foreground outline-none placeholder:text-muted-foreground/70 disabled:opacity-60"
+            placeholder="e.g. A mobile education app for kids to practice reading… (or use the mic)"
+            className="ide-glass-input mt-2 w-full resize-y border-0 bg-transparent px-4 py-3 text-[13px] leading-relaxed text-foreground outline-none placeholder:text-muted-foreground/70 disabled:opacity-60"
           />
-          <p className="mt-3 text-xs text-muted-foreground">
-            {isDashboard
-              ? 'Optional type chip. Missing details are asked in Build chat.'
-              : 'Optional platform chip. If the goal or platform is missing, chat will ask after Continue.'}
-          </p>
-          <div className="mt-2 flex flex-wrap gap-2">
-            {PROJECT_TYPES.map((t) => (
+          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border px-3 py-2.5 md:px-4">
+            <div className="flex flex-wrap gap-2">
+              {PROJECT_TYPES.map((t) => (
+                <button
+                  key={t.id}
+                  type="button"
+                  disabled={busyStarting}
+                  aria-pressed={ideaType === t.id}
+                  onClick={() => setIdeaType((prev) => (prev === t.id ? null : t.id))}
+                  className={cn(
+                    'inline-flex h-8 items-center gap-1.5 rounded-md px-3 text-xs disabled:cursor-not-allowed disabled:opacity-50',
+                    ideaType === t.id ? 'btn-cyan' : 'btn-secondary-surface text-muted-foreground',
+                  )}
+                >
+                  {t.title === 'Landing Page' ? 'Landing' : t.title}
+                </button>
+              ))}
+            </div>
+            <div className="ml-auto flex items-center gap-2">
               <button
-                key={t.id}
                 type="button"
+                title={listening ? 'Stop listening' : 'Voice input'}
+                aria-label={listening ? 'Stop listening' : 'Voice input'}
                 disabled={busyStarting}
-                aria-pressed={ideaType === t.id}
-                onClick={() => setIdeaType((prev) => (prev === t.id ? null : t.id))}
+                onClick={toggleMic}
                 className={cn(
-                  'inline-flex items-center gap-1.5 rounded-lg px-4 py-2 text-xs disabled:cursor-not-allowed disabled:opacity-50',
-                  ideaType === t.id ? 'btn-cyan' : 'btn-secondary-surface text-muted-foreground',
+                  'btn-secondary-surface btn-icon',
+                  listening && 'border-[var(--shell-border-strong)] text-foreground',
                 )}
               >
-                {t.title === 'Landing Page' ? 'Landing' : t.title}
+                <Mic className="h-4 w-4" aria-hidden />
               </button>
-            ))}
+              <button
+                type="button"
+                disabled={busyStarting}
+                onClick={() => void onStartFromIdea()}
+                className="btn-cyan inline-flex items-center gap-1.5 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {startingIdea ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+                {isDashboard ? 'Start' : 'Continue'}
+              </button>
+            </div>
           </div>
-          {startError ? <p className="mt-2 text-xs text-rose-300">{startError}</p> : null}
-          <div className="mt-4 flex justify-end">
-            <button
-              type="button"
-              disabled={busyStarting}
-              onClick={() => void onStartFromIdea()}
-              className="btn-cyan inline-flex items-center gap-1.5 rounded-lg px-4 py-2 text-xs disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {startingIdea ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
-              {isDashboard ? 'Start' : 'Continue'}
-            </button>
-          </div>
+          {startError ? (
+            <p className="type-label-sm border-t border-border px-4 py-2 text-muted-foreground">{startError}</p>
+          ) : null}
         </div>
       </section>
 
       {!isDashboard ? (
-        <section className="ide-glass-card space-y-4 rounded-2xl border border-border p-5">
+        <section className="ide-glass-card space-y-3 rounded-lg border border-border p-4">
           <div className="space-y-1">
-            <h2 className="text-base font-normal text-foreground">
+            <h2 className="type-section">
               {hasExistingWork ? 'Or choose a type for a new project' : 'Or choose a type'}
             </h2>
-            <p className="max-w-xl text-sm leading-relaxed text-muted-foreground">
+            <p className="type-body-md max-w-xl text-muted-foreground">
               Pick a platform to start. Chat asks for the goal if you have not written a prompt yet.
             </p>
           </div>
@@ -518,8 +590,8 @@ export function MyProjectsHome({
   );
 
   const continueSection = (
-    <section className="ide-glass-card space-y-3 rounded-2xl border border-border p-5">
-      <h2 className="text-base font-normal text-foreground">
+    <section className="ide-glass-card space-y-3 rounded-lg border border-border p-4">
+      <h2 className="type-section">
         {hasExistingWork ? 'Continue this workspace' : 'Or continue'}
       </h2>
       <div className="flex flex-wrap gap-2">
@@ -532,7 +604,7 @@ export function MyProjectsHome({
               onClick={action.onClick}
               title={action.title}
               aria-label={action.title}
-              className="btn-cyan inline-flex h-9 w-9 items-center justify-center rounded-lg"
+              className="btn-secondary-surface btn-icon"
             >
               <Icon className="h-4 w-4" aria-hidden />
             </button>
@@ -543,25 +615,25 @@ export function MyProjectsHome({
   );
 
   const projectsSection = (
-    <section className="ide-glass-card space-y-4 rounded-2xl border border-border p-5">
+    <section className="space-y-3">
       <div className="flex items-center justify-between gap-2">
-        <h2 className="text-base font-normal text-foreground">Your projects</h2>
+        <h2 className="type-section">Your projects</h2>
         {loadingList ? (
           <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
         ) : (
-          <span className="text-xs text-muted-foreground">{projects.length} total</span>
+          <span className="type-label-sm">{projects.length} total</span>
         )}
       </div>
 
       {listNote ? (
-        <p className="rounded-lg border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-xs text-amber-100/90">
+        <p className="type-label-sm rounded-md border border-border px-3 py-2">
           {listNote}
         </p>
       ) : null}
 
       {projects.length === 0 && !loadingList ? (
-        <div className="rounded-xl border border-dashed border-border/70 px-6 py-10 text-center">
-          <p className="text-sm leading-relaxed text-muted-foreground">
+        <div className="rounded-lg border border-dashed border-border px-4 py-10 text-center">
+          <p className="type-body-md text-muted-foreground">
             No projects yet. Start with a prompt above, or pick{' '}
             <span className="text-foreground">Web App</span>,{' '}
             <span className="text-foreground">Mobile App</span>, or{' '}
@@ -569,57 +641,83 @@ export function MyProjectsHome({
           </p>
         </div>
       ) : (
-        <ul className="ide-glass-card divide-y divide-border overflow-hidden rounded-xl border border-border/60">
+        <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4">
           {projects.map((p) => {
             const isActive = p.key === activeKey || p.name === getBrowserProjectName();
+            const previewSrc = isActive
+              ? withProjectQuery(`/api/app-preview/bootstrap?_thumb=${encodeURIComponent(p.key)}`)
+              : '';
             return (
-              <li
-                key={`${p.source}-${p.key}`}
-                className={cn(
-                  'flex flex-wrap items-center justify-between gap-3 px-4 py-3',
-                  isActive && 'bg-white/[0.04]',
-                )}
-              >
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-normal text-foreground">
-                    {p.name}
-                    {isActive ? (
-                      <span className="ml-2 text-[10px] font-normal uppercase tracking-wide text-muted-foreground">
-                        Active
-                      </span>
-                    ) : null}
-                  </p>
-                  <p className="mt-0.5 text-xs text-muted-foreground">
-                    Last modified {formatWhen(p.updatedAt)}
-                    {p.source === 'cloud'
-                      ? ' · Cloud'
-                      : p.source === 'guest'
-                        ? ' · Local'
-                        : p.source === 'current'
-                          ? ' · Local'
-                          : ''}
-                  </p>
-                  {isDashboard &&
-                  activeLiveUrl &&
-                  (p.key === activeKey || p.name === activeName) ? (
-                    <a
-                      href={activeLiveUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="mt-1 inline-block max-w-full truncate text-[11px] text-muted-foreground underline-offset-2 hover:underline"
-                      title={activeLiveUrl}
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      Live URL
-                    </a>
-                  ) : null}
-                </div>
+              <li key={`${p.source}-${p.key}`}>
                 <button
                   type="button"
                   onClick={() => void onOpenProject(p)}
-                  className="btn-cyan inline-flex items-center rounded-lg px-4 py-2 text-xs"
+                  className={cn(
+                    'group flex w-full flex-col overflow-hidden rounded-lg border text-left transition-colors',
+                    isActive
+                      ? 'border-[var(--shell-border-strong)]'
+                      : 'border-border hover:border-[var(--shell-border-strong)]',
+                  )}
                 >
-                  Open
+                  <div className="relative aspect-square w-full overflow-hidden bg-[#1a1a1a]">
+                    {isActive && previewSrc ? (
+                      <div className="pointer-events-none absolute inset-0 overflow-hidden">
+                        <iframe
+                          title={`${p.name} preview`}
+                          src={previewSrc}
+                          tabIndex={-1}
+                          className="absolute left-0 top-0 border-0 bg-transparent"
+                          style={{
+                            width: '400%',
+                            height: '400%',
+                            transform: 'scale(0.25)',
+                            transformOrigin: 'top left',
+                          }}
+                        />
+                      </div>
+                    ) : (
+                      <div
+                        className="flex h-full w-full flex-col items-center justify-center gap-2"
+                        aria-hidden
+                      >
+                        <div className="flex h-14 w-14 items-center justify-center rounded-lg border border-border text-sm text-foreground">
+                          {projectInitials(p.name)}
+                        </div>
+                        <div className="h-px w-10 bg-border" />
+                        <div className="flex w-3/5 flex-col gap-1.5 opacity-40">
+                          <div className="h-1.5 rounded-full bg-border" />
+                          <div className="h-1.5 w-4/5 rounded-full bg-border" />
+                          <div className="h-1.5 w-2/3 rounded-full bg-border" />
+                        </div>
+                      </div>
+                    )}
+                    {isActive ? (
+                      <span className="type-micro absolute left-2 top-2 rounded-md border border-border bg-[var(--shell-bg)]/90 px-1.5 py-0.5 uppercase tracking-wide">
+                        Active
+                      </span>
+                    ) : null}
+                  </div>
+                  <div className="space-y-1 border-t border-border px-3 py-2.5">
+                    <p className="type-body-dense truncate text-foreground">{p.name}</p>
+                    <p className="type-micro truncate">
+                      {formatWhen(p.updatedAt)}
+                      {p.source === 'cloud' ? ' · Cloud' : ' · Local'}
+                    </p>
+                    {isDashboard &&
+                    activeLiveUrl &&
+                    (p.key === activeKey || p.name === activeName) ? (
+                      <a
+                        href={activeLiveUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="type-micro block truncate font-mono underline-offset-2 hover:underline"
+                        title={activeLiveUrl}
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        Live URL
+                      </a>
+                    ) : null}
+                  </div>
                 </button>
               </li>
             );
@@ -633,8 +731,8 @@ export function MyProjectsHome({
     <div className="min-h-0 flex-1 overflow-auto bg-transparent">
       <div
         className={cn(
-          'mx-auto flex w-full flex-col gap-8 px-6 py-4 sm:px-10 sm:py-6',
-          isDashboard ? 'max-w-2xl' : 'max-w-3xl',
+          'mx-auto flex w-full flex-col gap-6 px-5 py-5 sm:px-6',
+          isDashboard ? 'max-w-3xl' : 'max-w-3xl',
         )}
       >
         {showStartHeroFirst ? (
@@ -653,12 +751,12 @@ export function MyProjectsHome({
       </div>
 
       {!isDashboard && fileModal ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm">
-          <div className="ide-glass-card w-full max-w-lg rounded-2xl border border-border p-5">
-            <h3 className="text-base font-normal text-foreground">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/65 p-4">
+          <div className="ide-glass-card w-full max-w-md rounded-lg border border-border p-5">
+            <h3 className="type-section">
               {fileModal === 'github' ? 'Open from GitHub' : 'Open existing file'}
             </h3>
-            <p className="mt-1 text-xs text-muted-foreground">
+            <p className="type-label-sm mt-1">
               {fileModal === 'github'
                 ? 'Paste a public raw or blob GitHub URL.'
                 : 'Example: nebulla-project/full-bug-database.md'}

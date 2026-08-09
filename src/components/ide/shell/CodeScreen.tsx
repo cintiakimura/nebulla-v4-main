@@ -8,15 +8,12 @@ import {
   Github,
   Loader2,
   RefreshCw,
-  Rocket,
-  GitCommit,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useIdeWorkspace } from '@/components/ide/IdeWorkspaceContext';
 import { buildWorkspaceFileTree, type WorkspaceTreeNode } from '../../../lib/workspaceFileTree';
 import { readResponseJson } from '../../../lib/apiFetch';
 import { withProjectQuery } from '../../../lib/nebulaProjectApi';
-import { runWorkspaceDeployOrBuildCheck } from '../../../lib/workspaceDeployClient';
 import { fetchSessionUser, type NebulaSessionUser } from '../../../lib/nebulaCloud';
 import { fetchNebulaPublicConfig } from '../../../lib/nebulaPublicConfig';
 import { formatGithubConnectionStatus } from '../../../lib/githubDisplay';
@@ -121,9 +118,8 @@ export function CodeScreen() {
   const [changesError, setChangesError] = useState<string | null>(null);
   const [commitMessage, setCommitMessage] = useState('');
   const [statusLine, setStatusLine] = useState<string | null>(null);
-  const [busy, setBusy] = useState<'commit' | 'deploy' | null>(null);
+  const [busy, setBusy] = useState<'commit' | null>(null);
   const [commitOpen, setCommitOpen] = useState(false);
-  const [gitPulse, setGitPulse] = useState(false);
   const [sessionUser, setSessionUser] = useState<NebulaSessionUser | null>(null);
   const [githubOAuthReady, setGithubOAuthReady] = useState(false);
 
@@ -177,15 +173,13 @@ export function CodeScreen() {
   }, []);
 
   useEffect(() => {
-    const onPulse = (ev: Event) => {
-      const kind = (ev as CustomEvent<{ kind?: string }>).detail?.kind;
-      if (kind !== 'git') return;
-      setGitPulse(true);
-      window.setTimeout(() => setGitPulse(false), 2400);
+    const onOpenCommit = () => {
+      setCommitOpen(true);
+      void loadChanges();
     };
-    window.addEventListener('nebula-guided-pulse', onPulse);
-    return () => window.removeEventListener('nebula-guided-pulse', onPulse);
-  }, []);
+    window.addEventListener('nebula-open-commit', onOpenCommit);
+    return () => window.removeEventListener('nebula-open-commit', onOpenCommit);
+  }, [loadChanges]);
 
   useEffect(() => {
     if (!commitOpen) return;
@@ -244,32 +238,19 @@ export function CodeScreen() {
     }
   }, [commitMessage, loadChanges, refreshTree]);
 
-  const onDeploy = useCallback(async () => {
-    setBusy('deploy');
-    setStatusLine('Deploy / build check…');
-    try {
-      const result = await runWorkspaceDeployOrBuildCheck({});
-      setStatusLine(result.ok ? 'Deploy / build check OK' : result.error || 'Deploy check failed');
-    } catch (e) {
-      setStatusLine(e instanceof Error ? e.message : 'Deploy failed');
-    } finally {
-      setBusy(null);
-    }
-  }, []);
-
   return (
     <div className="flex min-h-0 flex-1 overflow-hidden">
       {/* Left: explorer (list scrolls) */}
       <aside className="ide-glass-chrome flex w-56 shrink-0 flex-col overflow-hidden border-r border-border md:w-64">
         <div className="flex h-9 shrink-0 items-center justify-between border-b border-border px-3">
-          <span className="text-xs text-muted-foreground">Files</span>
+          <span className="type-label-sm">Files</span>
           <button
             type="button"
             title="Refresh"
             aria-label="Refresh file tree"
             disabled={overviewLoading}
             onClick={() => void refreshTree()}
-            className="btn-secondary-surface rounded p-1 text-muted-foreground"
+            className="btn-secondary-surface btn-icon text-muted-foreground"
           >
             <RefreshCw className={cn('h-3.5 w-3.5', overviewLoading && 'animate-spin')} />
           </button>
@@ -294,56 +275,22 @@ export function CodeScreen() {
         </div>
       </aside>
 
-      {/* Center: code view + compact commit / deploy */}
-      <main className="flex min-h-0 min-w-0 flex-1 flex-col bg-[#0a0a0a]">
+      {/* Center: code view — Commit / Deploy live in the shell header */}
+      <main className="flex min-h-0 min-w-0 flex-1 flex-col">
         <div className="relative flex h-9 shrink-0 items-center gap-2 border-b border-border px-3">
-          <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
+          <span className="type-body-dense min-w-0 flex-1 truncate text-muted-foreground">
             {activePath || 'Select a file'}
             {activeTab?.dirty ? ' · unsaved' : ''}
           </span>
 
           {statusLine ? (
-            <span className="hidden max-w-[12rem] truncate text-[10px] text-muted-foreground md:inline" role="status">
+            <span className="type-micro max-w-[14rem] truncate" role="status">
               {statusLine}
             </span>
           ) : null}
-
-          <button
-            type="button"
-            title={hasChanges ? 'Commit changes' : 'Commit'}
-            aria-label="Commit"
-            aria-haspopup="dialog"
-            onClick={() => {
-              setCommitOpen(true);
-              void loadChanges();
-            }}
-            className={cn(
-              'btn-secondary-surface inline-flex h-8 w-8 items-center justify-center rounded-md',
-              hasChanges ? 'text-emerald-400' : 'text-muted-foreground',
-              gitPulse && 'nebulla-guided-pulse',
-            )}
-          >
-            {changesLoading && busy !== 'commit' ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
-            ) : (
-              <GitCommit className="h-3.5 w-3.5" aria-hidden />
-            )}
-          </button>
-
-          <button
-            type="button"
-            title="Deploy"
-            aria-label="Deploy"
-            disabled={busy !== null}
-            onClick={() => void onDeploy()}
-            className="btn-secondary-surface inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground disabled:opacity-40"
-          >
-            {busy === 'deploy' ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
-            ) : (
-              <Rocket className="h-3.5 w-3.5" aria-hidden />
-            )}
-          </button>
+          {hasChanges && !statusLine ? (
+            <span className="type-micro shrink-0">{changes.length} change{changes.length === 1 ? '' : 's'}</span>
+          ) : null}
         </div>
 
         <div className="min-h-0 flex-1 overflow-auto">
@@ -370,15 +317,15 @@ export function CodeScreen() {
 
       {/* T3 — Commit modal (does not navigate until Commit succeeds) */}
       {commitOpen ? (
-        <div className="fixed inset-0 z-[210] flex items-center justify-center bg-black/70 p-4">
+        <div className="fixed inset-0 z-[210] flex items-center justify-center bg-black/65 p-4">
           <div
-            className="ide-glass-card w-full max-w-md rounded-2xl border border-border p-5 shadow-none"
+            className="ide-glass-card w-full max-w-md rounded-lg border border-border p-5 shadow-none"
             role="dialog"
             aria-modal="true"
             aria-label="Commit changes"
           >
             <div className="mb-3 flex items-center justify-between gap-2">
-              <p className="text-sm text-foreground">Commit</p>
+              <p className="type-section">Commit</p>
               <button
                 type="button"
                 title="Refresh changes"

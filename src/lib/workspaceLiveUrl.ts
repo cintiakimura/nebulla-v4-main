@@ -2,6 +2,8 @@
 
 const LIVE_URL_KEY = 'nebula_workspace_live_url_v1';
 const DOMAIN_KEY_PREFIX = 'nebula_workspace_custom_domain_v1:';
+const REPO_KEY_PREFIX = 'nebula_workspace_repo_url_v1:';
+const DNS_RECORDS_KEY_PREFIX = 'nebula_workspace_dns_records_v1:';
 
 export type DnsDomainStatus = 'not_configured' | 'pending' | 'active';
 
@@ -9,6 +11,14 @@ export type StoredCustomDomain = {
   domain: string;
   status: DnsDomainStatus;
   savedAt: string;
+};
+
+/** Stub DNS rows for Plan page (local until provider wiring). */
+export type StoredDnsRecord = {
+  type: 'A' | 'CNAME' | 'TXT';
+  host: string;
+  value: string;
+  ttl: string;
 };
 
 function readLs(key: string): string | null {
@@ -73,5 +83,60 @@ export function writeStoredCustomDomain(
     savedAt: new Date().toISOString(),
   };
   writeLs(`${DOMAIN_KEY_PREFIX}${projectKey || 'default'}`, JSON.stringify(next));
+  return next;
+}
+
+export function readStoredRepoUrl(projectKey: string): string {
+  return readLs(`${REPO_KEY_PREFIX}${projectKey || 'default'}`)?.trim() || '';
+}
+
+export function writeStoredRepoUrl(projectKey: string, url: string): string {
+  const trimmed = url.trim();
+  const key = `${REPO_KEY_PREFIX}${projectKey || 'default'}`;
+  if (!trimmed) {
+    try {
+      localStorage.removeItem(key);
+    } catch {
+      /* ignore */
+    }
+    return '';
+  }
+  writeLs(key, trimmed);
+  return trimmed;
+}
+
+const DEFAULT_DNS_RECORDS: StoredDnsRecord[] = [
+  { type: 'A', host: '@', value: '', ttl: '3600' },
+  { type: 'CNAME', host: 'www', value: '', ttl: '3600' },
+  { type: 'TXT', host: '@', value: '', ttl: '3600' },
+];
+
+export function readStoredDnsRecords(projectKey: string): StoredDnsRecord[] {
+  const raw = readLs(`${DNS_RECORDS_KEY_PREFIX}${projectKey || 'default'}`);
+  if (!raw) return DEFAULT_DNS_RECORDS.map((r) => ({ ...r }));
+  try {
+    const parsed = JSON.parse(raw) as StoredDnsRecord[];
+    if (!Array.isArray(parsed) || parsed.length === 0) {
+      return DEFAULT_DNS_RECORDS.map((r) => ({ ...r }));
+    }
+    return parsed.map((r) => ({
+      type: r.type === 'CNAME' || r.type === 'TXT' ? r.type : 'A',
+      host: String(r.host || ''),
+      value: String(r.value || ''),
+      ttl: String(r.ttl || '3600'),
+    }));
+  } catch {
+    return DEFAULT_DNS_RECORDS.map((r) => ({ ...r }));
+  }
+}
+
+export function writeStoredDnsRecords(projectKey: string, records: StoredDnsRecord[]): StoredDnsRecord[] {
+  const next = records.map((r) => ({
+    type: r.type === 'CNAME' || r.type === 'TXT' ? r.type : ('A' as const),
+    host: r.host.trim(),
+    value: r.value.trim(),
+    ttl: r.ttl.trim() || '3600',
+  }));
+  writeLs(`${DNS_RECORDS_KEY_PREFIX}${projectKey || 'default'}`, JSON.stringify(next));
   return next;
 }

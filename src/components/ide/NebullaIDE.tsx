@@ -299,11 +299,11 @@ function NebullaIDEShell() {
             activeScreen === 'code' ||
             activeScreen === 'plan') && (
             <>
-              {/* pb clears the floating capsule nav; each page owns its scroll */}
+              {/* Floating bottom nav overlays content — no reserved bottom margin */}
               <div
                 className={
                   activeScreen === 'build'
-                    ? 'flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden pb-16'
+                    ? 'flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden'
                     : 'hidden'
                 }
                 aria-hidden={activeScreen !== 'build'}
@@ -313,7 +313,7 @@ function NebullaIDEShell() {
               <div
                 className={
                   activeScreen === 'code'
-                    ? 'flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden pb-16'
+                    ? 'flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden'
                     : 'hidden'
                 }
                 aria-hidden={activeScreen !== 'code'}
@@ -323,7 +323,7 @@ function NebullaIDEShell() {
               <div
                 className={
                   activeScreen === 'plan'
-                    ? 'flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden pb-16'
+                    ? 'flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden'
                     : 'hidden'
                 }
                 aria-hidden={activeScreen !== 'plan'}

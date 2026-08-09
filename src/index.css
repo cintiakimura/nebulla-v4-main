@@ -53,7 +53,7 @@
   --chart-3: var(--misc);
   --chart-4: #5750cc;
   --chart-5: #c6937c;
-  --radius: 0.75rem;
+  --radius: 0.5rem; /* 8px — Nebulla shared sheet radius */
   --sidebar: #000000;
   --sidebar-foreground: #f2f2f2;
   --sidebar-primary: var(--primary);
@@ -93,10 +93,10 @@
   --color-chart-3: var(--chart-3);
   --color-chart-4: var(--chart-4);
   --color-chart-5: var(--chart-5);
-  --radius-sm: calc(var(--radius) - 4px);
-  --radius-md: calc(var(--radius) - 2px);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) + 4px);
+  --radius-sm: 0.375rem; /* 6px */
+  --radius-md: 0.5rem; /* 8px */
+  --radius-lg: 0.625rem; /* 10px */
+  --radius-xl: 0.75rem;
   --color-sidebar: var(--sidebar);
   --color-sidebar-foreground: var(--sidebar-foreground);
   --color-sidebar-primary: var(--sidebar-primary);
@@ -167,43 +167,75 @@
 }
 
 @layer utilities {
+  /* Nebulla type scale — tight; titles never steal the work area */
   .type-body-md {
-    font-size: 0.875rem;
-    line-height: 1.55;
+    font-size: 0.8125rem; /* 13 */
+    line-height: 1.45;
+    font-weight: 400;
+    color: var(--foreground);
+  }
+
+  .type-body-dense {
+    font-size: 0.75rem; /* 12 */
+    line-height: 1.4;
     font-weight: 400;
     color: var(--foreground);
   }
 
   .type-label-sm {
-    font-size: 0.6875rem;
+    font-size: 0.6875rem; /* 11 */
     line-height: 1.35;
     font-weight: 400;
-    letter-spacing: 0.03em;
+    letter-spacing: 0.02em;
     color: var(--muted-foreground);
   }
 
   .type-title-sm {
-    font-size: 1rem;
-    line-height: 1.4;
-    font-weight: 400;
-    letter-spacing: 0.01em;
+    font-size: 0.875rem; /* 14 */
+    line-height: 1.35;
+    font-weight: 500;
+    letter-spacing: 0;
     color: var(--foreground);
+  }
+
+  .type-section {
+    font-size: 0.875rem; /* 14 */
+    line-height: 1.35;
+    font-weight: 500;
+    letter-spacing: 0;
+    color: var(--foreground);
+  }
+
+  .type-page {
+    font-size: 1.125rem; /* 18 */
+    line-height: 1.3;
+    font-weight: 500;
+    letter-spacing: -0.01em;
+    color: var(--foreground);
+  }
+
+  .type-micro {
+    font-size: 0.625rem; /* 10 */
+    line-height: 1.3;
+    font-weight: 400;
+    letter-spacing: 0.04em;
+    color: var(--muted-foreground);
   }
 
   .kyn-logotype {
     font-size: 0.8125rem;
     line-height: 1.25;
-    font-weight: 400;
-    letter-spacing: 0.06rem;
+    font-weight: 500;
+    letter-spacing: 0.02em;
     text-transform: lowercase;
     color: var(--foreground);
   }
 
   .app-logotype {
-    font-size: 0.8125rem;
+    font-size: 0.8125rem; /* 13 */
     line-height: 1.25;
-    font-weight: 400;
-    letter-spacing: 0.04rem;
+    font-weight: 500;
+    letter-spacing: 0.02em;
     text-transform: none;
     color: var(--foreground);
   }
@@ -472,52 +504,87 @@
  * are separate documents and keep their own product colors.
  */
 .nebulla-ide-shell {
-  /* ========== MONOCHROME SHELL TOKENS ========== */
-  --ide-bg: #000000;
-  --ide-surface: #141414;
-  --ide-surface-raised: #1a1a1a;
-  --ide-surface-soft: #101010;
-  --ide-ink: #e8e8e8;
-  --ide-ink-muted: #d0d0d0;
-  --ide-ink-dim: #a8a8a8;
-  --ide-border: #2a2a2a;
-  --ide-border-strong: #3a3a3a;
+  /* ========== NEBULLA BRAND SYSTEM ========== */
+  /* One surface; structure from 1px lines; tight type; rare CTA fill */
+  --shell-bg: #141414;
+  --shell-border: rgba(255, 255, 255, 0.12);
+  --shell-border-strong: rgba(255, 255, 255, 0.18);
+  --ink: #e8e8e8;
+  --ink-muted: #a3a3a3;
+  --ink-dim: #737373;
+  --cta-fill: #e8e8e8;
+  --cta-ink: #141414;
 
-  /* Keep old token names so existing rules remap without scattered edits */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 10px;
+
+  --header-h: 48px;
+  --control-h: 32px;
+  --control-h-lg: 36px;
+  --icon-sm: 14px;
+  --icon-md: 16px;
+
+  --text-section: 0.875rem;
+  --text-body: 0.8125rem;
+  --text-dense: 0.75rem;
+  --text-label: 0.6875rem;
+
+  --ide-bg: var(--shell-bg);
+  --ide-surface: var(--shell-bg);
+  --ide-surface-raised: var(--shell-bg);
+  --ide-surface-soft: var(--shell-bg);
+  --ide-ink: var(--ink);
+  --ide-ink-muted: var(--ink-muted);
+  --ide-ink-dim: var(--ink-dim);
+  --ide-border: var(--shell-border);
+  --ide-border-strong: var(--shell-border-strong);
+
   --ide-bg-image: none;
   --ide-bg-overlay: 1;
-  --ide-glass-fill: var(--ide-surface);
-  --ide-glass-fill-strong: var(--ide-surface-raised);
-  --ide-glass-fill-soft: var(--ide-surface-soft);
-  --ide-glass-chrome: var(--ide-surface);
+  --ide-glass-fill: var(--shell-bg);
+  --ide-glass-fill-strong: var(--shell-bg);
+  --ide-glass-fill-soft: var(--shell-bg);
+  --ide-glass-chrome: var(--shell-bg);
   --ide-glass-blur: none;
   --ide-glass-blur-chrome: none;
 
-  --ide-btn-color: #d0d0d0;
-  --ide-btn-fill: 12%;
-  --ide-btn-border: 0%;
-  --ide-btn-fill-hover: 20%;
-  --ide-btn-border-hover: 0%;
+  --ide-btn-color: var(--ink-muted);
+  --ide-btn-fill: 0%;
+  --ide-btn-border: 100%;
+  --ide-btn-fill-hover: 0%;
+  --ide-btn-border-hover: 100%;
   --ide-btn-border-width: 1px;
-  --ide-btn-text: #e8e8e8;
-  --ide-cyan: var(--ide-ink-muted); /* neutralized accent alias */
+  --ide-btn-text: var(--ink);
+  --ide-cyan: var(--ink-muted);
 
-  /* ========== end monochrome tokens ========== */
+  /* ========== end brand tokens ========== */
 
   position: relative;
   color: var(--ide-ink);
   background-color: var(--ide-bg) !important;
   background-image: none !important;
+  font-family: "Inter", ui-sans-serif, system-ui, sans-serif;
+  font-size: var(--text-body);
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
 
   --primary: var(--ide-ink-muted);
-  --primary-container: var(--ide-surface-raised);
+  --primary-container: var(--shell-bg);
   --on-primary-container: var(--ide-ink);
   --primary-foreground: #000000;
-  --ring: var(--ide-border-strong);
+  --ring: var(--shell-border-strong);
   --title: var(--ide-ink);
   --subtitle: var(--ide-ink-muted);
   --misc: var(--ide-ink-dim);
-  --gradient-primary-cta: var(--ide-surface-raised);
+  --gradient-primary-cta: var(--shell-bg);
   --gradient-active-tab: none;
   --shadow-ambient-popover: none;
   --success: var(--ide-ink-dim);
@@ -535,43 +602,43 @@
   --secondary-foreground: var(--ide-ink);
   --accent-foreground: var(--ide-ink);
   --sidebar-foreground: var(--ide-ink);
-  --muted-foreground: var(--ide-ink-dim);
-  --on-surface-variant: var(--ide-ink-dim);
+  --muted-foreground: var(--ink-muted);
+  --on-surface-variant: var(--ink-dim);
 
-  --border: var(--ide-border);
-  --hairline: var(--ide-border);
-  --outline-variant: var(--ide-border);
-  --sidebar-border: var(--ide-border);
+  --border: var(--shell-border);
+  --hairline: var(--shell-border);
+  --outline-variant: var(--shell-border);
+  --sidebar-border: var(--shell-border);
 
-  --surface: var(--ide-surface);
-  --surface-container: var(--ide-surface);
-  --surface-bright: var(--ide-surface-soft);
-  --surface-container-highest: var(--ide-surface-raised);
-  --secondary-container: var(--ide-surface-soft);
-  --elevated: var(--ide-surface-raised);
-  --background: var(--ide-bg);
-  --card: var(--ide-surface);
-  --popover: var(--ide-surface-raised);
-  --secondary: var(--ide-surface-soft);
-  --muted: var(--ide-surface-soft);
-  --accent: var(--ide-surface-raised);
-  --input: var(--ide-surface-raised);
-  --sidebar: var(--ide-surface-soft);
-  --sidebar-accent: var(--ide-surface);
+  --surface: var(--shell-bg);
+  --surface-container: var(--shell-bg);
+  --surface-bright: var(--shell-bg);
+  --surface-container-highest: var(--shell-bg);
+  --secondary-container: var(--shell-bg);
+  --elevated: var(--shell-bg);
+  --background: var(--shell-bg);
+  --card: var(--shell-bg);
+  --popover: var(--shell-bg);
+  --secondary: var(--shell-bg);
+  --muted: var(--shell-bg);
+  --accent: var(--shell-bg);
+  --input: var(--shell-bg);
+  --sidebar: var(--shell-bg);
+  --sidebar-accent: var(--shell-bg);
   --sidebar-primary: var(--ide-ink-muted);
 
-  --color-background: var(--ide-bg);
-  --color-card: var(--ide-surface);
-  --color-muted: var(--ide-surface-soft);
-  --color-secondary: var(--ide-surface-soft);
-  --color-sidebar: var(--ide-surface-soft);
-  --color-surface: var(--ide-surface);
-  --color-surface-container: var(--ide-surface);
-  --color-surface-bright: var(--ide-surface-soft);
+  --color-background: var(--shell-bg);
+  --color-card: var(--shell-bg);
+  --color-muted: var(--shell-bg);
+  --color-secondary: var(--shell-bg);
+  --color-sidebar: var(--shell-bg);
+  --color-surface: var(--shell-bg);
+  --color-surface-container: var(--shell-bg);
+  --color-surface-bright: var(--shell-bg);
   --color-primary: var(--ide-ink-muted);
   --color-foreground: var(--ide-ink);
   --color-muted-foreground: var(--ide-ink-dim);
-  --color-border: var(--ide-border);
+  --color-border: var(--shell-border);
 }
 
 /* Solid black stack — wallpaper/veil layers inert */
@@ -612,22 +679,22 @@
   -webkit-backdrop-filter: none !important;
 }
 
-/* Flat panels — no frost, blur, or wallpaper slices */
+/* Flat panels — one fill; division via 1px low-contrast border only */
 .nebulla-ide-shell .ide-glass-chrome,
 .nebulla-ide-shell .ide-glass-card {
   position: relative !important;
   isolation: isolate;
-  background-color: var(--ide-surface) !important;
+  background-color: var(--shell-bg) !important;
   background-image: none !important;
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
-  border-color: var(--ide-border) !important;
+  border-color: var(--shell-border) !important;
   box-shadow: none !important;
 }
 
 .nebulla-ide-shell .ide-glass-card {
   overflow: hidden !important;
-  background-color: var(--ide-surface-raised) !important;
+  background-color: var(--shell-bg) !important;
 }
 
 .nebulla-ide-shell .ide-glass-chrome::before,
@@ -671,9 +738,9 @@
   position: relative;
   isolation: isolate;
   overflow: hidden;
-  background-color: var(--ide-surface-raised) !important;
+  background-color: var(--shell-bg) !important;
   color: var(--ide-ink) !important;
-  border: 1px solid var(--ide-border) !important;
+  border: 1px solid var(--shell-border) !important;
   box-shadow: none !important;
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
@@ -687,8 +754,22 @@
   --tw-ring-shadow: 0 0 #0000 !important;
 }
 
-.nebulla-ide-shell :is(.font-bold, .font-semibold, .font-medium, .font-headline) {
+/* Default soft; allow 500 for section titles / logotype */
+.nebulla-ide-shell :is(.font-bold, .font-semibold, .font-headline) {
   font-weight: 400 !important;
+}
+
+.nebulla-ide-shell :is(.font-medium, .type-section, .type-title-sm, .type-page, .app-logotype, .kyn-logotype) {
+  font-weight: 500 !important;
+}
+
+.nebulla-ide-shell h1,
+.nebulla-ide-shell h2,
+.nebulla-ide-shell h3 {
+  font-size: var(--text-section);
+  line-height: 1.35;
+  font-weight: 500;
+  letter-spacing: 0;
 }
 
 .nebulla-ide-shell :is(.text-foreground, .text-card-foreground, .text-popover-foreground) {
@@ -696,7 +777,12 @@
 }
 
 .nebulla-ide-shell .text-muted-foreground {
-  color: var(--ide-ink-dim) !important;
+  color: var(--ink-muted) !important;
+}
+
+.nebulla-ide-shell .placeholder\:text-muted-foreground\/70::placeholder,
+.nebulla-ide-shell .placeholder\:text-muted-foreground\/50::placeholder {
+  color: var(--ink-dim) !important;
 }
 
 .nebulla-ide-shell :is(
@@ -748,7 +834,7 @@
   [class*='from-purple'],
   [class*='to-indigo']
 ) {
-  background-color: var(--ide-surface-raised) !important;
+  background-color: var(--shell-bg) !important;
   background-image: none !important;
 }
 
@@ -769,49 +855,90 @@
   --tw-ring-shadow: 0 0 0 1px var(--ide-border-strong);
 }
 
+/* Primary: solid fill for affordance (only intentional second fill) */
 .nebulla-ide-shell .btn-cyan,
 .nebulla-ide-shell .ide-btn,
 .nebulla-ide-shell .btn-primary-cta {
-  background-color: var(--ide-surface-raised) !important;
-  color: var(--ide-btn-text) !important;
-  border: 1px solid var(--ide-border) !important;
+  background-color: var(--cta-fill) !important;
+  color: var(--cta-ink) !important;
+  border: 1px solid var(--cta-fill) !important;
   border-width: 1px !important;
-  font-weight: 400;
-  border-radius: 0.5rem;
+  font-size: var(--text-dense);
+  font-weight: 500;
+  line-height: 1.2;
+  min-height: var(--control-h);
+  padding: 0 14px;
+  border-radius: var(--radius-md);
   box-shadow: none !important;
 }
 
 .nebulla-ide-shell .btn-cyan:hover:not(:disabled),
 .nebulla-ide-shell .ide-btn:hover:not(:disabled),
 .nebulla-ide-shell .btn-primary-cta:hover:not(:disabled) {
-  background-color: #222222 !important;
-  border-color: var(--ide-border-strong) !important;
-  color: var(--ide-btn-text) !important;
+  background-color: #ffffff !important;
+  border-color: #ffffff !important;
+  color: var(--cta-ink) !important;
   box-shadow: none !important;
 }
 
 .nebulla-ide-shell .ide-btn--pressed,
 .nebulla-ide-shell .btn-cyan[aria-pressed='true'] {
-  background-color: #222222 !important;
-  border-color: var(--ide-border-strong) !important;
-  color: var(--ide-btn-text) !important;
+  background-color: #ffffff !important;
+  border-color: var(--shell-border-strong) !important;
+  color: var(--cta-ink) !important;
   box-shadow: none !important;
 }
 
+/* Secondary: border-only on shell fill */
 .nebulla-ide-shell .btn-secondary-surface {
-  background-color: var(--ide-surface) !important;
+  background-color: transparent !important;
   color: var(--ide-btn-text) !important;
-  border: 1px solid var(--ide-border) !important;
+  border: 1px solid var(--shell-border) !important;
+  font-size: var(--text-dense);
   font-weight: 400;
-  border-radius: 0.5rem;
+  line-height: 1.2;
+  min-height: var(--control-h);
+  border-radius: var(--radius-md);
   box-shadow: none !important;
 }
 
 .nebulla-ide-shell .btn-secondary-surface:hover:not(:disabled) {
-  background-color: var(--ide-surface-raised) !important;
-  border-color: var(--ide-border-strong) !important;
-  color: var(--ide-btn-text) !important;
+  background-color: transparent !important;
+  border-color: var(--shell-border-strong) !important;
+  color: var(--ide-ink) !important;
   box-shadow: none !important;
+}
+
+/* Icon controls — 32×32 */
+.nebulla-ide-shell .btn-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--control-h);
+  height: var(--control-h);
+  min-height: var(--control-h);
+  padding: 0;
+  border-radius: var(--radius-md);
+}
+
+.nebulla-ide-shell .ide-glass-card,
+.nebulla-ide-shell .ide-glass-chrome {
+  border-radius: 0;
+}
+
+.nebulla-ide-shell .ide-glass-card.rounded-lg,
+.nebulla-ide-shell .ide-glass-card.rounded-xl,
+.nebulla-ide-shell .ide-glass-card.rounded-2xl,
+.nebulla-ide-shell section.ide-glass-card,
+.nebulla-ide-shell div.ide-glass-card {
+  border-radius: var(--radius-md) !important;
+}
+
+.nebulla-ide-shell .ide-glass-input {
+  min-height: var(--control-h-lg);
+  padding: 8px 12px !important;
+  font-size: var(--text-body) !important;
+  border-radius: var(--radius-sm) !important;
 }
 
 .nebulla-ide-shell :is(
@@ -840,7 +967,7 @@
 }
 
 .nebulla-ide-shell .bg-primary {
-  background-color: var(--ide-surface-raised) !important;
+  background-color: var(--shell-bg) !important;
   color: var(--ide-ink) !important;
 }
 
@@ -857,7 +984,8 @@
 }
 
 .nebulla-ide-shell nav button[aria-current='true'] {
-  background-color: var(--ide-surface-raised) !important;
+  background-color: transparent !important;
+  border-color: var(--shell-border-strong) !important;
   color: var(--ide-ink) !important;
 }
 
@@ -875,8 +1003,27 @@
 }
 
 .nebulla-ide-shell .glass-panel {
-  background: var(--ide-surface) !important;
+  background: var(--shell-bg) !important;
   backdrop-filter: none !important;
+}
+
+/* Nested fills that used to stack grey-on-black → same shell field */
+.nebulla-ide-shell :is(
+  .bg-black,
+  .bg-card,
+  .bg-muted,
+  .bg-secondary,
+  .bg-accent,
+  .bg-popover,
+  .bg-\[\#0a0a0a\],
+  .bg-\[\#111111\],
+  .bg-\[\#1a1a1a\],
+  .bg-white\/\[0\.04\],
+  .bg-white\/5,
+  .bg-black\/40
+) {
+  background-color: var(--shell-bg) !important;
+  background-image: none !important;
 }
 
 @keyframes nebulla-throbber-pulse {
@@ -954,9 +1101,9 @@
   background-image: none !important;
 }
 
-/* Landing mock IDE chrome — flat mono surfaces */
+/* Landing mock IDE chrome — same shell field */
 .nebulla-ide-shell .nebula-landing-page [class*='bg-[#'] {
-  background-color: var(--ide-surface-raised) !important;
+  background-color: var(--shell-bg) !important;
 }
 
 /* Logo keeps original brand color (do not grayscale) */
