@@ -14,13 +14,17 @@ import { getGrokRequestHeaders } from './grokUserKey';
 import { withProjectBody, withProjectQuery } from './nebulaProjectApi';
 import { dispatchOpenCenterPanel } from '@/components/ide/IdeCenterTabsContext';
 import {
+  extractUiRouteKeys,
   looksLikeUiRelevantPaths,
   resolvePostCodeUiAction,
   type PostCodeUiAction,
 } from './postCodeUiRefresh';
 
-export { looksLikeUiRelevantPaths, resolvePostCodeUiAction };
+export { looksLikeUiRelevantPaths, resolvePostCodeUiAction, extractUiRouteKeys };
 export type { PostCodeUiAction };
+
+/** Ask UI Studio to show the live coded App Preview surface (not mockup). */
+export const NEBULA_STUDIO_SHOW_LIVE_APP = 'nebula-studio-show-live-app';
 
 export const NEBULA_UI_STUDIO_BETA_RUN = 'nebula-ui-studio-beta-run';
 export const NEBULA_UI_STUDIO_BETA_COMPLETE = 'nebula-ui-studio-beta-complete';
@@ -57,22 +61,43 @@ export type UiStudioBetaGenerateResult = {
 let inFlight: Promise<UiStudioBetaGenerateResult> | null = null;
 let lastAutoKey = '';
 
-/** One automatic post-code UI refresh per project session (unless force / user Generate). */
+/** Post-code Studio refresh has run at least once this session (per project). */
 const postCodeAutoDoneKeys = new Set<string>();
+/** UI route keys already covered by a post-code Studio refresh this session. */
+const postCodeCoveredRouteKeys = new Map<string, string[]>();
 
 export function hasPostCodeUiRefreshRun(projectKey: string): boolean {
   return postCodeAutoDoneKeys.has(projectKey || 'default');
 }
 
-export function markPostCodeUiRefreshDone(projectKey: string): void {
-  postCodeAutoDoneKeys.add(projectKey || 'default');
+export function getPostCodeCoveredRouteKeys(projectKey: string): string[] {
+  return postCodeCoveredRouteKeys.get(projectKey || 'default')?.slice() || [];
+}
+
+export function markPostCodeUiRefreshDone(projectKey: string, writtenPaths: string[] = []): void {
+  const key = projectKey || 'default';
+  postCodeAutoDoneKeys.add(key);
+  const incoming = extractUiRouteKeys(writtenPaths);
+  const prev = new Set(postCodeCoveredRouteKeys.get(key) || []);
+  for (const k of incoming) prev.add(k);
+  postCodeCoveredRouteKeys.set(key, [...prev].sort());
 }
 
 /** Test helper — clears one-shot post-code session state. */
 export function resetPostCodeUiRefreshForTests(): void {
   postCodeAutoDoneKeys.clear();
+  postCodeCoveredRouteKeys.clear();
   lastAutoKey = '';
   inFlight = null;
+}
+
+export function dispatchStudioShowLiveApp(): void {
+  try {
+    window.dispatchEvent(new CustomEvent(NEBULA_STUDIO_SHOW_LIVE_APP));
+    window.dispatchEvent(new CustomEvent('nebula-reload-app-preview'));
+  } catch {
+    /* ignore */
+  }
 }
 
 export function dispatchOpenUiStudioBeta(): void {
@@ -222,8 +247,9 @@ export async function applyUiStudioBetaToAppPreview(
 }
 
 /**
- * After successful apply of UI-relevant files: one post-code UI Gen cycle
- * (plan + file grounding). Max one automatic pass per project session.
+ * After successful apply of UI-relevant files: post-code UI Gen cycle
+ * (plan + file grounding). Re-runs when a later slice adds new UI routes;
+ * otherwise reloads live App Preview only (mockup must not reclaim entry).
  */
 export async function triggerUiStudioBetaAfterFilesApplied(options: {
   writtenPaths: string[];
@@ -237,6 +263,7 @@ export async function triggerUiStudioBetaAfterFilesApplied(options: {
   const action = resolvePostCodeUiAction({
     writtenPaths: paths,
     alreadyRanPostCode: hasPostCodeUiRefreshRun(projectKey),
+    previouslyCoveredKeys: getPostCodeCoveredRouteKeys(projectKey),
     force: options.force,
   });
 
@@ -250,14 +277,14 @@ export async function triggerUiStudioBetaAfterFilesApplied(options: {
 
   if (action === 'sync_preview_only') {
     // Do not reclaim live App Preview with mockup HTML after code exists.
-    // Bootstrap authority decides pre-code mockup vs post-code bridge / live entry.
     options.onProgress?.(
-      'Post-code UI refresh already ran — reloading Preview (mockup does not own live entry; open Generate UI for Studio only)',
+      'Coded app owns App Preview — reloading live Preview. UI Studio visual model is separate; switch Studio to “Live app” or Generate UI to refresh the model.',
       'info',
     );
     try {
-      window.dispatchEvent(new CustomEvent('nebula-reload-app-preview'));
+      dispatchStudioShowLiveApp();
       window.dispatchEvent(new CustomEvent('nebula-open-app-preview'));
+      dispatchOpenUiStudioBeta();
     } catch {
       /* ignore */
     }
@@ -269,7 +296,7 @@ export async function triggerUiStudioBetaAfterFilesApplied(options: {
     return inFlight;
   }
   lastAutoKey = key;
-  markPostCodeUiRefreshDone(projectKey);
+  markPostCodeUiRefreshDone(projectKey, paths);
 
   return runUiStudioBetaGeneration({
     projectName: options.projectName,

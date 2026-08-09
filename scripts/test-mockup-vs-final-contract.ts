@@ -14,7 +14,10 @@ import {
   MOCKUP_NON_AUTHORITATIVE_RULE,
 } from '../lib/codingMockupContract.ts';
 import { CODING_QUALITY_APPENDIX } from '../src/lib/grokChatArtifacts.ts';
-import { resolvePostCodeUiAction } from '../src/lib/postCodeUiRefresh.ts';
+import {
+  extractUiRouteKeys,
+  resolvePostCodeUiAction,
+} from '../src/lib/postCodeUiRefresh.ts';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.join(__dirname, '..');
@@ -51,10 +54,16 @@ assert.equal(
   'regen_post_code',
 );
 
+assert.deepEqual(extractUiRouteKeys(['app/page.tsx', 'app/layout.tsx']), [
+  'app',
+  'app/layout.tsx',
+]);
+
 assert.equal(
   resolvePostCodeUiAction({
     writtenPaths: ['app/page.tsx'],
     alreadyRanPostCode: true,
+    previouslyCoveredKeys: extractUiRouteKeys(['app/page.tsx']),
   }),
   'sync_preview_only',
 );
@@ -66,6 +75,30 @@ assert.equal(
     force: true,
   }),
   'regen_post_code',
+);
+
+// Primary slice after Foundation: new routes → another Studio refresh
+assert.equal(
+  resolvePostCodeUiAction({
+    writtenPaths: [
+      'app/globals.css',
+      'app/kid/page.tsx',
+      'app/kid/tutor/page.tsx',
+      'app/kid/rewards/page.tsx',
+    ],
+    alreadyRanPostCode: true,
+    previouslyCoveredKeys: ['app', 'app/layout'],
+  }),
+  'regen_post_code',
+);
+
+assert.equal(
+  resolvePostCodeUiAction({
+    writtenPaths: ['app/kid/page.tsx'],
+    alreadyRanPostCode: true,
+    previouslyCoveredKeys: ['app/kid'],
+  }),
+  'sync_preview_only',
 );
 
 const uiLogic = fs.readFileSync(

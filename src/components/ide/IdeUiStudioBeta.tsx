@@ -48,6 +48,7 @@ import {
 } from '../../lib/uiGenStatusLabels';
 import { clearUiMockupStageFlags } from '../../lib/uiMockupGate';
 import { isLoadableStudioModel } from '../../../lib/uiMockupArtifactHonesty';
+import { NEBULA_STUDIO_SHOW_LIVE_APP } from '../../lib/uiStudioBetaEngine';
 
 const V0_FETCH_TIMEOUT_MS = 360_000;
 
@@ -75,7 +76,13 @@ type StudioStatus = {
   eligibilityReason?: string;
 };
 
-type StudioPreviewSurface = 'v0-live' | 'visual-model';
+type StudioPreviewSurface = 'v0-live' | 'visual-model' | 'live-app';
+
+function buildStudioLivePreviewUrl(rev: number): string {
+  const base = withProjectQuery('/api/app-preview/bootstrap');
+  const sep = base.includes('?') ? '&' : '?';
+  return `${base}${sep}_rev=${rev}`;
+}
 
 export type VisualStyle = {
   backgroundColor: string;
@@ -333,6 +340,9 @@ export function IdeUiStudioBeta({
   const previewRef = useRef<HTMLDivElement>(null);
   const baselineRef = useRef<EditorModel | null>(null);
   const [previewSurface, setPreviewSurface] = useState<StudioPreviewSurface>('visual-model');
+  const [codedAppLive, setCodedAppLive] = useState(false);
+  const [livePreviewRev, setLivePreviewRev] = useState(0);
+  const [previewStatusLabel, setPreviewStatusLabel] = useState<string | null>(null);
   const [v0DemoUrl, setV0DemoUrl] = useState<string | null>(null);
   const [projectType, setProjectType] = useState<NebulaProjectType | null>(null);
   const [deviceMode, setDeviceMode] = useState<StudioDeviceMode>('desktop');
@@ -464,6 +474,61 @@ export function IdeUiStudioBeta({
     const demo = studioStatus?.v0DemoUrl?.trim();
     if (demo) setV0DemoUrl(demo);
   }, [studioStatus?.v0DemoUrl]);
+
+  const refreshCodedAppMeta = useCallback(async () => {
+    try {
+      const res = await fetch(withProjectQuery('/api/app-preview/meta'), {
+        credentials: 'include',
+        cache: 'no-store',
+      });
+      if (!res.ok) return;
+      const data = (await res.json()) as {
+        codedApp?: boolean;
+        previewMode?: string;
+        previewStatusLabel?: string;
+      };
+      const coded =
+        data.codedApp === true ||
+        data.previewMode === 'post_code_bridge' ||
+        data.previewMode === 'live_app_static';
+      setCodedAppLive(coded);
+      if (typeof data.previewStatusLabel === 'string' && data.previewStatusLabel.trim()) {
+        setPreviewStatusLabel(data.previewStatusLabel.trim());
+      }
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  useEffect(() => {
+    void refreshCodedAppMeta();
+    const onFiles = () => {
+      void refreshCodedAppMeta();
+      setLivePreviewRev((n) => n + 1);
+    };
+    const onReload = () => {
+      void refreshCodedAppMeta();
+      setLivePreviewRev((n) => n + 1);
+    };
+    const onShowLive = () => {
+      void refreshCodedAppMeta();
+      setLivePreviewRev((n) => n + 1);
+      setPreviewSurface('live-app');
+    };
+    window.addEventListener('nebula-files-applied', onFiles);
+    window.addEventListener('nebula-reload-app-preview', onReload);
+    window.addEventListener(NEBULA_STUDIO_SHOW_LIVE_APP, onShowLive);
+    return () => {
+      window.removeEventListener('nebula-files-applied', onFiles);
+      window.removeEventListener('nebula-reload-app-preview', onReload);
+      window.removeEventListener(NEBULA_STUDIO_SHOW_LIVE_APP, onShowLive);
+    };
+  }, [refreshCodedAppMeta]);
+
+  const livePreviewUrl = useMemo(
+    () => buildStudioLivePreviewUrl(livePreviewRev),
+    [livePreviewRev],
+  );
 
   const refreshV0KeyState = useCallback(async () => {
     try {
@@ -1865,6 +1930,17 @@ export function IdeUiStudioBeta({
                 {resourceMatchLabel}
               </span>
             ) : null}
+            {codedAppLive ? (
+              <span
+                className="hidden max-w-[200px] truncate rounded-full bg-sky-500/15 px-2 py-0.5 text-[10px] font-medium text-sky-100 sm:inline"
+                title={
+                  previewStatusLabel ||
+                  'Coded product UI owns App Preview. Studio visual model is editable mockup — use Live app toggle to see Spark.'
+                }
+              >
+                Live → App Preview
+              </span>
+            ) : null}
           </div>
 
           <div className="flex shrink-0 items-center gap-1">
@@ -1954,6 +2030,31 @@ export function IdeUiStudioBeta({
         {lastGate === 'weak' ? (
           <div className="border-t border-rose-500/30 bg-rose-500/10 px-2 py-1 text-[10px] leading-snug text-rose-100 sm:px-3">
             {t('uiStudio.gateWeakPreview')}
+          </div>
+        ) : null}
+        {codedAppLive ? (
+          <div className="flex flex-wrap items-center gap-2 border-t border-sky-500/25 bg-sky-500/10 px-2 py-1.5 text-[10px] leading-snug text-sky-50 sm:px-3">
+            <span className="min-w-0 flex-1">
+              Coded app owns <strong className="font-medium">App Preview</strong>. This canvas is the
+              editable visual model (not a second live product). Use{' '}
+              <strong className="font-medium">Live app</strong> here to see the same Preview, or{' '}
+              <strong className="font-medium">Generate UI</strong> to refresh the model.
+            </span>
+            <button
+              type="button"
+              className="shrink-0 rounded-md border border-sky-400/40 bg-sky-500/20 px-2 py-0.5 text-[10px] text-sky-50 hover:bg-sky-500/30"
+              onClick={() => {
+                setLivePreviewRev((n) => n + 1);
+                setPreviewSurface('live-app');
+                try {
+                  window.dispatchEvent(new CustomEvent('nebula-open-app-preview'));
+                } catch {
+                  /* ignore */
+                }
+              }}
+            >
+              Show Live app
+            </button>
           </div>
         ) : null}
         {figmaStatus &&
@@ -2068,20 +2169,8 @@ export function IdeUiStudioBeta({
                     <span className="hidden sm:inline">Mobile</span>
                   </button>
                 </div>
-                {v0DemoUrl ? (
+                {codedAppLive || v0DemoUrl ? (
                   <div className="flex rounded-md border border-border p-0.5">
-                    <button
-                      type="button"
-                      onClick={() => setPreviewSurface('v0-live')}
-                      className={cn(
-                        'rounded px-2 py-0.5 text-[10px] transition-colors',
-                        previewSurface === 'v0-live'
-                          ? 'bg-primary/20 text-primary'
-                          : 'text-muted-foreground hover:text-foreground',
-                      )}
-                    >
-                      v0 live
-                    </button>
                     <button
                       type="button"
                       onClick={() => setPreviewSurface('visual-model')}
@@ -2094,6 +2183,38 @@ export function IdeUiStudioBeta({
                     >
                       Visual model
                     </button>
+                    {codedAppLive ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setLivePreviewRev((n) => n + 1);
+                          setPreviewSurface('live-app');
+                        }}
+                        className={cn(
+                          'rounded px-2 py-0.5 text-[10px] transition-colors',
+                          previewSurface === 'live-app'
+                            ? 'bg-sky-500/25 text-sky-100'
+                            : 'text-muted-foreground hover:text-foreground',
+                        )}
+                        title={previewStatusLabel || 'Same bootstrap as App Preview tab'}
+                      >
+                        Live app
+                      </button>
+                    ) : null}
+                    {v0DemoUrl ? (
+                      <button
+                        type="button"
+                        onClick={() => setPreviewSurface('v0-live')}
+                        className={cn(
+                          'rounded px-2 py-0.5 text-[10px] transition-colors',
+                          previewSurface === 'v0-live'
+                            ? 'bg-primary/20 text-primary'
+                            : 'text-muted-foreground hover:text-foreground',
+                        )}
+                      >
+                        v0 live
+                      </button>
+                    ) : null}
                   </div>
                 ) : null}
                 {pageIds.length > 1 && previewSurface === 'visual-model' ? (
@@ -2119,6 +2240,20 @@ export function IdeUiStudioBeta({
                 <span className="truncate text-[10px] text-primary">
                   {selected.role} · {selected.type}
                 </span>
+              ) : previewSurface === 'live-app' ? (
+                <button
+                  type="button"
+                  className="truncate text-[10px] text-sky-200 hover:underline"
+                  onClick={() => {
+                    try {
+                      window.dispatchEvent(new CustomEvent('nebula-open-app-preview'));
+                    } catch {
+                      /* ignore */
+                    }
+                  }}
+                >
+                  Same as App Preview tab ↗
+                </button>
               ) : previewSurface === 'v0-live' && v0DemoUrl ? (
                 <a
                   href={v0DemoUrl}
@@ -2140,7 +2275,14 @@ export function IdeUiStudioBeta({
                     <span className="absolute left-1/2 top-1.5 h-3.5 w-20 -translate-x-1/2 rounded-full bg-black/80" />
                     <span className="sr-only">Mobile device frame</span>
                   </div>
-                  {previewSurface === 'v0-live' && v0DemoUrl ? (
+                  {previewSurface === 'live-app' ? (
+                    <iframe
+                      title="Live coded app preview (mobile)"
+                      src={livePreviewUrl}
+                      className="min-h-[640px] w-full border-0 bg-white"
+                      sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals"
+                    />
+                  ) : previewSurface === 'v0-live' && v0DemoUrl ? (
                     <iframe
                       title="v0 live preview (mobile)"
                       src={v0DemoUrl}
@@ -2170,14 +2312,23 @@ export function IdeUiStudioBeta({
                     <span className="h-2 w-2 rounded-full bg-amber-500/80" />
                     <span className="h-2 w-2 rounded-full bg-foreground/50" />
                     <span className="ml-2 truncate text-[10px] text-muted-foreground">
-                      {previewSurface === 'v0-live' && v0DemoUrl
-                        ? `${activePage} — v0 live preview`
-                        : `${activePage} — visual model`}
+                      {previewSurface === 'live-app'
+                        ? 'Live coded app — App Preview'
+                        : previewSurface === 'v0-live' && v0DemoUrl
+                          ? `${activePage} — v0 live preview`
+                          : `${activePage} — visual model`}
                       {projectType ? ` · ${projectType}` : ''}
                     </span>
                   </div>
                 </div>
-                {previewSurface === 'v0-live' && v0DemoUrl ? (
+                {previewSurface === 'live-app' ? (
+                  <iframe
+                    title="Live coded app preview"
+                    src={livePreviewUrl}
+                    className="min-h-[420px] w-full flex-1 border-0 bg-white"
+                    sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals"
+                  />
+                ) : previewSurface === 'v0-live' && v0DemoUrl ? (
                   <iframe
                     title="v0 live preview"
                     src={v0DemoUrl}

@@ -2092,7 +2092,7 @@ export function AIChat() {
               pushActivity('Coding pass finished — open UI Studio Beta to generate mockup', 'info');
             } else {
               pushActivity(
-                'Coding slice done — post-code UI refresh already ran (or synced) with apply',
+                'Coding slice done — live App Preview synced; UI Studio shows visual model (use Live app toggle or Generate UI)',
                 'success',
               );
             }
