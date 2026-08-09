@@ -142,13 +142,22 @@ async function afterFilesAppliedArtifacts(
   projectName?: string,
   onProgress?: GrokActivityProgressFn,
 ): Promise<void> {
-  await runPostCodingWorkspaceSync({
-    userNote,
-    projectName,
-    seedBasicUi: false,
-    openMindMap: true,
-    onProgress,
-  });
+  // Soft-fail + hard timeout inside runPostCodingWorkspaceSync — never throw to coding success.
+  try {
+    await runPostCodingWorkspaceSync({
+      userNote,
+      projectName,
+      seedBasicUi: false,
+      openMindMap: true,
+      onProgress,
+    });
+  } catch (e) {
+    console.warn('[nebulaGrokCodingPipeline] artifact sync soft-fail:', e);
+    onProgress?.(
+      'Artifact sync timed out/skipped — files already applied; continuing',
+      'warn',
+    );
+  }
 }
 
 export async function applyGeneratedFiles(
@@ -606,7 +615,13 @@ export async function runGoCodeAndApply(options: {
 
       lastCodeText = codeText;
       onProgress?.(`Received Grok Code output (${codeText.length.toLocaleString()} chars)`, 'info');
-      const apply = await applyGeneratedFiles(codeText, { userNote, projectName, onProgress });
+      // Skip per-pass artifact sync — one post-apply sync after the Go loop (avoids stacked hangs).
+      const apply = await applyGeneratedFiles(codeText, {
+        userNote,
+        projectName,
+        onProgress,
+        skipPostSync: true,
+      });
       totalWritten += apply.writtenCount;
       allWrittenPaths.push(...apply.writtenPaths);
 
@@ -669,6 +684,8 @@ export async function runGoCodeAndApply(options: {
 
     const ok = totalWritten > 0 && !partialPlanOnly;
     if (ok) {
+      // Single owner for post-apply artifact sync (soft-fail; never blocks coding success).
+      await afterFilesAppliedArtifacts(userNote, projectName, onProgress);
       await triggerUiStudioBetaAfterFilesApplied({
         writtenPaths: allWrittenPaths,
         projectName,
@@ -773,10 +790,7 @@ export async function handlePostGrokCodingTurn(options: {
       },
     ],
   });
-  if (go.ok) {
-    await afterFilesAppliedArtifacts(userNote, projectName, onProgress);
-    // UI Studio Beta already triggered inside runGoCodeAndApply after successful apply.
-  }
+  // Artifact sync + UI Studio Beta already run inside runGoCodeAndApply on success.
   return {
     ran: true,
     ok: go.ok,

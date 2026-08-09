@@ -70,5 +70,7 @@ assert.match(goPrompt, /filterUnsolicitedBaaSBlocks/);
 const syncSrc = fs.readFileSync(path.join(root, 'src/lib/ideArtifactSync.ts'), 'utf8');
 assert.match(syncSrc, /ARTIFACT_SYNC_TIMEOUT_MS/);
 assert.match(syncSrc, /Artifact sync timed out/);
+assert.match(syncSrc, /withHardTimeout/);
+assert.match(syncSrc, /Artifact sync timed out\/skipped/);
 
 console.log('\n✓ mvp stack + artifact sync contract passed\n');

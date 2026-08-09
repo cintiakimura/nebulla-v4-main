@@ -235,13 +235,21 @@ export function startGrokActivityWaitTicker(
 ): () => void {
   const started = Date.now();
   onTick(`${label}…`, 'wait');
-  const id = window.setInterval(() => {
+  const schedule =
+    typeof window !== 'undefined'
+      ? window.setInterval.bind(window)
+      : (setInterval as unknown as typeof window.setInterval);
+  const clear =
+    typeof window !== 'undefined'
+      ? window.clearInterval.bind(window)
+      : (clearInterval as unknown as typeof window.clearInterval);
+  const id = schedule(() => {
     const elapsed = formatGrokActivityElapsed(started);
     onTick(elapsed ? `${label} (${elapsed})` : label, 'wait', { currentOnly: true });
   }, intervalMs);
   return () => {
-    window.clearInterval(id);
-    // Clear hung wait line so Live Activity does not spin forever after mind map already synced.
-    onTick(`${label} — done`, 'info', { currentOnly: true });
+    clear(id);
+    // Do NOT emit `${label} — done` here: callers must post a terminal success/warn/error.
+    // Overwriting with kind=info while `sending` is true re-arms the chat spinner (false hang).
   };
 }

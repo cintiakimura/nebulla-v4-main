@@ -76,7 +76,7 @@ import {
   shouldAutoRunPrimarySliceAfterFoundation,
 } from '../../lib/fastPrototypeNextSlice';
 import { setGrokCodingActive } from '../../lib/nebulaGrokCodingGate';
-import { runMasterPlanUiPipeline, runPostCodingWorkspaceSync } from '../../lib/ideArtifactSync';
+import { runMasterPlanUiPipeline } from '../../lib/ideArtifactSync';
 import {
   applyUiStudioBetaToAppPreview,
   dispatchOpenUiStudioBeta,
@@ -2055,14 +2055,9 @@ export function AIChat() {
           if (coding.ok === false) {
             resetCodingActivity();
           } else {
-            const artifactSync = await runPostCodingWorkspaceSync({
-              userNote: text,
-              projectName,
-              seedBasicUi: false,
-              openMindMap: true,
-              onProgress: pushActivity,
-            });
-            if (mpSaved > 0 || (artifactSync.masterPlanTabs ?? 0) > 0) {
+            // Artifact sync already ran inside Go/apply (single owner). Do not start a second
+            // "Syncing project artifacts…" that can false-block the activity feed.
+            if (mpSaved > 0) {
               window.dispatchEvent(new CustomEvent('nebula-open-master-plan'));
             }
             if (showWorkActivity) {
@@ -2080,13 +2075,6 @@ export function AIChat() {
                 }),
               );
             }
-            // Mind map only — do not auto-run V0.
-            masterPlanPipeline = await runMasterPlanUiPipeline({
-              projectName,
-              autoV0: false,
-              quietV0Status: true,
-              onProgress: pushActivity,
-            });
             if (!uiMockupStarted) {
               dispatchOpenUiStudioBeta();
               pushActivity('Coding pass finished — open UI Studio Beta to generate mockup', 'info');
@@ -2130,14 +2118,8 @@ export function AIChat() {
                   },
                 ],
               });
+              // Primary Go owns its own soft-fail artifact sync — do not re-sync here.
               if (primaryGo.ok) {
-                await runPostCodingWorkspaceSync({
-                  userNote: 'SLICE: Primary',
-                  projectName,
-                  seedBasicUi: false,
-                  openMindMap: true,
-                  onProgress: pushActivity,
-                });
                 pushActivity(
                   primaryGo.statusMessage || 'Primary feature slice applied',
                   'success',
@@ -2562,7 +2544,7 @@ export function AIChat() {
       });
       setGrokActivity((prev) =>
         advanceGrokActivity(prev, 3, {
-          currentAction: go.ok ? 'Syncing Master Plan, mind map, explorer…' : go.statusMessage,
+          currentAction: go.statusMessage,
           ...(go.statusMessage
             ? { stepDetail: { index: 2, detail: go.statusMessage }, log: { message: go.statusMessage, kind: go.ok ? 'success' : 'error' } }
             : {}),
@@ -2573,27 +2555,14 @@ export function AIChat() {
         resetCodingActivity();
         return;
       }
-      await runPostCodingWorkspaceSync({
-        userNote,
-        projectName,
-        seedBasicUi: false,
-        openMindMap: true,
-        onProgress: pushActivity,
-      });
-      window.dispatchEvent(new CustomEvent('nebula-master-plan-updated'));
-      setGrokActivity((prev) =>
-        advanceGrokActivity(prev, 4, {
-          currentAction: 'Grok Code done — UI Studio Beta generation…',
-          log: { message: 'UI Studio Beta engine (Master Plan + applied files)', kind: 'info' },
-        }),
-      );
-      // Mind map sync only — V0 auto disabled; Beta already triggered from file apply.
-      await runMasterPlanUiPipeline({
-        projectName,
-        autoV0: false,
-        quietV0Status: true,
-        onProgress: pushActivity,
-      });
+      // Artifact sync + UI Studio Beta already ran inside runGoCodeAndApply (single owner).
+      // Do not start a second "Syncing project artifacts…" — that was the forever spinner after Slice complete.
+      try {
+        window.dispatchEvent(new CustomEvent('nebula-master-plan-updated'));
+        window.dispatchEvent(new CustomEvent('nebula-files-applied'));
+      } catch {
+        /* ignore */
+      }
       dispatchOpenUiStudioBeta();
       pushActivity('Coding pipeline finished — UI Studio Beta is the active generator', 'success');
       codingActivityRef.current = false;
@@ -2837,13 +2806,17 @@ export function AIChat() {
               <div className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center">
                 {(() => {
                   const isLatest = message.id === messages[messages.length - 1]?.id;
-                  // Only the latest wait row spins while work is still in flight (Phase 7.4).
+                  // Only wait rows spin. Terminal kinds (success/warn/error) never spin —
+                  // prevents false "Syncing project artifacts…" hang after apply already succeeded.
                   const waitSpinning =
                     message.statusKind === 'wait' &&
                     isLatest &&
                     (sending || grokActivity.tone === 'work');
                   const sendingSpin =
-                    sending && isLatest && message.statusKind !== 'wait';
+                    sending &&
+                    isLatest &&
+                    (message.statusKind === 'info' || !message.statusKind) &&
+                    /syncing|waiting|generating|applying|writing/i.test(message.content || '');
                   return waitSpinning || sendingSpin ? (
                     <Loader2 className="h-3 w-3 animate-spin text-muted-foreground/70" aria-hidden />
                   ) : (

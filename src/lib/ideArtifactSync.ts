@@ -20,6 +20,9 @@ export type IdeArtifactSyncResult = {
   previewIndexWritten?: boolean;
   basicUiWritten?: string[];
   uiStudioUnlocked?: boolean;
+  /** Soft-fail markers — never means coding apply failed. */
+  timedOut?: boolean;
+  softFailed?: boolean;
 };
 
 export type MasterPlanUiPipelineResult = {
@@ -61,9 +64,8 @@ export async function runMasterPlanUiPipeline(options?: {
         ? window.setTimeout(() => ac.abort(), 90_000)
         : null;
     try {
-      result = await fetchJson<MasterPlanUiPipelineResult>(
-        withProjectQuery('/api/ide/master-plan-ui-pipeline'),
-        {
+      result = await Promise.race([
+        fetchJson<MasterPlanUiPipelineResult>(withProjectQuery('/api/ide/master-plan-ui-pipeline'), {
           method: 'POST',
           headers: ideArtifactHeaders(),
           credentials: 'include',
@@ -71,12 +73,12 @@ export async function runMasterPlanUiPipeline(options?: {
           body: JSON.stringify(
             withProjectBody({
               projectName: options?.projectName?.trim() || undefined,
-              // Never auto-run V0 from Master Plan sync.
               autoV0: false,
             }),
           ),
-        },
-      );
+        }),
+        rejectAfterMs(90_000, 'Mind map sync timed out'),
+      ]);
     } finally {
       if (timeoutId != null) window.clearTimeout(timeoutId);
       stopWait();
@@ -91,7 +93,7 @@ export async function runMasterPlanUiPipeline(options?: {
     console.warn('[ideArtifactSync] master-plan-ui-pipeline:', e);
     const msg = e instanceof Error ? e.message : 'Mind map sync failed';
     onProgress?.(
-      msg.includes('fetch failed') || msg.includes('Failed to fetch')
+      msg.includes('fetch failed') || msg.includes('Failed to fetch') || /timed out|aborted/i.test(msg)
         ? 'Mind map sync timed out — retry from Master Plan'
         : 'Mind map sync request failed',
       'error',
@@ -189,8 +191,57 @@ export async function runMasterPlanUiPipelineWithV0(options?: {
   return { ...base, ...v0 };
 }
 
-/** Client timeout — never leave Live Activity on "Syncing project artifacts…" forever. */
-export const ARTIFACT_SYNC_TIMEOUT_MS = 45_000;
+/** Client hard timeout — AbortController alone is insufficient when fetch never settles. */
+export const ARTIFACT_SYNC_TIMEOUT_MS = 60_000;
+
+const ARTIFACT_SYNC_WAIT_LABEL = 'Syncing project artifacts (Master Plan, mind map)';
+
+/** Single-flight owner so duplicate post-apply callers cannot stack forever-running rows. */
+let artifactSyncInFlight: Promise<IdeArtifactSyncResult> | null = null;
+
+/** Test helper — clears in-flight mutex. */
+export function resetArtifactSyncInFlightForTests(): void {
+  artifactSyncInFlight = null;
+}
+
+export function rejectAfterMs(ms: number, message: string): Promise<never> {
+  return new Promise((_, reject) => {
+    const id =
+      typeof window !== 'undefined'
+        ? window.setTimeout(() => reject(new Error(message)), ms)
+        : setTimeout(() => reject(new Error(message)), ms);
+    // Attach for GC clarity in environments that support unref
+    void id;
+  });
+}
+
+export function isArtifactSyncTimeoutError(e: unknown): boolean {
+  if (typeof DOMException !== 'undefined' && e instanceof DOMException && e.name === 'AbortError') {
+    return true;
+  }
+  const msg = e instanceof Error ? e.message : String(e);
+  return /aborted|abort|timeout|timed out/i.test(msg);
+}
+
+/**
+ * Race a promise against a hard wall-clock timeout. Always settles.
+ * Pure helper — unit-tested without network.
+ */
+export async function withHardTimeout<T>(
+  work: Promise<T>,
+  ms: number,
+  timeoutMessage: string,
+): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(timeoutMessage)), ms);
+  });
+  try {
+    return await Promise.race([work, timeoutPromise]);
+  } finally {
+    if (timer != null) clearTimeout(timer);
+  }
+}
 
 /** After coding / file apply: Master Plan bootstrap + mind map (no V0 status noise). */
 export async function syncIdeProjectArtifacts(options?: {
@@ -198,18 +249,54 @@ export async function syncIdeProjectArtifacts(options?: {
   projectName?: string;
   seedBasicUi?: boolean;
   onProgress?: GrokActivityProgressFn;
+  /** Override timeout (tests). */
+  timeoutMs?: number;
+}): Promise<IdeArtifactSyncResult> {
+  if (artifactSyncInFlight) {
+    options?.onProgress?.(
+      'Artifact sync already running — waiting on the same job…',
+      'wait',
+      { currentOnly: true },
+    );
+    return artifactSyncInFlight;
+  }
+
+  const run = runSyncIdeProjectArtifactsOnce(options).finally(() => {
+    artifactSyncInFlight = null;
+  });
+  artifactSyncInFlight = run;
+  return run;
+}
+
+async function runSyncIdeProjectArtifactsOnce(options?: {
+  userNote?: string;
+  projectName?: string;
+  seedBasicUi?: boolean;
+  onProgress?: GrokActivityProgressFn;
+  timeoutMs?: number;
 }): Promise<IdeArtifactSyncResult> {
   const onProgress = options?.onProgress;
+  const timeoutMs = options?.timeoutMs ?? ARTIFACT_SYNC_TIMEOUT_MS;
   const ac = typeof AbortController !== 'undefined' ? new AbortController() : null;
-  const timeoutId =
+  const abortTimer =
     ac && typeof window !== 'undefined'
-      ? window.setTimeout(() => ac.abort(), ARTIFACT_SYNC_TIMEOUT_MS)
+      ? window.setTimeout(() => {
+          try {
+            ac.abort();
+          } catch {
+            /* ignore */
+          }
+        }, timeoutMs)
       : null;
+
+  // Use wait kind so the chat spinner is owned by this phase and cleared on terminal kinds.
+  const stopWait = startGrokActivityWaitTicker(ARTIFACT_SYNC_WAIT_LABEL, (msg, kind, opts) =>
+    onProgress?.(msg, kind, opts),
+  );
+
   try {
-    onProgress?.('Syncing project artifacts (Master Plan, mind map)…', 'info');
-    const sync = await fetchJson<IdeArtifactSyncResult>(
-      withProjectQuery('/api/ide/sync-project-artifacts'),
-      {
+    const sync = await withHardTimeout(
+      fetchJson<IdeArtifactSyncResult>(withProjectQuery('/api/ide/sync-project-artifacts'), {
         method: 'POST',
         headers: ideArtifactHeaders(),
         credentials: 'include',
@@ -221,36 +308,41 @@ export async function syncIdeProjectArtifacts(options?: {
             seedBasicUi: options?.seedBasicUi === true,
           }),
         ),
-      },
+      }),
+      timeoutMs,
+      'Artifact sync timed out',
     );
     if ((sync.masterPlanTabs ?? 0) > 0) {
-      onProgress?.(`Bootstrapped ${sync.masterPlanTabs} empty Master Plan tab(s) from workspace`, 'success');
+      onProgress?.(
+        `Bootstrapped ${sync.masterPlanTabs} empty Master Plan tab(s) from workspace`,
+        'success',
+      );
     }
     if ((sync.mindMapPageCount ?? 0) > 0) {
       onProgress?.(`Mind map: ${sync.mindMapPageCount} page(s)`, 'success');
     }
+    onProgress?.('Artifact sync done', 'success');
     return sync;
   } catch (e) {
     console.warn('[ideArtifactSync]', e);
-    const msg = e instanceof Error ? e.message : String(e);
-    const timedOut =
-      (typeof DOMException !== 'undefined' && e instanceof DOMException && e.name === 'AbortError') ||
-      /aborted|abort|timeout/i.test(msg);
+    const timedOut = isArtifactSyncTimeoutError(e);
     onProgress?.(
       timedOut
-        ? 'Artifact sync timed out — continuing (files already applied; open Explorer / say continue building)'
-        : 'Artifact sync failed — continuing (files already applied)',
+        ? 'Artifact sync timed out/skipped — files already applied; continuing'
+        : 'Artifact sync failed/skipped — files already applied; continuing',
       'warn',
     );
-    return {};
+    return { timedOut, softFailed: true };
   } finally {
-    if (timeoutId != null) window.clearTimeout(timeoutId);
+    stopWait();
+    if (abortTimer != null) window.clearTimeout(abortTimer);
   }
 }
 
 export async function syncMindMapForProject(
   projectName?: string,
   onProgress?: GrokActivityProgressFn,
+  timeoutMs: number = ARTIFACT_SYNC_TIMEOUT_MS,
 ): Promise<{
   ok: boolean;
   pageCount: number;
@@ -258,19 +350,23 @@ export async function syncMindMapForProject(
   const ac = typeof AbortController !== 'undefined' ? new AbortController() : null;
   const timeoutId =
     ac && typeof window !== 'undefined'
-      ? window.setTimeout(() => ac.abort(), ARTIFACT_SYNC_TIMEOUT_MS)
+      ? window.setTimeout(() => ac.abort(), timeoutMs)
       : null;
   try {
     onProgress?.('Syncing mind map from Master Plan §4…', 'info');
-    const data = await fetchJson<{ pages?: unknown[]; routeCount?: number }>(
-      withProjectQuery('/api/workspace/mind-map/sync-from-master-plan'),
-      {
-        method: 'POST',
-        headers: ideArtifactHeaders(),
-        credentials: 'include',
-        signal: ac?.signal,
-        body: JSON.stringify(withProjectBody({ projectName: projectName?.trim() || undefined })),
-      },
+    const data = await withHardTimeout(
+      fetchJson<{ pages?: unknown[]; routeCount?: number }>(
+        withProjectQuery('/api/workspace/mind-map/sync-from-master-plan'),
+        {
+          method: 'POST',
+          headers: ideArtifactHeaders(),
+          credentials: 'include',
+          signal: ac?.signal,
+          body: JSON.stringify(withProjectBody({ projectName: projectName?.trim() || undefined })),
+        },
+      ),
+      timeoutMs,
+      'Mind map sync timed out',
     );
     const pageCount = Array.isArray(data.pages) ? data.pages.length : 0;
     if (pageCount > 0) {
@@ -293,48 +389,75 @@ export async function runPostCodingWorkspaceSync(options?: {
   seedBasicUi?: boolean;
   openMindMap?: boolean;
   onProgress?: GrokActivityProgressFn;
+  timeoutMs?: number;
 }): Promise<IdeArtifactSyncResult> {
   const onProgress = options?.onProgress;
-  const sync = await syncIdeProjectArtifacts({
-    userNote: options?.userNote,
-    projectName: options?.projectName,
-    seedBasicUi: options?.seedBasicUi,
-    onProgress,
-  });
-
-  let pageCount = sync.mindMapPageCount ?? 0;
-  if (pageCount === 0) {
-    const mm = await syncMindMapForProject(options?.projectName, onProgress);
-    pageCount = mm.pageCount;
-    sync.mindMapSynced = mm.ok;
-    sync.mindMapPageCount = pageCount;
-  }
+  // Wall-clock cap for the whole post-apply sync chain (artifacts + optional mind-map retry).
+  const budgetMs = options?.timeoutMs ?? ARTIFACT_SYNC_TIMEOUT_MS;
+  const started = Date.now();
 
   try {
-    onProgress?.('Refreshing explorer, preview, and mind map views', 'info');
-    if ((sync.masterPlanTabs ?? 0) > 0) {
-      window.dispatchEvent(new CustomEvent('nebula-master-plan-updated'));
+    const sync = await syncIdeProjectArtifacts({
+      userNote: options?.userNote,
+      projectName: options?.projectName,
+      seedBasicUi: options?.seedBasicUi,
+      onProgress,
+      timeoutMs: budgetMs,
+    });
+
+    let pageCount = sync.mindMapPageCount ?? 0;
+    const remaining = budgetMs - (Date.now() - started);
+    if (pageCount === 0 && remaining > 2_000 && !sync.timedOut) {
+      const mm = await syncMindMapForProject(options?.projectName, onProgress, Math.min(remaining, 30_000));
+      pageCount = mm.pageCount;
+      sync.mindMapSynced = mm.ok;
+      sync.mindMapPageCount = pageCount;
     }
-    window.dispatchEvent(new CustomEvent('nebula-mind-map-updated'));
-    if (options?.openMindMap !== false && pageCount > 0) {
-      window.dispatchEvent(new CustomEvent('nebula-open-mind-map'));
-    }
-    window.dispatchEvent(new CustomEvent('nebula-files-applied'));
-    window.dispatchEvent(new CustomEvent('nebula-open-app-preview'));
-    // Always open Beta after coding — do not unlock/report old V0 studio.
-    window.dispatchEvent(new CustomEvent('nebula-open-ui-studio-beta'));
+
     try {
-      const { dispatchOpenUiStudioBeta } = await import('./uiStudioBetaEngine');
-      dispatchOpenUiStudioBeta();
+      onProgress?.('Refreshing explorer, preview, and mind map views', 'info');
+      if ((sync.masterPlanTabs ?? 0) > 0) {
+        window.dispatchEvent(new CustomEvent('nebula-master-plan-updated'));
+      }
+      window.dispatchEvent(new CustomEvent('nebula-mind-map-updated'));
+      if (options?.openMindMap !== false && pageCount > 0) {
+        window.dispatchEvent(new CustomEvent('nebula-open-mind-map'));
+      }
+      window.dispatchEvent(new CustomEvent('nebula-files-applied'));
+      window.dispatchEvent(new CustomEvent('nebula-open-app-preview'));
+      window.dispatchEvent(new CustomEvent('nebula-open-ui-studio-beta'));
+      try {
+        const { dispatchOpenUiStudioBeta } = await import('./uiStudioBetaEngine');
+        dispatchOpenUiStudioBeta();
+      } catch {
+        /* ignore */
+      }
+      onProgress?.(
+        sync.timedOut || sync.softFailed
+          ? 'Workspace sync skipped/soft — UI Studio Beta next'
+          : 'Workspace sync complete — UI Studio Beta next',
+        sync.timedOut || sync.softFailed ? 'warn' : 'success',
+      );
     } catch {
       /* ignore */
     }
-    onProgress?.('Workspace sync complete — UI Studio Beta next', 'success');
-  } catch {
-    /* ignore */
-  }
 
-  return sync;
+    return sync;
+  } catch (e) {
+    // Must never throw out of post-apply sync — files already applied.
+    console.warn('[ideArtifactSync] post-coding sync:', e);
+    onProgress?.(
+      'Artifact sync timed out/skipped — files already applied; continuing',
+      'warn',
+    );
+    try {
+      window.dispatchEvent(new CustomEvent('nebula-files-applied'));
+      window.dispatchEvent(new CustomEvent('nebula-open-app-preview'));
+    } catch {
+      /* ignore */
+    }
+    return { timedOut: true, softFailed: true };
+  }
 }
 
 export async function seedBasicUiFallback(projectName?: string): Promise<string[]> {
