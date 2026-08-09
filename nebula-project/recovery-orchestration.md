@@ -250,6 +250,7 @@ Work **one step per Agent turn / PR** after constitution install. Fix the **earl
 | 2026-08-09 | Preview authority: coded app UI detected → bootstrap does not serve UI Gen mockup as live product; mockup only at public/nebula-ui-gen-preview.html post-code | App Preview stuck on static mockup after Grok wrote real app/src files |
 | 2026-08-09 | Drop X-Nebulla-Preview-Status (em-dash crashed Node setHeader); Fast Prototype auto-Primary also after Auth/shell labels | Preview black-screen Invalid character in header; Go stopped at Auth-only |
 | 2026-08-09 | Phase E: promoted `project-workflow.proposed.md` → live `project-workflow.md` (Steps 1–14 north star). UI Gen v2 primary; security defer-to-end (Step 13); research direct→analogues→baseline. `project-execution-rules.md` not modified this turn. | Thin live workflow was pointer-only; competing spines with inference-first / execution-rules |
+| 2026-08-09 | Phase H: promoted `execution-rules.proposed.md` → live `project-execution-rules.md` (depth only). Workflow remains conductor. Auto-V0 not spine; security defer-to-end retained. No code this turn. | Execution-rules had competed as second spine / V0-era & mid-run security hard bars |
 
 ---
 

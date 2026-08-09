@@ -37,6 +37,7 @@ import {
 } from "./lib/appPreviewAuthz";
 import { createApiRateLimitGate } from "./lib/rateLimit";
 import { getOpsReadiness, logOpsReadinessAtBoot } from "./lib/opsReadiness";
+import { registerFigmaIngestAdminRoutes } from "./lib/figmaIngestAdminRoutes";
 import {
   isLegacyV0ApiFrozen,
   isPencilApiFrozen,
@@ -431,6 +432,9 @@ async function startServer() {
   app.get("/api/ops/readiness", (_req, res) => {
     res.json({ ok: true, ...getOpsReadiness() });
   });
+
+  // Side job only — does not block Generate / workflow / coding
+  registerFigmaIngestAdminRoutes(app, process.cwd());
 
   app.get("/api/storage/status", async (_req, res) => {
     const missing = getMissingR2EnvVars();

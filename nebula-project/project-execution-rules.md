@@ -1,41 +1,147 @@
-**Project Execution Rules**
+# Project Execution Rules
 
-**Single source of truth** for Grok and the Nebula Product. Timeline pointer: **`project-workflow.md`**. Studio paths: **`nebula-ui-studio.md`**. Guardian methods: **`nebulla-project/`**. Methodology changelog: **`CHANGELOG-methodology.md`**.
+**Conductor is `project-workflow.md` (north-star order).** This file is **depth only** — quality bars, MUST / MUST NOT, and contracts for steps named there.
 
-**Inference-first (default):** clear goal → categorize → research → draft → build — **`inference-first-rules.md`**. Guided / full interview is an **opt-in exception** only (brainstorm / “interview me” / Full architecture interview).
+- On sequence / “what next” conflicts → **workflow wins**
+- Guardians under `nebulla-project/` = rooms opened when a step or this file names them
+- Fast Prototype detail: `inference-first-rules.md` (compatible with workflow intake: gap-fill default; interview opt-in)
+- On conflict with legacy V0-era timelines → **workflow + UI Gen v2 win**
+- This file **MUST NOT** define a second competing “mandatory sequence A–G / 6-step UI” that reorders the workflow
 
-**Enforcement tags** on MUST rows: `doc-only` | `prompt` | `soft-gate` | `hard-gate`  
-(`soft-gate` / `hard-gate` = product validators behind `MASTER_PLAN_STRICT=off|warn|strict` — Phase C; until then treat as `prompt` + law.)
-
----
-
-## Core philosophy
-
-Nebulla is an **architecture-first** AI development partner: rigorous software architecture + modern AI.
-
-- Quality and clarity over speed. Never vague or shallow on Master Plan, pages, security, or UI.
-- **BYOK** — users bring AI keys; Nebulla does not sell credits.
-- **UI Gen Beta (v2)** is the **primary** UI path. **V0 is optional legacy** when `V0_API_KEY` is present and the path is opted in.
-- **Grok** — planning, reasoning, coding orchestration. **Quality Agent** — manual Run and Test only.
-- Nebula Project (this folder) ≠ Nebula Product (IDE at repo root).
-
-### Mode sequence (strict — one mode per turn)
-
-1. **Chat / Inference-first (default)** — clear goal → follow `inference-first-rules.md` (no long intake). Guided Discovery Q&A only when user opts into interview. [`prompt`]
-2. **Architecture (Master Plan)** — emit plan only inside `<START_MASTERPLAN>…</END_MASTERPLAN>`. [`prompt`]
-3. **Coding** — after draft plan / inference-first Step 8, or explicit tiny fix; one slice per Go. [`prompt` → `soft-gate`]
-4. **Debugging** — NDM: Verify → Analyze → Trace → Fix → Validate. [`prompt`]
-5. **UI Generation** — UI brief + §5 tokens → **UI Gen v2** (primary); V0 only if optional path applies. [`prompt`]
-
-**Path gate:** Clear goals use inference-first by default. Guided interview is opt-in. File open / mode switch must **not** wipe plan memory. [`prompt` → `hard-gate` when `MASTER_PLAN_STRICT=strict`]
-
-Core tags **`<START_MASTERPLAN>`**, **`START_CODING`**, and **`file:`** blocks MUST remain intact. [`prompt`]
+Policy catalog (lab reference): `recovery-lab/proposed/policies-and-steps.md`.
 
 ---
 
-## Master Plan contract (machine-oriented)
+## 0. Authority relationship
 
-### Exact headers (Grok MUST)
+- **`project-workflow.md`** = north-star **order**
+- **This file** = depth / quality law for steps named in the workflow
+- **`nebulla-project/`** = method rooms (NDM, incremental, UI Gen v2, checklist, communication)
+- Tags [`prompt`] / soft-gate / hard-gate remain product-enforcement hints where noted; MVP critical path follows workflow security deferral
+
+---
+
+## 1. Global MUST
+
+1. **Action precision** — Hard verbs only; ban vague-only “consider / try / when possible.”
+2. **Branching** — Workflow owns Step ids and IF/ELSE next-step; this file states quality bars and what PARTIAL means.
+3. **No invent** — Never invent competitors, studies, statistics, vendors, APIs, or packages.
+4. **No mid-run security block** — Security/industry perfection MUST NOT stop Steps 1–12. MVP defaults + Deferred list mid-run. Offer hardenings at workflow **Step 13**; add only if user accepts.
+5. **UI Gen v2 primary** — Auto-V0 is **not** the spine. Optional legacy only if key + opt-in. Missing V0 key = success, not failure.
+6. **Mockup temporary** — Plan + architecture + features win over mockup pixels. Label pre-code mockup ≠ live app.
+7. **One agent / one pipeline** — After a usable goal, chat vs short prompt does not change Steps 1–14 order.
+8. **Artifact honesty** — Status labels: `OK` | `PARTIAL` | `MISSING` | `TIMEOUT` | `SKIPPED_OPTIONAL`. Never claim Ready when artifact is MISSING.
+9. **Core tags intact** — `<START_MASTERPLAN>`, `START_CODING`, and `file:` blocks MUST remain the implementation channel. [`prompt`]
+
+---
+
+## 2. Depth by workflow step
+
+Do not restate the full action list from workflow — quality bars only.
+
+### Step 1 — Accept / normalize goal
+- **Quality bar / MUST:** Primary job stated in plain language; users/constraints captured if present.
+- **MUST NOT:** Long interview ladder; invent features not implied by goal.
+- **Artifacts:** Goal section in `nebula-project/fast-prototype-memory.md` (or equivalent).
+- **Rooms:** `inference-first-rules.md` (3.1); `recovery-lab/proposed/policies-and-steps.md` §2.
+- **Fallback quality:** PARTIAL = thin goal but still a primary job; MISSING = unusable → one blocking question.
+
+### Step 2 — Classify type / industry
+- **Quality bar / MUST:** Category + platform + risk + confidence; label `assumption:` / `inferred:` when not user-stated.
+- **MUST NOT:** Block on low confidence; invent niche taxonomy.
+- **Artifacts:** `category-classification.md` or plan notes.
+- **Rooms:** `inference-first-rules.md` Step 3.2.
+- **Fallback quality:** PARTIAL with labeled assumptions is OK.
+
+### Step 3 — Research (with fallbacks)
+- **Quality bar / MUST:** Follow ladder: direct competitors → method/logic analogues (`analogue:`) → labeled category baseline (`baseline:`). Evidence line or exact `No supporting studies found for this feature.` Never invent names/stats. Research MUST shape §2/§3/§4/§5 and ui-brief.
+- **MUST NOT:** Halt spine for thin research; invent 8–12 fake competitors.
+- **Artifacts:** `competitor-research.md` and/or Master Plan §2 research block.
+- **Rooms:** policies-and-steps §3; inference-first research steps.
+- **Fallback quality:** PARTIAL/TIMEOUT + baseline is OK to continue.
+
+### Step 4 — Gap-fill assumptions
+- **Quality bar / MUST:** Labeled assumptions for roles, MVP pages, stack default, nav, MVP auth (mock/local OK). Start **Deferred** security bullets (not implement). No forced Supabase/Firebase unless plan already names vendor.
+- **MUST NOT:** Non-blocking brand interrogation; mid-run security theater that blocks Steps 5–12.
+- **Artifacts:** Assumptions + Deferred list in memory.
+- **Rooms:** policies-and-steps §2 + §4.
+- **Fallback quality:** PARTIAL defaults OK.
+
+### Step 5 — Write Master Plan §§1–5
+- **Quality bar / MUST:** Exact five headers; §4 page fields (name, route, purpose, primary_actions, data_entities, authz, empty_state, error_state, nav_links); §5 ≤15–25 lines tokens (mood, hex palette, typography, density, radius, motion, components, nav). Persist `master-plan.json`. Depth implementable from §4 alone.
+- **MUST NOT:** Merge §§ into Goal; code or §4 dump in §5; require interview before write when goal usable.
+- **Artifacts:** `master-plan.json`.
+- **Rooms:** This file §3 Master Plan contract.
+- **Fallback quality:** PARTIAL + local fillMissing OK; **do not** block on incomplete security baseline (record Deferred instead).
+
+### Step 6 — Mind map from §4 only
+- **Quality bar / MUST:** Mind Map routes ⊆ §4; sync when §4 saved; use `` `/route` `` for parsing. MUST NOT wait for §5 / UI / V0.
+- **MUST NOT:** Invent pages; use UI/mockup as primary source.
+- **Artifacts:** Mind-map JSON / IDE mind map.
+- **Rooms:** Mind-map fidelity when product enforces (`lib/mindMapFidelity.ts`).
+- **Fallback quality:** PARTIAL after one retry still continues.
+
+### Step 7 — Write UI brief
+- **Quality bar / MUST:** `nebula-ui-studio/ui-brief.md` includes every §4 page (required fields) + §5 tokens + authz UI notes. Primary UI input. Not truncated to 8 routes as sole truth.
+- **MUST NOT:** Put full brief only in §5 or only in chat.
+- **Artifacts:** `nebula-ui-studio/ui-brief.md`.
+- **Rooms:** `nebula-ui-studio.md` paths if needed.
+- **Fallback quality:** PARTIAL stub → regenerate once; still Go to Step 8.
+
+### Step 8 — UI Gen v2 mockup
+- **Quality bar / MUST:** Run UI Gen v2 primary. Label **Pre-code mockup**. Honest gate: weak → PARTIAL, no false strong Ready. Auto-V0 not required.
+- **MUST NOT:** Treat mockup as coding spec; require V0; pretend Figma live if offline/seed.
+- **Artifacts:** Studio model / meta (+ optional mockup HTML).
+- **Rooms:** `nebulla-project/ui-generation-logic-v2.md` (do not paste).
+- **Fallback quality:** PARTIAL/weak mockup MUST NOT block Foundation (Step 9).
+
+### Step 9 — Foundation coding slice
+- **Quality bar / MUST:** One coherent Foundation slice (shell/routes/layout). `file:` apply to disk. Mentally apply `code-review-checklist.md`. Plan wins over mockup. Append Deferred security only.
+- **MUST NOT:** Dump all §4 routes; invent BaaS; paste app code in chat; implement full security stack mid-run.
+- **Artifacts:** Foundation files under `app/` / `src/` / equiv.
+- **Rooms:** `nebulla-project/incremental-development.md`; `code-review-checklist.md`.
+- **Fallback quality:** PARTIAL/TIMEOUT → report; retry Foundation before Primary.
+
+### Step 10 — Validate Foundation
+- **Quality bar / MUST:** NDM happy path for shell/routes; Preview honesty (mockup vs coded).
+- **MUST NOT:** Skip to features with broken shell; claim live app if Preview is mockup/bridge only.
+- **Artifacts:** Validation note / App Status.
+- **Rooms:** `debugging-method.md`; `app-status-runtime.md` when present.
+- **Fallback quality:** One smallest fix then continue if shell exists; else Step 9.
+
+### Step 11 — Primary feature slice + validate
+- **Quality bar / MUST:** Exactly one Primary slice for core user job; apply; validate happy path. Do not stop forever at Auth-only.
+- **MUST NOT:** Secondary/Polish dump in same Go; clone mockup as sole UI.
+- **Artifacts:** Primary product files.
+- **Rooms:** `incremental-development.md` + NDM.
+- **Fallback quality:** PARTIAL with listed gaps OK to present (Step 12).
+
+### Step 12 — Present draft
+- **Quality bar / MUST:** Honest summary: category, assumptions, pages, mockup vs code. Invite corrections. Beginner-friendly chat (`user-communication-rules.md`).
+- **MUST NOT:** Restart full spine; overclaim interactive live app.
+- **Artifacts:** Chat summary.
+- **Rooms:** `user-communication-rules.md`.
+- **Fallback quality:** PARTIAL summary still proceeds to Step 13.
+
+### Step 13 — End-of-run deferred offers
+- **Quality bar / MUST:** Offer security/industry hardenings from Deferred list in plain language. Accept → later slice / amend §2. Decline/ignore → stop offers this run.
+- **MUST NOT:** Block earlier steps waiting for accept; silently add cloud vendors; treat offer as mid-run gate.
+- **Artifacts:** Chat offer (+ optional later task).
+- **Rooms:** policies-and-steps §4; security baseline content may be offered here (not forced earlier).
+- **Fallback quality:** SKIPPED_OPTIONAL if Deferred empty.
+
+### Step 14 — Refine changed parts only
+- **Quality bar / MUST:** Update only affected plan/slices/UI; preserve the rest.
+- **MUST NOT:** Full regenerate unless user asks.
+- **Artifacts:** Revised plan/files.
+- **Rooms:** Jump to affected Step depth.
+- **Fallback quality:** PARTIAL → report → idle.
+
+---
+
+## 3. Master Plan contract (depth)
+
+### Exact headers (MUST)
 
 ```
 ### 1. Goal of the app
@@ -45,284 +151,96 @@ Core tags **`<START_MASTERPLAN>`**, **`START_CODING`**, and **`file:`** blocks M
 ### 5. UI/UX design
 ```
 
-JSON keys in `master-plan.json` MUST match `lib/masterPlanSections.ts` (canonical: `"2. Tech and Research"`). Legacy `"2. Tech Research"` is accepted by the product normalizer. [`prompt`]
+JSON keys MUST match `lib/masterPlanSections.ts` (canonical `"2. Tech and Research"`). Legacy `"2. Tech Research"` accepted by normalizer.
 
-### Section contract table
+### § expectations
 
-| § | Minimum content | Auto-injected defaults | Severity when strict | Downstream |
-|---|-----------------|------------------------|----------------------|------------|
-| **1 Goal** | Purpose, primary users, in/out of scope | — | `block` if empty/placeholder | All |
-| **2 Tech and Research** | Project type; Research Pillars (below); recommended stack | **Security baseline** (below) even if user never asked | `block` if pillars or security baseline missing when app has auth/data | SKILL, stack, security slices |
-| **3 Features and KPIs** | MVP features as verbs; **testable** KPIs | Security-related KPI when auth/data (e.g. zero cross-tenant leaks in access tests) | `warn` if KPIs are slogans only; `block` if no features | Go slice order |
-| **4 Pages and navigation** | Every page with **page fields** (below); real `/routes` | Public vs authenticated defaults; deny-by-default for private data pages | `block` if no real route or missing required page fields | **Mind Map**, **UI brief**, Go |
-| **5 UI/UX design** | Concise visual/token summary **≤ 15–25 lines**: mood, palette, typography, density, radius, motion, component style, nav pattern | Derive from §2 UI patterns if user gives none | `warn` if vague-only; `block` if empty | Tokens for UI Gen v2; humans |
+| § | MUST | MUST NOT |
+|---|------|----------|
+| 1 | Purpose, primary users, in/out of scope | Dump of §§2–5 |
+| 2 | Project type; research (direct/analogue/baseline); recommended stack; Deferred security notes mid-run | Invented competitors/stats; forced vendor |
+| 3 | MVP features as verbs; ≥1 testable KPI | Slogan-only KPIs as sole content |
+| 4 | Every page with page fields + real `/routes` | Page names only with no routes/fields |
+| 5 | ≤15–25 lines: mood, palette, typography, density, radius, motion, components, nav | Code; long prose; §4 copy; full ui-brief |
 
-**Grok MUST NOT** merge §2–§5 into §1. **Grok MUST NOT** omit headers. **Grok MUST NOT** put page specs or code in §5. [`prompt`]
+### §4 page fields (per page)
 
-### §4 page fields (required per page) [`prompt` → `soft-gate`]
+`name`, `route`, `purpose`, `primary_actions`, `data_entities`, `authz`, `empty_state`, `error_state`, `nav_links`.
 
-For **every** page, Grok MUST include:
+### Mind map
 
-| Field | Meaning |
-|-------|---------|
-| `name` | Human page name |
-| `route` | Path e.g. `/app/projects/:id` |
-| `purpose` | Why the page exists |
-| `primary_actions` | Important buttons/actions |
-| `data_entities` | Key data shown or collected |
-| `authz` | Who can view/edit (public, member, owner, role…) |
-| `empty_state` | What user sees with no data |
-| `error_state` | Forbidden / not found / failure messaging intent |
-| `nav_links` | Where user can go next / back |
+- From **§4 only** (workflow Step 6 owns order; this reinforces quality).
+- MUST NOT invent pages; MUST NOT wait for UI/V0.
 
-Depth MUST be implementable by a developer from §4 alone. [`prompt`]
+### Security baseline (timing)
 
-### Security baseline (auto-inject — even for naïve users) [`prompt` → `soft-gate`]
+- Mid-run: MVP/auth mock OK; write **Deferred** lines; do **not** hard-block Steps 5–12 for missing RLS/PII polish.
+- Full baseline (auth model, tenant/RLS, roles, secrets, PII, deny-by-default) offered at **Step 13**; merge into §2 only if user accepts.
+- If product still auto-drafts baseline into §2 as assumptions, treat as **draft/Deferred**, not a Go blocker for MVP.
 
-When the app has **accounts, private data, uploads, or multi-user access**, §2 (and relevant §4 `authz`) MUST include:
+### Tags
 
-1. **Auth model** — how users sign in; which routes are public.
-2. **Tenant / RLS** — every private row scoped (e.g. `workspace_id`); RLS or equivalent filters; no cross-tenant reads.
-3. **Roles** — at least a minimal role model (e.g. owner / member) or explicit “single-user only”.
-4. **Secrets** — API keys and tokens only in server env; never in client bundles or Master Plan prose as real secrets.
-5. **PII** — what personal data is stored; minimize; no logging of secrets/tokens.
-6. **Deny by default** — private data inaccessible unless a rule grants access.
-
-If the user never mentioned security, Grok **MUST still inject** this baseline into the plan (do not wait to be asked). [`prompt`]
-
-### What “Master Plan complete” means [`soft-gate` / `hard-gate`]
-
-Complete = all of:
-
-- [ ] All five sections present and non-placeholder  
-- [ ] §2 includes Research Pillars + security baseline when auth/data applies  
-- [ ] §3 has MVP features + at least one testable KPI  
-- [ ] §4 has ≥1 real route and each listed page includes the required page fields  
-- [ ] §5 includes palette + typography + density (within 15–25 lines)  
-- [ ] `nebula-ui-studio/ui-brief.md` written from §4 + §5 (see UI sequence)
-
-**Legacy thin plans** (page names only, no security, vague §5): classify as `legacy`.  
-- `MASTER_PLAN_STRICT=off` — no gate.  
-- `warn` — allow Go with gaps listed.  
-- `strict` — block Go / treat as incomplete for **new** projects; nudge Discovery.  
-
-(Product wiring = Phase C. Until then Grok still **MUST** aim for complete plans.) [`doc-only` until Phase C]
-
-### Infer vs ask (Discovery)
-
-| MUST ask (when unknown) | MAY infer (document the assumption in the plan) |
-|-------------------------|--------------------------------------------------|
-| Core goal / one primary job | Reasonable secondary pages for the project type |
-| Project type (exact question below) | Default stack (React + Tailwind + shadcn) unless user specified |
-| Whether multi-user / client-facing data exists (if unclear) | Security baseline defaults for that shape |
-| Brand/logo constraints if user cares | Palette/typography from §2 patterns |
-
-**Project type — exact wording (alone):**
-
-```
-What type of project are you building?
-- Web App
-- Mobile App
-- Landing Page
-- Other (please specify)
-```
-
-### Discovery order [`prompt`]
-
-1. Main goal (one core feature)  
-2. Project type (exact question)  
-3. Remaining necessary info (one question at a time)  
-4. Research Pillars → §2 (influence §3/§4/§5 + UI brief)  
-5. Detailed Architecture / Pages / UI tokens  
-
-### Mandatory Research Pillars (before complete §§2–5 / UI) [`prompt`]
-
-1. **Competitors** — 8–12 real products (never invent).  
-2. **Most used features** — extract, rank.  
-3. **Evidence** — studies/stats; else exact: `No supporting studies found for this feature.`  
-4. **Best UI/UX patterns** — nav, density, components for the target user.  
-
-Pillars MUST visibly shape §2, §3, §4, §5, and **`ui-brief.md`**. [`prompt`]
+`<START_MASTERPLAN>`, `START_CODING`, `file:` MUST remain intact.
 
 ---
 
-## Post–Master Plan workflow (Grok + product)
+## 4. Coding / debug depth
 
-| Order | What | Who | MUST | Tag |
-|-------|------|-----|------|-----|
-| A | Five-section Master Plan saved | Grok | Contract above; §5 ≤ 15–25 lines | `prompt` |
-| B | Mind Map synced | Product | **Only** from §4 — do **not** wait for §5 / UI / V0 | `prompt` → `soft-gate` |
-| C | **`nebula-ui-studio/ui-brief.md`** written | Grok | Full page contracts from §4 + tokens from §5 (see Rule UI-1) | `prompt` |
-| D | **UI Gen v2 (Beta)** — primary | Product / Grok trigger | Uses UI brief + §5 tokens + Figma/seeds per `nebulla-project/ui-generation-logic-v2.md` | `prompt` |
-| E | **V0 path (optional legacy)** | Grok → product | Only if `V0_API_KEY` set and path opted in: write `v0-prompt.md` (800–1200 chars distill of UI brief), trigger V0, save `v0-original/<timestamp>/` | `prompt` |
-| F | UI Studio open | User | Loads §5 + **ui-brief** (+ v0 UI if legacy path ran) | `prompt` |
-| G | Apply Changes | User | Warning → confirm → file apply | `prompt` |
+**Before ANY code change (Steps 9–11, 14):**
+1. Mentally complete `nebulla-project/code-review-checklist.md`.
+2. Obey Incremental Development: Build → Debug/Validate → Next (`incremental-development.md`).
+3. Mockup non-authoritative — plan wins.
 
-**Grok MUST NOT** delay Mind Map (B) until UI finishes. **Grok MUST NOT** treat V0 as required for a valid project. [`prompt`]
+**Each Go / START_CODING:** one coherent slice only; smallest safe file set; no full §4 dump.
 
----
+**On bug / failure:**
+1. Match `full-bug-database.md` when useful.
+2. NDM: Verify → Analyze → Trace → Fix → Validate (`debugging-method.md`).
+3. Output only ` ```file:relative/path` ` blocks.
 
-## Rule UI-1 — UI brief (primary artifact) [`prompt`]
+**MVP stack:**
+- No unsolicited Supabase/Firebase/BaaS unless plan names the vendor.
+- Prefer mock/local auth for first slices when Deferred.
 
-**Immediately after** a complete Master Plan is saved:
-
-1. Grok **MUST** write **`nebula-ui-studio/ui-brief.md`**.  
-2. Contents **MUST** include:
-   - Every §4 page with the required page fields (not truncated to 8 routes)
-   - §5 tokens (palette, type, density, radius, motion, components, nav pattern)
-   - Security/authz notes that affect UI (e.g. gated nav, role-dependent actions)
-3. This file is the **primary input** for **UI Gen v2** and for coding UI slices.  
-4. **Grok MUST NOT** put the full UI brief into §5 or into chat.
-
-Optional mirror comments may exist in `nebula-project/nebula-ui-studio.md`.
+**Chat:** Do not paste app/UI code dumps; use apply pipeline.
 
 ---
 
-## Rule UI-2 — §5 tokens only [`prompt`]
+## 5. UI depth
 
-| Requirement | Detail |
-|-------------|--------|
-| **Maximum** | **15–25 lines** |
-| **Purpose** | Visual/token direction for humans + UI Gen token phase |
-| **MUST include** | Mood, colors, typography, density, radius, motion, component style, nav pattern |
-| **MUST NOT** | Long prose; code; full page specs; copy of §4; the UI brief |
-
-Rich page detail lives in **§4** and **`ui-brief.md`**, not in §5.
+- Method room: **`nebulla-project/ui-generation-logic-v2.md`** (do not paste full manual here).
+- Primary inputs: `ui-brief.md` + §5 tokens + plan; Figma local-first / seed per product.
+- Stitch-minimum honesty; no false Ready / Gate pass theater.
+- Regen limits / preference recovery: as product already defines — do not invent new product policy here.
+- Optional V0 legacy: only if key + opt-in; never required for success.
+- Studio Apply: warning + confirm before writes when user-driven Apply path is used.
 
 ---
 
-## Rule UI-3 — V0 optional legacy [`prompt`]
+## 6. Removed / demoted from prior execution-rules (reference)
 
-When (and only when) the optional V0 path is used:
-
-1. Distill **`ui-brief.md`** into **`nebula-ui-studio/v0-prompt.md`** (800–1200 chars, hard max 1500).  
-2. Prefer ≤8 routes in the distill; remainder = later pass.  
-3. Trigger V0 from `v0-prompt.md`; save immutable **`nebula-ui-studio/v0-original/<timestamp>/`**.  
-4. **MUST NOT** modify `v0-original/` except restore.  
-5. **MUST NOT** paste v0 output in chat.  
-
-If `V0_API_KEY` is missing, **skip** this rule and use UI Gen v2 / studio with the UI brief. That is success, not failure.
-
----
-
-## Rule UI-4 — Nebula UI Studio (product MUST) [`prompt`]
-
-When the user opens **IDE → UI Studio**, the product SHOULD load:
-
-| # | Source | Required |
-|---|--------|----------|
-| 1 | Master Plan §5 | YES |
-| 2 | **`nebula-ui-studio/ui-brief.md`** | YES (primary) |
-| 3 | Generated UI (v2 and/or legacy v0) | When present |
-| 4 | `v0-prompt.md` | Only if legacy V0 path was used |
-
-**Apply Changes to All Pages:** clear warning → user confirm → then writes. Cancel = no writes. [`prompt`]
+| Old requirement | Fate |
+|-----------------|------|
+| “Single source of truth” / competing timeline vs workflow | **Demoted** — conductor is workflow; this file is depth |
+| Mode sequence as peer spine (Chat→Arch→Coding→…) | **Remapped** — modes are rooms; order is Steps 1–14 |
+| Discovery order as default interview ladder | **Remapped** — Steps 1–4 gap-fill; interview opt-in |
+| Post–MP table A–G as second sequence | **Dropped as spine** — covered by workflow Steps 5–8 |
+| Auto-V0 immediate after Master Plan (“MUST NOT skip”) | **Dropped** — UI Gen v2 Step 8; V0 optional legacy only |
+| `v0-prompt.md` as sole/primary UI input | **Remapped** — `ui-brief.md` Step 7 |
+| `V0_API_KEY` required for UI success | **Dropped** |
+| Security baseline MUST inject + can block Go/strict mid-run | **Remapped** — Deferred mid-run; offer Step 13; MVP continue |
+| Research “8–12 competitors” hard bar | **Softened** — ladder allows analogues/baseline; never invent to hit 8–12 |
+| Mandatory 6-step UI/UX generation (V0) | **Dropped as law** — force kept for Mind Map timing + §5 brevity |
+| Phases 0–5 narrative as alternate conductor | **Demoted** — pointer only; workflow Steps win |
+| Final checklist “security baseline” as Go hard bar | **Remapped** — aim for quality; do not hard-block MVP mid-run |
 
 ---
 
-## Rule MM-1 — Mind Map (product MUST — exclusive §4) [`prompt` → `soft-gate` / `hard-gate`]
+## 7. Other (abbreviated)
 
-| | |
-|-|-|
-| **MUST** | Generate Mind Map **exclusively** from **"4. Pages and navigation"** |
-| **MUST** | Sync when §4 is saved (same turn as Master Plan persist OK) |
-| **MUST NOT** | Wait for §5, ui-brief, v0, or UI Studio |
-| **MUST NOT** | Use §5 or UI output as primary Mind Map source |
-| **MUST NOT** | Invent pages absent from §4 (workspace route fallback only if §4 has no parseable pages) |
-| **MUST** | Use `` `/route` `` in §4 for reliable parsing |
-| **Product** | Fidelity check (`lib/mindMapFidelity.ts`): Mind Map routes ⊆ §4; `MASTER_PLAN_STRICT=strict` blocks PUT with extras |
-
-Re-sync when §4 changes and user/product runs sync again.
-
----
-
-## Incremental Development Method (Build → Debug → Next) — Grok MUST [`prompt`]
-
-**Detail:** `nebulla-project/incremental-development.md` (keep in sync).
-
-Never implement the entire application in one generation when it can be sliced.  
-**Build one slice → Debug/Validate (NDM) → Next.**
-
-Each **Go** / `START_CODING` = **one coherent slice** (smallest coherent file set). Do **not** dump every §4 route in one pass.
-
-### Recommended slice order
-
-1. Foundation (setup, routing shell, layout)  
-2. Authentication / access control (if required) — honor security baseline  
-3. Core data models + main API routes (+ RLS/filters)  
-4. Primary user feature  
-5. Secondary features (one at a time)  
-6. Integration polish + edge cases  
-
-### When a larger generation is allowed
-
-Only when the slice is naturally small, the user explicitly requests broader generation, or architecture is already clear and risk is low — still validate before expanding.
-
----
-
-## Chat vs build — Grok MUST / MUST NOT [`prompt`]
-
-| Mode | Grok MUST | Grok MUST NOT |
-|------|-----------|----------------|
-| Chat / Discovery | Warm prose; **one** clear question | Master Plan bodies, § dumps, UI/code fences |
-| Architecture | `<START_MASTERPLAN>…</END_MASTERPLAN>` only | Repeat five sections in chat; invent competitors |
-| Implementation | ` ```file:path` ` → apply API | Paste app code in chat; code before complete plan without explicit tiny-fix ask |
-| Debugging | NDM full sequence | Skip steps; dump stacks unless asked |
-| UI | Write **ui-brief**; run v2; optional V0 distill | Vague-only “modern/clean”; paste generated UI in chat |
-
-Paths in ` ```file:…``` ` are relative to `workspaceRoot`.
-
----
-
-## Grok — final checklist
-
-**MUST**
-- [ ] Five separated sections with exact `###` headers  
-- [ ] §4 page fields + security baseline when auth/data applies  
-- [ ] §5 ≤ 15–25 lines (tokens only)  
-- [ ] **`nebula-ui-studio/ui-brief.md`** immediately after Master Plan  
-- [ ] Mind Map from §4 only — do not wait for UI  
-- [ ] UI Gen v2 as primary when available; V0 only if optional path applies  
-- [ ] One slice per Go; NDM before next slice  
-- [ ] File apply after user confirms Apply in UI Studio  
-
-**MUST NOT**
-- [ ] Dump §2–§5 into Goal  
-- [ ] Put UI brief or page specs into §5  
-- [ ] Require V0 when key missing  
-- [ ] Block Mind Map on §5 / UI / V0  
-- [ ] Invent Mind Map pages not in §4  
-- [ ] Paste app or generated UI code in chat  
-
----
-
-## Mandatory Agent Methods (Grok MUST) [`prompt`]
-
-**Before ANY code change (coding / Go):**
-- Mentally complete `nebulla-project/code-review-checklist.md`.
-- Obey Incremental Development (this file + `incremental-development.md`).
-- **Mockup is non-authoritative:** Grok/coding implements from **plan + architecture + features** (Master Plan §§1–5, roles, pages, data, auth). UI Studio mockup / preview-model pixels, copy, and accidental feature set are **not** the spec. Do not reduce the app to what the mockup happened to draw. If mockup and plan disagree, **plan wins**.
-
-**On bug / test failure / runtime error:**
-1. Match category in `nebulla-project/full-bug-database.md` when useful.  
-2. Follow `nebulla-project/debugging-method.md` (Verify → Analyze → Trace → Fix → Validate).  
-3. Output only as ` ```file:relative/path` ` blocks.  
-
-**All user-facing chat:**
-- `nebulla-project/user-communication-rules.md`  
-- Mode first: `nebulla-project/chat-mode-detection.md` — incomplete plan → Discovery  
-- No raw errors/stacks unless asked; clear next step  
-
----
-
-## Other rules (abbreviated)
-
-**Infrastructure Manager** — Render + DB; V0 key optional for UI.  
-
-**Voice / Open Talk** — TTS on Grok text; mic off during TTS; mic on after **5s** silence.  
-
-**Phases** — 0: read workflow → `master-plan.json` → env → studio/ui-brief → these rules; 1: features by slice; 2: UI via brief + studio; 3–4: polish + Run and Test; 5: iteration.  
-
+**BYOK** — users bring AI keys; Nebulla does not sell credits.  
+**Infrastructure Manager** — Render + DB; V0 key optional for legacy UI.  
+**Voice / Open Talk** — TTS on Grok text; mic off during TTS; mic on after ~5s silence.  
 **Chat history** — `conversationLog.ts` per `projectKey`.  
-
-**Fixtures** — `nebula-project/fixtures/master-plan/` (good / thin-legacy / naive-insecure).  
+**Fixtures** — `nebula-project/fixtures/master-plan/`.  
+**Chat vs Agent** — `nebulla-project/chat-vs-agent-mode.md` (interaction lock; does not reorder Steps 1–14 after usable goal).

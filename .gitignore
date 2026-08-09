@@ -24,6 +24,8 @@ nebulla-project/figma-library/profile-drafts/
 nebulla-project/figma-library/download-manifest.json
 nebulla-project/figma-library/figma-keys.csv
 nebulla-project/figma-library/figma-keys.catalog.csv
+nebulla-project/figma-library/ingest-status.json
+nebulla-project/figma-library/ingest.lock
 
 figma-raw/
 figma-profile-drafts/

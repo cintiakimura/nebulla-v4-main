@@ -66,23 +66,11 @@ const EXAMPLE_CSV = path.join(
   "figma-keys.example.csv",
 );
 
-if (!TOKEN) {
-  console.error("Missing FIGMA_API_KEY (set in .env or export FIGMA_API_KEY=figd_…)");
-  process.exit(1);
-}
-
 const csvPath = process.argv[2]
   ? path.resolve(process.argv[2])
   : fs.existsSync(DEFAULT_CSV)
     ? DEFAULT_CSV
     : EXAMPLE_CSV;
-if (!fs.existsSync(csvPath)) {
-  console.error(
-    "Usage: npm run figma:download -- [keys.csv]\n" +
-      "Copy nebulla-project/figma-library/figma-keys.example.csv → figma-keys.csv and fill owned FileKeys.",
-  );
-  process.exit(1);
-}
 
 function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms));
@@ -274,6 +262,18 @@ async function downloadOne(row, manifest) {
 }
 
 async function main() {
+  if (!TOKEN) {
+    console.error("Missing FIGMA_API_KEY (set in .env or export FIGMA_API_KEY=figd_…)");
+    process.exit(1);
+  }
+  if (!fs.existsSync(csvPath)) {
+    console.error(
+      "Usage: npm run figma:download -- [keys.csv]\n" +
+        "Copy nebulla-project/figma-library/figma-keys.example.csv → figma-keys.csv and fill owned FileKeys.",
+    );
+    process.exit(1);
+  }
+
   const rows = parseCsv(fs.readFileSync(csvPath, "utf8"));
   console.log(`Loaded ${rows.length} unique FileKeys from ${csvPath}`);
   console.log(`OUT_DIR=${OUT_DIR}  DELAY_MS=${DELAY_MS}  MAX_RETRIES=${MAX_RETRIES}`);
@@ -304,10 +304,14 @@ async function main() {
   console.log(summary);
   console.log(`Manifest: ${MANIFEST_PATH}`);
   console.log(`Raw files: ${OUT_DIR}/`);
-  console.log("Next: npm run figma:profile-drafts");
+  console.log("Next: npm run figma:profile-drafts  (or npm run figma:ingest-daily for capped side job)");
 }
 
-main().catch((e) => {
-  console.error(e);
-  process.exit(1);
-});
+const isMain =
+  process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+if (isMain) {
+  main().catch((e) => {
+    console.error(e);
+    process.exit(1);
+  });
+}

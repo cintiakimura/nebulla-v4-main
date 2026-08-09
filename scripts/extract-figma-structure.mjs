@@ -4,6 +4,7 @@
  * Usage:
  *   node scripts/extract-figma-structure.mjs
  *   node scripts/extract-figma-structure.mjs --seed-missing
+ *   node scripts/extract-figma-structure.mjs --key=MaFREMBRF3vQ8BhtqA2ZpK
  *
  * Writes: nebulla-project/figma-library/structure/<fileKey>/document.json
  * Safe to commit (no secrets; layout tree only).
@@ -11,12 +12,14 @@
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
+import { extractStructureForKey } from "./lib/figma-structure-extract.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO = path.resolve(__dirname, "..");
-const RAW = path.join(REPO, "nebulla-project", "figma-library", "raw");
-const OUT = path.join(REPO, "nebulla-project", "figma-library", "structure");
-const EXAMPLE = path.join(REPO, "nebulla-project", "figma-library", "figma-keys.example.csv");
+const LIBRARY = path.join(REPO, "nebulla-project", "figma-library");
+const RAW = path.join(LIBRARY, "raw");
+const OUT = path.join(LIBRARY, "structure");
+const EXAMPLE = path.join(LIBRARY, "figma-keys.example.csv");
 
 const SHORTLIST = [
   {
@@ -40,35 +43,6 @@ const SHORTLIST = [
     name: "Auth kit (structure)",
   },
 ];
-
-function pruneNode(n, depth, maxDepth) {
-  if (!n || depth > maxDepth) return null;
-  const type = String(n.type || "").toUpperCase();
-  const keepType =
-    type === "DOCUMENT" ||
-    type === "CANVAS" ||
-    type === "FRAME" ||
-    type === "COMPONENT" ||
-    type === "INSTANCE" ||
-    type === "SECTION" ||
-    type === "GROUP";
-  if (!keepType && depth > 0) return null;
-  const out = {
-    name: n.name || type || "node",
-    type: type || "FRAME",
-  };
-  if (n.layoutMode) out.layoutMode = n.layoutMode;
-  if (typeof n.itemSpacing === "number") out.itemSpacing = n.itemSpacing;
-  if (typeof n.cornerRadius === "number") out.cornerRadius = n.cornerRadius;
-  const kids = [];
-  for (const c of n.children || []) {
-    const p = pruneNode(c, depth + 1, maxDepth);
-    if (p) kids.push(p);
-    if (kids.length >= 24) break;
-  }
-  if (kids.length) out.children = kids;
-  return out;
-}
 
 function seedDoc(bucket, name) {
   const spacing = bucket === "landing" ? 24 : bucket === "dashboard" ? 16 : 14;
@@ -249,16 +223,29 @@ function writeStructure(key, data) {
 }
 
 const seedMissing = process.argv.includes("--seed-missing");
+const keyArg = process.argv.find((a) => a.startsWith("--key="));
+const onlyKey = keyArg ? keyArg.slice("--key=".length).trim() : "";
+
+if (onlyKey) {
+  const r = extractStructureForKey(LIBRARY, onlyKey);
+  if (!r.ok) {
+    console.error(r.error);
+    process.exit(1);
+  }
+  console.log(`wrote ${path.relative(REPO, r.path)}`);
+  console.log("done");
+  process.exit(0);
+}
 
 for (const row of SHORTLIST) {
   const rawPath = path.join(RAW, row.key, "document.json");
   if (fs.existsSync(rawPath)) {
-    const full = JSON.parse(fs.readFileSync(rawPath, "utf8"));
-    const pruned = {
-      name: full.name || row.name,
-      document: pruneNode(full.document, 0, 5),
-    };
-    writeStructure(row.key, pruned);
+    const r = extractStructureForKey(LIBRARY, row.key);
+    if (!r.ok) {
+      console.error(`${row.key}: ${r.error}`);
+      continue;
+    }
+    console.log(`wrote ${path.relative(REPO, r.path)}`);
   } else if (seedMissing) {
     writeStructure(row.key, seedDoc(row.bucket, row.name));
   } else {

@@ -1,3 +1,5 @@
+PROMOTED to nebula-project/project-execution-rules.md on 2026-08-09 — lab copy retained.
+
 # Project Execution Rules (PROPOSED — not live)
 
 Status: Candidate depth layer. Conductor: `nebula-project/project-workflow.md`. Promote only after human approval.
