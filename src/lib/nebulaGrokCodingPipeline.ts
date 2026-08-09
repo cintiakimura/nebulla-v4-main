@@ -92,6 +92,9 @@ export type ApplyGeneratedResult = {
   writtenPaths: string[];
   message: string;
   error?: string;
+  runnableRoot?: boolean;
+  runnableStatusLine?: string;
+  deployable?: boolean;
 };
 
 const APP_SOURCE_PREFIXES = ['app/', 'components/', 'src/', 'pages/'];
@@ -106,6 +109,7 @@ function buildGoCompleteMessage(
   writtenPaths: string[],
   passes: number,
   partialPlanOnly: boolean,
+  runnableHint?: { runnableRoot?: boolean; runnableStatusLine?: string },
 ): string {
   const appFiles = writtenPaths.filter((p) =>
     APP_SOURCE_PREFIXES.some((prefix) => p.startsWith(prefix)),
@@ -121,7 +125,13 @@ function buildGoCompleteMessage(
     appFiles.length > 0
       ? ` App routes: ${appFiles.slice(0, 6).join(', ')}${appFiles.length > 6 ? '…' : ''}.`
       : '';
-  return `Slice complete${passNote}. Applied ${totalWritten} file(s).${routeHint} Validate this slice (NDM happy path) before the next Go. Master Plan synced — UI mockup is plan-first (or optional refine if pages changed).`;
+  const runnableLine =
+    typeof runnableHint?.runnableRoot === 'boolean'
+      ? ` ${runnableHint.runnableStatusLine || `Runnable root: ${runnableHint.runnableRoot ? 'yes' : 'no'} (workspace root)`}.`
+      : appFiles.length > 0
+        ? ' Runnable root: check package.json at workspace root (Deploy / Build check).'
+        : '';
+  return `Slice complete${passNote}. Applied ${totalWritten} file(s).${routeHint}${runnableLine} Validate this slice (NDM happy path) before the next Go. Master Plan synced — UI mockup is plan-first (or optional refine if pages changed).`;
 }
 
 function stripNonFileArtifacts(text: string): string {
@@ -197,6 +207,12 @@ export async function applyGeneratedFiles(
       usedFallbackPath?: string;
       baasSkippedReason?: string;
       error?: string;
+      runnableRoot?: boolean;
+      runnableStatusLine?: string;
+      deployable?: boolean;
+      skeletonWritten?: string[];
+      interactivePreview?: boolean;
+      interactivePreviewPath?: string;
     }>(withProjectQuery('/api/files/apply-generated'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -226,6 +242,33 @@ export async function applyGeneratedFiles(
     if (writtenCount > 0) {
       onProgress?.(`Wrote ${writtenCount} file(s) to workspace`, 'success');
     }
+    if (typeof apply.runnableRoot === 'boolean') {
+      onProgress?.(
+        apply.runnableStatusLine ||
+          `Runnable root: ${apply.runnableRoot ? 'yes' : 'no'} (workspace root)`,
+        apply.runnableRoot ? 'success' : 'warn',
+      );
+    }
+    if (apply.skeletonWritten?.length) {
+      onProgress?.(
+        `Runnable skeleton filled: ${apply.skeletonWritten.slice(0, 6).join(', ')}${
+          apply.skeletonWritten.length > 6 ? '…' : ''
+        }`,
+        'info',
+      );
+    }
+    if (apply.interactivePreview) {
+      onProgress?.(
+        `Interactive product preview ready (${apply.interactivePreviewPath || 'public/product-preview/index.html'}) — open App Preview to click the happy path`,
+        'success',
+      );
+      try {
+        window.dispatchEvent(new CustomEvent('nebula-reload-app-preview'));
+        window.dispatchEvent(new CustomEvent('nebula-open-app-preview'));
+      } catch {
+        /* ignore */
+      }
+    }
     if (apply.baasSkippedReason) {
       onProgress?.(apply.baasSkippedReason, 'warn');
     } else if (
@@ -244,16 +287,23 @@ export async function applyGeneratedFiles(
     } else if (writtenCount > 0) {
       notifyWorkspaceFilesChanged();
     }
+    const runnableNote =
+      typeof apply.runnableRoot === 'boolean'
+        ? ` ${apply.runnableStatusLine || `Runnable root: ${apply.runnableRoot ? 'yes' : 'no'}`}.`
+        : '';
     return {
       ok: writtenCount > 0,
       writtenCount,
       skippedCount,
       writtenPaths,
+      runnableRoot: apply.runnableRoot,
+      runnableStatusLine: apply.runnableStatusLine,
+      deployable: apply.deployable,
       message:
         writtenCount > 0
           ? `Applied ${writtenCount} file(s)${skippedCount ? `, skipped ${skippedCount}` : ''}${
               apply.usedFallbackPath ? ` (fallback: ${apply.usedFallbackPath})` : ''
-            }.`
+            }.${runnableNote}`
           : 'Grok returned text, but no writable file blocks were found. Expected ```file:path``` blocks.',
     };
   } catch (e) {
@@ -536,6 +586,7 @@ export async function runGoCodeAndApply(options: {
     let lastCodeText = '';
     let passes = 0;
     let partialPlanOnly = false;
+    let lastRunnable: { runnableRoot?: boolean; runnableStatusLine?: string } = {};
 
     for (let pass = 0; pass < GO_CODE_MAX_PASSES; pass++) {
       passes = pass + 1;
@@ -624,6 +675,12 @@ export async function runGoCodeAndApply(options: {
       });
       totalWritten += apply.writtenCount;
       allWrittenPaths.push(...apply.writtenPaths);
+      if (typeof apply.runnableRoot === 'boolean') {
+        lastRunnable = {
+          runnableRoot: apply.runnableRoot,
+          runnableStatusLine: apply.runnableStatusLine,
+        };
+      }
 
       if (apply.ok && apply.writtenCount > 0) {
         // Ack durable server result only after files are applied — missed polls can re-fetch until then.
@@ -668,7 +725,13 @@ export async function runGoCodeAndApply(options: {
       parseGoSliceLabel(userNote) ||
       parseGoSliceLabel('SLICE: Foundation');
     const oversized = assessOversizedGoApply({ sliceLabel, writtenPaths: allWrittenPaths });
-    let statusMessage = buildGoCompleteMessage(totalWritten, allWrittenPaths, passes, partialPlanOnly);
+    let statusMessage = buildGoCompleteMessage(
+      totalWritten,
+      allWrittenPaths,
+      passes,
+      partialPlanOnly,
+      lastRunnable,
+    );
     if (sliceLabel) {
       statusMessage = `Slice: **${sliceLabel}**. ${statusMessage}`;
     }

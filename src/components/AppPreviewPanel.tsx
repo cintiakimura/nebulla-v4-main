@@ -527,26 +527,63 @@ export function AppPreviewPanel({
         </button>
         <IdeAppStatusPreviewBadge />
         <span
-          className="hidden max-w-[200px] truncate text-[9px] leading-tight text-slate-500 sm:inline"
+          className="hidden max-w-[160px] truncate text-[9px] leading-tight text-slate-500 sm:inline"
           title={
             previewMode === 'pre_code_mockup'
               ? 'Pre-code mockup only — static UI Gen shell, not the live coded app.'
-              : previewMode === 'post_code_bridge'
-                ? 'Product UI source detected. Static mockup is not the live product; iframe cannot run Vite/Next/Expo yet.'
-                : previewMode === 'live_app_static'
-                  ? 'Serving workspace app entry / built static output.'
-                  : 'App Preview authority from workspace bootstrap.'
+              : previewMode === 'interactive_product_preview'
+                ? 'Interactive product preview with mock/local data — click through the happy path. Not UI Gen mockup; not full Next/Vite SSR.'
+                : previewMode === 'post_code_bridge'
+                  ? 'Product files detected but no interactive preview yet. Re-run a coding slice, or inspect files in Explorer.'
+                  : previewMode === 'live_app_static'
+                    ? 'Serving workspace app entry / built static output.'
+                    : 'App Preview authority from workspace bootstrap.'
           }
         >
           {previewStatusLabel ||
             (previewMode === 'pre_code_mockup'
               ? 'Pre-code mockup'
-              : previewMode === 'post_code_bridge'
-                ? 'Post-code (not mockup)'
-                : previewMode === 'live_app_static'
-                  ? 'Live app preview'
-                  : 'Preview')}
+              : previewMode === 'interactive_product_preview'
+                ? 'Interactive preview (mock data)'
+                : previewMode === 'post_code_bridge'
+                  ? 'Post-code (files only)'
+                  : previewMode === 'live_app_static'
+                    ? 'Live app preview'
+                    : 'Preview')}
         </span>
+        {previewMode === 'interactive_product_preview' ? (
+          <button
+            type="button"
+            title="Reload interactive product preview"
+            onClick={() => {
+              setPreviewRev((n) => n + 1);
+              void loadPreviewMeta();
+            }}
+            className="hidden h-7 shrink-0 items-center rounded-md border border-emerald-500/40 bg-emerald-500/10 px-2 text-[10px] text-emerald-100 hover:bg-emerald-500/20 sm:inline-flex"
+          >
+            Reload app
+          </button>
+        ) : null}
+        {previewMode === 'post_code_bridge' ? (
+          <button
+            type="button"
+            title="Open README run instructions"
+            onClick={() => {
+              try {
+                window.dispatchEvent(
+                  new CustomEvent('nebula-center-focus-file', {
+                    detail: { path: 'README.md' },
+                  }),
+                );
+              } catch {
+                /* ignore */
+              }
+            }}
+            className="hidden h-7 shrink-0 items-center rounded-md border border-white/15 px-2 text-[10px] text-slate-300 hover:border-cyan-500/35 hover:text-cyan-200 sm:inline-flex"
+          >
+            Run instructions
+          </button>
+        ) : null}
       </div>
     </div>
   );

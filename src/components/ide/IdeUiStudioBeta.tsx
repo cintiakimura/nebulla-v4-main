@@ -490,6 +490,7 @@ export function IdeUiStudioBeta({
       const coded =
         data.codedApp === true ||
         data.previewMode === 'post_code_bridge' ||
+        data.previewMode === 'interactive_product_preview' ||
         data.previewMode === 'live_app_static';
       setCodedAppLive(coded);
       if (typeof data.previewStatusLabel === 'string' && data.previewStatusLabel.trim()) {

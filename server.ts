@@ -144,6 +144,19 @@ import {
   MVP_STACK_GO_BULLETS,
 } from "./lib/mvpStackContract";
 import {
+  ensureRunnableSkeleton,
+  inspectRunnableSkeleton,
+  RUNNABLE_SKELETON_GO_BULLETS,
+  runnableStatusLine,
+  writtenPathsNeedRunnableSkeleton,
+} from "./lib/runnableAppSkeleton";
+import { runWorkspaceBuildCheck } from "./lib/workspaceBuildCheck";
+import {
+  ensureInteractiveProductPreview,
+  hasInteractiveProductPreview,
+  INTERACTIVE_PREVIEW_GO_BULLETS,
+} from "./lib/interactiveProductPreview";
+import {
   masterPlanKeyForTabIndex,
   normalizeMasterPlanRecord,
   parseMasterPlanBlock,
@@ -2225,6 +2238,19 @@ No approved UI code yet.
       const pp = projectPathsFor(req);
       const demoUrl = readV0DemoUrl(pp.workspaceRoot);
       const hasReal = hasRealV0ApiGeneration(pp.workspaceRoot);
+      // Heal older coded workspaces: prefer interactive mock preview over file-list bridge.
+      try {
+        const early = resolveAppPreviewAuthority(pp.workspaceRoot);
+        if (
+          early.codedApp &&
+          early.mode === "post_code_bridge" &&
+          !hasInteractiveProductPreview(pp.workspaceRoot)
+        ) {
+          ensureInteractiveProductPreview(pp.workspaceRoot);
+        }
+      } catch (healErr) {
+        console.warn("[app-preview/meta] interactive preview heal:", healErr);
+      }
       const authority = resolveAppPreviewAuthority(pp.workspaceRoot);
       res.json({
         ok: true,
@@ -2268,6 +2294,20 @@ No approved UI code yet.
         (typeof q.projectName === "string" && q.projectName.trim()) ||
         pp.projectKey ||
         "Untitled Project";
+
+      // Working app output: when product UI exists but no bundler/build, serve interactive mock preview.
+      try {
+        const early = resolveAppPreviewAuthority(pp.workspaceRoot);
+        if (
+          early.codedApp &&
+          early.mode === "post_code_bridge" &&
+          !hasInteractiveProductPreview(pp.workspaceRoot)
+        ) {
+          ensureInteractiveProductPreview(pp.workspaceRoot, { projectName: displayName });
+        }
+      } catch (healErr) {
+        console.warn("[app-preview/bootstrap] interactive preview heal:", healErr);
+      }
 
       const authority = resolveAppPreviewAuthority(pp.workspaceRoot);
       let html = "";
@@ -2593,6 +2633,43 @@ No approved UI code yet.
         written.push(b.relativePath);
       }
 
+      let runnable: ReturnType<typeof inspectRunnableSkeleton> | null = null;
+      let skeletonWritten: string[] = [];
+      const bodyEarly = req.body || {};
+      const projectNameEarly =
+        typeof bodyEarly.projectName === "string" && bodyEarly.projectName.trim()
+          ? String(bodyEarly.projectName).trim()
+          : "Untitled Project";
+
+      let interactivePreviewPath: string | undefined;
+      if (written.length > 0 && writtenPathsNeedRunnableSkeleton(written)) {
+        try {
+          const ensured = ensureRunnableSkeleton(workspaceRoot, {
+            projectName: projectNameEarly,
+          });
+          runnable = ensured;
+          skeletonWritten = ensured.written || [];
+          for (const rel of skeletonWritten) {
+            if (!written.includes(rel)) written.push(rel);
+          }
+        } catch (skelErr) {
+          console.warn("[apply-generated] runnable skeleton:", skelErr);
+          runnable = inspectRunnableSkeleton(workspaceRoot);
+        }
+        try {
+          const preview = ensureInteractiveProductPreview(workspaceRoot, {
+            projectName: projectNameEarly,
+            productFiles: written.filter((p) => writtenPathsNeedRunnableSkeleton([p])),
+          });
+          interactivePreviewPath = preview.path;
+          if (!written.includes(preview.path)) written.push(preview.path);
+        } catch (prevErr) {
+          console.warn("[apply-generated] interactive product preview:", prevErr);
+        }
+      } else if (written.length > 0) {
+        runnable = inspectRunnableSkeleton(workspaceRoot);
+      }
+
       res.json({
         success: true,
         written,
@@ -2600,6 +2677,14 @@ No approved UI code yet.
         parsedBlocks: blocks.length,
         usedFallbackPath: fallbackPath || undefined,
         baasSkippedReason: baasFilter.reason || undefined,
+        runnableRoot: runnable?.runnable ?? false,
+        appRoot: runnable?.appRootRel ?? ".",
+        framework: runnable?.framework ?? "unknown",
+        runnableStatusLine: runnable ? runnableStatusLine(runnable) : undefined,
+        skeletonWritten: skeletonWritten.length ? skeletonWritten : undefined,
+        deployable: Boolean(runnable?.runnable),
+        interactivePreview: Boolean(interactivePreviewPath),
+        interactivePreviewPath,
       });
 
       if (written.length > 0) {
@@ -2629,6 +2714,87 @@ No approved UI code yet.
       }
     } catch (err: any) {
       res.status(500).json({ error: err?.message || "Failed to apply generated files" });
+    }
+  });
+
+  /** Product app runnable status (workspace root convention). */
+  app.get("/api/workspace/runnable-status", (req, res) => {
+    try {
+      const { workspaceRoot } = projectPathsFor(req);
+      const status = inspectRunnableSkeleton(workspaceRoot);
+      res.json({
+        ok: true,
+        ...status,
+        runnableStatusLine: runnableStatusLine(status),
+        deployable: status.runnable,
+      });
+    } catch (e) {
+      res.status(500).json({
+        ok: false,
+        error: e instanceof Error ? e.message : "runnable status failed",
+      });
+    }
+  });
+
+  /**
+   * Deploy path (MVP): ensure runnable skeleton + npm install + npm run build.
+   * Does NOT redeploy the Nebulla platform Render service.
+   * Public per-project URL hosting is deferred — returns build result + nextStep.
+   */
+  app.post("/api/workspace/deploy", async (req, res) => {
+    try {
+      const { workspaceRoot } = projectPathsFor(req);
+      const body = req.body || {};
+      const projectName =
+        typeof body.projectName === "string" && body.projectName.trim()
+          ? String(body.projectName).trim()
+          : "Untitled Project";
+      const skipInstall = body.skipInstall === true;
+      const pre = inspectRunnableSkeleton(workspaceRoot);
+      if (!pre.hasPackageJson && !workspaceHasCodedAppUi(workspaceRoot)) {
+        return res.status(422).json({
+          ok: false,
+          mode: "build_check",
+          error: "No product app root — missing package.json and product UI files",
+          url: null,
+          nextStep: "Run a Foundation/Primary coding slice first, then Deploy / Build check.",
+        });
+      }
+      const result = await runWorkspaceBuildCheck(workspaceRoot, {
+        projectName,
+        skipInstall,
+      });
+      return res.status(result.ok ? 200 : 422).json(result);
+    } catch (e) {
+      return res.status(500).json({
+        ok: false,
+        mode: "build_check",
+        error: e instanceof Error ? e.message : "Deploy / build check failed",
+        url: null,
+      });
+    }
+  });
+
+  app.post("/api/workspace/build-check", async (req, res) => {
+    try {
+      const { workspaceRoot } = projectPathsFor(req);
+      const body = req.body || {};
+      const projectName =
+        typeof body.projectName === "string" && body.projectName.trim()
+          ? String(body.projectName).trim()
+          : "Untitled Project";
+      const result = await runWorkspaceBuildCheck(workspaceRoot, {
+        projectName,
+        skipInstall: body.skipInstall === true,
+      });
+      return res.status(result.ok ? 200 : 422).json(result);
+    } catch (e) {
+      return res.status(500).json({
+        ok: false,
+        mode: "build_check",
+        error: e instanceof Error ? e.message : "Build check failed",
+        url: null,
+      });
     }
   });
 
@@ -4673,7 +4839,9 @@ Strict rules:
 - Larger generation only if the slice is naturally tiny, the user explicitly asks for a broader pass, or risk is clearly low.
 MOCKUP VS FINAL UI (mandatory):
 ${MOCKUP_NON_AUTHORITATIVE_GO_BULLETS}
-${MVP_STACK_GO_BULLETS}`;
+${MVP_STACK_GO_BULLETS}
+${RUNNABLE_SKELETON_GO_BULLETS}
+${INTERACTIVE_PREVIEW_GO_BULLETS}`;
 
       const codeSystemPrompt = continuation
         ? `You are Grok Code (CONTINUATION pass). master-plan.json was updated but the **Foundation slice** (runnable shell) is still missing.
@@ -4681,9 +4849,10 @@ ${MVP_STACK_GO_BULLETS}`;
 ${codeQualityContract}
 
 Output the Foundation slice in THIS response (not the entire §4 app):
-- \`app/layout.tsx\`, \`app/globals.css\`, root \`app/page.tsx\`
+- \`package.json\` (private, scripts.dev/build/start) + \`app/layout.tsx\`, \`app/globals.css\`, root \`app/page.tsx\`
 - Minimal routing shell for the primary entry route(s) only
 - Shared scaffolding \`components/\` / \`lib/\` only if required for that shell
+- Short \`README.md\` with npm install / npm run dev / npm run build
 - Do NOT implement every §4 route yet — leave Auth / Data / Primary feature for later Go presses
 - Do NOT return only master-plan.json
 

@@ -26,6 +26,18 @@ assert.match(MOCKUP_NON_AUTHORITATIVE_RULE, /Do not treat UI Studio mockup/);
 assert.match(MOCKUP_NON_AUTHORITATIVE_RULE, /plan wins/i);
 assert.match(MOCKUP_NON_AUTHORITATIVE_GO_BULLETS, /preview-model as the spec/);
 assert.match(CODING_QUALITY_APPENDIX, /Do not treat UI Studio mockup/);
+assert.match(CODING_QUALITY_APPENDIX, /silent dead buttons/i);
+assert.match(CODING_QUALITY_APPENDIX, /Working app output/i);
+
+{
+  const goBullets = fs.readFileSync(
+    path.join(root, 'lib/interactiveProductPreview.ts'),
+    'utf8',
+  );
+  assert.match(goBullets, /WORKING APP OUTPUT/);
+  assert.match(goBullets, /Silent no-op buttons are forbidden/);
+  assert.match(goBullets, /public\/product-preview/);
+}
 
 const assistantPrompt = fs.readFileSync(
   path.join(root, 'src/lib/nebulaAssistantSystemPrompt.ts'),

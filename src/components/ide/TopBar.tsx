@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Check, ChevronDown, Loader2, LogOut, MonitorPlay, Search, X } from 'lucide-react';
+import { Check, ChevronDown, Loader2, LogOut, MonitorPlay, Rocket, Search, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Logo } from '@/components/Logo';
 import { getBrowserProjectName } from '../../lib/nebulaProjectApi';
@@ -10,6 +10,10 @@ import { useLanguage } from '@/components/i18n/LanguageProvider';
 import { IdeStatusStrip } from '@/components/ide/IdeStatusStrip';
 import { fetchSessionUser, logoutNebula, type NebulaSessionUser } from '../../lib/nebulaCloud';
 import { sessionInitials } from '../../lib/sessionInitials';
+import {
+  fetchRunnableStatus,
+  runWorkspaceDeployOrBuildCheck,
+} from '../../lib/workspaceDeployClient';
 
 const models: { id: IdeChatModelId; name: string; badge: string | null }[] = AI_CHAT_MODELS.map(
   (m) => ({
@@ -50,6 +54,9 @@ export function TopBar({
   const [replaceMsg, setReplaceMsg] = useState<string | null>(null);
   const [sessionUser, setSessionUser] = useState<NebulaSessionUser | null>(null);
   const [logoutBusy, setLogoutBusy] = useState(false);
+  const [deployBusy, setDeployBusy] = useState(false);
+  const [deployHint, setDeployHint] = useState<string | null>(null);
+  const [runnableOk, setRunnableOk] = useState<boolean | null>(null);
   const [draftName, setDraftName] = useState(
     () => workspaceLabel?.trim() || getBrowserProjectName().trim() || '',
   );
@@ -80,6 +87,69 @@ export function TopBar({
     const next = workspaceLabel?.trim() || getBrowserProjectName().trim() || '';
     setDraftName(next);
   }, [workspaceLabel]);
+
+  const refreshRunnable = useCallback(() => {
+    void fetchRunnableStatus()
+      .then((s) => setRunnableOk(Boolean(s.runnable || s.deployable)))
+      .catch(() => setRunnableOk(null));
+  }, []);
+
+  const runDeploy = useCallback(async () => {
+    if (deployBusy) return;
+    setDeployBusy(true);
+    setDeployHint('Build check running (npm install + build)…');
+    try {
+      const result = await runWorkspaceDeployOrBuildCheck({
+        projectName: draftName.trim() || getBrowserProjectName().trim() || undefined,
+      });
+      setRunnableOk(Boolean(result.runnable));
+      if (result.ok) {
+        setDeployHint(
+          result.url
+            ? `Live: ${result.url}`
+            : result.nextStep || 'Build OK — no public URL yet (Build check mode).',
+        );
+      } else {
+        setDeployHint(
+          result.error
+            ? `${result.error}${result.logSnippet ? ` — ${result.logSnippet.slice(0, 160)}` : ''}`
+            : result.nextStep || 'Build check failed',
+        );
+      }
+      window.setTimeout(() => setDeployHint(null), 14000);
+    } finally {
+      setDeployBusy(false);
+    }
+  }, [deployBusy, draftName]);
+
+  useEffect(() => {
+    refreshRunnable();
+    const onFiles = () => refreshRunnable();
+    const onDeployEvt = () => {
+      void runDeploy();
+    };
+    const onMessage = (ev: MessageEvent) => {
+      const t = (ev.data as { type?: string } | null)?.type;
+      if (t === 'nebula-workspace-deploy') void runDeploy();
+      if (t === 'nebula-open-readme') {
+        try {
+          window.dispatchEvent(
+            new CustomEvent('nebula-center-focus-file', { detail: { path: 'README.md' } }),
+          );
+        } catch {
+          /* ignore */
+        }
+      }
+    };
+    window.addEventListener('nebula-files-applied', onFiles);
+    window.addEventListener('nebula-workspace-deploy', onDeployEvt);
+    window.addEventListener('message', onMessage);
+    return () => {
+      window.removeEventListener('nebula-files-applied', onFiles);
+      window.removeEventListener('nebula-workspace-deploy', onDeployEvt);
+      window.removeEventListener('message', onMessage);
+    };
+  }, [refreshRunnable, runDeploy]);
 
   useEffect(() => {
     const onSync = (ev: Event) => {
@@ -215,6 +285,35 @@ export function TopBar({
             <MonitorPlay className="h-4 w-4" aria-hidden />
             {t('ide.topbar.preview')}
           </button>
+          <button
+            type="button"
+            title={
+              runnableOk === false
+                ? 'Needs runnable root (package.json + build scripts). Run a coding slice first.'
+                : 'Deploy / Build check — npm install + npm run build on the product workspace root'
+            }
+            disabled={deployBusy}
+            onClick={() => void runDeploy()}
+            className={cn(
+              'btn-secondary-surface type-label-sm hidden h-9 items-center gap-1.5 rounded-md px-2.5 text-muted-foreground hover:text-foreground disabled:opacity-40 sm:inline-flex',
+              runnableOk === false && 'opacity-70',
+            )}
+          >
+            {deployBusy ? (
+              <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+            ) : (
+              <Rocket className="h-4 w-4" aria-hidden />
+            )}
+            Deploy
+          </button>
+          {deployHint ? (
+            <span
+              className="hidden max-w-[12rem] truncate text-[10px] text-muted-foreground lg:inline"
+              title={deployHint}
+            >
+              {deployHint}
+            </span>
+          ) : null}
 
           <div className="relative" ref={findWrapRef}>
             <button

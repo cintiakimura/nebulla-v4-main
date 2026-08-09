@@ -17,6 +17,12 @@ import {
   toHttpHeaderSafe,
   workspaceHasCodedAppUi,
 } from "../lib/workspaceCodedAppUi.ts";
+import {
+  ensureInteractiveProductPreview,
+  inferPreviewScreensFromPaths,
+  PRODUCT_PREVIEW_MARKER,
+  PRODUCT_PREVIEW_REL,
+} from "../lib/interactiveProductPreview.ts";
 
 const tokens = {
   bg: "#FAFAF9",
@@ -136,6 +142,54 @@ section("built dist/index.html preferred as live entry");
   const auth = resolveAppPreviewAuthority(root);
   assert.equal(auth.mode, "live_app_static");
   assert.equal(auth.entryRel, "dist/index.html");
+  fs.rmSync(root, { recursive: true, force: true });
+}
+
+section("interactive product preview preferred over post-code bridge");
+{
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "nebulla-preview-interactive-"));
+  fs.mkdirSync(path.join(root, "app", "kid"), { recursive: true });
+  fs.writeFileSync(
+    path.join(root, "app", "page.tsx"),
+    "export default function Home(){ return <main>Home</main>; }\n",
+  );
+  fs.writeFileSync(
+    path.join(root, "app", "kid", "page.tsx"),
+    "export default function Kid(){ return <main>Kid</main>; }\n",
+  );
+  const screens = inferPreviewScreensFromPaths([
+    "app/page.tsx",
+    "app/kid/page.tsx",
+    "app/teacher/page.tsx",
+    "components/TutorSession.tsx",
+    "components/UploadLesson.tsx",
+  ]);
+  assert.ok(screens.some((s) => s.id === "role-kid"));
+  assert.ok(screens.some((s) => s.id === "role-teacher"));
+  assert.ok(screens.some((s) => s.id === "tutor"));
+  assert.ok(screens.some((s) => s.id === "upload"));
+
+  const ensured = ensureInteractiveProductPreview(root, {
+    projectName: "Tutor Demo",
+    productFiles: [
+      "app/page.tsx",
+      "app/kid/page.tsx",
+      "app/teacher/page.tsx",
+      "components/TutorSession.tsx",
+      "components/UploadLesson.tsx",
+    ],
+  });
+  assert.equal(ensured.path, PRODUCT_PREVIEW_REL);
+  const html = fs.readFileSync(path.join(root, PRODUCT_PREVIEW_REL), "utf8");
+  assert.match(html, new RegExp(PRODUCT_PREVIEW_MARKER, "i"));
+  assert.match(html, /Interactive preview/);
+  assert.match(html, /localStorage/);
+  assert.match(html, /data-role=/);
+  const auth = resolveAppPreviewAuthority(root);
+  assert.equal(auth.mode, "interactive_product_preview");
+  assert.equal(auth.entryRel, PRODUCT_PREVIEW_REL);
+  assert.match(auth.statusLabel, /Interactive preview/i);
+  assert.ok(auth.mode !== "post_code_bridge");
   fs.rmSync(root, { recursive: true, force: true });
 }
 

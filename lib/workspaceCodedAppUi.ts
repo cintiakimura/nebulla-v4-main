@@ -5,11 +5,17 @@
 
 import fs from "fs";
 import path from "path";
+import {
+  PRODUCT_PREVIEW_MARKER,
+  PRODUCT_PREVIEW_REL,
+  hasInteractiveProductPreview,
+} from "./interactiveProductPreview";
 
 export const UI_GEN_MOCKUP_META = 'name="nebulla-preview" content="ui-gen-mockup"';
 export const UI_GEN_MOCKUP_MARKER = "ui-gen-mockup";
 export const UI_GEN_MOCKUP_REL = "public/nebula-ui-gen-preview.html";
 export const CODED_APP_BRIDGE_MARKER = "coded-app-bridge";
+export { PRODUCT_PREVIEW_REL, PRODUCT_PREVIEW_MARKER };
 
 const SKIP_DIR = new Set([
   "node_modules",
@@ -33,6 +39,7 @@ const IGNORE_FILE_RE = /\.(test|spec|stories|d)\.[tj]sx?$/i;
 export type AppPreviewMode =
   | "pre_code_mockup"
   | "post_code_bridge"
+  | "interactive_product_preview"
   | "live_app_static"
   | "empty";
 
@@ -190,7 +197,7 @@ export function resolveAppPreviewAuthority(workspaceRoot: string): AppPreviewAut
     };
   }
 
-  // Coded product exists
+  // Coded product exists — prefer real build, then interactive mock-data preview (working app output).
   if (built) {
     return {
       mode: "live_app_static",
@@ -201,6 +208,20 @@ export function resolveAppPreviewAuthority(workspaceRoot: string): AppPreviewAut
       productFiles,
       mockupRel,
       limitation: null,
+    };
+  }
+
+  if (hasInteractiveProductPreview(workspaceRoot)) {
+    return {
+      mode: "interactive_product_preview",
+      statusLabel: "Interactive preview (mock data)",
+      codedApp: true,
+      indexIsMockup: false,
+      entryRel: PRODUCT_PREVIEW_REL,
+      productFiles,
+      mockupRel,
+      limitation:
+        "Serving interactive product preview with mock/local data. Not UI Gen mockup; not full Vite/Next SSR.",
     };
   }
 
@@ -218,21 +239,21 @@ export function resolveAppPreviewAuthority(workspaceRoot: string): AppPreviewAut
       productFiles,
       mockupRel,
       limitation: needsBundler
-        ? "Workspace Vite/Next/Expo runtime is not started inside App Preview iframe yet — showing coded-file bridge instead of the static UI Gen mockup."
+        ? "Workspace Vite/Next/Expo runtime is not started inside App Preview iframe yet — interactive product preview missing."
         : null,
     };
   }
 
   return {
     mode: "post_code_bridge",
-    statusLabel: "Post-code - product files (not mockup)",
+    statusLabel: "Post-code - files only (no interactive preview yet)",
     codedApp: true,
     indexIsMockup,
     entryRel: null,
     productFiles,
     mockupRel,
     limitation:
-      "App Preview cannot run the workspace Vite/Next/Expo bundler in the iframe yet. Product UI source was detected - open those files to validate features. Optional static mockup is kept at public/nebula-ui-gen-preview.html only.",
+      "No interactive product preview yet. Re-apply a coding slice to generate public/product-preview, or open files in Explorer.",
   };
 }
 
@@ -286,15 +307,29 @@ export function buildCodedAppPreviewBridgeHtml(opts: {
     ul { padding-left:1.1rem; margin:12px 0; }
     code { font-size:.85em; background:#F5F5F4; padding:1px 4px; border-radius:4px; }
     .card { background:#fff; border:1px solid #E7E5E4; border-radius:12px; padding:16px; max-width:40rem; }
+    .actions { display:flex; flex-wrap:wrap; gap:8px; margin-top:14px; }
+    .btn { display:inline-block; font-size:12px; font-weight:600; padding:8px 12px; border-radius:8px; text-decoration:none; border:1px solid #D6D3D1; color:#1C1917; background:#fff; cursor:pointer; }
+    .btn-primary { background:#0F766E; border-color:#0F766E; color:#fff; }
   </style>
 </head>
 <body>
   <div class="card">
     <span class="badge">Post-code — not mockup</span>
     <h1>${name}</h1>
-    <p><strong>Product UI source was detected.</strong> App Preview is no longer treating the static UI Gen shell as your live app.</p>
+    <p><strong>Product UI source was detected.</strong> This iframe is <em>not</em> the live Vite/Next app.</p>
     <p class="muted">${limit}</p>
-    <p><strong>Coded UI files</strong> (validate features here):</p>
+    <p><strong>Run / deploy path</strong> (product app root = workspace root):</p>
+    <ul>
+      <li><code>npm install</code></li>
+      <li><code>npm run dev</code> (local) or <code>npm run build</code></li>
+      <li>In Nebulla: use the <strong>Deploy</strong> control (Build check) in the top bar</li>
+      <li>See workspace <code>README.md</code> for scripts</li>
+    </ul>
+    <div class="actions">
+      <button type="button" class="btn btn-primary" onclick="try{parent.postMessage({type:'nebula-workspace-deploy'},'*')}catch(e){}">Deploy / Build check</button>
+      <button type="button" class="btn" onclick="try{parent.postMessage({type:'nebula-open-readme'},'*')}catch(e){}">Open run instructions</button>
+    </div>
+    <p><strong>Coded UI files</strong> (validate features in Explorer):</p>
     <ul>
 ${list || "<li><code>(none listed)</code></li>"}
     </ul>
