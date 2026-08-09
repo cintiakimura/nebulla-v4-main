@@ -1,24 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { cn } from '@/lib/utils';
-import { AIChat } from '@/components/ide/AIChat';
-import { IdeCenterWorkspace } from '@/components/ide/IdeCenterWorkspace';
 import {
   dispatchOpenCenterPanel,
   IdeCenterTabsProvider,
-  useIdeCenterTabs,
 } from '@/components/ide/IdeCenterTabsContext';
-import { TerminalPanel } from '@/components/ide/TerminalPanel';
-import { TopBar } from '@/components/ide/TopBar';
-import { VerticalNav } from '@/components/ide/VerticalNav';
 import { UserProfilePage } from '@/components/UserProfilePage';
 import { WelcomeOnboardingModal } from '@/components/ide/WelcomeOnboardingModal';
-import { FileExplorer } from '@/components/ide/FileExplorer';
-import { SourceControlPanel } from '@/components/SourceControlPanel';
-import { IdeWorkspaceProvider, useIdeWorkspace } from '@/components/ide/IdeWorkspaceContext';
-import {
-  NEBULA_OPEN_LEFT_SIDEBAR,
-  type IdeLeftSidebarView,
-} from '../../lib/ideLeftSidebar';
+import { IdeWorkspaceProvider } from '@/components/ide/IdeWorkspaceContext';
 import {
   ensureCloudWorkspaceReady,
   fetchSessionUser,
@@ -31,247 +18,32 @@ import {
   WorkspaceSetupGate,
   type WorkspaceContext,
 } from '@/components/ide/WorkspaceSetupGate';
-import { navIdToCenterPane } from '../../lib/ideCenterPanes';
 import { registerNebulaUiStudioBridge } from '../../lib/nebulaUiStudioEvents';
 import { shouldShowWelcomeOnboarding } from '../../lib/nebulaWelcomeOnboarding';
 import { cloudBlockedBannerMessage } from '../../lib/ideCloudStatus';
 import { installOnboardingRideListeners } from '../../lib/ideOnboardingRide';
-import { markUserJumpedPhase } from '../../lib/ideProjectPhase';
 import { UI_SHELL_ONLY } from '../../lib/testingBranch';
-
-const EXPLORER_MIN = 160;
-const EXPLORER_MAX = 480;
-const EXPLORER_DEFAULT = 224;
-
-const CHAT_MIN = 240;
-const CHAT_MAX = 560;
-const CHAT_DEFAULT = 320;
-
-const TERMINAL_MIN = 80;
-const TERMINAL_MAX = 560;
-const TERMINAL_DEFAULT = 220;
-
-function IdeExplorerSidebar() {
-  return <FileExplorer />;
-}
-
-function readStoredSize(key: string | undefined, fallback: number, min: number, max: number): number {
-  if (!key || typeof window === 'undefined') return fallback;
-  try {
-    const raw = localStorage.getItem(key);
-    if (!raw) return fallback;
-    const n = Number(raw);
-    if (!Number.isFinite(n)) return fallback;
-    return Math.min(max, Math.max(min, n));
-  } catch {
-    return fallback;
-  }
-}
-
-function useDragResize(
-  initial: number,
-  min: number,
-  max: number,
-  direction: 'horizontal-right' | 'horizontal-left' | 'vertical',
-  storageKey?: string,
-) {
-  const [size, setSize] = useState(() => readStoredSize(storageKey, initial, min, max));
-  const dragging = useRef(false);
-  const startPos = useRef(0);
-  const startSize = useRef(initial);
-
-  const onMouseDown = useCallback(
-    (e: React.MouseEvent) => {
-      e.preventDefault();
-      dragging.current = true;
-      startPos.current = direction === 'vertical' ? e.clientY : e.clientX;
-      startSize.current = size;
-
-      const onMove = (ev: MouseEvent) => {
-        if (!dragging.current) return;
-        const delta =
-          direction === 'vertical'
-            ? ev.clientY - startPos.current
-            : direction === 'horizontal-right'
-              ? ev.clientX - startPos.current
-              : startPos.current - ev.clientX;
-        const next = Math.min(max, Math.max(min, startSize.current + delta));
-        setSize(next);
-      };
-
-      const onUp = () => {
-        dragging.current = false;
-        window.removeEventListener('mousemove', onMove);
-        window.removeEventListener('mouseup', onUp);
-        if (storageKey) {
-          try {
-            // Read latest size from startSize + last delta via closure — persist current state on next tick.
-            setSize((current) => {
-              try {
-                localStorage.setItem(storageKey, String(current));
-              } catch {
-                /* ignore */
-              }
-              return current;
-            });
-          } catch {
-            /* ignore */
-          }
-        }
-      };
-
-      window.addEventListener('mousemove', onMove);
-      window.addEventListener('mouseup', onUp);
-    },
-    [size, min, max, direction, storageKey],
-  );
-
-  return { size, onMouseDown };
-}
-
-function ResizeHandle({
-  onMouseDown,
-  orientation,
-}: {
-  onMouseDown: (e: React.MouseEvent) => void;
-  orientation: 'vertical' | 'horizontal';
-}) {
-  return (
-    <div
-      role="separator"
-      onMouseDown={onMouseDown}
-      className={cn(
-        'relative',
-        orientation === 'horizontal' ? 'ide-resize-hit' : 'ide-resize-hit-row',
-      )}
-    >
-      <div
-        className={cn(
-          'absolute',
-          orientation === 'horizontal'
-            ? 'inset-y-0 -left-1 -right-1'
-            : 'inset-x-0 -top-1 -bottom-1',
-        )}
-      />
-    </div>
-  );
-}
+import { openGitHubFile, openLocalFile } from '../../lib/fileOperations';
+import { IdeShellNavProvider, useIdeShellNav } from '@/components/ide/shell/IdeShellNavContext';
+import { ShellHeader } from '@/components/ide/shell/ShellHeader';
+import { StartScreen } from '@/components/ide/shell/StartScreen';
+import { BuildScreen } from '@/components/ide/shell/BuildScreen';
+import { DashboardScreen } from '@/components/ide/shell/DashboardScreen';
 
 export function NebullaIDE() {
   return (
     <IdeWorkspaceProvider>
       <IdeCenterTabsProvider>
-        <NebullaIDEShell />
+        <IdeShellNavProvider>
+          <NebullaIDEShell />
+        </IdeShellNavProvider>
       </IdeCenterTabsProvider>
     </IdeWorkspaceProvider>
   );
 }
 
-type IdeShellStage = 'code' | 'projects' | 'plan' | 'ui-studio' | 'other';
-
-function shellStageFromCenterTab(tab: { kind?: string; pane?: string } | null): IdeShellStage {
-  if (!tab) return 'other';
-  if (tab.kind === 'file') return 'code';
-  if (tab.pane === 'projects') return 'projects';
-  if (tab.pane === 'master-plan' || tab.pane === 'mind-map') return 'plan';
-  if (tab.pane === 'ui-studio' || tab.pane === 'ui-studio-beta') return 'ui-studio';
-  return 'other';
-}
-
 function NebullaIDEShell() {
-  const { activeNavId, openPanel, activeTab } = useIdeCenterTabs();
-  const explorer = useDragResize(
-    EXPLORER_DEFAULT,
-    EXPLORER_MIN,
-    EXPLORER_MAX,
-    'horizontal-right',
-    'nebulla_ide_explorer_w',
-  );
-  const [leftSidebarOpen, setLeftSidebarOpen] = useState(true);
-  const [leftSidebarView, setLeftSidebarView] = useState<IdeLeftSidebarView>('explorer');
-  const chat = useDragResize(CHAT_DEFAULT, CHAT_MIN, CHAT_MAX, 'horizontal-left', 'nebulla_ide_chat_w');
-  const terminal = useDragResize(
-    TERMINAL_DEFAULT,
-    TERMINAL_MIN,
-    TERMINAL_MAX,
-    'vertical',
-    'nebulla_ide_terminal_h',
-  );
-  const [terminalCollapsed, setTerminalCollapsed] = useState(true);
-  const [securityAlertCount, setSecurityAlertCount] = useState(0);
-  const prevShellStageRef = useRef<IdeShellStage | null>(null);
-
-  // Apply chrome defaults only on stage transition — never fight user resizes continuously.
-  useEffect(() => {
-    const stage = shellStageFromCenterTab(activeTab);
-    if (prevShellStageRef.current === stage) return;
-    prevShellStageRef.current = stage;
-    setTerminalCollapsed(true);
-    if (stage === 'code') {
-      setLeftSidebarOpen(true);
-      setLeftSidebarView('explorer');
-    } else if (stage === 'plan' || stage === 'ui-studio') {
-      setLeftSidebarOpen(false);
-    }
-    // projects / other: keep explorer preference; only collapse terminal
-  }, [activeTab]);
-
-  useEffect(() => installOnboardingRideListeners(), []);
-
-  useEffect(() => {
-    const refreshBadge = async () => {
-      try {
-        const res = await fetch(withProjectQuery('/api/security-scan/latest'));
-        if (!res.ok) {
-          setSecurityAlertCount(0);
-          return;
-        }
-        const data = await res.json();
-        const findings = Array.isArray(data?.findings) ? data.findings : [];
-        let dismissed = new Set<string>();
-        try {
-          const raw = localStorage.getItem('nebulla_security_scan_dismissed_v1');
-          const map = raw ? (JSON.parse(raw) as Record<string, string[]>) : {};
-          dismissed = new Set(map[String(data.projectKey || '')] || []);
-        } catch {
-          /* ignore */
-        }
-        const n = findings.filter(
-          (f: { id?: string; severity?: string }) =>
-            f?.id &&
-            !dismissed.has(f.id) &&
-            (f.severity === 'critical' || f.severity === 'high'),
-        ).length;
-        setSecurityAlertCount(n);
-      } catch {
-        setSecurityAlertCount(0);
-      }
-    };
-    void refreshBadge();
-    const onUpdate = () => void refreshBadge();
-    window.addEventListener('nebula-security-scan-updated', onUpdate);
-    return () => window.removeEventListener('nebula-security-scan-updated', onUpdate);
-  }, []);
-
-  /** Same view again collapses; different view switches content and stays open. */
-  const toggleLeftSidebar = useCallback(
-    (view: IdeLeftSidebarView) => {
-      if (leftSidebarOpen && leftSidebarView === view) {
-        setLeftSidebarOpen(false);
-        return;
-      }
-      setLeftSidebarView(view);
-      setLeftSidebarOpen(true);
-    },
-    [leftSidebarOpen, leftSidebarView],
-  );
-
-  /** Open (or switch to) a left sidebar view without toggling closed. */
-  const openLeftSidebar = useCallback((view: IdeLeftSidebarView) => {
-    setLeftSidebarView(view);
-    setLeftSidebarOpen(true);
-  }, []);
-
+  const { activeScreen } = useIdeShellNav();
   const [profileOpen, setProfileOpen] = useState(false);
   const [myServicesUser, setMyServicesUser] = useState<NebulaSessionUser | null>(null);
   const [workspaceCtx, setWorkspaceCtx] = useState<WorkspaceContext | null>(null);
@@ -300,15 +72,7 @@ function NebullaIDEShell() {
     document.title = 'Nebulla.beta — Workspace';
   }, []);
 
-  useEffect(() => {
-    const onOpen = (ev: Event) => {
-      const detail = (ev as CustomEvent<{ view?: IdeLeftSidebarView }>).detail;
-      const view = detail?.view === 'source-control' ? 'source-control' : 'explorer';
-      openLeftSidebar(view);
-    };
-    window.addEventListener(NEBULA_OPEN_LEFT_SIDEBAR, onOpen);
-    return () => window.removeEventListener(NEBULA_OPEN_LEFT_SIDEBAR, onOpen);
-  }, [openLeftSidebar]);
+  useEffect(() => installOnboardingRideListeners(), []);
 
   const handleWorkspaceReady = useCallback((ctx: WorkspaceContext) => {
     setWorkspaceSetupBusy(false);
@@ -398,7 +162,6 @@ function NebullaIDEShell() {
     setMyServicesUser(null);
     setWorkspaceCtx(null);
     welcomeCheckedRef.current = false;
-    // Public marketing home (not the IDE gate).
     window.location.assign('/');
   }, []);
 
@@ -434,17 +197,14 @@ function NebullaIDEShell() {
     const w = window as Window & { syncMindMapFromMasterPlan?: () => Promise<void> };
     w.syncMindMapFromMasterPlan = async () => {
       try {
-        await fetch(
-          withProjectQuery('/api/workspace/mind-map/sync-from-master-plan'),
-          {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            credentials: 'include',
-            body: JSON.stringify(
-              withProjectBody({ projectName: getBrowserProjectName().trim() || 'Untitled Project' }),
-            ),
-          },
-        );
+        await fetch(withProjectQuery('/api/workspace/mind-map/sync-from-master-plan'), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify(
+            withProjectBody({ projectName: getBrowserProjectName().trim() || 'Untitled Project' }),
+          ),
+        });
         window.dispatchEvent(new CustomEvent('nebula-mind-map-updated'));
         window.dispatchEvent(new CustomEvent('nebula-files-applied'));
       } catch {
@@ -459,51 +219,32 @@ function NebullaIDEShell() {
   useEffect(() => {
     return registerNebulaUiStudioBridge({
       openUiStudio: (opts) => {
-        // Legacy v0 Studio disabled — always open UI Studio Beta.
         dispatchOpenCenterPanel('ui-studio-beta', { uiStudioTab: opts?.tab ?? 'design' });
       },
       runV0Generate: (opts) => {
         dispatchOpenCenterPanel('ui-studio-beta', { uiStudioTab: 'design' });
         window.setTimeout(() => {
           window.dispatchEvent(
-            new CustomEvent('nebula-ui-studio-beta-run', { detail: { ...(opts ?? {}), autoTriggered: true } }),
+            new CustomEvent('nebula-ui-studio-beta-run', {
+              detail: { ...(opts ?? {}), autoTriggered: true },
+            }),
           );
         }, 350);
       },
     });
   }, []);
 
-  const selectNavItem = useCallback(
-    (id: string) => {
-      // Settings gear → Account (profile + project settings). Keys live under Secrets.
-      if (id === 'project-settings') {
-        setProfileOpen(true);
-        return;
-      }
-      if (id === 'explorer') {
-        markUserJumpedPhase();
-        toggleLeftSidebar('explorer');
-        return;
-      }
-      if (id === 'source-control') {
-        markUserJumpedPhase();
-        toggleLeftSidebar('source-control');
-        return;
-      }
-      markUserJumpedPhase();
-      const pane = navIdToCenterPane(id);
-      if (pane !== 'code') openPanel(pane);
-    },
-    [openPanel, toggleLeftSidebar],
-  );
+  const handleOpenLocalFile = useCallback(() => {
+    const path = window.prompt('Open workspace file path (relative):');
+    if (!path?.trim()) return;
+    void openLocalFile(path.trim());
+  }, []);
 
-  const navActiveItem = profileOpen
-    ? 'project-settings'
-    : leftSidebarOpen && (leftSidebarView === 'explorer' || leftSidebarView === 'source-control')
-      ? leftSidebarView
-      : activeNavId === 'source-control'
-        ? 'explorer'
-        : activeNavId;
+  const handleOpenGitHub = useCallback(() => {
+    const url = window.prompt('GitHub file URL:');
+    if (!url?.trim()) return;
+    void openGitHubFile(url.trim());
+  }, []);
 
   return (
     /* Wallpaper/glass come from AppShell — this is layout only */
@@ -538,16 +279,11 @@ function NebullaIDEShell() {
         </div>
       ) : null}
 
-      <TopBar
+      <ShellHeader
         workspaceLabel={workspaceCtx?.projectName}
         workspaceSetupBusy={workspaceSetupBusy && !workspaceCtx}
         onProjectNameCommit={handleProjectNameCommit}
-        onSwitchWorkspace={() => {
-          setWorkspaceSetupBusy(true);
-          setWorkspaceCtx(null);
-        }}
         onOpenAccount={() => setProfileOpen(true)}
-        onLoggedOut={handleSessionEnded}
       />
 
       {!UI_SHELL_ONLY && cloudBanner && !cloudBannerDismissed && workspaceCtx ? (
@@ -566,63 +302,13 @@ function NebullaIDEShell() {
         </div>
       ) : null}
 
-      <div className="flex min-h-0 flex-1 overflow-hidden">
-        <VerticalNav
-          activeItem={navActiveItem}
-          onSelectItem={selectNavItem}
-          securityAlertCount={securityAlertCount}
-        />
-
-        {leftSidebarOpen ? (
-          <>
-            <div
-              className="ide-glass-chrome hidden shrink-0 overflow-hidden border-r border-border md:block"
-              style={{ width: explorer.size }}
-            >
-              {leftSidebarView === 'source-control' ? (
-                <SourceControlPanel
-                  projectKey={workspaceProjectKey}
-                  projectName={workspaceCtx?.projectName || getBrowserProjectName()}
-                  compact
-                />
-              ) : (
-                <IdeExplorerSidebar />
-              )}
-            </div>
-
-            <ResizeHandle onMouseDown={explorer.onMouseDown} orientation="horizontal" />
-          </>
-        ) : null}
-
-        <div className="flex min-w-0 flex-1 flex-col overflow-hidden bg-transparent">
-          <div className="flex min-h-0 flex-1 overflow-hidden bg-transparent">
-            <IdeCenterWorkspace />
-          </div>
-
-          {!terminalCollapsed ? (
-            <ResizeHandle onMouseDown={terminal.onMouseDown} orientation="vertical" />
-          ) : null}
-
-          <div
-            className="ide-glass-chrome shrink-0 overflow-hidden"
-            style={{ height: terminalCollapsed ? 32 : terminal.size }}
-          >
-            <TerminalPanel
-              collapsed={terminalCollapsed}
-              onToggleCollapse={() => setTerminalCollapsed((c) => !c)}
-            />
-          </div>
-        </div>
-
-        <ResizeHandle onMouseDown={chat.onMouseDown} orientation="horizontal" />
-
-        <div
-          className="ide-glass-chrome flex h-full min-h-0 shrink-0 flex-col overflow-hidden border-l border-border"
-          style={{ width: chat.size, minWidth: 280, maxWidth: 420 }}
-        >
-          <AIChat />
-        </div>
-      </div>
+      {activeScreen === 'start' ? (
+        <StartScreen onOpenLocalFile={handleOpenLocalFile} onOpenGitHub={handleOpenGitHub} />
+      ) : null}
+      {activeScreen === 'build' ? <BuildScreen /> : null}
+      {activeScreen === 'dashboard' ? (
+        <DashboardScreen onOpenAccount={() => setProfileOpen(true)} />
+      ) : null}
     </div>
   );
 }
