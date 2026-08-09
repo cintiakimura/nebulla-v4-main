@@ -1,3 +1,5 @@
+PROMOTED to nebula-project/project-workflow.md on 2026-08-09 — lab copy retained as archive of proposal.
+
 # Project Workflow (PROPOSED — not live)
 
 Status: Candidate north star. Promote only after human approval (Phase D+).
