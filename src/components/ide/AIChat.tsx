@@ -6,7 +6,6 @@ import {
   MAIN_AI_CHAT_SETUP_HINT,
   serverReportsMainAiKey,
 } from '../../lib/grokKey';
-import { UI_SHELL_ONLY } from '../../lib/testingBranch';
 import {
   classifyContinueFailure,
   clearMainAiAuthRejected,
@@ -2387,8 +2386,8 @@ export function AIChat() {
     };
   }, [interruptVoiceAndTts]);
 
-  // UI redesign branch: no backend / BYOK nags in the chat rail.
-  const showGrokKeyBanner = !UI_SHELL_ONLY && serverHasGrokKey === false;
+  // Missing key must stay visible on Build send — Settings still owns the save path.
+  const showGrokKeyBanner = serverHasGrokKey === false;
 
   /** Manual / Agent-switch coding pass (replaces the removed Go button). */
   const runCodingPass = useCallback(async (opts?: { force?: boolean; note?: string }) => {

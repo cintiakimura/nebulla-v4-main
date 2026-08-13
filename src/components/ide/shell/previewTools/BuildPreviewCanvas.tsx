@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { withProjectQuery } from '../../../../lib/nebulaProjectApi';
 import { tryGuidedDoneToCode } from '../../../../lib/guidedFunnel';
+import { installPreviewRuntimeMessageListener } from '../../../../lib/previewRuntimeBridge';
 import { PreviewEditToolbar, type PreviewToolbarState } from './PreviewEditToolbar';
 
 /**
@@ -12,6 +13,17 @@ export function BuildPreviewCanvas() {
   const [failed, setFailed] = useState(false);
   const [hasSelection] = useState(false);
   const src = withProjectQuery(`/api/app-preview/bootstrap?_rev=${rev}`);
+
+  useEffect(() => {
+    const onFilesApplied = () => {
+      setFailed(false);
+      setRev((n) => n + 1);
+    };
+    window.addEventListener('nebula-files-applied', onFilesApplied);
+    return () => window.removeEventListener('nebula-files-applied', onFilesApplied);
+  }, []);
+
+  useEffect(() => installPreviewRuntimeMessageListener(), []);
 
   return (
     <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
