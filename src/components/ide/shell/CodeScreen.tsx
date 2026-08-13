@@ -11,6 +11,8 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useIdeWorkspace } from '@/components/ide/IdeWorkspaceContext';
+import { IdeFileEditor } from '@/components/ide/IdeFileEditor';
+import { useIdeShellNav } from '@/components/ide/shell/IdeShellNavContext';
 import { buildWorkspaceFileTree, type WorkspaceTreeNode } from '../../../lib/workspaceFileTree';
 import { readResponseJson } from '../../../lib/apiFetch';
 import { withProjectQuery } from '../../../lib/nebulaProjectApi';
@@ -100,6 +102,7 @@ function TreeNode({
  * Code page: explorer + file view + compact commit dropdown + Deploy.
  */
 export function CodeScreen() {
+  const { activeScreen } = useIdeShellNav();
   const {
     workspacePaths,
     overviewLoading,
@@ -108,7 +111,6 @@ export function CodeScreen() {
     activePath,
     activeTab,
     openFile,
-    updateActiveContent,
   } = useIdeWorkspace();
 
   const tree = useMemo(() => buildWorkspaceFileTree(workspacePaths), [workspacePaths]);
@@ -293,25 +295,8 @@ export function CodeScreen() {
           ) : null}
         </div>
 
-        <div className="min-h-0 flex-1 overflow-auto">
-          {!activePath ? (
-            <div className="flex h-full items-center justify-center px-6 text-sm text-muted-foreground">
-              Open a file from the explorer
-            </div>
-          ) : activeTab?.loading ? (
-            <div className="flex h-full items-center justify-center gap-2 text-sm text-muted-foreground">
-              <Loader2 className="h-4 w-4 animate-spin" />
-              Loading…
-            </div>
-          ) : (
-            <textarea
-              value={activeTab?.content ?? ''}
-              onChange={(e) => updateActiveContent(e.target.value)}
-              spellCheck={false}
-              className="font-code h-full min-h-full w-full resize-none bg-transparent px-4 py-3 text-[13px] leading-relaxed text-[#D4D4D4] outline-none"
-              aria-label="File content"
-            />
-          )}
+        <div className="min-h-0 flex-1 overflow-hidden">
+          <IdeFileEditor active={activeScreen === 'code'} />
         </div>
       </main>
 
