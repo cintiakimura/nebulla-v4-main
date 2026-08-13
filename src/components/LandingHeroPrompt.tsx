@@ -92,7 +92,7 @@ export function LandingHeroPrompt({ className }: { className?: string }) {
   }, [listening]);
 
   return (
-    <div className={cn('mx-auto flex w-full max-w-2xl flex-col items-center gap-3 md:max-w-3xl', className)}>
+    <div className={cn('mx-auto flex w-full flex-col items-center gap-2', className)}>
       <div className="w-full overflow-hidden rounded-lg border border-border text-left shadow-none">
         <textarea
           value={draft}
@@ -109,11 +109,11 @@ export function LandingHeroPrompt({ className }: { className?: string }) {
           rows={4}
           placeholder="Describe what you want to build…"
           disabled={busy}
-          className="ide-glass-input min-h-[7.5rem] w-full resize-none border-0 bg-transparent px-5 py-5 text-[15px] leading-relaxed text-foreground outline-none placeholder:text-muted-foreground/60 md:min-h-[8.5rem] md:text-base"
+          className="ide-glass-input min-h-[6.5rem] w-full resize-none border-0 bg-transparent px-4 py-4 text-[15px] font-light leading-relaxed text-foreground outline-none placeholder:text-muted-foreground/50 md:min-h-[7rem]"
           aria-label="Project goal"
         />
 
-        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border px-3 py-2.5 md:px-4">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border px-3 py-2">
           <div className="flex flex-wrap items-center gap-2">
             {TYPES.map((t) => (
               <button

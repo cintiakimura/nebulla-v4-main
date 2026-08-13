@@ -826,7 +826,7 @@
   letter-spacing: 0;
 }
 
-/* Landing may use real display sizes + Light/Bold (Linear-style weight play) */
+/* Landing may use real display sizes (Linear-style hierarchy; Light/Regular only) */
 .nebulla-ide-shell .nebula-landing-page h1,
 .nebulla-ide-shell .nebula-landing-page h2,
 .nebulla-ide-shell .nebula-landing-page h3 {
@@ -1148,6 +1148,98 @@
   min-height: 100vh;
   overflow-x: hidden;
   overflow-y: auto;
+
+  /* Landing type + rhythm — scoped; shell chrome unchanged */
+  --landing-display: clamp(2.5rem, 4.8vw, 3.5rem); /* 40–56 */
+  --landing-title: clamp(1.375rem, 2.1vw, 1.75rem); /* 22–28 */
+  --landing-body: 1rem; /* 16 */
+  --landing-meta: 0.8125rem; /* 13 */
+  --landing-label: 0.6875rem; /* 11 */
+  --landing-ink: var(--ink);
+  --landing-ink-2: color-mix(in srgb, var(--ink) 66%, transparent);
+  --landing-ink-3: color-mix(in srgb, var(--ink) 45%, transparent);
+  --landing-space-1: 8px;
+  --landing-space-2: 16px;
+  --landing-space-3: 24px;
+  --landing-space-4: 48px;
+  --landing-space-5: 72px;
+  --landing-measure: 45rem; /* 720 */
+}
+
+.nebulla-ide-shell .landing-label {
+  font-family: "Akkurat", ui-sans-serif, system-ui, sans-serif;
+  font-size: var(--landing-label);
+  font-weight: 400;
+  letter-spacing: 0.1em;
+  line-height: 1.3;
+  text-transform: uppercase;
+  color: var(--landing-ink-3);
+}
+
+.nebulla-ide-shell .landing-label-mono {
+  font-family: var(--font-mono);
+  font-size: var(--landing-label);
+  font-weight: 400;
+  letter-spacing: 0.08em;
+  line-height: 1.3;
+  color: var(--landing-ink-3);
+}
+
+.nebulla-ide-shell .landing-display {
+  font-size: var(--landing-display);
+  font-weight: 400 !important;
+  letter-spacing: -0.035em;
+  line-height: 1.05;
+  color: var(--landing-ink);
+}
+
+.nebulla-ide-shell .landing-title {
+  font-size: var(--landing-title);
+  font-weight: 400;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+  color: var(--landing-ink);
+}
+
+.nebulla-ide-shell .landing-body {
+  font-size: var(--landing-body);
+  font-weight: 300 !important;
+  letter-spacing: 0;
+  line-height: 1.55;
+  color: var(--landing-ink-2);
+}
+
+.nebulla-ide-shell .landing-meta {
+  font-size: var(--landing-meta);
+  font-weight: 300 !important;
+  letter-spacing: 0;
+  line-height: 1.5;
+  color: var(--landing-ink-2);
+}
+
+.nebulla-ide-shell .landing-measure {
+  width: 100%;
+  max-width: var(--landing-measure);
+}
+
+.nebulla-ide-shell .landing-hero {
+  padding: var(--landing-space-5) 20px var(--landing-space-4);
+}
+
+@media (min-width: 768px) {
+  .nebulla-ide-shell .landing-hero {
+    padding: var(--landing-space-5) 40px;
+  }
+}
+
+.nebulla-ide-shell .landing-section {
+  padding: var(--landing-space-5) 20px;
+}
+
+@media (min-width: 768px) {
+  .nebulla-ide-shell .landing-section {
+    padding: var(--landing-space-5) 40px;
+  }
 }
 
 .nebulla-ide-shell :is(
