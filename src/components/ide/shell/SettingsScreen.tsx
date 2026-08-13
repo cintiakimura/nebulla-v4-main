@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
+  Check,
+  Copy,
   CreditCard,
   Eye,
   EyeOff,
@@ -19,6 +21,8 @@ import { fetchNebulaPublicConfig, type NebulaPublicConfig } from '../../../lib/n
 import { formatGithubConnectionStatus } from '../../../lib/githubDisplay';
 import {
   GROK_CONSOLE_URL,
+  GROK_SECRET_NAME,
+  getStoredGrokApiKey,
   hasLocalGrokApiKey,
   isPlausibleGrokApiKey,
   saveGrokApiKeyRobust,
@@ -26,17 +30,35 @@ import {
 import { fetchByokStatus } from '../../../lib/byokClient';
 import { BETA_FREE_BANNER } from '../../../lib/billingFlags';
 
-type SettingsSection = 'account' | 'ai' | 'github' | 'billing';
+export type SettingsSection = 'account' | 'ai' | 'github' | 'billing';
 
 const SECTIONS: { id: SettingsSection; label: string; icon: typeof User }[] = [
   { id: 'account', label: 'Account', icon: User },
-  { id: 'ai', label: 'AI keys', icon: KeyRound },
+  { id: 'ai', label: 'Secrets', icon: KeyRound },
   { id: 'github', label: 'GitHub', icon: Github },
   { id: 'billing', label: 'Billing', icon: CreditCard },
 ];
 
 const DISPLAY_NAME_KEY = 'nebula_account_display_name_v1';
-const SECTION_KEY = 'nebula_shell_settings_section_v1';
+export const SETTINGS_SECTION_KEY = 'nebula_shell_settings_section_v1';
+
+export function writeSettingsSection(section: SettingsSection): void {
+  try {
+    localStorage.setItem(SETTINGS_SECTION_KEY, section);
+  } catch {
+    /* ignore */
+  }
+}
+
+/** Open Settings → Secrets. */
+export function openSettingsAiKeys(): void {
+  writeSettingsSection('ai');
+  try {
+    window.dispatchEvent(new CustomEvent('nebula-open-settings', { detail: { section: 'ai' } }));
+  } catch {
+    /* ignore */
+  }
+}
 
 function readDisplayNameOverride(): string {
   try {
@@ -58,20 +80,12 @@ function writeDisplayNameOverride(name: string): void {
 
 function readSection(): SettingsSection {
   try {
-    const raw = localStorage.getItem(SECTION_KEY);
+    const raw = localStorage.getItem(SETTINGS_SECTION_KEY);
     if (raw === 'account' || raw === 'ai' || raw === 'github' || raw === 'billing') return raw;
   } catch {
     /* ignore */
   }
   return 'account';
-}
-
-function writeSection(section: SettingsSection): void {
-  try {
-    localStorage.setItem(SECTION_KEY, section);
-  } catch {
-    /* ignore */
-  }
 }
 
 type AiKeyStatus = 'connected' | 'missing' | 'invalid';
@@ -89,7 +103,7 @@ function billingStatus(user: NebulaSessionUser | null): 'Active' | 'Trial' | 'No
 }
 
 /**
- * Account-level Settings: Account · AI keys · GitHub · Billing.
+ * Account-level Settings: Account · Secrets · GitHub · Billing.
  */
 export function SettingsScreen({ onLoggedOut }: { onLoggedOut?: () => void }) {
   const [section, setSection] = useState<SettingsSection>(() => readSection());
@@ -107,12 +121,13 @@ export function SettingsScreen({ onLoggedOut }: { onLoggedOut?: () => void }) {
   const [accountGrokConfigured, setAccountGrokConfigured] = useState(false);
   const [accountGrokTail, setAccountGrokTail] = useState<string | null>(null);
   const [aiStatusOverride, setAiStatusOverride] = useState<AiKeyStatus | null>(null);
+  const [copiedKey, setCopiedKey] = useState(false);
 
   const [githubHint, setGithubHint] = useState<string | null>(null);
 
   const selectSection = useCallback((next: SettingsSection) => {
     setSection(next);
-    writeSection(next);
+    writeSettingsSection(next);
   }, []);
 
   const refresh = useCallback(async () => {
@@ -145,13 +160,21 @@ export function SettingsScreen({ onLoggedOut }: { onLoggedOut?: () => void }) {
     const onOAuth = (ev: MessageEvent) => {
       if (ev.data?.type === 'OAUTH_AUTH_SUCCESS') void refresh();
     };
+    const onOpenSettings = (ev: Event) => {
+      const section = (ev as CustomEvent<{ section?: SettingsSection }>).detail?.section;
+      if (section === 'account' || section === 'ai' || section === 'github' || section === 'billing') {
+        selectSection(section);
+      }
+    };
     window.addEventListener('nebula-byok-updated', onByok);
     window.addEventListener('message', onOAuth);
+    window.addEventListener('nebula-open-settings', onOpenSettings);
     return () => {
       window.removeEventListener('nebula-byok-updated', onByok);
       window.removeEventListener('message', onOAuth);
+      window.removeEventListener('nebula-open-settings', onOpenSettings);
     };
-  }, [refresh]);
+  }, [refresh, selectSection]);
 
   const aiStatus: AiKeyStatus =
     aiStatusOverride ||
@@ -195,18 +218,30 @@ export function SettingsScreen({ onLoggedOut }: { onLoggedOut?: () => void }) {
         return;
       }
       setGrokInput('');
-      setAiStatusOverride(null);
+      setAiStatusOverride('connected');
       await refresh();
       setGrokMsg(
         result.source === 'server'
           ? 'Saved on your account (encrypted).'
-          : result.error || 'Saved in this browser only.',
+          : result.error || 'Saved in this browser only. Build chat will use this key.',
       );
     } catch {
       setAiStatusOverride('invalid');
       setGrokMsg('Could not save key.');
     } finally {
       setGrokBusy(false);
+    }
+  };
+
+  const onCopyGrok = async () => {
+    const v = grokInput.trim() || getStoredGrokApiKey() || '';
+    if (!v) return;
+    try {
+      await navigator.clipboard.writeText(v);
+      setCopiedKey(true);
+      window.setTimeout(() => setCopiedKey(false), 1500);
+    } catch {
+      /* ignore */
     }
   };
 
@@ -257,7 +292,7 @@ export function SettingsScreen({ onLoggedOut }: { onLoggedOut?: () => void }) {
       </nav>
 
       <div className="min-h-0 min-w-0 flex-1 overflow-y-auto p-5">
-        <div className="mx-auto max-w-lg space-y-5">
+        <div className={cn('mx-auto space-y-5', section === 'ai' ? 'max-w-2xl' : 'max-w-lg')}>
           {loading ? <p className="type-body-md text-muted-foreground">Loading…</p> : null}
 
           {section === 'account' ? (
@@ -332,64 +367,124 @@ export function SettingsScreen({ onLoggedOut }: { onLoggedOut?: () => void }) {
           ) : null}
 
           {section === 'ai' ? (
-            <section className="space-y-4" aria-label="AI keys">
-              <h2 className="type-page">AI keys</h2>
-              <p className="text-xs text-muted-foreground">
-                Provider: <span className="text-foreground">Grok</span> (primary)
-              </p>
-              <p className="text-xs leading-relaxed text-muted-foreground">
-                You use your own key; usage is billed by the provider.
-              </p>
-              <div className="flex items-center justify-between gap-2 text-xs">
-                <span className="text-muted-foreground">Status</span>
+            <section className="space-y-5" aria-label="Secrets">
+              <div className="space-y-1.5">
+                <h2 className="type-page">Secrets</h2>
+                <p className="text-xs leading-relaxed text-muted-foreground">
+                  Environment variables for this workspace. Chat uses{' '}
+                  <span className="font-mono text-foreground/80">{GROK_SECRET_NAME}</span>.
+                </p>
+              </div>
+
+              <div>
+                <div className="grid grid-cols-[minmax(9.5rem,13rem)_minmax(0,1fr)] gap-3 pb-2">
+                  <span className="type-label-sm uppercase tracking-[0.08em]">Key</span>
+                  <span className="type-label-sm uppercase tracking-[0.08em]">Value</span>
+                </div>
+                <div className="border-t border-border" />
+                <div className="grid grid-cols-[minmax(9.5rem,13rem)_minmax(0,1fr)] items-start gap-3 pt-3">
+                  <input
+                    readOnly
+                    value={GROK_SECRET_NAME}
+                    aria-label="Secret key"
+                    className="w-full rounded-md border border-border bg-[#1a1a1a] px-2.5 py-2 font-mono text-xs text-foreground outline-none"
+                  />
+                  <div className="flex min-w-0 items-start gap-1">
+                    {showKey ? (
+                      <textarea
+                        rows={1}
+                        autoComplete="off"
+                        spellCheck={false}
+                        value={grokInput}
+                        onChange={(e) => {
+                          setGrokInput(e.target.value);
+                          setGrokMsg(null);
+                          setAiStatusOverride(null);
+                        }}
+                        placeholder={
+                          accountGrokConfigured || hasLocalGrokApiKey()
+                            ? '••••••••••'
+                            : 'Paste value'
+                        }
+                        className="min-h-[2.25rem] min-w-0 flex-1 resize-y rounded-md border border-border bg-[#1a1a1a] px-2.5 py-2 font-mono text-xs text-foreground outline-none"
+                      />
+                    ) : (
+                      <input
+                        type="password"
+                        autoComplete="off"
+                        value={grokInput}
+                        onChange={(e) => {
+                          setGrokInput(e.target.value);
+                          setGrokMsg(null);
+                          setAiStatusOverride(null);
+                        }}
+                        placeholder={
+                          accountGrokConfigured || hasLocalGrokApiKey()
+                            ? '••••••••••'
+                            : 'Paste value'
+                        }
+                        className="min-h-[2.25rem] min-w-0 flex-1 rounded-md border border-border bg-[#1a1a1a] px-2.5 py-2 font-mono text-xs text-foreground outline-none"
+                      />
+                    )}
+                    <button
+                      type="button"
+                      title={copiedKey ? 'Copied' : 'Copy'}
+                      aria-label={copiedKey ? 'Copied' : 'Copy value'}
+                      onClick={() => void onCopyGrok()}
+                      className="inline-flex h-9 w-8 shrink-0 items-center justify-center text-muted-foreground hover:text-foreground"
+                    >
+                      {copiedKey ? (
+                        <Check className="h-3.5 w-3.5" aria-hidden />
+                      ) : (
+                        <Copy className="h-3.5 w-3.5" aria-hidden />
+                      )}
+                    </button>
+                    <button
+                      type="button"
+                      title={showKey ? 'Hide' : 'Reveal'}
+                      aria-label={showKey ? 'Hide value' : 'Reveal value'}
+                      onClick={() => setShowKey((v) => !v)}
+                      className="inline-flex h-9 w-8 shrink-0 items-center justify-center text-muted-foreground hover:text-foreground"
+                    >
+                      {showKey ? (
+                        <EyeOff className="h-3.5 w-3.5" aria-hidden />
+                      ) : (
+                        <Eye className="h-3.5 w-3.5" aria-hidden />
+                      )}
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-3">
+                <button
+                  type="button"
+                  disabled={grokBusy}
+                  onClick={() => void onSaveGrok()}
+                  className="h-9 rounded-md border border-border bg-[#1a1a1a] px-3.5 text-xs text-foreground hover:border-white/20 disabled:opacity-40"
+                >
+                  {grokBusy ? 'Saving…' : 'Save'}
+                </button>
                 <span
                   className={cn(
-                    aiStatus === 'connected' && 'text-foreground',
+                    'text-xs',
+                    aiStatus === 'connected' && 'text-foreground/80',
                     aiStatus === 'missing' && 'text-muted-foreground',
                     aiStatus === 'invalid' && 'text-red-300',
                   )}
                 >
                   {aiStatus === 'connected'
-                    ? `Connected${accountGrokTail ? ` (…${accountGrokTail})` : ''}`
+                    ? `Saved${accountGrokTail ? ` (…${accountGrokTail})` : ''}`
                     : aiStatus === 'invalid'
                       ? 'Invalid'
-                      : 'Missing'}
+                      : 'Not set'}
                 </span>
               </div>
-              <label className="block space-y-1.5">
-                <span className="text-[11px] text-muted-foreground">API key</span>
-                <div className="flex gap-2">
-                  <input
-                    type={showKey ? 'text' : 'password'}
-                    autoComplete="off"
-                    value={grokInput}
-                    onChange={(e) => {
-                      setGrokInput(e.target.value);
-                      setGrokMsg(null);
-                      setAiStatusOverride(null);
-                    }}
-                    placeholder={
-                      accountGrokConfigured || hasLocalGrokApiKey()
-                        ? 'Key on file — paste a new key to replace'
-                        : 'Paste your Grok / xAI API key'
-                    }
-                    className="ide-glass-input min-w-0 flex-1 rounded-md px-2.5 py-1.5 font-mono text-xs outline-none"
-                  />
-                  <button
-                    type="button"
-                    title={showKey ? 'Hide key' : 'Show key'}
-                    aria-label={showKey ? 'Hide key' : 'Show key'}
-                    onClick={() => setShowKey((v) => !v)}
-                    className="btn-secondary-surface inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md"
-                  >
-                    {showKey ? (
-                      <EyeOff className="h-3.5 w-3.5" aria-hidden />
-                    ) : (
-                      <Eye className="h-3.5 w-3.5" aria-hidden />
-                    )}
-                  </button>
-                </div>
-              </label>
+              {grokMsg ? (
+                <p className="text-xs text-muted-foreground" role="status">
+                  {grokMsg}
+                </p>
+              ) : null}
               <a
                 href={GROK_CONSOLE_URL}
                 target="_blank"
@@ -398,19 +493,6 @@ export function SettingsScreen({ onLoggedOut }: { onLoggedOut?: () => void }) {
               >
                 Get a key from the xAI console
               </a>
-              <button
-                type="button"
-                disabled={grokBusy}
-                onClick={() => void onSaveGrok()}
-                className="btn-cyan h-9 rounded-md px-3 text-xs disabled:opacity-40"
-              >
-                {grokBusy ? 'Saving…' : 'Save / update key'}
-              </button>
-              {grokMsg ? (
-                <p className="text-xs text-muted-foreground" role="status">
-                  {grokMsg}
-                </p>
-              ) : null}
             </section>
           ) : null}
 

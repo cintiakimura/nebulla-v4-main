@@ -41,6 +41,20 @@ export function clearMainAiAuthRejected(projectKey?: string): void {
   }
 }
 
+/** Clear every project’s sticky 401 flag (key save / landing reset). */
+export function clearAllMainAiAuthRejected(): void {
+  try {
+    const doomed: string[] = [];
+    for (let i = 0; i < sessionStorage.length; i++) {
+      const k = sessionStorage.key(i);
+      if (k && k.startsWith('nebula-main-ai-auth-rejected:')) doomed.push(k);
+    }
+    for (const k of doomed) sessionStorage.removeItem(k);
+  } catch {
+    /* ignore */
+  }
+}
+
 export function isMainAiAuthRejected(projectKey?: string): boolean {
   try {
     return sessionStorage.getItem(authRejectedKey(projectKey)) === '1';

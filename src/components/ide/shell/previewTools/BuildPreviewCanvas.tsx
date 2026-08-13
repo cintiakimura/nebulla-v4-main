@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { withProjectQuery } from '../../../../lib/nebulaProjectApi';
 import { tryGuidedDoneToCode } from '../../../../lib/guidedFunnel';
 import { installPreviewRuntimeMessageListener } from '../../../../lib/previewRuntimeBridge';
@@ -11,6 +11,7 @@ import { PreviewEditToolbar, type PreviewToolbarState } from './PreviewEditToolb
 export function BuildPreviewCanvas() {
   const [rev, setRev] = useState(0);
   const [failed, setFailed] = useState(false);
+  const retriedLegacyRef = useRef(false);
   const [hasSelection] = useState(false);
   const src = withProjectQuery(`/api/app-preview/bootstrap?_rev=${rev}`);
 
@@ -67,6 +68,15 @@ export function BuildPreviewCanvas() {
             onLoad={(e) => {
               try {
                 const doc = e.currentTarget.contentDocument;
+                const html = doc?.documentElement?.outerHTML || '';
+                if (
+                  !retriedLegacyRef.current &&
+                  /V0 credits unavailable|basic UI preview/i.test(html)
+                ) {
+                  retriedLegacyRef.current = true;
+                  setRev((n) => n + 1);
+                  return;
+                }
                 const bodyText = doc?.body?.innerText?.trim() || '';
                 if (/no preview|not found|error/i.test(bodyText) && bodyText.length < 200) {
                   setFailed(true);

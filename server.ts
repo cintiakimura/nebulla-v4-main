@@ -60,6 +60,7 @@ import {
   MAIN_AI_ENV_VAR,
   MAIN_AI_KEY_SETUP_HINT,
   mainAiApiKeyTail,
+  requestHasClientAiKey,
   readMainAiApiKeyFromEnv,
   readPlatformSwarmApiKey,
   readPlatformTtsApiKey,
@@ -78,6 +79,7 @@ import { formatWorkspaceFileIndexBlock } from "./lib/ideAiContextBlocks";
 import {
   bootstrapMasterPlanFromWorkspace,
   ensurePreviewIndexHtml,
+  isLegacyNebulaBasicPreviewHtml,
   fillMissingMasterPlanSectionsLocal,
   hydrateAndPersistMasterPlan,
   readMasterPlanFile,
@@ -570,8 +572,13 @@ async function startServer() {
     }
 
     const hasPlatformMain = grok.length >= 20;
+    const hasClientByok = requestHasClientAiKey(req);
     const hasMainAi =
-      hasPlatformMain || byok.xai.configured || byok.anthropic.configured || byok.openai.configured;
+      hasPlatformMain ||
+      hasClientByok ||
+      byok.xai.configured ||
+      byok.anthropic.configured ||
+      byok.openai.configured;
 
     res.json({
       ...render,
@@ -2335,6 +2342,12 @@ No approved UI code yet.
           return res.status(200).type("html").send(emptyPreviewHtmlWithBridge());
         }
         html = fs.readFileSync(idx, "utf8");
+      }
+
+      if (html && isLegacyNebulaBasicPreviewHtml(html)) {
+        writeBasicUiScaffold(pp.workspaceRoot, displayName, { force: true });
+        const idx = path.join(pp.workspaceRoot, "index.html");
+        html = fs.existsSync(idx) ? fs.readFileSync(idx, "utf8") : html;
       }
 
       const xfProto = (req.headers["x-forwarded-proto"] as string | undefined)?.split(",")[0]?.trim();

@@ -29,7 +29,7 @@ import { GuidedFunnelOverlays } from '@/components/ide/shell/GuidedFunnelOverlay
 import { BuildScreen } from '@/components/ide/shell/BuildScreen';
 import { CodeScreen } from '@/components/ide/shell/CodeScreen';
 import { PlanScreen } from '@/components/ide/shell/PlanScreen';
-import { SettingsScreen } from '@/components/ide/shell/SettingsScreen';
+import { openSettingsAiKeys, SettingsScreen } from '@/components/ide/shell/SettingsScreen';
 import { DashboardScreen } from '@/components/ide/shell/DashboardScreen';
 import {
   consumeForceDashboardOnce,
@@ -165,16 +165,21 @@ function NebullaIDEShell() {
   }, []);
 
   useEffect(() => {
-    const openSecrets = () => {
-      dispatchOpenCenterPanel('secrets');
+    const openAiKeys = () => {
+      openSettingsAiKeys();
+    };
+    const onOpenSettings = () => {
+      goToSettings();
     };
     const openProfile = () => {
       goToSettings();
     };
-    window.addEventListener('nebula-open-my-services', openSecrets);
+    window.addEventListener('nebula-open-my-services', openAiKeys);
+    window.addEventListener('nebula-open-settings', onOpenSettings);
     window.addEventListener('nebula-open-user-profile', openProfile);
     return () => {
-      window.removeEventListener('nebula-open-my-services', openSecrets);
+      window.removeEventListener('nebula-open-my-services', openAiKeys);
+      window.removeEventListener('nebula-open-settings', onOpenSettings);
       window.removeEventListener('nebula-open-user-profile', openProfile);
     };
   }, [goToSettings]);

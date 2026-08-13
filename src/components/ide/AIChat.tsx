@@ -2,12 +2,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Bot, Hand, Loader2, Mic, Paperclip, Send, User, Wrench } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { fetchSessionUser, syncActiveCloudProjectFromSession, upsertCloudProject } from '../../lib/nebulaCloud';
-import {
-  MAIN_AI_CHAT_SETUP_HINT,
-  serverReportsMainAiKey,
-} from '../../lib/grokKey';
+import { MAIN_AI_CHAT_SETUP_HINT } from '../../lib/grokKey';
+import { getGrokRequestHeaders, hasUsableGrokKeyForChat } from '../../lib/grokUserKey';
 import {
   classifyContinueFailure,
+  clearAllMainAiAuthRejected,
   clearMainAiAuthRejected,
   continueFailureActivityLine,
   isKeyAuthFailureMessage,
@@ -29,6 +28,7 @@ import {
   resetProjectFromScratch,
 } from '../../lib/ideProjectReset';
 import { sendIdeAssistantGrokTurn } from '../../lib/ideAssistantGrokChat';
+import { openSettingsAiKeys } from './shell/SettingsScreen';
 import {
   conversationEntriesToIdeMessages,
   buildDiscoveryBootstrap,
@@ -286,7 +286,7 @@ export function AIChat() {
     assistantInteractionMode,
     setAssistantInteractionMode,
   } = useIdeWorkspace();
-  const { activeTab: centerActiveTab, openPanel } = useIdeCenterTabs();
+  const { activeTab: centerActiveTab } = useIdeCenterTabs();
   /** Center My Projects / discovery already owns the hero — keep chat secondary. */
   const centerIsProjectsHome =
     centerActiveTab?.kind === 'panel' && centerActiveTab.pane === 'projects';
@@ -889,11 +889,14 @@ export function AIChat() {
     let cancelled = false;
     void (async () => {
       try {
-        const r = await fetch(withProjectQuery('/api/config'), { credentials: 'include' });
+        const r = await fetch(withProjectQuery('/api/config'), {
+          credentials: 'include',
+          headers: getGrokRequestHeaders(),
+        });
         const cfg = (await readResponseJson(r)) as { hasMainAiApiKey?: boolean; hasGrokApiKey?: boolean };
-        if (!cancelled) setServerHasGrokKey(r.ok && serverReportsMainAiKey(cfg));
+        if (!cancelled) setServerHasGrokKey(hasUsableGrokKeyForChat(r.ok ? cfg : null));
       } catch {
-        if (!cancelled) setServerHasGrokKey(false);
+        if (!cancelled) setServerHasGrokKey(hasUsableGrokKeyForChat(null));
       }
       if (!cancelled) {
         await syncActiveCloudProjectFromSession();
@@ -901,8 +904,26 @@ export function AIChat() {
         void refreshTree();
       }
     })();
+    const onByok = () => {
+      clearAllMainAiAuthRejected();
+      if (hasUsableGrokKeyForChat(null)) setServerHasGrokKey(true);
+      void (async () => {
+        try {
+          const r = await fetch(withProjectQuery('/api/config'), {
+            credentials: 'include',
+            headers: getGrokRequestHeaders(),
+          });
+          const cfg = (await readResponseJson(r)) as { hasMainAiApiKey?: boolean; hasGrokApiKey?: boolean };
+          setServerHasGrokKey(hasUsableGrokKeyForChat(r.ok ? cfg : null));
+        } catch {
+          setServerHasGrokKey(hasUsableGrokKeyForChat(null));
+        }
+      })();
+    };
+    window.addEventListener('nebula-byok-updated', onByok);
     return () => {
       cancelled = true;
+      window.removeEventListener('nebula-byok-updated', onByok);
     };
   }, [refreshTree, refreshWorkspaceMeta]);
 
@@ -1003,7 +1024,7 @@ export function AIChat() {
   // Post-login / landing handoff: stay quiet until New Project or pending goal idea.
   useEffect(() => {
     // Phase 7.0: prior 401/403 — do not auto-stampede Start/Continue.
-    if (isMainAiAuthRejected(diskProjectKey)) return;
+    if (isMainAiAuthRejected(diskProjectKey) && !hasUsableGrokKeyForChat(null)) return;
     if (!chatHistoryReady) return;
     if (bootstrapStartedRef.current || sendingRef.current) return;
     // Prefer pending idea from landing / "Start with a prompt" even if chat log restored noise.
@@ -1298,19 +1319,27 @@ export function AIChat() {
     const projectCreation = detectProjectCreationIntent(rawText);
     if (projectCreation) {
       // Phase 7.0: do not create + bootstrap a false pipeline when chat key is missing/rejected.
-      let hasKeyForCreate = serverHasGrokKey;
-      if (hasKeyForCreate === null) {
+      let hasKeyForCreate = serverHasGrokKey === true || hasUsableGrokKeyForChat(null);
+      if (hasKeyForCreate === false && serverHasGrokKey === null) {
       try {
-        const r = await fetch(withProjectQuery('/api/config'), { credentials: 'include' });
+        const r = await fetch(withProjectQuery('/api/config'), {
+          credentials: 'include',
+          headers: getGrokRequestHeaders(),
+        });
           const cfg = (await readResponseJson(r)) as { hasMainAiApiKey?: boolean; hasGrokApiKey?: boolean };
-          hasKeyForCreate = r.ok && serverReportsMainAiKey(cfg);
+          hasKeyForCreate = hasUsableGrokKeyForChat(r.ok ? cfg : null);
           setServerHasGrokKey(hasKeyForCreate);
       } catch {
-          hasKeyForCreate = false;
-        setServerHasGrokKey(false);
+          hasKeyForCreate = hasUsableGrokKeyForChat(null);
+        setServerHasGrokKey(hasKeyForCreate);
       }
       }
-      if (hasKeyForCreate === false || isMainAiAuthRejected(diskProjectKey)) {
+      if (hasUsableGrokKeyForChat(null)) {
+        clearMainAiAuthRejected(diskProjectKey);
+        hasKeyForCreate = true;
+        setServerHasGrokKey(true);
+      }
+      if (hasKeyForCreate === false) {
         const failureClass = classifyContinueFailure({
           message: 'Grok chat is unavailable: no valid API key on the server.',
         });
@@ -1357,21 +1386,29 @@ export function AIChat() {
       return;
     }
 
-    let hasMainAiKey = serverHasGrokKey;
-    if (hasMainAiKey === null) {
+    let hasMainAiKey = serverHasGrokKey === true || hasUsableGrokKeyForChat(null);
+    if (hasMainAiKey === false && serverHasGrokKey === null) {
       try {
-        const r = await fetch(withProjectQuery('/api/config'), { credentials: 'include' });
+        const r = await fetch(withProjectQuery('/api/config'), {
+          credentials: 'include',
+          headers: getGrokRequestHeaders(),
+        });
         const cfg = (await readResponseJson(r)) as { hasMainAiApiKey?: boolean; hasGrokApiKey?: boolean };
-        hasMainAiKey = r.ok && serverReportsMainAiKey(cfg);
+        hasMainAiKey = hasUsableGrokKeyForChat(r.ok ? cfg : null);
         setServerHasGrokKey(hasMainAiKey);
       } catch {
-        hasMainAiKey = false;
-        setServerHasGrokKey(false);
+        hasMainAiKey = hasUsableGrokKeyForChat(null);
+        setServerHasGrokKey(hasMainAiKey);
       }
     }
 
-    // Phase 7.0 Auth/API-key health precondition — fail fast before plan/mockup/coding stampede.
-    if (hasMainAiKey === false || isMainAiAuthRejected(diskProjectKey)) {
+    // Phase 7.0: block only when no usable key. A prior 401 must not stick after BYOK/local save.
+    if (hasUsableGrokKeyForChat(null)) {
+      clearMainAiAuthRejected(diskProjectKey);
+      hasMainAiKey = true;
+      setServerHasGrokKey(true);
+    }
+    if (hasMainAiKey === false) {
       const failureClass = classifyContinueFailure({
         message: 'Grok chat is unavailable: no valid API key on the server.',
       });
@@ -2447,11 +2484,14 @@ export function AIChat() {
 
     if (serverHasGrokKey === null) {
       try {
-        const r = await fetch(withProjectQuery('/api/config'), { credentials: 'include' });
+        const r = await fetch(withProjectQuery('/api/config'), {
+          credentials: 'include',
+          headers: getGrokRequestHeaders(),
+        });
         const cfg = (await readResponseJson(r)) as { hasMainAiApiKey?: boolean; hasGrokApiKey?: boolean };
-        setServerHasGrokKey(r.ok && serverReportsMainAiKey(cfg));
+        setServerHasGrokKey(hasUsableGrokKeyForChat(r.ok ? cfg : null));
       } catch {
-        setServerHasGrokKey(false);
+        setServerHasGrokKey(hasUsableGrokKeyForChat(null));
       }
     }
 
@@ -2775,7 +2815,7 @@ export function AIChat() {
             <button
               type="button"
               className="shrink-0 rounded-md px-2 py-0.5 font-medium text-red-50 ring-1 ring-red-400/40 hover:bg-red-500/20"
-              onClick={() => openPanel('secrets')}
+              onClick={() => openSettingsAiKeys()}
             >
               Open Secrets
             </button>

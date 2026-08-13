@@ -1,6 +1,6 @@
 /** Same guidance as server `MAIN_AI_KEY_SETUP_HINT` (kept in client bundle). */
 export const MAIN_AI_CHAT_SETUP_HINT =
-  'Grok chat is unavailable: no valid API key on the server. Add your xAI key in My services (or ask your operator to configure the deployment), then restart or redeploy and reload this page.';
+  'Grok chat is unavailable: no valid API key. Paste your xAI key in Settings → Secrets, then send again.';
 
 /** @deprecated Use {@link MAIN_AI_CHAT_SETUP_HINT}. */
 export const GROK_CHAT_SETUP_HINT = MAIN_AI_CHAT_SETUP_HINT;
