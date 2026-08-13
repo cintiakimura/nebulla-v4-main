@@ -5,6 +5,7 @@
 
 import {
   MAIN_AI_CHAT_SETUP_HINT,
+  XAI_INCORRECT_KEY_MESSAGE,
   isProviderPermissionError,
   resolveAiLimitUserMessage,
 } from './grokKey';
@@ -116,6 +117,7 @@ export function userFacingContinueFailureMessage(
 ): string {
   const limited = resolveAiLimitUserMessage(rawMessage, opts);
   if (failureClass === 'key/auth fail') {
+    if (/incorrect api key/i.test(rawMessage)) return XAI_INCORRECT_KEY_MESSAGE;
     // Permission/quota copy when recognizable; otherwise the standard missing-key hint.
     if (limited !== rawMessage) return limited;
     return MAIN_AI_CHAT_SETUP_HINT;

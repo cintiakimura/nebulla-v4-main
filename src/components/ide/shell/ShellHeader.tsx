@@ -56,6 +56,15 @@ export function ShellHeader({
   }, [workspaceLabel]);
 
   useEffect(() => {
+    const onSync = (ev: Event) => {
+      const name = (ev as CustomEvent<{ projectName?: string }>).detail?.projectName?.trim();
+      setDraftName(name || getBrowserProjectName().trim() || '');
+    };
+    window.addEventListener('nebula-workspace-context-synced', onSync);
+    return () => window.removeEventListener('nebula-workspace-context-synced', onSync);
+  }, []);
+
+  useEffect(() => {
     let cancelled = false;
     void Promise.all([fetchSessionUser(), fetchNebulaPublicConfig()]).then(([u, cfg]) => {
       if (cancelled) return;

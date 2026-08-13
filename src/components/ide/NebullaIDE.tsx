@@ -155,7 +155,15 @@ function NebullaIDEShell() {
   }, [workspaceCtx, refreshMyServicesContext]);
 
   useEffect(() => {
-    const onWorkspaceSync = () => setWorkspaceProjectKey(getBrowserProjectKey());
+    const onWorkspaceSync = (ev: Event) => {
+      const detail = (ev as CustomEvent<{ projectName?: string; projectKey?: string }>).detail;
+      const nextName = detail?.projectName?.trim() || getBrowserProjectName().trim();
+      const nextKey = detail?.projectKey?.trim() || getBrowserProjectKey();
+      setWorkspaceProjectKey(nextKey);
+      setWorkspaceCtx((prev) =>
+        prev ? { ...prev, projectName: nextName || prev.projectName, projectKey: nextKey } : prev,
+      );
+    };
     window.addEventListener('nebula-workspace-context-synced', onWorkspaceSync);
     window.addEventListener('nebula-files-applied', onWorkspaceSync);
     return () => {

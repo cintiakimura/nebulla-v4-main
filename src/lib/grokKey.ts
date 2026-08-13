@@ -2,6 +2,10 @@
 export const MAIN_AI_CHAT_SETUP_HINT =
   'Grok chat is unavailable: no valid API key. Paste your xAI key in Settings → Secrets, then send again.';
 
+/** xAI accepted the request but rejected the key string (local save still worked). */
+export const XAI_INCORRECT_KEY_MESSAGE =
+  'xAI rejected this key (incorrect API key). It is saved in this browser — the key itself is invalid. Copy a fresh key from console.x.ai, paste it in Settings → Secrets as XAI_API_KEY, Save, then send again.';
+
 /** @deprecated Use {@link MAIN_AI_CHAT_SETUP_HINT}. */
 export const GROK_CHAT_SETUP_HINT = MAIN_AI_CHAT_SETUP_HINT;
 

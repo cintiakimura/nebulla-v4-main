@@ -69,6 +69,26 @@ section("workspaceHasCodedAppUi true with src/pages");
   fs.rmSync(root, { recursive: true, force: true });
 }
 
+section("workspace-routes scaffold yields to UI Gen mockup");
+{
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "nebulla-preview-scaffold-"));
+  fs.writeFileSync(
+    path.join(root, "index.html"),
+    `<!DOCTYPE html><html><head><meta name="nebulla-preview" content="workspace-routes"/><title>App</title></head><body><p class="sub">Workspace routes on disk.</p></body></html>`,
+    "utf8",
+  );
+  fs.mkdirSync(path.join(root, "public"), { recursive: true });
+  fs.writeFileSync(
+    path.join(root, "public", "nebula-ui-gen-preview.html"),
+    `<!DOCTYPE html><html><head><meta name="nebulla-ui-gen-preview" content="1"/></head><body><div class="shell--phone" data-screen="home">Mockup</div></body></html>`,
+    "utf8",
+  );
+  const auth = resolveAppPreviewAuthority(root);
+  assert.equal(auth.mode, "pre_code_mockup");
+  assert.equal(auth.entryRel, "public/nebula-ui-gen-preview.html");
+  fs.rmSync(root, { recursive: true, force: true });
+}
+
 section("pre-code apply writes index.html + dedicated mockup");
 {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "nebulla-preview-pre-"));

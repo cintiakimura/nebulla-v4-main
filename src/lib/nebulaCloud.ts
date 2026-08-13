@@ -23,6 +23,7 @@ import {
   setBrowserProjectName,
 } from './nebulaProjectApi';
 import { clearIdeWorkspaceMetaCache } from './ideWorkspaceChatContext';
+import { FORCE_GUEST_MODE } from './testingBranch';
 
 const ACTIVE_CLOUD_PROJECT_NAME_KEY = 'nebula_active_cloud_project_name_v1';
 const ACTIVE_CLOUD_PROJECT_KEY_LS = 'nebula_active_cloud_project_key_v1';
@@ -413,7 +414,7 @@ export async function createProjectForCurrentSession(name: string): Promise<{
   mode: 'cloud' | 'guest';
 }> {
   const trimmed = name.trim() || 'Untitled Project';
-  const user = await fetchSessionUser();
+  const user = FORCE_GUEST_MODE ? null : await fetchSessionUser();
   if (user?.uid) {
     const ok = await createAndSelectCloudProject(trimmed);
     if (ok) {

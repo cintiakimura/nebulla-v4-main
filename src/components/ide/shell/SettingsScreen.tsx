@@ -28,7 +28,10 @@ import {
   getStoredGrokApiKey,
   hasLocalGrokApiKey,
   isPlausibleGrokApiKey,
+  looksLikeXaiApiKey,
+  sanitizeGrokApiKey,
   saveGrokApiKeyRobust,
+  storedGrokKeyTail,
 } from '../../../lib/grokUserKey';
 import { fetchByokStatus } from '../../../lib/byokClient';
 import { getBrowserProjectKey } from '../../../lib/nebulaProjectApi';
@@ -109,14 +112,13 @@ function isXaiSecretName(name: string): boolean {
 
 function loadSecretRows(): SecretRow[] {
   const stored = loadProjectSecrets(getBrowserProjectKey());
-  const grok = getStoredGrokApiKey() || '';
   const rows: SecretRow[] = stored.map((e) => ({
     id: e.id,
     name: e.name,
-    value: e.value || (isXaiSecretName(e.name) ? grok : ''),
+    value: e.value,
   }));
   if (!rows.some((r) => isXaiSecretName(r.name))) {
-    rows.unshift({ id: newSecretId(), name: GROK_SECRET_NAME, value: grok });
+    rows.unshift({ id: newSecretId(), name: GROK_SECRET_NAME, value: '' });
   }
   return rows;
 }
@@ -262,9 +264,15 @@ export function SettingsScreen({ onLoggedOut }: { onLoggedOut?: () => void }) {
       .map((row) => ({ ...row, name: row.name.trim(), value: row.value.trim() }))
       .filter((row) => row.name || row.value);
     const xai = cleaned.find((row) => isXaiSecretName(row.name));
-    if (xai && xai.value && !isPlausibleGrokApiKey(xai.value)) {
+    const grokValue = xai?.value ? sanitizeGrokApiKey(xai.value) : '';
+    if (grokValue && !isPlausibleGrokApiKey(grokValue)) {
       setAiStatusOverride('invalid');
       setGrokMsg('That XAI_API_KEY looks too short or invalid.');
+      return;
+    }
+    if (grokValue && !looksLikeXaiApiKey(grokValue)) {
+      setAiStatusOverride('invalid');
+      setGrokMsg('XAI_API_KEY must be an xAI key (it starts with xai-). Other secrets are not used for chat.');
       return;
     }
     setGrokBusy(true);
@@ -272,16 +280,12 @@ export function SettingsScreen({ onLoggedOut }: { onLoggedOut?: () => void }) {
       const projectKey = getBrowserProjectKey();
       const entries: SecretEntry[] = cleaned.map((row) => ({
         id: row.id,
-        name: row.name,
-        value: row.value,
+        name: isXaiSecretName(row.name) ? GROK_SECRET_NAME : row.name,
+        value: isXaiSecretName(row.name) ? grokValue : row.value,
         category: 'api_key',
       }));
       saveProjectSecrets(projectKey, entries);
       setSecretRows(cleaned.length ? cleaned : loadSecretRows());
-      const grokValue =
-        xai?.value ||
-        cleaned.find((row) => isPlausibleGrokApiKey(row.value))?.value ||
-        '';
       if (grokValue) {
         const result = await saveGrokApiKeyRobust(grokValue);
         if (!result.ok) {
@@ -290,15 +294,11 @@ export function SettingsScreen({ onLoggedOut }: { onLoggedOut?: () => void }) {
           return;
         }
         setAiStatusOverride('connected');
-        setGrokMsg(
-          result.source === 'server'
-            ? 'Saved on your account (encrypted).'
-            : 'Saved. Build chat will use this key — open Build and send again.',
-        );
+        setGrokMsg(`Saved. Build chat will use XAI_API_KEY (…${grokValue.slice(-4)}).`);
       } else {
         clearLocalGrokApiKeyCache();
         setAiStatusOverride('missing');
-        setGrokMsg('Saved. Paste your xAI key in XAI_API_KEY for Build chat.');
+        setGrokMsg('Saved. Chat has no Grok key until you paste an xai-… key in XAI_API_KEY.');
       }
       await refresh();
     } catch {
@@ -447,8 +447,8 @@ export function SettingsScreen({ onLoggedOut }: { onLoggedOut?: () => void }) {
               <div className="space-y-1.5">
                 <h2 className="type-page">Secrets</h2>
                 <p className="text-xs leading-relaxed text-muted-foreground">
-                  Environment variables for this workspace. Chat uses{' '}
-                  <span className="font-mono text-foreground/80">{GROK_SECRET_NAME}</span>.
+                  Chat only uses <span className="font-mono text-foreground/80">{GROK_SECRET_NAME}</span>{' '}
+                  (must start with <span className="font-mono">xai-</span>). Other rows are not sent to Grok.
                 </p>
               </div>
 
@@ -567,7 +567,7 @@ export function SettingsScreen({ onLoggedOut }: { onLoggedOut?: () => void }) {
                   )}
                 >
                   {aiStatus === 'connected'
-                    ? `Saved${accountGrokTail ? ` (…${accountGrokTail})` : ''}`
+                    ? `Chat key …${storedGrokKeyTail() || accountGrokTail || '????'}`
                     : aiStatus === 'invalid'
                       ? 'Invalid'
                       : 'Not set'}

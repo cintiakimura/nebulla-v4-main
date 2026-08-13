@@ -107,6 +107,13 @@ export function workspaceHasCodedAppUi(workspaceRoot: string): boolean {
   return listProductUiFiles(workspaceRoot, 8).length >= 1;
 }
 
+/** Route-map shell written when no live app exists — not a product preview. */
+export function isWorkspaceRoutesScaffoldHtml(html: string): boolean {
+  const t = String(html || "");
+  return /name=["']nebulla-preview["']\s+content=["']workspace-routes["']/i.test(t) ||
+    /Workspace routes on disk/i.test(t);
+}
+
 export function isNebulaUiGenMockupHtml(html: string): boolean {
   const t = String(html || "");
   if (!t.trim()) return false;
@@ -161,7 +168,20 @@ export function resolveAppPreviewAuthority(workspaceRoot: string): AppPreviewAut
   const built = findBuiltStaticEntry(workspaceRoot);
 
   if (!codedApp) {
-    if (indexHtml && !indexIsMockup && indexHtml.length >= 80) {
+    const indexIsScaffold = indexHtml ? isWorkspaceRoutesScaffoldHtml(indexHtml) : false;
+    if (mockupRel && (indexIsScaffold || !indexHtml || indexIsMockup)) {
+      return {
+        mode: "pre_code_mockup",
+        statusLabel: "Pre-code mockup only - not live app",
+        codedApp: false,
+        indexIsMockup: true,
+        entryRel: mockupRel,
+        productFiles,
+        mockupRel,
+        limitation: null,
+      };
+    }
+    if (indexHtml && !indexIsMockup && !indexIsScaffold && indexHtml.length >= 80) {
       return {
         mode: "live_app_static",
         statusLabel: "Live app preview",
@@ -179,7 +199,7 @@ export function resolveAppPreviewAuthority(workspaceRoot: string): AppPreviewAut
         statusLabel: "Pre-code mockup only - not live app",
         codedApp: false,
         indexIsMockup: indexIsMockup || Boolean(mockupRel),
-        entryRel: indexHtml ? "index.html" : mockupRel,
+        entryRel: mockupRel || "index.html",
         productFiles,
         mockupRel,
         limitation: null,

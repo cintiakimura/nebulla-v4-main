@@ -2058,7 +2058,7 @@ No approved UI code yet.
         templateRoot: NEBULA_PROJECT_ROOT,
         projectDisplayName: projectName,
       });
-      ensurePreviewIndexHtml(pp.workspaceRoot, projectName || "Untitled Project");
+      writeBasicUiScaffold(pp.workspaceRoot, projectName || "Untitled Project", { force: true });
       return res.json({ ok: true, cleared, removed, chatCleared });
     } catch (err: unknown) {
       return res.status(500).json({

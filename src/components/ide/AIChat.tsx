@@ -1467,13 +1467,22 @@ export function AIChat() {
     /** Bare "go" / "start coding" — must launch Foundation even if the model omits START_CODING. */
     const userForcedCoding = isUserExplicitCodingRequest(rawText);
     // Product promise: "nothing more to add" / explicit "go" starts coding — even if still Chat.
-    if ((discoveryCompleteAck || userForcedCoding) && interactionModeRef.current === 'chat') {
+    const fastPrototypeTurnEarly =
+      codingHint === 'fast-prototype' ||
+      rawText.trim().startsWith(FAST_PROTOTYPE_BOOTSTRAP_PREFIX) ||
+      rawText.trim().startsWith(FAST_PROTOTYPE_CONTINUE_PREFIX);
+    if (
+      (discoveryCompleteAck || userForcedCoding || fastPrototypeTurnEarly) &&
+      interactionModeRef.current === 'chat'
+    ) {
       interactionModeRef.current = 'agent';
       setAssistantInteractionMode('agent');
       setAccessoryHint(
         discoveryCompleteAck
           ? 'Discovery done — switching to Agent and starting the first coding slice.'
-          : 'Switching to Agent — starting the next coding slice in your workspace.',
+          : fastPrototypeTurnEarly
+            ? 'Fast Prototype — switching to Agent after the mockup so coding can start.'
+            : 'Switching to Agent — starting the next coding slice in your workspace.',
       );
       window.setTimeout(() => setAccessoryHint(null), 4500);
     }
@@ -1671,7 +1680,7 @@ export function AIChat() {
 
       const shortCodingNudge = isShortCodingGoNudge(displayText || raw);
       const assistantCodingPromise = isAssistantCodingPromise(displayText || raw);
-      const willCode =
+      let willCode =
         agentAllowed &&
         (hadCodingTag ||
           hasGrokFileBlocks(raw) ||
@@ -1865,6 +1874,15 @@ export function AIChat() {
             'info',
           );
         }
+      }
+
+      if (
+        !willCode &&
+        agentAllowed &&
+        fastPrototypeTurn &&
+        (uiMockupStarted || mockupSkippedOrFailed || mpSaved > 0)
+      ) {
+        willCode = true;
       }
 
       try {
