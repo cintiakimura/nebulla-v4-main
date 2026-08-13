@@ -906,7 +906,8 @@ export function AIChat() {
     })();
     const onByok = () => {
       clearAllMainAiAuthRejected();
-      if (hasUsableGrokKeyForChat(null)) setServerHasGrokKey(true);
+      setSendError(null);
+      setServerHasGrokKey(hasUsableGrokKeyForChat(null));
       void (async () => {
         try {
           const r = await fetch(withProjectQuery('/api/config'), {

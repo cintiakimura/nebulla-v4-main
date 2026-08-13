@@ -33,9 +33,9 @@ function readBrowserGrokKey(): string | undefined {
 }
 
 export function getStoredGrokApiKey(): string | undefined {
-  const fromBrowser = readBrowserGrokKey();
-  if (fromBrowser) return fromBrowser;
-  return getProjectSecretValue(getBrowserProjectKey(), GROK_SECRET_NAME);
+  const fromSecret = getProjectSecretValue(getBrowserProjectKey(), GROK_SECRET_NAME);
+  if (fromSecret && fromSecret.length >= MIN_GROK_KEY_LEN) return fromSecret;
+  return readBrowserGrokKey();
 }
 
 export function hasLocalGrokApiKey(): boolean {

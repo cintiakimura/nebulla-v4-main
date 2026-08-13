@@ -24,6 +24,7 @@ import { formatGithubConnectionStatus } from '../../../lib/githubDisplay';
 import {
   GROK_CONSOLE_URL,
   GROK_SECRET_NAME,
+  clearLocalGrokApiKeyCache,
   getStoredGrokApiKey,
   hasLocalGrokApiKey,
   isPlausibleGrokApiKey,
@@ -277,8 +278,12 @@ export function SettingsScreen({ onLoggedOut }: { onLoggedOut?: () => void }) {
       }));
       saveProjectSecrets(projectKey, entries);
       setSecretRows(cleaned.length ? cleaned : loadSecretRows());
-      if (xai?.value) {
-        const result = await saveGrokApiKeyRobust(xai.value);
+      const grokValue =
+        xai?.value ||
+        cleaned.find((row) => isPlausibleGrokApiKey(row.value))?.value ||
+        '';
+      if (grokValue) {
+        const result = await saveGrokApiKeyRobust(grokValue);
         if (!result.ok) {
           setAiStatusOverride('invalid');
           setGrokMsg(result.error || 'Could not save Grok key.');
@@ -288,11 +293,12 @@ export function SettingsScreen({ onLoggedOut }: { onLoggedOut?: () => void }) {
         setGrokMsg(
           result.source === 'server'
             ? 'Saved on your account (encrypted).'
-            : result.error || 'Saved in this browser. Build chat will use XAI_API_KEY.',
+            : 'Saved. Build chat will use this key — open Build and send again.',
         );
       } else {
-        setAiStatusOverride(hasLocalGrokApiKey() ? 'connected' : 'missing');
-        setGrokMsg('Saved in this browser.');
+        clearLocalGrokApiKeyCache();
+        setAiStatusOverride('missing');
+        setGrokMsg('Saved. Paste your xAI key in XAI_API_KEY for Build chat.');
       }
       await refresh();
     } catch {
