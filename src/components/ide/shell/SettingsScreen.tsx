@@ -8,6 +8,8 @@ import {
   Github,
   KeyRound,
   LogOut,
+  Plus,
+  Trash2,
   User,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -28,6 +30,13 @@ import {
   saveGrokApiKeyRobust,
 } from '../../../lib/grokUserKey';
 import { fetchByokStatus } from '../../../lib/byokClient';
+import { getBrowserProjectKey } from '../../../lib/nebulaProjectApi';
+import {
+  loadProjectSecrets,
+  newSecretId,
+  saveProjectSecrets,
+  type SecretEntry,
+} from '../../../lib/nebulaDashboardStorage';
 import { BETA_FREE_BANNER } from '../../../lib/billingFlags';
 
 export type SettingsSection = 'account' | 'ai' | 'github' | 'billing';
@@ -90,6 +99,27 @@ function readSection(): SettingsSection {
 
 type AiKeyStatus = 'connected' | 'missing' | 'invalid';
 
+type SecretRow = { id: string; name: string; value: string };
+
+function isXaiSecretName(name: string): boolean {
+  const n = name.trim().toUpperCase();
+  return n === GROK_SECRET_NAME || n === 'GROK_API_KEY';
+}
+
+function loadSecretRows(): SecretRow[] {
+  const stored = loadProjectSecrets(getBrowserProjectKey());
+  const grok = getStoredGrokApiKey() || '';
+  const rows: SecretRow[] = stored.map((e) => ({
+    id: e.id,
+    name: e.name,
+    value: e.value || (isXaiSecretName(e.name) ? grok : ''),
+  }));
+  if (!rows.some((r) => isXaiSecretName(r.name))) {
+    rows.unshift({ id: newSecretId(), name: GROK_SECRET_NAME, value: grok });
+  }
+  return rows;
+}
+
 function planLabel(tier: NebulaSessionUser['billingTier'] | undefined): string {
   if (tier === 'pro') return 'Pro';
   if (tier === 'power') return 'Power';
@@ -114,14 +144,14 @@ export function SettingsScreen({ onLoggedOut }: { onLoggedOut?: () => void }) {
   const [nameHint, setNameHint] = useState<string | null>(null);
   const [logoutBusy, setLogoutBusy] = useState(false);
 
-  const [grokInput, setGrokInput] = useState('');
-  const [showKey, setShowKey] = useState(false);
+  const [secretRows, setSecretRows] = useState<SecretRow[]>(() => loadSecretRows());
+  const [revealedId, setRevealedId] = useState<string | null>(null);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
   const [grokBusy, setGrokBusy] = useState(false);
   const [grokMsg, setGrokMsg] = useState<string | null>(null);
   const [accountGrokConfigured, setAccountGrokConfigured] = useState(false);
   const [accountGrokTail, setAccountGrokTail] = useState<string | null>(null);
   const [aiStatusOverride, setAiStatusOverride] = useState<AiKeyStatus | null>(null);
-  const [copiedKey, setCopiedKey] = useState(false);
 
   const [githubHint, setGithubHint] = useState<string | null>(null);
 
@@ -154,6 +184,10 @@ export function SettingsScreen({ onLoggedOut }: { onLoggedOut?: () => void }) {
   useEffect(() => {
     void refresh();
   }, [refresh]);
+
+  useEffect(() => {
+    if (section === 'ai') setSecretRows(loadSecretRows());
+  }, [section]);
 
   useEffect(() => {
     const onByok = () => void refresh();
@@ -200,46 +234,82 @@ export function SettingsScreen({ onLoggedOut }: { onLoggedOut?: () => void }) {
     }
   };
 
-  const onSaveGrok = async () => {
+  const patchSecretRow = (id: string, patch: Partial<Pick<SecretRow, 'name' | 'value'>>) => {
+    setSecretRows((prev) => prev.map((row) => (row.id === id ? { ...row, ...patch } : row)));
     setGrokMsg(null);
     setAiStatusOverride(null);
-    const v = grokInput.trim();
-    if (!isPlausibleGrokApiKey(v)) {
+  };
+
+  const addSecretRow = () => {
+    const id = newSecretId();
+    setSecretRows((prev) => [...prev, { id, name: '', value: '' }]);
+    window.requestAnimationFrame(() => {
+      document.getElementById(`secret-key-${id}`)?.focus();
+    });
+  };
+
+  const removeSecretRow = (id: string) => {
+    setSecretRows((prev) => (prev.length <= 1 ? prev : prev.filter((row) => row.id !== id)));
+    if (revealedId === id) setRevealedId(null);
+    setGrokMsg(null);
+  };
+
+  const onSaveSecrets = async () => {
+    setGrokMsg(null);
+    setAiStatusOverride(null);
+    const cleaned = secretRows
+      .map((row) => ({ ...row, name: row.name.trim(), value: row.value.trim() }))
+      .filter((row) => row.name || row.value);
+    const xai = cleaned.find((row) => isXaiSecretName(row.name));
+    if (xai && xai.value && !isPlausibleGrokApiKey(xai.value)) {
       setAiStatusOverride('invalid');
-      setGrokMsg(v ? 'That key looks too short or invalid.' : 'Paste your Grok API key first.');
+      setGrokMsg('That XAI_API_KEY looks too short or invalid.');
       return;
     }
     setGrokBusy(true);
     try {
-      const result = await saveGrokApiKeyRobust(v);
-      if (!result.ok) {
-        setAiStatusOverride('invalid');
-        setGrokMsg(result.error || 'Could not save key.');
-        return;
+      const projectKey = getBrowserProjectKey();
+      const entries: SecretEntry[] = cleaned.map((row) => ({
+        id: row.id,
+        name: row.name,
+        value: row.value,
+        category: 'api_key',
+      }));
+      saveProjectSecrets(projectKey, entries);
+      setSecretRows(cleaned.length ? cleaned : loadSecretRows());
+      if (xai?.value) {
+        const result = await saveGrokApiKeyRobust(xai.value);
+        if (!result.ok) {
+          setAiStatusOverride('invalid');
+          setGrokMsg(result.error || 'Could not save Grok key.');
+          return;
+        }
+        setAiStatusOverride('connected');
+        setGrokMsg(
+          result.source === 'server'
+            ? 'Saved on your account (encrypted).'
+            : result.error || 'Saved in this browser. Build chat will use XAI_API_KEY.',
+        );
+      } else {
+        setAiStatusOverride(hasLocalGrokApiKey() ? 'connected' : 'missing');
+        setGrokMsg('Saved in this browser.');
       }
-      setGrokInput('');
-      setAiStatusOverride('connected');
       await refresh();
-      setGrokMsg(
-        result.source === 'server'
-          ? 'Saved on your account (encrypted).'
-          : result.error || 'Saved in this browser only. Build chat will use this key.',
-      );
     } catch {
       setAiStatusOverride('invalid');
-      setGrokMsg('Could not save key.');
+      setGrokMsg('Could not save secrets.');
     } finally {
       setGrokBusy(false);
     }
   };
 
-  const onCopyGrok = async () => {
-    const v = grokInput.trim() || getStoredGrokApiKey() || '';
+  const onCopySecret = async (row: SecretRow) => {
+    const v = row.value.trim() || (isXaiSecretName(row.name) ? getStoredGrokApiKey() || '' : '');
     if (!v) return;
     try {
       await navigator.clipboard.writeText(v);
-      setCopiedKey(true);
-      window.setTimeout(() => setCopiedKey(false), 1500);
+      setCopiedId(row.id);
+      window.setTimeout(() => setCopiedId((cur) => (cur === row.id ? null : cur)), 1500);
     } catch {
       /* ignore */
     }
@@ -382,85 +452,102 @@ export function SettingsScreen({ onLoggedOut }: { onLoggedOut?: () => void }) {
                   <span className="type-label-sm uppercase tracking-[0.08em]">Value</span>
                 </div>
                 <div className="border-t border-border" />
-                <div className="grid grid-cols-[minmax(9.5rem,13rem)_minmax(0,1fr)] items-start gap-3 pt-3">
-                  <input
-                    readOnly
-                    value={GROK_SECRET_NAME}
-                    aria-label="Secret key"
-                    className="w-full rounded-md border border-border bg-[#1a1a1a] px-2.5 py-2 font-mono text-xs text-foreground outline-none"
-                  />
-                  <div className="flex min-w-0 items-start gap-1">
-                    {showKey ? (
-                      <textarea
-                        rows={1}
-                        autoComplete="off"
-                        spellCheck={false}
-                        value={grokInput}
-                        onChange={(e) => {
-                          setGrokInput(e.target.value);
-                          setGrokMsg(null);
-                          setAiStatusOverride(null);
-                        }}
-                        placeholder={
-                          accountGrokConfigured || hasLocalGrokApiKey()
-                            ? '••••••••••'
-                            : 'Paste value'
-                        }
-                        className="min-h-[2.25rem] min-w-0 flex-1 resize-y rounded-md border border-border bg-[#1a1a1a] px-2.5 py-2 font-mono text-xs text-foreground outline-none"
-                      />
-                    ) : (
-                      <input
-                        type="password"
-                        autoComplete="off"
-                        value={grokInput}
-                        onChange={(e) => {
-                          setGrokInput(e.target.value);
-                          setGrokMsg(null);
-                          setAiStatusOverride(null);
-                        }}
-                        placeholder={
-                          accountGrokConfigured || hasLocalGrokApiKey()
-                            ? '••••••••••'
-                            : 'Paste value'
-                        }
-                        className="min-h-[2.25rem] min-w-0 flex-1 rounded-md border border-border bg-[#1a1a1a] px-2.5 py-2 font-mono text-xs text-foreground outline-none"
-                      />
-                    )}
-                    <button
-                      type="button"
-                      title={copiedKey ? 'Copied' : 'Copy'}
-                      aria-label={copiedKey ? 'Copied' : 'Copy value'}
-                      onClick={() => void onCopyGrok()}
-                      className="inline-flex h-9 w-8 shrink-0 items-center justify-center text-muted-foreground hover:text-foreground"
-                    >
-                      {copiedKey ? (
-                        <Check className="h-3.5 w-3.5" aria-hidden />
-                      ) : (
-                        <Copy className="h-3.5 w-3.5" aria-hidden />
-                      )}
-                    </button>
-                    <button
-                      type="button"
-                      title={showKey ? 'Hide' : 'Reveal'}
-                      aria-label={showKey ? 'Hide value' : 'Reveal value'}
-                      onClick={() => setShowKey((v) => !v)}
-                      className="inline-flex h-9 w-8 shrink-0 items-center justify-center text-muted-foreground hover:text-foreground"
-                    >
-                      {showKey ? (
-                        <EyeOff className="h-3.5 w-3.5" aria-hidden />
-                      ) : (
-                        <Eye className="h-3.5 w-3.5" aria-hidden />
-                      )}
-                    </button>
-                  </div>
-                </div>
+                <ul className="divide-y divide-border">
+                  {secretRows.map((row) => {
+                    const revealed = revealedId === row.id;
+                    return (
+                      <li
+                        key={row.id}
+                        className="grid grid-cols-[minmax(9.5rem,13rem)_minmax(0,1fr)] items-start gap-3 py-3"
+                      >
+                        <input
+                          id={`secret-key-${row.id}`}
+                          value={row.name}
+                          autoComplete="off"
+                          spellCheck={false}
+                          aria-label="Secret key"
+                          onChange={(e) => patchSecretRow(row.id, { name: e.target.value })}
+                          placeholder="VARIABLE_NAME"
+                          className="w-full rounded-md border border-border bg-[#1a1a1a] px-2.5 py-2 font-mono text-xs text-foreground outline-none"
+                        />
+                        <div className="flex min-w-0 items-start gap-1">
+                          {revealed ? (
+                            <textarea
+                              rows={1}
+                              autoComplete="off"
+                              spellCheck={false}
+                              value={row.value}
+                              onChange={(e) => patchSecretRow(row.id, { value: e.target.value })}
+                              placeholder="Paste value"
+                              className="min-h-[2.25rem] min-w-0 flex-1 resize-y rounded-md border border-border bg-[#1a1a1a] px-2.5 py-2 font-mono text-xs text-foreground outline-none"
+                            />
+                          ) : (
+                            <input
+                              type="password"
+                              autoComplete="off"
+                              value={row.value}
+                              onChange={(e) => patchSecretRow(row.id, { value: e.target.value })}
+                              placeholder="Paste value"
+                              className="min-h-[2.25rem] min-w-0 flex-1 rounded-md border border-border bg-[#1a1a1a] px-2.5 py-2 font-mono text-xs text-foreground outline-none"
+                            />
+                          )}
+                          <button
+                            type="button"
+                            title={copiedId === row.id ? 'Copied' : 'Copy'}
+                            aria-label={copiedId === row.id ? 'Copied' : 'Copy value'}
+                            onClick={() => void onCopySecret(row)}
+                            className="inline-flex h-9 w-8 shrink-0 items-center justify-center text-muted-foreground hover:text-foreground"
+                          >
+                            {copiedId === row.id ? (
+                              <Check className="h-3.5 w-3.5" aria-hidden />
+                            ) : (
+                              <Copy className="h-3.5 w-3.5" aria-hidden />
+                            )}
+                          </button>
+                          <button
+                            type="button"
+                            title={revealed ? 'Hide' : 'Reveal'}
+                            aria-label={revealed ? 'Hide value' : 'Reveal value'}
+                            onClick={() => setRevealedId((cur) => (cur === row.id ? null : row.id))}
+                            className="inline-flex h-9 w-8 shrink-0 items-center justify-center text-muted-foreground hover:text-foreground"
+                          >
+                            {revealed ? (
+                              <EyeOff className="h-3.5 w-3.5" aria-hidden />
+                            ) : (
+                              <Eye className="h-3.5 w-3.5" aria-hidden />
+                            )}
+                          </button>
+                          {secretRows.length > 1 ? (
+                            <button
+                              type="button"
+                              title="Remove"
+                              aria-label="Remove secret"
+                              onClick={() => removeSecretRow(row.id)}
+                              className="inline-flex h-9 w-8 shrink-0 items-center justify-center text-muted-foreground hover:text-foreground"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" aria-hidden />
+                            </button>
+                          ) : null}
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
               </div>
 
               <div className="flex flex-wrap items-center gap-3">
                 <button
                   type="button"
+                  onClick={addSecretRow}
+                  className="inline-flex h-9 items-center gap-1.5 rounded-md border border-border bg-transparent px-3 text-xs text-foreground hover:border-white/20"
+                >
+                  <Plus className="h-3.5 w-3.5" aria-hidden />
+                  Add secret
+                </button>
+                <button
+                  type="button"
                   disabled={grokBusy}
-                  onClick={() => void onSaveGrok()}
+                  onClick={() => void onSaveSecrets()}
                   className="h-9 rounded-md border border-border bg-[#1a1a1a] px-3.5 text-xs text-foreground hover:border-white/20 disabled:opacity-40"
                 >
                   {grokBusy ? 'Saving…' : 'Save'}
