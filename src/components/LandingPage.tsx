@@ -105,10 +105,15 @@ export function LandingPage({ onEnter }: LandingPageProps) {
           {/* Hero — one display line; grouped band, not viewport-centered void */}
           <section className="landing-hero flex flex-col items-center text-center">
             <div className="landing-measure flex flex-col items-center">
-              <p className="landing-label">Nebulla</p>
-              <h1 className="landing-display mt-2 max-w-[18ch]">What are we building?</h1>
-              <p className="landing-body mt-4 max-w-md">
-                Describe the goal. Nebulla holds the plan from idea to live URL.
+              <p className="landing-label">NEBULLA</p>
+              <h1 className="landing-display mt-2">
+                Talk like a friend.
+                <br />
+                Build like a pro.
+              </h1>
+              <p className="landing-body mt-4 max-w-[34rem]">
+                Architecture-first. You describe the goal — Nebulla plans and builds a real product
+                you can launch, not a dead mockup.
               </p>
               <LandingHeroPrompt className="mt-6 w-full" />
             </div>

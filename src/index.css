@@ -826,8 +826,8 @@
   letter-spacing: 0;
 }
 
-/* Landing may use real display sizes (Linear-style hierarchy; Light/Regular only) */
-.nebulla-ide-shell .nebula-landing-page h1,
+/* Landing headings inherit unless they carry a landing type class */
+.nebulla-ide-shell .nebula-landing-page h1:not(.landing-display),
 .nebulla-ide-shell .nebula-landing-page h2,
 .nebulla-ide-shell .nebula-landing-page h3 {
   font-size: unset;
@@ -1150,7 +1150,7 @@
   overflow-y: auto;
 
   /* Landing type + rhythm — scoped; shell chrome unchanged */
-  --landing-display: clamp(2.5rem, 4.8vw, 3.5rem); /* 40–56 */
+  --landing-display: clamp(3rem, 5.5vw, 4.5rem); /* 48–72 */
   --landing-title: clamp(1.375rem, 2.1vw, 1.75rem); /* 22–28 */
   --landing-body: 1rem; /* 16 */
   --landing-meta: 0.8125rem; /* 13 */
@@ -1185,12 +1185,13 @@
   color: var(--landing-ink-3);
 }
 
-.nebulla-ide-shell .landing-display {
-  font-size: var(--landing-display);
+.nebulla-ide-shell .nebula-landing-page h1.landing-display {
+  font-family: "Akkurat", ui-sans-serif, system-ui, sans-serif;
   font-weight: 400 !important;
-  letter-spacing: -0.035em;
-  line-height: 1.05;
-  color: var(--landing-ink);
+  font-size: clamp(3rem, 5.5vw, 4.5rem) !important;
+  line-height: 1.08 !important;
+  letter-spacing: -0.045em !important;
+  color: var(--ink);
 }
 
 .nebulla-ide-shell .landing-title {
