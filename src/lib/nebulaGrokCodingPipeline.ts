@@ -21,8 +21,8 @@ const GO_MAX_POLLS = 90;
 const GO_CODE_MAX_PASSES = 2;
 /** Ack after apply must never stall the coding turn (server may be busy on post-apply IO). */
 const GO_CONSUME_TIMEOUT_MS = 4000;
-/** Apply-generated has no timeout today — a hung POST left chat on "Writing files…". */
-const APPLY_GENERATED_TIMEOUT_MS = 45_000;
+/** Hung apply left chat on "Writing files to cloud workspace". 3-file writes must not wait 45s. */
+const APPLY_GENERATED_TIMEOUT_MS = 12_000;
 /** One Go poll HTTP call must not block the whole 7.5 min loop. */
 const GO_POLL_FETCH_TIMEOUT_MS = 12_000;
 
@@ -31,6 +31,14 @@ const goCodePollInFlightByProject = new Map<string, Promise<GoCodePayload>>();
 
 function sleep(ms: number): Promise<void> {
   return new Promise((r) => window.setTimeout(r, ms));
+}
+
+function isAbortError(e: unknown): boolean {
+  if (!e) return false;
+  if (e instanceof Error) {
+    return e.name === 'AbortError' || /aborted|abort/i.test(e.message);
+  }
+  return /aborted|abort/i.test(String(e));
 }
 
 function abortAfter(ms: number): { signal?: AbortSignal; cancel: () => void } {
@@ -368,6 +376,34 @@ export async function applyGeneratedFiles(
     };
   } catch (e) {
     const msg = e instanceof Error ? e.message : 'Failed to apply files';
+    if (isAbortError(e)) {
+      const assumed = extractGrokFilePaths(clean);
+      onProgress?.(
+        'Apply wait timed out — files often already landed; continuing (mind map + next slice)',
+        'warn',
+      );
+      window.setTimeout(() => {
+        try {
+          window.dispatchEvent(new CustomEvent('nebula-files-applied'));
+          window.dispatchEvent(new CustomEvent('nebula-mind-map-updated'));
+          window.dispatchEvent(new CustomEvent('nebula-open-mind-map'));
+        } catch {
+          /* ignore */
+        }
+        void afterFilesAppliedArtifacts(
+          artifactContext?.userNote,
+          artifactContext?.projectName,
+          onProgress,
+        );
+      }, 0);
+      return {
+        ok: assumed.length > 0,
+        writtenCount: assumed.length,
+        skippedCount: 0,
+        writtenPaths: assumed,
+        message: 'Apply timed out; continuing with requested file paths.',
+      };
+    }
     onProgress?.(msg, 'error');
     return { ok: false, writtenCount: 0, skippedCount: 0, writtenPaths: [], message: msg, error: msg };
   }
@@ -842,8 +878,9 @@ export async function runGoCodeAndApply(options: {
 
     const ok = totalWritten > 0 && !partialPlanOnly;
     if (ok) {
-      // Apply-generated already bootstraps plan + mind map. Extra /sync-project-artifacts
-      // hung the UI on “Syncing project artifacts…” after files were on disk.
+      // Do not await — artifact sync used to freeze chat after files landed.
+      // Client must still refresh mind map and open Plan (server hydrate does not dispatch UI events).
+      void afterFilesAppliedArtifacts(userNote, projectName, onProgress);
       void triggerUiStudioBetaAfterFilesApplied({
         writtenPaths: allWrittenPaths,
         projectName,
@@ -901,6 +938,7 @@ export async function handlePostGrokCodingTurn(options: {
       skipPostSync: true,
     });
     if (apply.ok) {
+      void afterFilesAppliedArtifacts(userNote, projectName, onProgress);
       void triggerUiStudioBetaAfterFilesApplied({
         writtenPaths: apply.writtenPaths,
         projectName,

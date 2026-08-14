@@ -42,6 +42,12 @@ assert.equal(
   'runGoCodeAndApply must not await consume poll (hangs on Runnable skeleton filled)',
 );
 assert.match(goFn, /ackConsumedGoCodeResult/);
+assert.match(
+  goFn,
+  /afterFilesAppliedArtifacts/,
+  'Go success must refresh mind map / Plan (not skip client events)',
+);
+assert.match(pipeline, /APPLY_GENERATED_TIMEOUT_MS = 12_000/);
 
 assert.match(
   applyFn,
@@ -59,6 +65,7 @@ assert.equal(
 );
 
 assert.match(chat, /looksLikePostApplyCodingStall/);
+assert.match(chat, /looksLikeApplyInFlightStall/);
 assert.match(chat, /runAutoNextSliceRef\.current\(\)/);
 assert.equal(
   /sendChatRef\.current\('continue building'\)/.test(chat),
@@ -84,6 +91,13 @@ assert.equal(
   /setImmediate\(/.test(applyRoute.slice(0, applyRoute.indexOf('app.get("/api/workspace/runnable-status"') || applyRoute.length)),
   false,
   'apply-generated must yield before hydrate so poll/consume can be served',
+);
+
+const ide = fs.readFileSync(path.join(root, 'src/components/ide/NebullaIDE.tsx'), 'utf8');
+assert.match(
+  ide,
+  /addEventListener\('nebula-open-mind-map'/,
+  'shell must open Plan when coding asks for the mind map',
 );
 
 const figma = fs.readFileSync(

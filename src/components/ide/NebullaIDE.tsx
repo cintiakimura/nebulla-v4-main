@@ -96,8 +96,15 @@ function NebullaIDEShell() {
       else if (screen === 'plan') goToPlan();
       else if (screen === 'dashboard') goToDashboard();
     };
+    const onPlan = () => goToPlan();
     window.addEventListener('nebula-guided-nav', onNav);
-    return () => window.removeEventListener('nebula-guided-nav', onNav);
+    window.addEventListener('nebula-open-mind-map', onPlan);
+    window.addEventListener('nebula-open-master-plan', onPlan);
+    return () => {
+      window.removeEventListener('nebula-guided-nav', onNav);
+      window.removeEventListener('nebula-open-mind-map', onPlan);
+      window.removeEventListener('nebula-open-master-plan', onPlan);
+    };
   }, [goToBuild, goToCode, goToPlan, goToDashboard]);
 
   useEffect(() => installOnboardingRideListeners(), []);

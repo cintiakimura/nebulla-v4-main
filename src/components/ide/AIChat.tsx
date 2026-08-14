@@ -78,6 +78,7 @@ import {
   FOUNDATION_APPLY_STALL_MS,
   getAutopilotSliceCount,
   incrementAutopilotSliceCount,
+  looksLikeApplyInFlightStall,
   looksLikePostApplyCodingStall,
   resetAutopilotSliceCount,
   shouldAutopilotAdvance,
@@ -407,6 +408,10 @@ export function AIChat() {
   const runAutoNextSlice = useCallback(async () => {
     if (autoSliceAbortRef.current) return;
     if (autoSliceInFlightRef.current) return;
+    if (interactionModeRef.current === 'chat') {
+      interactionModeRef.current = 'agent';
+      setAssistantInteractionMode('agent');
+    }
     const { projectKey, projectName } = resolveActiveProjectIds(diskProjectKey);
     const decision = shouldAutopilotAdvance({
       codingOk: true,
@@ -498,7 +503,7 @@ export function AIChat() {
       sendingRef.current = false;
       setSending(false);
     }
-  }, [beginCodingActivity, diskProjectKey, pushActivity, resetCodingActivity]);
+  }, [beginCodingActivity, diskProjectKey, pushActivity, resetCodingActivity, setAssistantInteractionMode]);
 
   runAutoNextSliceRef.current = runAutoNextSlice;
 
@@ -1285,14 +1290,25 @@ export function AIChat() {
 
   // Foundation apply used to freeze on "Runnable skeleton filled" (preview events + poll ack).
   // If that line is still the last work log after a few seconds, unlock and start the next slice.
+  // "Writing files to cloud workspace" means the apply POST is still in flight — do not start
+  // another Go (that poisoned the handoff latch while Primary was hung).
   useEffect(() => {
     if (grokActivity.tone !== 'work') return;
     const last = grokActivity.liveLog[grokActivity.liveLog.length - 1]?.message || '';
+    if (looksLikeApplyInFlightStall(last)) {
+      const waitTimer = window.setTimeout(() => {
+        if (!codingActivityRef.current) return;
+        if (autoSliceAbortRef.current) return;
+        pushActivity('Still writing files to the workspace — waiting for apply to finish…', 'wait');
+      }, FOUNDATION_APPLY_STALL_MS);
+      return () => window.clearTimeout(waitTimer);
+    }
     if (!looksLikePostApplyCodingStall(last)) return;
     const timer = window.setTimeout(() => {
       if (!codingActivityRef.current) return;
       if (foundationStallRecoveredRef.current) return;
       if (autoSliceAbortRef.current) return;
+      if (autoSliceInFlightRef.current) return;
       if (autopilotHandoffScheduledRef.current) return;
       lastAutoSliceLabelRef.current = lastAutoSliceLabelRef.current || 'Foundation';
       pushActivity('Foundation files are on disk — auto-starting the next slice…', 'success');

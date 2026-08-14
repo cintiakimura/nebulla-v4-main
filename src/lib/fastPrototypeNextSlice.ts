@@ -205,3 +205,9 @@ export const FOUNDATION_APPLY_STALL_MS = 4000;
 export function looksLikePostApplyCodingStall(lastLogMessage?: string | null): boolean {
   return /Runnable skeleton filled/i.test(String(lastLogMessage || ''));
 }
+
+/** Apply POST still in flight — do not start the next Go slice yet. */
+export function looksLikeApplyInFlightStall(lastLogMessage?: string | null): boolean {
+  const s = String(lastLogMessage || '');
+  return /Writing files to cloud workspace/i.test(s) || /Applying \d+ file\(s\) to workspace/i.test(s);
+}

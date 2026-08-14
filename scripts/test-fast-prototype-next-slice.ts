@@ -14,6 +14,7 @@ import {
   FAST_PROTOTYPE_PRIMARY_SLICE_INSTRUCTION,
   userNoteRequestsNextSlice,
   looksLikePostApplyCodingStall,
+  looksLikeApplyInFlightStall,
   FOUNDATION_APPLY_STALL_MS,
   nextAutopilotSliceLabel,
   shouldAutopilotAdvance,
@@ -148,6 +149,10 @@ assert.equal(userNoteRequestsNextSlice(''), false);
 
 assert.equal(looksLikePostApplyCodingStall('Runnable skeleton filled: next-env.d.ts'), true);
 assert.equal(looksLikePostApplyCodingStall('Wrote 14 file(s) to workspace'), false);
+assert.equal(looksLikePostApplyCodingStall('Writing files to cloud workspace'), false);
+assert.equal(looksLikeApplyInFlightStall('Writing files to cloud workspace'), true);
+assert.equal(looksLikeApplyInFlightStall('Applying 3 file(s) to workspace'), true);
+assert.equal(looksLikeApplyInFlightStall('Wrote 14 file(s) to workspace'), false);
 assert.ok(FOUNDATION_APPLY_STALL_MS >= 3000 && FOUNDATION_APPLY_STALL_MS <= 8000);
 
 {
@@ -213,10 +218,26 @@ assert.ok(FOUNDATION_APPLY_STALL_MS >= 3000 && FOUNDATION_APPLY_STALL_MS <= 8000
     chat.indexOf('Detect natural language project creation'),
   );
   assert.match(stallBlock, /scheduleAutopilotHandoff\(\)/);
+  assert.match(
+    stallBlock,
+    /autoSliceInFlightRef\.current/,
+    'post-apply stall must not start another Go while apply/autopilot is in flight',
+  );
+  assert.match(stallBlock, /looksLikeApplyInFlightStall/);
   assert.equal(
     /sendChatRef\.current\(/.test(stallBlock),
     false,
     'stall recovery must not send a chat message',
+  );
+
+  const autoFn = chat.slice(
+    chat.indexOf('const runAutoNextSlice = useCallback'),
+    chat.indexOf('runAutoNextSliceRef.current = runAutoNextSlice'),
+  );
+  assert.match(
+    autoFn,
+    /setAssistantInteractionMode\('agent'\)/,
+    'autopilot Go must switch Chat → Agent without a tap',
   );
 
   const finallyIdx = chat.lastIndexOf('if (queueAutopilotAfterUnlock)');
