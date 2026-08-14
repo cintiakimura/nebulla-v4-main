@@ -167,7 +167,18 @@ export function goCodePendingToPollResponse(
       hint: "No Go coding session on server — press Go to start, or the last job already finished.",
     };
   }
-  if (pending.status === "running" || jobActive) {
+  // Terminal pending wins over a still-listed job — otherwise polls stay "coding" forever.
+  if (pending.status === "error") {
+    return {
+      ok: false,
+      pending: false,
+      preCodingSummary: pending.preCodingSummary,
+      codeError: pending.codeError || "Grok Code failed",
+      summarySaved: Boolean(pending.preCodingSummary),
+      awaitConsume: true,
+    };
+  }
+  if (pending.status === "running" || (jobActive && pending.status !== "done")) {
     const elapsed = Date.now() - pending.startedAt;
     if (elapsed >= GO_CODE_JOB_TIMEOUT_MS) {
       return {
@@ -193,16 +204,6 @@ export function goCodePendingToPollResponse(
       pending: false,
       idle: true,
       hint: "Go Code result already applied — press Go to start a new pass.",
-    };
-  }
-  if (pending.status === "error") {
-    return {
-      ok: false,
-      pending: false,
-      preCodingSummary: pending.preCodingSummary,
-      codeError: pending.codeError || "Grok Code failed",
-      summarySaved: Boolean(pending.preCodingSummary),
-      awaitConsume: true,
     };
   }
   return {

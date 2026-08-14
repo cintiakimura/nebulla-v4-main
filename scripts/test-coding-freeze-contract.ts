@@ -5,8 +5,15 @@
  */
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import {
+  expireStaleGoCodePending,
+  readGoCodePending,
+  writeGoCodePending,
+} from '../lib/nebulaGoCodePending.ts';
+import { goCodePendingToPollResponse } from '../lib/nebulaGoCodeJob.ts';
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const pipeline = fs.readFileSync(path.join(root, 'src/lib/nebulaGrokCodingPipeline.ts'), 'utf8');
@@ -21,7 +28,10 @@ const pollFn = pipeline.slice(
 
 assert.match(pipeline, /APPLY_GENERATED_TIMEOUT_MS/, 'apply-generated fetch must time out');
 assert.match(pipeline, /GO_POLL_FETCH_TIMEOUT_MS/, 'each Go poll HTTP call must time out');
+assert.match(pipeline, /GO_POLL_MAX_WAIT_MS = 180_000/, 'Go generation poll must hard-stop at 3 minutes');
 assert.match(pipeline, /GO_CONSUME_TIMEOUT_MS/, 'consume ack must time out');
+assert.match(pollFn, /GO_POLL_TIMEOUT_MESSAGE/);
+assert.match(pollFn, /onProgress\?\.\(GO_POLL_TIMEOUT_MESSAGE, 'error'\)/);
 const ackFn = pipeline.slice(
   pipeline.indexOf('export function ackConsumedGoCodeResult'),
   pipeline.indexOf('export function hasGrokFileBlocks'),
@@ -42,6 +52,24 @@ assert.equal(
   'runGoCodeAndApply must not await consume poll (hangs on Runnable skeleton filled)',
 );
 assert.match(goFn, /ackConsumedGoCodeResult/);
+assert.match(goFn, /if \(data\.error && !data\.choices\?\.length\)/);
+assert.equal(
+  /if \(data\.error && !data\.summarySaved/.test(goFn),
+  false,
+  'Go timeout/error must fail even when pre-coding summary was saved',
+);
+{
+  const codeErrBlock = goFn.slice(
+    goFn.indexOf('if (data.codeError && !codeText)'),
+    goFn.indexOf('if (!codeText)'),
+  );
+  assert.match(codeErrBlock, /ok:\s*false/);
+  assert.equal(
+    /ok:\s*Boolean\(data\.summarySaved\)/.test(codeErrBlock),
+    false,
+    'codeError with no files must not count as Go success',
+  );
+}
 assert.match(
   goFn,
   /afterFilesAppliedArtifacts/,
@@ -105,5 +133,39 @@ const figma = fs.readFileSync(
   'utf8',
 );
 assert.match(figma, /controller\.abort\(\), 4000\)/, 'live Figma fetch must time out (non-blocking)');
+
+{
+  const job = fs.readFileSync(path.join(root, 'lib/nebulaGoCodeJob.ts'), 'utf8');
+  const pending = fs.readFileSync(path.join(root, 'lib/nebulaGoCodePending.ts'), 'utf8');
+  assert.match(pending, /GO_CODE_JOB_TIMEOUT_MS = 180_000/);
+  assert.match(job, /GO_CODE_JOB_TIMEOUT_MS/);
+  assert.equal(/GO_CODE_JOB_TIMEOUT_MS = 600_000/.test(job), false);
+  assert.equal(/GO_MAX_POLLS = 90/.test(pipeline), false);
+}
+
+{
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'go-code-expire-'));
+  writeGoCodePending(tmp, {
+    status: 'running',
+    startedAt: Date.now() - 181_000,
+    preCodingSummary: 'SLICE: Primary',
+  });
+  expireStaleGoCodePending(tmp, { jobActive: true });
+  const after = readGoCodePending(tmp);
+  assert.equal(after?.status, 'error');
+  assert.match(String(after?.codeError || ''), /timed out after 3 minutes/i);
+
+  const errTmp = fs.mkdtempSync(path.join(os.tmpdir(), 'go-code-poll-err-'));
+  writeGoCodePending(errTmp, {
+    status: 'error',
+    startedAt: Date.now() - 30_000,
+    preCodingSummary: 'saved',
+    codeError: 'xAI failed',
+  });
+  const pollErr = goCodePendingToPollResponse(readGoCodePending(errTmp), true, errTmp);
+  assert.equal(pollErr.pending, false);
+  assert.equal(pollErr.coding, undefined);
+  assert.equal(pollErr.codeError, 'xAI failed');
+}
 
 console.log('\n✓ coding freeze contract passed\n');

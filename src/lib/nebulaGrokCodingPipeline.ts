@@ -17,14 +17,19 @@ import {
 
 const START_CODING_RE = /<\s*START_CODING\s*>|\bSTART_CODING\b/i;
 const GO_POLL_MS = 5000;
-const GO_MAX_POLLS = 90;
+/** Safety cap — wall clock GO_POLL_MAX_WAIT_MS is the real stop. */
+const GO_MAX_POLLS = 36;
 const GO_CODE_MAX_PASSES = 2;
 /** Ack after apply must never stall the coding turn (server may be busy on post-apply IO). */
 const GO_CONSUME_TIMEOUT_MS = 4000;
 /** Hung apply left chat on "Writing files to cloud workspace". 3-file writes must not wait 45s. */
 const APPLY_GENERATED_TIMEOUT_MS = 12_000;
-/** One Go poll HTTP call must not block the whole 7.5 min loop. */
+/** One Go poll HTTP call must not block the whole wait. */
 const GO_POLL_FETCH_TIMEOUT_MS = 12_000;
+/** Hard max wait for Grok Code generation (matches server GO_CODE_JOB_TIMEOUT_MS). */
+const GO_POLL_MAX_WAIT_MS = 180_000;
+const GO_POLL_TIMEOUT_MESSAGE =
+  'Grok Code timed out after 3 minutes — stopped waiting. Try Go again with a narrower slice.';
 
 /** One poll loop per project — do not join ADHD + children onto the same waiter. */
 const goCodePollInFlightByProject = new Map<string, Promise<GoCodePayload>>();
@@ -462,8 +467,13 @@ async function pollGoCodeUntilDoneInner(
   projectName: string,
   onProgress?: GrokActivityProgressFn,
 ): Promise<GoCodePayload> {
+  const deadline = Date.now() + GO_POLL_MAX_WAIT_MS;
   for (let i = 0; i < GO_MAX_POLLS; i++) {
-    await sleep(GO_POLL_MS);
+    if (Date.now() >= deadline) break;
+    const sleepMs = Math.min(GO_POLL_MS, Math.max(0, deadline - Date.now()));
+    if (sleepMs <= 0) break;
+    await sleep(sleepMs);
+    if (Date.now() >= deadline) break;
     try {
       const pollTimed = abortAfter(GO_POLL_FETCH_TIMEOUT_MS);
       let response: Response;
@@ -493,12 +503,18 @@ async function pollGoCodeUntilDoneInner(
           `Too many requests — waiting ${waitSec}s then continuing to poll (not a preview crash)…`,
           'warn',
         );
-        await sleep(waitSec * 1000);
+        await sleep(Math.min(waitSec * 1000, Math.max(0, deadline - Date.now())));
         continue;
       }
       if (poll.idle) {
-        if (i < 4) continue;
+        if (i < 4 && Date.now() < deadline) continue;
         return poll;
+      }
+      if (poll.error && !poll.choices?.length) {
+        return poll;
+      }
+      if (poll.codeError && !poll.choices?.[0]?.message?.content?.trim()) {
+        return { ...poll, error: poll.codeError };
       }
       if (!response.ok && !poll.pending) {
         return poll;
@@ -525,14 +541,14 @@ async function pollGoCodeUntilDoneInner(
       return poll;
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Go poll failed';
-      if (i >= GO_MAX_POLLS - 1) {
+      if (Date.now() >= deadline || i >= GO_MAX_POLLS - 1) {
+        onProgress?.(msg, 'error');
         return { error: msg };
       }
     }
   }
-  return {
-    error: 'Grok Code is still running after several minutes. Try Go again with a narrower focus.',
-  };
+  onProgress?.(GO_POLL_TIMEOUT_MESSAGE, 'error');
+  return { error: GO_POLL_TIMEOUT_MESSAGE };
 }
 
 async function kickGoCodeJob(options: {
@@ -756,7 +772,7 @@ export async function runGoCodeAndApply(options: {
         onProgress,
       });
 
-      if (data.error && !data.summarySaved && !data.choices?.length) {
+      if (data.error && !data.choices?.length) {
         onProgress?.(data.error || 'Go Code failed', 'error');
         if (totalWritten > 0) break;
         return { ok: false, statusMessage: data.error || 'Go Code failed.', totalWritten };
@@ -784,7 +800,7 @@ export async function runGoCodeAndApply(options: {
         onProgress?.(`Grok Code error: ${data.codeError.slice(0, 200)}`, 'error');
         if (totalWritten > 0) break;
         return {
-          ok: Boolean(data.summarySaved),
+          ok: false,
           statusMessage: data.codeError.slice(0, 400),
           totalWritten,
         };
