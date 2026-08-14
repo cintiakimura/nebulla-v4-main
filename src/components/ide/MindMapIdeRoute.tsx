@@ -73,7 +73,11 @@ export function MindMapIdeRoute() {
     void reloadMindMap();
   }, [reloadMindMap]);
 
+  const lastMasterPlanSyncAtRef = useRef(0);
   const syncFromMasterPlan = useCallback(async () => {
+    const now = Date.now();
+    if (now - lastMasterPlanSyncAtRef.current < 4000) return;
+    lastMasterPlanSyncAtRef.current = now;
     try {
       await fetchJson(withProjectQuery('/api/workspace/mind-map/sync-from-master-plan'), {
         method: 'POST',

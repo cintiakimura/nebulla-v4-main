@@ -160,6 +160,7 @@ async function afterFilesAppliedArtifacts(
       seedBasicUi: false,
       openMindMap: true,
       onProgress,
+      timeoutMs: 12_000,
     });
   } catch (e) {
     console.warn('[nebulaGrokCodingPipeline] artifact sync soft-fail:', e);
@@ -747,13 +748,19 @@ export async function runGoCodeAndApply(options: {
 
     const ok = totalWritten > 0 && !partialPlanOnly;
     if (ok) {
-      // Single owner for post-apply artifact sync (soft-fail; never blocks coding success).
-      await afterFilesAppliedArtifacts(userNote, projectName, onProgress);
-      await triggerUiStudioBetaAfterFilesApplied({
-        writtenPaths: allWrittenPaths,
-        projectName,
-        onProgress,
-      });
+      // Do not hold the coding turn on artifact sync / post-code UI gen — that left the
+      // activity panel spinning after files were already on disk.
+      void afterFilesAppliedArtifacts(userNote, projectName, onProgress)
+        .then(() =>
+          triggerUiStudioBetaAfterFilesApplied({
+            writtenPaths: allWrittenPaths,
+            projectName,
+            onProgress,
+          }),
+        )
+        .catch((e) => {
+          console.warn('[nebulaGrokCodingPipeline] background post-apply:', e);
+        });
     }
 
     return {
