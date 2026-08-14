@@ -111,6 +111,10 @@ export default defineConfig(({ mode }) => {
       hmr: {
         overlay: false,
       },
+      watch: {
+        // Guest workspaces live here — writing mockup/code must not reload the IDE mid-chat.
+        ignored: ['**/data/**', '**/conversation-logs/**', '**/.git/**'],
+      },
     },
   };
 });

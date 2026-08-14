@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Bot, Hand, Loader2, Mic, Paperclip, Send, User, Wrench } from 'lucide-react';
+import { Bot, Hand, Loader2, Mic, Paperclip, Send, Square, User, Wrench } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { fetchSessionUser, syncActiveCloudProjectFromSession, upsertCloudProject } from '../../lib/nebulaCloud';
 import { MAIN_AI_CHAT_SETUP_HINT } from '../../lib/grokKey';
@@ -561,6 +561,7 @@ export function AIChat() {
   const handsFreeFirstSpeechAtRef = useRef<number | null>(null);
   const micInputBlockedRef = useRef(false);
   const sendingRef = useRef(false);
+  const sendingAbortRef = useRef<AbortController | null>(null);
   const isHandsFreeRef = useRef(false);
   const openTalkDesiredRef = useRef(false);
   const handsFreeResumeAfterTtsRef = useRef(false);
@@ -610,6 +611,15 @@ export function AIChat() {
   useEffect(() => {
     sendingRef.current = sending;
   }, [sending]);
+
+  const stopSending = useCallback(() => {
+    sendingAbortRef.current?.abort();
+    sendingAbortRef.current = null;
+    sendingRef.current = false;
+    setSending(false);
+    resetCodingActivity();
+    pushActivity('Stopped — chat is unlocked. Type to continue building.', 'info');
+  }, [pushActivity, resetCodingActivity]);
 
   const clearVoiceIdleTimer = () => {
     if (voiceIdleTimerRef.current != null) {
@@ -1153,7 +1163,7 @@ export function AIChat() {
 
   const sendChat = useCallback(async (textOverride?: string) => {
     const rawText = (textOverride ?? inputRef.current).trim();
-    if (!rawText || sending) return;
+    if (!rawText || sendingRef.current) return;
 
     if (micInputBlocked) return;
 
@@ -1462,6 +1472,10 @@ export function AIChat() {
     inputRef.current = '';
     stickToBottomRef.current = true;
     setSending(true);
+    sendingRef.current = true;
+    sendingAbortRef.current?.abort();
+    sendingAbortRef.current = new AbortController();
+    const sendAbort = sendingAbortRef.current;
     setSendError(null);
     const discoveryCompleteAck = detectOnboardingBuildStart(rawText, prior);
     /** Bare "go" / "start coding" — must launch Foundation even if the model omits START_CODING. */
@@ -1607,24 +1621,68 @@ export function AIChat() {
       let assistantContent: string;
       let planningPhase: string;
       try {
-        ({ assistantContent, planningPhase } = await sendIdeAssistantGrokTurn({
-        textToSend: text,
-        history: historyForApi,
-        userId,
-        projectName,
-        ideAppendix,
-          buildMode,
-          chatModel,
-          chatMode,
-          codingHint,
-          discoveryRequired,
-          interactionMode: interactionModeRef.current,
-          hasAppStatusPayload,
-          appStatusTechnicalMessages,
-          ideLocale: resolvedIdeLocale,
-          contentLocale: contentLocaleRef.current,
-          contentMode: prefs.contentMode,
-        }));
+        const skipGrokForExistingPlan =
+          interactionModeRef.current === 'agent' &&
+          (userForcedCoding || isFastPrototypeContinue) &&
+          !onboardingBuildStart &&
+          !hasAppStatusPayload;
+        let skippedGrokChat = false;
+        if (skipGrokForExistingPlan) {
+          try {
+            const mpRes = await fetch(withProjectQuery('/api/master-plan/read'), {
+              credentials: 'include',
+              cache: 'no-store',
+            });
+            if (mpRes.ok) {
+              const plan = (await readResponseJson(mpRes)) as Record<string, unknown>;
+              if (isMasterPlanCompleteForDiscovery(plan)) {
+                skippedGrokChat = true;
+                assistantContent =
+                  'START_CODING — continuing from the saved Master Plan (skipped a second Grok chat wait).';
+                planningPhase = 'START_CODING';
+                pushActivity(
+                  'Master Plan already on disk — skipping Grok chat, starting coding',
+                  'info',
+                );
+              }
+            }
+          } catch {
+            /* fall through to Grok */
+          }
+        }
+        if (!skippedGrokChat) {
+          try {
+            ({ assistantContent, planningPhase } = await sendIdeAssistantGrokTurn({
+              textToSend: text,
+              history: historyForApi,
+              userId,
+              projectName,
+              ideAppendix,
+              buildMode,
+              chatModel,
+              chatMode,
+              codingHint,
+              discoveryRequired,
+              interactionMode: interactionModeRef.current,
+              hasAppStatusPayload,
+              appStatusTechnicalMessages,
+              ideLocale: resolvedIdeLocale,
+              contentLocale: contentLocaleRef.current,
+              contentMode: prefs.contentMode,
+              signal: sendAbort.signal,
+            }));
+          } catch (grokErr) {
+            const grokMsg = grokErr instanceof Error ? grokErr.message : String(grokErr);
+            if (/timed out/i.test(grokMsg) && (userForcedCoding || fastPrototypeTurn)) {
+              pushActivity(`${grokMsg} — continuing coding from saved Master Plan`, 'warn');
+              assistantContent =
+                'START_CODING — Grok chat timed out; continue from the saved Master Plan.';
+              planningPhase = 'START_CODING';
+            } else {
+              throw grokErr;
+            }
+          }
+        }
         // Phase 7.0: a successful chat turn clears sticky key/auth rejection.
         clearMainAiAuthRejected(diskProjectKey);
       } finally {
@@ -1802,9 +1860,17 @@ export function AIChat() {
         }
       }
 
+      // Unlock composer before mockup. This shell does not mount IdeUiStudioBeta;
+      // generate can take minutes and must not freeze the input.
+      setSending(false);
+      sendingRef.current = false;
+
       // Stage B — UI mockup after plan + ui-brief, BEFORE coding (single API key queue).
       let uiMockupStarted = false;
       let mockupSkippedOrFailed = false;
+      if (sendAbort.signal.aborted) {
+        return;
+      }
       if (agentAllowed && (fastPrototypeTurn || willCode || mpSaved > 0)) {
         const readiness = await assessUiMockupReadiness({ projectKey: diskProjectKey });
         if (readiness.ok) {
@@ -1828,10 +1894,22 @@ export function AIChat() {
               }),
             );
           }
-          const mockup = await triggerUiStudioBetaAfterPlanReady({
-            projectName,
-            onProgress: pushActivity,
-          });
+          const mockup = await Promise.race([
+            triggerUiStudioBetaAfterPlanReady({
+              projectName,
+              onProgress: pushActivity,
+            }),
+            new Promise<{ ok: false; error: string }>((resolve) => {
+              window.setTimeout(
+                () =>
+                  resolve({
+                    ok: false,
+                    error: 'UI mockup timed out — Foundation coding continues',
+                  }),
+                45_000,
+              );
+            }),
+          ]);
           if (mockup.ok) {
             uiMockupStarted = true;
             markUiMockupSucceeded(diskProjectKey);
@@ -3015,6 +3093,7 @@ export function AIChat() {
             onKeyDown={(e) => {
               if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
+                if (sendingRef.current) stopSending();
                 void sendChat();
               }
             }}
@@ -3024,7 +3103,7 @@ export function AIChat() {
                 : t('chat.placeholder.chat')
             }
             rows={2}
-            disabled={sending || uploadBusy}
+            disabled={uploadBusy}
             className="min-h-[2.75rem] w-full resize-none bg-transparent pt-0 pr-16 text-[12px] leading-snug text-foreground outline-none placeholder:text-muted-foreground disabled:opacity-50"
           />
 
@@ -3034,7 +3113,7 @@ export function AIChat() {
                 size="sm"
                 label={uploadBusy ? t('chat.uploading') : t('chat.attach')}
                 onClick={handleFileAttachClick}
-                disabled={sending || uploadBusy || micInputBlocked}
+                disabled={uploadBusy || micInputBlocked}
               >
                 {uploadBusy ? (
                   <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
@@ -3057,7 +3136,7 @@ export function AIChat() {
                 size="sm"
                 label={isRecordingVoice ? t('chat.micStop') : t('chat.mic')}
                 onClick={() => toggleVoiceMic()}
-                disabled={sending || uploadBusy}
+                disabled={uploadBusy}
               >
                 <Mic
                   className={cn(
@@ -3068,18 +3147,32 @@ export function AIChat() {
               </ChatRoundButton>
             </div>
 
-              <ChatRoundButton
-              size="sm"
-              label={t('chat.sendMessage')}
-                onClick={() => {
-                stopVoiceRecognition();
-                setIsRecordingVoice(false);
-                void sendChat();
-              }}
-              disabled={!input.trim() || sending || uploadBusy}
-            >
-              <Send className="h-3.5 w-3.5" />
-              </ChatRoundButton>
+              {sending ? (
+                <ChatRoundButton
+                  size="sm"
+                  label="Stop"
+                  onClick={() => {
+                    stopVoiceRecognition();
+                    setIsRecordingVoice(false);
+                    stopSending();
+                  }}
+                >
+                  <Square className="h-3.5 w-3.5" />
+                </ChatRoundButton>
+              ) : (
+                <ChatRoundButton
+                  size="sm"
+                  label={t('chat.sendMessage')}
+                  onClick={() => {
+                    stopVoiceRecognition();
+                    setIsRecordingVoice(false);
+                    void sendChat();
+                  }}
+                  disabled={!input.trim() || uploadBusy}
+                >
+                  <Send className="h-3.5 w-3.5" />
+                </ChatRoundButton>
+              )}
           </div>
         </div>
       </div>
