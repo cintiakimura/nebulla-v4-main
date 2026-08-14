@@ -234,7 +234,7 @@ export function startGrokActivityWaitTicker(
   intervalMs = 2500,
 ): () => void {
   const started = Date.now();
-  onTick(`${label}…`, 'wait');
+  onTick(`${label}…`, 'wait', { currentOnly: true });
   const schedule =
     typeof window !== 'undefined'
       ? window.setInterval.bind(window)

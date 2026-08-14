@@ -71,6 +71,12 @@ const root = path.join(__dirname, '..');
   const pipeline = fs.readFileSync(path.join(root, 'src/lib/nebulaGrokCodingPipeline.ts'), 'utf8');
   assert.match(pipeline, /skipPostSync: true/);
   assert.match(pipeline, /afterFilesAppliedArtifacts/);
+  const goFn = pipeline.slice(pipeline.indexOf('export async function runGoCodeAndApply'));
+  assert.equal(
+    /await afterFilesAppliedArtifacts/.test(goFn),
+    false,
+    'runGoCodeAndApply must not await artifact sync after files land',
+  );
 
   const chat = fs.readFileSync(path.join(root, 'src/components/ide/AIChat.tsx'), 'utf8');
   // Direct Go path must not re-await a second post-coding workspace sync after Go already synced.

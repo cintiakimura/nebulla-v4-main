@@ -281,12 +281,18 @@ export async function applyGeneratedFiles(
         'warn',
       );
     }
-    if (writtenCount > 0 && !artifactContext?.skipPostSync) {
+    if (writtenCount > 0) {
+      try {
+        window.dispatchEvent(new CustomEvent('nebula-files-applied'));
+        window.dispatchEvent(new CustomEvent('nebula-reload-app-preview'));
+      } catch {
+        /* ignore */
+      }
       notifyWorkspaceFilesChanged();
-      onProgress?.('Syncing Master Plan, mind map, and preview', 'info');
-      await afterFilesAppliedArtifacts(artifactContext?.userNote, artifactContext?.projectName, onProgress);
-    } else if (writtenCount > 0) {
-      notifyWorkspaceFilesChanged();
+      if (!artifactContext?.skipPostSync) {
+        // Never hold the coding turn on artifact sync — that left “Syncing project artifacts…” stuck.
+        void afterFilesAppliedArtifacts(artifactContext?.userNote, artifactContext?.projectName, onProgress);
+      }
     }
     const runnableNote =
       typeof apply.runnableRoot === 'boolean'
@@ -748,19 +754,15 @@ export async function runGoCodeAndApply(options: {
 
     const ok = totalWritten > 0 && !partialPlanOnly;
     if (ok) {
-      // Do not hold the coding turn on artifact sync / post-code UI gen — that left the
-      // activity panel spinning after files were already on disk.
-      void afterFilesAppliedArtifacts(userNote, projectName, onProgress)
-        .then(() =>
-          triggerUiStudioBetaAfterFilesApplied({
-            writtenPaths: allWrittenPaths,
-            projectName,
-            onProgress,
-          }),
-        )
-        .catch((e) => {
-          console.warn('[nebulaGrokCodingPipeline] background post-apply:', e);
-        });
+      // Apply-generated already bootstraps plan + mind map. Extra /sync-project-artifacts
+      // hung the UI on “Syncing project artifacts…” after files were on disk.
+      void triggerUiStudioBetaAfterFilesApplied({
+        writtenPaths: allWrittenPaths,
+        projectName,
+        onProgress,
+      }).catch((e) => {
+        console.warn('[nebulaGrokCodingPipeline] background post-apply UI:', e);
+      });
     }
 
     return {
@@ -804,12 +806,19 @@ export async function handlePostGrokCodingTurn(options: {
   const appCodeBlocks = filterGrokContentToAppCodeFiles(assistantContent);
   if (appCodeBlocks) {
     onProgress?.('Applying app file blocks from Grok coding handoff', 'info');
-    const apply = await applyGeneratedFiles(appCodeBlocks, { userNote, projectName, onProgress });
+    const apply = await applyGeneratedFiles(appCodeBlocks, {
+      userNote,
+      projectName,
+      onProgress,
+      skipPostSync: true,
+    });
     if (apply.ok) {
-      await triggerUiStudioBetaAfterFilesApplied({
+      void triggerUiStudioBetaAfterFilesApplied({
         writtenPaths: apply.writtenPaths,
         projectName,
         onProgress,
+      }).catch((e) => {
+        console.warn('[nebulaGrokCodingPipeline] background post-apply UI:', e);
       });
       return {
         ran: true,

@@ -2663,30 +2663,34 @@ No approved UI code yet.
         interactivePreviewPath,
       });
 
+      // Defer so this request returns even if plan/mind-map IO is slow — do not block
+      // the next /sync-project-artifacts or a hard refresh on the same Node thread.
       if (written.length > 0) {
-        try {
-          const pp = projectPathsFor(req);
-          const body = req.body || {};
-          const projectName =
-            typeof body.projectName === "string" && body.projectName.trim()
-              ? String(body.projectName).trim()
-              : "Untitled Project";
-          const userNote = typeof body.userNote === "string" ? body.userNote.trim() : "";
-          bootstrapMasterPlanFromWorkspace({
-            workspaceRoot: pp.workspaceRoot,
-            masterPlanPath: pp.masterPlanPath,
-            projectName,
-            userNote,
-          });
-          hydrateAndPersistMasterPlan(pp.workspaceRoot, pp.masterPlanPath);
-          syncMindMapFromMasterPlan({
-            workspaceRoot: pp.workspaceRoot,
-            masterPlanPath: pp.masterPlanPath,
-            projectLabel: projectName,
-          });
-        } catch (syncErr) {
-          console.warn("[apply-generated] post-apply artifact sync:", syncErr);
-        }
+        const pp = projectPathsFor(req);
+        const body = req.body || {};
+        const projectName =
+          typeof body.projectName === "string" && body.projectName.trim()
+            ? String(body.projectName).trim()
+            : "Untitled Project";
+        const userNote = typeof body.userNote === "string" ? body.userNote.trim() : "";
+        setImmediate(() => {
+          try {
+            bootstrapMasterPlanFromWorkspace({
+              workspaceRoot: pp.workspaceRoot,
+              masterPlanPath: pp.masterPlanPath,
+              projectName,
+              userNote,
+            });
+            hydrateAndPersistMasterPlan(pp.workspaceRoot, pp.masterPlanPath);
+            syncMindMapFromMasterPlan({
+              workspaceRoot: pp.workspaceRoot,
+              masterPlanPath: pp.masterPlanPath,
+              projectLabel: projectName,
+            });
+          } catch (syncErr) {
+            console.warn("[apply-generated] post-apply artifact sync:", syncErr);
+          }
+        });
       }
     } catch (err: any) {
       res.status(500).json({ error: err?.message || "Failed to apply generated files" });

@@ -71,7 +71,6 @@ import {
   SHORT_CODING_GO_SUMMARY,
 } from '../../lib/ideShortCodingNudge';
 import {
-  FAST_PROTOTYPE_PRIMARY_SLICE_INSTRUCTION,
   markFastPrototypePrimaryAutoRun,
   shouldAutoRunPrimarySliceAfterFoundation,
 } from '../../lib/fastPrototypeNextSlice';
@@ -377,20 +376,9 @@ export function AIChat() {
         ? updateGrokActivityCurrent(prev, message)
         : commitGrokActivityStatus(prev, message, kind),
     );
-    // In-place update of the latest status bubble for wait/elapsed ticks (Cursor-like).
-    if (options?.currentOnly) {
-      setMessages((prev) => {
-        for (let i = prev.length - 1; i >= 0; i--) {
-          if (prev[i]?.variant === 'status') {
-            const next = [...prev];
-            next[i] = { ...next[i], content: message, statusKind: kind };
-            messagesRef.current = next;
-            return next;
-          }
-        }
-        return prev;
-      });
-    }
+    // Wait ticks stay on the compact status line only — never rewrite the last chat row
+    // (that left “Syncing project artifacts…” stuck after files were already applied).
+    if (options?.currentOnly || kind === 'wait') return;
   }, []);
 
   /** Manual V0 watch only — do not inject V0 readiness into Live Activity after Go / file apply. */
@@ -499,7 +487,7 @@ export function AIChat() {
   useEffect(() => {
     const entries = grokActivity.liveLog;
     if (!entries.length) return;
-    const fresh = entries.filter((e) => !syncedStatusLogIdsRef.current.has(e.id));
+    const fresh = entries.filter((e) => !syncedStatusLogIdsRef.current.has(e.id) && e.kind !== 'wait');
     if (!fresh.length) return;
     for (const e of fresh) syncedStatusLogIdsRef.current.add(e.id);
     const ts = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
@@ -939,6 +927,11 @@ export function AIChat() {
   }, [refreshTree, refreshWorkspaceMeta]);
 
   useEffect(() => {
+    sendingRef.current = false;
+    setSending(false);
+    codingActivityRef.current = false;
+    setGrokCodingActive(false);
+    setGrokActivity(idleGrokActivity(interactionModeRef.current));
     let cancelled = false;
     chatHistoryLoadedRef.current = false;
     setChatHistoryReady(false);
@@ -968,6 +961,30 @@ export function AIChat() {
       cancelled = true;
     };
   }, [diskProjectKey]);
+
+  useEffect(() => {
+    if (sending || grokActivity.tone === 'work') return;
+    setMessages((prev) => {
+      const last = prev[prev.length - 1];
+      if (
+        !last ||
+        last.variant !== 'status' ||
+        (last.statusKind !== 'wait' && !/Syncing project artifacts/i.test(last.content || ''))
+      ) {
+        return prev;
+      }
+      const next = [
+        ...prev.slice(0, -1),
+        {
+          ...last,
+          statusKind: 'success' as const,
+          content: 'Files are on disk. Type continue building for the next slice.',
+        },
+      ];
+      messagesRef.current = next;
+      return next;
+    });
+  }, [sending, grokActivity.tone]);
 
   const startGuidedDiscovery = useCallback(() => {
     clearDiscoveryClosed(diskProjectKey);
@@ -2221,55 +2238,24 @@ export function AIChat() {
               );
             }
 
-            // Fast Prototype Step 9.2: one automatic primary feature slice after Foundation (no user nudge).
+            // Finish this slice immediately. Auto-awaiting Primary Go after Auth/Foundation
+            // left the composer stuck on "Grok Code running on server".
             const codingSliceLabel =
               (coding as { sliceLabel?: string | null }).sliceLabel ?? 'Foundation';
-            if (
-              shouldAutoRunPrimarySliceAfterFoundation({
-                fastPrototypeTurn,
-                codingOk: coding.ok !== false,
-                projectKey: diskProjectKey || projectName,
-                sliceLabel: codingSliceLabel,
-              })
-            ) {
+            const wouldAutoPrimary = shouldAutoRunPrimarySliceAfterFoundation({
+              fastPrototypeTurn,
+              codingOk: coding.ok !== false,
+              projectKey: diskProjectKey || projectName,
+              sliceLabel: codingSliceLabel,
+            });
+            if (wouldAutoPrimary) {
               markFastPrototypePrimaryAutoRun(diskProjectKey || projectName);
               pushActivity(
-                'Fast Prototype — Step 9.2 primary feature slice (auto after Foundation)…',
-                'info',
+                'Slice applied. Send “continue building” for the next (primary) slice — chat is unlocked.',
+                'success',
               );
-              beginCodingActivity('Coding — primary feature slice', goWorkSteps(), {
-                subhead: 'Foundation landed — building the core user job next (one slice).',
-                initialLog: 'Auto primary slice after Foundation (max one per session)',
-              });
-              const primaryGo = await runGoCodeAndApply({
-                userId,
-                projectName,
-                userNote: 'SLICE: Primary — core feature after Foundation',
-                onProgress: pushActivity,
-                messages: [
-                  { role: 'assistant' as const, content: masterPlanSource.slice(0, 12000) },
-                  {
-                    role: 'user' as const,
-                    content: FAST_PROTOTYPE_PRIMARY_SLICE_INSTRUCTION,
-                  },
-                ],
-              });
-              // Primary Go owns its own soft-fail artifact sync — do not re-sync here.
-              if (primaryGo.ok) {
-                pushActivity(
-                  primaryGo.statusMessage || 'Primary feature slice applied',
-                  'success',
-                );
-                setAccessoryHint(
-                  'Foundation + primary feature landed — say “continue building” for the next slice.',
-                );
-                window.setTimeout(() => setAccessoryHint(null), 10000);
-              } else {
-                pushActivity(
-                  primaryGo.statusMessage || 'Primary feature slice did not finish — say continue building',
-                  'warn',
-                );
-              }
+              setAccessoryHint('Slice done — type continue building for the next screen.');
+              window.setTimeout(() => setAccessoryHint(null), 8000);
             }
 
             resetCodingActivity();
@@ -2952,12 +2938,7 @@ export function AIChat() {
                     message.statusKind === 'wait' &&
                     isLatest &&
                     (sending || grokActivity.tone === 'work');
-                  const sendingSpin =
-                    sending &&
-                    isLatest &&
-                    (message.statusKind === 'info' || !message.statusKind) &&
-                    /syncing|waiting|generating|applying|writing/i.test(message.content || '');
-                  return waitSpinning || sendingSpin ? (
+                  return waitSpinning ? (
                     <Loader2 className="h-3 w-3 animate-spin text-muted-foreground/70" aria-hidden />
                   ) : (
                     <Bot className="h-3 w-3 text-muted-foreground/50" aria-hidden />
