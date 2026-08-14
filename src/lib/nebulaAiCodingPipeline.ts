@@ -4,6 +4,7 @@
  * Import from here in new code; `nebulaGrokCodingPipeline` stays as a compatible alias.
  */
 export {
+  ackConsumedGoCodeResult,
   applyArchitectureArtifactsFromAssistant,
   applyGeneratedFiles,
   filterGrokContentToArchitectureFiles,

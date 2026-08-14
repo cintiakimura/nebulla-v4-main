@@ -58,6 +58,7 @@ import {
 import { sanitizeAssistantChatText } from '../../../lib/assistantChatSanitize';
 import { dispatchOpenUiStudio, dispatchStartUiUxWorkflow } from '../../lib/nebulaUiStudioEvents';
 import {
+  ackConsumedGoCodeResult,
   handlePostGrokCodingTurn,
   applyArchitectureArtifactsFromAssistant,
   hasGrokFileBlocks,
@@ -72,6 +73,8 @@ import {
 } from '../../lib/ideShortCodingNudge';
 import {
   FAST_PROTOTYPE_PRIMARY_SLICE_INSTRUCTION,
+  FOUNDATION_APPLY_STALL_MS,
+  looksLikePostApplyCodingStall,
   markFastPrototypePrimaryAutoRun,
   shouldAutoRunPrimarySliceAfterFoundation,
   userNoteRequestsNextSlice,
@@ -321,6 +324,7 @@ export function AIChat() {
   const stickToBottomRef = useRef(true);
   const lastV0StatusRef = useRef<string>('');
   const pendingAgentResendRef = useRef<string | null>(null);
+  const foundationStallRecoveredRef = useRef(false);
 
   const resetCodingActivity = useCallback(() => {
     codingActivityRef.current = false;
@@ -349,6 +353,7 @@ export function AIChat() {
 
   useEffect(() => {
     resetAppRuntimeForProject();
+    foundationStallRecoveredRef.current = false;
   }, [diskProjectKey]);
 
   const appStatusVoiceNudgeRef = useRef(0);
@@ -1148,6 +1153,36 @@ export function AIChat() {
   }, [activePath]);
 
   const sendChatRef = useRef<(override?: string) => Promise<void>>(async () => {});
+
+  // Foundation apply used to freeze on "Runnable skeleton filled" (preview events + poll ack).
+  // If that line is still the last work log after a few seconds, unlock and start the next slice.
+  useEffect(() => {
+    if (grokActivity.tone !== 'work') return;
+    const last = grokActivity.liveLog[grokActivity.liveLog.length - 1]?.message || '';
+    if (!looksLikePostApplyCodingStall(last)) return;
+    const timer = window.setTimeout(() => {
+      if (!codingActivityRef.current) return;
+      if (foundationStallRecoveredRef.current) return;
+      foundationStallRecoveredRef.current = true;
+      const projectKey = diskProjectKey || getBrowserProjectName() || 'default';
+      markFastPrototypePrimaryAutoRun(projectKey);
+      ackConsumedGoCodeResult(getBrowserProjectName() || projectKey);
+      pushActivity(
+        'Foundation files are on disk — unlocking and starting the next slice…',
+        'success',
+      );
+      setAccessoryHint('Starting primary screens next…');
+      window.setTimeout(() => setAccessoryHint(null), 8000);
+      resetCodingActivity();
+      sendingRef.current = false;
+      setSending(false);
+      window.setTimeout(() => {
+        if (sendingRef.current) return;
+        void sendChatRef.current('continue building');
+      }, 80);
+    }, FOUNDATION_APPLY_STALL_MS);
+    return () => window.clearTimeout(timer);
+  }, [diskProjectKey, grokActivity.liveLog, grokActivity.tone, pushActivity, resetCodingActivity]);
 
   /** Detect natural language project creation requests like "Create a new project: fitness tracker" */
   function detectProjectCreationIntent(text: string): { description: string } | null {

@@ -75,3 +75,10 @@ export function userNoteRequestsNextSlice(note?: string | null): boolean {
   if (/^(continue|continue\.|continue!|build\s+next)$/i.test(t)) return true;
   return false;
 }
+
+/** Last activity line after apply — coding turn often froze here. */
+export const FOUNDATION_APPLY_STALL_MS = 4000;
+
+export function looksLikePostApplyCodingStall(lastLogMessage?: string | null): boolean {
+  return /Runnable skeleton filled/i.test(String(lastLogMessage || ''));
+}

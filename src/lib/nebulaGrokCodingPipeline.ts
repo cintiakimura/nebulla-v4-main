@@ -30,7 +30,7 @@ function sleep(ms: number): Promise<void> {
 }
 
 /** Fire-and-forget ack so apply is not blocked if poll consume hangs. */
-function ackConsumedGoCodeResult(projectName: string): void {
+export function ackConsumedGoCodeResult(projectName: string): void {
   const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
   const timer =
     controller && typeof window !== 'undefined'
@@ -310,17 +310,20 @@ export async function applyGeneratedFiles(
       );
     }
     if (writtenCount > 0) {
-      try {
-        window.dispatchEvent(new CustomEvent('nebula-files-applied'));
-        window.dispatchEvent(new CustomEvent('nebula-reload-app-preview'));
-      } catch {
-        /* ignore */
-      }
-      notifyWorkspaceFilesChanged();
-      if (!artifactContext?.skipPostSync) {
-        // Never hold the coding turn on artifact sync — that left “Syncing project artifacts…” stuck.
-        void afterFilesAppliedArtifacts(artifactContext?.userNote, artifactContext?.projectName, onProgress);
-      }
+      // Defer preview/tree events — sync dispatch after skeleton froze the coding turn
+      // (listeners hit the API while apply-generated's setImmediate still owns the event loop).
+      window.setTimeout(() => {
+        try {
+          window.dispatchEvent(new CustomEvent('nebula-files-applied'));
+          window.dispatchEvent(new CustomEvent('nebula-reload-app-preview'));
+        } catch {
+          /* ignore */
+        }
+        notifyWorkspaceFilesChanged();
+        if (!artifactContext?.skipPostSync) {
+          void afterFilesAppliedArtifacts(artifactContext?.userNote, artifactContext?.projectName, onProgress);
+        }
+      }, 0);
     }
     const runnableNote =
       typeof apply.runnableRoot === 'boolean'
