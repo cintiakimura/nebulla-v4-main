@@ -17,6 +17,8 @@ import {
 } from "./masterPlanCompleteness";
 import { assessMasterPlanCompletenessWithWorkspace } from "./masterPlanCompletenessIo";
 import { resolveMasterPlanStrictMode } from "./masterPlanStrictPolicy";
+import { mergeResearchIntoMasterPlan } from "./nebulaResearchStroke";
+import { readResearchArtifact } from "./researchArtifact";
 
 export { listMissingMasterPlanSections, fillMissingMasterPlanSectionsLocal };
 export { readMasterPlanStrictMode };
@@ -60,6 +62,11 @@ export async function synthesizeMasterPlanSectionsWithGrok(opts: {
   const missing = listMissingMasterPlanSections(opts.planSnapshot);
   if (missing.length === 0) return { written: [] };
 
+  const researchMd = readResearchArtifact(opts.workspaceRoot).trim();
+  const researchNote = researchMd
+    ? `\n\nCanonical research artifact (prefer over invention; never invent competitor names):\n${researchMd.slice(0, 6000)}`
+    : "";
+
   const system = `You are Grok 4 (Master Plan writer only). Follow nebula-project/project-execution-rules.md (Master Plan contract).
 
 Output EXACTLY one block: <START_MASTERPLAN>...</END_MASTERPLAN>
@@ -88,7 +95,7 @@ Current master-plan.json:
 ${JSON.stringify(opts.planSnapshot, null, 2)}
 
 Discovery conversation:
-${opts.memoryContent.slice(0, 90_000)}`;
+${opts.memoryContent.slice(0, 90_000)}${researchNote}`;
 
   try {
     const res = await fetch("https://api.x.ai/v1/chat/completions", {
@@ -144,7 +151,7 @@ ${opts.memoryContent.slice(0, 90_000)}`;
   }
 }
 
-/** Fill missing sections before Go — Grok from chat when memory exists, else local routes. */
+/** Fill missing sections before Go — Grok from chat when memory exists, else local routes. Phase 2 then Phase 3 brief sync. */
 export async function ensureMasterPlanBeforeGo(opts: {
   apiKey: string;
   workspaceRoot: string;
@@ -194,6 +201,19 @@ export async function ensureMasterPlanBeforeGo(opts: {
     } catch {
       planForAssess = opts.planSnapshot;
     }
+  }
+
+  try {
+    const merged = mergeResearchIntoMasterPlan({
+      workspaceRoot: opts.workspaceRoot,
+      masterPlanPath: opts.masterPlanPath,
+    });
+    if (merged.updated.length > 0) {
+      written = [...new Set([...written, ...merged.updated])];
+      planForAssess = readMasterPlanFile(opts.masterPlanPath);
+    }
+  } catch {
+    /* research merge best-effort */
   }
 
   try {

@@ -1,4 +1,5 @@
 # Nebulla Recovery Orchestration (conductor)
+Canonical runtime order: §11 Canonical spine sequence
 
 **Authority:** Single map of record for Recovery & Re-Integration.  
 **Does not replace:** `inference-first-rules.md`, `project-execution-rules.md`, or `nebulla-project/` guardians.  
@@ -43,8 +44,8 @@
 ### Official machine path (must remain)
 
 ```text
-goal → classify/research → Master Plan §§1–5 → ui-brief
-  → UI mockup (plan-first) → apply to App Preview
+goal → Master Plan usable (light assumptions) → FULL research (Web Search) → merge plan
+  → ui-brief → UI mockup (plan-first) → apply to App Preview
   → foundation coding → primary slice → refine → tech docs
 ```
 
@@ -251,7 +252,18 @@ Work **one step per Agent turn / PR** after constitution install. Fix the **earl
 | 2026-08-09 | Drop X-Nebulla-Preview-Status (em-dash crashed Node setHeader); Fast Prototype auto-Primary also after Auth/shell labels | Preview black-screen Invalid character in header; Go stopped at Auth-only |
 | 2026-08-09 | Phase E: promoted `project-workflow.proposed.md` → live `project-workflow.md` (Steps 1–14 north star). UI Gen v2 primary; security defer-to-end (Step 13); research direct→analogues→baseline. `project-execution-rules.md` not modified this turn. | Thin live workflow was pointer-only; competing spines with inference-first / execution-rules |
 | 2026-08-14 | Render-only stack: apply drops supabase paths; Go/coding/security text never treat RLS as a hosted BaaS; skip warn “stack is Render-only” | Grok invented src/lib/supabase.ts from security language |
-| 2026-08-14 | Build canvas: one Generate UI button; bootstrap serves mockup when coded iframe cannot run Next/Vite; generate always apply+reload | Generate UI missing on Build; CODE EXISTS card hid mockup; agent looked stuck |
+| 2026-08-14 | Wired §11 spine phases 1–8: junk-goal stop; brief pages; Go label exact; hard-stop Go/UI Gen if plan/brief unusable after auto-repair | Conductor contract must match runtime; one key, one stroke |
+| 2026-08-14 | Phase 3 research is **mandatory** before ui-brief success and Foundation Go. Skip-with-reason removed as Fast Prototype default. Assumptions may pre-fill plan; Web Search overwrites/corrects. Demo skip `NEBULLA_SKIP_RESEARCH=1` default OFF. | Inference-first ≠ skip research; artifact `nebula-project/competitor-research.md` is load-bearing (Gate R) |
+
+---
+
+## 7.1 Phase 3 amendment (research stroke)
+
+- **Assumptions** start the map (type/industry/users/safe defaults) so the user is not interrogated.
+- **Research is mandatory** on Fast Prototype / Start / Continue. Skip-with-reason is **not** the default.
+- Product runs **one Web Search** heavy job (`POST /api/grok/research` → xAI Responses API `tools: [{ type: "web_search" }]`) and writes `nebula-project/competitor-research.md`.
+- **Gate R** then **Gate A** (ui-brief) then UI Gen then Go. IF research missing or below minimum THEN do not treat ui-brief as success and do not start Foundation Go.
+- User-visible: `Stopped: research not complete — Foundation will not start.`
 
 ---
 
@@ -286,5 +298,93 @@ Do not redesign. Do not start Phase 8. Do not add methodology docs.
 ```
 
 ---
+# Nebulla spine — synchronized sequence (canonical contract)
+
+Philosophy: one user Grok API key. Speed comes from a car-engine sequence: clear strokes, synchronized, one heavy xAI job at a time per project turn. Progress is artifact-based. Labels must match reality. UI Gen v2 is the only auto mockup engine. Go Code must not invent product UI from an empty brief.
+
+Global rules:
+1) One heavy Grok job at a time per project turn (plan-fill OR research OR UI Gen OR Go). If a job is already running, join it; do not pretend a new kick started.
+2) Next phase only when the required artifact exists, or a documented auto-repair runs first and succeeds.
+3) Honest labels only. Never show "App looks OK" or "generating all files in one pass" when artifacts are missing or the job is a single Foundation slice.
+4) Default path is mockup-before-code. Code-only is allowed only with an explicit user-visible "mockup deferred — coding Foundation" label.
+5) Research is mandatory. Assumptions may pre-fill; Web Search corrects. Never label research as optional skip on the default path.
+
+PHASE 1 — Identity / Start
+Entry: user submits goal (Start / Continue / Fast Prototype).
+IF goal is empty or junk THEN stop and ask for a short goal; do not open Go or UI Gen.
+IF goal is usable THEN set project key and a sensible name; continue to Phase 2.
+Artifact out: project identity (key + non-junk name).
+
+PHASE 2 — Master Plan usable
+Entry: identity OK.
+IF Master Plan is missing or thin (no usable §1 goal / type / pages signal) THEN run one plan-fill pass and write Master Plan (light assumption defaults allowed; label them).
+IF after fill the plan is still unusable THEN hard-stop with a clear message; do not start research, UI Gen, or Go.
+IF plan is usable THEN continue to Phase 3.
+Artifact out: Master Plan on disk with usable goal and page/route signal.
+
+PHASE 3 — FULL research (Web Search) — Gate R
+Entry: Master Plan usable.
+IF research artifact `nebula-project/competitor-research.md` is missing OR below minimum (fewer than 5 real competitor names, empty rankings, missing UI/UX patterns / evidence / assumptions, or stale goal fingerprint) THEN run one research stroke: labeled assumptions → Web Search → write the file → merge into plan (Phase 3b). Do not re-run on every poll tick; reuse until the goal materially changes.
+IF Foundation Go or UI Gen is in flight THEN do not start research in parallel (one heavy job); queue or wait.
+IF after the stroke Gate R still fails THEN hard-stop. Activity: "Stopped: research not complete — Foundation will not start." Do not treat ui-brief as success. Do not start UI Gen or Foundation Go.
+IF Gate R passes THEN continue to Phase 3b then Phase 4.
+Labels: "Researching competitors and patterns (Web Search)…" → "Writing research notes…" → "Updating Master Plan from research…".
+Demo-only skip: `NEBULLA_SKIP_RESEARCH=1` or workspace `nebulla-ide/skip-research.json` `{ "skip": true }` — default **OFF**.
+Artifact out: competitor-research.md meeting Gate R minimum.
+
+PHASE 3b — Merge research into plan
+Entry: Gate R OK.
+Confirmed items become plan facts; rejected assumptions marked corrected; never leave invented competitor names after research completes.
+`ensureMasterPlanBeforeGo` / plan synthesis MUST read the research artifact and prefer it over model invention for competitors, features, and UI pattern lines.
+Artifact out: Master Plan §2 (and thin §3/§5) patched from research.
+
+PHASE 4 — ui-brief (fuel for UI Gen) — Gate A
+Entry: Gate R OK; Master Plan merged.
+IF ui-brief.md is missing OR too short (under ~80 characters / no pages) THEN auto-build ui-brief from Master Plan §4, §5, goal, **and research outputs** (ranked features, UI patterns, competitor-informed labels). IF auto-build is not possible THEN hard-stop with message: finish plan so ui-brief can be generated; do not start UI Gen or Foundation Go.
+IF ui-brief is OK THEN continue to Phase 5.
+Hard rule: activity must never say Foundation coding is fine while Gate R or this gate fails. Label: "Building ui-brief…".
+Artifact out: ui-brief.md usable (pages + enough text for tokens/slots + research-backed UI).
+
+PHASE 5 — UI mockup (UI Gen v2 only)
+Entry: Gate R OK and ui-brief OK, unless user explicitly ordered code-only with visible "mockup deferred" label (research still required).
+IF regeneration count is already at max (3) THEN preference recovery only; no silent fourth Generate.
+IF ui-brief OK THEN run runUiGenerationCycleV2 only: classify → template → offline Figma/structure → tokens → slots → render → quality gate → write preview model.
+IF quality gate is weak after one repair THEN status is weak / try Generate again; not Ready; not App looks OK.
+IF gate is pass or repair AND model is loadable THEN write engine preview model and apply to preview shell using existing honesty helpers.
+IF model is not loadable THEN clear false "already on disk" flags; status is waiting or failed.
+Hard rule: never mark mockup success from flags alone without a loadable preview model. Never claim Ready from an empty research-backed brief.
+Artifact out: loadable ui-generation-preview-model OR honest weak/waiting status.
+
+Resource order (mandatory): offline Figma structure/catalog first → named template slots from brief → seed only as fallback. Seed-only empty shell must not be status Ready. Post-code UI Gen may replace the pre-code mockup; coding ignores mockup pixels and follows Master Plan + ui-brief + NDM.
+
+PHASE 6 — Foundation Go Code (one slice)
+Entry default: Gate R + Gate A; Phase 5 has a loadable mockup OR explicit honest mockup-deferred coding.
+IF research is still missing or below minimum THEN block Go; activity: "Stopped: research not complete — Foundation will not start."
+IF ui-brief is still missing or too short THEN block Go; repair brief or stop.
+IF a Go job is already running for this project THEN join poll only; label: "Joining in-flight Foundation job…".
+IF pre-work (plan ensure / research) is still running and the job is not scheduled yet THEN label: "Preparing plan before Grok Code…"; do not say "Grok Code running".
+IF job is scheduled or xAI completion is in flight THEN label exactly: "Grok Code: Foundation slice (up to ~3 min, no stream)". Never say "generating all files in one pass".
+IF completion returns THEN apply files and go to Phase 7.
+IF timeout THEN honest timeout message; no false OK.
+Artifact out: applied file paths from one Foundation slice.
+
+PHASE 7 — Apply + route depth check
+Entry: Go completion applied.
+IF plan has multiple pages/routes AND disk only has a shell (App.tsx / main.tsx / no app/ or pages/ routes) THEN status is thin Foundation / missing routes; not App looks OK. Optional one targeted follow-up slice only if policy allows and user-visible.
+IF real routes exist for the plan THEN continue to honesty labels (same as prior spine: mockup vs code shell).
+IF apply wrote zero product files THEN honest failure.
+IF loadable mockup exists THEN preview may show mockup; label mockup vs coded shell clearly.
+IF only CODE EXISTS shell THEN label as code shell / Open Code; not live app success.
+IF no mockup and no routes THEN do not show App looks OK.
+IF a post-code UI refresh is desired THEN run a separate post_code UI Gen cycle only after files exist; never mix it into an in-flight Go job.
+Artifact out: real routes on disk when plan is multi-page.
+
+PHASE 8 — Debug / next slice (frozen shell — do not redesign)
+Only after Phase 7 did not lie about routes. NDM or next slice still one heavy job at a time.
+
+Sync chain (must hold):
+Goal → Plan usable → Research (Gate R) → merge → ui-brief OK (Gate A) → UI Gen v2 (loadable or honest weak) → Go Foundation → Apply → Routes check → Next slice/NDM.
+
+This contract does not replace UI Gen v2 internals. It synchronizes when UI Gen and Go may run, what must exist first, and what the UI is allowed to claim. Implementation work should only wire IF/IF NOT gates and labels to these phases; no Phase 8 shell redesign; no multi-model split; no parallel heavy jobs without join/queue visibility.
 
 *End of conductor. Amend in place.*

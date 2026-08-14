@@ -111,6 +111,8 @@ import {
   readinessBlocksAutoFoundation,
   setInferenceFirstStage,
 } from '../../lib/uiMockupGate';
+import { ensureResearchBeforeUiAndGo } from '../../lib/nebulaResearchClient';
+import { RESEARCH_STAGE_BRIEF, RESEARCH_STOPPED } from '../../lib/researchStages';
 import { createProjectForCurrentSession } from '../../lib/nebulaCloud';
 import { handleSmartChatMessage, type SmartChatFilePreview } from '../../lib/smartChatHandler';
 import { isMasterPlanCompleteForDiscovery } from '../../lib/masterPlanSections';
@@ -132,6 +134,7 @@ import {
   type StartGuidedChatDetail,
 } from '../../lib/ideHomeEvents';
 import { shortNameFromIdea } from '../../lib/projectNameFromIdea';
+import { ASK_FOR_SHORT_GOAL, isUsableProjectGoal } from '../../lib/spineSequenceGates';
 import { ideContextSnippetForChat, useIdeWorkspace } from '@/components/ide/IdeWorkspaceContext';
 import { useIdeCenterTabs } from '@/components/ide/IdeCenterTabsContext';
 import { ChatFilePreview } from '@/components/ide/ChatFilePreview';
@@ -1136,6 +1139,31 @@ export function AIChat() {
     const projectType = consumePendingProjectType();
 
     if (startMode === 'fast_prototype') {
+      // Phase 1: IF goal empty/junk THEN stop and ask; do not open Go or UI Gen.
+      if (!isUsableProjectGoal(ideaPrompt || '')) {
+        const stamp = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+        const ask: Message = {
+          id: `a-goal-${Date.now()}`,
+          role: 'assistant',
+          content: ASK_FOR_SHORT_GOAL,
+          timestamp: stamp,
+        };
+        const next: Message[] = ideaPrompt
+          ? [
+              {
+                id: `u-idea-${Date.now()}`,
+                role: 'user',
+                content: ideaPrompt,
+                timestamp: stamp,
+              },
+              ask,
+            ]
+          : [ask];
+        setMessages(next);
+        messagesRef.current = next;
+        pushActivity('Stopped: need a short usable goal before Master Plan, UI Gen, or Go.', 'warn');
+        return;
+      }
       // Fast Prototype drafts + codes — Agent on; do not force Guided rediscovery.
       markDiscoveryClosed(diskProjectKey);
       if (interactionModeRef.current === 'chat') {
@@ -1171,7 +1199,7 @@ export function AIChat() {
       return;
     }
     void sendChatRef.current(buildDiscoveryBootstrap(projectType));
-  }, [diskProjectKey, setAssistantInteractionMode]);
+  }, [diskProjectKey, pushActivity, setAssistantInteractionMode]);
 
   useEffect(() => {
     const onReset = () => {
@@ -2060,9 +2088,21 @@ export function AIChat() {
         return;
       }
       if (agentAllowed && (fastPrototypeTurn || willCode || mpSaved > 0)) {
+        const research = await ensureResearchBeforeUiAndGo({
+          projectName,
+          onProgress: pushActivity,
+        });
+        if (!research.ok) {
+          architectureBlocked = true;
+          pushActivity(research.error || RESEARCH_STOPPED, 'error');
+        } else {
+          pushActivity(RESEARCH_STAGE_BRIEF, 'info');
+        }
         const readiness = await assessUiMockupReadiness({ projectKey: diskProjectKey });
-        architectureBlocked = readinessBlocksAutoFoundation(readiness);
-        if (readiness.ok) {
+        architectureBlocked = architectureBlocked || readinessBlocksAutoFoundation(readiness);
+        if (architectureBlocked && !research.ok) {
+          /* Gate R failed — do not start UI Gen or Go */
+        } else if (readiness.ok) {
           markUiMockupStageStarted(diskProjectKey);
           pushActivity(
             'Architecture draft ready — generating UI mockup from researched patterns + plan (before coding)',
@@ -2093,7 +2133,7 @@ export function AIChat() {
                 () =>
                   resolve({
                     ok: false,
-                    error: 'UI mockup timed out — Foundation coding continues',
+                    error: 'UI mockup timed out — mockup deferred — coding Foundation',
                   }),
                 45_000,
               );
@@ -2133,20 +2173,25 @@ export function AIChat() {
             mockupSkippedOrFailed = true;
             clearUiMockupStageFlags(diskProjectKey);
             pushActivity(
-              `UI mockup: ${mockup.error || 'incomplete'} — Foundation coding continues (skip path); Studio can regenerate later`,
+              `UI mockup: ${mockup.error || 'incomplete'} — mockup deferred — coding Foundation (Studio can regenerate later)`,
               'warn',
             );
           }
         } else if (architectureBlocked) {
+          // Gate R or Gate A failed — hard-stop Go.
           pushActivity(
             `Stopped: ${readiness.reasons.join('; ') || 'ui-brief missing or too short'}. Finish Master Plan §§1–5 so ui-brief can be built from §4/§5 (and goal), then Generate UI. Foundation will not start while mockup is waiting.`,
             'error',
           );
-        } else if (fastPrototypeTurn || willCode) {
+        } else if (userForcedCoding) {
           mockupSkippedOrFailed = true;
+          pushActivity('mockup deferred — coding Foundation (you asked to code)', 'warn');
+        } else if (fastPrototypeTurn || willCode) {
+          // Phase 4: never imply mockup waiting AND coding is fine.
+          architectureBlocked = true;
           pushActivity(
-            `UI mockup waiting — ${readiness.reasons.join('; ') || 'architecture inputs incomplete'} — Foundation may still start`,
-            'info',
+            `Stopped: ${readiness.reasons.join('; ') || 'architecture inputs incomplete'}. Finish Master Plan + ui-brief, then Generate UI. Foundation will not start while mockup is waiting.`,
+            'error',
           );
         }
       }
@@ -2162,7 +2207,7 @@ export function AIChat() {
       }
 
       try {
-        // Phase 7.5 — Foundation only after persisted mockup or explicit skip (no arch-doc false “coding”).
+        // Phase 5 — Foundation only after persisted mockup or explicit skip (no arch-doc false “coding”).
         let foundationGate = willCode
           ? await canStartFoundationCoding({ mockupSkippedOrFailed })
           : { ok: false as const, reason: 'blocked' as const };
@@ -2170,7 +2215,7 @@ export function AIChat() {
         if (willCode && !foundationGate.ok && (userForcedCoding || assistantCodingPromise) && !architectureBlocked) {
           foundationGate = { ok: true, reason: 'explicit_skip' };
           pushActivity(
-            'Starting Foundation coding now (user asked to code — mockup/security soft-continue)',
+            'mockup deferred — coding Foundation (you asked to code)',
             'info',
           );
         }
@@ -2189,9 +2234,11 @@ export function AIChat() {
             subhead:
               foundationGate.reason === 'mockup_ready'
                 ? 'UI mockup on disk — Foundation coding slice next.'
-                : uiMockupStarted
-                  ? 'UI mockup triggered — now Foundation coding slice.'
-                  : 'Master Plan → Grok Code → files on disk.',
+                : foundationGate.reason === 'explicit_skip'
+                  ? 'mockup deferred — coding Foundation'
+                  : uiMockupStarted
+                    ? 'UI mockup triggered — now Foundation coding slice.'
+                    : 'Master Plan → Grok Code → files on disk.',
             initialLog: 'Coding stage — after architecture (and UI mockup when ready)',
           });
         }

@@ -148,6 +148,7 @@ export function assessApplyRouteDepth(writtenPaths: string[]): {
   zeroProductRoutes: boolean;
   authOnly: boolean;
 } {
+  // Phase 6: App+main-only (or no app/pages routes) is not a product shell.
   const productRouteFiles = listProductRouteFiles(writtenPaths);
   const productRoutes = inferRoutesFromProductFiles(writtenPaths);
   return {
@@ -288,7 +289,7 @@ export function resolveAppPreviewAuthority(workspaceRoot: string): AppPreviewAut
     return withHonesty(
       {
         mode: "thin_code_shell",
-        statusLabel: "Thin code shell - no product routes",
+        statusLabel: "Code shell — open Code",
         codedApp: false,
         indexIsMockup,
         entryRel: null,
@@ -424,7 +425,7 @@ export function buildCodedAppPreviewBridgeHtml(opts: {
         ? "Need real product routes under app/ or pages/. src/App.tsx + src/main.tsx is not enough."
         : "This shell cannot run the workspace Vite/Next app in the iframe. Open Code to inspect the coded routes."),
   );
-  const badge = thin ? "Thin code shell - no product routes" : "Code exists — open Code";
+  const badge = thin ? "Code shell — open Code" : "Code exists — open Code";
   const title = thin ? `${name} — thin shell` : `${name} — Code exists`;
   const lead = thin
     ? "<strong>This is not a finished product.</strong> Apply wrote a Vite shell (or similar) without <code>app/</code> or <code>pages/</code> routes. App Status must not show success."

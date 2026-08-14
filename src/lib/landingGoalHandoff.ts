@@ -28,6 +28,7 @@ import { peekPendingStartMode, setPendingStartMode } from './ideStartMode';
 import { markGuidedEnterBuild } from './guidedFunnel';
 import { resetProjectFromScratch } from './ideProjectReset';
 import { shortNameFromIdea } from './projectNameFromIdea';
+import { isUsableProjectGoal } from '../../lib/spineSequenceGates';
 import { getBrowserProjectName, setBrowserProjectName } from './nebulaProjectApi';
 
 /** Durable shell goal key (also written by persistLandingGoalForBuild). Survives refresh. */
@@ -45,9 +46,11 @@ export function commitLandingGoalHandoff(
   startType?: IdeStartProjectType,
 ): boolean {
   const type = startType === undefined ? readStoredStartType() : startType;
-  if (!persistLandingGoalForBuild(goal, type ?? null)) return false;
-
   const trimmed = goal.trim().slice(0, 4000);
+  // Phase 1: junk/empty goals must not start the Fast Prototype pipeline.
+  if (!isUsableProjectGoal(trimmed)) return false;
+  if (!persistLandingGoalForBuild(trimmed, type ?? null)) return false;
+
   setPendingProjectIdea(trimmed);
   setPendingStartMode('fast_prototype');
   if (type === 'Web App' || type === 'Mobile App' || type === 'Landing Page') {
@@ -113,6 +116,9 @@ export async function continueFromLandingGoal(
   const trimmed = goal.trim();
   const type = startType === undefined ? readStoredStartType() : startType;
   if (trimmed) {
+    if (!isUsableProjectGoal(trimmed)) {
+      return { ok: false, error: 'Write a short goal (who the app is for and what it helps them do).' };
+    }
     if (!commitLandingGoalHandoff(trimmed, type)) {
       return { ok: false, error: 'Add a short goal to continue.' };
     }

@@ -29,6 +29,17 @@ const pollFn = pipeline.slice(
 assert.match(pipeline, /APPLY_GENERATED_TIMEOUT_MS/, 'apply-generated fetch must time out');
 assert.match(pipeline, /GO_POLL_FETCH_TIMEOUT_MS/, 'each Go poll HTTP call must time out');
 assert.match(pipeline, /GO_POLL_MAX_WAIT_MS = 180_000/, 'Go generation poll must hard-stop at 3 minutes');
+assert.equal(
+  /generating all files in one pass/.test(pipeline),
+  false,
+  'Go wait copy must not say generating all files in one pass',
+);
+assert.equal(
+  /Grok Code running on server/.test(pipeline),
+  false,
+  'must not label Grok Code running until poll.coding is true',
+);
+assert.match(pipeline, /Grok Code: Foundation slice \(up to ~3 min, no stream\)|GO_SLICE_WAIT_LABEL/);
 assert.match(pipeline, /GO_CONSUME_TIMEOUT_MS/, 'consume ack must time out');
 assert.match(pollFn, /GO_POLL_TIMEOUT_MESSAGE/);
 assert.match(pollFn, /onProgress\?\.\(GO_POLL_TIMEOUT_MESSAGE, 'error'\)/);

@@ -2,7 +2,7 @@ import fs from "fs";
 import path from "path";
 
 export type GoCodePendingState = {
-  status: "running" | "done" | "error";
+  status: "preparing" | "running" | "done" | "error";
   startedAt: number;
   preCodingSummary?: string;
   codeText?: string;
@@ -107,6 +107,19 @@ export function clearGoCodeLastResult(workspaceRoot: string): void {
 }
 
 /**
+ * Phase 5: kick failed before scheduleGoCodeJob — poll must not stay “preparing” forever.
+ */
+export function failGoCodePreparing(workspaceRoot: string, codeError: string): void {
+  const cur = readGoCodePending(workspaceRoot);
+  if (cur?.status !== "preparing") return;
+  writeGoCodePending(workspaceRoot, {
+    ...cur,
+    status: "error",
+    codeError: codeError.slice(0, 800),
+  });
+}
+
+/**
  * Mark result consumed after successful apply (or explicit client ack).
  * Clears pending; keeps last-result marked consumed so idle polls stay clean.
  */
@@ -159,7 +172,7 @@ export function expireStaleGoCodePending(
     return true;
   }
 
-  if (pending.status === "running" && age >= GO_CODE_JOB_TIMEOUT_MS) {
+  if ((pending.status === "running" || pending.status === "preparing") && age >= GO_CODE_JOB_TIMEOUT_MS) {
     writeGoCodePending(workspaceRoot, {
       ...pending,
       status: "error",
@@ -168,7 +181,12 @@ export function expireStaleGoCodePending(
     return false;
   }
 
-  if (pending.status === "running" && !opts?.jobActive && age > GO_CODE_JOB_TIMEOUT_MS / 2) {
+  // Phase 6 Gate C: preparing is plan-fill before schedule — do not expire as an orphaned job.
+  if (
+    pending.status === "running" &&
+    !opts?.jobActive &&
+    age > GO_CODE_JOB_TIMEOUT_MS / 2
+  ) {
     writeGoCodePending(workspaceRoot, {
       ...pending,
       status: "error",

@@ -443,7 +443,7 @@ export function syncV0PromptFromMasterPlan(
   return { plan, content, written };
 }
 
-/** Hydrate Master Plan, then write full nebula-ui-studio/ui-brief.md (primary UI input). */
+/** Hydrate Master Plan, then write full nebula-ui-studio/ui-brief.md (Phase 3). */
 export function syncUiBriefFromMasterPlan(
   workspaceRoot: string,
   masterPlanPath: string,

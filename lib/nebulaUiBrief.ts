@@ -7,6 +7,7 @@ import fs from "fs";
 import path from "path";
 import { summarizeDesignReferencesForPrompt } from "./nebulaDesignReferences";
 import { readWorkspaceContentLocale } from "./contentLocaleWorkspace";
+import { readResearchArtifact } from "./researchArtifact";
 import {
   buildConcreteUiuxSection,
   buildStitchChromeBriefSection,
@@ -88,6 +89,8 @@ export function buildUiBriefMarkdown(
   const security = extractSecurityNotesForUi(tech);
   const brandRefs =
     workspaceRoot?.trim() ? summarizeDesignReferencesForPrompt(workspaceRoot, 1200) : "";
+  const researchNotes =
+    workspaceRoot?.trim() ? readResearchArtifact(workspaceRoot).trim() : "";
   const localeFromDisk =
     workspaceRoot?.trim() ? readWorkspaceContentLocale(workspaceRoot) : undefined;
   const copyLocale = (contentLocale || localeFromDisk || "en").trim().toLowerCase() || "en";
@@ -113,7 +116,7 @@ export function buildUiBriefMarkdown(
   const parts = [
     "# Nebula UI Brief (primary)",
     "",
-    "> Generated from Master Plan §4 (full page contracts) + §5 (visual tokens).",
+    "> Generated from Master Plan §4 (full page contracts) + §5 (visual tokens) + Gate R research.",
     "> This file is the **primary** input for UI Gen Beta / Studio. `v0-prompt.md` is optional legacy only.",
     "",
     "## App",
@@ -159,6 +162,21 @@ export function buildUiBriefMarkdown(
 
   if (brandRefs) {
     parts.push("## Brand / design references", "", brandRefs, "");
+  }
+
+  if (researchNotes) {
+    const clipped =
+      researchNotes.length > 5000
+        ? `${researchNotes.slice(0, 5000).trim()}\n… (see nebula-project/competitor-research.md)`
+        : researchNotes;
+    parts.push(
+      "## Research-backed UI (Gate R)",
+      "",
+      "Use competitor-informed labels, ranked features, and observed UI/UX patterns — do not invent a generic empty feature set.",
+      "",
+      clipped,
+      "",
+    );
   }
 
   if (tech) {

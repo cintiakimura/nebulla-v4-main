@@ -159,6 +159,7 @@ export function IdeAppStatusMenuButton({
   const [open, setOpen] = useState(false);
   const errorCount = snap.issues.filter((i) => i.severity !== 'info').length;
   const runtimeHealthy = errorCount === 0;
+  // Phase 7: “App looks OK” only when honesty is real_routes.
   const honestSuccess = runtimeHealthy && honesty === 'real_routes';
 
   useEffect(() => {

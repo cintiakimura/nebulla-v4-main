@@ -27,6 +27,8 @@ Ask a question only when a step is blocked.
 Never interrogate by default.  
 Never invent competitors, studies, or statistics.
 
+**Runtime (Recovery §11):** Phase 3 research is a **product Web Search stroke** that writes `nebula-project/competitor-research.md`. Chat may pre-fill labeled assumptions; it must **not** skip research or invent competitor names. Gate R requires 5–10 real names plus rankings, UI/UX patterns, evidence, and assumptions-vs-confirmed. Demo-only skip: `NEBULLA_SKIP_RESEARCH=1` (default **OFF**).
+
 ---
 
 ## 1. Required working files
@@ -188,9 +190,9 @@ Must include:
 Rules:
 - real products only
 - never invent names
-- if fewer than 5 reliable ones are available, write the ones found and state the shortfall honestly
+- **Gate R:** fewer than 5 real names (or invented placeholders) means research is **not done** — do not continue to ui-brief success or Foundation Go. Honest shortfall is recorded, not a pass.
 
-**Write** the list into `competitor-research.md` under `## Competitors`.
+**Write** the list into `competitor-research.md` under `## Competitors` (product Web Search writes this file; chat must not invent the list).
 
 **Output required:** competitor list in `competitor-research.md`
 
@@ -509,7 +511,7 @@ Do not restart the whole flow.
 **Verify** all of the following:
 
 1. category file exists  
-2. competitor research has real names or honest shortfall note  
+2. competitor research has **5–10 real names** (Gate R; honest shortfall is not done)  
 3. feature map exists  
 4. evidence section exists  
 5. all 5 Master Plan sections exist with correct headers  

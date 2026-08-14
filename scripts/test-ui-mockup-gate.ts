@@ -80,6 +80,28 @@ assert.equal(
   false,
 );
 
+assert.equal(
+  canStartUiMockup({
+    masterPlan: completePlan,
+    uiBriefLength: 200,
+    uiBriefPageCount: 3,
+    researchOk: false,
+    inferenceFirst: true,
+  }),
+  false,
+);
+assert.equal(
+  readinessBlocksAutoFoundation({
+    ok: false,
+    planComplete: true,
+    uiBriefLength: 200,
+    uiBriefPageCount: 3,
+    researchOk: false,
+    reasons: ['research not complete (need ≥5 real competitors + rankings)'],
+  }),
+  true,
+);
+
 assert.equal(isArchitectureArtifactPath('nebula-ui-studio/ui-brief.md'), true);
 assert.equal(isArchitectureArtifactPath('nebula-project/competitor-research.md'), true);
 assert.equal(isArchitectureArtifactPath('app/page.tsx'), false);

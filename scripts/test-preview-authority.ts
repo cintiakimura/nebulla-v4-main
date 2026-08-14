@@ -265,7 +265,7 @@ section("Vite App+main is thin shell not Code exists success");
   assert.equal(auth.mode, "thin_code_shell");
   assert.equal(auth.codedApp, false);
   assert.equal(auth.honesty, "thin_code_shell");
-  assert.match(auth.statusLabel, /Thin code shell/i);
+  assert.match(auth.statusLabel, /Code shell/i);
   assert.equal(/App looks OK/i.test(auth.statusLabel), false);
   fs.rmSync(root, { recursive: true, force: true });
 }

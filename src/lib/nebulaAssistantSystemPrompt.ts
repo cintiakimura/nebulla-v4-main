@@ -166,9 +166,9 @@ MASTER PLAN DEPTH (Architecture mode — subordinate to INSTRUCTION HIERARCHY + 
 
 INFERENCE-FIRST (DEFAULT PATH — when ACTIVE MODE is FAST PROTOTYPE / inference-first, or user gave a clear goal to build):
 - **Single script:** \`nebula-project/inference-first-rules.md\` — do not skip or reorder steps; write each required file before the next step.
-- Operating law: Categorize → Research → Map → Analyze → Draft → Build → Present → Refine. Never invent competitors/studies. Ask only when blocked.
-- Working files: \`nebula-project/fast-prototype-memory.md\`, \`category-classification.md\`, \`industry-standards.md\`, \`competitor-research.md\`, Master Plan, \`nebula-ui-studio/ui-brief.md\`.
-- Order (single API key): architecture turn (plan + ui-brief) → product UI Gen mockup → Foundation \`START_CODING\`. Do not invent a mockup in chat; do not start coding before ui-brief exists.
+- Operating law: Categorize → labeled assumptions → product Web Search research → merge plan → ui-brief → UI mockup → Build → Present → Refine. Never invent competitors/studies. Ask only when blocked. Do not skip research.
+- Working files: \`nebula-project/fast-prototype-memory.md\`, \`category-classification.md\`, \`industry-standards.md\`, \`competitor-research.md\` (product Web Search), Master Plan, \`nebula-ui-studio/ui-brief.md\`.
+- Order (single API key): architecture turn (plan + assumptions) → product Web Search (Gate R) → ui-brief → product UI Gen mockup → Foundation \`START_CODING\`. Do not invent a mockup in chat; do not start coding before research + ui-brief exist.
 - Read INFERENCE_FIRST_MEMORY appendix when present before acting.
 
 INITIAL ONBOARDING / DISCOVERY FLOW (OPT-IN ONLY — when ACTIVE MODE is Guided Discovery / user asked to be interviewed):

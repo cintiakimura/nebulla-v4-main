@@ -14,6 +14,8 @@ import { getGrokRequestHeaders } from './grokUserKey';
 import { withProjectBody, withProjectQuery } from './nebulaProjectApi';
 import { dispatchOpenCenterPanel } from '@/components/ide/IdeCenterTabsContext';
 import { statusLooksReadyForSkip } from './uiMockupGate';
+import { isFoundationGoInFlight } from './foundationHeavyJob';
+import { fetchResearchStatus } from './nebulaResearchClient';
 import {
   extractUiRouteKeys,
   looksLikeUiRelevantPaths,
@@ -117,6 +119,25 @@ export async function runUiStudioBetaGeneration(
 
   inFlight = (async () => {
     const onProgress = options.onProgress;
+    // Phase 5: IF Foundation Go is running → do not start a second silent UI Gen brain.
+    if (isFoundationGoInFlight(options.projectName)) {
+      onProgress?.(
+        'Foundation Go running — UI Gen waiting (one heavy job). Generate UI after the slice finishes.',
+        'warn',
+      );
+      return {
+        ok: false,
+        error: 'Foundation Go in flight — UI Gen not started in parallel',
+      };
+    }
+    const researchSt = await fetchResearchStatus();
+    if (researchSt.pending) {
+      onProgress?.('Research in flight — UI Gen waiting (one heavy job).', 'warn');
+      return {
+        ok: false,
+        error: 'Research in flight — UI Gen not started in parallel (one heavy job).',
+      };
+    }
     if (options.openPane !== false) {
       dispatchOpenUiStudioBeta();
     }
@@ -199,7 +220,7 @@ export async function runUiStudioBetaGeneration(
         })(),
         new Promise<never>((_, reject) => {
           window.setTimeout(() => {
-            reject(new Error('UI Studio Beta generation timed out — Foundation coding continues'));
+            reject(new Error('UI Studio Beta generation timed out — mockup deferred'));
           }, GENERATE_TIMEOUT_MS);
         }),
       ]);

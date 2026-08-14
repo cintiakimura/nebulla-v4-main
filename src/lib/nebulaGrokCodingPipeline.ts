@@ -10,8 +10,16 @@ import { reportGoApplyTelemetry } from './contractTelemetryClient';
 import { assessOversizedGoApply, parseGoSliceLabel, type GoSliceLabel } from '../../lib/goSliceContract';
 import { assessApplyRouteDepth } from '../../lib/workspaceCodedAppUi';
 import { UNSOLICITED_BAAS_SKIP_REASON } from '../../lib/mvpStackContract';
+import {
+  GO_JOIN_LABEL,
+  GO_PREPARING_LABEL,
+  GO_SLICE_WAIT_LABEL,
+  classifyGoPoll,
+  goPollActivityMessage,
+} from '../../lib/spineSequenceGates';
 import { withProjectBody, withProjectQuery } from './nebulaProjectApi';
 import { triggerUiStudioBetaAfterFilesApplied } from './uiStudioBetaEngine';
+import { markFoundationGoInFlight } from './foundationHeavyJob';
 import {
   FAST_PROTOTYPE_PRIMARY_SLICE_INSTRUCTION,
   userNoteRequestsNextSlice,
@@ -362,6 +370,7 @@ export async function applyGeneratedFiles(
     const writtenCount = writtenPaths.length;
     const skippedCount = Array.isArray(apply.skipped) ? apply.skipped.length : 0;
     const depth = assessApplyRouteDepth(writtenPaths);
+    // Phase 6: IF plan needs routes AND disk is App+main-only → not “App looks OK”.
     if (writtenCount > 0) {
       onProgress?.(
         `Wrote ${writtenCount} file(s): ${writtenPaths.slice(0, 12).join(', ')}${
@@ -530,6 +539,7 @@ type GoCodePayload = {
   codeModel?: string;
   pending?: boolean;
   coding?: boolean;
+  preparing?: boolean;
   idle?: boolean;
   hint?: string;
   v0PromptWritten?: boolean;
@@ -586,6 +596,7 @@ async function pollGoCodeUntilDoneInner(
           elapsedMs?: number;
           error?: string;
           idle?: boolean;
+          preparing?: boolean;
           retryAfterSec?: number;
         }
       >(response);
@@ -599,7 +610,10 @@ async function pollGoCodeUntilDoneInner(
         continue;
       }
       if (poll.idle) {
-        if (i < 4 && Date.now() < deadline) continue;
+        if (i === 0 || i % 6 === 0) {
+          onProgress?.(GO_PREPARING_LABEL, 'info');
+        }
+        if (i < 8 && Date.now() < deadline) continue;
         return poll;
       }
       if (poll.error && !poll.choices?.length) {
@@ -611,15 +625,17 @@ async function pollGoCodeUntilDoneInner(
       if (!response.ok && !poll.pending) {
         return poll;
       }
+      const phase = classifyGoPoll(poll);
+      if (phase === 'preparing' || (poll.pending && poll.preparing && !poll.coding)) {
+        // Phase 5: preparing is not coding.
+        if (i === 0 || i % 6 === 0) {
+          onProgress?.(goPollActivityMessage('preparing', poll.elapsedMs), 'info');
+        }
+        continue;
+      }
       if (poll.pending && poll.coding) {
         if (i === 0 || i % 6 === 0) {
-          const mins = poll.elapsedMs ? Math.round(poll.elapsedMs / 60_000) : undefined;
-          onProgress?.(
-            mins && mins >= 1
-              ? `Grok Code still running (~${mins} min) — one pass, please wait…`
-              : 'Grok Code running on server — generating all files in one pass…',
-            'info',
-          );
+          onProgress?.(goPollActivityMessage('coding', poll.elapsedMs), 'info');
         }
         continue;
       }
@@ -673,7 +689,9 @@ async function kickGoCodeJob(options: {
       if (prePoll.idle) {
         prePoll = null;
       } else if (prePoll.pending && prePoll.coding) {
-        onProgress?.('Grok Code already running — waiting for it to finish (do not press Go again)', 'warn');
+        onProgress?.(GO_JOIN_LABEL, 'warn');
+      } else if (prePoll.pending && prePoll.preparing) {
+        onProgress?.(GO_JOIN_LABEL, 'info');
       } else if (prePoll.choices?.[0]?.message?.content?.trim()) {
         // Unconsumed durable result — do not start a new Go and overwrite it.
         onProgress?.('Recovering unapplied Go Code result from server', 'info');
@@ -686,9 +704,7 @@ async function kickGoCodeJob(options: {
     await cancelProjectBackgroundJobs();
   }
 
-  let waitLabel = continuation
-    ? 'Grok Code continuation on server'
-    : 'Preparing Go (plan sync + summary)';
+  let waitLabel = continuation ? 'Grok Code continuation on server' : GO_PREPARING_LABEL;
   let stopWait = startGrokActivityWaitTicker(waitLabel, (msg, kind, opts) =>
     onProgress?.(msg, kind, opts),
   );
@@ -703,7 +719,11 @@ async function kickGoCodeJob(options: {
 
   try {
     if (prePoll?.pending && prePoll.coding) {
-      switchWaitLabel('Grok Code running on server');
+      switchWaitLabel(GO_JOIN_LABEL);
+      return await pollGoCodeUntilDone(projectName, onProgress);
+    }
+    if (prePoll?.pending && prePoll.preparing) {
+      switchWaitLabel(GO_PREPARING_LABEL);
       return await pollGoCodeUntilDone(projectName, onProgress);
     }
 
@@ -734,10 +754,10 @@ async function kickGoCodeJob(options: {
         (err instanceof Error && /abort/i.test(err.message));
       if (aborted) {
         onProgress?.(
-          'Go kick still preparing — switching to poll (coding may already be running)',
+          'Go kick still preparing — polling until the Foundation job is scheduled (not coding yet)',
           'warn',
         );
-        switchWaitLabel('Grok Code running on server');
+        switchWaitLabel(GO_PREPARING_LABEL);
         return await pollGoCodeUntilDone(projectName, onProgress);
       }
       throw err;
@@ -762,10 +782,15 @@ async function kickGoCodeJob(options: {
           'warn',
         );
         await sleep(waitSec * 1000);
-        switchWaitLabel('Grok Code running on server');
+        switchWaitLabel(GO_PREPARING_LABEL);
         return await pollGoCodeUntilDone(projectName, onProgress);
       }
-      if (data.code === 'MASTER_PLAN_INCOMPLETE' || goRes.status === 409) {
+      if (
+        data.code === 'MASTER_PLAN_INCOMPLETE' ||
+        data.code === 'UI_BRIEF_MISSING' ||
+        data.code === 'RESEARCH_INCOMPLETE' ||
+        goRes.status === 409
+      ) {
         const friendly = formatGoBlockedByPlanMessage(data);
         onProgress?.(friendly.split('\n')[0] || 'Master Plan incomplete', 'warn');
         throw new Error(friendly);
@@ -778,13 +803,18 @@ async function kickGoCodeJob(options: {
     }
 
     if (data.pending && data.coding) {
-      switchWaitLabel('Grok Code running on server');
+      switchWaitLabel(GO_SLICE_WAIT_LABEL);
       onProgress?.(
         continuation
-          ? 'Continuing Grok Code — Foundation slice (shell)…'
-          : 'Pre-coding summary saved — Grok Code generating current slice (1–3 min)',
+          ? 'Continuing Foundation slice (up to ~3 min, no stream)…'
+          : `Pre-coding summary saved — ${GO_SLICE_WAIT_LABEL}`,
         'info',
       );
+      return await pollGoCodeUntilDone(projectName, onProgress);
+    }
+    if (data.pending && data.preparing) {
+      switchWaitLabel(GO_PREPARING_LABEL);
+      onProgress?.(GO_PREPARING_LABEL, 'info');
       return await pollGoCodeUntilDone(projectName, onProgress);
     }
     return data;
@@ -824,8 +854,9 @@ export async function runGoCodeAndApply(options: {
           },
         ];
 
+  markFoundationGoInFlight(projectName, true);
   try {
-    onProgress?.('Go — Grok Code will generate one slice (auto-continues only if Master Plan-only)', 'info');
+    onProgress?.('Go — Grok Code: Foundation slice (not all files)', 'info');
 
     let totalWritten = 0;
     const allWrittenPaths: string[] = [];
@@ -982,6 +1013,7 @@ export async function runGoCodeAndApply(options: {
 
     const depth = assessApplyRouteDepth(allWrittenPaths);
     const foundationLike = !sliceLabel || /foundation/i.test(String(sliceLabel));
+    // Phase 6: Foundation with only App/main is a fail, not success.
     if (foundationLike && depth.zeroProductRoutes && totalWritten > 0 && !partialPlanOnly) {
       const pathNote = allWrittenPaths.slice(0, 12).join(', ') + (allWrittenPaths.length > 12 ? '…' : '');
       const failMsg = `Foundation apply wrote ${totalWritten} file(s) [${pathNote}] but zero app/ or pages/ routes. Not a product shell — retry Go for Home/practice (or equivalent) routes.`;
@@ -1027,6 +1059,8 @@ export async function runGoCodeAndApply(options: {
     const planBlocked = /Go is paused|planning pieces|Master Plan incomplete/i.test(msg);
     onProgress?.(msg, planBlocked ? 'warn' : 'error');
     return { ok: false, statusMessage: msg, totalWritten: 0 };
+  } finally {
+    markFoundationGoInFlight(projectName, false);
   }
 }
 

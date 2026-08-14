@@ -104,10 +104,16 @@ export function formatGoBlockedByPlanMessage(payload: {
   error?: string;
   masterPlanCompleteness?: { gaps?: MasterPlanStatusGap[]; mode?: string };
 }): string {
+  if (payload.error && /research not complete/i.test(payload.error)) {
+    return payload.error.trim();
+  }
   const gaps = payload.masterPlanCompleteness?.gaps?.filter((g) => g.severity === 'block') ?? [];
   const lines = gaps.slice(0, 4).map(friendlyGapLine);
   if (lines.length === 0) {
-    return "We're missing a few planning pieces before Go. Open the Master Plan tab and finish Discovery with the assistant — one question at a time.";
+    return (
+      payload.error?.trim() ||
+      "We're missing a few planning pieces before Go. Open the Master Plan tab and finish Discovery with the assistant — one question at a time."
+    );
   }
   return [
     "Go is paused until the Master Plan is more complete.",

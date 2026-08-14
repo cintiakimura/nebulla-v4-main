@@ -26,7 +26,8 @@ export type GoCodeJobOptions = {
 
 /**
  * Run Grok Code off the HTTP thread (Render ~30s gateway limit).
- * Writes nebulla-ide/go-code-pending.json immediately with status running.
+ * Phase 5: preparing → running when the xAI fetch is actually scheduled.
+ * Writes nebulla-ide/go-code-pending.json with status running.
  */
 export function scheduleGoCodeJob(opts: GoCodeJobOptions): boolean {
   const { workspaceRoot } = opts;
@@ -168,6 +169,28 @@ export function goCodePendingToPollResponse(
     };
   }
   // Terminal pending wins over a still-listed job — otherwise polls stay "coding" forever.
+  if (pending.status === "preparing") {
+    const elapsed = Date.now() - pending.startedAt;
+    if (elapsed >= GO_CODE_JOB_TIMEOUT_MS) {
+      return {
+        ok: false,
+        pending: false,
+        preCodingSummary: pending.preCodingSummary,
+        codeError: "Grok Code timed out after 3 minutes. Try Go again with a narrower slice.",
+        summarySaved: Boolean(pending.preCodingSummary),
+      };
+    }
+    // Phase 5: preparing is not coding — client must not say "Grok Code running".
+    return {
+      ok: true,
+      pending: true,
+      preparing: true,
+      coding: false,
+      preCodingSummary: pending.preCodingSummary,
+      elapsedMs: elapsed,
+      hint: "Preparing plan before Grok Code — job not scheduled yet.",
+    };
+  }
   if (pending.status === "error") {
     return {
       ok: false,
@@ -195,7 +218,7 @@ export function goCodePendingToPollResponse(
       coding: true,
       preCodingSummary: pending.preCodingSummary,
       elapsedMs: elapsed,
-      hint: "Grok Code is still running on the server — keep polling.",
+      hint: "Foundation slice still running (up to ~3 min, no stream) — keep polling.",
     };
   }
   if (pending.consumed) {

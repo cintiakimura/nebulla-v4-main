@@ -489,6 +489,12 @@ export function MyProjectsHome({
             <Sparkles className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden />
             <span className="text-foreground">{isDashboard ? 'Goal / brief' : 'Prompt'}</span>
           </label>
+          <p
+            id="nebula-project-idea-tip"
+            className="px-4 pt-1 text-[10px] italic leading-snug text-muted-foreground"
+          >
+            Pro tip: Add industry + who it’s for (education / kids & teachers, e-commerce / small shops…) for better research and speed.
+          </p>
           <textarea
             id="nebula-project-idea"
             value={ideaInput}
@@ -498,7 +504,8 @@ export function MyProjectsHome({
             }}
             rows={hasExistingWork ? 3 : 4}
             disabled={busyStarting}
-            placeholder="e.g. A mobile education app for kids to practice reading… (or use the mic)"
+            aria-describedby="nebula-project-idea-tip"
+            placeholder="e.g. Education app for kids and teachers to practice reading and track progress"
             className="ide-glass-input mt-2 w-full resize-y border-0 bg-transparent px-4 py-3 text-[13px] leading-relaxed text-foreground outline-none placeholder:text-muted-foreground/70 disabled:opacity-60"
           />
           <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border px-3 py-2.5 md:px-4">

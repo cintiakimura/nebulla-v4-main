@@ -88,7 +88,7 @@ import {
   unlockVisualEditorFromWorkspaceCoding,
   writeBasicUiScaffold,
 } from "./lib/nebulaIdeWorkspaceArtifacts";
-import { readUiBriefMarkdown } from "./lib/nebulaUiBrief";
+import { parsePagesFromUiBrief, readUiBriefMarkdown } from "./lib/nebulaUiBrief";
 import { resolveMasterPlanStrictMode } from "./lib/masterPlanStrictPolicy";
 import { isUserAppProductPath } from "./lib/nebulaOrchestrationPaths";
 import { isLoadableStudioModel } from "./lib/uiMockupArtifactHonesty";
@@ -103,7 +103,11 @@ import {
 } from "./lib/securityBaselinePropose";
 import { softenSecurityBlocksForMvpGo } from "./lib/mvpDeliveryGates";
 import { draftSection4AmendmentsForRoutes } from "./lib/mindMapAmendmentPropose";
+import { isMasterPlanReadyForUiMockup } from "./lib/masterPlanCompleteness";
+import { uiBriefUsable } from "./lib/spineSequenceGates";
 import { ensureMasterPlanBeforeGo } from "./lib/nebulaMasterPlanSynthesis";
+import { assessResearchArtifact, RESEARCH_STOPPED } from "./lib/researchArtifact";
+import { isResearchJobActive, runResearchStroke } from "./lib/nebulaResearchStroke";
 import {
   addDesignReference,
   readDesignReferences,
@@ -181,6 +185,7 @@ import {
 } from "./lib/nebulaGoCodeJob";
 import {
   consumeGoCodeResult,
+  failGoCodePreparing,
   readGoCodePending,
   writeGoCodePending,
 } from "./lib/nebulaGoCodePending";
@@ -1302,24 +1307,29 @@ No approved UI code yet.
     }
   });
 
-  /** Completeness gaps for UI badge / Go gate (MASTER_PLAN_STRICT=off|warn|strict). */
+  /** Completeness gaps for UI badge / Go gate (MASTER_PLAN_STRICT=off|warn|strict).
+   * Phase 3: IF plan usable AND brief missing/short/no pages → auto-build from §4/§5 + goal. */
   app.get("/api/master-plan/status", (req, res) => {
     try {
       const pp = projectPathsFor(req);
       let plan: Record<string, unknown> = {};
       let uiBriefLength = 0;
+      let uiBriefPageCount = 0;
       if (fs.existsSync(pp.masterPlanPath)) {
         try {
           const arts = syncUiArtifactsFromMasterPlan(pp.workspaceRoot, pp.masterPlanPath);
           plan = arts.plan;
           uiBriefLength = arts.uiBrief.content.length;
+          uiBriefPageCount = parsePagesFromUiBrief(arts.uiBrief.content).length;
           mirrorV0PromptToStudioFile(pp, arts.uiBrief.content || arts.v0Prompt.content);
         } catch {
           plan = hydrateAndPersistMasterPlan(pp.workspaceRoot, pp.masterPlanPath) as Record<
             string,
             unknown
           >;
-          uiBriefLength = readUiBriefMarkdown(pp.workspaceRoot).length;
+          const brief = readUiBriefMarkdown(pp.workspaceRoot);
+          uiBriefLength = brief.length;
+          uiBriefPageCount = parsePagesFromUiBrief(brief).length;
         }
       }
       // Auto-merge security/sign-in assumptions into §2 (asset). Never wait on Accept for MVP.
@@ -1348,6 +1358,10 @@ No approved UI code yet.
       completeness = softenSecurityBlocksForMvpGo(completeness);
       // Optional acknowledgment only — coding/Go must not depend on this.
       const securityProposal = buildSecurityBaselineProposal(plan);
+      const goalForResearch = String(
+        (plan as Record<string, string>)["1. Goal of the app"] || "",
+      );
+      const researchGate = assessResearchArtifact(pp.workspaceRoot, { goal: goalForResearch });
       res.json({
         mode: completeness.mode,
         ok: completeness.ok,
@@ -1356,6 +1370,11 @@ No approved UI code yet.
         gaps: completeness.gaps,
         sectionLengths: completeness.sectionLengths,
         uiBriefLength,
+        uiBriefPageCount,
+        researchOk: researchGate.ok,
+        researchCompetitorCount: researchGate.competitorCount,
+        researchReasons: researchGate.reasons,
+        researchSkipped: researchGate.skipped,
         securityAutoApplied,
         securityProposal: securityProposal
           ? {
@@ -1654,7 +1673,7 @@ No approved UI code yet.
       if (!filePath) {
         return res.json({ success: false, error: "path is required" });
       }
-      // Project display titles (spaces, no slash) are not file paths.
+      // Project display titles (spaces, no slash) are not file paths. Phase 7: open by projectKey + encoded path.
       if (/\s/.test(filePath) && !filePath.includes("/")) {
         return res.json({
           success: false,
@@ -2664,6 +2683,7 @@ No approved UI code yet.
       }
 
       const applyDepth = assessApplyRouteDepth(written);
+      // Phase 6: list paths; App+main-only is not a multi-page product shell.
       console.log(
         `[apply-generated] wrote ${written.length} file(s): ${written.slice(0, 20).join(", ")}${
           written.length > 20 ? "…" : ""
@@ -4143,6 +4163,53 @@ ${modelJson}`;
         uiPhaseRaw === "pre_code" || uiPhaseRaw === "post_code" || uiPhaseRaw === "manual"
           ? uiPhaseRaw
           : undefined;
+      // Phase 5: IF Foundation Go is preparing/running → do not start a second heavy UI Gen brain.
+      const goPending = readGoCodePending(pp.workspaceRoot);
+      const goBusy =
+        isGoCodeJobActive(pp.workspaceRoot) ||
+        goPending?.status === "running" ||
+        goPending?.status === "preparing";
+      if (goBusy) {
+        return res.status(409).json({
+          ok: false,
+          error:
+            "Foundation Go in flight — UI Gen not started in parallel (one heavy job). Wait for the slice, then Generate UI.",
+          code: "FOUNDATION_GO_IN_FLIGHT",
+        });
+      }
+      if (isResearchJobActive(pp.workspaceRoot)) {
+        return res.status(409).json({
+          ok: false,
+          error: "Research in flight — UI Gen not started in parallel (one heavy job).",
+          code: "RESEARCH_IN_FLIGHT",
+        });
+      }
+      const researchGateUi = assessResearchArtifact(pp.workspaceRoot);
+      if (!researchGateUi.ok) {
+        return res.status(409).json({
+          ok: false,
+          error: RESEARCH_STOPPED.replace("Foundation will not start", "UI Gen not started"),
+          code: "RESEARCH_INCOMPLETE",
+          reasons: researchGateUi.reasons,
+        });
+      }
+      // Phase 4: IF ui-brief missing/short/no pages THEN do not start UI Gen.
+      try {
+        const arts = syncUiArtifactsFromMasterPlan(pp.workspaceRoot, pp.masterPlanPath);
+        if (!uiBriefUsable(arts.uiBrief.content)) {
+          return res.status(409).json({
+            ok: false,
+            error: "Finish Master Plan so ui-brief can be generated. UI Gen not started.",
+            code: "UI_BRIEF_MISSING",
+          });
+        }
+      } catch {
+        return res.status(409).json({
+          ok: false,
+          error: "Finish Master Plan so ui-brief can be generated. UI Gen not started.",
+          code: "UI_BRIEF_MISSING",
+        });
+      }
       // Grok key optional — seed/template generate works without it; key enables locale polish.
       const apiKey = (await resolveMainGrokApiKey(req)) || undefined;
       const result = await runUiGenerationCycle({
@@ -4586,6 +4653,115 @@ Rules:
     }
   });
 
+  /** Phase 3: mandatory Web Search research stroke (one heavy job). */
+  app.post("/api/grok/research", async (req, res) => {
+    try {
+      const apiKey = await resolveMainGrokApiKey(req);
+      if (!apiKey) {
+        return res.status(401).json({
+          error: `Main AI API key is missing. Set ${MAIN_AI_ENV_VAR} in the server .env file and restart.`,
+          code: "RESEARCH_INCOMPLETE",
+        });
+      }
+      const pp = projectPathsFor(req);
+      if (isGoCodeJobActive(pp.workspaceRoot)) {
+        return res.status(409).json({
+          ok: false,
+          error: "Foundation Go in flight — research not started in parallel (one heavy job).",
+          code: "FOUNDATION_GO_IN_FLIGHT",
+        });
+      }
+      if (isResearchJobActive(pp.workspaceRoot)) {
+        return res.json({
+          ok: false,
+          pending: true,
+          error: "Research already running — wait, then continue.",
+          code: "RESEARCH_IN_FLIGHT",
+        });
+      }
+      const body = req.body || {};
+      let goal =
+        typeof body.goal === "string" && body.goal.trim()
+          ? String(body.goal).trim()
+          : "";
+      if (!goal) {
+        try {
+          const plan = readMasterPlanFile(pp.masterPlanPath);
+          goal = String(plan["1. Goal of the app"] || "").trim();
+        } catch {
+          goal = "";
+        }
+      }
+      if (!goal) {
+        return res.status(409).json({
+          ok: false,
+          error: "Write a short usable goal before research.",
+          code: "RESEARCH_INCOMPLETE",
+        });
+      }
+      const convProject =
+        typeof body.projectName === "string" && body.projectName.trim()
+          ? String(body.projectName).trim()
+          : "Untitled Project";
+      const result = await runResearchStroke({
+        apiKey,
+        workspaceRoot: pp.workspaceRoot,
+        masterPlanPath: pp.masterPlanPath,
+        projectKey: pp.projectKey,
+        projectName: convProject,
+        goal,
+        projectType: typeof body.projectType === "string" ? body.projectType : undefined,
+        force: body.force === true,
+      });
+      if (!result.ok) {
+        return res.status(409).json({
+          ok: false,
+          error: result.error || RESEARCH_STOPPED,
+          code: "RESEARCH_INCOMPLETE",
+          gate: result.gate,
+          wrote: result.wrote,
+        });
+      }
+      return res.json({
+        ok: true,
+        wrote: result.wrote,
+        reused: result.reused === true,
+        merged: result.merged,
+        gate: result.gate,
+      });
+    } catch (error) {
+      console.error("Error in /api/grok/research:", error);
+      return res.status(500).json({
+        ok: false,
+        error: error instanceof Error ? error.message : "Research stroke failed",
+        code: "RESEARCH_INCOMPLETE",
+      });
+    }
+  });
+
+  app.get("/api/grok/research/status", (req, res) => {
+    try {
+      const pp = projectPathsFor(req);
+      let goal = "";
+      try {
+        goal = String(readMasterPlanFile(pp.masterPlanPath)["1. Goal of the app"] || "");
+      } catch {
+        goal = "";
+      }
+      const gate = assessResearchArtifact(pp.workspaceRoot, { goal });
+      return res.json({
+        ok: gate.ok,
+        pending: isResearchJobActive(pp.workspaceRoot),
+        gate,
+      });
+    } catch (error) {
+      return res.status(500).json({
+        ok: false,
+        error: error instanceof Error ? error.message : "Research status failed",
+      });
+    }
+  });
+
   /** Go: Grok 4 writes a short summary into master-plan.json only, then Grok Code runs (no full execution doc in MP). */
   app.post("/api/grok/go-code", async (req, res) => {
     const { messages, userId, projectName, userNote, continuation: continuationRaw } = req.body || {};
@@ -4615,6 +4791,36 @@ Rules:
       const ppGo = projectPathsFor(req);
       const { masterPlanPath } = ppGo;
       const convScopeGo = { userId: convUserId, projectKey: ppGo.projectKey, projectLabel: convProject };
+
+      // Phase 5: IF a Go job is already running → join poll only (do not kick again).
+      const existingGo = readGoCodePending(ppGo.workspaceRoot);
+      if (existingGo?.status === "running" || isGoCodeJobActive(ppGo.workspaceRoot)) {
+        return res.json({
+          preCodingSummary: existingGo?.preCodingSummary,
+          pending: true,
+          coding: true,
+          resumed: true,
+          hint: "Joining in-flight Foundation job — poll /api/grok/go-code/poll",
+        });
+      }
+      if (existingGo?.status === "preparing") {
+        return res.json({
+          preCodingSummary: existingGo.preCodingSummary,
+          pending: true,
+          preparing: true,
+          coding: false,
+          resumed: true,
+          hint: "Preparing plan before Grok Code — job not scheduled yet.",
+        });
+      }
+
+      // Phase 5: mark preparing BEFORE plan-fill so a 55s client abort + poll is not a false “Grok Code running”.
+      writeGoCodePending(ppGo.workspaceRoot, {
+        status: "preparing",
+        startedAt: Date.now(),
+        projectDisplayName: convProject,
+      });
+
       let planSnapshot: Record<string, string> = {};
       try {
         if (fs.existsSync(masterPlanPath)) {
@@ -4666,7 +4872,7 @@ Rules:
         }
       }
 
-      /** Write full ui-brief (+ legacy v0-prompt) before completeness check so UI_BRIEF_MISSING is not a false fail. */
+      // Phase 3: auto-build ui-brief from plan before completeness (so UI_BRIEF_MISSING is not a false fail).
       let uiArts = syncUiArtifactsFromMasterPlan(ppGo.workspaceRoot, masterPlanPath);
       console.log(
         `[go-code] Wrote ui-brief.md (${uiArts.uiBrief.content.length} chars) + v0-prompt.md (${uiArts.v0Prompt.content.length} chars)`,
@@ -4722,11 +4928,69 @@ Rules:
         );
       }
       if (!completeness.allowGo) {
+        failGoCodePreparing(
+          ppGo.workspaceRoot,
+          "Master Plan incomplete for Go. Fix gaps, then press Go again.",
+        );
         return res.status(409).json({
           error:
             "Master Plan incomplete for Go (MASTER_PLAN_STRICT=strict). Fix gaps or set MASTER_PLAN_STRICT=warn|off.",
           code: "MASTER_PLAN_INCOMPLETE",
           masterPlanCompleteness: completeness,
+        });
+      }
+
+      // Phase 2: IF after fill the plan is still unusable THEN hard-stop (even in warn mode).
+      if (!isMasterPlanReadyForUiMockup(planSnapshot)) {
+        failGoCodePreparing(
+          ppGo.workspaceRoot,
+          "Master Plan is still too thin after fill. Add a usable §1 goal, type, and pages before UI Gen or Go.",
+        );
+        return res.status(409).json({
+          error:
+            "Master Plan is still too thin after fill. Add a usable §1 goal, type, and pages before UI Gen or Go.",
+          code: "MASTER_PLAN_INCOMPLETE",
+          masterPlanCompleteness: completeness,
+        });
+      }
+
+      // Phase 3 Gate R: research artifact required before ui-brief success and Go.
+      const goalForResearch = String(planSnapshot["1. Goal of the app"] || note || convProject);
+      let researchGate = assessResearchArtifact(ppGo.workspaceRoot, { goal: goalForResearch });
+      if (!researchGate.ok) {
+        const stroke = await runResearchStroke({
+          apiKey,
+          workspaceRoot: ppGo.workspaceRoot,
+          masterPlanPath,
+          projectKey: ppGo.projectKey,
+          projectName: convProject,
+          goal: goalForResearch,
+        });
+        researchGate = stroke.gate;
+        if (!stroke.ok || !researchGate.ok) {
+          failGoCodePreparing(ppGo.workspaceRoot, RESEARCH_STOPPED);
+          return res.status(409).json({
+            error: stroke.error || RESEARCH_STOPPED,
+            code: "RESEARCH_INCOMPLETE",
+            researchGate,
+          });
+        }
+        try {
+          uiArts = syncUiArtifactsFromMasterPlan(ppGo.workspaceRoot, masterPlanPath);
+        } catch {
+          /* brief refresh after merge */
+        }
+      }
+
+      // Phase 4: IF ui-brief still missing, too short, or has no pages THEN block Go.
+      if (!uiBriefUsable(uiArts.uiBrief.content)) {
+        failGoCodePreparing(
+          ppGo.workspaceRoot,
+          "Finish Master Plan §§4–5 so ui-brief can be generated. Foundation will not start.",
+        );
+        return res.status(409).json({
+          error: "Finish Master Plan §§4–5 so ui-brief can be generated. Foundation will not start.",
+          code: "UI_BRIEF_MISSING",
         });
       }
 
@@ -4795,6 +5059,7 @@ Strict rules:
 
       if (!g4Res.ok) {
         const errText = await g4Res.text();
+        failGoCodePreparing(ppGo.workspaceRoot, `Grok 4 summary phase failed: ${errText.slice(0, 500)}`);
         return res.status(g4Res.status).json({ error: `Grok 4 summary phase failed: ${errText.slice(0, 500)}` });
       }
 
@@ -4971,7 +5236,18 @@ ${workflowContext}`;
             resumed: true,
             v0PromptWritten: v0Sync.written,
             v0PromptLength: v0Sync.content.length,
-            hint: "Grok Code already running — poll /api/grok/go-code/poll",
+            hint: "Joining in-flight Foundation job — poll /api/grok/go-code/poll",
+          });
+        }
+        if (existing?.status === "preparing") {
+          return res.json({
+            preCodingSummary: summary,
+            summarySaved: true,
+            pending: true,
+            preparing: true,
+            coding: false,
+            resumed: true,
+            hint: "Preparing plan before Grok Code — job not scheduled yet.",
           });
         }
       }
@@ -5003,6 +5279,15 @@ ${workflowContext}`;
       });
     } catch (error) {
       console.error("Error in /api/grok/go-code:", error);
+      try {
+        const ppFail = projectPathsFor(req);
+        failGoCodePreparing(
+          ppFail.workspaceRoot,
+          error instanceof Error ? error.message : "Failed to run Go (code) pipeline",
+        );
+      } catch {
+        /* workspace unresolved */
+      }
       captureError(error instanceof Error ? error : new Error(String(error)), {
         source: "server",
         route: "/api/grok/go-code",

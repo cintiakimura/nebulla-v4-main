@@ -68,6 +68,7 @@ export async function openLocalFile(filePath: string): Promise<OpenFileResult> {
     };
   }
   if (/\s/.test(path) && !path.includes('/')) {
+    // Phase 7: titles with spaces are not file paths — open by projectKey + encoded path.
     return {
       success: false,
       error: 'path must be a workspace-relative file, not the project title',
