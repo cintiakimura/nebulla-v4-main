@@ -2102,14 +2102,17 @@ export function AIChat() {
           ]);
           if (mockup.ok) {
             uiMockupStarted = true;
-            markUiMockupSucceeded(diskProjectKey);
             const applied = await applyUiStudioBetaToAppPreview(pushActivity);
-            pushActivity(
-              applied.ok
-                ? 'UI mockup ready — App Preview updated from UI Studio Beta'
-                : 'UI mockup ready in UI Studio Beta — open App Preview / Generate if shell still looks empty',
-              applied.ok ? 'success' : 'warn',
-            );
+            if (applied.ok) {
+              markUiMockupSucceeded(diskProjectKey);
+              pushActivity('UI mockup ready — App Preview updated from UI Studio Beta', 'success');
+            } else {
+              mockupSkippedOrFailed = true;
+              pushActivity(
+                'UI mockup ready in UI Studio Beta — open App Preview / Generate if shell still looks empty',
+                'warn',
+              );
+            }
       setMessages((p) => {
         const next = [
           ...p,

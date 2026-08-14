@@ -1,12 +1,13 @@
 import {
   expireStaleGoCodePending,
+  GO_CODE_JOB_TIMEOUT_MS,
   readGoCodeLastResult,
   readGoCodePending,
   writeGoCodeLastResult,
   writeGoCodePending,
 } from "./nebulaGoCodePending";
 
-export const GO_CODE_JOB_TIMEOUT_MS = 600_000;
+export { GO_CODE_JOB_TIMEOUT_MS };
 
 const activeJobs = new Set<string>();
 
@@ -100,7 +101,7 @@ export function scheduleGoCodeJob(opts: GoCodeJobOptions): boolean {
         startedAt: readGoCodePending(workspaceRoot)?.startedAt ?? Date.now(),
         preCodingSummary: opts.preCodingSummary,
         codeError: aborted
-          ? "Grok Code timed out after 10 minutes. Try Go again with a narrower focus."
+          ? "Grok Code timed out after 3 minutes. Try Go again with a narrower slice."
           : e instanceof Error
             ? e.message
             : "Grok Code failed",
@@ -167,12 +168,22 @@ export function goCodePendingToPollResponse(
     };
   }
   if (pending.status === "running" || jobActive) {
+    const elapsed = Date.now() - pending.startedAt;
+    if (elapsed >= GO_CODE_JOB_TIMEOUT_MS) {
+      return {
+        ok: false,
+        pending: false,
+        preCodingSummary: pending.preCodingSummary,
+        codeError: "Grok Code timed out after 3 minutes. Try Go again with a narrower slice.",
+        summarySaved: Boolean(pending.preCodingSummary),
+      };
+    }
     return {
       ok: true,
       pending: true,
       coding: true,
       preCodingSummary: pending.preCodingSummary,
-      elapsedMs: Date.now() - pending.startedAt,
+      elapsedMs: elapsed,
       hint: "Grok Code is still running on the server — keep polling.",
     };
   }

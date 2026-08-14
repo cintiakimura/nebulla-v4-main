@@ -80,6 +80,18 @@ export function wasUiMockupStageStarted(projectKey?: string): boolean {
 }
 
 /**
+ * Skip /generate only when Studio already has a loadable model.
+ * Leftover `user_visible_stage` / `final_status` "Ready" is not success (Phase 7.4).
+ */
+export function statusLooksReadyForSkip(st: {
+  has_loadable_model?: boolean;
+  user_visible_stage?: string;
+  final_status?: string;
+}): boolean {
+  return st.has_loadable_model === true;
+}
+
+/**
  * True when UI Gen produced a **loadable Studio model** and meta is usable.
  * preview_applied / gate alone are NOT enough (false “already on disk” left Studio Waiting).
  */
@@ -129,11 +141,6 @@ export async function canStartFoundationCoding(options?: {
     return { ok: true, reason: 'mockup_ready' };
   }
   if (options?.mockupSkippedOrFailed) {
-    return { ok: true, reason: 'explicit_skip' };
-  }
-  // Mockup claimed in-session success but disk empty — still allow Go so spine does not stall;
-  // Studio mount repair (7.4) can recover the canvas separately.
-  if (wasUiMockupStageStarted()) {
     return { ok: true, reason: 'explicit_skip' };
   }
   return { ok: false, reason: 'blocked' };

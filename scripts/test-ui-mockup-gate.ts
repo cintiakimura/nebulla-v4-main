@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { canStartUiMockup } from '../src/lib/uiMockupGate';
+import { canStartUiMockup, statusLooksReadyForSkip } from '../src/lib/uiMockupGate';
 import { isMasterPlanReadyForUiMockup } from '../lib/masterPlanCompleteness';
 import {
   filterGrokContentToArchitectureFiles,
@@ -146,6 +146,38 @@ assert.equal(
   }),
   false,
 );
+
+assert.equal(statusLooksReadyForSkip({ has_loadable_model: true }), true);
+assert.equal(
+  statusLooksReadyForSkip({
+    has_loadable_model: false,
+    user_visible_stage: 'Ready in preview',
+    final_status: 'generated',
+  }),
+  false,
+  'leftover Ready stage must not skip generate',
+);
+assert.equal(statusLooksReadyForSkip({ final_status: 'accepted' }), false);
+
+{
+  const engine = fs.readFileSync(
+    path.join(__dirname, '../src/lib/uiStudioBetaEngine.ts'),
+    'utf8',
+  );
+  assert.match(engine, /statusLooksReadyForSkip\(existing\)/);
+  assert.equal(
+    /final === 'generated' \|\| final === 'refined'/.test(engine),
+    false,
+    'skip must not use leftover final_status as Ready',
+  );
+  const gate = fs.readFileSync(path.join(__dirname, '../src/lib/uiMockupGate.ts'), 'utf8');
+  const codingGate = gate.slice(gate.indexOf('export async function canStartFoundationCoding'));
+  assert.equal(
+    /wasUiMockupStageStarted\(\)/.test(codingGate),
+    false,
+    'Foundation must not treat session mockup flags as success',
+  );
+}
 
 {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'nebulla-cycle-'));

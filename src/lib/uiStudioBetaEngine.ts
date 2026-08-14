@@ -13,6 +13,7 @@ import type { GrokActivityProgressFn } from './ideGrokActivityStatus';
 import { getGrokRequestHeaders } from './grokUserKey';
 import { withProjectBody, withProjectQuery } from './nebulaProjectApi';
 import { dispatchOpenCenterPanel } from '@/components/ide/IdeCenterTabsContext';
+import { statusLooksReadyForSkip } from './uiMockupGate';
 import {
   extractUiRouteKeys,
   looksLikeUiRelevantPaths,
@@ -135,18 +136,6 @@ export async function runUiStudioBetaGeneration(
       'info',
     );
 
-    const statusLooksReady = (st: {
-      user_visible_stage?: string;
-      final_status?: string;
-      has_loadable_model?: boolean;
-    }) => {
-      if (st.has_loadable_model) return true;
-      const final = String(st.final_status || '').toLowerCase();
-      const stage = String(st.user_visible_stage || '');
-      if (!/ready in preview/i.test(stage)) return false;
-      return final === 'generated' || final === 'refined' || final === 'accepted';
-    };
-
     try {
       const existing = await fetchJson<{
         user_visible_stage?: string;
@@ -156,7 +145,7 @@ export async function runUiStudioBetaGeneration(
         credentials: 'include',
         headers: getGrokRequestHeaders(),
       });
-      if (statusLooksReady(existing) && !options.regenerate) {
+      if (statusLooksReadyForSkip(existing) && !options.regenerate) {
         onProgress?.(existing.user_visible_stage || 'Ready in preview', 'success');
         return { ok: true, user_visible_stage: existing.user_visible_stage };
       }

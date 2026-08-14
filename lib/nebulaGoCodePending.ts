@@ -134,7 +134,13 @@ export function consumeGoCodeResult(workspaceRoot: string): boolean {
 }
 
 /** After this, any go-code-pending row is dropped (stale poll loops). */
-export const GO_CODE_PENDING_MAX_AGE_MS = 20 * 60 * 1000;
+export const GO_CODE_PENDING_MAX_AGE_MS = 5 * 60 * 1000;
+
+/** Wall-clock cap for the xAI Code fetch and client poll (UI: 1–3 min). */
+export const GO_CODE_JOB_TIMEOUT_MS = 180_000;
+
+const GO_TIMEOUT_MESSAGE =
+  "Grok Code timed out after 3 minutes. Try Go again with a narrower slice.";
 
 /**
  * Drop or fail abandoned go-code-pending.json so clients stop polling.
@@ -153,7 +159,16 @@ export function expireStaleGoCodePending(
     return true;
   }
 
-  if (pending.status === "running" && !opts?.jobActive && age > 11 * 60 * 1000) {
+  if (pending.status === "running" && age >= GO_CODE_JOB_TIMEOUT_MS) {
+    writeGoCodePending(workspaceRoot, {
+      ...pending,
+      status: "error",
+      codeError: GO_TIMEOUT_MESSAGE,
+    });
+    return false;
+  }
+
+  if (pending.status === "running" && !opts?.jobActive && age > GO_CODE_JOB_TIMEOUT_MS / 2) {
     writeGoCodePending(workspaceRoot, {
       ...pending,
       status: "error",
