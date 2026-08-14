@@ -77,6 +77,13 @@ const root = path.join(__dirname, '..');
     false,
     'runGoCodeAndApply must not await artifact sync after files land',
   );
+  assert.match(pipeline, /GO_CONSUME_TIMEOUT_MS/);
+  assert.match(goFn, /ackConsumedGoCodeResult/);
+  assert.equal(
+    /await fetch\(withProjectQuery\('\/api\/grok\/go-code\/poll'\)/.test(goFn),
+    false,
+    'consume poll after apply must not be awaited (hangs on Runnable skeleton filled)',
+  );
 
   const chat = fs.readFileSync(path.join(root, 'src/components/ide/AIChat.tsx'), 'utf8');
   // Direct Go path must not re-await a second post-coding workspace sync after Go already synced.

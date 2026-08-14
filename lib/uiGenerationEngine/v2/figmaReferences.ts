@@ -402,11 +402,18 @@ async function fetchFigmaFileOnce(
   const headers = { "X-Figma-Token": token };
 
   const attempt = async (): Promise<{ res: Response | null; networkError?: string }> => {
+    const controller = typeof AbortController !== "undefined" ? new AbortController() : null;
+    const timer = controller ? setTimeout(() => controller.abort(), 4000) : null;
     try {
-      const res = await fetch(url, { headers });
+      const res = await fetch(url, {
+        headers,
+        signal: controller?.signal,
+      });
       return { res };
     } catch (e) {
       return { res: null, networkError: e instanceof Error ? e.message : "network error" };
+    } finally {
+      if (timer) clearTimeout(timer);
     }
   };
 

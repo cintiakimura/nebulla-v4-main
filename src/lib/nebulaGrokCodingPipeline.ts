@@ -10,17 +10,63 @@ import { reportGoApplyTelemetry } from './contractTelemetryClient';
 import { assessOversizedGoApply, parseGoSliceLabel, type GoSliceLabel } from '../../lib/goSliceContract';
 import { withProjectBody, withProjectQuery } from './nebulaProjectApi';
 import { triggerUiStudioBetaAfterFilesApplied } from './uiStudioBetaEngine';
+import {
+  FAST_PROTOTYPE_PRIMARY_SLICE_INSTRUCTION,
+  userNoteRequestsNextSlice,
+} from './fastPrototypeNextSlice';
 
 const START_CODING_RE = /<\s*START_CODING\s*>|\bSTART_CODING\b/i;
 const GO_POLL_MS = 5000;
 const GO_MAX_POLLS = 90;
 const GO_CODE_MAX_PASSES = 2;
+/** Ack after apply must never stall the coding turn (server may be busy on post-apply IO). */
+const GO_CONSUME_TIMEOUT_MS = 4000;
+/** Apply-generated has no timeout today — a hung POST left chat on "Writing files…". */
+const APPLY_GENERATED_TIMEOUT_MS = 45_000;
+/** One Go poll HTTP call must not block the whole 7.5 min loop. */
+const GO_POLL_FETCH_TIMEOUT_MS = 12_000;
 
 /** One poll loop per project — do not join ADHD + children onto the same waiter. */
 const goCodePollInFlightByProject = new Map<string, Promise<GoCodePayload>>();
 
 function sleep(ms: number): Promise<void> {
   return new Promise((r) => window.setTimeout(r, ms));
+}
+
+function abortAfter(ms: number): { signal?: AbortSignal; cancel: () => void } {
+  const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+  const w = typeof window !== 'undefined' ? window : null;
+  const timer = controller
+    ? w
+      ? w.setTimeout(() => controller.abort(), ms)
+      : setTimeout(() => controller.abort(), ms)
+    : null;
+  return {
+    signal: controller?.signal,
+    cancel: () => {
+      if (timer == null) return;
+      if (w) w.clearTimeout(timer);
+      else clearTimeout(timer);
+    },
+  };
+}
+
+/** Fire-and-forget ack so apply is not blocked if poll consume hangs. */
+export function ackConsumedGoCodeResult(projectName: string): void {
+  const consumeTimed = abortAfter(GO_CONSUME_TIMEOUT_MS);
+  void fetch(withProjectQuery('/api/grok/go-code/poll'), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getGrokRequestHeaders() },
+    credentials: 'include',
+    signal: consumeTimed.signal,
+    body: JSON.stringify(withProjectBody({ projectName, consume: true })),
+  })
+    .catch(() => {
+      /* keep durable result for retry */
+    })
+    .finally(() => {
+      consumeTimed.cancel();
+    });
 }
 
 export function hasGrokFileBlocks(text: string): boolean {
@@ -200,7 +246,8 @@ export async function applyGeneratedFiles(
   }
   try {
     onProgress?.('Writing files to cloud workspace', 'info');
-    const apply = await fetchJson<{
+    const applyTimed = abortAfter(APPLY_GENERATED_TIMEOUT_MS);
+    let apply: {
       success?: boolean;
       written?: string[];
       skipped?: string[];
@@ -214,18 +261,24 @@ export async function applyGeneratedFiles(
       skeletonWritten?: string[];
       interactivePreview?: boolean;
       interactivePreviewPath?: string;
-    }>(withProjectQuery('/api/files/apply-generated'), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
-      body: JSON.stringify(
-        withProjectBody({
-          content: clean,
-          userNote: artifactContext?.userNote?.trim() || undefined,
-          projectName: artifactContext?.projectName?.trim() || undefined,
-        }),
-      ),
-    });
+    };
+    try {
+      apply = await fetchJson(withProjectQuery('/api/files/apply-generated'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        signal: applyTimed.signal,
+        body: JSON.stringify(
+          withProjectBody({
+            content: clean,
+            userNote: artifactContext?.userNote?.trim() || undefined,
+            projectName: artifactContext?.projectName?.trim() || undefined,
+          }),
+        ),
+      });
+    } finally {
+      applyTimed.cancel();
+    }
     if (apply.error) {
       onProgress?.(`Apply failed: ${apply.error}`, 'error');
       return {
@@ -263,12 +316,6 @@ export async function applyGeneratedFiles(
         `Interactive product preview ready (${apply.interactivePreviewPath || 'public/product-preview/index.html'}) — open App Preview to click the happy path`,
         'success',
       );
-      try {
-        window.dispatchEvent(new CustomEvent('nebula-reload-app-preview'));
-        window.dispatchEvent(new CustomEvent('nebula-open-app-preview'));
-      } catch {
-        /* ignore */
-      }
     }
     if (apply.baasSkippedReason) {
       onProgress?.(apply.baasSkippedReason, 'warn');
@@ -282,17 +329,23 @@ export async function applyGeneratedFiles(
       );
     }
     if (writtenCount > 0) {
-      try {
-        window.dispatchEvent(new CustomEvent('nebula-files-applied'));
-        window.dispatchEvent(new CustomEvent('nebula-reload-app-preview'));
-      } catch {
-        /* ignore */
-      }
-      notifyWorkspaceFilesChanged();
-      if (!artifactContext?.skipPostSync) {
-        // Never hold the coding turn on artifact sync — that left “Syncing project artifacts…” stuck.
-        void afterFilesAppliedArtifacts(artifactContext?.userNote, artifactContext?.projectName, onProgress);
-      }
+      // Defer preview/tree events — sync dispatch after skeleton froze the coding turn
+      // (listeners hit the API while apply-generated's setImmediate still owns the event loop).
+      window.setTimeout(() => {
+        try {
+          window.dispatchEvent(new CustomEvent('nebula-files-applied'));
+          window.dispatchEvent(new CustomEvent('nebula-reload-app-preview'));
+          if (apply.interactivePreview) {
+            window.dispatchEvent(new CustomEvent('nebula-open-app-preview'));
+          }
+        } catch {
+          /* ignore */
+        }
+        notifyWorkspaceFilesChanged();
+        if (!artifactContext?.skipPostSync) {
+          void afterFilesAppliedArtifacts(artifactContext?.userNote, artifactContext?.projectName, onProgress);
+        }
+      }, 0);
     }
     const runnableNote =
       typeof apply.runnableRoot === 'boolean'
@@ -376,12 +429,19 @@ async function pollGoCodeUntilDoneInner(
   for (let i = 0; i < GO_MAX_POLLS; i++) {
     await sleep(GO_POLL_MS);
     try {
-      const response = await fetch(withProjectQuery('/api/grok/go-code/poll'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...getGrokRequestHeaders() },
-        credentials: 'include',
-        body: JSON.stringify(withProjectBody({ projectName })),
-      });
+      const pollTimed = abortAfter(GO_POLL_FETCH_TIMEOUT_MS);
+      let response: Response;
+      try {
+        response = await fetch(withProjectQuery('/api/grok/go-code/poll'), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...getGrokRequestHeaders() },
+          credentials: 'include',
+          signal: pollTimed.signal,
+          body: JSON.stringify(withProjectBody({ projectName })),
+        });
+      } finally {
+        pollTimed.cancel();
+      }
       const poll = await readResponseJson<
         GoCodePayload & {
           hint?: string;
@@ -452,12 +512,19 @@ async function kickGoCodeJob(options: {
   let prePoll: GoCodePayload | null = null;
   if (!continuation) {
     try {
-      const preRes = await fetch(withProjectQuery('/api/grok/go-code/poll'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...getGrokRequestHeaders() },
-        credentials: 'include',
-        body: JSON.stringify(withProjectBody({ projectName })),
-      });
+      const preTimed = abortAfter(GO_POLL_FETCH_TIMEOUT_MS);
+      let preRes: Response;
+      try {
+        preRes = await fetch(withProjectQuery('/api/grok/go-code/poll'), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...getGrokRequestHeaders() },
+          credentials: 'include',
+          signal: preTimed.signal,
+          body: JSON.stringify(withProjectBody({ projectName })),
+        });
+      } finally {
+        preTimed.cancel();
+      }
       prePoll = await readResponseJson<GoCodePayload>(preRes);
       if (prePoll.idle) {
         prePoll = null;
@@ -718,27 +785,20 @@ export async function runGoCodeAndApply(options: {
       }
 
       if (apply.ok && apply.writtenCount > 0) {
-        // Ack durable server result only after files are applied — missed polls can re-fetch until then.
-        try {
-          await fetch(withProjectQuery('/api/grok/go-code/poll'), {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', ...getGrokRequestHeaders() },
-            credentials: 'include',
-            body: JSON.stringify(withProjectBody({ projectName, consume: true })),
-          });
-        } catch {
-          /* keep durable result for retry */
-        }
+        onProgress?.('Slice files on disk — auto-advance continues (not waiting on poll ack)…', 'info');
+        // Never await consume — a hung poll ack left chat stuck on "Runnable skeleton filled".
+        ackConsumedGoCodeResult(projectName);
       }
 
       if (!apply.ok) {
-        partialPlanOnly = isPlanOnlyApply(apply.writtenPaths);
+        partialPlanOnly = isPlanOnlyApply(apply.writtenPaths) && apply.runnableRoot !== true;
         if (pass >= GO_CODE_MAX_PASSES - 1) break;
-        if (!isPlanOnlyApply(apply.writtenPaths)) break;
+        if (!partialPlanOnly) break;
         continue;
       }
 
-      partialPlanOnly = isPlanOnlyApply(apply.writtenPaths);
+      // Runnable Next/Vite skeleton counts as Foundation, even if this pass only filled config files.
+      partialPlanOnly = isPlanOnlyApply(apply.writtenPaths) && apply.runnableRoot !== true;
       if (!partialPlanOnly && apply.writtenCount >= 2) {
         break;
       }
@@ -882,7 +942,13 @@ export async function handlePostGrokCodingTurn(options: {
   }
 
   const codingSource = planning || assistantContent;
-  onProgress?.('START_CODING detected — launching Go Code pipeline', 'info');
+  const nextSlice = userNoteRequestsNextSlice(userNote);
+  onProgress?.(
+    nextSlice
+      ? 'START_CODING detected — launching Go Code for the next incomplete slice'
+      : 'START_CODING detected — launching Go Code pipeline',
+    'info',
+  );
   const go = await runGoCodeAndApply({
     userId,
     projectName,
@@ -892,8 +958,9 @@ export async function handlePostGrokCodingTurn(options: {
       { role: 'assistant', content: codingSource.slice(0, 12000) },
       {
         role: 'user',
-        content:
-          'START_CODING — implement ONE coherent Foundation slice only (Build → Debug → Next). Prefer app/, src/, components/, pages/ — not master-plan/ui-brief only. File blocks for this slice only — not the full §4 app.',
+        content: nextSlice
+          ? FAST_PROTOTYPE_PRIMARY_SLICE_INSTRUCTION
+          : 'START_CODING — implement ONE coherent Foundation slice only (Build → Debug → Next). Prefer app/, src/, components/, pages/ — not master-plan/ui-brief only. File blocks for this slice only — not the full §4 app.',
       },
     ],
   });

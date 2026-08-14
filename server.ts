@@ -2673,7 +2673,7 @@ No approved UI code yet.
             ? String(body.projectName).trim()
             : "Untitled Project";
         const userNote = typeof body.userNote === "string" ? body.userNote.trim() : "";
-        setImmediate(() => {
+        setTimeout(() => {
           try {
             bootstrapMasterPlanFromWorkspace({
               workspaceRoot: pp.workspaceRoot,
@@ -2690,7 +2690,7 @@ No approved UI code yet.
           } catch (syncErr) {
             console.warn("[apply-generated] post-apply artifact sync:", syncErr);
           }
-        });
+        }, 50);
       }
     } catch (err: any) {
       res.status(500).json({ error: err?.message || "Failed to apply generated files" });
