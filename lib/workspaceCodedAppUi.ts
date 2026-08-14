@@ -5,7 +5,11 @@
 
 import fs from "fs";
 import path from "path";
-import { PRODUCT_PREVIEW_MARKER, PRODUCT_PREVIEW_REL } from "./interactiveProductPreview";
+import {
+  PRODUCT_PREVIEW_MARKER,
+  PRODUCT_PREVIEW_REL,
+  hasInteractiveProductPreview,
+} from "./interactiveProductPreview";
 
 export const UI_GEN_MOCKUP_META = 'name="nebulla-preview" content="ui-gen-mockup"';
 export const UI_GEN_MOCKUP_MARKER = "ui-gen-mockup";
@@ -237,6 +241,22 @@ export function resolveAppPreviewAuthority(workspaceRoot: string): AppPreviewAut
         codedApp: true,
         indexIsMockup: false,
         entryRel: built,
+        productFiles,
+        mockupRel,
+        limitation: null,
+      },
+      "real_routes",
+    );
+  }
+
+  if (hasRealRoutes && hasInteractiveProductPreview(workspaceRoot)) {
+    return withHonesty(
+      {
+        mode: "interactive_product_preview",
+        statusLabel: "Interactive preview (mock data)",
+        codedApp: true,
+        indexIsMockup: false,
+        entryRel: PRODUCT_PREVIEW_REL,
         productFiles,
         mockupRel,
         limitation: null,

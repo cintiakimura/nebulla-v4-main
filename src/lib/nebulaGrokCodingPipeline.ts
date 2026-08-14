@@ -852,6 +852,7 @@ export async function runGoCodeAndApply(options: {
   sliceLabel?: GoSliceLabel | null;
   oversizedWarning?: string | null;
   blockedReason?: GoBlockedReason;
+  productRouteCount?: number;
 }> {
   const { userId, projectName, userNote, messages, onProgress } = options;
   const baseMessages =
@@ -1018,10 +1019,14 @@ export async function runGoCodeAndApply(options: {
       }
     }
 
-    const sliceLabel =
+    const depth = assessApplyRouteDepth(allWrittenPaths);
+    let sliceLabel =
       parseGoSliceLabel(lastCodeText) ||
       parseGoSliceLabel(userNote) ||
       parseGoSliceLabel('SLICE: Foundation');
+    if (depth.productRoutes.length < 3 && sliceLabel && /secondary|polish/i.test(sliceLabel)) {
+      sliceLabel = 'Foundation';
+    }
     const oversized = assessOversizedGoApply({ sliceLabel, writtenPaths: allWrittenPaths });
     const exit = assessFoundationGoExit({
       totalWritten,
@@ -1030,7 +1035,6 @@ export async function runGoCodeAndApply(options: {
       runnableRoot: lastRunnable.runnableRoot,
       partialPlanOnly,
     });
-    const depth = assessApplyRouteDepth(allWrittenPaths);
     let statusMessage = buildGoCompleteMessage(
       totalWritten,
       allWrittenPaths,
@@ -1089,6 +1093,7 @@ export async function runGoCodeAndApply(options: {
       sliceLabel,
       oversizedWarning: oversized.message,
       blockedReason: exit.blockedReason || undefined,
+      productRouteCount: depth.productRoutes.length,
     };
   } catch (e) {
     const blocked = classifyGoFailure({
@@ -1126,6 +1131,7 @@ export async function handlePostGrokCodingTurn(options: {
   writtenPaths?: string[];
   sliceLabel?: string | null;
   blockedReason?: GoBlockedReason;
+  productRouteCount?: number;
 }> {
   const { assistantContent, planningPhase, userId, projectName, userNote, onProgress } = options;
 
@@ -1167,6 +1173,7 @@ export async function handlePostGrokCodingTurn(options: {
         writtenPaths: apply.writtenPaths,
         sliceLabel,
         blockedReason: exit.blockedReason || undefined,
+        productRouteCount: assessApplyRouteDepth(apply.writtenPaths).productRoutes.length,
       };
     }
     const blocked = classifyGoFailure({ error: apply.message, code: 'APPLY_EMPTY_PRODUCT' });
@@ -1227,5 +1234,6 @@ export async function handlePostGrokCodingTurn(options: {
     writtenPaths: undefined,
     sliceLabel: go.sliceLabel ?? 'Foundation',
     blockedReason: go.blockedReason,
+    productRouteCount: go.productRouteCount,
   };
 }

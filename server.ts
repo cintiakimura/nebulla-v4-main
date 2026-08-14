@@ -139,6 +139,7 @@ import {
 import { MOCKUP_NON_AUTHORITATIVE_GO_BULLETS } from "./lib/codingMockupContract";
 import {
   buildLocalPreCodingSummary,
+  applyClampedSliceToSummary,
   lockedUserConstraintsFromPlan,
   shouldSkipPhaseALlm,
 } from "./lib/goSliceContract";
@@ -149,6 +150,7 @@ import {
   assessApplyRouteDepth,
   resolveAppPreviewAuthority,
   workspaceHasCodedAppUi,
+  listProductUiFiles,
 } from "./lib/workspaceCodedAppUi";
 import {
   filterUnsolicitedBaaSBlocks,
@@ -162,7 +164,11 @@ import {
   writtenPathsNeedRunnableSkeleton,
 } from "./lib/runnableAppSkeleton";
 import { runWorkspaceBuildCheck } from "./lib/workspaceBuildCheck";
-import { INTERACTIVE_PREVIEW_GO_BULLETS } from "./lib/interactiveProductPreview";
+import {
+  INTERACTIVE_PREVIEW_GO_BULLETS,
+  ensureInteractiveProductPreview,
+  PRODUCT_PREVIEW_REL,
+} from "./lib/interactiveProductPreview";
 import {
   masterPlanKeyForTabIndex,
   normalizeMasterPlanRecord,
@@ -2344,16 +2350,24 @@ No approved UI code yet.
 
       if (
         !html &&
+        authority.mode === "interactive_product_preview" &&
+        authority.entryRel
+      ) {
+        const entryAbs = path.join(pp.workspaceRoot, authority.entryRel);
+        if (fs.existsSync(entryAbs)) {
+          html = fs.readFileSync(entryAbs, "utf8");
+        }
+      }
+
+      if (
+        !html &&
         (authority.mode === "post_code_bridge" ||
           authority.mode === "thin_code_shell" ||
           (authority.codedApp && !authority.entryRel))
       ) {
-        // Iframe cannot run Vite/Next — show last mockup when present so Generate UI is visible.
-        if (authority.mockupRel) {
-          const mockAbs = path.join(pp.workspaceRoot, authority.mockupRel);
-          if (fs.existsSync(mockAbs)) {
-            html = fs.readFileSync(mockAbs, "utf8");
-          }
+        const productPrev = path.join(pp.workspaceRoot, PRODUCT_PREVIEW_REL);
+        if (fs.existsSync(productPrev)) {
+          html = fs.readFileSync(productPrev, "utf8");
         }
         if (!html) {
           html = buildCodedAppPreviewBridgeHtml({
@@ -2712,6 +2726,19 @@ No approved UI code yet.
           runnable = inspectRunnableSkeleton(workspaceRoot);
         } catch {
           runnable = null;
+        }
+        try {
+          const diskUi = listProductUiFiles(workspaceRoot, 24);
+          const diskDepth = assessApplyRouteDepth(diskUi.length ? diskUi : written);
+          if (!diskDepth.zeroProductRoutes) {
+            const preview = ensureInteractiveProductPreview(workspaceRoot, {
+              projectName: projectNameEarly,
+              productFiles: diskUi.length ? diskUi : written,
+            });
+            interactivePreviewPath = preview.path;
+          }
+        } catch (previewErr) {
+          console.warn("[apply-generated] interactive product preview:", previewErr);
         }
       }
 
@@ -5111,6 +5138,7 @@ Strict rules:
         });
       }
       summary = summary.slice(0, 2000);
+      summary = applyClampedSliceToSummary(summary, ppGo.workspaceRoot);
       }
 
       // Session notes belong only in PRE_CODING_SUMMARY — never pollute §1 Goal
@@ -5141,6 +5169,7 @@ Strict rules:
         if (!summary) {
           summary = "Continue implementation from master-plan.json and project-execution-rules.md.";
         }
+        summary = applyClampedSliceToSummary(summary, ppGo.workspaceRoot);
         uiArts = syncUiArtifactsFromMasterPlan(ppGo.workspaceRoot, masterPlanPath);
         v0Sync = {
           content: uiArts.v0Prompt.content,
@@ -5206,7 +5235,8 @@ Master Plan (project-execution-rules — MUST be complete before code):
 
 Implementation (ONE SLICE per Go — Build → Debug → Next):
 - Implement only the slice named in "${PRE_CODING_SUMMARY_KEY}" (or infer next incomplete slice: Foundation first if no app shell exists).
-- Prefer the smallest coherent file set for that slice (often 3–8 file blocks). Do NOT emit every §4 route in one pass.
+- Foundation for a multi-page plan: \`app/layout.tsx\` + root \`app/page.tsx\` + at least one more \`app/<route>/page.tsx\` from §4, with working primary controls (mock data OK). Do not stop at a single static dashboard.
+- Later slices: smallest coherent set (often 3–8 file blocks). Do NOT emit every §4 route in one pass.
 - Include master-plan.json updates IN THE SAME response if needed — never as the only file when app code is due.
 - Honor security baseline (RLS/tenant filters) in Auth/Data slices.
 

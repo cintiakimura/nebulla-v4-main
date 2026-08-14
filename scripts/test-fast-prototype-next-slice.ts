@@ -136,6 +136,17 @@ assert.equal(nextAutopilotSliceLabel('Secondary'), 'Polish');
   assert.equal(d.advance, false);
   assert.equal(d.stopReason, 'failed');
 }
+{
+  const d = shouldAutopilotAdvance({
+    codingOk: true,
+    lastSlice: 'Secondary',
+    autoCount: 0,
+    autopilotKickoff: true,
+    productRouteCount: 2,
+  });
+  assert.equal(d.advance, true);
+  assert.equal(d.nextLabel, 'Primary');
+}
 assert.match(buildAutopilotSliceInstruction('Secondary'), /SLICE: Secondary/);
 
 assert.equal(userNoteRequestsNextSlice('continue building'), true);

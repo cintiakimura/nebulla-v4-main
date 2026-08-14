@@ -5,7 +5,7 @@
 
 import fs from "fs";
 import path from "path";
-import { assessApplyRouteDepth, inferRoutesFromProductFiles, listProductUiFiles } from "./workspaceCodedAppUi";
+import { assessApplyRouteDepth, listProductUiFiles } from "./workspaceCodedAppUi";
 import { goBlocked, type GoBlockedReason } from "./goBlockedReason";
 
 export const GO_SLICE_LABELS = [
@@ -92,34 +92,54 @@ function workspaceExists(...parts: string[]): boolean {
   return fs.existsSync(path.join(...parts));
 }
 
-/** Heuristic next slice from on-disk app shell (no LLM). */
+const SLICE_RANK: Record<GoSliceLabel, number> = {
+  Foundation: 0,
+  Auth: 1,
+  "Data+API": 2,
+  Primary: 3,
+  Secondary: 4,
+  Polish: 5,
+};
+
+/** Heuristic next slice from on-disk app shell (no LLM). Never skip to Secondary on 1–2 stub routes. */
 export function inferGoSliceFromWorkspace(workspaceRoot: string): GoSliceLabel {
   const root = workspaceRoot.trim();
   if (!root) return "Foundation";
   const productFiles = listProductUiFiles(root, 40);
-  const routes = inferRoutesFromProductFiles(productFiles);
+  const depth = assessApplyRouteDepth(productFiles);
+  const routes = depth.productRoutes;
   // Vite App/main or mockup index.html is not a Foundation — need app/ or pages/ routes.
-  if (routes.length === 0) return "Foundation";
+  if (routes.length === 0 || depth.thinCodeShell) return "Foundation";
 
+  const AUTH_ROUTE = /^\/(login|auth|signin|sign-in|signup|register|sign-up)$/i;
+  const screens = routes.filter((r) => !AUTH_ROUTE.test(r));
   const hasAuth =
     workspaceExists(root, "lib", "auth.ts") ||
     workspaceExists(root, "src", "lib", "auth.ts") ||
     workspaceExists(root, "src", "pages", "Login.tsx") ||
     workspaceExists(root, "app", "login", "page.tsx") ||
     workspaceExists(root, "app", "auth", "page.tsx");
-  if (!hasAuth) return "Auth";
-
-  const pageCount = routes.length;
-  const hasPrimary =
-    pageCount >= 2 ||
-    workspaceExists(root, "src", "pages", "ChildSession.tsx") ||
-    workspaceExists(root, "src", "pages", "ParentDashboard.tsx") ||
-    workspaceExists(root, "app", "dashboard", "page.tsx") ||
-    workspaceExists(root, "app", "practice", "page.tsx") ||
-    workspaceExists(root, "app", "parent", "page.tsx");
-  if (!hasPrimary) return "Primary";
-
+  if (!hasAuth) return screens.length <= 1 ? "Foundation" : "Auth";
+  // Home + one extra (login does not count) is still Primary, not Secondary.
+  if (screens.length < 3) return "Primary";
   return "Secondary";
+}
+
+/** LLM/summary must not skip ahead of what disk actually supports. */
+export function clampClaimedSliceToWorkspace(
+  claimed: string | null | undefined,
+  workspaceRoot: string,
+): GoSliceLabel {
+  const inferred = inferGoSliceFromWorkspace(workspaceRoot);
+  const parsed = parseGoSliceLabel(claimed) || inferred;
+  return SLICE_RANK[parsed] > SLICE_RANK[inferred] ? inferred : parsed;
+}
+
+/** Rewrite PRE_CODING_SUMMARY so SLICE: cannot skip ahead of disk. */
+export function applyClampedSliceToSummary(summary: string, workspaceRoot: string): string {
+  const clamped = clampClaimedSliceToWorkspace(summary, workspaceRoot);
+  const rest = String(summary || "").replace(/^\s*SLICE\s*:[^\n]*\n?/i, "").trim();
+  return rest ? `SLICE: ${clamped}\n${rest}` : `SLICE: ${clamped}`;
 }
 
 /**
@@ -133,10 +153,11 @@ export function buildLocalPreCodingSummary(opts: {
 }): string {
   const fromNote = parseGoSliceLabel(opts.userNote);
   const fromExisting = parseGoSliceLabel(opts.existingSummary);
-  const slice =
+  const rawSlice =
     fromNote ||
     (!opts.userNote?.trim() || isBareGoNote(opts.userNote) ? fromExisting : null) ||
     inferGoSliceFromWorkspace(opts.workspaceRoot);
+  const slice = clampClaimedSliceToWorkspace(rawSlice, opts.workspaceRoot);
   const name = (opts.projectName || "App").trim().slice(0, 64);
   const focus = String(opts.userNote || "").trim().slice(0, 180);
   const lines = [

@@ -5,6 +5,7 @@ import {
   assessOversizedGoApply,
   buildLocalPreCodingSummary,
   inferGoSliceFromWorkspace,
+  clampClaimedSliceToWorkspace,
   isBareGoNote,
   lockedUserConstraintsFromPlan,
   parseGoSliceLabel,
@@ -109,7 +110,14 @@ assert.match(localSum, /ADHD|tutor|slice/i);
     "export default function Practice(){return null}\n",
   );
   const next = inferGoSliceFromWorkspace(root);
-  assert.ok(next === "Auth" || next === "Primary" || next === "Secondary");
+  assert.equal(next, "Auth");
+  fs.mkdirSync(path.join(root, "app", "login"), { recursive: true });
+  fs.writeFileSync(
+    path.join(root, "app", "login", "page.tsx"),
+    "export default function Login(){return null}\n",
+  );
+  assert.equal(inferGoSliceFromWorkspace(root), "Primary");
+  assert.equal(clampClaimedSliceToWorkspace("SLICE: Secondary", root), "Primary");
   fs.rmSync(root, { recursive: true, force: true });
 }
 

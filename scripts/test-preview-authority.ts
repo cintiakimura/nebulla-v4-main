@@ -217,10 +217,10 @@ section("coded app files beat interactive mock — honest bridge");
   assert.match(html, new RegExp(PRODUCT_PREVIEW_MARKER, "i"));
   assert.match(html, /Who are you today/);
   const auth = resolveAppPreviewAuthority(root);
-  assert.equal(auth.mode, "post_code_bridge");
+  assert.equal(auth.mode, "interactive_product_preview");
   assert.equal(auth.codedApp, true);
-  assert.equal(auth.entryRel, null);
-  assert.match(auth.statusLabel, /Code exists/i);
+  assert.equal(auth.entryRel, PRODUCT_PREVIEW_REL);
+  assert.match(auth.statusLabel, /Interactive preview/i);
   const bridge = buildCodedAppPreviewBridgeHtml({
     projectName: "Tutor Demo",
     productFiles: auth.productFiles,

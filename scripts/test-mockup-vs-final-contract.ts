@@ -63,7 +63,7 @@ assert.equal(
     writtenPaths: ['app/page.tsx', 'app/layout.tsx'],
     alreadyRanPostCode: false,
   }),
-  'regen_post_code',
+  'sync_preview_only',
 );
 
 assert.deepEqual(extractUiRouteKeys(['app/page.tsx', 'app/layout.tsx']), [
@@ -89,7 +89,7 @@ assert.equal(
   'regen_post_code',
 );
 
-// Primary slice after Foundation: new routes → another Studio refresh
+// Primary slice after Foundation: product routes own App Preview (no Studio mockup reclaim)
 assert.equal(
   resolvePostCodeUiAction({
     writtenPaths: [
@@ -101,7 +101,7 @@ assert.equal(
     alreadyRanPostCode: true,
     previouslyCoveredKeys: ['app', 'app/layout'],
   }),
-  'regen_post_code',
+  'sync_preview_only',
 );
 
 assert.equal(

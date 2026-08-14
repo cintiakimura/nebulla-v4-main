@@ -102,6 +102,8 @@ export function shouldAutopilotAdvance(opts: {
   /** Kickoff turn (Fast Prototype / mockup→Foundation). */
   autopilotKickoff: boolean;
   maxAuto?: number;
+  /** Product app/ or pages/ routes from this apply — < 3 means Foundation is not done. */
+  productRouteCount?: number;
 }): AutopilotAdvanceDecision {
   const maxAuto = opts.maxAuto ?? MAX_AUTOPILOT_SLICES;
   if (!opts.codingOk) {
@@ -120,7 +122,9 @@ export function shouldAutopilotAdvance(opts: {
       message: 'Autopilot only follows the initial Plan → mockup → Foundation run.',
     };
   }
-  if (looksLikePolishSlice(opts.lastSlice)) {
+  const thinProduct =
+    typeof opts.productRouteCount === 'number' && opts.productRouteCount < 3;
+  if (looksLikePolishSlice(opts.lastSlice) && !thinProduct) {
     return {
       advance: false,
       nextLabel: null,
@@ -136,8 +140,9 @@ export function shouldAutopilotAdvance(opts: {
       message: `Autopilot reached ${maxAuto} follow-up slices. Review Preview or send a new goal.`,
     };
   }
-  const nextLabel = nextAutopilotSliceLabel(opts.lastSlice);
-  if (nextLabel === 'Polish' && looksLikePolishSlice(opts.lastSlice)) {
+  const lastSlice = thinProduct ? 'Foundation' : opts.lastSlice;
+  const nextLabel = thinProduct ? 'Primary' : nextAutopilotSliceLabel(lastSlice);
+  if (nextLabel === 'Polish' && looksLikePolishSlice(lastSlice)) {
     return {
       advance: false,
       nextLabel: null,

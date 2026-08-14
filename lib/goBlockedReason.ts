@@ -104,9 +104,10 @@ export function classifyGoFailure(input: {
   const text = [
     extractGoFailureText(input.error),
     extractGoFailureText(input.codeError),
-    typeof input.code === "string" ? input.code : "",
+    typeof input.code === "string" && !isGoBlockedCode(input.code) ? input.code : "",
   ]
     .filter(Boolean)
+    .filter((v, i, arr) => arr.indexOf(v) === i)
     .join(" ");
   const lower = text.toLowerCase();
 

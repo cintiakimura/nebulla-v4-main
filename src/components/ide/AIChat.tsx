@@ -335,6 +335,7 @@ export function AIChat() {
   const autoSliceAbortRef = useRef(false);
   const autoSliceInFlightRef = useRef(false);
   const lastAutoSliceLabelRef = useRef<string | null>(null);
+  const lastAutoProductRouteCountRef = useRef<number | undefined>(undefined);
   const runAutoNextSliceRef = useRef<() => Promise<void>>(async () => {});
   /** One handoff after Foundation — stall watchdog and sendChat finally must not both start Go. */
   const autopilotHandoffScheduledRef = useRef(false);
@@ -370,6 +371,7 @@ export function AIChat() {
     autoSliceAbortRef.current = false;
     autoSliceInFlightRef.current = false;
     lastAutoSliceLabelRef.current = null;
+    lastAutoProductRouteCountRef.current = undefined;
     autopilotHandoffScheduledRef.current = false;
     resetAutopilotSliceCount(resolveActiveProjectIds(diskProjectKey).projectKey);
   }, [diskProjectKey]);
@@ -420,6 +422,7 @@ export function AIChat() {
       lastSlice: lastAutoSliceLabelRef.current,
       autoCount: getAutopilotSliceCount(projectKey),
       autopilotKickoff: true,
+      productRouteCount: lastAutoProductRouteCountRef.current,
     });
     if (!decision.advance || !decision.nextLabel) {
       pushActivity(decision.message, 'success');
@@ -455,6 +458,7 @@ export function AIChat() {
         onProgress: pushActivity,
       });
       lastAutoSliceLabelRef.current = go.sliceLabel || decision.nextLabel;
+      lastAutoProductRouteCountRef.current = go.productRouteCount;
       if (autoSliceAbortRef.current) {
         resetCodingActivity();
         return;
@@ -480,6 +484,7 @@ export function AIChat() {
         lastSlice: lastAutoSliceLabelRef.current,
         autoCount: getAutopilotSliceCount(projectKey),
         autopilotKickoff: true,
+        productRouteCount: lastAutoProductRouteCountRef.current,
       });
       if (again.advance) {
         pushActivity(again.message, 'info');
@@ -2371,6 +2376,7 @@ export function AIChat() {
             writtenCount: go.totalWritten,
             sliceLabel: go.sliceLabel ?? 'Foundation',
             blockedReason: go.blockedReason,
+            productRouteCount: go.productRouteCount,
           };
         }
         if (!agentAllowed && (hadCodingTag || hasGrokFileBlocks(raw))) {
@@ -2460,11 +2466,20 @@ export function AIChat() {
               );
             }
             if (!uiMockupStarted) {
-              dispatchOpenUiStudioBeta();
-              pushActivity('Coding pass finished — open UI Studio Beta to generate mockup', 'info');
+              try {
+                window.dispatchEvent(new CustomEvent('nebula-open-app-preview'));
+              } catch {
+                /* ignore */
+              }
+              pushActivity('Coding pass finished — opening App Preview (not UI Studio mockup)', 'info');
             } else {
+              try {
+                window.dispatchEvent(new CustomEvent('nebula-open-app-preview'));
+              } catch {
+                /* ignore */
+              }
               pushActivity(
-                'Coding slice done — live App Preview synced; UI Studio shows visual model (use Live app toggle or Generate UI)',
+                'Coding slice done — opening live App Preview (interactive product, not the UI Studio mockup)',
                 'success',
               );
             }
@@ -2474,12 +2489,16 @@ export function AIChat() {
             const codingSliceLabel =
               (coding as { sliceLabel?: string | null }).sliceLabel ?? 'Foundation';
             lastAutoSliceLabelRef.current = codingSliceLabel;
+            lastAutoProductRouteCountRef.current = (
+              coding as { productRouteCount?: number }
+            ).productRouteCount;
             const { projectKey } = resolveActiveProjectIds(diskProjectKey);
             const autoDecision = shouldAutopilotAdvance({
               codingOk: true,
               lastSlice: codingSliceLabel,
               autoCount: getAutopilotSliceCount(projectKey),
               autopilotKickoff: fastPrototypeTurn || uiMockupStarted,
+              productRouteCount: lastAutoProductRouteCountRef.current,
             });
             if (autoDecision.advance) {
               queueAutopilotAfterUnlock = true;

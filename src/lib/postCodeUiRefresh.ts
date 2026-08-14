@@ -66,6 +66,16 @@ export function hasNewUiRoutes(
 
 export type PostCodeUiAction = 'regen_post_code' | 'sync_preview_only' | 'skip_no_ui_paths';
 
+function hasProductRoutePaths(writtenPaths: string[]): boolean {
+  return writtenPaths.some((raw) => {
+    const p = raw.replace(/\\/g, '/');
+    return (
+      /^app\/(?:.+\/)?page\.(tsx|jsx|js)$/i.test(p) ||
+      /^(?:src\/)?pages\/.+\.(tsx|jsx|js)$/i.test(p)
+    );
+  });
+}
+
 export function resolvePostCodeUiAction(opts: {
   writtenPaths: string[];
   alreadyRanPostCode: boolean;
@@ -75,6 +85,8 @@ export function resolvePostCodeUiAction(opts: {
 }): PostCodeUiAction {
   if (!looksLikeUiRelevantPaths(opts.writtenPaths)) return 'skip_no_ui_paths';
   if (opts.force) return 'regen_post_code';
+  // Product routes own App Preview — do not reopen UI Studio mockup after Go apply.
+  if (hasProductRoutePaths(opts.writtenPaths)) return 'sync_preview_only';
   if (!opts.alreadyRanPostCode) return 'regen_post_code';
   if (hasNewUiRoutes(opts.writtenPaths, opts.previouslyCoveredKeys)) {
     return 'regen_post_code';

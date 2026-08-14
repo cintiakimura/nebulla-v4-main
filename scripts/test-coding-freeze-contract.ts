@@ -42,7 +42,7 @@ assert.equal(
 assert.match(pipeline, /Grok Code: Foundation slice \(up to ~3 min, no stream\)|GO_SLICE_WAIT_LABEL/);
 assert.match(pipeline, /GO_CONSUME_TIMEOUT_MS/, 'consume ack must time out');
 assert.match(pollFn, /GO_POLL_TIMEOUT_MESSAGE/);
-assert.match(pollFn, /onProgress\?\.\(GO_POLL_TIMEOUT_MESSAGE, 'error'\)/);
+assert.match(pollFn, /onProgress\?\.\(formatBlockedReasonLine\(timedOut\), 'error'\)/);
 const ackFn = pipeline.slice(
   pipeline.indexOf('export function ackConsumedGoCodeResult'),
   pipeline.indexOf('export function hasGrokFileBlocks'),
