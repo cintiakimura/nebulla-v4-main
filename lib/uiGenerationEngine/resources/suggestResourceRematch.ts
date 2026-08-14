@@ -173,6 +173,7 @@ Rules:
     const result = await runAiChatCompletion({
       apiKeyOverride: options.apiKey,
       preferredProvider: "xai",
+      stroke: "ui_gen",
       messages: [
         { role: "system", content: system },
         { role: "user", content: user },

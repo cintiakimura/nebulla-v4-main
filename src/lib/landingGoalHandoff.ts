@@ -28,7 +28,7 @@ import { peekPendingStartMode, setPendingStartMode } from './ideStartMode';
 import { markGuidedEnterBuild } from './guidedFunnel';
 import { resetProjectFromScratch } from './ideProjectReset';
 import { shortNameFromIdea } from './projectNameFromIdea';
-import { isUsableProjectGoal } from '../../lib/spineSequenceGates';
+import { isUsableProjectGoal } from './spineSequenceGates';
 import { getBrowserProjectName, setBrowserProjectName } from './nebulaProjectApi';
 
 /** Durable shell goal key (also written by persistLandingGoalForBuild). Survives refresh. */

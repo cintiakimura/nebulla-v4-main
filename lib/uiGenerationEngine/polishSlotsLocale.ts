@@ -67,6 +67,7 @@ Rules: keep meaning; keep length short (titles ≤36 chars, CTAs ≤28); no mark
     const result = await runAiChatCompletion({
       apiKeyOverride: options.apiKey,
       preferredProvider: "xai",
+      stroke: "ui_gen",
       messages: [
         { role: "system", content: system },
         { role: "user", content: JSON.stringify(payload) },

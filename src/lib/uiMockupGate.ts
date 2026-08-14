@@ -8,7 +8,7 @@ import { getBrowserProjectKey, withProjectQuery } from './nebulaProjectApi';
 import { readResponseJson } from './apiFetch';
 import { isFastPrototypeMode } from './ideStartMode';
 import { isLoadableStudioModel } from '../../lib/uiMockupArtifactHonesty';
-import { UI_BRIEF_MIN_CHARS, uiBriefTooShort } from '../../lib/spineSequenceGates';
+import { UI_BRIEF_MIN_CHARS, uiBriefTooShort } from './spineSequenceGates';
 
 export type InferenceFirstStage =
   | 'research'

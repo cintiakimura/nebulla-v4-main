@@ -1,6 +1,6 @@
 /**
- * Client re-export of spine sequence helpers (repo-root lib/).
- * AIChat and other src/components files import via ../../lib/…
+ * Client spine helpers. Do not re-export uiBriefUsable — that pulls Node fs/path
+ * (nebulaUiBrief → design-references path.join) and crashes the browser bundle.
  */
 export {
   ASK_FOR_SHORT_GOAL,
@@ -12,6 +12,5 @@ export {
   goPollActivityMessage,
   isUsableProjectGoal,
   uiBriefTooShort,
-  uiBriefUsable,
-} from '../../lib/spineSequenceGates';
-export type { GoPollPhase } from '../../lib/spineSequenceGates';
+} from '../../lib/spineSequenceClient';
+export type { GoPollPhase } from '../../lib/spineSequenceClient';

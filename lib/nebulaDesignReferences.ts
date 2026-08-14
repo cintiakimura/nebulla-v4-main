@@ -10,7 +10,7 @@ export type DesignReferenceEntry = {
   uploadedAt: string;
 };
 
-const REL = path.join("nebulla-ide", "design-references.json");
+const REL = "nebulla-ide/design-references.json";
 
 function absPath(workspaceRoot: string): string {
   return path.join(workspaceRoot, REL);

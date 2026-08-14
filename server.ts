@@ -108,6 +108,7 @@ import { uiBriefUsable } from "./lib/spineSequenceGates";
 import { ensureMasterPlanBeforeGo } from "./lib/nebulaMasterPlanSynthesis";
 import { assessResearchArtifact, RESEARCH_STOPPED } from "./lib/researchArtifact";
 import { isResearchJobActive, runResearchStroke } from "./lib/nebulaResearchStroke";
+import { grokChatCompletionsExtras } from "./lib/grokRequestPolicy";
 import {
   addDesignReference,
   readDesignReferences,
@@ -4021,6 +4022,7 @@ ${modelJson}`;
           ],
           temperature: 0.2,
           max_tokens: 32000,
+          ...grokChatCompletionsExtras("go"),
         }),
       });
       const gData = (await gRes.json()) as {
@@ -4636,6 +4638,7 @@ Rules:
           model: "grok-4-1-fast-reasoning",
           messages: [{ role: "system", content: executionSystemPrompt }, ...baseMessages.slice(-12)],
           stream: false,
+          ...grokChatCompletionsExtras("chat"),
         }),
       });
 
@@ -5054,6 +5057,7 @@ Strict rules:
           model: "grok-4-1-fast-reasoning",
           messages: phaseAMessages,
           stream: false,
+          ...grokChatCompletionsExtras("plan"),
         }),
       });
 
@@ -5701,6 +5705,7 @@ ${answer.slice(0, 8000)}`;
         preferredProvider: mainAiProvider === "xai" ? "xai" : preferredProvider,
         clientChatModel,
         apiKeyOverride: chatApiKeyOverride,
+        stroke: "chat",
       });
 
       if (completion.ok === false) {

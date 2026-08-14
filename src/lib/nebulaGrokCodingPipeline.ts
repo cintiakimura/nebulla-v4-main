@@ -16,7 +16,7 @@ import {
   GO_SLICE_WAIT_LABEL,
   classifyGoPoll,
   goPollActivityMessage,
-} from '../../lib/spineSequenceGates';
+} from './spineSequenceGates';
 import { withProjectBody, withProjectQuery } from './nebulaProjectApi';
 import { triggerUiStudioBetaAfterFilesApplied } from './uiStudioBetaEngine';
 import { markFoundationGoInFlight } from './foundationHeavyJob';

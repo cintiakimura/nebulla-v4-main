@@ -16,6 +16,7 @@ import {
   type MainAiProvider,
 } from "./nebulaMainAiProvider";
 import { readMainAiApiKeyFromEnv } from "./nebulaMainGrokResolver";
+import { grokChatCompletionsExtras, type GrokStroke } from "./grokRequestPolicy";
 
 const MIN_KEY_LEN = 20;
 
@@ -161,6 +162,7 @@ async function callXaiChatCompletion(
   messages: OpenAiStyleChatMessage[],
   apiKey: string,
   model: string,
+  stroke: GrokStroke = "chat",
 ): Promise<AiChatCompletionResult> {
   try {
     const controller = new AbortController();
@@ -173,7 +175,12 @@ async function callXaiChatCompletion(
           "Content-Type": "application/json",
           Authorization: `Bearer ${apiKey}`,
         },
-        body: JSON.stringify({ model, messages, stream: false }),
+        body: JSON.stringify({
+          model,
+          messages,
+          stream: false,
+          ...grokChatCompletionsExtras(stroke),
+        }),
         signal: controller.signal,
       });
     } catch (e) {
@@ -315,6 +322,8 @@ export async function runAiChatCompletion(options: {
   clientChatModel?: string | null;
   /** BYOK from onboarding / Secrets (e.g. X-Nebula-Xai-Api-Key). */
   apiKeyOverride?: string | null;
+  /** Chat vs UI Gen polish — never enables web/x search. */
+  stroke?: GrokStroke;
 }): Promise<AiChatCompletionResult> {
   const preferredRaw = String(options.preferredProvider || "").trim().toLowerCase();
   const preferred: MainAiProvider =
@@ -364,7 +373,12 @@ export async function runAiChatCompletion(options: {
   } else if (resolved.provider === "openai") {
     result = await callOpenAiChatCompletion(options.messages, resolved.apiKey, model);
   } else {
-    result = await callXaiChatCompletion(options.messages, resolved.apiKey, model);
+    result = await callXaiChatCompletion(
+      options.messages,
+      resolved.apiKey,
+      model,
+      options.stroke || "chat",
+    );
   }
 
   if (result.ok === true && resolved.usedFallback) {

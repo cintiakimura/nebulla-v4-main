@@ -19,6 +19,7 @@ import { assessMasterPlanCompletenessWithWorkspace } from "./masterPlanCompleten
 import { resolveMasterPlanStrictMode } from "./masterPlanStrictPolicy";
 import { mergeResearchIntoMasterPlan } from "./nebulaResearchStroke";
 import { readResearchArtifact } from "./researchArtifact";
+import { grokChatCompletionsExtras } from "./grokRequestPolicy";
 
 export { listMissingMasterPlanSections, fillMissingMasterPlanSectionsLocal };
 export { readMasterPlanStrictMode };
@@ -111,6 +112,7 @@ ${opts.memoryContent.slice(0, 90_000)}${researchNote}`;
           { role: "user", content: user },
         ],
         stream: false,
+        ...grokChatCompletionsExtras("plan"),
       }),
     });
 

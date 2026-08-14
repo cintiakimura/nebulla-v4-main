@@ -3,6 +3,8 @@
  * Phase 3 research stroke only — do not use on Go or UI Gen.
  */
 
+import { grokResponsesExtras } from "./grokRequestPolicy";
+
 export type GrokWebSearchResult =
   | { ok: true; text: string; model: string }
   | { ok: false; error: string; status: number };
@@ -52,7 +54,7 @@ export async function callGrokWebSearch(opts: {
           { role: "system", content: opts.system },
           { role: "user", content: opts.user },
         ],
-        tools: [{ type: "web_search" }],
+        ...grokResponsesExtras("research"),
       }),
       signal: controller.signal,
     });

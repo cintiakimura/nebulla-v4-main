@@ -6,6 +6,7 @@ import {
   writeGoCodeLastResult,
   writeGoCodePending,
 } from "./nebulaGoCodePending";
+import { grokChatCompletionsExtras } from "./grokRequestPolicy";
 
 export { GO_CODE_JOB_TIMEOUT_MS };
 
@@ -55,6 +56,7 @@ export function scheduleGoCodeJob(opts: GoCodeJobOptions): boolean {
           model: opts.codeModel,
           messages: opts.codeMessages,
           stream: false,
+          ...grokChatCompletionsExtras("go"),
         }),
         signal: controller.signal,
       });
