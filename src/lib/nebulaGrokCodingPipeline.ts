@@ -8,6 +8,7 @@ import { getGrokRequestHeaders } from './grokUserKey';
 import { formatGoBlockedByPlanMessage } from './masterPlanStatus';
 import { reportGoApplyTelemetry } from './contractTelemetryClient';
 import { assessOversizedGoApply, parseGoSliceLabel, type GoSliceLabel } from '../../lib/goSliceContract';
+import { assessApplyRouteDepth } from '../../lib/workspaceCodedAppUi';
 import { UNSOLICITED_BAAS_SKIP_REASON } from '../../lib/mvpStackContract';
 import { withProjectBody, withProjectQuery } from './nebulaProjectApi';
 import { triggerUiStudioBetaAfterFilesApplied } from './uiStudioBetaEngine';
@@ -360,8 +361,27 @@ export async function applyGeneratedFiles(
     const writtenPaths = Array.isArray(apply.written) ? apply.written : [];
     const writtenCount = writtenPaths.length;
     const skippedCount = Array.isArray(apply.skipped) ? apply.skipped.length : 0;
+    const depth = assessApplyRouteDepth(writtenPaths);
     if (writtenCount > 0) {
-      onProgress?.(`Wrote ${writtenCount} file(s) to workspace`, 'success');
+      onProgress?.(
+        `Wrote ${writtenCount} file(s): ${writtenPaths.slice(0, 12).join(', ')}${
+          writtenPaths.length > 12 ? '…' : ''
+        }`,
+        'success',
+      );
+      if (depth.zeroProductRoutes) {
+        onProgress?.(
+          'Zero app/ or pages/ routes in this apply — Vite src/App.tsx + src/main.tsx is not a product shell',
+          'warn',
+        );
+      } else {
+        onProgress?.(
+          `Product routes: ${depth.productRoutes.slice(0, 8).join(', ')}${
+            depth.productRoutes.length > 8 ? '…' : ''
+          }`,
+          'info',
+        );
+      }
     }
     if (typeof apply.runnableRoot === 'boolean') {
       onProgress?.(
@@ -921,13 +941,14 @@ export async function runGoCodeAndApply(options: {
         continue;
       }
 
-      // Runnable Next/Vite skeleton counts as Foundation, even if this pass only filled config files.
+      // Runnable Next/Vite skeleton counts as Foundation only when product routes exist.
       partialPlanOnly = isPlanOnlyApply(apply.writtenPaths) && apply.runnableRoot !== true;
-      if (!partialPlanOnly && apply.writtenCount >= 2) {
+      const depthSoFar = assessApplyRouteDepth(allWrittenPaths);
+      if (!partialPlanOnly && apply.writtenCount >= 2 && !depthSoFar.zeroProductRoutes) {
         break;
       }
       if (pass >= GO_CODE_MAX_PASSES - 1) break;
-      if (!partialPlanOnly) break;
+      if (!partialPlanOnly && !depthSoFar.zeroProductRoutes) break;
     }
 
     if (totalWritten > 0) {
@@ -958,13 +979,28 @@ export async function runGoCodeAndApply(options: {
       statusMessage = `${statusMessage}\n\n_${oversized.message}_`;
       onProgress?.(oversized.message, 'warn');
     }
-    if (totalWritten > 0) {
+
+    const depth = assessApplyRouteDepth(allWrittenPaths);
+    const foundationLike = !sliceLabel || /foundation/i.test(String(sliceLabel));
+    if (foundationLike && depth.zeroProductRoutes && totalWritten > 0 && !partialPlanOnly) {
+      const pathNote = allWrittenPaths.slice(0, 12).join(', ') + (allWrittenPaths.length > 12 ? '…' : '');
+      const failMsg = `Foundation apply wrote ${totalWritten} file(s) [${pathNote}] but zero app/ or pages/ routes. Not a product shell — retry Go for Home/practice (or equivalent) routes.`;
+      onProgress?.(failMsg, 'error');
+      statusMessage = failMsg;
+    } else if (depth.authOnly && foundationLike) {
+      onProgress?.(
+        'Auth routes landed; Home/practice/parent screens from the plan are still missing — next slice should add those routes.',
+        'warn',
+      );
+      if (totalWritten > 0) onProgress?.(statusMessage, 'success');
+    } else if (totalWritten > 0) {
       onProgress?.(statusMessage, 'success');
     }
 
     reportGoApplyTelemetry({ writtenPaths: allWrittenPaths, sliceLabel: sliceLabel || undefined });
 
-    const ok = totalWritten > 0 && !partialPlanOnly;
+    const ok =
+      totalWritten > 0 && !partialPlanOnly && !(foundationLike && depth.zeroProductRoutes);
     if (ok) {
       // Do not await — artifact sync used to freeze chat after files landed.
       // Client must still refresh mind map and open Plan (server hydrate does not dispatch UI events).

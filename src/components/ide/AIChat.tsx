@@ -108,6 +108,7 @@ import {
   hasPersistedUiMockup,
   markUiMockupStageStarted,
   markUiMockupSucceeded,
+  readinessBlocksAutoFoundation,
   setInferenceFirstStage,
 } from '../../lib/uiMockupGate';
 import { createProjectForCurrentSession } from '../../lib/nebulaCloud';
@@ -2054,11 +2055,13 @@ export function AIChat() {
       // Stage B — UI mockup after plan + ui-brief, BEFORE coding (single API key queue).
       let uiMockupStarted = false;
       let mockupSkippedOrFailed = false;
+      let architectureBlocked = false;
       if (sendAbort.signal.aborted) {
         return;
       }
       if (agentAllowed && (fastPrototypeTurn || willCode || mpSaved > 0)) {
         const readiness = await assessUiMockupReadiness({ projectKey: diskProjectKey });
+        architectureBlocked = readinessBlocksAutoFoundation(readiness);
         if (readiness.ok) {
           markUiMockupStageStarted(diskProjectKey);
           pushActivity(
@@ -2134,6 +2137,11 @@ export function AIChat() {
               'warn',
             );
           }
+        } else if (architectureBlocked) {
+          pushActivity(
+            `Stopped: ${readiness.reasons.join('; ') || 'ui-brief missing or too short'}. Finish Master Plan §§1–5 so ui-brief can be built from §4/§5 (and goal), then Generate UI. Foundation will not start while mockup is waiting.`,
+            'error',
+          );
         } else if (fastPrototypeTurn || willCode) {
           mockupSkippedOrFailed = true;
           pushActivity(
@@ -2147,6 +2155,7 @@ export function AIChat() {
         !willCode &&
         agentAllowed &&
         fastPrototypeTurn &&
+        !architectureBlocked &&
         (uiMockupStarted || mockupSkippedOrFailed || mpSaved > 0)
       ) {
         willCode = true;
@@ -2158,7 +2167,7 @@ export function AIChat() {
           ? await canStartFoundationCoding({ mockupSkippedOrFailed })
           : { ok: false as const, reason: 'blocked' as const };
         // User said "go" / "start coding" — do not stall on mockup/security polish.
-        if (willCode && !foundationGate.ok && (userForcedCoding || assistantCodingPromise)) {
+        if (willCode && !foundationGate.ok && (userForcedCoding || assistantCodingPromise) && !architectureBlocked) {
           foundationGate = { ok: true, reason: 'explicit_skip' };
           pushActivity(
             'Starting Foundation coding now (user asked to code — mockup/security soft-continue)',

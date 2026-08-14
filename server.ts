@@ -138,6 +138,8 @@ import {
 } from "./lib/goSliceContract";
 import {
   buildCodedAppPreviewBridgeHtml,
+  inferRoutesFromProductFiles,
+  assessApplyRouteDepth,
   resolveAppPreviewAuthority,
   workspaceHasCodedAppUi,
 } from "./lib/workspaceCodedAppUi";
@@ -1640,14 +1642,25 @@ No approved UI code yet.
   });
 
   /** Open a workspace-relative file (File Ops mode) — content + language hint. */
-  app.post("/api/files/open", (req, res) => {
+  const handleFilesOpen = (req: express.Request, res: express.Response) => {
     try {
       const { workspaceRoot } = projectPathsFor(req);
-      const filePath =
-        typeof req.body?.path === "string"
-          ? req.body.path.trim().replace(/^\.\/+/, "").replace(/\\/g, "/")
-          : "";
-      if (!filePath) return res.status(400).json({ error: "path is required" });
+      const fromBody = typeof req.body?.path === "string" ? req.body.path : "";
+      const fromQuery = typeof req.query.path === "string" ? String(req.query.path) : "";
+      const filePath = (fromBody || fromQuery)
+        .trim()
+        .replace(/^\.\/+/, "")
+        .replace(/\\/g, "/");
+      if (!filePath) {
+        return res.json({ success: false, error: "path is required" });
+      }
+      // Project display titles (spaces, no slash) are not file paths.
+      if (/\s/.test(filePath) && !filePath.includes("/")) {
+        return res.json({
+          success: false,
+          error: "path must be a workspace-relative file, not the project title",
+        });
+      }
 
       const tryResolveUnder = (root: string, rel: string): string | null => {
         try {
@@ -1694,7 +1707,11 @@ No approved UI code yet.
       }
       return res.status(500).json({ error: "Failed to open file" });
     }
-  });
+  };
+
+  app.post("/api/files/open", handleFilesOpen);
+  /** GET alias — projectKey (not raw title) scopes the workspace; path must be encoded. */
+  app.get("/api/files/open", handleFilesOpen);
 
   /** Open a single public GitHub file (blob or raw URL). */
   app.post("/api/files/open-github", async (req, res) => {
@@ -2252,12 +2269,14 @@ No approved UI code yet.
         previewSource: "workspace",
         previewMode: authority.mode,
         previewStatusLabel: authority.statusLabel,
+        previewHonesty: authority.honesty,
         codedApp: authority.codedApp,
         indexIsMockup: authority.indexIsMockup,
         entryRel: authority.entryRel,
         mockupRel: authority.mockupRel,
         productFileCount: authority.productFiles.length,
         productFilesSample: authority.productFiles.slice(0, 8),
+        productRoutes: inferRoutesFromProductFiles(authority.productFiles),
         limitation: authority.limitation,
       });
     } catch (err: unknown) {
@@ -2292,12 +2311,17 @@ No approved UI code yet.
       const authority = resolveAppPreviewAuthority(pp.workspaceRoot);
       let html = "";
 
-      if (authority.mode === "post_code_bridge" || (authority.codedApp && !authority.entryRel)) {
+      if (
+        authority.mode === "post_code_bridge" ||
+        authority.mode === "thin_code_shell" ||
+        (authority.codedApp && !authority.entryRel)
+      ) {
         html = buildCodedAppPreviewBridgeHtml({
           projectName: displayName,
           productFiles: authority.productFiles,
           mockupRel: authority.mockupRel,
           limitation: authority.limitation,
+          honesty: authority.honesty,
         });
       } else if (authority.entryRel) {
         const entryAbs = path.join(pp.workspaceRoot, authority.entryRel);
@@ -2563,11 +2587,11 @@ No approved UI code yet.
         const trimmed = raw.trim();
         // Heuristic fallback when model returns a single raw file body with no path wrapper.
         if (/function\s+App\s*\(|export\s+default\s+App|<Route\s+path=|react-router/i.test(trimmed)) {
-          fallbackPath = "src/App.tsx";
+          fallbackPath = "app/page.tsx";
         } else if (/^<!DOCTYPE html>/i.test(trimmed) || /<html[\s>]/i.test(trimmed)) {
           fallbackPath = "index.html";
         } else if (/^import\s+.*from\s+['"][^'"]+['"]/m.test(trimmed) && /export\s+default/m.test(trimmed)) {
-          fallbackPath = "src/App.tsx";
+          fallbackPath = "app/page.tsx";
         }
         if (fallbackPath) {
           addBlock(fallbackPath, trimmed);
@@ -2620,6 +2644,16 @@ No approved UI code yet.
         written.push(b.relativePath);
       }
 
+      const applyDepth = assessApplyRouteDepth(written);
+      console.log(
+        `[apply-generated] wrote ${written.length} file(s): ${written.slice(0, 20).join(", ")}${
+          written.length > 20 ? "…" : ""
+        }`,
+      );
+      console.log(
+        `[apply-generated] product routes: ${applyDepth.productRoutes.join(", ") || "(none)"} thinShell=${applyDepth.thinCodeShell}`,
+      );
+
       let runnable: ReturnType<typeof inspectRunnableSkeleton> | null = null;
       let skeletonWritten: string[] = [];
       const bodyEarly = req.body || {};
@@ -2654,6 +2688,9 @@ No approved UI code yet.
         deployable: Boolean(runnable?.runnable),
         interactivePreview: Boolean(interactivePreviewPath),
         interactivePreviewPath,
+        productRoutes: applyDepth.productRoutes,
+        thinCodeShell: applyDepth.thinCodeShell,
+        zeroProductRoutes: applyDepth.zeroProductRoutes,
       });
 
       // Defer so this request returns even if plan/mind-map IO is slow — do not block
@@ -4811,6 +4848,7 @@ Strict rules:
 - Follow nebulla-project/incremental-development.md: Build one slice → Debug/Validate (NDM) → Next. Never dump the entire app when it can be sliced.
 - Typical slice order: Foundation (shell/routes/layout) → Auth (if needed) → Core data/API → Primary feature → Secondary (one at a time) → Polish.
 - Implement ONLY routes/features from Master Plan §3/§4 that belong to the **current slice**; respect Project Type in §1.
+- Foundation: real \`app/**/page.tsx\` or \`pages/\` routes. src/App.tsx + src/main.tsx alone is a failed Foundation for multi-page plans.
 - No hallucinated packages, APIs, env vars, or paths — create them explicitly in this response if needed.
 - Prefer smallest safe change over clever refactors. No temporary hacks. Explicit error handling on I/O.
 - UI: §2 research patterns + §5 visuals + Project Type — NEVER Nebulla IDE chrome (#080A14 / #00D4D4).
@@ -4828,11 +4866,13 @@ ${codeQualityContract}
 
 Output the Foundation slice in THIS response (not the entire §4 app):
 - \`package.json\` (private, scripts.dev/build/start) + \`app/layout.tsx\`, \`app/globals.css\`, root \`app/page.tsx\`
+- For multi-page kids/education plans: also emit at least one more \`app/<route>/page.tsx\` (practice/home/parent) — never only \`src/App.tsx\` + \`src/main.tsx\`
 - Minimal routing shell for the primary entry route(s) only
 - Shared scaffolding \`components/\` / \`lib/\` only if required for that shell
 - Short \`README.md\` with npm install / npm run dev / npm run build
 - Do NOT implement every §4 route yet — leave Auth / Data / Primary feature for later Go presses
 - Do NOT return only master-plan.json
+- Auth-only login is not Foundation when the plan has Home/practice/parent screens
 
 File blocks only: \`\`\`file:relative/path\` … \`\`\` — no chat prose.
 

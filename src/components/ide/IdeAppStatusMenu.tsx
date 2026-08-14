@@ -17,6 +17,55 @@ import {
   type AppRuntimeIssue,
 } from '../../lib/ideAppRuntimeStatus';
 import { useLanguage } from '@/components/i18n/LanguageProvider';
+import { withProjectQuery } from '../../lib/nebulaProjectApi';
+import { readResponseJson } from '../../lib/apiFetch';
+
+type PreviewHonesty = 'mockup_waiting' | 'thin_code_shell' | 'real_routes' | 'empty';
+
+function usePreviewHonesty() {
+  const [honesty, setHonesty] = useState<PreviewHonesty | null>(null);
+  const [previewLabel, setPreviewLabel] = useState<string | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const res = await fetch(withProjectQuery('/api/app-preview/meta'), {
+          credentials: 'include',
+          cache: 'no-store',
+        });
+        const data = (await readResponseJson(res)) as {
+          previewHonesty?: PreviewHonesty;
+          previewStatusLabel?: string;
+        };
+        if (cancelled || !res.ok) return;
+        const h = data.previewHonesty;
+        setHonesty(
+          h === 'mockup_waiting' || h === 'thin_code_shell' || h === 'real_routes' || h === 'empty'
+            ? h
+            : null,
+        );
+        setPreviewLabel(
+          typeof data.previewStatusLabel === 'string' && data.previewStatusLabel.trim()
+            ? data.previewStatusLabel.trim()
+            : null,
+        );
+      } catch {
+        /* ignore */
+      }
+    };
+    void load();
+    window.addEventListener('nebula-files-applied', load);
+    window.addEventListener('nebula-reload-app-preview', load);
+    window.addEventListener('nebula-master-plan-updated', load);
+    return () => {
+      cancelled = true;
+      window.removeEventListener('nebula-files-applied', load);
+      window.removeEventListener('nebula-reload-app-preview', load);
+      window.removeEventListener('nebula-master-plan-updated', load);
+    };
+  }, []);
+  return { honesty, previewLabel };
+}
 
 function useAppRuntimeSnapshot() {
   const [snap, setSnap] = useState(getAppRuntimeSnapshot);
@@ -106,9 +155,11 @@ export function IdeAppStatusMenuButton({
 }) {
   const { t } = useLanguage();
   const snap = useAppRuntimeSnapshot();
+  const { honesty, previewLabel } = usePreviewHonesty();
   const [open, setOpen] = useState(false);
   const errorCount = snap.issues.filter((i) => i.severity !== 'info').length;
-  const healthy = errorCount === 0;
+  const runtimeHealthy = errorCount === 0;
+  const honestSuccess = runtimeHealthy && honesty === 'real_routes';
 
   useEffect(() => {
     const onOpen = () => {
@@ -150,24 +201,38 @@ export function IdeAppStatusMenuButton({
     [onFixWithAgent],
   );
 
-  const statusLabel = healthy
-    ? t('appStatus.looksOk')
-    : errorCount === 1
+  const statusLabel = !runtimeHealthy
+    ? errorCount === 1
       ? t('appStatus.somethingBroke')
-      : t('appStatus.nIssues', { count: errorCount });
+      : t('appStatus.nIssues', { count: errorCount })
+    : honesty === 'mockup_waiting'
+      ? t('appStatus.mockupWaiting')
+      : honesty === 'thin_code_shell'
+        ? t('appStatus.thinShell')
+        : honesty === 'empty'
+          ? previewLabel || t('appStatus.noPreview')
+          : honestSuccess
+            ? t('appStatus.looksOk')
+            : previewLabel || t('appStatus.unknown');
 
   return (
     <div className="shrink-0 border-b border-border/70">
       <div
         className={cn(
           'flex items-center gap-2 px-2.5 py-1.5',
-          healthy ? 'text-emerald-200/90' : 'bg-red-500/10 text-red-100',
+          honestSuccess ? 'text-emerald-200/90' : runtimeHealthy ? 'text-amber-100/90' : 'bg-red-500/10 text-red-100',
         )}
       >
-        {healthy ? (
+        {honestSuccess ? (
           <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-400/90" aria-hidden />
         ) : (
-          <AlertCircle className="h-3.5 w-3.5 shrink-0 text-red-300/90" aria-hidden />
+          <AlertCircle
+            className={cn(
+              'h-3.5 w-3.5 shrink-0',
+              runtimeHealthy ? 'text-amber-300/90' : 'text-red-300/90',
+            )}
+            aria-hidden
+          />
         )}
         <div className="min-w-0 flex-1">
           <p className="truncate text-[11px] font-normal">{statusLabel}</p>
@@ -175,7 +240,7 @@ export function IdeAppStatusMenuButton({
             <p className="truncate text-[10px] text-muted-foreground">{rideStatus}</p>
           ) : null}
         </div>
-        {!healthy ? (
+        {!runtimeHealthy ? (
           <button
             type="button"
             onClick={() => {
@@ -189,7 +254,7 @@ export function IdeAppStatusMenuButton({
         ) : null}
       </div>
 
-      {open && !healthy ? (
+      {open && !runtimeHealthy ? (
         <div
           className="border-t border-border/70 bg-[#0a0a0a]/90 px-2.5 py-2"
           role="region"
@@ -230,15 +295,23 @@ export function IdeAppStatusMenuButton({
 export function IdeAppStatusPreviewBadge() {
   const { t } = useLanguage();
   const snap = useAppRuntimeSnapshot();
+  const { honesty } = usePreviewHonesty();
   const count = getAppRuntimeErrorCount();
-  const healthy = count === 0;
+  const runtimeHealthy = count === 0;
+  const honestSuccess = runtimeHealthy && honesty === 'real_routes';
   return (
     <button
       type="button"
       title={
-        healthy
-          ? t('appStatus.previewOk')
-          : t('appStatus.previewIssues', { count })
+        !runtimeHealthy
+          ? t('appStatus.previewIssues', { count })
+          : honestSuccess
+            ? t('appStatus.previewOk')
+            : honesty === 'thin_code_shell'
+              ? t('appStatus.thinShell')
+              : honesty === 'mockup_waiting'
+                ? t('appStatus.mockupWaiting')
+                : t('appStatus.unknown')
       }
       onClick={() => openAppStatusMenu()}
       className="inline-flex items-center gap-1.5 rounded-md px-1.5 py-0.5 hover:bg-white/5"
@@ -246,14 +319,14 @@ export function IdeAppStatusPreviewBadge() {
       <span
         className={cn(
           'h-2 w-2 rounded-full',
-          healthy ? 'bg-emerald-400/90' : 'bg-red-400 animate-pulse',
+          honestSuccess ? 'bg-emerald-400/90' : runtimeHealthy ? 'bg-amber-400/90' : 'bg-red-400 animate-pulse',
         )}
         aria-hidden
       />
-      {!healthy ? (
+      {!runtimeHealthy ? (
         <span className="text-[10px] tabular-nums text-red-200/90">{count}</span>
       ) : (
-        <span className="text-[10px] text-slate-500">OK</span>
+        <span className="text-[10px] text-slate-500">{honestSuccess ? 'OK' : '—'}</span>
       )}
     </button>
   );

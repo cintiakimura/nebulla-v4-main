@@ -35,9 +35,13 @@ const IGNORE_FILE_RE = /\.(test|spec|stories|d)\.[tj]sx?$/i;
 export type AppPreviewMode =
   | "pre_code_mockup"
   | "post_code_bridge"
+  | "thin_code_shell"
   | "interactive_product_preview"
   | "live_app_static"
   | "empty";
+
+/** Honest preview / App Status — never treat a Vite App/main shell as success. */
+export type PreviewHonesty = "mockup_waiting" | "thin_code_shell" | "real_routes" | "empty";
 
 export type AppPreviewAuthority = {
   mode: AppPreviewMode;
@@ -50,9 +54,10 @@ export type AppPreviewAuthority = {
   productFiles: string[];
   mockupRel: string | null;
   limitation: string | null;
+  honesty: PreviewHonesty;
 };
 
-function listProductUiFiles(workspaceRoot: string, max = 40): string[] {
+export function listProductUiFiles(workspaceRoot: string, max = 40): string[] {
   const root = workspaceRoot.trim();
   if (!root || !fs.existsSync(root)) return [];
   const out: string[] = [];
@@ -98,9 +103,60 @@ function listProductUiFiles(workspaceRoot: string, max = 40): string[] {
   return out.sort();
 }
 
-/** True when meaningful product UI source exists (not only public HTML / mockup meta). */
+/** True when any product UI source exists (used so mockup does not reclaim index.html). */
 export function workspaceHasCodedAppUi(workspaceRoot: string): boolean {
   return listProductUiFiles(workspaceRoot, 8).length >= 1;
+}
+
+/** app/**/page and pages/* files — not Vite src/App.tsx + src/main.tsx. */
+export function listProductRouteFiles(paths: string[]): string[] {
+  return (paths || []).filter((raw) => {
+    const p = String(raw || "").replace(/\\/g, "/");
+    return (
+      /^app\/(?:.+\/)?page\.(tsx|jsx|js)$/i.test(p) ||
+      /^(?:src\/)?pages\/.+\.(tsx|jsx|js)$/i.test(p)
+    );
+  });
+}
+
+/**
+ * UI files on disk but no app/ or pages/ routes (typical: src/App.tsx + src/main.tsx).
+ */
+export function isThinCodeShell(paths: string[]): boolean {
+  const normalized = (paths || []).map((p) => String(p || "").replace(/\\/g, "/"));
+  const ui = normalized.filter((p) => {
+    if (!/\.(tsx|jsx)$/i.test(p)) return false;
+    const top = p.split("/")[0] || "";
+    return ["app", "src", "pages", "components"].includes(top);
+  });
+  if (ui.length === 0) return false;
+  return inferRoutesFromProductFiles(normalized).length === 0;
+}
+
+export function isAuthOnlyProductRoutes(paths: string[]): boolean {
+  const routes = inferRoutesFromProductFiles(paths);
+  if (routes.length === 0) return false;
+  return routes.every((r) =>
+    /^\/(login|auth|signin|sign-in|signup|register|sign-up)?$/i.test(r),
+  );
+}
+
+export function assessApplyRouteDepth(writtenPaths: string[]): {
+  productRouteFiles: string[];
+  productRoutes: string[];
+  thinCodeShell: boolean;
+  zeroProductRoutes: boolean;
+  authOnly: boolean;
+} {
+  const productRouteFiles = listProductRouteFiles(writtenPaths);
+  const productRoutes = inferRoutesFromProductFiles(writtenPaths);
+  return {
+    productRouteFiles,
+    productRoutes,
+    thinCodeShell: isThinCodeShell(writtenPaths),
+    zeroProductRoutes: productRoutes.length === 0,
+    authOnly: isAuthOnlyProductRoutes(writtenPaths),
+  };
 }
 
 /** Route-map shell written when no live app exists — not a product preview. */
@@ -150,35 +206,120 @@ function findBuiltStaticEntry(workspaceRoot: string): string | null {
   return null;
 }
 
+function withHonesty(
+  auth: Omit<AppPreviewAuthority, "honesty">,
+  honesty: PreviewHonesty,
+): AppPreviewAuthority {
+  return { ...auth, honesty };
+}
+
 /**
  * Resolve what App Preview bootstrap should serve.
- * Prefers real static build entry; never presents UI Gen mockup as the live product after code exists.
+ * Prefers real static build entry; never presents UI Gen mockup as the live product after real routes exist.
+ * Vite-only src/App.tsx + src/main.tsx is a thin shell — not "Code exists" success.
  */
 export function resolveAppPreviewAuthority(workspaceRoot: string): AppPreviewAuthority {
   const productFiles = listProductUiFiles(workspaceRoot, 24);
-  const codedApp = productFiles.length >= 1;
+  const thinShell = isThinCodeShell(productFiles);
+  const hasRealRoutes = inferRoutesFromProductFiles(productFiles).length > 0 && !thinShell;
   const indexHtml = readIndexHtml(workspaceRoot);
   const indexIsMockup = indexHtml ? isNebulaUiGenMockupHtml(indexHtml) : false;
   const mockupAbs = path.join(workspaceRoot, UI_GEN_MOCKUP_REL);
   const mockupRel = fs.existsSync(mockupAbs) ? UI_GEN_MOCKUP_REL : null;
   const built = findBuiltStaticEntry(workspaceRoot);
 
-  if (!codedApp) {
-    const indexIsScaffold = indexHtml ? isWorkspaceRoutesScaffoldHtml(indexHtml) : false;
-    if (mockupRel && (indexIsScaffold || !indexHtml || indexIsMockup)) {
-      return {
+  if (built) {
+    return withHonesty(
+      {
+        mode: "live_app_static",
+        statusLabel: "Live app preview",
+        codedApp: true,
+        indexIsMockup: false,
+        entryRel: built,
+        productFiles,
+        mockupRel,
+        limitation: null,
+      },
+      "real_routes",
+    );
+  }
+
+  if (hasRealRoutes) {
+    if (
+      indexHtml &&
+      !indexIsMockup &&
+      !isCodedAppBridgeHtml(indexHtml) &&
+      !isWorkspaceRoutesScaffoldHtml(indexHtml)
+    ) {
+      const needsBundler = /type=["']module["']|\/src\/main\.|\/src\/App\.|\.tsx/i.test(indexHtml);
+      return withHonesty(
+        {
+          mode: needsBundler ? "post_code_bridge" : "live_app_static",
+          statusLabel: needsBundler ? "Code exists — open Code" : "Live app preview",
+          codedApp: true,
+          indexIsMockup: false,
+          entryRel: needsBundler ? null : "index.html",
+          productFiles,
+          mockupRel,
+          limitation: needsBundler
+            ? "This shell cannot run the workspace Vite/Next app in the iframe. Open Code to inspect the coded routes."
+            : null,
+        },
+        "real_routes",
+      );
+    }
+    return withHonesty(
+      {
+        mode: "post_code_bridge",
+        statusLabel: "Code exists — open Code",
+        codedApp: true,
+        indexIsMockup,
+        entryRel: null,
+        productFiles,
+        mockupRel,
+        limitation:
+          "This shell cannot run the workspace Vite/Next app in the iframe. Open Code to inspect the coded routes.",
+      },
+      "real_routes",
+    );
+  }
+
+  if (thinShell) {
+    return withHonesty(
+      {
+        mode: "thin_code_shell",
+        statusLabel: "Thin code shell — no product routes",
+        codedApp: false,
+        indexIsMockup,
+        entryRel: null,
+        productFiles,
+        mockupRel,
+        limitation:
+          "src/App.tsx + src/main.tsx (or similar) is not a product. Need app/ or pages/ routes.",
+      },
+      "thin_code_shell",
+    );
+  }
+
+  const indexIsScaffold = indexHtml ? isWorkspaceRoutesScaffoldHtml(indexHtml) : false;
+  if (mockupRel && (indexIsScaffold || !indexHtml || indexIsMockup)) {
+    return withHonesty(
+      {
         mode: "pre_code_mockup",
-        statusLabel: "Pre-code mockup only - not live app",
+        statusLabel: "Mockup waiting — not live app",
         codedApp: false,
         indexIsMockup: true,
         entryRel: mockupRel,
         productFiles,
         mockupRel,
         limitation: null,
-      };
-    }
-    if (indexHtml && !indexIsMockup && !indexIsScaffold && indexHtml.length >= 80) {
-      return {
+      },
+      "mockup_waiting",
+    );
+  }
+  if (indexHtml && !indexIsMockup && !indexIsScaffold && indexHtml.length >= 80) {
+    return withHonesty(
+      {
         mode: "live_app_static",
         statusLabel: "Live app preview",
         codedApp: false,
@@ -187,21 +328,27 @@ export function resolveAppPreviewAuthority(workspaceRoot: string): AppPreviewAut
         productFiles,
         mockupRel,
         limitation: null,
-      };
-    }
-    if (indexHtml || mockupRel) {
-      return {
+      },
+      "real_routes",
+    );
+  }
+  if (indexHtml || mockupRel) {
+    return withHonesty(
+      {
         mode: "pre_code_mockup",
-        statusLabel: "Pre-code mockup only - not live app",
+        statusLabel: "Mockup waiting — not live app",
         codedApp: false,
         indexIsMockup: indexIsMockup || Boolean(mockupRel),
         entryRel: mockupRel || "index.html",
         productFiles,
         mockupRel,
         limitation: null,
-      };
-    }
-    return {
+      },
+      "mockup_waiting",
+    );
+  }
+  return withHonesty(
+    {
       mode: "empty",
       statusLabel: "No preview yet",
       codedApp: false,
@@ -210,51 +357,9 @@ export function resolveAppPreviewAuthority(workspaceRoot: string): AppPreviewAut
       productFiles,
       mockupRel: null,
       limitation: null,
-    };
-  }
-
-  // Coded product exists — never serve the generic role-picker mock as the product.
-  if (built) {
-    return {
-      mode: "live_app_static",
-      statusLabel: "Live app preview",
-      codedApp: true,
-      indexIsMockup: false,
-      entryRel: built,
-      productFiles,
-      mockupRel,
-      limitation: null,
-    };
-  }
-
-  if (indexHtml && !indexIsMockup && !isCodedAppBridgeHtml(indexHtml) && !isWorkspaceRoutesScaffoldHtml(indexHtml)) {
-    // Real index.html that isn't our mockup — serve it, but React/Vite usually needs a bundler.
-    const needsBundler = /type=["']module["']|\/src\/main\.|\/src\/App\.|\.tsx/i.test(indexHtml);
-    return {
-      mode: needsBundler ? "post_code_bridge" : "live_app_static",
-      statusLabel: needsBundler ? "Code exists — open Code" : "Live app preview",
-      codedApp: true,
-      indexIsMockup: false,
-      entryRel: needsBundler ? null : "index.html",
-      productFiles,
-      mockupRel,
-      limitation: needsBundler
-        ? "This shell cannot run the workspace Vite/Next app in the iframe. Open Code to inspect the coded routes."
-        : null,
-    };
-  }
-
-  return {
-    mode: "post_code_bridge",
-    statusLabel: "Code exists — open Code",
-    codedApp: true,
-    indexIsMockup,
-    entryRel: null,
-    productFiles,
-    mockupRel,
-    limitation:
-      "This shell cannot run the workspace Vite/Next app in the iframe. Open Code to inspect the coded routes.",
-  };
+    },
+    "empty",
+  );
 }
 
 /** Routes implied by app/ and pages/ product files (for honest post-code preview). */
@@ -302,19 +407,28 @@ export function buildCodedAppPreviewBridgeHtml(opts: {
   productFiles: string[];
   mockupRel?: string | null;
   limitation?: string | null;
+  honesty?: PreviewHonesty;
 }): string {
   const name = esc((opts.projectName || "App").slice(0, 80));
   const files = (opts.productFiles || []).slice(0, 16);
   const list = files.map((f) => `<li><code>${esc(f)}</code></li>`).join("\n");
   const routes = inferRoutesFromProductFiles(opts.productFiles || []);
   const routeList = routes.map((r) => `<li><code>${esc(r)}</code></li>`).join("\n");
+  const thin = opts.honesty === "thin_code_shell" || (routes.length === 0 && files.length > 0);
   const mockup = opts.mockupRel
     ? `<p class="muted">A pre-code mockup file may still exist at <code>${esc(opts.mockupRel)}</code> — it is not this product.</p>`
     : "";
   const limit = esc(
     opts.limitation ||
-      "This shell cannot run the workspace Vite/Next app in the iframe. Open Code to inspect the coded routes.",
+      (thin
+        ? "Need real product routes under app/ or pages/. src/App.tsx + src/main.tsx is not enough."
+        : "This shell cannot run the workspace Vite/Next app in the iframe. Open Code to inspect the coded routes."),
   );
+  const badge = thin ? "Thin code shell - no product routes" : "Code exists — open Code";
+  const title = thin ? `${name} — thin shell` : `${name} — Code exists`;
+  const lead = thin
+    ? "<strong>This is not a finished product.</strong> Apply wrote a Vite shell (or similar) without <code>app/</code> or <code>pages/</code> routes. App Status must not show success."
+    : "<strong>Coded workspace routes are on disk.</strong> This is not a live app runtime and not the generic role-picker mock.";
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -322,10 +436,10 @@ export function buildCodedAppPreviewBridgeHtml(opts: {
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="nebulla-preview" content="${CODED_APP_BRIDGE_MARKER}"/>
-  <title>${name} — Code exists</title>
+  <title>${title}</title>
   <style>
     body { margin:0; font-family: system-ui, -apple-system, Segoe UI, sans-serif; background:#FAFAF9; color:#1C1917; padding:24px; line-height:1.45; }
-    .badge { display:inline-block; font-size:11px; font-weight:600; letter-spacing:.04em; text-transform:uppercase; color:#0F766E; background:#CCFBF1; padding:4px 8px; border-radius:6px; }
+    .badge { display:inline-block; font-size:11px; font-weight:600; letter-spacing:.04em; text-transform:uppercase; color:${thin ? "#9A3412" : "#0F766E"}; background:${thin ? "#FFEDD5" : "#CCFBF1"}; padding:4px 8px; border-radius:6px; }
     h1 { font-size:1.25rem; margin:12px 0 8px; }
     p { margin:8px 0; max-width:36rem; }
     .muted { color:#78716C; font-size:.9rem; }
@@ -339,9 +453,9 @@ export function buildCodedAppPreviewBridgeHtml(opts: {
 </head>
 <body>
   <div class="card">
-    <span class="badge">Code exists — open Code</span>
+    <span class="badge">${badge}</span>
     <h1>${name}</h1>
-    <p><strong>Coded workspace routes are on disk.</strong> This is not a live app runtime and not the generic role-picker mock.</p>
+    <p>${lead}</p>
     <p class="muted">${limit}</p>
     <p><strong>Routes in this workspace</strong></p>
     <ul>

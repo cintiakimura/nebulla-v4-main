@@ -67,6 +67,13 @@ export async function openLocalFile(filePath: string): Promise<OpenFileResult> {
       userMessage: 'Please share a file path so I can open it.',
     };
   }
+  if (/\s/.test(path) && !path.includes('/')) {
+    return {
+      success: false,
+      error: 'path must be a workspace-relative file, not the project title',
+      userMessage: 'That looks like a project name, not a file path. Use a path like nebula-ui-studio/ui-brief.md.',
+    };
+  }
 
   try {
     const res = await fetch(apiUrl(withProjectQuery('/api/files/open')), {

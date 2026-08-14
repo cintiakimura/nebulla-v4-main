@@ -155,6 +155,15 @@ export type UiMockupReadiness = {
 
 const UI_BRIEF_MIN = 80;
 
+export function readinessBlocksAutoFoundation(
+  r: Pick<UiMockupReadiness, 'ok' | 'reasons' | 'planComplete' | 'uiBriefLength'>,
+): boolean {
+  if (r.ok) return false;
+  if (!r.planComplete) return true;
+  if ((r.uiBriefLength || 0) < UI_BRIEF_MIN) return true;
+  return r.reasons.some((x) => /ui-brief|incomplete/i.test(x));
+}
+
 /**
  * True when architecture inputs are ready for UI Gen v2 mockup.
  * Does not start generation — call runUiStudioBetaGeneration after this returns ok.

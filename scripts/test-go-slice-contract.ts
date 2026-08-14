@@ -3,10 +3,13 @@ import os from "node:os";
 import {
   assessOversizedGoApply,
   buildLocalPreCodingSummary,
+  inferGoSliceFromWorkspace,
   isBareGoNote,
   parseGoSliceLabel,
   shouldSkipPhaseALlm,
 } from "../lib/goSliceContract.ts";
+import fs from "node:fs";
+import path from "node:path";
 import {
   buildSecurityBaselineProposal,
   mergeSecurityBaselineIntoSection2,
@@ -83,5 +86,28 @@ const localSum = buildLocalPreCodingSummary({
 });
 assert.match(localSum, /^SLICE:/);
 assert.match(localSum, /ADHD|tutor|slice/i);
+
+{
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "nebulla-slice-thin-"));
+  fs.mkdirSync(path.join(root, "src"), { recursive: true });
+  fs.writeFileSync(path.join(root, "src", "App.tsx"), "export default function App(){return null}\n");
+  fs.writeFileSync(path.join(root, "src", "main.tsx"), "import App from './App'\n");
+  fs.writeFileSync(path.join(root, "index.html"), "<!doctype html><html><body></body></html>");
+  assert.equal(inferGoSliceFromWorkspace(root), "Foundation");
+  fs.rmSync(root, { recursive: true, force: true });
+}
+
+{
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "nebulla-slice-routes-"));
+  fs.mkdirSync(path.join(root, "app", "practice"), { recursive: true });
+  fs.writeFileSync(path.join(root, "app", "page.tsx"), "export default function Home(){return null}\n");
+  fs.writeFileSync(
+    path.join(root, "app", "practice", "page.tsx"),
+    "export default function Practice(){return null}\n",
+  );
+  const next = inferGoSliceFromWorkspace(root);
+  assert.ok(next === "Auth" || next === "Primary" || next === "Secondary");
+  fs.rmSync(root, { recursive: true, force: true });
+}
 
 console.log("\n✓ go-slice + security propose + mind-map amend tests passed\n");

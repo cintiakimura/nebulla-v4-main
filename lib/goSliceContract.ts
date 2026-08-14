@@ -5,6 +5,7 @@
 
 import fs from "fs";
 import path from "path";
+import { inferRoutesFromProductFiles, listProductUiFiles } from "./workspaceCodedAppUi";
 
 export const GO_SLICE_LABELS = [
   "Foundation",
@@ -90,40 +91,31 @@ function workspaceExists(...parts: string[]): boolean {
   return fs.existsSync(path.join(...parts));
 }
 
-function countSrcPages(workspaceRoot: string): number {
-  const dir = path.join(workspaceRoot, "src", "pages");
-  if (!fs.existsSync(dir)) return 0;
-  try {
-    return fs.readdirSync(dir).filter((f) => /\.(tsx|jsx|ts|js)$/i.test(f)).length;
-  } catch {
-    return 0;
-  }
-}
-
 /** Heuristic next slice from on-disk app shell (no LLM). */
 export function inferGoSliceFromWorkspace(workspaceRoot: string): GoSliceLabel {
   const root = workspaceRoot.trim();
   if (!root) return "Foundation";
-  const hasShell =
-    workspaceExists(root, "app", "layout.tsx") ||
-    workspaceExists(root, "app", "page.tsx") ||
-    workspaceExists(root, "src", "App.tsx") ||
-    workspaceExists(root, "src", "main.tsx") ||
-    workspaceExists(root, "index.html");
-  if (!hasShell) return "Foundation";
+  const productFiles = listProductUiFiles(root, 40);
+  const routes = inferRoutesFromProductFiles(productFiles);
+  // Vite App/main or mockup index.html is not a Foundation — need app/ or pages/ routes.
+  if (routes.length === 0) return "Foundation";
 
   const hasAuth =
     workspaceExists(root, "lib", "auth.ts") ||
     workspaceExists(root, "src", "lib", "auth.ts") ||
-    workspaceExists(root, "src", "pages", "Login.tsx");
+    workspaceExists(root, "src", "pages", "Login.tsx") ||
+    workspaceExists(root, "app", "login", "page.tsx") ||
+    workspaceExists(root, "app", "auth", "page.tsx");
   if (!hasAuth) return "Auth";
 
-  const pageCount = countSrcPages(root);
+  const pageCount = routes.length;
   const hasPrimary =
     pageCount >= 2 ||
     workspaceExists(root, "src", "pages", "ChildSession.tsx") ||
     workspaceExists(root, "src", "pages", "ParentDashboard.tsx") ||
-    workspaceExists(root, "app", "dashboard", "page.tsx");
+    workspaceExists(root, "app", "dashboard", "page.tsx") ||
+    workspaceExists(root, "app", "practice", "page.tsx") ||
+    workspaceExists(root, "app", "parent", "page.tsx");
   if (!hasPrimary) return "Primary";
 
   return "Secondary";

@@ -489,7 +489,7 @@ export const RUNNABLE_SKELETON_GO_BULLETS = `
 RUNNABLE / DEPLOYABLE ROOT (mandatory when emitting app/ src/ pages/ components/ product UI):
 - Product app root = **workspace root** (same folder as app/, components/) — not nebulla-project/.
 - If package.json or build scripts are missing, emit them in the SAME response: package.json with private:true and scripts.dev, scripts.build, scripts.start (Next: next dev/build/start; Vite: vite / vite build / vite preview).
-- Foundation must include framework entry: Next → app/layout.tsx + app/page.tsx (+ next.config + tsconfig as needed); Vite → index.html + src/main.tsx.
+- Foundation must include framework entry: Next → app/layout.tsx + app/page.tsx (+ next.config + tsconfig as needed). Prefer Next app/ routes for multi-page plans (Home/practice/parent). Vite-only src/App.tsx + src/main.tsx is NOT a Foundation when §4 lists multiple screens.
 - Include a short README.md with npm install / npm run dev / npm run build.
 - Orphan feature pages without a runnable root are NOT done — leave something the user can install, build, and deploy.
 `.trim();
