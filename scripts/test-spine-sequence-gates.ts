@@ -22,7 +22,11 @@ import {
   readGoCodePending,
   writeGoCodePending,
 } from "../lib/nebulaGoCodePending.ts";
-import { goCodePendingToPollResponse } from "../lib/nebulaGoCodeJob.ts";
+import {
+  goCodePendingToPollResponse,
+  isGoCodeJobActive,
+  scheduleGoCodeJob,
+} from "../lib/nebulaGoCodeJob.ts";
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 const pipeline = fs.readFileSync(path.join(root, "src/lib/nebulaGrokCodingPipeline.ts"), "utf8");
@@ -30,6 +34,12 @@ const chat = fs.readFileSync(path.join(root, "src/components/ide/AIChat.tsx"), "
 const server = fs.readFileSync(path.join(root, "server.ts"), "utf8");
 const studio = fs.readFileSync(path.join(root, "src/lib/uiStudioBetaEngine.ts"), "utf8");
 const statusMenu = fs.readFileSync(path.join(root, "src/components/ide/IdeAppStatusMenu.tsx"), "utf8");
+
+section("Go job named exports — server boot import");
+assert.equal(typeof isGoCodeJobActive, "function");
+assert.equal(typeof scheduleGoCodeJob, "function");
+assert.equal(typeof goCodePendingToPollResponse, "function");
+assert.equal(isGoCodeJobActive("/no-such-go-job"), false);
 
 section("Gate C copy — never all files in one pass");
 assert.equal(/generating all files in one pass/.test(pipeline), false);

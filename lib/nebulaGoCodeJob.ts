@@ -13,6 +13,10 @@ export { GO_CODE_JOB_TIMEOUT_MS };
 
 const activeJobs = new Set<string>();
 
+export function isGoCodeJobActive(workspaceRoot: string): boolean {
+  return activeJobs.has(workspaceRoot);
+}
+
 function pollBlockedPayload(
   extra: Record<string, unknown>,
   codeError: string | undefined,
