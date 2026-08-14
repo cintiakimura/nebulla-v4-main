@@ -251,6 +251,7 @@ Work **one step per Agent turn / PR** after constitution install. Fix the **earl
 | 2026-08-09 | Drop X-Nebulla-Preview-Status (em-dash crashed Node setHeader); Fast Prototype auto-Primary also after Auth/shell labels | Preview black-screen Invalid character in header; Go stopped at Auth-only |
 | 2026-08-09 | Phase E: promoted `project-workflow.proposed.md` → live `project-workflow.md` (Steps 1–14 north star). UI Gen v2 primary; security defer-to-end (Step 13); research direct→analogues→baseline. `project-execution-rules.md` not modified this turn. | Thin live workflow was pointer-only; competing spines with inference-first / execution-rules |
 | 2026-08-14 | Render-only stack: apply drops supabase paths; Go/coding/security text never treat RLS as a hosted BaaS; skip warn “stack is Render-only” | Grok invented src/lib/supabase.ts from security language |
+| 2026-08-14 | Build canvas: one Generate UI button; bootstrap serves mockup when coded iframe cannot run Next/Vite; generate always apply+reload | Generate UI missing on Build; CODE EXISTS card hid mockup; agent looked stuck |
 
 ---
 

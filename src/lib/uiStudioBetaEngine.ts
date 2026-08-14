@@ -157,7 +157,18 @@ export async function runUiStudioBetaGeneration(
       });
       if (statusLooksReadyForSkip(existing) && !options.regenerate) {
         onProgress?.(existing.user_visible_stage || 'Ready in preview', 'success');
-        return { ok: true, user_visible_stage: existing.user_visible_stage };
+        const applied = await applyUiStudioBetaToAppPreview(onProgress);
+        try {
+          window.dispatchEvent(new CustomEvent('nebula-preview-show-mockup'));
+          window.dispatchEvent(new CustomEvent('nebula-reload-app-preview'));
+        } catch {
+          /* ignore */
+        }
+        return {
+          ok: applied.ok,
+          user_visible_stage: existing.user_visible_stage,
+          error: applied.ok ? undefined : applied.error,
+        };
       }
     } catch {
       /* generate below */
@@ -210,12 +221,15 @@ export async function runUiStudioBetaGeneration(
         return data;
       }
       onProgress?.(data.user_visible_stage || 'Ready in preview', 'success');
+      const applied = await applyUiStudioBetaToAppPreview(onProgress);
       try {
         window.dispatchEvent(new CustomEvent(NEBULA_UI_STUDIO_BETA_COMPLETE, { detail: { ok: true, ...data } }));
+        window.dispatchEvent(new CustomEvent('nebula-preview-show-mockup'));
+        window.dispatchEvent(new CustomEvent('nebula-reload-app-preview'));
       } catch {
         /* ignore */
       }
-      return { ok: true, ...data };
+      return { ok: applied.ok !== false, ...data, error: applied.ok ? undefined : applied.error };
     } catch (e) {
       const error = e instanceof Error ? e.message : 'UI Studio Beta generation failed';
       onProgress?.(error, 'error');
@@ -268,6 +282,7 @@ export async function applyUiStudioBetaToAppPreview(
     );
     try {
       window.dispatchEvent(new CustomEvent('nebula-files-applied'));
+      window.dispatchEvent(new CustomEvent('nebula-preview-show-mockup'));
       window.dispatchEvent(new CustomEvent('nebula-reload-app-preview'));
       window.dispatchEvent(new CustomEvent('nebula-open-app-preview'));
     } catch {

@@ -108,7 +108,7 @@ export function workspaceHasCodedAppUi(workspaceRoot: string): boolean {
   return listProductUiFiles(workspaceRoot, 8).length >= 1;
 }
 
-/** app/**/page and pages/* files — not Vite src/App.tsx + src/main.tsx. */
+/** Next app page files and pages/* files - not Vite src/App.tsx + src/main.tsx. */
 export function listProductRouteFiles(paths: string[]): string[] {
   return (paths || []).filter((raw) => {
     const p = String(raw || "").replace(/\\/g, "/");
@@ -255,7 +255,7 @@ export function resolveAppPreviewAuthority(workspaceRoot: string): AppPreviewAut
       return withHonesty(
         {
           mode: needsBundler ? "post_code_bridge" : "live_app_static",
-          statusLabel: needsBundler ? "Code exists — open Code" : "Live app preview",
+          statusLabel: needsBundler ? "Code exists - open Code" : "Live app preview",
           codedApp: true,
           indexIsMockup: false,
           entryRel: needsBundler ? null : "index.html",
@@ -271,7 +271,7 @@ export function resolveAppPreviewAuthority(workspaceRoot: string): AppPreviewAut
     return withHonesty(
       {
         mode: "post_code_bridge",
-        statusLabel: "Code exists — open Code",
+        statusLabel: "Code exists - open Code",
         codedApp: true,
         indexIsMockup,
         entryRel: null,
@@ -288,7 +288,7 @@ export function resolveAppPreviewAuthority(workspaceRoot: string): AppPreviewAut
     return withHonesty(
       {
         mode: "thin_code_shell",
-        statusLabel: "Thin code shell — no product routes",
+        statusLabel: "Thin code shell - no product routes",
         codedApp: false,
         indexIsMockup,
         entryRel: null,
@@ -306,7 +306,7 @@ export function resolveAppPreviewAuthority(workspaceRoot: string): AppPreviewAut
     return withHonesty(
       {
         mode: "pre_code_mockup",
-        statusLabel: "Mockup waiting — not live app",
+        statusLabel: "Mockup waiting - not live app",
         codedApp: false,
         indexIsMockup: true,
         entryRel: mockupRel,
@@ -336,7 +336,7 @@ export function resolveAppPreviewAuthority(workspaceRoot: string): AppPreviewAut
     return withHonesty(
       {
         mode: "pre_code_mockup",
-        statusLabel: "Mockup waiting — not live app",
+        statusLabel: "Mockup waiting - not live app",
         codedApp: false,
         indexIsMockup: indexIsMockup || Boolean(mockupRel),
         entryRel: mockupRel || "index.html",

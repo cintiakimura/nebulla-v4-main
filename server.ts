@@ -2310,20 +2310,39 @@ No approved UI code yet.
 
       const authority = resolveAppPreviewAuthority(pp.workspaceRoot);
       let html = "";
+      const surface = String(q.surface || "").toLowerCase();
+      const preferMockup = surface === "mockup" || surface === "ui-gen";
+
+      if (preferMockup && authority.mockupRel) {
+        const mockAbs = path.join(pp.workspaceRoot, authority.mockupRel);
+        if (fs.existsSync(mockAbs)) {
+          html = fs.readFileSync(mockAbs, "utf8");
+        }
+      }
 
       if (
-        authority.mode === "post_code_bridge" ||
-        authority.mode === "thin_code_shell" ||
-        (authority.codedApp && !authority.entryRel)
+        !html &&
+        (authority.mode === "post_code_bridge" ||
+          authority.mode === "thin_code_shell" ||
+          (authority.codedApp && !authority.entryRel))
       ) {
-        html = buildCodedAppPreviewBridgeHtml({
-          projectName: displayName,
-          productFiles: authority.productFiles,
-          mockupRel: authority.mockupRel,
-          limitation: authority.limitation,
-          honesty: authority.honesty,
-        });
-      } else if (authority.entryRel) {
+        // Iframe cannot run Vite/Next — show last mockup when present so Generate UI is visible.
+        if (authority.mockupRel) {
+          const mockAbs = path.join(pp.workspaceRoot, authority.mockupRel);
+          if (fs.existsSync(mockAbs)) {
+            html = fs.readFileSync(mockAbs, "utf8");
+          }
+        }
+        if (!html) {
+          html = buildCodedAppPreviewBridgeHtml({
+            projectName: displayName,
+            productFiles: authority.productFiles,
+            mockupRel: authority.mockupRel,
+            limitation: authority.limitation,
+            honesty: authority.honesty,
+          });
+        }
+      } else if (!html && authority.entryRel) {
         const entryAbs = path.join(pp.workspaceRoot, authority.entryRel);
         if (fs.existsSync(entryAbs)) {
           html = fs.readFileSync(entryAbs, "utf8");

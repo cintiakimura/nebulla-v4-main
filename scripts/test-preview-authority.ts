@@ -255,4 +255,19 @@ section("status labels / headers must not crash Node setHeader");
   fs.rmSync(root, { recursive: true, force: true });
 }
 
+section("Vite App+main is thin shell not Code exists success");
+{
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "nebulla-preview-thin-"));
+  fs.mkdirSync(path.join(root, "src"), { recursive: true });
+  fs.writeFileSync(path.join(root, "src", "App.tsx"), "export default function App(){return null}\n");
+  fs.writeFileSync(path.join(root, "src", "main.tsx"), "import App from './App'\n");
+  const auth = resolveAppPreviewAuthority(root);
+  assert.equal(auth.mode, "thin_code_shell");
+  assert.equal(auth.codedApp, false);
+  assert.equal(auth.honesty, "thin_code_shell");
+  assert.match(auth.statusLabel, /Thin code shell/i);
+  assert.equal(/App looks OK/i.test(auth.statusLabel), false);
+  fs.rmSync(root, { recursive: true, force: true });
+}
+
 console.log("\n✓ preview authority tests passed\n");

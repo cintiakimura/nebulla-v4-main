@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { canStartUiMockup, statusLooksReadyForSkip } from '../src/lib/uiMockupGate';
+import { canStartUiMockup, readinessBlocksAutoFoundation, statusLooksReadyForSkip } from '../src/lib/uiMockupGate';
 import { isMasterPlanReadyForUiMockup } from '../lib/masterPlanCompleteness';
 import {
   filterGrokContentToArchitectureFiles,
@@ -57,6 +57,25 @@ assert.equal(
     masterPlan: completePlan,
     uiBriefLength: 200,
     blocked: true,
+  }),
+  false,
+);
+
+assert.equal(
+  readinessBlocksAutoFoundation({
+    ok: false,
+    planComplete: false,
+    uiBriefLength: 10,
+    reasons: ['ui-brief.md missing or too short'],
+  }),
+  true,
+);
+assert.equal(
+  readinessBlocksAutoFoundation({
+    ok: true,
+    planComplete: true,
+    uiBriefLength: 200,
+    reasons: [],
   }),
   false,
 );

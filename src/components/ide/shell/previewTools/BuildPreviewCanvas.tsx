@@ -1,8 +1,12 @@
-import { useEffect, useRef, useState } from 'react';
-import { withProjectQuery } from '../../../../lib/nebulaProjectApi';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { withProjectQuery, getBrowserProjectName } from '../../../../lib/nebulaProjectApi';
 import { tryGuidedDoneToCode } from '../../../../lib/guidedFunnel';
 import { installPreviewRuntimeMessageListener } from '../../../../lib/previewRuntimeBridge';
 import { PreviewEditToolbar, type PreviewToolbarState } from './PreviewEditToolbar';
+import {
+  applyUiStudioBetaToAppPreview,
+  runUiStudioBetaGeneration,
+} from '../../../../lib/uiStudioBetaEngine';
 
 /**
  * Preview column for Build: toolbar fixed above canvas, no outer “Preview” frame.
@@ -11,31 +15,65 @@ import { PreviewEditToolbar, type PreviewToolbarState } from './PreviewEditToolb
 export function BuildPreviewCanvas() {
   const [rev, setRev] = useState(0);
   const [failed, setFailed] = useState(false);
+  const [showMockup, setShowMockup] = useState(true);
+  const [generateBusy, setGenerateBusy] = useState(false);
   const retriedLegacyRef = useRef(false);
   const retriedMockShellRef = useRef(false);
   const [hasSelection] = useState(false);
-  const src = withProjectQuery(`/api/app-preview/bootstrap?_rev=${rev}`);
+  const src = withProjectQuery(
+    `/api/app-preview/bootstrap?_rev=${rev}${showMockup ? '&surface=mockup' : ''}`,
+  );
+
+  const bump = useCallback(() => {
+    setFailed(false);
+    retriedMockShellRef.current = false;
+    setRev((n) => n + 1);
+  }, []);
 
   useEffect(() => {
-    const bump = () => {
-      setFailed(false);
-      retriedMockShellRef.current = false;
-      setRev((n) => n + 1);
+    const onShowMockup = () => {
+      setShowMockup(true);
+      bump();
     };
     window.addEventListener('nebula-files-applied', bump);
     window.addEventListener('nebula-reload-app-preview', bump);
+    window.addEventListener('nebula-preview-show-mockup', onShowMockup);
     return () => {
       window.removeEventListener('nebula-files-applied', bump);
       window.removeEventListener('nebula-reload-app-preview', bump);
+      window.removeEventListener('nebula-preview-show-mockup', onShowMockup);
     };
-  }, []);
+  }, [bump]);
 
   useEffect(() => installPreviewRuntimeMessageListener(), []);
+
+  const onGenerateUi = useCallback(async () => {
+    if (generateBusy) return;
+    setGenerateBusy(true);
+    setFailed(false);
+    try {
+      const result = await runUiStudioBetaGeneration({
+        projectName: getBrowserProjectName() || undefined,
+        regenerate: true,
+        openPane: false,
+        uiPhase: 'manual',
+      });
+      if (result.ok) {
+        await applyUiStudioBetaToAppPreview();
+      }
+      setShowMockup(true);
+      bump();
+    } finally {
+      setGenerateBusy(false);
+    }
+  }, [bump, generateBusy]);
 
   return (
     <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
       <PreviewEditToolbar
         hasSelection={hasSelection}
+        generateBusy={generateBusy}
+        onGenerateUi={() => void onGenerateUi()}
         onApplyToAll={(_state: PreviewToolbarState) => {
           /* stub until selection bridge */
         }}
@@ -81,19 +119,6 @@ export function BuildPreviewCanvas() {
                 ) {
                   retriedLegacyRef.current = true;
                   setRev((n) => n + 1);
-                  return;
-                }
-                if (
-                  !retriedMockShellRef.current &&
-                  /interactive-product-preview|Who are you today\?/i.test(html)
-                ) {
-                  retriedMockShellRef.current = true;
-                  setRev((n) => n + 1);
-                  return;
-                }
-                const bodyText = doc?.body?.innerText?.trim() || '';
-                if (/no preview|not found|error/i.test(bodyText) && bodyText.length < 200) {
-                  setFailed(true);
                 }
               } catch {
                 /* cross-origin */

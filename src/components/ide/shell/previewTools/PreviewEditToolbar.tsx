@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNo
 import {
   Bold,
   Hand,
+  Loader2,
   Maximize2,
   Move,
   Redo2,
@@ -33,6 +34,9 @@ type Props = {
   onDone?: () => void;
   onUndo?: () => void;
   onRedo?: () => void;
+  /** Single Generate UI control for the Build preview canvas. */
+  onGenerateUi?: () => void;
+  generateBusy?: boolean;
   className?: string;
 };
 
@@ -46,6 +50,8 @@ export function PreviewEditToolbar({
   onDone,
   onUndo,
   onRedo,
+  onGenerateUi,
+  generateBusy = false,
   className,
 }: Props) {
   const [mode, setMode] = useState<PreviewToolMode>('grab');
@@ -300,6 +306,17 @@ export function PreviewEditToolbar({
         </div>
       ) : null}
 
+      <button
+        type="button"
+        title="Generate UI from Master Plan + ui-brief"
+        aria-label="Generate UI"
+        disabled={generateBusy || !onGenerateUi}
+        onClick={() => onGenerateUi?.()}
+        className="btn-cyan ml-1 h-8 shrink-0 rounded-md px-2.5 text-[11px] disabled:opacity-40"
+      >
+        {generateBusy ? <Loader2 className="mr-1 inline h-3 w-3 animate-spin" aria-hidden /> : null}
+        Generate UI
+      </button>
       <button
         type="button"
         title={hasSelection ? 'Apply to all' : 'Apply to all (select an element first)'}

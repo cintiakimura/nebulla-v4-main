@@ -1795,13 +1795,10 @@ export function IdeUiStudioBeta({
 
   const layerCount = page ? Object.keys(page.nodes).length : 0;
   const atMaxRegens = regenCount >= maxRegens && regenCount > 0;
-  const remainingRegens = Math.max(0, maxRegens - regenCount);
-  const showPrimaryGenerate = !hasEnginePreview;
-  const showGenerateAgain = hasEnginePreview || regenCount > 0;
-  const generateAgainDisabled = busy || preferenceRecovery || atMaxRegens;
-  const generateAgainTitle = atMaxRegens
+  const generateDisabled = busy || preferenceRecovery || atMaxRegens;
+  const generateTitle = atMaxRegens
     ? t('uiStudio.generationsExhausted', { max: maxRegens })
-    : t('uiStudio.generateAgainRemaining', { remaining: remainingRegens, max: maxRegens });
+    : t('uiStudio.generateTitle');
 
   return (
     <div
@@ -2004,38 +2001,25 @@ export function IdeUiStudioBeta({
             ) : null}
             <span
               className="rounded-md bg-secondary px-1.5 py-0.5 text-[10px] font-medium tabular-nums text-muted-foreground"
-              title={generateAgainTitle}
+              title={generateTitle}
             >
               {regenCount}/{maxRegens}
             </span>
-            {showPrimaryGenerate ? (
-              <button
-                type="button"
-                disabled={busy}
-                onClick={() => void runEngineGenerate({ preferenceHints })}
-                className="btn-cyan rounded-md px-2.5 py-1 text-[11px] disabled:opacity-40 sm:px-3"
-                title={t('uiStudio.generateTitle')}
-              >
-                {busy ? <Loader2 className="mr-1 inline h-3 w-3 animate-spin" /> : null}
-                {t('uiStudio.generate')}
-              </button>
-            ) : null}
-            {showGenerateAgain ? (
-              <button
-                type="button"
-                disabled={generateAgainDisabled}
-                onClick={() => void runEngineGenerate({ regenerate: true, preferenceHints })}
-                className={cn(
-                  'rounded-md px-2 py-1 text-[10px] disabled:opacity-40',
-                  hasEnginePreview
-                    ? 'btn-cyan px-2.5 text-[11px] sm:px-3'
-                    : 'border border-border text-foreground hover:bg-secondary',
-                )}
-                title={generateAgainTitle}
-              >
-                {t('uiStudio.generateAgain')}
-              </button>
-            ) : null}
+            <button
+              type="button"
+              disabled={generateDisabled}
+              onClick={() =>
+                void runEngineGenerate({
+                  regenerate: hasEnginePreview,
+                  preferenceHints,
+                })
+              }
+              className="btn-cyan rounded-md px-2.5 py-1 text-[11px] disabled:opacity-40 sm:px-3"
+              title={generateTitle}
+            >
+              {busy ? <Loader2 className="mr-1 inline h-3 w-3 animate-spin" /> : null}
+              {t('uiStudio.generate')}
+            </button>
             {(lastGate === 'pass' || lastGate === 'repair') && hasEnginePreview ? (
               <button
                 type="button"
@@ -2098,7 +2082,7 @@ export function IdeUiStudioBeta({
               Coded app owns <strong className="font-medium">App Preview</strong>. This canvas is the
               editable visual model (not a second live product). Use{' '}
               <strong className="font-medium">Live app</strong> here to see the same Preview, or{' '}
-              <strong className="font-medium">Generate again</strong> to refresh the model.
+              <strong className="font-medium">Generate UI</strong> to refresh the model.
             </span>
             <button
               type="button"

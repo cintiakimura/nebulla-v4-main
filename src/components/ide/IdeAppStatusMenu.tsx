@@ -294,7 +294,6 @@ export function IdeAppStatusMenuButton({
 /** Compact status dot for the preview dock chrome. */
 export function IdeAppStatusPreviewBadge() {
   const { t } = useLanguage();
-  const snap = useAppRuntimeSnapshot();
   const { honesty } = usePreviewHonesty();
   const count = getAppRuntimeErrorCount();
   const runtimeHealthy = count === 0;
