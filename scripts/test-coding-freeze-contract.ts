@@ -39,7 +39,7 @@ assert.equal(
   false,
   'must not label Grok Code running until poll.coding is true',
 );
-assert.match(pipeline, /Grok Code: Foundation slice \(up to ~3 min, no stream\)|GO_SLICE_WAIT_LABEL/);
+assert.match(pipeline, /Code pass 1|GO_CODE_PASS1_LABEL/);
 assert.match(pipeline, /GO_CONSUME_TIMEOUT_MS/, 'consume ack must time out');
 assert.match(pollFn, /GO_POLL_TIMEOUT_MESSAGE/);
 assert.match(pollFn, /onProgress\?\.\(formatBlockedReasonLine\(timedOut\), 'error'\)/);
@@ -114,14 +114,17 @@ assert.equal(
 
 assert.match(chat, /looksLikePostApplyCodingStall/);
 assert.match(chat, /looksLikeApplyInFlightStall/);
-assert.match(chat, /runAutoNextSliceRef\.current\(\)/);
 assert.equal(
   /sendChatRef\.current\('continue building'\)/.test(chat),
   false,
-  'skeleton recovery must auto-run next Go, not wait for a chat message',
+  'stall recovery must not wait for a chat message',
 );
-assert.match(chat, /autopilotHandoffScheduledRef/);
-assert.match(chat, /scheduleAutopilotHandoff\(\)/);
+assert.equal(
+  /scheduleAutopilotHandoff\(\)/.test(chat),
+  false,
+  'same wait must not hand off into Primary autopilot',
+);
+assert.match(chat, /abortGoCodeWait\(projectName\)/);
 assert.equal(
   /diskProjectKey\s*\|\|\s*getBrowserProjectName\(\)/.test(chat),
   false,

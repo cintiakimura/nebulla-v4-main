@@ -85,10 +85,16 @@ export function nextAutopilotSliceLabel(current?: string | null): AutopilotSlice
 /** Auto Go passes after the kickoff Foundation turn (Primary, Secondary, Polish). */
 export const MAX_AUTOPILOT_SLICES = 3;
 
+/**
+ * Same-session Primary/Secondary/Polish chain is a euro sink.
+ * Cap remains a safety net if this is re-enabled. User Continue starts the next slice.
+ */
+export const FAST_PROTOTYPE_SAME_SESSION_AUTOPILOT = false;
+
 export type AutopilotAdvanceDecision = {
   advance: boolean;
   nextLabel: AutopilotSliceLabel | null;
-  stopReason: 'next' | 'done' | 'failed' | 'cap' | 'not_kickoff';
+  stopReason: 'next' | 'done' | 'failed' | 'cap' | 'not_kickoff' | 'session_complete';
   message: string;
 };
 
@@ -111,7 +117,15 @@ export function shouldAutopilotAdvance(opts: {
       advance: false,
       nextLabel: null,
       stopReason: 'failed',
-      message: 'Slice apply failed — autopilot paused. Fix the failing slice, then resume.',
+      message: 'Slice apply failed — paused. Fix the failing slice, then send Continue.',
+    };
+  }
+  if (!FAST_PROTOTYPE_SAME_SESSION_AUTOPILOT) {
+    return {
+      advance: false,
+      nextLabel: null,
+      stopReason: 'session_complete',
+      message: 'Coding complete. Send Continue for the next slice — not started automatically.',
     };
   }
   if (!opts.autopilotKickoff) {
@@ -169,6 +183,7 @@ export function shouldAutoRunPrimarySliceAfterFoundation(opts: {
   sliceLabel?: string | null;
   force?: boolean;
 }): boolean {
+  if (!FAST_PROTOTYPE_SAME_SESSION_AUTOPILOT) return false;
   if (!opts.fastPrototypeTurn || !opts.codingOk) return false;
   if (!opts.force && hasFastPrototypePrimaryAutoRun(opts.projectKey)) return false;
   return looksLikePrePrimaryShellSlice(opts.sliceLabel);

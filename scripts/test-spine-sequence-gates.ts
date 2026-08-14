@@ -8,11 +8,13 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
+  GO_CODE_PASS1_LABEL,
   GO_JOIN_LABEL,
   GO_PREPARING_LABEL,
   GO_SLICE_WAIT_LABEL,
   classifyGoPoll,
   goPollActivityMessage,
+  goPollBackoffMs,
   isUsableProjectGoal,
   uiBriefTooShort,
   uiBriefUsable,
@@ -44,20 +46,28 @@ assert.equal(isGoCodeJobActive("/no-such-go-job"), false);
 section("Gate C copy — never all files in one pass");
 assert.equal(/generating all files in one pass/.test(pipeline), false);
 assert.equal(/Grok Code running on server/.test(pipeline), false);
-assert.match(pipeline, /GO_SLICE_WAIT_LABEL|Grok Code: Foundation slice \(up to ~3 min, no stream\)/);
+assert.match(pipeline, /GO_CODE_PASS1_LABEL|Code pass 1/);
 assert.match(pipeline, /GO_PREPARING_LABEL|Preparing plan before Grok Code/);
 assert.match(pipeline, /GO_JOIN_LABEL|Joining in-flight Foundation job/);
 assert.equal(GO_SLICE_WAIT_LABEL, "Grok Code: Foundation slice (up to ~3 min, no stream)");
 assert.equal(GO_PREPARING_LABEL, "Preparing plan before Grok Code…");
 assert.equal(GO_JOIN_LABEL, "Joining in-flight Foundation job…");
+assert.equal(GO_CODE_PASS1_LABEL, "Code pass 1");
 
 section("Gate C poll classify");
 assert.equal(classifyGoPoll({ idle: true }), "idle");
 assert.equal(classifyGoPoll({ pending: true, preparing: true, coding: false }), "preparing");
 assert.equal(classifyGoPoll({ pending: true, coding: true }), "coding");
 assert.match(goPollActivityMessage("preparing"), /Preparing plan before Grok Code/);
-assert.match(goPollActivityMessage("coding"), /Foundation slice/);
+assert.match(goPollActivityMessage("coding"), /Code pass 1/);
 assert.equal(/all files/i.test(goPollActivityMessage("coding")), false);
+assert.equal(goPollBackoffMs(0), 0);
+assert.equal(goPollBackoffMs(1), 2000);
+assert.equal(goPollBackoffMs(2), 5000);
+assert.match(pipeline, /goPollBackoffMs\(i\)/);
+assert.match(pipeline, /clearCodingLocks\(projectName\)/);
+assert.match(pipeline, /export function abortGoCodeWait/);
+assert.match(chat, /abortGoCodeWait\(projectName\)/);
 
 section("Gate C preparing is not coding");
 {
@@ -155,6 +165,9 @@ assert.match(pipeline, /assessFoundationGoExit/);
 assert.match(pipeline, /blockedReason: blocked/);
 assert.match(server, /blockedReason: blocked/);
 assert.match(server, /GO_MODEL_REJECTED|goBlocked\("RESEARCH_INCOMPLETE"/);
+assert.match(server, /buildCompactGoCodeUserPrompt/);
+assert.match(server, /isUsablePreCodingSummary\(existingSummary\)/);
+assert.equal(/withMem\.slice\(\s*-16\s*\)/.test(server), false);
 
 console.log("\n✓ spine sequence gates passed\n");
 

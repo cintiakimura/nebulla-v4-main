@@ -4,12 +4,16 @@
  */
 export {
   ASK_FOR_SHORT_GOAL,
+  GO_CODE_PASS1_LABEL,
+  GO_CODE_PASS2_LABEL,
   GO_JOIN_LABEL,
   GO_PREPARING_LABEL,
   GO_SLICE_WAIT_LABEL,
   UI_BRIEF_MIN_CHARS,
   classifyGoPoll,
+  goCodePassWaitLabel,
   goPollActivityMessage,
+  goPollBackoffMs,
   isUsableProjectGoal,
   uiBriefTooShort,
 } from '../../lib/spineSequenceClient';

@@ -9,6 +9,7 @@ import {
   isBareGoNote,
   lockedUserConstraintsFromPlan,
   parseGoSliceLabel,
+  shouldRunGoCodeSecondPass,
   shouldSkipPhaseALlm,
 } from "../lib/goSliceContract.ts";
 import { classifyGoFailure } from "../lib/goBlockedReason.ts";
@@ -80,6 +81,21 @@ assert.equal(
   shouldSkipPhaseALlm({
     userNote: "focus on auth screens carefully",
     existingSummary: "SLICE: Auth\n- login only",
+  }),
+  true,
+);
+assert.equal(
+  shouldSkipPhaseALlm({
+    userNote:
+      "START_CODING — SLICE: Primary — implement the NEXT incomplete primary feature slice only",
+    existingSummary: "SLICE: Foundation\n- app/page.tsx shell",
+  }),
+  true,
+);
+assert.equal(
+  shouldSkipPhaseALlm({
+    userNote: "implement ADHD tutor screens in detail for this first pass",
+    existingSummary: "",
   }),
   false,
 );
@@ -173,6 +189,32 @@ assert.match(localSum, /ADHD|tutor|slice/i);
   });
   assert.match(lock, /Roles/);
   assert.match(lock, /Privacy/);
+}
+
+{
+  assert.equal(
+    shouldRunGoCodeSecondPass({
+      totalWritten: 2,
+      writtenPaths: ["app/page.tsx", "app/practice/page.tsx"],
+    }),
+    false,
+  );
+  assert.equal(
+    shouldRunGoCodeSecondPass({
+      totalWritten: 2,
+      writtenPaths: ["src/App.tsx", "src/main.tsx"],
+    }),
+    true,
+  );
+  assert.equal(shouldRunGoCodeSecondPass({ totalWritten: 0, writtenPaths: [] }), true);
+  assert.equal(
+    shouldRunGoCodeSecondPass({
+      totalWritten: 1,
+      writtenPaths: ["master-plan.json"],
+      partialPlanOnly: true,
+    }),
+    true,
+  );
 }
 
 console.log("\n✓ go-slice + security propose + mind-map amend tests passed\n");

@@ -7,27 +7,29 @@ import { startGrokActivityWaitTicker } from './ideGrokActivityStatus';
 import { getGrokRequestHeaders } from './grokUserKey';
 import { formatGoBlockedByPlanMessage } from './masterPlanStatus';
 import { reportGoApplyTelemetry } from './contractTelemetryClient';
-import { assessFoundationGoExit, assessOversizedGoApply, parseGoSliceLabel, type GoSliceLabel } from '../../lib/goSliceContract';
-import { classifyGoFailure, formatBlockedReasonLine, type GoBlockedReason } from '../../lib/goBlockedReason';
+import { assessFoundationGoExit, assessOversizedGoApply, parseGoSliceLabel, shouldRunGoCodeSecondPass, type GoSliceLabel } from '../../lib/goSliceContract';
+import { classifyGoFailure, formatBlockedReasonLine, goBlocked, type GoBlockedReason } from '../../lib/goBlockedReason';
 import { assessApplyRouteDepth } from '../../lib/workspaceCodedAppUi';
 import { UNSOLICITED_BAAS_SKIP_REASON } from '../../lib/mvpStackContract';
 import {
+  GO_CODE_PASS1_LABEL,
   GO_JOIN_LABEL,
   GO_PREPARING_LABEL,
-  GO_SLICE_WAIT_LABEL,
   classifyGoPoll,
+  goCodePassWaitLabel,
   goPollActivityMessage,
+  goPollBackoffMs,
 } from './spineSequenceGates';
 import { withProjectBody, withProjectQuery } from './nebulaProjectApi';
-import { triggerUiStudioBetaAfterFilesApplied } from './uiStudioBetaEngine';
+import { dispatchStudioShowLiveApp, triggerUiStudioBetaAfterFilesApplied } from './uiStudioBetaEngine';
 import { markFoundationGoInFlight } from './foundationHeavyJob';
+import { setGrokCodingActive } from './nebulaGrokCodingGate';
 import {
   FAST_PROTOTYPE_PRIMARY_SLICE_INSTRUCTION,
   userNoteRequestsNextSlice,
 } from './fastPrototypeNextSlice';
 
 const START_CODING_RE = /<\s*START_CODING\s*>|\bSTART_CODING\b/i;
-const GO_POLL_MS = 5000;
 /** Safety cap — wall clock GO_POLL_MAX_WAIT_MS is the real stop. */
 const GO_MAX_POLLS = 36;
 const GO_CODE_MAX_PASSES = 2;
@@ -47,6 +49,24 @@ const GO_POLL_TIMEOUT_MESSAGE =
 
 /** One poll loop per project — do not join ADHD + children onto the same waiter. */
 const goCodePollInFlightByProject = new Map<string, Promise<GoCodePayload>>();
+const goCodePollAbortedByProject = new Set<string>();
+
+function goPollProjectKey(projectName?: string): string {
+  return (projectName || '').trim() || 'default';
+}
+
+function clearCodingLocks(projectName: string): void {
+  markFoundationGoInFlight(projectName, false);
+  setGrokCodingActive(false);
+}
+
+/** Stop / timeout: abort poll wait and drop in-flight so UI Gen is not refused. */
+export function abortGoCodeWait(projectName: string): void {
+  const key = goPollProjectKey(projectName);
+  goCodePollAbortedByProject.add(key);
+  goCodePollInFlightByProject.delete(key);
+  clearCodingLocks(projectName);
+}
 
 function sleep(ms: number): Promise<void> {
   return new Promise((r) => window.setTimeout(r, ms));
@@ -432,7 +452,10 @@ export async function applyGeneratedFiles(
         try {
           window.dispatchEvent(new CustomEvent('nebula-files-applied'));
           window.dispatchEvent(new CustomEvent('nebula-reload-app-preview'));
-          if (apply.interactivePreview) {
+          if (!assessApplyRouteDepth(writtenPaths).zeroProductRoutes) {
+            dispatchStudioShowLiveApp();
+            window.dispatchEvent(new CustomEvent('nebula-open-app-preview'));
+          } else if (apply.interactivePreview) {
             window.dispatchEvent(new CustomEvent('nebula-open-app-preview'));
           }
         } catch {
@@ -553,15 +576,16 @@ type GoCodePayload = {
 async function pollGoCodeUntilDone(
   projectName: string,
   onProgress?: GrokActivityProgressFn,
+  codingLabel: string = GO_CODE_PASS1_LABEL,
 ): Promise<GoCodePayload> {
-  const key = projectName.trim() || 'default';
+  const key = goPollProjectKey(projectName);
   const existing = goCodePollInFlightByProject.get(key);
   if (existing) {
     onProgress?.('Go already polling on server — joining existing wait…', 'info');
     return existing;
   }
 
-  const run = pollGoCodeUntilDoneInner(projectName, onProgress).finally(() => {
+  const run = pollGoCodeUntilDoneInner(projectName, onProgress, codingLabel).finally(() => {
     goCodePollInFlightByProject.delete(key);
   });
   goCodePollInFlightByProject.set(key, run);
@@ -571,13 +595,25 @@ async function pollGoCodeUntilDone(
 async function pollGoCodeUntilDoneInner(
   projectName: string,
   onProgress?: GrokActivityProgressFn,
+  codingLabel: string = GO_CODE_PASS1_LABEL,
 ): Promise<GoCodePayload> {
+  const key = goPollProjectKey(projectName);
+  goCodePollAbortedByProject.delete(key);
   const deadline = Date.now() + GO_POLL_MAX_WAIT_MS;
   for (let i = 0; i < GO_MAX_POLLS; i++) {
+    if (goCodePollAbortedByProject.has(key)) {
+      goCodePollAbortedByProject.delete(key);
+      const stopped = goBlocked('GO_FAILED', 'Stopped — coding cancelled.');
+      return { error: formatBlockedReasonLine(stopped), blockedReason: stopped, code: stopped.code };
+    }
     if (Date.now() >= deadline) break;
-    const sleepMs = Math.min(GO_POLL_MS, Math.max(0, deadline - Date.now()));
-    if (sleepMs <= 0) break;
-    await sleep(sleepMs);
+    const sleepMs = Math.min(goPollBackoffMs(i), Math.max(0, deadline - Date.now()));
+    if (sleepMs > 0) await sleep(sleepMs);
+    if (goCodePollAbortedByProject.has(key)) {
+      goCodePollAbortedByProject.delete(key);
+      const stopped = goBlocked('GO_FAILED', 'Stopped — coding cancelled.');
+      return { error: formatBlockedReasonLine(stopped), blockedReason: stopped, code: stopped.code };
+    }
     if (Date.now() >= deadline) break;
     try {
       const pollTimed = abortAfter(GO_POLL_FETCH_TIMEOUT_MS);
@@ -639,7 +675,6 @@ async function pollGoCodeUntilDoneInner(
       }
       const phase = classifyGoPoll(poll);
       if (phase === 'preparing' || (poll.pending && poll.preparing && !poll.coding)) {
-        // Phase 5: preparing is not coding.
         if (i === 0 || i % 6 === 0) {
           onProgress?.(goPollActivityMessage('preparing', poll.elapsedMs), 'info');
         }
@@ -647,7 +682,7 @@ async function pollGoCodeUntilDoneInner(
       }
       if (poll.pending && poll.coding) {
         if (i === 0 || i % 6 === 0) {
-          onProgress?.(goPollActivityMessage('coding', poll.elapsedMs), 'info');
+          onProgress?.(codingLabel, 'info');
         }
         continue;
       }
@@ -682,6 +717,7 @@ async function kickGoCodeJob(options: {
   onProgress?: GrokActivityProgressFn;
 }): Promise<GoCodePayload> {
   const { userId, projectName, userNote, messages, continuation, onProgress } = options;
+  const codingLabel = goCodePassWaitLabel(continuation ? 2 : 1, parseGoSliceLabel(userNote));
 
   let prePoll: GoCodePayload | null = null;
   if (!continuation) {
@@ -734,11 +770,11 @@ async function kickGoCodeJob(options: {
   try {
     if (prePoll?.pending && prePoll.coding) {
       switchWaitLabel(GO_JOIN_LABEL);
-      return await pollGoCodeUntilDone(projectName, onProgress);
+      return await pollGoCodeUntilDone(projectName, onProgress, codingLabel);
     }
     if (prePoll?.pending && prePoll.preparing) {
       switchWaitLabel(GO_PREPARING_LABEL);
-      return await pollGoCodeUntilDone(projectName, onProgress);
+      return await pollGoCodeUntilDone(projectName, onProgress, codingLabel);
     }
 
     const GO_KICK_TIMEOUT_MS = 55_000;
@@ -772,7 +808,7 @@ async function kickGoCodeJob(options: {
           'warn',
         );
         switchWaitLabel(GO_PREPARING_LABEL);
-        return await pollGoCodeUntilDone(projectName, onProgress);
+        return await pollGoCodeUntilDone(projectName, onProgress, codingLabel);
       }
       throw err;
     } finally {
@@ -797,7 +833,7 @@ async function kickGoCodeJob(options: {
         );
         await sleep(waitSec * 1000);
         switchWaitLabel(GO_PREPARING_LABEL);
-        return await pollGoCodeUntilDone(projectName, onProgress);
+        return await pollGoCodeUntilDone(projectName, onProgress, codingLabel);
       }
       const blocked = classifyGoFailure({
         httpStatus: goRes.status,
@@ -818,19 +854,19 @@ async function kickGoCodeJob(options: {
     }
 
     if (data.pending && data.coding) {
-      switchWaitLabel(GO_SLICE_WAIT_LABEL);
+      switchWaitLabel(codingLabel);
       onProgress?.(
         continuation
-          ? 'Continuing Foundation slice (up to ~3 min, no stream)…'
-          : `Pre-coding summary saved — ${GO_SLICE_WAIT_LABEL}`,
+          ? `${codingLabel} — empty/zero-route retry (up to ~3 min, no stream)…`
+          : `Pre-coding summary saved — ${codingLabel}`,
         'info',
       );
-      return await pollGoCodeUntilDone(projectName, onProgress);
+      return await pollGoCodeUntilDone(projectName, onProgress, codingLabel);
     }
     if (data.pending && data.preparing) {
       switchWaitLabel(GO_PREPARING_LABEL);
       onProgress?.(GO_PREPARING_LABEL, 'info');
-      return await pollGoCodeUntilDone(projectName, onProgress);
+      return await pollGoCodeUntilDone(projectName, onProgress, codingLabel);
     }
     return data;
   } finally {
@@ -855,25 +891,27 @@ export async function runGoCodeAndApply(options: {
   productRouteCount?: number;
 }> {
   const { userId, projectName, userNote, messages, onProgress } = options;
+  const noteSlice = parseGoSliceLabel(userNote);
   const baseMessages =
     messages && messages.length > 0
       ? messages.map((m) => ({
           role: m.role,
-          content: m.content.slice(0, 12000),
+          content: m.content.slice(0, 2000),
         }))
       : [
           {
             role: 'user' as const,
-            content:
-              userNote && userNote.trim()
-                ? `START_CODING — implement ONE coherent slice only (Build → Debug → Next; see incremental-development.md). Session focus: ${userNote.trim()}. Prefer Foundation first if no shell exists; do not dump every §4 route. File blocks only — not master-plan.json only.`
-                : 'START_CODING — implement ONE coherent slice only per master-plan.json, project-execution-rules.md, and incremental-development.md. Foundation → Auth → Data/API → Primary → Secondary → Polish. File blocks for this slice only.',
+            content: (userNote && userNote.trim()
+              ? userNote.trim()
+              : 'START_CODING — Foundation slice only'
+            ).slice(0, 2000),
           },
         ];
 
   markFoundationGoInFlight(projectName, true);
+  setGrokCodingActive(true);
   try {
-    onProgress?.('Go — Grok Code: Foundation slice (not all files)', 'info');
+    onProgress?.(`Go — ${goCodePassWaitLabel(1, noteSlice)}`, 'info');
 
     let totalWritten = 0;
     const allWrittenPaths: string[] = [];
@@ -898,7 +936,7 @@ export async function runGoCodeAndApply(options: {
 
       if (continuation) {
         onProgress?.(
-          'Only Master Plan was updated — auto-continuing Foundation slice (do not press Go again)',
+          `${goCodePassWaitLabel(2, noteSlice)} — empty or zero product routes after pass 1`,
           'warn',
         );
       }
@@ -988,26 +1026,21 @@ export async function runGoCodeAndApply(options: {
       }
 
       if (apply.ok && apply.writtenCount > 0) {
-        onProgress?.('Slice files on disk — auto-advance continues (not waiting on poll ack)…', 'info');
-        // Never await consume — a hung poll ack left chat stuck on "Runnable skeleton filled".
+        onProgress?.('Slice files on disk — coding complete for this wait (not starting the next slice)…', 'info');
         ackConsumedGoCodeResult(projectName);
       }
 
-      if (!apply.ok) {
-        partialPlanOnly = isPlanOnlyApply(apply.writtenPaths) && apply.runnableRoot !== true;
-        if (pass >= GO_CODE_MAX_PASSES - 1) break;
-        if (!partialPlanOnly) break;
-        continue;
-      }
-
-      // Runnable Next/Vite skeleton counts as Foundation only when product routes exist.
-      partialPlanOnly = isPlanOnlyApply(apply.writtenPaths) && apply.runnableRoot !== true;
-      const depthSoFar = assessApplyRouteDepth(allWrittenPaths);
-      if (!partialPlanOnly && apply.writtenCount >= 2 && !depthSoFar.zeroProductRoutes) {
+      partialPlanOnly = isPlanOnlyApply(allWrittenPaths) && lastRunnable.runnableRoot !== true;
+      if (pass >= GO_CODE_MAX_PASSES - 1) break;
+      if (
+        !shouldRunGoCodeSecondPass({
+          totalWritten,
+          writtenPaths: allWrittenPaths,
+          partialPlanOnly,
+        })
+      ) {
         break;
       }
-      if (pass >= GO_CODE_MAX_PASSES - 1) break;
-      if (!partialPlanOnly && !depthSoFar.zeroProductRoutes) break;
     }
 
     if (totalWritten > 0) {
@@ -1107,7 +1140,7 @@ export async function runGoCodeAndApply(options: {
       blockedReason: blocked,
     };
   } finally {
-    markFoundationGoInFlight(projectName, false);
+    clearCodingLocks(projectName);
   }
 }
 
@@ -1202,7 +1235,6 @@ export async function handlePostGrokCodingTurn(options: {
     return { ran: false };
   }
 
-  const codingSource = planning || assistantContent;
   const nextSlice = userNoteRequestsNextSlice(userNote);
   onProgress?.(
     nextSlice
@@ -1216,12 +1248,11 @@ export async function handlePostGrokCodingTurn(options: {
     userNote,
     onProgress,
     messages: [
-      { role: 'assistant', content: codingSource.slice(0, 12000) },
       {
         role: 'user',
         content: nextSlice
           ? FAST_PROTOTYPE_PRIMARY_SLICE_INSTRUCTION
-          : 'START_CODING — implement ONE coherent Foundation slice only (Build → Debug → Next). Prefer app/, src/, components/, pages/ — not master-plan/ui-brief only. File blocks for this slice only — not the full §4 app.',
+          : (userNote || 'START_CODING — Foundation slice only').slice(0, 2000),
       },
     ],
   });

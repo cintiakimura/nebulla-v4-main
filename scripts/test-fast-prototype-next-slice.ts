@@ -42,7 +42,8 @@ assert.equal(
     projectKey: 'p1',
     sliceLabel: 'Foundation',
   }),
-  true,
+  false,
+  'same-session autopilot is off — Foundation must not auto-start Primary',
 );
 
 markFastPrototypePrimaryAutoRun('p1');
@@ -77,7 +78,7 @@ assert.equal(
   false,
 );
 
-// First Go often returns Auth for shell+login — still auto Primary once.
+// First Go often returns Auth for shell+login — still do not auto Primary in the same wait.
 assert.equal(
   shouldAutoRunPrimarySliceAfterFoundation({
     fastPrototypeTurn: true,
@@ -85,7 +86,7 @@ assert.equal(
     projectKey: 'p-auth',
     sliceLabel: 'Auth',
   }),
-  true,
+  false,
 );
 
 assert.match(FAST_PROTOTYPE_PRIMARY_SLICE_INSTRUCTION, /SLICE: Primary/);
@@ -103,8 +104,9 @@ assert.equal(nextAutopilotSliceLabel('Secondary'), 'Polish');
     autoCount: 0,
     autopilotKickoff: true,
   });
-  assert.equal(d.advance, true);
-  assert.equal(d.nextLabel, 'Primary');
+  assert.equal(d.advance, false);
+  assert.equal(d.stopReason, 'session_complete');
+  assert.match(d.message, /not started automatically/i);
 }
 {
   const d = shouldAutopilotAdvance({
@@ -114,7 +116,7 @@ assert.equal(nextAutopilotSliceLabel('Secondary'), 'Polish');
     autopilotKickoff: true,
   });
   assert.equal(d.advance, false);
-  assert.equal(d.stopReason, 'done');
+  assert.equal(d.stopReason, 'session_complete');
 }
 {
   const d = shouldAutopilotAdvance({
@@ -124,7 +126,7 @@ assert.equal(nextAutopilotSliceLabel('Secondary'), 'Polish');
     autopilotKickoff: true,
   });
   assert.equal(d.advance, false);
-  assert.equal(d.stopReason, 'cap');
+  assert.equal(d.stopReason, 'session_complete');
 }
 {
   const d = shouldAutopilotAdvance({
@@ -144,8 +146,8 @@ assert.equal(nextAutopilotSliceLabel('Secondary'), 'Polish');
     autopilotKickoff: true,
     productRouteCount: 2,
   });
-  assert.equal(d.advance, true);
-  assert.equal(d.nextLabel, 'Primary');
+  assert.equal(d.advance, false);
+  assert.equal(d.nextLabel, null);
 }
 assert.match(buildAutopilotSliceInstruction('Secondary'), /SLICE: Secondary/);
 
@@ -169,15 +171,20 @@ assert.ok(FOUNDATION_APPLY_STALL_MS >= 3000 && FOUNDATION_APPLY_STALL_MS <= 8000
 {
   const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
   const chat = fs.readFileSync(path.join(root, 'src/components/ide/AIChat.tsx'), 'utf8');
-  assert.match(
-    chat,
-    /runAutoNextSliceRef\.current\(\)/,
-    'Foundation success must schedule runGoCodeAndApply via autopilot (no user continue-building message)',
+  assert.equal(
+    /Starting Primary slice automatically/.test(chat),
+    false,
+    'same wait must not auto-start Primary',
+  );
+  assert.equal(
+    /queueAutopilotAfterUnlock = true/.test(chat),
+    false,
+    'sendChat must not queue a same-session autopilot Go',
   );
   assert.equal(
     /sendChatRef\.current\('continue building'\)/.test(chat),
     false,
-    'autopilot must not wait for a continue-building chat turn',
+    'must not inject a continue-building chat turn',
   );
   assert.match(
     chat,
@@ -188,78 +195,37 @@ assert.ok(FOUNDATION_APPLY_STALL_MS >= 3000 && FOUNDATION_APPLY_STALL_MS <= 8000
   assert.match(
     pipeline,
     /userNoteRequestsNextSlice\(userNote\)/,
-    'Go after continue building must request Primary, not rewrite Foundation',
+    'explicit Continue may request Primary, not rewrite Foundation',
   );
+  assert.match(pipeline, /shouldRunGoCodeSecondPass/);
+  assert.match(pipeline, /clearCodingLocks/);
   const applyFn = pipeline.slice(pipeline.indexOf('export async function applyGeneratedFiles'));
   assert.match(
     applyFn,
     /window\.setTimeout/,
     'post-apply preview events must be deferred so they cannot stall coding',
   );
-
-  assert.match(
-    chat,
-    /autopilotHandoffScheduledRef/,
-    'stall recovery and sendChat finally must share a single handoff latch',
-  );
-  const handoffFn = chat.slice(
-    chat.indexOf('const scheduleAutopilotHandoff = useCallback'),
-    chat.indexOf('/** Manual V0 watch only'),
-  );
-  assert.match(
-    handoffFn,
-    /if \(autopilotHandoffScheduledRef\.current\) return/,
-    'handoff latch must no-op if already scheduled',
-  );
-  assert.match(handoffFn, /autopilotHandoffScheduledRef\.current = true/);
-  assert.match(
-    handoffFn,
-    /resolveActiveProjectIds\(diskProjectKey\)/,
-    'ack must use resolved ids, not mixed name/key fallbacks',
-  );
-  assert.match(handoffFn, /ackConsumedGoCodeResult\(projectName\)/);
-  assert.equal(
-    /getBrowserProjectName\(\)\s*\|\|/.test(handoffFn),
-    false,
-    'handoff must not ack with getBrowserProjectName() || projectKey',
-  );
+  assert.match(applyFn, /dispatchStudioShowLiveApp/);
 
   const stallBlock = chat.slice(
     chat.indexOf('Foundation apply used to freeze'),
     chat.indexOf('Detect natural language project creation'),
   );
-  assert.match(stallBlock, /scheduleAutopilotHandoff\(\)/);
-  assert.match(
-    stallBlock,
-    /autoSliceInFlightRef\.current/,
-    'post-apply stall must not start another Go while apply/autopilot is in flight',
+  assert.equal(
+    /scheduleAutopilotHandoff\(\)/.test(stallBlock),
+    false,
+    'post-apply stall must not start Primary in the same wait',
   );
   assert.match(stallBlock, /looksLikeApplyInFlightStall/);
+  assert.match(stallBlock, /Coding complete/);
   assert.equal(
     /sendChatRef\.current\(/.test(stallBlock),
     false,
     'stall recovery must not send a chat message',
   );
-
-  const autoFn = chat.slice(
-    chat.indexOf('const runAutoNextSlice = useCallback'),
-    chat.indexOf('runAutoNextSliceRef.current = runAutoNextSlice'),
-  );
-  assert.match(
-    autoFn,
-    /setAssistantInteractionMode\('agent'\)/,
-    'autopilot Go must switch Chat → Agent without a tap',
-  );
-
-  const finallyIdx = chat.lastIndexOf('if (queueAutopilotAfterUnlock)');
-  assert.ok(finallyIdx > 0, 'sendChat finally must queue autopilot after unlock');
-  const finallyBlock = chat.slice(finallyIdx, finallyIdx + 350);
-  assert.match(finallyBlock, /scheduleAutopilotHandoff\(\)/);
-  assert.equal(/sendChatRef\.current\(/.test(finallyBlock), false);
   assert.equal(
-    /continue building/.test(finallyBlock),
+    /auto-starting the next slice/.test(stallBlock),
     false,
-    'sendChat finally must not queue continue building (duplicate with stall recovery)',
   );
 
   assert.equal(
@@ -272,6 +238,7 @@ assert.ok(FOUNDATION_APPLY_STALL_MS >= 3000 && FOUNDATION_APPLY_STALL_MS <= 8000
     false,
     'ack must not use a mixed display-name / projectKey fallback',
   );
+  assert.match(chat, /abortGoCodeWait\(projectName\)/);
 }
 
 {

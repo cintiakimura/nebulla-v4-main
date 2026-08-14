@@ -140,7 +140,11 @@ import { MOCKUP_NON_AUTHORITATIVE_GO_BULLETS } from "./lib/codingMockupContract"
 import {
   buildLocalPreCodingSummary,
   applyClampedSliceToSummary,
+  buildCompactGoCodeUserPrompt,
+  formatSlicePromptLine,
+  isUsablePreCodingSummary,
   lockedUserConstraintsFromPlan,
+  parseGoSliceLabel,
   shouldSkipPhaseALlm,
 } from "./lib/goSliceContract";
 import { classifyGoFailure, goBlocked } from "./lib/goBlockedReason";
@@ -5059,12 +5063,14 @@ Rules:
       const skipPhaseA = shouldSkipPhaseALlm({ userNote: note, existingSummary });
 
       if (skipPhaseA) {
-        summary = buildLocalPreCodingSummary({
-          workspaceRoot: ppGo.workspaceRoot,
-          userNote: note,
-          existingSummary,
-          projectName: convProject,
-        });
+        summary = isUsablePreCodingSummary(existingSummary)
+          ? existingSummary.slice(0, 2000)
+          : buildLocalPreCodingSummary({
+              workspaceRoot: ppGo.workspaceRoot,
+              userNote: note,
+              existingSummary,
+              projectName: convProject,
+            });
         console.log(
           `[go-code] Local ${PRE_CODING_SUMMARY_KEY} (skipped Grok-4 Phase A; ${summary.length} chars)`,
         );
@@ -5256,25 +5262,25 @@ ${lockedUserConstraintsFromPlan(planSnapshot)}
 
 ${workflowContext}`;
 
-      const incomingMessages: { role: string; content?: string }[] = Array.isArray(messages) ? messages : [];
-      const normalized = incomingMessages.map((m) => ({
-        role: m.role === "model" ? "assistant" : m.role,
-        content: typeof m.content === "string" ? m.content : "",
-      }));
-      const withMem = injectMemoryIntoMessages(normalized, memory);
-      const codeUserContent = continuation
-        ? `CONTINUATION — master-plan.json is ready; emit the Foundation slice now (layout, globals, root page, minimal shell). Do NOT implement every §4 route. Focus: ${note || "(foundation shell)"}`
-        : `Run the coding pass now. Output ONE coherent slice only (Build → Debug → Next) — not the full app. Respect "${PRE_CODING_SUMMARY_KEY}" and Master Plan §4 for that slice's scope. Session focus: ${note || "(next incomplete slice)"}`;
+      const sliceFromNote = parseGoSliceLabel(note);
+      const sliceFromSummary = parseGoSliceLabel(summary);
+      const sliceLine = formatSlicePromptLine(sliceFromNote || sliceFromSummary || "Foundation");
+      const briefPages = parsePagesFromUiBrief(uiArts.uiBrief.content || "")
+        .slice(0, 14)
+        .map((p) => `- ${p.name} \`${p.route}\``)
+        .join("\n");
+      const compactUser = buildCompactGoCodeUserPrompt({
+        sliceLine,
+        goal: String(planSnapshot["1. Goal of the app"] || ""),
+        pagesSection: String(planSnapshot["4. Pages and navigation"] || ""),
+        constraints: lockedUserConstraintsFromPlan(planSnapshot),
+        uiBriefPageList: briefPages,
+        sessionFocus: note || (continuation ? "(foundation shell)" : "(next incomplete slice)"),
+        continuation,
+      });
       const codeMessages: { role: string; content: string }[] = [
         { role: "system", content: codeSystemPrompt },
-        ...withMem.slice(-16).map((m) => ({
-          role: String(m.role || "user"),
-          content: typeof m.content === "string" ? m.content : "",
-        })),
-        {
-          role: "user",
-          content: codeUserContent,
-        },
+        { role: "user", content: compactUser },
       ];
 
       const kicked = scheduleGoCodeJob({

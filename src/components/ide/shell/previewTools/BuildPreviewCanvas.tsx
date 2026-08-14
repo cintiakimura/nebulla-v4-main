@@ -7,6 +7,7 @@ import { PreviewEditToolbar, type PreviewToolbarState } from './PreviewEditToolb
 import { PreviewWaitingThrobber } from './PreviewWaitingThrobber';
 import {
   applyUiStudioBetaToAppPreview,
+  NEBULA_STUDIO_SHOW_LIVE_APP,
   NEBULA_UI_STUDIO_BETA_BUSY,
   NEBULA_UI_STUDIO_BETA_COMPLETE,
   runUiStudioBetaGeneration,
@@ -80,6 +81,10 @@ export function BuildPreviewCanvas() {
       setShowMockup(true);
       bump();
     };
+    const onShowLive = () => {
+      setShowMockup(false);
+      bump();
+    };
     const onBusy = (ev: Event) => {
       const busy = Boolean((ev as CustomEvent<{ busy?: boolean }>).detail?.busy);
       setEngineBusy(busy);
@@ -99,12 +104,14 @@ export function BuildPreviewCanvas() {
     window.addEventListener('nebula-files-applied', bump);
     window.addEventListener('nebula-reload-app-preview', bump);
     window.addEventListener('nebula-preview-show-mockup', onShowMockup);
+    window.addEventListener(NEBULA_STUDIO_SHOW_LIVE_APP, onShowLive);
     window.addEventListener(NEBULA_UI_STUDIO_BETA_BUSY, onBusy);
     window.addEventListener(NEBULA_UI_STUDIO_BETA_COMPLETE, onComplete);
     return () => {
       window.removeEventListener('nebula-files-applied', bump);
       window.removeEventListener('nebula-reload-app-preview', bump);
       window.removeEventListener('nebula-preview-show-mockup', onShowMockup);
+      window.removeEventListener(NEBULA_STUDIO_SHOW_LIVE_APP, onShowLive);
       window.removeEventListener(NEBULA_UI_STUDIO_BETA_BUSY, onBusy);
       window.removeEventListener(NEBULA_UI_STUDIO_BETA_COMPLETE, onComplete);
     };

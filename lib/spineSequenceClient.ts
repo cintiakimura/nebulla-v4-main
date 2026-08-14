@@ -8,6 +8,26 @@
 export const GO_SLICE_WAIT_LABEL = "Grok Code: Foundation slice (up to ~3 min, no stream)";
 export const GO_PREPARING_LABEL = "Preparing plan before Grok Code…";
 export const GO_JOIN_LABEL = "Joining in-flight Foundation job…";
+export const GO_CODE_PASS1_LABEL = "Code pass 1";
+export const GO_CODE_PASS2_LABEL = "Code pass 2";
+
+/** First poll immediately, then 2s, then 5s. */
+export const GO_POLL_FIRST_MS = 0;
+export const GO_POLL_SECOND_MS = 2000;
+export const GO_POLL_LATER_MS = 5000;
+
+export function goPollBackoffMs(pollIndex: number): number {
+  if (pollIndex <= 0) return GO_POLL_FIRST_MS;
+  if (pollIndex === 1) return GO_POLL_SECOND_MS;
+  return GO_POLL_LATER_MS;
+}
+
+export function goCodePassWaitLabel(pass: number, sliceLabel?: string | null): string {
+  const n = pass <= 1 ? 1 : 2;
+  const slice = String(sliceLabel || "").trim();
+  if (slice && !/^foundation$/i.test(slice)) return `Code pass ${n} (${slice})`;
+  return n === 2 ? GO_CODE_PASS2_LABEL : GO_CODE_PASS1_LABEL;
+}
 
 export type GoPollPhase = "idle" | "preparing" | "coding" | "done" | "error";
 
@@ -34,9 +54,7 @@ export function goPollActivityMessage(phase: GoPollPhase, elapsedMs?: number): s
   if (phase === "preparing") return GO_PREPARING_LABEL;
   if (phase === "coding") {
     const mins = elapsedMs ? Math.round(elapsedMs / 60_000) : 0;
-    return mins >= 1
-      ? `${GO_SLICE_WAIT_LABEL} (~${mins} min)`
-      : GO_SLICE_WAIT_LABEL;
+    return mins >= 1 ? `${GO_CODE_PASS1_LABEL} (~${mins} min)` : GO_CODE_PASS1_LABEL;
   }
   return GO_PREPARING_LABEL;
 }

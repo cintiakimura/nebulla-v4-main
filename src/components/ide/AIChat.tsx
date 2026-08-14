@@ -59,6 +59,7 @@ import {
 import { sanitizeAssistantChatText } from '../../../lib/assistantChatSanitize';
 import { dispatchOpenUiStudio, dispatchStartUiUxWorkflow } from '../../lib/nebulaUiStudioEvents';
 import {
+  abortGoCodeWait,
   ackConsumedGoCodeResult,
   handlePostGrokCodingTurn,
   applyArchitectureArtifactsFromAssistant,
@@ -88,7 +89,7 @@ import { setGrokCodingActive } from '../../lib/nebulaGrokCodingGate';
 import { runMasterPlanUiPipeline } from '../../lib/ideArtifactSync';
 import {
   applyUiStudioBetaToAppPreview,
-  dispatchOpenUiStudioBeta,
+  dispatchStudioShowLiveApp,
   triggerUiStudioBetaAfterPlanReady,
 } from '../../lib/uiStudioBetaEngine';
 import {
@@ -753,9 +754,11 @@ export function AIChat() {
     sendingAbortRef.current = null;
     sendingRef.current = false;
     setSending(false);
+    const { projectName } = resolveActiveProjectIds(diskProjectKey);
+    abortGoCodeWait(projectName);
     resetCodingActivity();
-    pushActivity('Stopped — autopilot cancelled. Chat is unlocked.', 'info');
-  }, [pushActivity, resetCodingActivity]);
+    pushActivity('Stopped — coding cancelled. Chat is unlocked.', 'info');
+  }, [diskProjectKey, pushActivity, resetCodingActivity]);
 
   const clearVoiceIdleTimer = () => {
     if (voiceIdleTimerRef.current != null) {
@@ -1320,15 +1323,11 @@ export function AIChat() {
 
   const sendChatRef = useRef<(override?: string) => Promise<void>>(async () => {});
 
-  // Foundation apply used to freeze on "Runnable skeleton filled" (preview events + poll ack).
-  // If that line is still the last work log after a few seconds, unlock and start the next slice.
-  // "Writing files to cloud workspace" means the apply POST is still in flight — do not start
-  // another Go (that poisoned the handoff latch while Primary was hung).
+  // Foundation apply used to freeze on "Runnable skeleton filled". Unlock coding; do not auto-start Primary.
   useEffect(() => {
     if (grokActivity.tone !== 'work') return;
     const last = grokActivity.liveLog[grokActivity.liveLog.length - 1]?.message || '';
     if (looksLikeApplyInFlightStall(last)) {
-      // applyGeneratedFiles owns the 12s hard timeout + disk confirm — do not extend "writing…"
       return;
     }
     if (!looksLikePostApplyCodingStall(last)) return;
@@ -1336,16 +1335,14 @@ export function AIChat() {
       if (!codingActivityRef.current) return;
       if (foundationStallRecoveredRef.current) return;
       if (autoSliceAbortRef.current) return;
-      if (autoSliceInFlightRef.current) return;
-      if (autopilotHandoffScheduledRef.current) return;
-      lastAutoSliceLabelRef.current = lastAutoSliceLabelRef.current || 'Foundation';
-      pushActivity('Foundation files are on disk — auto-starting the next slice…', 'success');
-      setAccessoryHint('Starting next screens automatically…');
-      window.setTimeout(() => setAccessoryHint(null), 8000);
-      scheduleAutopilotHandoff();
+      foundationStallRecoveredRef.current = true;
+      const { projectName } = resolveActiveProjectIds(diskProjectKey);
+      abortGoCodeWait(projectName);
+      pushActivity('Coding complete. Send Continue for the next slice — not started automatically.', 'success');
+      resetCodingActivity();
     }, FOUNDATION_APPLY_STALL_MS);
     return () => window.clearTimeout(timer);
-  }, [diskProjectKey, grokActivity.liveLog, grokActivity.tone, pushActivity, scheduleAutopilotHandoff]);
+  }, [diskProjectKey, grokActivity.liveLog, grokActivity.tone, pushActivity, resetCodingActivity]);
 
   /** Detect natural language project creation requests like "Create a new project: fitness tracker" */
   function detectProjectCreationIntent(text: string): { description: string } | null {
@@ -1817,7 +1814,6 @@ export function AIChat() {
     const session = await fetchSessionUser();
     const userId = session?.uid?.trim() || 'anonymous';
     let scheduledTts = false;
-    let queueAutopilotAfterUnlock = false;
 
     try {
       if (showWorkActivity) {
@@ -2321,7 +2317,6 @@ export function AIChat() {
             ? FAST_PROTOTYPE_PRIMARY_SLICE_INSTRUCTION
             : 'START_CODING — implement ONE coherent Foundation slice only (Build → Debug → Next). Prefer app/, src/, components/, pages/ — not master-plan/ui-brief only. File blocks for this slice only — not the full §4 app.';
           const goMessages = [
-            { role: 'assistant' as const, content: masterPlanSource.slice(0, 12000) },
             {
               role: 'user' as const,
               content: goSliceInstruction,
@@ -2453,39 +2448,22 @@ export function AIChat() {
             if (showWorkActivity) {
               setGrokActivity((prev) =>
                 advanceGrokActivity(prev, showWorkActivity ? 6 : 4, {
-                  currentAction: uiMockupStarted
-                    ? 'Coding slice applied — post-code UI path runs with file apply'
-                    : 'Grok Code finished — opening UI Studio Beta…',
+                  currentAction: 'Coding slice applied — opening live App Preview',
                   log: {
-                    message: uiMockupStarted
-                      ? 'Post-code UI refresh is handled inside Go apply (one auto pass / session)'
-                      : 'UI Studio Beta after coding (fallback)',
+                    message: 'Coded app owns App Preview (not the UI Studio mockup)',
                     kind: 'info',
                   },
                 }),
               );
             }
-            if (!uiMockupStarted) {
-              try {
-                window.dispatchEvent(new CustomEvent('nebula-open-app-preview'));
-              } catch {
-                /* ignore */
-              }
-              pushActivity('Coding pass finished — opening App Preview (not UI Studio mockup)', 'info');
-            } else {
-              try {
-                window.dispatchEvent(new CustomEvent('nebula-open-app-preview'));
-              } catch {
-                /* ignore */
-              }
-              pushActivity(
-                'Coding slice done — opening live App Preview (interactive product, not the UI Studio mockup)',
-                'success',
-              );
+            try {
+              dispatchStudioShowLiveApp();
+              window.dispatchEvent(new CustomEvent('nebula-open-app-preview'));
+            } catch {
+              /* ignore */
             }
+            pushActivity('Coding slice done — opening live App Preview (not the UI Studio mockup)', 'success');
 
-            // Finish this slice immediately (do not nest another Go await).
-            // Autopilot schedules the next slice without a user chat message.
             const codingSliceLabel =
               (coding as { sliceLabel?: string | null }).sliceLabel ?? 'Foundation';
             lastAutoSliceLabelRef.current = codingSliceLabel;
@@ -2500,18 +2478,8 @@ export function AIChat() {
               autopilotKickoff: fastPrototypeTurn || uiMockupStarted,
               productRouteCount: lastAutoProductRouteCountRef.current,
             });
-            if (autoDecision.advance) {
-              queueAutopilotAfterUnlock = true;
-              pushActivity(autoDecision.message, 'success');
-              setAccessoryHint(autoDecision.message);
-              window.setTimeout(() => setAccessoryHint(null), 8000);
-            } else {
-              pushActivity(autoDecision.message, 'success');
-            }
-
-            if (!queueAutopilotAfterUnlock) {
-              resetCodingActivity();
-            }
+            pushActivity(autoDecision.message, 'success');
+            resetCodingActivity();
           }
         } else if (hasAppStatusPayload && agentAllowed && assistantSkippedNdmVerify(raw)) {
           setAccessoryHint(t('appStatus.ndmNudge'));
@@ -2557,14 +2525,11 @@ export function AIChat() {
     } finally {
       sendingRef.current = false;
       setSending(false);
-      if (queueAutopilotAfterUnlock) {
-        scheduleAutopilotHandoff();
-      }
       if (openTalkDesiredRef.current && !scheduledTts) {
         resumeOpenTalkIfWanted();
     }
     }
-  }, [sending, activePath, activeTab?.content, serverHasGrokKey, micInputBlocked, workspaceRootLabel, gitBranch, tabs, pauseHandsFreeListening, resumeOpenTalkIfWanted, beginCodingActivity, pushActivity, resetCodingActivity, workspacePaths.length, noteUserMessageForMirror, prefs.contentMode, resolvedIdeLocale, t, localeLabels, scheduleAutopilotHandoff]);
+  }, [sending, activePath, activeTab?.content, serverHasGrokKey, micInputBlocked, workspaceRootLabel, gitBranch, tabs, pauseHandsFreeListening, resumeOpenTalkIfWanted, beginCodingActivity, pushActivity, resetCodingActivity, workspacePaths.length, noteUserMessageForMirror, prefs.contentMode, resolvedIdeLocale, t, localeLabels]);
 
   sendChatRef.current = sendChat;
 
@@ -2946,8 +2911,8 @@ export function AIChat() {
       } catch {
         /* ignore */
       }
-      dispatchOpenUiStudioBeta();
-      pushActivity('Coding pipeline finished — UI Studio Beta is the active generator', 'success');
+      dispatchStudioShowLiveApp();
+      pushActivity('Coding complete — opening live App Preview', 'success');
       codingActivityRef.current = false;
       setGrokCodingActive(false);
       setGrokActivity((prev) =>

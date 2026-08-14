@@ -173,13 +173,79 @@ export function buildLocalPreCodingSummary(opts: {
   return lines.join("\n").slice(0, 1200);
 }
 
-/** Prefer local summary for bare Go (or reuse existing SLICE when note is bare). */
+/** True when Master Plan already has a usable PRE_CODING_SUMMARY / SLICE line. */
+export function isUsablePreCodingSummary(summary?: string | null): boolean {
+  const t = String(summary || "").trim();
+  if (t.length < 24) return false;
+  if (/^SLICE\s*:/im.test(t)) return true;
+  return Boolean(parseGoSliceLabel(t));
+}
+
+/**
+ * Skip expensive Grok-4 Phase A when a SLICE summary already exists.
+ * Bare "go"/"continue" still skip (local summary) when none exists yet.
+ */
 export function shouldSkipPhaseALlm(opts: {
   userNote?: string;
   existingSummary?: string;
 }): boolean {
-  if (!isBareGoNote(opts.userNote)) return false;
-  return true;
+  if (isUsablePreCodingSummary(opts.existingSummary)) return true;
+  return isBareGoNote(opts.userNote);
+}
+
+/**
+ * Pass 2 only when apply was empty, plan-only, or zero product routes.
+ * ≥1 real app/|pages/ route → no second Code job.
+ */
+export function shouldRunGoCodeSecondPass(opts: {
+  totalWritten: number;
+  writtenPaths: string[];
+  partialPlanOnly?: boolean;
+}): boolean {
+  if (opts.totalWritten <= 0 || !opts.writtenPaths?.length) return true;
+  if (opts.partialPlanOnly) return true;
+  return assessApplyRouteDepth(opts.writtenPaths).zeroProductRoutes;
+}
+
+/** Compact Go Code user payload — SLICE + §1/§4 + constraints + ui-brief pages. No chat history. */
+export function buildCompactGoCodeUserPrompt(opts: {
+  sliceLine: string;
+  goal: string;
+  pagesSection: string;
+  constraints: string;
+  uiBriefPageList: string;
+  sessionFocus: string;
+  continuation?: boolean;
+}): string {
+  const slice = String(opts.sliceLine || "SLICE: Foundation").trim().slice(0, 80);
+  const goal = String(opts.goal || "").replace(/\s+/g, " ").trim().slice(0, 800);
+  const pages = String(opts.pagesSection || "").trim().slice(0, 1600);
+  const constraints = String(opts.constraints || "").trim().slice(0, 800);
+  const briefPages = String(opts.uiBriefPageList || "").trim().slice(0, 800);
+  const focus = String(opts.sessionFocus || "").trim().slice(0, 400);
+  const task = opts.continuation
+    ? "CONTINUATION — emit the current slice file blocks now. Do NOT implement every §4 route."
+    : "Run the coding pass now. Output ONE coherent slice only (Build → Debug → Next) — not the full app.";
+  return [
+    slice,
+    `Session focus: ${focus || "(next incomplete slice)"}`,
+    "",
+    "§1 Goal:",
+    goal || "(from Master Plan)",
+    "",
+    "§4 Pages excerpt:",
+    pages || "(from Master Plan §4)",
+    constraints ? `\n${constraints}` : "",
+    "",
+    "ui-brief pages:",
+    briefPages || "(none parsed)",
+    "",
+    task,
+    "File blocks only: ```file:relative/path``` — no chat prose.",
+  ]
+    .filter((line) => line !== "")
+    .join("\n")
+    .slice(0, 4500);
 }
 
 const PRODUCT_PREFIX = /^(app|src|pages|components)\//i;
