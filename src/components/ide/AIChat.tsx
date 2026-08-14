@@ -1,13 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Bot, Hand, Loader2, Mic, Paperclip, Send, User, Wrench } from 'lucide-react';
+import { Bot, Hand, Loader2, Mic, Paperclip, Send, Square, User, Wrench } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { fetchSessionUser, syncActiveCloudProjectFromSession, upsertCloudProject } from '../../lib/nebulaCloud';
-import {
-  MAIN_AI_CHAT_SETUP_HINT,
-  serverReportsMainAiKey,
-} from '../../lib/grokKey';
+import { MAIN_AI_CHAT_SETUP_HINT } from '../../lib/grokKey';
+import { getGrokRequestHeaders, hasUsableGrokKeyForChat } from '../../lib/grokUserKey';
 import {
   classifyContinueFailure,
+  clearAllMainAiAuthRejected,
   clearMainAiAuthRejected,
   continueFailureActivityLine,
   isKeyAuthFailureMessage,
@@ -29,6 +28,7 @@ import {
   resetProjectFromScratch,
 } from '../../lib/ideProjectReset';
 import { sendIdeAssistantGrokTurn } from '../../lib/ideAssistantGrokChat';
+import { openSettingsAiKeys } from './shell/SettingsScreen';
 import {
   conversationEntriesToIdeMessages,
   buildDiscoveryBootstrap,
@@ -71,7 +71,6 @@ import {
   SHORT_CODING_GO_SUMMARY,
 } from '../../lib/ideShortCodingNudge';
 import {
-  FAST_PROTOTYPE_PRIMARY_SLICE_INSTRUCTION,
   markFastPrototypePrimaryAutoRun,
   shouldAutoRunPrimarySliceAfterFoundation,
 } from '../../lib/fastPrototypeNextSlice';
@@ -286,7 +285,7 @@ export function AIChat() {
     assistantInteractionMode,
     setAssistantInteractionMode,
   } = useIdeWorkspace();
-  const { activeTab: centerActiveTab, openPanel } = useIdeCenterTabs();
+  const { activeTab: centerActiveTab } = useIdeCenterTabs();
   /** Center My Projects / discovery already owns the hero — keep chat secondary. */
   const centerIsProjectsHome =
     centerActiveTab?.kind === 'panel' && centerActiveTab.pane === 'projects';
@@ -377,20 +376,9 @@ export function AIChat() {
         ? updateGrokActivityCurrent(prev, message)
         : commitGrokActivityStatus(prev, message, kind),
     );
-    // In-place update of the latest status bubble for wait/elapsed ticks (Cursor-like).
-    if (options?.currentOnly) {
-      setMessages((prev) => {
-        for (let i = prev.length - 1; i >= 0; i--) {
-          if (prev[i]?.variant === 'status') {
-            const next = [...prev];
-            next[i] = { ...next[i], content: message, statusKind: kind };
-            messagesRef.current = next;
-            return next;
-          }
-        }
-        return prev;
-      });
-    }
+    // Wait ticks stay on the compact status line only — never rewrite the last chat row
+    // (that left “Syncing project artifacts…” stuck after files were already applied).
+    if (options?.currentOnly || kind === 'wait') return;
   }, []);
 
   /** Manual V0 watch only — do not inject V0 readiness into Live Activity after Go / file apply. */
@@ -499,7 +487,7 @@ export function AIChat() {
   useEffect(() => {
     const entries = grokActivity.liveLog;
     if (!entries.length) return;
-    const fresh = entries.filter((e) => !syncedStatusLogIdsRef.current.has(e.id));
+    const fresh = entries.filter((e) => !syncedStatusLogIdsRef.current.has(e.id) && e.kind !== 'wait');
     if (!fresh.length) return;
     for (const e of fresh) syncedStatusLogIdsRef.current.add(e.id);
     const ts = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
@@ -561,6 +549,7 @@ export function AIChat() {
   const handsFreeFirstSpeechAtRef = useRef<number | null>(null);
   const micInputBlockedRef = useRef(false);
   const sendingRef = useRef(false);
+  const sendingAbortRef = useRef<AbortController | null>(null);
   const isHandsFreeRef = useRef(false);
   const openTalkDesiredRef = useRef(false);
   const handsFreeResumeAfterTtsRef = useRef(false);
@@ -610,6 +599,15 @@ export function AIChat() {
   useEffect(() => {
     sendingRef.current = sending;
   }, [sending]);
+
+  const stopSending = useCallback(() => {
+    sendingAbortRef.current?.abort();
+    sendingAbortRef.current = null;
+    sendingRef.current = false;
+    setSending(false);
+    resetCodingActivity();
+    pushActivity('Stopped — chat is unlocked. Type to continue building.', 'info');
+  }, [pushActivity, resetCodingActivity]);
 
   const clearVoiceIdleTimer = () => {
     if (voiceIdleTimerRef.current != null) {
@@ -889,11 +887,14 @@ export function AIChat() {
     let cancelled = false;
     void (async () => {
       try {
-        const r = await fetch(withProjectQuery('/api/config'), { credentials: 'include' });
+        const r = await fetch(withProjectQuery('/api/config'), {
+          credentials: 'include',
+          headers: getGrokRequestHeaders(),
+        });
         const cfg = (await readResponseJson(r)) as { hasMainAiApiKey?: boolean; hasGrokApiKey?: boolean };
-        if (!cancelled) setServerHasGrokKey(r.ok && serverReportsMainAiKey(cfg));
+        if (!cancelled) setServerHasGrokKey(hasUsableGrokKeyForChat(r.ok ? cfg : null));
       } catch {
-        if (!cancelled) setServerHasGrokKey(false);
+        if (!cancelled) setServerHasGrokKey(hasUsableGrokKeyForChat(null));
       }
       if (!cancelled) {
         await syncActiveCloudProjectFromSession();
@@ -901,12 +902,36 @@ export function AIChat() {
         void refreshTree();
       }
     })();
+    const onByok = () => {
+      clearAllMainAiAuthRejected();
+      setSendError(null);
+      setServerHasGrokKey(hasUsableGrokKeyForChat(null));
+      void (async () => {
+        try {
+          const r = await fetch(withProjectQuery('/api/config'), {
+            credentials: 'include',
+            headers: getGrokRequestHeaders(),
+          });
+          const cfg = (await readResponseJson(r)) as { hasMainAiApiKey?: boolean; hasGrokApiKey?: boolean };
+          setServerHasGrokKey(hasUsableGrokKeyForChat(r.ok ? cfg : null));
+        } catch {
+          setServerHasGrokKey(hasUsableGrokKeyForChat(null));
+        }
+      })();
+    };
+    window.addEventListener('nebula-byok-updated', onByok);
     return () => {
       cancelled = true;
+      window.removeEventListener('nebula-byok-updated', onByok);
     };
   }, [refreshTree, refreshWorkspaceMeta]);
 
   useEffect(() => {
+    sendingRef.current = false;
+    setSending(false);
+    codingActivityRef.current = false;
+    setGrokCodingActive(false);
+    setGrokActivity(idleGrokActivity(interactionModeRef.current));
     let cancelled = false;
     chatHistoryLoadedRef.current = false;
     setChatHistoryReady(false);
@@ -936,6 +961,30 @@ export function AIChat() {
       cancelled = true;
     };
   }, [diskProjectKey]);
+
+  useEffect(() => {
+    if (sending || grokActivity.tone === 'work') return;
+    setMessages((prev) => {
+      const last = prev[prev.length - 1];
+      if (
+        !last ||
+        last.variant !== 'status' ||
+        (last.statusKind !== 'wait' && !/Syncing project artifacts/i.test(last.content || ''))
+      ) {
+        return prev;
+      }
+      const next = [
+        ...prev.slice(0, -1),
+        {
+          ...last,
+          statusKind: 'success' as const,
+          content: 'Files are on disk. Type continue building for the next slice.',
+        },
+      ];
+      messagesRef.current = next;
+      return next;
+    });
+  }, [sending, grokActivity.tone]);
 
   const startGuidedDiscovery = useCallback(() => {
     clearDiscoveryClosed(diskProjectKey);
@@ -1000,23 +1049,25 @@ export function AIChat() {
     return () => window.removeEventListener('nebula-project-reset', onReset);
   }, [diskProjectKey]);
 
-  // Post-login: stay quiet until My Projects → New Project (or explicit guided event).
+  // Post-login / landing handoff: stay quiet until New Project or pending goal idea.
   useEffect(() => {
-    if (serverHasGrokKey !== true) return;
     // Phase 7.0: prior 401/403 — do not auto-stampede Start/Continue.
-    if (isMainAiAuthRejected(diskProjectKey)) return;
+    if (isMainAiAuthRejected(diskProjectKey) && !hasUsableGrokKeyForChat(null)) return;
     if (!chatHistoryReady) return;
     if (bootstrapStartedRef.current || sendingRef.current) return;
-    // Prefer pending idea from "Start with a prompt" even if chat log restored noise.
+    // Prefer pending idea from landing / "Start with a prompt" even if chat log restored noise.
     const pendingIdea = peekPendingProjectIdea();
     // Peek-only until we commit — do not burn the flag on a skipped turn.
     let guidedFlag = false;
     try {
       guidedFlag = localStorage.getItem(NEBULA_START_GUIDED_ON_READY_KEY) === '1';
-      } catch {
+    } catch {
       guidedFlag = false;
     }
     if (!guidedFlag && !pendingIdea) return;
+    // Without a confirmed key, still bootstrap when a landing goal is pending so the
+    // visible user turn is stamped; send may fail until a key is available.
+    if (serverHasGrokKey !== true && !pendingIdea) return;
     if (!pendingIdea && messagesRef.current.length > 0) return;
     bootstrapStartedRef.current = true;
     consumeGuidedStartOnReady();
@@ -1129,7 +1180,7 @@ export function AIChat() {
 
   const sendChat = useCallback(async (textOverride?: string) => {
     const rawText = (textOverride ?? inputRef.current).trim();
-    if (!rawText || sending) return;
+    if (!rawText || sendingRef.current) return;
 
     if (micInputBlocked) return;
 
@@ -1296,19 +1347,27 @@ export function AIChat() {
     const projectCreation = detectProjectCreationIntent(rawText);
     if (projectCreation) {
       // Phase 7.0: do not create + bootstrap a false pipeline when chat key is missing/rejected.
-      let hasKeyForCreate = serverHasGrokKey;
-      if (hasKeyForCreate === null) {
+      let hasKeyForCreate = serverHasGrokKey === true || hasUsableGrokKeyForChat(null);
+      if (hasKeyForCreate === false && serverHasGrokKey === null) {
       try {
-        const r = await fetch(withProjectQuery('/api/config'), { credentials: 'include' });
+        const r = await fetch(withProjectQuery('/api/config'), {
+          credentials: 'include',
+          headers: getGrokRequestHeaders(),
+        });
           const cfg = (await readResponseJson(r)) as { hasMainAiApiKey?: boolean; hasGrokApiKey?: boolean };
-          hasKeyForCreate = r.ok && serverReportsMainAiKey(cfg);
+          hasKeyForCreate = hasUsableGrokKeyForChat(r.ok ? cfg : null);
           setServerHasGrokKey(hasKeyForCreate);
       } catch {
-          hasKeyForCreate = false;
-        setServerHasGrokKey(false);
+          hasKeyForCreate = hasUsableGrokKeyForChat(null);
+        setServerHasGrokKey(hasKeyForCreate);
       }
       }
-      if (hasKeyForCreate === false || isMainAiAuthRejected(diskProjectKey)) {
+      if (hasUsableGrokKeyForChat(null)) {
+        clearMainAiAuthRejected(diskProjectKey);
+        hasKeyForCreate = true;
+        setServerHasGrokKey(true);
+      }
+      if (hasKeyForCreate === false) {
         const failureClass = classifyContinueFailure({
           message: 'Grok chat is unavailable: no valid API key on the server.',
         });
@@ -1355,21 +1414,29 @@ export function AIChat() {
       return;
     }
 
-    let hasMainAiKey = serverHasGrokKey;
-    if (hasMainAiKey === null) {
+    let hasMainAiKey = serverHasGrokKey === true || hasUsableGrokKeyForChat(null);
+    if (hasMainAiKey === false && serverHasGrokKey === null) {
       try {
-        const r = await fetch(withProjectQuery('/api/config'), { credentials: 'include' });
+        const r = await fetch(withProjectQuery('/api/config'), {
+          credentials: 'include',
+          headers: getGrokRequestHeaders(),
+        });
         const cfg = (await readResponseJson(r)) as { hasMainAiApiKey?: boolean; hasGrokApiKey?: boolean };
-        hasMainAiKey = r.ok && serverReportsMainAiKey(cfg);
+        hasMainAiKey = hasUsableGrokKeyForChat(r.ok ? cfg : null);
         setServerHasGrokKey(hasMainAiKey);
       } catch {
-        hasMainAiKey = false;
-        setServerHasGrokKey(false);
+        hasMainAiKey = hasUsableGrokKeyForChat(null);
+        setServerHasGrokKey(hasMainAiKey);
       }
     }
 
-    // Phase 7.0 Auth/API-key health precondition — fail fast before plan/mockup/coding stampede.
-    if (hasMainAiKey === false || isMainAiAuthRejected(diskProjectKey)) {
+    // Phase 7.0: block only when no usable key. A prior 401 must not stick after BYOK/local save.
+    if (hasUsableGrokKeyForChat(null)) {
+      clearMainAiAuthRejected(diskProjectKey);
+      hasMainAiKey = true;
+      setServerHasGrokKey(true);
+    }
+    if (hasMainAiKey === false) {
       const failureClass = classifyContinueFailure({
         message: 'Grok chat is unavailable: no valid API key on the server.',
       });
@@ -1422,18 +1489,31 @@ export function AIChat() {
     inputRef.current = '';
     stickToBottomRef.current = true;
     setSending(true);
+    sendingRef.current = true;
+    sendingAbortRef.current?.abort();
+    sendingAbortRef.current = new AbortController();
+    const sendAbort = sendingAbortRef.current;
     setSendError(null);
     const discoveryCompleteAck = detectOnboardingBuildStart(rawText, prior);
     /** Bare "go" / "start coding" — must launch Foundation even if the model omits START_CODING. */
     const userForcedCoding = isUserExplicitCodingRequest(rawText);
     // Product promise: "nothing more to add" / explicit "go" starts coding — even if still Chat.
-    if ((discoveryCompleteAck || userForcedCoding) && interactionModeRef.current === 'chat') {
+    const fastPrototypeTurnEarly =
+      codingHint === 'fast-prototype' ||
+      rawText.trim().startsWith(FAST_PROTOTYPE_BOOTSTRAP_PREFIX) ||
+      rawText.trim().startsWith(FAST_PROTOTYPE_CONTINUE_PREFIX);
+    if (
+      (discoveryCompleteAck || userForcedCoding || fastPrototypeTurnEarly) &&
+      interactionModeRef.current === 'chat'
+    ) {
       interactionModeRef.current = 'agent';
       setAssistantInteractionMode('agent');
       setAccessoryHint(
         discoveryCompleteAck
           ? 'Discovery done — switching to Agent and starting the first coding slice.'
-          : 'Switching to Agent — starting the next coding slice in your workspace.',
+          : fastPrototypeTurnEarly
+            ? 'Fast Prototype — switching to Agent after the mockup so coding can start.'
+            : 'Switching to Agent — starting the next coding slice in your workspace.',
       );
       window.setTimeout(() => setAccessoryHint(null), 4500);
     }
@@ -1558,24 +1638,68 @@ export function AIChat() {
       let assistantContent: string;
       let planningPhase: string;
       try {
-        ({ assistantContent, planningPhase } = await sendIdeAssistantGrokTurn({
-        textToSend: text,
-        history: historyForApi,
-        userId,
-        projectName,
-        ideAppendix,
-          buildMode,
-          chatModel,
-          chatMode,
-          codingHint,
-          discoveryRequired,
-          interactionMode: interactionModeRef.current,
-          hasAppStatusPayload,
-          appStatusTechnicalMessages,
-          ideLocale: resolvedIdeLocale,
-          contentLocale: contentLocaleRef.current,
-          contentMode: prefs.contentMode,
-        }));
+        const skipGrokForExistingPlan =
+          interactionModeRef.current === 'agent' &&
+          (userForcedCoding || isFastPrototypeContinue) &&
+          !onboardingBuildStart &&
+          !hasAppStatusPayload;
+        let skippedGrokChat = false;
+        if (skipGrokForExistingPlan) {
+          try {
+            const mpRes = await fetch(withProjectQuery('/api/master-plan/read'), {
+              credentials: 'include',
+              cache: 'no-store',
+            });
+            if (mpRes.ok) {
+              const plan = (await readResponseJson(mpRes)) as Record<string, unknown>;
+              if (isMasterPlanCompleteForDiscovery(plan)) {
+                skippedGrokChat = true;
+                assistantContent =
+                  'START_CODING — continuing from the saved Master Plan (skipped a second Grok chat wait).';
+                planningPhase = 'START_CODING';
+                pushActivity(
+                  'Master Plan already on disk — skipping Grok chat, starting coding',
+                  'info',
+                );
+              }
+            }
+          } catch {
+            /* fall through to Grok */
+          }
+        }
+        if (!skippedGrokChat) {
+          try {
+            ({ assistantContent, planningPhase } = await sendIdeAssistantGrokTurn({
+              textToSend: text,
+              history: historyForApi,
+              userId,
+              projectName,
+              ideAppendix,
+              buildMode,
+              chatModel,
+              chatMode,
+              codingHint,
+              discoveryRequired,
+              interactionMode: interactionModeRef.current,
+              hasAppStatusPayload,
+              appStatusTechnicalMessages,
+              ideLocale: resolvedIdeLocale,
+              contentLocale: contentLocaleRef.current,
+              contentMode: prefs.contentMode,
+              signal: sendAbort.signal,
+            }));
+          } catch (grokErr) {
+            const grokMsg = grokErr instanceof Error ? grokErr.message : String(grokErr);
+            if (/timed out/i.test(grokMsg) && (userForcedCoding || fastPrototypeTurn)) {
+              pushActivity(`${grokMsg} — continuing coding from saved Master Plan`, 'warn');
+              assistantContent =
+                'START_CODING — Grok chat timed out; continue from the saved Master Plan.';
+              planningPhase = 'START_CODING';
+            } else {
+              throw grokErr;
+            }
+          }
+        }
         // Phase 7.0: a successful chat turn clears sticky key/auth rejection.
         clearMainAiAuthRejected(diskProjectKey);
       } finally {
@@ -1631,7 +1755,7 @@ export function AIChat() {
 
       const shortCodingNudge = isShortCodingGoNudge(displayText || raw);
       const assistantCodingPromise = isAssistantCodingPromise(displayText || raw);
-      const willCode =
+      let willCode =
         agentAllowed &&
         (hadCodingTag ||
           hasGrokFileBlocks(raw) ||
@@ -1753,9 +1877,17 @@ export function AIChat() {
         }
       }
 
+      // Unlock composer before mockup. This shell does not mount IdeUiStudioBeta;
+      // generate can take minutes and must not freeze the input.
+      setSending(false);
+      sendingRef.current = false;
+
       // Stage B — UI mockup after plan + ui-brief, BEFORE coding (single API key queue).
       let uiMockupStarted = false;
       let mockupSkippedOrFailed = false;
+      if (sendAbort.signal.aborted) {
+        return;
+      }
       if (agentAllowed && (fastPrototypeTurn || willCode || mpSaved > 0)) {
         const readiness = await assessUiMockupReadiness({ projectKey: diskProjectKey });
         if (readiness.ok) {
@@ -1779,10 +1911,22 @@ export function AIChat() {
               }),
             );
           }
-          const mockup = await triggerUiStudioBetaAfterPlanReady({
-            projectName,
-            onProgress: pushActivity,
-          });
+          const mockup = await Promise.race([
+            triggerUiStudioBetaAfterPlanReady({
+              projectName,
+              onProgress: pushActivity,
+            }),
+            new Promise<{ ok: false; error: string }>((resolve) => {
+              window.setTimeout(
+                () =>
+                  resolve({
+                    ok: false,
+                    error: 'UI mockup timed out — Foundation coding continues',
+                  }),
+                45_000,
+              );
+            }),
+          ]);
           if (mockup.ok) {
             uiMockupStarted = true;
             markUiMockupSucceeded(diskProjectKey);
@@ -1825,6 +1969,15 @@ export function AIChat() {
             'info',
           );
         }
+      }
+
+      if (
+        !willCode &&
+        agentAllowed &&
+        fastPrototypeTurn &&
+        (uiMockupStarted || mockupSkippedOrFailed || mpSaved > 0)
+      ) {
+        willCode = true;
       }
 
       try {
@@ -2016,7 +2169,11 @@ export function AIChat() {
                 : {}),
             }),
           );
-          if (coding.ok === false && coding.statusMessage) {
+          if (
+            coding.ok === false &&
+            coding.statusMessage &&
+            !/429|too many requests|rate limit/i.test(coding.statusMessage)
+          ) {
             reportAppRuntimeIssue({
               technicalMessage: coding.statusMessage.slice(0, 800),
               source: 'build',
@@ -2085,55 +2242,24 @@ export function AIChat() {
               );
             }
 
-            // Fast Prototype Step 9.2: one automatic primary feature slice after Foundation (no user nudge).
+            // Finish this slice immediately. Auto-awaiting Primary Go after Auth/Foundation
+            // left the composer stuck on "Grok Code running on server".
             const codingSliceLabel =
               (coding as { sliceLabel?: string | null }).sliceLabel ?? 'Foundation';
-            if (
-              shouldAutoRunPrimarySliceAfterFoundation({
-                fastPrototypeTurn,
-                codingOk: coding.ok !== false,
-                projectKey: diskProjectKey || projectName,
-                sliceLabel: codingSliceLabel,
-              })
-            ) {
+            const wouldAutoPrimary = shouldAutoRunPrimarySliceAfterFoundation({
+              fastPrototypeTurn,
+              codingOk: true,
+              projectKey: diskProjectKey || projectName,
+              sliceLabel: codingSliceLabel,
+            });
+            if (wouldAutoPrimary) {
               markFastPrototypePrimaryAutoRun(diskProjectKey || projectName);
               pushActivity(
-                'Fast Prototype — Step 9.2 primary feature slice (auto after Foundation)…',
-                'info',
+                'Slice applied. Send “continue building” for the next (primary) slice — chat is unlocked.',
+                'success',
               );
-              beginCodingActivity('Coding — primary feature slice', goWorkSteps(), {
-                subhead: 'Foundation landed — building the core user job next (one slice).',
-                initialLog: 'Auto primary slice after Foundation (max one per session)',
-              });
-              const primaryGo = await runGoCodeAndApply({
-                userId,
-                projectName,
-                userNote: 'SLICE: Primary — core feature after Foundation',
-                onProgress: pushActivity,
-                messages: [
-                  { role: 'assistant' as const, content: masterPlanSource.slice(0, 12000) },
-                  {
-                    role: 'user' as const,
-                    content: FAST_PROTOTYPE_PRIMARY_SLICE_INSTRUCTION,
-                  },
-                ],
-              });
-              // Primary Go owns its own soft-fail artifact sync — do not re-sync here.
-              if (primaryGo.ok) {
-                pushActivity(
-                  primaryGo.statusMessage || 'Primary feature slice applied',
-                  'success',
-                );
-                setAccessoryHint(
-                  'Foundation + primary feature landed — say “continue building” for the next slice.',
-                );
-                window.setTimeout(() => setAccessoryHint(null), 10000);
-              } else {
-                pushActivity(
-                  primaryGo.statusMessage || 'Primary feature slice did not finish — say continue building',
-                  'warn',
-                );
-              }
+              setAccessoryHint('Slice done — type continue building for the next screen.');
+              window.setTimeout(() => setAccessoryHint(null), 8000);
             }
 
             resetCodingActivity();
@@ -2384,6 +2510,7 @@ export function AIChat() {
     };
   }, [interruptVoiceAndTts]);
 
+  // Missing key must stay visible on Build send — Settings still owns the save path.
   const showGrokKeyBanner = serverHasGrokKey === false;
 
   /** Manual / Agent-switch coding pass (replaces the removed Go button). */
@@ -2444,11 +2571,14 @@ export function AIChat() {
 
     if (serverHasGrokKey === null) {
       try {
-        const r = await fetch(withProjectQuery('/api/config'), { credentials: 'include' });
+        const r = await fetch(withProjectQuery('/api/config'), {
+          credentials: 'include',
+          headers: getGrokRequestHeaders(),
+        });
         const cfg = (await readResponseJson(r)) as { hasMainAiApiKey?: boolean; hasGrokApiKey?: boolean };
-        setServerHasGrokKey(r.ok && serverReportsMainAiKey(cfg));
+        setServerHasGrokKey(hasUsableGrokKeyForChat(r.ok ? cfg : null));
       } catch {
-        setServerHasGrokKey(false);
+        setServerHasGrokKey(hasUsableGrokKeyForChat(null));
       }
     }
 
@@ -2723,7 +2853,7 @@ export function AIChat() {
   }, []);
 
   return (
-    <div className="surface-active flex h-full min-h-0 flex-col overflow-hidden">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-transparent">
       <IdeAppStatusMenuButton
         onFixWithAgent={handleFixWithAgent}
         onVoiceNudge={onAppStatusVoiceNudge}
@@ -2772,7 +2902,7 @@ export function AIChat() {
             <button
               type="button"
               className="shrink-0 rounded-md px-2 py-0.5 font-medium text-red-50 ring-1 ring-red-400/40 hover:bg-red-500/20"
-              onClick={() => openPanel('secrets')}
+              onClick={() => openSettingsAiKeys()}
             >
               Open Secrets
             </button>
@@ -2783,7 +2913,7 @@ export function AIChat() {
       <div
         ref={scrollContainerRef}
         onScroll={onChatScroll}
-        className="min-h-0 flex-1 space-y-3 overflow-auto p-3"
+        className="min-h-0 flex-1 space-y-4 overflow-auto px-4 py-4"
       >
         {messages.length === 0 && !sending ? (
           <div className="px-1 pt-2 pb-4 text-left">
@@ -2812,12 +2942,7 @@ export function AIChat() {
                     message.statusKind === 'wait' &&
                     isLatest &&
                     (sending || grokActivity.tone === 'work');
-                  const sendingSpin =
-                    sending &&
-                    isLatest &&
-                    (message.statusKind === 'info' || !message.statusKind) &&
-                    /syncing|waiting|generating|applying|writing/i.test(message.content || '');
-                  return waitSpinning || sendingSpin ? (
+                  return waitSpinning ? (
                     <Loader2 className="h-3 w-3 animate-spin text-muted-foreground/70" aria-hidden />
                   ) : (
                     <Bot className="h-3 w-3 text-muted-foreground/50" aria-hidden />
@@ -2853,8 +2978,8 @@ export function AIChat() {
             <div className={cn('max-w-[85%]', message.role === 'user' ? 'text-right' : 'text-left')}>
               <div
                 className={cn(
-                  'type-body-md inline-block rounded-2xl px-3 py-2',
-                  message.role === 'user' ? 'bg-[#111111] text-foreground' : 'bg-transparent text-foreground',
+                  'type-body-md inline-block rounded-lg px-3 py-2',
+                  message.role === 'user' ? 'border border-border text-foreground' : 'bg-transparent text-foreground',
                 )}
               >
                 <p className="whitespace-pre-wrap">
@@ -2953,6 +3078,7 @@ export function AIChat() {
             onKeyDown={(e) => {
               if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
+                if (sendingRef.current) stopSending();
                 void sendChat();
               }
             }}
@@ -2962,7 +3088,7 @@ export function AIChat() {
                 : t('chat.placeholder.chat')
             }
             rows={2}
-            disabled={sending || uploadBusy}
+            disabled={uploadBusy}
             className="min-h-[2.75rem] w-full resize-none bg-transparent pt-0 pr-16 text-[12px] leading-snug text-foreground outline-none placeholder:text-muted-foreground disabled:opacity-50"
           />
 
@@ -2972,7 +3098,7 @@ export function AIChat() {
                 size="sm"
                 label={uploadBusy ? t('chat.uploading') : t('chat.attach')}
                 onClick={handleFileAttachClick}
-                disabled={sending || uploadBusy || micInputBlocked}
+                disabled={uploadBusy || micInputBlocked}
               >
                 {uploadBusy ? (
                   <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
@@ -2995,7 +3121,7 @@ export function AIChat() {
                 size="sm"
                 label={isRecordingVoice ? t('chat.micStop') : t('chat.mic')}
                 onClick={() => toggleVoiceMic()}
-                disabled={sending || uploadBusy}
+                disabled={uploadBusy}
               >
                 <Mic
                   className={cn(
@@ -3006,18 +3132,32 @@ export function AIChat() {
               </ChatRoundButton>
             </div>
 
-              <ChatRoundButton
-              size="sm"
-              label={t('chat.sendMessage')}
-                onClick={() => {
-                stopVoiceRecognition();
-                setIsRecordingVoice(false);
-                void sendChat();
-              }}
-              disabled={!input.trim() || sending || uploadBusy}
-            >
-              <Send className="h-3.5 w-3.5" />
-              </ChatRoundButton>
+              {sending ? (
+                <ChatRoundButton
+                  size="sm"
+                  label="Stop"
+                  onClick={() => {
+                    stopVoiceRecognition();
+                    setIsRecordingVoice(false);
+                    stopSending();
+                  }}
+                >
+                  <Square className="h-3.5 w-3.5" />
+                </ChatRoundButton>
+              ) : (
+                <ChatRoundButton
+                  size="sm"
+                  label={t('chat.sendMessage')}
+                  onClick={() => {
+                    stopVoiceRecognition();
+                    setIsRecordingVoice(false);
+                    void sendChat();
+                  }}
+                  disabled={!input.trim() || uploadBusy}
+                >
+                  <Send className="h-3.5 w-3.5" />
+                </ChatRoundButton>
+              )}
           </div>
         </div>
       </div>

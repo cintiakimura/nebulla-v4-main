@@ -1,6 +1,7 @@
 import { useCallback, useMemo } from 'react';
 import { NebullaIDE } from '@/components/ide/NebullaIDE';
 import { LandingPage } from '@/components/LandingPage';
+import { AppShell } from '@/components/AppShell';
 import { PrivacyPolicyPage } from './pages/PrivacyPolicyPage';
 import { TermsOfServicePage } from './pages/TermsOfServicePage';
 import { DpaPage } from './pages/DpaPage';
@@ -8,7 +9,8 @@ import { ResetPasswordPage } from './pages/ResetPasswordPage';
 import { LoginPage } from './pages/LoginPage';
 import { PricingPage } from './pages/PricingPage';
 import { PaymentPage } from './pages/PaymentPage';
-import { goToTryFree } from './lib/authNavigate';
+import { goToApp, goToTryFree } from './lib/authNavigate';
+import { FORCE_GUEST_MODE } from './lib/testingBranch';
 
 function usePathname(): string {
   return useMemo(() => {
@@ -17,11 +19,15 @@ function usePathname(): string {
   }, []);
 }
 
-export default function App() {
+function AppRoutes() {
   const path = usePathname();
 
-  /** Always open signup (do not skip to IDE when already signed in). */
+  /** Try-free CTA — lab guest (`NEBULA_FORCE_GUEST=1`) skips signup. */
   const enterTryFree = useCallback(() => {
+    if (FORCE_GUEST_MODE) {
+      goToApp();
+      return;
+    }
     goToTryFree('/app');
   }, []);
 
@@ -29,10 +35,22 @@ export default function App() {
   if (path === '/terms') return <TermsOfServicePage />;
   if (path === '/legal/dpa' || path === '/dpa') return <DpaPage />;
   if (path === '/reset-password') return <ResetPasswordPage />;
-  if (path === '/login' || path === '/signup') return <LoginPage />;
+  // Lab guest only: skip login/signup. Production renders LoginPage.
+  if (path === '/login' || path === '/signup') {
+    if (FORCE_GUEST_MODE) return <NebullaIDE />;
+    return <LoginPage />;
+  }
   if (path === '/payment') return <PaymentPage />;
   if (path === '/pricing') return <PricingPage />;
   if (path === '/app' || path === '/ide') return <NebullaIDE />;
 
   return <LandingPage onEnter={enterTryFree} />;
+}
+
+export default function App() {
+  return (
+    <AppShell>
+      <AppRoutes />
+    </AppShell>
+  );
 }

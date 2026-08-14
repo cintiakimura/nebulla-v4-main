@@ -42,9 +42,9 @@ const mobileClass: PageClassification = {
 const seedState = {
   device: 'mobile' as const,
   page_type: 'home' as const,
-  function: 'general',
-  navigation_type: 'bottom_tabs',
-  industry_class: 'education',
+  function: 'general' as const,
+  navigation_type: 'tabs' as const,
+  industry_class: 'education' as const,
   visual_tone: 'friendly',
   density: 'medium' as const,
 };
@@ -251,11 +251,11 @@ try {
       seedState: {
         device: 'web',
         page_type: 'landing',
-        function: 'general',
-        navigation_type: 'none',
-        industry_class: 'saas',
+        function: 'general' as const,
+        navigation_type: 'none' as const,
+        industry_class: 'other' as const,
         visual_tone: '',
-        density: 'spacious',
+        density: 'spacious' as const,
       },
     });
     assert.equal(rec.figma_status, 'offline');
@@ -295,7 +295,7 @@ try {
     ];
     const plan = parseStructureLayoutPlan(hints, 'auth', 'mobile_auth_form');
     let slots = ensureSlotsForStructurePlan({}, plan, 'auth', 'Kids Read');
-    const tokens = buildDesignTokens('', [], 'medium');
+    const tokens = buildDesignTokens('', '', 'medium');
     let model = renderTemplateModel({
       template,
       classification: { ...mobileClass, page_type: 'auth', navigation_mode: 'none' },

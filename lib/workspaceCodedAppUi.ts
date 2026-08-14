@@ -5,11 +5,7 @@
 
 import fs from "fs";
 import path from "path";
-import {
-  PRODUCT_PREVIEW_MARKER,
-  PRODUCT_PREVIEW_REL,
-  hasInteractiveProductPreview,
-} from "./interactiveProductPreview";
+import { PRODUCT_PREVIEW_MARKER, PRODUCT_PREVIEW_REL } from "./interactiveProductPreview";
 
 export const UI_GEN_MOCKUP_META = 'name="nebulla-preview" content="ui-gen-mockup"';
 export const UI_GEN_MOCKUP_MARKER = "ui-gen-mockup";
@@ -107,6 +103,13 @@ export function workspaceHasCodedAppUi(workspaceRoot: string): boolean {
   return listProductUiFiles(workspaceRoot, 8).length >= 1;
 }
 
+/** Route-map shell written when no live app exists — not a product preview. */
+export function isWorkspaceRoutesScaffoldHtml(html: string): boolean {
+  const t = String(html || "");
+  return /name=["']nebulla-preview["']\s+content=["']workspace-routes["']/i.test(t) ||
+    /Workspace routes on disk/i.test(t);
+}
+
 export function isNebulaUiGenMockupHtml(html: string): boolean {
   const t = String(html || "");
   if (!t.trim()) return false;
@@ -161,7 +164,20 @@ export function resolveAppPreviewAuthority(workspaceRoot: string): AppPreviewAut
   const built = findBuiltStaticEntry(workspaceRoot);
 
   if (!codedApp) {
-    if (indexHtml && !indexIsMockup && indexHtml.length >= 80) {
+    const indexIsScaffold = indexHtml ? isWorkspaceRoutesScaffoldHtml(indexHtml) : false;
+    if (mockupRel && (indexIsScaffold || !indexHtml || indexIsMockup)) {
+      return {
+        mode: "pre_code_mockup",
+        statusLabel: "Pre-code mockup only - not live app",
+        codedApp: false,
+        indexIsMockup: true,
+        entryRel: mockupRel,
+        productFiles,
+        mockupRel,
+        limitation: null,
+      };
+    }
+    if (indexHtml && !indexIsMockup && !indexIsScaffold && indexHtml.length >= 80) {
       return {
         mode: "live_app_static",
         statusLabel: "Live app preview",
@@ -179,7 +195,7 @@ export function resolveAppPreviewAuthority(workspaceRoot: string): AppPreviewAut
         statusLabel: "Pre-code mockup only - not live app",
         codedApp: false,
         indexIsMockup: indexIsMockup || Boolean(mockupRel),
-        entryRel: indexHtml ? "index.html" : mockupRel,
+        entryRel: mockupRel || "index.html",
         productFiles,
         mockupRel,
         limitation: null,
@@ -197,7 +213,7 @@ export function resolveAppPreviewAuthority(workspaceRoot: string): AppPreviewAut
     };
   }
 
-  // Coded product exists — prefer real build, then interactive mock-data preview (working app output).
+  // Coded product exists — never serve the generic role-picker mock as the product.
   if (built) {
     return {
       mode: "live_app_static",
@@ -211,50 +227,57 @@ export function resolveAppPreviewAuthority(workspaceRoot: string): AppPreviewAut
     };
   }
 
-  if (hasInteractiveProductPreview(workspaceRoot)) {
-    return {
-      mode: "interactive_product_preview",
-      statusLabel: "Interactive preview (mock data)",
-      codedApp: true,
-      indexIsMockup: false,
-      entryRel: PRODUCT_PREVIEW_REL,
-      productFiles,
-      mockupRel,
-      limitation:
-        "Serving interactive product preview with mock/local data. Not UI Gen mockup; not full Vite/Next SSR.",
-    };
-  }
-
-  if (indexHtml && !indexIsMockup && !isCodedAppBridgeHtml(indexHtml)) {
+  if (indexHtml && !indexIsMockup && !isCodedAppBridgeHtml(indexHtml) && !isWorkspaceRoutesScaffoldHtml(indexHtml)) {
     // Real index.html that isn't our mockup — serve it, but React/Vite usually needs a bundler.
     const needsBundler = /type=["']module["']|\/src\/main\.|\/src\/App\.|\.tsx/i.test(indexHtml);
     return {
       mode: needsBundler ? "post_code_bridge" : "live_app_static",
-      statusLabel: needsBundler
-        ? "Post-code - product files (runtime limited)"
-        : "Live app preview",
+      statusLabel: needsBundler ? "Code exists — open Code" : "Live app preview",
       codedApp: true,
       indexIsMockup: false,
       entryRel: needsBundler ? null : "index.html",
       productFiles,
       mockupRel,
       limitation: needsBundler
-        ? "Workspace Vite/Next/Expo runtime is not started inside App Preview iframe yet — interactive product preview missing."
+        ? "This shell cannot run the workspace Vite/Next app in the iframe. Open Code to inspect the coded routes."
         : null,
     };
   }
 
   return {
     mode: "post_code_bridge",
-    statusLabel: "Post-code - files only (no interactive preview yet)",
+    statusLabel: "Code exists — open Code",
     codedApp: true,
     indexIsMockup,
     entryRel: null,
     productFiles,
     mockupRel,
     limitation:
-      "No interactive product preview yet. Re-apply a coding slice to generate public/product-preview, or open files in Explorer.",
+      "This shell cannot run the workspace Vite/Next app in the iframe. Open Code to inspect the coded routes.",
   };
+}
+
+/** Routes implied by app/ and pages/ product files (for honest post-code preview). */
+export function inferRoutesFromProductFiles(productFiles: string[]): string[] {
+  const routes = new Set<string>();
+  for (const raw of productFiles || []) {
+    const p = String(raw || "").replace(/\\/g, "/");
+    if (/^app\/page\.(tsx|jsx|js)$/i.test(p)) {
+      routes.add("/");
+      continue;
+    }
+    const appPage = p.match(/^app\/(.+)\/page\.(tsx|jsx|js)$/i);
+    if (appPage) {
+      routes.add(`/${appPage[1].replace(/\/index$/i, "")}`);
+      continue;
+    }
+    const pages = p.match(/^(?:src\/)?pages\/(.+)\.(tsx|jsx|js)$/i);
+    if (pages) {
+      const slug = pages[1].replace(/\/index$/i, "").replace(/^index$/i, "");
+      routes.add(`/${slug.replace(/\[(.+?)\]/g, ":$1")}`);
+    }
+  }
+  return [...routes].sort();
 }
 
 /** ASCII-only header value (Node rejects em-dash etc. in setHeader). */
@@ -283,12 +306,14 @@ export function buildCodedAppPreviewBridgeHtml(opts: {
   const name = esc((opts.projectName || "App").slice(0, 80));
   const files = (opts.productFiles || []).slice(0, 16);
   const list = files.map((f) => `<li><code>${esc(f)}</code></li>`).join("\n");
+  const routes = inferRoutesFromProductFiles(opts.productFiles || []);
+  const routeList = routes.map((r) => `<li><code>${esc(r)}</code></li>`).join("\n");
   const mockup = opts.mockupRel
-    ? `<p class="muted">Optional pre-code mockup (not the live product): <code>${esc(opts.mockupRel)}</code></p>`
+    ? `<p class="muted">A pre-code mockup file may still exist at <code>${esc(opts.mockupRel)}</code> — it is not this product.</p>`
     : "";
   const limit = esc(
     opts.limitation ||
-      "In-IDE App Preview cannot start the workspace app bundler yet. Use the Explorer to inspect coded screens.",
+      "This shell cannot run the workspace Vite/Next app in the iframe. Open Code to inspect the coded routes.",
   );
 
   return `<!DOCTYPE html>
@@ -297,7 +322,7 @@ export function buildCodedAppPreviewBridgeHtml(opts: {
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="nebulla-preview" content="${CODED_APP_BRIDGE_MARKER}"/>
-  <title>${name} — Coded app</title>
+  <title>${name} — Code exists</title>
   <style>
     body { margin:0; font-family: system-ui, -apple-system, Segoe UI, sans-serif; background:#FAFAF9; color:#1C1917; padding:24px; line-height:1.45; }
     .badge { display:inline-block; font-size:11px; font-weight:600; letter-spacing:.04em; text-transform:uppercase; color:#0F766E; background:#CCFBF1; padding:4px 8px; border-radius:6px; }
@@ -314,27 +339,24 @@ export function buildCodedAppPreviewBridgeHtml(opts: {
 </head>
 <body>
   <div class="card">
-    <span class="badge">Post-code — not mockup</span>
+    <span class="badge">Code exists — open Code</span>
     <h1>${name}</h1>
-    <p><strong>Product UI source was detected.</strong> This iframe is <em>not</em> the live Vite/Next app.</p>
+    <p><strong>Coded workspace routes are on disk.</strong> This is not a live app runtime and not the generic role-picker mock.</p>
     <p class="muted">${limit}</p>
-    <p><strong>Run / deploy path</strong> (product app root = workspace root):</p>
+    <p><strong>Routes in this workspace</strong></p>
     <ul>
-      <li><code>npm install</code></li>
-      <li><code>npm run dev</code> (local) or <code>npm run build</code></li>
-      <li>In Nebulla: use the <strong>Deploy</strong> control (Build check) in the top bar</li>
-      <li>See workspace <code>README.md</code> for scripts</li>
+${routeList || "<li><code>(no app/ or pages/ routes detected)</code></li>"}
     </ul>
-    <div class="actions">
-      <button type="button" class="btn btn-primary" onclick="try{parent.postMessage({type:'nebula-workspace-deploy'},'*')}catch(e){}">Deploy / Build check</button>
-      <button type="button" class="btn" onclick="try{parent.postMessage({type:'nebula-open-readme'},'*')}catch(e){}">Open run instructions</button>
-    </div>
-    <p><strong>Coded UI files</strong> (validate features in Explorer):</p>
+    <p><strong>Coded UI files</strong></p>
     <ul>
 ${list || "<li><code>(none listed)</code></li>"}
     </ul>
+    <div class="actions">
+      <button type="button" class="btn btn-primary" onclick="try{parent.postMessage({type:'nebula-open-code'},'*')}catch(e){}">Open Code</button>
+      <button type="button" class="btn" onclick="try{parent.postMessage({type:'nebula-workspace-deploy'},'*')}catch(e){}">Deploy / Build check</button>
+    </div>
     ${mockup}
-    <p class="muted">UI Studio Beta remains the visual tree / mockup editor. Coding follows Master Plan — mockup pixels are not the spec.</p>
+    <p class="muted">Build preview cannot start Vite/Next inside this iframe. Use the Code tab for the real files.</p>
   </div>
 </body>
 </html>

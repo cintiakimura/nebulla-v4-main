@@ -5,6 +5,7 @@
 
 import {
   MAIN_AI_CHAT_SETUP_HINT,
+  XAI_INCORRECT_KEY_MESSAGE,
   isProviderPermissionError,
   resolveAiLimitUserMessage,
 } from './grokKey';
@@ -36,6 +37,20 @@ export function markMainAiAuthRejected(projectKey?: string): void {
 export function clearMainAiAuthRejected(projectKey?: string): void {
   try {
     sessionStorage.removeItem(authRejectedKey(projectKey));
+  } catch {
+    /* ignore */
+  }
+}
+
+/** Clear every project’s sticky 401 flag (key save / landing reset). */
+export function clearAllMainAiAuthRejected(): void {
+  try {
+    const doomed: string[] = [];
+    for (let i = 0; i < sessionStorage.length; i++) {
+      const k = sessionStorage.key(i);
+      if (k && k.startsWith('nebula-main-ai-auth-rejected:')) doomed.push(k);
+    }
+    for (const k of doomed) sessionStorage.removeItem(k);
   } catch {
     /* ignore */
   }
@@ -102,6 +117,7 @@ export function userFacingContinueFailureMessage(
 ): string {
   const limited = resolveAiLimitUserMessage(rawMessage, opts);
   if (failureClass === 'key/auth fail') {
+    if (/incorrect api key/i.test(rawMessage)) return XAI_INCORRECT_KEY_MESSAGE;
     // Permission/quota copy when recognizable; otherwise the standard missing-key hint.
     if (limited !== rawMessage) return limited;
     return MAIN_AI_CHAT_SETUP_HINT;

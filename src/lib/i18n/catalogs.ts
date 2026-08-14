@@ -109,6 +109,9 @@ const enAppStatus: Catalog = {
   'appStatus.friendly.networkTitle': 'The app couldn’t reach the server',
   'appStatus.friendly.networkBody':
     'A request from the preview failed. This can be a missing API or a temporary network issue.',
+  'appStatus.friendly.rateLimitTitle': 'Too many requests — wait a minute',
+  'appStatus.friendly.rateLimitBody':
+    'Grok was asked too often. This is not a preview crash — wait, then continue building.',
   'appStatus.friendly.genericBody':
     'The preview hit a problem. Open Technical details if you want the exact message.',
   'appStatus.friendly.genericBodyWhere':
@@ -231,6 +234,9 @@ const frAppStatus: Catalog = {
   'appStatus.friendly.networkTitle': 'L’app n’a pas atteint le serveur',
   'appStatus.friendly.networkBody':
     'Une requête de l’aperçu a échoué. Clé API manquante ou réseau temporaire possible.',
+  'appStatus.friendly.rateLimitTitle': 'Trop de requêtes — attendez une minute',
+  'appStatus.friendly.rateLimitBody':
+    'Grok a été sollicité trop souvent. Ce n’est pas un crash de l’aperçu — attendez, puis continuez.',
   'appStatus.friendly.genericBody':
     'L’aperçu a rencontré un problème. Ouvre Détails techniques pour le message exact.',
   'appStatus.friendly.genericBodyWhere':
@@ -353,6 +359,9 @@ const itAppStatus: Catalog = {
   'appStatus.friendly.networkTitle': 'L’app non ha raggiunto il server',
   'appStatus.friendly.networkBody':
     'Una richiesta dall’anteprima è fallita. Può essere un’API mancante o un problema di rete temporaneo.',
+  'appStatus.friendly.rateLimitTitle': 'Troppe richieste — attendi un minuto',
+  'appStatus.friendly.rateLimitBody':
+    'Grok è stato chiamato troppe volte. Non è un crash dell’anteprima — attendi, poi continua.',
   'appStatus.friendly.genericBody':
     'L’anteprima ha avuto un problema. Apri Dettagli tecnici per il messaggio esatto.',
   'appStatus.friendly.genericBodyWhere':
@@ -475,6 +484,9 @@ const esAppStatus: Catalog = {
   'appStatus.friendly.networkTitle': 'La app no pudo llegar al servidor',
   'appStatus.friendly.networkBody':
     'Falló una petición de la vista previa. Puede ser una API faltante o un problema de red temporal.',
+  'appStatus.friendly.rateLimitTitle': 'Demasiadas solicitudes — espera un minuto',
+  'appStatus.friendly.rateLimitBody':
+    'Grok recibió demasiadas peticiones. No es un fallo de la vista previa — espera y sigue construyendo.',
   'appStatus.friendly.genericBody':
     'La vista previa tuvo un problema. Abre Detalles técnicos para el mensaje exacto.',
   'appStatus.friendly.genericBodyWhere':
@@ -597,6 +609,9 @@ const deAppStatus: Catalog = {
   'appStatus.friendly.networkTitle': 'Die App erreichte den Server nicht',
   'appStatus.friendly.networkBody':
     'Eine Anfrage aus der Vorschau ist fehlgeschlagen. Fehlende API oder temporäres Netzwerk möglich.',
+  'appStatus.friendly.rateLimitTitle': 'Zu viele Anfragen — eine Minute warten',
+  'appStatus.friendly.rateLimitBody':
+    'Grok wurde zu oft aufgerufen. Das ist kein Vorschau-Absturz — warten, dann weiterbauen.',
   'appStatus.friendly.genericBody':
     'Die Vorschau hatte ein Problem. Öffne Technische Details für die genaue Meldung.',
   'appStatus.friendly.genericBodyWhere':

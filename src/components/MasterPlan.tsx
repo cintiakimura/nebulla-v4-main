@@ -1,18 +1,13 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { BookOpen, Download, Lock, Loader2, Save, X } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { readResponseJson } from '../lib/apiFetch';
 import { PRE_CODING_SUMMARY_KEY } from '../lib/masterPlanSections';
-import { getBrowserProjectName, withProjectBody, withProjectQuery } from '../lib/nebulaProjectApi';
-import { runMasterPlanUiPipelineWithV0 } from '../lib/ideArtifactSync';
-import { downloadTechnicalDocumentation } from '../lib/technicalDocumentationDownload';
-import { MasterPlanStatusBanner } from './ide/MasterPlanStatusBanner';
+import { withProjectBody, withProjectQuery } from '../lib/nebulaProjectApi';
 
 export function MasterPlan({
-  onClose,
   projectKey = 'default',
 }: {
-  onClose: () => void;
+  onClose?: () => void;
   projectKey?: string;
 }) {
   const [planData, setPlanData] = useState<Record<string, string>>({});
@@ -32,11 +27,11 @@ export function MasterPlan({
         const data = await readResponseJson<Record<string, string>>(res);
         setPlanData(data);
       } else {
-        console.warn("Failed to fetch master plan, status:", res.status);
+        console.warn('Failed to fetch master plan, status:', res.status);
       }
       setLoading(false);
     } catch (err) {
-      console.error("Error fetching master plan:", err);
+      console.error('Error fetching master plan:', err);
       setLoading(false);
     }
   }, [projectKey]);
@@ -51,16 +46,13 @@ export function MasterPlan({
     return () => window.removeEventListener('nebula-master-plan-updated', onRefresh);
   }, [fetchPlan]);
 
-  // Expose updateSection to window for Grok B to use if needed
   useEffect(() => {
     (window as any).updateMasterPlanSection = async (tabNumber: number, newText: string) => {
       const title = titles[tabNumber - 1];
-      if (!title) return { error: "Invalid tab number" };
+      if (!title) return { error: 'Invalid tab number' };
 
-      // Update local state immediately for instant re-render
-      setPlanData(prev => ({ ...prev, [title]: newText }));
+      setPlanData((prev) => ({ ...prev, [title]: newText }));
 
-      // Persist to backend
       try {
         const res = await fetch(withProjectQuery('/api/master-plan/update'), {
           method: 'POST',
@@ -69,7 +61,7 @@ export function MasterPlan({
         });
         return await res.json();
       } catch (err) {
-        console.error("Failed to persist master plan update:", err);
+        console.error('Failed to persist master plan update:', err);
         return { error: err };
       }
     };
@@ -102,7 +94,7 @@ export function MasterPlan({
   const sessionBrief = planData[PRE_CODING_SUMMARY_KEY]?.trim() ?? '';
 
   const PLAN_SECTIONS = titles.map((title) => {
-    const id = title.toLowerCase().replace(/[^a-z0-9]/g, '-');
+    const id = title.toLowerCase().replace(/[^a-z0-9]+/g, '-');
     const content = sectionContent(title);
     return { id, title, content };
   });
@@ -114,7 +106,6 @@ export function MasterPlan({
   ];
 
   const [activeTab, setActiveTab] = useState(visibleSections[0].id);
-  const [isSaved, setIsSaved] = useState(true);
 
   useEffect(() => {
     const openTabFromNumber = (tabNumber: number) => {
@@ -145,129 +136,46 @@ export function MasterPlan({
     };
   }, [visibleSections]);
 
-  const activeSection = visibleSections.find(s => s.id === activeTab);
+  const activeSection = visibleSections.find((s) => s.id === activeTab);
   const activeContent = activeSection?.content ?? '';
 
-  const [exportBusy, setExportBusy] = useState(false);
-  const [exportMsg, setExportMsg] = useState<string | null>(null);
-
-  const handleSave = async () => {
-    setIsSaved(true);
-    try {
-      const projectName = getBrowserProjectName().trim() || 'Untitled Project';
-      await runMasterPlanUiPipelineWithV0({
-        projectName,
-        autoV0: false,
-      });
-      window.dispatchEvent(new CustomEvent('nebula-master-plan-updated'));
-      window.dispatchEvent(new CustomEvent('nebula-mind-map-updated'));
-      // Do not auto-open legacy V0 studio or emit V0 status — Beta generates after coding.
-    } catch (err) {
-      console.warn('Master Plan save pipeline failed:', err);
-    }
-  };
-
-  const handleExportDocs = async () => {
-    if (exportBusy) return;
-    setExportBusy(true);
-    setExportMsg(null);
-    try {
-      const result = await downloadTechnicalDocumentation();
-      if (!result.ok) {
-        setExportMsg(result.error || 'Export failed');
-        window.setTimeout(() => setExportMsg(null), 6000);
-        return;
-      }
-      setExportMsg(result.filename ? `Downloaded ${result.filename}` : 'Downloaded');
-      window.setTimeout(() => setExportMsg(null), 4000);
-    } finally {
-      setExportBusy(false);
-    }
-  };
-
   return (
-    <div className="flex h-full flex-col overflow-hidden border border-border bg-black shadow-2xl">
-      {/* Header */}
-      <div className="flex h-12 items-center justify-between border-b border-border bg-black px-4">
-        <div className="flex items-center gap-3 text-foreground">
-          <BookOpen className="h-4 w-4" />
-          <span className="font-headline text-sm font-normal tracking-wide">Master Plan</span>
-          <span className="flex items-center gap-1 rounded-full border border-border px-2 py-0.5 text-[10px] text-muted-foreground">
-            <Lock className="h-3 w-3" />
-            SOURCE OF TRUTH
-          </span>
-        </div>
-        <div className="flex items-center gap-3">
-          <button
-            type="button"
-            onClick={() => void handleExportDocs()}
-            disabled={exportBusy}
-            title="Markdown summary of plan, stack, pages, and security baseline"
-            className="btn-cyan inline-flex items-center gap-1.5 rounded-lg px-4 py-2 text-xs disabled:opacity-45"
-          >
-            {exportBusy ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
-            ) : (
-              <Download className="h-3.5 w-3.5" aria-hidden />
-            )}
-            Export technical documentation
-          </button>
-          <button
-            type="button"
-            onClick={handleSave}
-            className="btn-cyan inline-flex items-center gap-1.5 rounded-lg px-4 py-2 text-xs"
-          >
-            <Save className="h-3.5 w-3.5" />
-            {isSaved ? 'Saved' : 'Save'}
-          </button>
-          <div className="h-4 w-px bg-border"></div>
-          <button onClick={onClose} className="flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-[#111111] hover:text-foreground">
-            <X className="h-4 w-4" />
-          </button>
-        </div>
+    <div className="flex h-full min-h-0 flex-col overflow-hidden">
+      <div className="flex h-10 shrink-0 items-center border-b border-border px-4">
+        <h2 className="type-section">Master Plan</h2>
       </div>
-      {exportMsg ? (
-        <p
-          className="border-b border-border bg-[#111111] px-4 py-1.5 text-[11px] text-muted-foreground"
-          role="status"
+
+      <div className="flex min-h-0 flex-1 overflow-hidden">
+        <nav
+          className="flex w-48 shrink-0 flex-col gap-0.5 overflow-y-auto border-r border-border p-2 sm:w-52"
+          aria-label="Master Plan sections"
         >
-          {exportMsg}
-        </p>
-      ) : null}
-
-      <MasterPlanStatusBanner />
-
-      {/* Body */}
-      <div className="flex flex-1 overflow-hidden">
-        {/* Sidebar Tabs */}
-        <div className="flex w-64 flex-col gap-1 overflow-y-auto border-r border-border bg-black p-3">
-          {visibleSections.map(section => (
+          {visibleSections.map((section) => (
             <button
               key={section.id}
+              type="button"
               onClick={() => setActiveTab(section.id)}
-              className={`rounded-lg border px-3 py-2.5 text-left text-13 font-normal tracking-wide transition-colors ${
+              className={`rounded-md border px-2.5 py-2 text-left text-xs tracking-wide transition-colors ${
                 activeTab === section.id
-                  ? 'border-white/30 bg-[#111111] text-foreground'
-                  : 'border-transparent text-muted-foreground hover:border-white/15 hover:bg-[#111111] hover:text-foreground'
+                  ? 'border-[var(--shell-border-strong)] text-foreground'
+                  : 'border-transparent text-muted-foreground hover:border-border hover:text-foreground'
               }`}
             >
               {section.title}
             </button>
           ))}
-        </div>
+        </nav>
 
-        {/* Content Area (Read-only Doc) */}
-        <div className="flex-1 overflow-y-auto bg-black p-8">
-          <div className="prose prose-invert prose-sm mx-auto min-h-full max-w-3xl rounded-xl border border-border bg-black p-8 shadow-lg prose-pre:rounded-md prose-pre:border prose-pre:border-border prose-pre:bg-[#0a0a0a] prose-pre:p-2 prose-table:border prose-table:border-border prose-th:bg-[#111111] prose-th:p-2 prose-td:border-t prose-td:border-border prose-td:p-2">
+        <div className="min-h-0 flex-1 overflow-y-auto p-5 md:p-7">
+          <div className="prose prose-invert prose-sm mx-auto min-h-full max-w-2xl prose-headings:font-medium prose-p:text-muted-foreground prose-pre:rounded-md prose-pre:border prose-pre:border-border prose-pre:p-3">
             {loading ? (
-              <p className="text-slate-500 text-sm not-prose">Loading…</p>
+              <p className="type-body-dense not-prose text-muted-foreground">Loading…</p>
             ) : activeContent.trim() ? (
               <ReactMarkdown>{activeContent}</ReactMarkdown>
             ) : (
-              <p className="text-slate-500 text-sm not-prose leading-relaxed">
-                No content in this section yet. Use the <strong className="text-slate-300">assistant</strong> (right
-                panel) for the guided interview — the Master Plan fills as Grok saves each tab. You can also paste or edit
-                here after generation.
+              <p className="type-body-dense not-prose leading-relaxed text-muted-foreground">
+                No content in this section yet. Use the assistant for the guided interview — the Master
+                Plan fills as each tab is saved.
               </p>
             )}
           </div>

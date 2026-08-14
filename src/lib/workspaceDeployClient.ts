@@ -4,6 +4,7 @@
  */
 import { fetchJson } from './apiFetch';
 import { getBrowserProjectName, withProjectBody, withProjectQuery } from './nebulaProjectApi';
+import { writeStoredWorkspaceLiveUrl } from './workspaceLiveUrl';
 
 export type WorkspaceDeployResult = {
   ok: boolean;
@@ -39,7 +40,7 @@ export async function runWorkspaceDeployOrBuildCheck(options?: {
   projectName?: string;
 }): Promise<WorkspaceDeployResult> {
   try {
-    return await fetchJson<WorkspaceDeployResult>(withProjectQuery('/api/workspace/deploy'), {
+    const result = await fetchJson<WorkspaceDeployResult>(withProjectQuery('/api/workspace/deploy'), {
       method: 'POST',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
@@ -50,6 +51,8 @@ export async function runWorkspaceDeployOrBuildCheck(options?: {
         }),
       ),
     });
+    if (result.url) writeStoredWorkspaceLiveUrl(result.url);
+    return result;
   } catch (e) {
     const msg = e instanceof Error ? e.message : 'Deploy / build check failed';
     return { ok: false, mode: 'build_check', error: msg, url: null };

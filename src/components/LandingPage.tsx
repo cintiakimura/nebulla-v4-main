@@ -1,21 +1,56 @@
-import React, { useState, useEffect } from 'react';
+import { useEffect } from 'react';
 import { Logo } from './Logo';
-import { Rocket, ArrowRight, CheckCircle, Terminal, LayoutGrid, Handshake, Network, Palette, Bug, Cpu, Globe, MoreHorizontal, PlusCircle, Save, Trash2, CreditCard, Camera, List, Code, User } from 'lucide-react';
+import { cn } from '@/lib/utils';
+import { FORCE_GUEST_MODE } from '../lib/testingBranch';
+import { LandingHeroPrompt } from './LandingHeroPrompt';
+import { fetchSessionUser } from '../lib/nebulaCloud';
+import { goToApp } from '../lib/authNavigate';
+import { markForceDashboardOnce } from '../lib/guidedFunnel';
 
 interface LandingPageProps {
   onEnter: () => void;
 }
 
-export function LandingPage({ onEnter }: LandingPageProps) {
-  const [userEmail, setUserEmail] = useState<string | null>(null);
+const PATH = [
+  {
+    step: '01',
+    title: 'Plan',
+    body: 'Goal becomes a Master Plan and mind map — the architecture stays grounded.',
+  },
+  {
+    step: '02',
+    title: 'Build',
+    body: 'Chat and preview on one surface. Edit the product while you talk.',
+  },
+  {
+    step: '03',
+    title: 'Code',
+    body: 'Open the files, commit when ready, keep the workspace as source of truth.',
+  },
+  {
+    step: '04',
+    title: 'Deploy',
+    body: 'Ship a temporary URL, then attach your domain when you are ready.',
+  },
+] as const;
 
+/**
+ * Landing — Linear-like type rhythm + sparse bands; composer owns the first viewport.
+ * Handoff via LandingHeroPrompt unchanged.
+ */
+export function LandingPage({ onEnter }: LandingPageProps) {
+  /** T8 — signed-in users skip marketing landing → Dashboard. */
   useEffect(() => {
-    // Mock authentication check from local storage
-    const savedUser = localStorage.getItem('nebula_user');
-    if (savedUser) {
-      const user = JSON.parse(savedUser);
-      setUserEmail(user.email || null);
-    }
+    if (FORCE_GUEST_MODE) return;
+    let cancelled = false;
+    void fetchSessionUser().then((u) => {
+      if (cancelled || !u) return;
+      markForceDashboardOnce();
+      goToApp();
+    });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
@@ -31,329 +66,175 @@ export function LandingPage({ onEnter }: LandingPageProps) {
   }, [onEnter]);
 
   const handleTryFree = () => {
+    markForceDashboardOnce();
     onEnter();
   };
 
   return (
-    <div className="nebula-landing-page min-h-screen text-on-surface font-body font-normal">
-      <div className="nebula-landing-page__bg" aria-hidden="true" />
-      <div className="nebula-landing-page__veil" aria-hidden="true" />
-
-      <div className="nebula-landing-page__content">
-      {/* Header */}
-      <header className="nebula-landing-header h-16 border-b border-cyan-500/10 flex items-center px-8 justify-between shrink-0">
-        <div className="flex items-center gap-2 text-cyan-300">
-          <Logo className="w-8 h-8" />
-          <span className="font-headline text-lg font-normal">nebulla</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <a
-            href="/login"
-            className="px-3 py-2 text-slate-400 hover:text-cyan-200 transition-all font-headline text-sm font-normal"
-          >
-            Sign in
-          </a>
-          <button
-            type="button"
-            onClick={onEnter}
-            className="px-4 py-2 bg-cyan-500/10 text-cyan-300 border border-cyan-500/30 rounded-md hover:bg-cyan-500/20 transition-all font-headline text-sm font-normal"
-          >
-            Closed beta
-          </button>
-        </div>
-      </header>
-
-      {/* Main Content */}
-      <main className="flex-1 p-8 md:p-16 lg:p-24 flex flex-col gap-24">
-        {/* Hero */}
-        <section className="grid grid-cols-1 lg:grid-cols-2 gap-12 lg:gap-8 items-center">
-          <div className="flex flex-col gap-6 text-left max-w-2xl">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-cyan-500/10 border border-cyan-500/20 text-cyan-300 text-xs font-headline font-normal w-fit">
-              <Rocket className="w-3.5 h-3.5" />
-              Free closed beta · invite only
-            </div>
-            <h1 className="text-4xl md:text-6xl font-headline text-slate-100 font-normal leading-tight">
-              The first architecture-focused<br/>AI builder.
-            </h1>
-            <p className="text-lg md:text-xl text-slate-300 font-normal max-w-2xl leading-relaxed">
-              Plan → UI Studio Beta → code → preview in one workspace. Free during closed beta — no payment required.
-            </p>
-            <div className="flex flex-col gap-8 mt-4">
-              <button 
-                onClick={onEnter}
-                className="px-6 py-3 bg-cyan-500/20 text-cyan-300 border border-cyan-500/50 rounded-lg hover:bg-cyan-500/30 transition-all font-headline text-base font-normal flex items-center gap-2 w-fit"
+    <div className="nebula-landing-page flex min-h-screen flex-col font-body text-foreground">
+      <div className="nebula-landing-page__content relative z-[2] flex min-h-screen flex-col">
+        <header className="ide-glass-chrome flex h-14 shrink-0 items-center justify-between border-b border-border px-5 md:px-10">
+          <div className="flex items-center gap-2.5">
+            <Logo className="h-9 w-9 md:h-10 md:w-10" />
+            <span className="app-logotype text-[15px] tracking-[0.03em] md:text-base">Nebulla</span>
+          </div>
+          <div className="flex items-center gap-2">
+            {FORCE_GUEST_MODE ? (
+              <a
+                href="/app"
+                onClick={() => markForceDashboardOnce()}
+                className="btn-secondary-surface inline-flex h-8 items-center rounded-md px-3 text-xs text-muted-foreground"
               >
-                Enter workspace
-                <ArrowRight className="w-4.5 h-4.5" />
-              </button>
-            </div>
+                Open app
+              </a>
+            ) : (
+              <a
+                href="/login"
+                className="btn-secondary-surface inline-flex h-8 items-center rounded-md px-3 text-xs text-muted-foreground"
+              >
+                Log in
+              </a>
+            )}
+            <button type="button" onClick={handleTryFree} className="btn-cyan">
+              {FORCE_GUEST_MODE ? 'Enter workspace' : 'Closed beta'}
+            </button>
           </div>
-          
-          <div className="nebula-landing-card nebula-landing-card--hero flex flex-col justify-center items-start lg:items-end p-8 lg:p-12">
-            <div className="text-4xl md:text-5xl lg:text-6xl font-headline text-cyan-300 font-normal tracking-tight mb-6">
-              Free beta
-            </div>
-            <p className="text-xl md:text-2xl text-slate-200 font-normal max-w-sm text-left lg:text-right leading-snug">
-              Invite-only closed beta<br/>
-              <span className="text-cyan-400/80">Core ride only</span><br/>
-              <span className="text-slate-400">Paid plan after beta (€19.99)</span>
-            </p>
-          </div>
-        </section>
+        </header>
 
-        {/* Features Grid */}
-        <section className="flex flex-col gap-12 text-left">
-          <h2 className="text-2xl md:text-3xl font-headline text-slate-100 font-normal">
-            Everything you need to build at scale.
-          </h2>
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 lg:gap-12">
-            <div className="lg:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-6">
-              <FeatureCard 
-                icon={<Globe className="w-6 h-6" />} 
-                title="No credit limits" 
-                description="Build without boundaries. We don't cap your creativity or charge per generation."
-              />
-              <FeatureCard 
-                icon={<LayoutGrid className="w-6 h-6" />} 
-                title="All in one solution" 
-                description="From architecture to deployment, everything happens in one unified workspace."
-              />
-              <FeatureCard 
-                icon={<Handshake className="w-6 h-6" />} 
-                title="Dev partner" 
-                description="More than a code generator. An AI that understands your architecture and context."
-              />
-              <FeatureCard 
-                icon={<Network className="w-6 h-6" />} 
-                title="Mind map" 
-                description="Visualize your entire application structure, user flows, and database schemas instantly."
-              />
-              <FeatureCard 
-                icon={<Palette className="w-6 h-6" />} 
-                title="AI gen. UI Mockup with 3 options" 
-                description="Generate multiple UI variations for any component and choose the perfect fit."
-              />
-              <FeatureCard 
-                icon={<Bug className="w-6 h-6" />} 
-                title="Self debugging method" 
-                description="Automated error detection and resolution that learns from your codebase."
-              />
+        <main className="flex flex-1 flex-col">
+          {/* Hero — one display line; grouped band, not viewport-centered void */}
+          <section className="landing-hero flex flex-col items-center text-center">
+            <div className="landing-measure flex flex-col items-center">
+              <p className="landing-label">NEBULLA</p>
+              <h1 className="landing-display mt-2">
+                Talk like a friend.
+                <br />
+                Build like a pro.
+              </h1>
+              <p className="landing-body mt-4 max-w-[34rem]">
+                Architecture-first. You describe the goal — Nebulla plans and builds a real product
+                you can launch, not a dead mockup.
+              </p>
+              <LandingHeroPrompt className="mt-6 w-full" />
             </div>
-            
-            <div className="nebula-landing-card lg:col-span-1 flex flex-col gap-6 p-8">
-              <h3 className="text-xl font-headline text-cyan-300 font-normal mb-2">All Features Included</h3>
-              <ul className="flex flex-col gap-4">
-                {[
-                  "Handsfree open talk, no more prompts",
-                  "Backend functions",
-                  "Database",
-                  "Github integration",
-                  "The latest AI dev model",
-                  "Connect domain",
-                  "Master plan - save all info no more hallucinations",
-                  "Mind map - visualize your architecture, drag and drop",
-                  "UI/UX mockup - AI gen. choose from 3 options",
-                  "Self debugging method"
-                ].map((feature, i) => (
-                  <li key={i} className="flex items-start gap-3 text-slate-300 text-sm">
-                    <CheckCircle className="w-4.5 h-4.5 text-cyan-500 shrink-0 mt-0.5" />
-                    <span className="leading-tight">{feature}</span>
+          </section>
+
+          {/* Product proof */}
+          <section className="landing-section border-t border-border">
+            <div className="mx-auto max-w-5xl">
+              <p className="landing-label">Workspace</p>
+              <h2 className="landing-title mt-2 max-w-2xl">Architecture first. One surface.</h2>
+              <p className="landing-body mt-4 max-w-xl">
+                Plan, build, and ship without stacking tools. Borders divide the work — not cards.
+              </p>
+
+              <div className="mt-12 overflow-hidden rounded-lg border border-border">
+                <div className="flex h-8 items-center gap-2 border-b border-border px-4">
+                  <span className="h-2 w-2 rounded-full border border-border" />
+                  <span className="h-2 w-2 rounded-full border border-border" />
+                  <span className="h-2 w-2 rounded-full border border-border" />
+                  <span className="landing-label-mono ml-2">Build · Preview · Chat</span>
+                </div>
+                <div className="grid min-h-[14rem] grid-cols-1 md:min-h-[18rem] md:grid-cols-[1fr_280px]">
+                  <div className="relative border-b border-border md:border-b-0 md:border-r">
+                    <div
+                      className="absolute inset-0 opacity-[0.12]"
+                      style={{
+                        backgroundImage: 'radial-gradient(#5a5a5a 1px, transparent 1px)',
+                        backgroundSize: '20px 20px',
+                      }}
+                      aria-hidden
+                    />
+                    <div className="relative flex h-full flex-col justify-end gap-2 p-6">
+                      <p className="landing-label">Preview</p>
+                      <p className="max-w-sm text-[15px] font-normal tracking-[-0.01em] text-foreground">
+                        Your app takes the stage. Chat stays beside it.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex flex-col justify-between p-5">
+                    <div>
+                      <p className="landing-label">Chat</p>
+                      <p className="landing-meta mt-2">Goal · tutoring app for kids</p>
+                    </div>
+                    <div className="mt-6 space-y-2">
+                      <div className="landing-meta rounded-md border border-border px-3 py-2 text-[var(--landing-ink)]">
+                        Drafted auth and the first learning path. Review the plan next?
+                      </div>
+                      <div className="landing-meta ml-auto max-w-[85%] rounded-md border border-border px-3 py-2">
+                        Yes — keep the architecture tight.
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          {/* Path */}
+          <section className="landing-section border-t border-border">
+            <div className="mx-auto max-w-5xl">
+              <p className="landing-label">Path</p>
+              <h2 className="landing-title mt-2 max-w-2xl">Plan → Build → Code → Deploy</h2>
+              <p className="landing-body mt-4 max-w-xl">
+                A clear sequence. No feature wall — just the work in order.
+              </p>
+
+              <ol className="mt-12 grid gap-6 border-t border-border pt-6 sm:grid-cols-2 lg:grid-cols-4 lg:gap-0">
+                {PATH.map((item, i) => (
+                  <li
+                    key={item.step}
+                    className={cn(
+                      'lg:px-6 lg:py-2',
+                      i > 0 && 'lg:border-l lg:border-border',
+                    )}
+                  >
+                    <p className="landing-label-mono">{item.step}</p>
+                    <h3 className="mt-2 text-[15px] font-normal tracking-[-0.01em] text-foreground">
+                      {item.title}
+                    </h3>
+                    <p className="landing-meta mt-2 max-w-[28ch]">{item.body}</p>
                   </li>
                 ))}
-              </ul>
+              </ol>
             </div>
-          </div>
-        </section>
+          </section>
 
-        {/* App Preview / Screenshots */}
-        <section className="flex flex-col gap-8 text-left w-full max-w-6xl mx-auto">
-          <div className="flex flex-col gap-2">
-            <h2 className="text-2xl md:text-3xl font-headline text-slate-100 font-normal">
-              A glimpse into the workspace
-            </h2>
-            <p className="text-slate-300 text-lg font-normal max-w-2xl">
-              Experience the seamless integration of our IDE and Architecture Mind Map. Everything is designed to keep you in the flow.
-            </p>
-          </div>
-          
-          {/* Full IDE Mockup */}
-          <div className="nebula-landing-card nebula-landing-card--subtle overflow-hidden flex flex-col aspect-[16/10] md:aspect-[16/9] w-full bg-[#020617]">
-            {/* Header */}
-            <div className="h-8 md:h-10 bg-[#161b22] border-b border-white/5 flex items-center px-4 gap-2 shrink-0">
-              <div className="w-2.5 h-2.5 md:w-3 md:h-3 rounded-full bg-red-500/80"></div>
-              <div className="w-2.5 h-2.5 md:w-3 md:h-3 rounded-full bg-yellow-500/80"></div>
-              <div className="w-2.5 h-2.5 md:w-3 md:h-3 rounded-full bg-green-500/80"></div>
-              <div className="ml-2 md:ml-4 text-[10px] md:text-xs text-slate-400 font-mono flex items-center gap-2">
-                <Terminal className="w-3 h-3 md:w-3.5 md:h-3.5" />
-                nebulla workspace
+          {/* Close */}
+          <section className="landing-section border-t border-border">
+            <div className="mx-auto flex max-w-5xl flex-col items-start gap-6 md:flex-row md:items-end md:justify-between">
+              <div className="max-w-xl">
+                <h2 className="landing-title">
+                  Built for the future.
+                  <br />
+                  Available in closed beta.
+                </h2>
+                <p className="landing-body mt-4">
+                  Invite only. Billing stays off while we finish the critical path.
+                </p>
               </div>
+              <button type="button" onClick={handleTryFree} className="btn-cyan shrink-0">
+                Enter workspace
+              </button>
             </div>
-            
-            {/* Main Workspace */}
-            <div className="flex flex-1 overflow-hidden">
-              {/* Left Sidebar (Assistant) */}
-              <div className="hidden md:flex w-1/4 max-w-[240px] border-r border-white/5 bg-surface/50 flex-col">
-                <div className="p-2 md:p-3 border-b border-white/5 text-[10px] md:text-xs font-headline text-cyan-300 flex items-center gap-2">
-                  <Cpu className="w-3.5 h-3.5" />
-                  AI Assistant
-                </div>
-                <div className="flex-1 p-3 flex flex-col gap-3 overflow-hidden">
-                  <div className="bg-cyan-500/10 border border-cyan-500/20 rounded-lg p-2 text-[10px] text-slate-300">
-                    I've generated the authentication flow. Would you like to review the mind map?
-                  </div>
-                  <div className="bg-white/5 rounded-lg p-2 text-[10px] text-slate-400 self-end">
-                    Yes, show me the architecture.
-                  </div>
-                  <div className="bg-cyan-500/10 border border-cyan-500/20 rounded-lg p-2 text-[10px] text-slate-300">
-                    Here is the updated structure with the new nodes connected.
-                  </div>
-                </div>
-              </div>
-              
-              {/* Center (Mind Map) */}
-              <div className="flex-1 relative bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-slate-800/30 to-background overflow-hidden flex flex-col">
-                <div className="absolute inset-0" style={{ backgroundImage: 'radial-gradient(#334155 1px, transparent 1px)', backgroundSize: '24px 24px', opacity: 0.2 }}></div>
-                
-                {/* Tabs */}
-                <div className="h-8 border-b border-white/5 flex items-center px-2 z-10 bg-background/50 backdrop-blur-sm shrink-0">
-                  <div className="px-3 py-1 text-[10px] text-cyan-300 border-b-2 border-cyan-400 bg-cyan-500/10 flex items-center gap-1">
-                    <Network className="w-3 h-3" />
-                    Mind Map
-                  </div>
-                  <div className="px-3 py-1 text-[10px] text-slate-500 flex items-center gap-1">
-                    <List className="w-3 h-3" />
-                    Master Plan
-                  </div>
-                </div>
-                
-                {/* Nodes & Edges */}
-                <div className="flex-1 relative min-h-0">
-                  <svg className="absolute inset-0 w-full h-full pointer-events-none z-0" viewBox="0 0 100 100" preserveAspectRatio="none">
-                    {/* Main to Auth */}
-                    <path d="M 30 50 Q 45 30 60 30" fill="none" stroke="#06b6d4" strokeWidth="2" className="opacity-60" />
-                    {/* Main to Dashboard */}
-                    <path d="M 30 50 L 60 50" fill="none" stroke="#06b6d4" strokeWidth="2" className="opacity-60" />
-                    {/* Main to Settings */}
-                    <path d="M 30 50 Q 45 70 60 70" fill="none" stroke="#06b6d4" strokeWidth="2" className="opacity-60" />
-                  </svg>
-                  
-                  {/* Root Node */}
-                  <div className="absolute left-[15%] md:left-[20%] top-[45%] bg-slate-800 border-2 border-cyan-500 rounded-lg p-2 md:p-3 shadow-[0_0_20px_rgba(6,182,212,0.2)] z-10 w-24 md:w-32 transform -translate-y-1/2">
-                    <div className="text-cyan-300 font-headline text-[10px] md:text-xs truncate">App.tsx</div>
-                    <div className="text-slate-400 text-[8px] md:text-[10px] mt-1 truncate">Main Application</div>
-                  </div>
-                  
-                  {/* Child Nodes */}
-                  <div className="absolute left-[55%] md:left-[60%] top-[30%] bg-slate-800 border border-white/10 rounded-lg p-2 md:p-3 shadow-lg z-10 w-24 md:w-32 transform -translate-y-1/2">
-                    <div className="text-slate-200 font-headline text-[10px] md:text-xs truncate">Auth Flow</div>
-                    <div className="text-slate-400 text-[8px] md:text-[10px] mt-1 truncate">Firebase Integration</div>
-                  </div>
-                  
-                  <div className="absolute left-[55%] md:left-[60%] top-[50%] bg-slate-800 border border-white/10 rounded-lg p-2 md:p-3 shadow-lg z-10 w-24 md:w-32 transform -translate-y-1/2">
-                    <div className="text-slate-200 font-headline text-[10px] md:text-xs truncate">Dashboard</div>
-                    <div className="text-slate-400 text-[8px] md:text-[10px] mt-1 truncate">User Projects</div>
-                  </div>
-                  
-                  <div className="absolute left-[55%] md:left-[60%] top-[70%] bg-slate-800 border border-white/10 rounded-lg p-2 md:p-3 shadow-lg z-10 w-24 md:w-32 transform -translate-y-1/2">
-                    <div className="text-slate-200 font-headline text-[10px] md:text-xs truncate">Settings</div>
-                    <div className="text-slate-400 text-[8px] md:text-[10px] mt-1 truncate">Preferences</div>
-                  </div>
-                </div>
-              </div>
-              
-              {/* Right Sidebar (Code) */}
-              <div className="hidden lg:flex w-1/3 max-w-[320px] border-l border-white/5 bg-[#0d1117] flex-col">
-                <div className="h-8 border-b border-white/5 flex items-center px-3 text-[10px] text-slate-400 font-mono bg-[#161b22] shrink-0 gap-2">
-                  <Code className="w-3 h-3 text-blue-400" />
-                  App.tsx
-                </div>
-                <div className="p-4 font-mono text-[10px] text-slate-300 flex flex-col gap-1.5 overflow-hidden">
-                  <div><span className="text-purple-400">import</span> {'{'} useState {'}'} <span className="text-purple-400">from</span> <span className="text-green-300">'react'</span>;</div>
-                  <div><span className="text-purple-400">import</span> {'{'} AssistantSidebar {'}'} <span className="text-purple-400">from</span> <span className="text-green-300">'./components'</span>;</div>
-                  <br/>
-                  <div><span className="text-purple-400">export default function</span> <span className="text-blue-400">App</span>() {'{'}</div>
-                  <div className="pl-4"><span className="text-purple-400">return</span> (</div>
-                  <div className="pl-8">{'<'}div className=<span className="text-green-300">"flex h-screen"</span>{'>'}</div>
-                  <div className="pl-12">{'<'}AssistantSidebar /{'>'}</div>
-                  <div className="pl-12">{'<'}MindMap /{'>'}</div>
-                  <div className="pl-8">{'<'}/div{'>'}</div>
-                  <div className="pl-4">);</div>
-                  <div>{'}'}</div>
-                </div>
-              </div>
-            </div>
-            
-            {/* Bottom Terminal */}
-            <div className="h-20 md:h-24 border-t border-white/5 bg-[#0d1117] flex flex-col shrink-0">
-              <div className="h-6 border-b border-white/5 flex items-center px-3 text-[10px] text-slate-500 font-mono bg-[#161b22] gap-2">
-                <Terminal className="w-3 h-3" />
-                Terminal
-              </div>
-              <div className="p-2 font-mono text-[10px] text-slate-400 flex flex-col gap-1 overflow-hidden">
-                <div className="flex gap-2"><span className="text-green-400">➜</span> <span className="text-cyan-400">nebula</span> npm run dev</div>
-                <div className="text-slate-500">VITE v5.0.0 ready in 250 ms</div>
-                <div className="text-green-400">➜ Local: http://localhost:3000/</div>
-              </div>
-            </div>
-          </div>
-        </section>
+          </section>
+        </main>
 
-        {/* Beta CTA */}
-        <section className="nebula-landing-card nebula-landing-card--hero p-8 md:p-12 flex flex-col md:flex-row items-start md:items-center justify-between gap-8 text-left">
-          <div className="flex flex-col gap-4">
-            <h2 className="text-base font-normal text-cyan-300">
-              Closed beta — invite only.
-            </h2>
-            <p className="text-slate-300 text-sm font-normal leading-relaxed">
-              Critical path: Plan → UI Studio Beta → one coding slice → App Preview. Billing is off. See BETA-STATUS for what works.
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={handleTryFree}
-            className="px-6 py-3 bg-cyan-500/20 text-cyan-300 border border-cyan-500/50 rounded-xl hover:bg-cyan-500/30 transition-all text-sm font-normal whitespace-nowrap"
-          >
-            Enter workspace
-          </button>
-        </section>
-      </main>
-
-      <footer className="nebula-landing-footer shrink-0 border-t border-cyan-500/10 py-6 px-8 flex flex-wrap items-center justify-center gap-6 text-13 text-slate-500">
-        <a href="/payment" className="text-slate-400 hover:text-cyan-300 transition-colors no-underline">
-          Payment
-        </a>
-        <span className="text-slate-600" aria-hidden>
-          ·
-        </span>
-        <a href="/privacy" className="text-slate-400 hover:text-cyan-300 transition-colors no-underline">
-          Privacy Policy
-        </a>
-        <span className="text-slate-600" aria-hidden>
-          ·
-        </span>
-        <a href="/terms" className="text-slate-400 hover:text-cyan-300 transition-colors no-underline">
-          Terms of Service
-        </a>
-        <span className="text-slate-600" aria-hidden>
-          ·
-        </span>
-        <a href="/legal/dpa" className="text-slate-400 hover:text-cyan-300 transition-colors no-underline">
-          DPA
-        </a>
-      </footer>
+        <footer className="type-label-sm flex shrink-0 flex-wrap items-center justify-center gap-5 border-t border-border px-5 py-8 text-muted-foreground md:gap-8">
+          <a href="/payment" className="no-underline transition-colors hover:text-foreground">
+            Payment
+          </a>
+          <a href="/privacy" className="no-underline transition-colors hover:text-foreground">
+            Privacy
+          </a>
+          <a href="/terms" className="no-underline transition-colors hover:text-foreground">
+            Terms
+          </a>
+          <a href="/legal/dpa" className="no-underline transition-colors hover:text-foreground">
+            DPA
+          </a>
+        </footer>
       </div>
-    </div>
-  );
-}
-
-function FeatureCard({ icon, title, description }: { icon: React.ReactNode, title: string, description: string }) {
-  return (
-    <div className="nebula-landing-card nebula-landing-card--hover p-6 flex flex-col gap-4 text-left">
-      <div className="w-12 h-12 rounded-lg bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center text-cyan-400">
-        {icon}
-      </div>
-      <h3 className="text-xl font-headline text-slate-100 font-normal">{title}</h3>
-      <p className="text-slate-300 text-sm font-normal leading-relaxed">{description}</p>
     </div>
   );
 }

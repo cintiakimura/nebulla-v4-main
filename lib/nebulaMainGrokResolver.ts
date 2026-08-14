@@ -158,6 +158,14 @@ function readClientHeaderKey(req: express.Request, provider: ByokProvider): stri
   return sanitizeEnvSecret(typeof value === "string" ? value : "");
 }
 
+/** True when the browser sent a usable BYOK header (guest / local save). */
+export function requestHasClientAiKey(req: express.Request): boolean {
+  for (const provider of ["xai", "anthropic", "openai"] as ByokProvider[]) {
+    if (readClientHeaderKey(req, provider).length >= MIN_KEY_LEN) return true;
+  }
+  return false;
+}
+
 function normalizePreferred(preferred?: MainAiProvider | string | null): ByokProvider {
   const p = String(preferred || "xai").trim().toLowerCase();
   if (isByokProvider(p)) return p;

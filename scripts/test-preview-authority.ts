@@ -12,6 +12,7 @@ import {
 } from "../lib/uiGenerationEngine/applyPreviewShell.ts";
 import {
   buildCodedAppPreviewBridgeHtml,
+  inferRoutesFromProductFiles,
   isNebulaUiGenMockupHtml,
   resolveAppPreviewAuthority,
   toHttpHeaderSafe,
@@ -65,7 +66,38 @@ section("workspaceHasCodedAppUi true with src/pages");
   const auth = resolveAppPreviewAuthority(root);
   assert.equal(auth.mode, "post_code_bridge");
   assert.equal(auth.codedApp, true);
-  assert.match(auth.statusLabel, /Post-code|product/i);
+  assert.match(auth.statusLabel, /Code exists|Post-code|product/i);
+  fs.rmSync(root, { recursive: true, force: true });
+}
+
+section("inferRoutesFromProductFiles from app/ pages");
+{
+  const routes = inferRoutesFromProductFiles([
+    "app/page.tsx",
+    "app/login/page.tsx",
+    "app/kid/page.tsx",
+    "components/TutorSession.tsx",
+  ]);
+  assert.deepEqual(routes, ["/", "/kid", "/login"]);
+}
+
+section("workspace-routes scaffold yields to UI Gen mockup");
+{
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "nebulla-preview-scaffold-"));
+  fs.writeFileSync(
+    path.join(root, "index.html"),
+    `<!DOCTYPE html><html><head><meta name="nebulla-preview" content="workspace-routes"/><title>App</title></head><body><p class="sub">Workspace routes on disk.</p></body></html>`,
+    "utf8",
+  );
+  fs.mkdirSync(path.join(root, "public"), { recursive: true });
+  fs.writeFileSync(
+    path.join(root, "public", "nebula-ui-gen-preview.html"),
+    `<!DOCTYPE html><html><head><meta name="nebulla-ui-gen-preview" content="1"/></head><body><div class="shell--phone" data-screen="home">Mockup</div></body></html>`,
+    "utf8",
+  );
+  const auth = resolveAppPreviewAuthority(root);
+  assert.equal(auth.mode, "pre_code_mockup");
+  assert.equal(auth.entryRel, "public/nebula-ui-gen-preview.html");
   fs.rmSync(root, { recursive: true, force: true });
 }
 
@@ -124,8 +156,9 @@ section("post-code apply does not overwrite live index with mockup");
     limitation: auth.limitation,
   });
   assert.match(bridge, /coded-app-bridge/);
-  assert.match(bridge, /Post-code/);
-  assert.ok(!/Fake buttons|class="btn"/.test(bridge) || /not mockup/i.test(bridge));
+  assert.match(bridge, /Code exists|Post-code/);
+  assert.ok(!/Who are you today/i.test(bridge));
+  assert.match(bridge, /Open Code/);
   fs.rmSync(root, { recursive: true, force: true });
 }
 
@@ -145,7 +178,7 @@ section("built dist/index.html preferred as live entry");
   fs.rmSync(root, { recursive: true, force: true });
 }
 
-section("interactive product preview preferred over post-code bridge");
+section("coded app files beat interactive mock — honest bridge");
 {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "nebulla-preview-interactive-"));
   fs.mkdirSync(path.join(root, "app", "kid"), { recursive: true });
@@ -182,14 +215,22 @@ section("interactive product preview preferred over post-code bridge");
   assert.equal(ensured.path, PRODUCT_PREVIEW_REL);
   const html = fs.readFileSync(path.join(root, PRODUCT_PREVIEW_REL), "utf8");
   assert.match(html, new RegExp(PRODUCT_PREVIEW_MARKER, "i"));
-  assert.match(html, /Interactive preview/);
-  assert.match(html, /localStorage/);
-  assert.match(html, /data-role=/);
+  assert.match(html, /Who are you today/);
   const auth = resolveAppPreviewAuthority(root);
-  assert.equal(auth.mode, "interactive_product_preview");
-  assert.equal(auth.entryRel, PRODUCT_PREVIEW_REL);
-  assert.match(auth.statusLabel, /Interactive preview/i);
-  assert.ok(auth.mode !== "post_code_bridge");
+  assert.equal(auth.mode, "post_code_bridge");
+  assert.equal(auth.codedApp, true);
+  assert.equal(auth.entryRel, null);
+  assert.match(auth.statusLabel, /Code exists/i);
+  const bridge = buildCodedAppPreviewBridgeHtml({
+    projectName: "Tutor Demo",
+    productFiles: auth.productFiles,
+    mockupRel: auth.mockupRel,
+    limitation: auth.limitation,
+  });
+  assert.match(bridge, /coded-app-bridge/);
+  assert.match(bridge, /Code exists/);
+  assert.match(bridge, /Open Code/);
+  assert.ok(!/Who are you today/i.test(bridge));
   fs.rmSync(root, { recursive: true, force: true });
 }
 

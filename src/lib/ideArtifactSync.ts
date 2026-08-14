@@ -194,8 +194,6 @@ export async function runMasterPlanUiPipelineWithV0(options?: {
 /** Client hard timeout — AbortController alone is insufficient when fetch never settles. */
 export const ARTIFACT_SYNC_TIMEOUT_MS = 60_000;
 
-const ARTIFACT_SYNC_WAIT_LABEL = 'Syncing project artifacts (Master Plan, mind map)';
-
 /** Single-flight owner so duplicate post-apply callers cannot stack forever-running rows. */
 let artifactSyncInFlight: Promise<IdeArtifactSyncResult> | null = null;
 
@@ -289,10 +287,7 @@ async function runSyncIdeProjectArtifactsOnce(options?: {
         }, timeoutMs)
       : null;
 
-  // Use wait kind so the chat spinner is owned by this phase and cleared on terminal kinds.
-  const stopWait = startGrokActivityWaitTicker(ARTIFACT_SYNC_WAIT_LABEL, (msg, kind, opts) =>
-    onProgress?.(msg, kind, opts),
-  );
+  onProgress?.('Syncing project artifacts (Master Plan, mind map)…', 'info');
 
   try {
     const sync = await withHardTimeout(
@@ -334,7 +329,6 @@ async function runSyncIdeProjectArtifactsOnce(options?: {
     );
     return { timedOut, softFailed: true };
   } finally {
-    stopWait();
     if (abortTimer != null) window.clearTimeout(abortTimer);
   }
 }

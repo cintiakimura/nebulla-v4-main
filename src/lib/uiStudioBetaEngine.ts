@@ -4,8 +4,8 @@
  * After successful UI-relevant Foundation/Go apply: one automatic post-code UI refresh
  * grounded on plan + file facts (not a sticky clone of the pre-code draft).
  *
- * Trigger flow: open Beta pane → dispatch run event → IdeUiStudioBeta owns the API call
- * (so stage UI stays in sync). Completes when nebula-ui-studio-beta-complete fires.
+ * This shell does not mount IdeUiStudioBeta — the engine calls /generate itself.
+ * Completes on HTTP result (or an already-ready status), not a pane complete event.
  */
 
 import { fetchJson } from './apiFetch';
@@ -135,64 +135,84 @@ export async function runUiStudioBetaGeneration(
       'info',
     );
 
-    return await new Promise<UiStudioBetaGenerateResult>((resolve) => {
-      let settled = false;
-      const finish = (result: UiStudioBetaGenerateResult) => {
-        if (settled) return;
-        settled = true;
-        window.clearInterval(pollTimer);
-        window.clearTimeout(timeout);
-        window.removeEventListener(NEBULA_UI_STUDIO_BETA_COMPLETE, onComplete as EventListener);
-        resolve(result);
-      };
+    const statusLooksReady = (st: {
+      user_visible_stage?: string;
+      final_status?: string;
+      has_loadable_model?: boolean;
+    }) => {
+      if (st.has_loadable_model) return true;
+      const final = String(st.final_status || '').toLowerCase();
+      const stage = String(st.user_visible_stage || '');
+      if (!/ready in preview/i.test(stage)) return false;
+      return final === 'generated' || final === 'refined' || final === 'accepted';
+    };
 
-      const onComplete = (ev: Event) => {
-        const detail = (ev as CustomEvent<UiStudioBetaGenerateResult>).detail;
-        if (detail?.preference_recovery) {
-          onProgress?.(detail.preference_recovery_question || 'Preference recovery needed', 'warn');
-          finish({ ...detail, ok: false, preference_recovery: true });
-          return;
-        }
-        if (detail?.ok === false) {
-          onProgress?.(detail.error || 'UI Studio Beta generation failed', 'error');
-          finish(detail);
-          return;
-        }
-        onProgress?.(detail?.user_visible_stage || 'Ready in preview', 'success');
-        finish({ ok: true, ...detail });
-      };
+    try {
+      const existing = await fetchJson<{
+        user_visible_stage?: string;
+        final_status?: string;
+        has_loadable_model?: boolean;
+      }>(withProjectQuery('/api/ui-studio-beta/status'), {
+        credentials: 'include',
+        headers: getGrokRequestHeaders(),
+      });
+      if (statusLooksReady(existing) && !options.regenerate) {
+        onProgress?.(existing.user_visible_stage || 'Ready in preview', 'success');
+        return { ok: true, user_visible_stage: existing.user_visible_stage };
+      }
+    } catch {
+      /* generate below */
+    }
 
-      window.addEventListener(NEBULA_UI_STUDIO_BETA_COMPLETE, onComplete as EventListener);
-
-      const pollTimer = window.setInterval(() => {
-        void fetchJson<{ user_visible_stage?: string }>(withProjectQuery('/api/ui-studio-beta/status'), {
-          credentials: 'include',
-          headers: getGrokRequestHeaders(),
-        })
-          .then((st) => {
-            if (st.user_visible_stage) onProgress?.(st.user_visible_stage, 'info');
-          })
-          .catch(() => undefined);
-      }, 1200);
-
-      const timeout = window.setTimeout(() => {
-        finish({ ok: false, error: 'UI Studio Beta generation timed out' });
-      }, 360_000);
-
-      // Delay so IdeUiStudioBeta can mount before handling the run event.
-      window.setTimeout(() => {
-        dispatchUiStudioBetaRun({
-          projectName: options.projectName,
-          pageName: options.pageName,
-          autoTriggered: options.autoTriggered,
-          regenerate: options.regenerate,
-          preferenceFeedback: options.preferenceFeedback,
-          guidedImprovement: options.guidedImprovement,
-          writtenPaths: options.writtenPaths,
-          uiPhase: options.uiPhase,
-        });
-      }, 400);
-    });
+    const GENERATE_TIMEOUT_MS = 45_000;
+    try {
+      const data = await Promise.race([
+        fetchJson<UiStudioBetaGenerateResult & { error?: string }>(
+          withProjectQuery('/api/ui-studio-beta/generate'),
+          {
+            method: 'POST',
+            credentials: 'include',
+            headers: { 'Content-Type': 'application/json', ...getGrokRequestHeaders() },
+            body: JSON.stringify(
+              withProjectBody({
+                projectName: options.projectName,
+                pageName: options.pageName,
+                regenerate: options.regenerate === true,
+                autoTriggered: options.autoTriggered === true,
+                preferenceFeedback: options.preferenceFeedback,
+                guidedImprovement: options.guidedImprovement === true,
+                writtenPaths: options.writtenPaths,
+                uiPhase: options.uiPhase,
+              }),
+            ),
+          },
+        ),
+        new Promise<never>((_, reject) => {
+          window.setTimeout(() => {
+            reject(new Error('UI Studio Beta generation timed out — Foundation coding continues'));
+          }, GENERATE_TIMEOUT_MS);
+        }),
+      ]);
+      if (data.preference_recovery) {
+        onProgress?.(data.preference_recovery_question || 'Preference recovery needed', 'warn');
+        return { ...data, ok: false, preference_recovery: true };
+      }
+      if (data.ok === false) {
+        onProgress?.(data.error || 'UI Studio Beta generation failed', 'error');
+        return data;
+      }
+      onProgress?.(data.user_visible_stage || 'Ready in preview', 'success');
+      try {
+        window.dispatchEvent(new CustomEvent(NEBULA_UI_STUDIO_BETA_COMPLETE, { detail: { ok: true, ...data } }));
+      } catch {
+        /* ignore */
+      }
+      return { ok: true, ...data };
+    } catch (e) {
+      const error = e instanceof Error ? e.message : 'UI Studio Beta generation failed';
+      onProgress?.(error, 'error');
+      return { ok: false, error };
+    }
   })().finally(() => {
     inFlight = null;
   });

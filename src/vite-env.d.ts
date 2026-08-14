@@ -7,6 +7,9 @@ interface ImportMetaEnv {
   readonly VITE_PUBLIC_SITE_URL?: string;
   /** Must match server `GUARDIAN_REPORT_KEY` for silent error reports. */
   readonly VITE_GUARDIAN_REPORT_KEY?: string;
+  /** Lab only (`1`/`true`). Unset in production. See `src/lib/testingBranch.ts`. */
+  readonly VITE_NEBULA_FORCE_GUEST?: string;
+  readonly NEBULA_FORCE_GUEST?: string;
 }
 
 interface ImportMeta {

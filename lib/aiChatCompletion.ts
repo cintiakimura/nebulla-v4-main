@@ -163,14 +163,33 @@ async function callXaiChatCompletion(
   model: string,
 ): Promise<AiChatCompletionResult> {
   try {
-    const response = await fetch("https://api.x.ai/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({ model, messages, stream: false }),
-    });
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 90_000);
+    let response: Response;
+    try {
+      response = await fetch("https://api.x.ai/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({ model, messages, stream: false }),
+        signal: controller.signal,
+      });
+    } catch (e) {
+      if (controller.signal.aborted) {
+        return {
+          ok: false,
+          status: 504,
+          error: "xAI timed out after 90s — coding can continue from the saved Master Plan",
+          provider: "xai",
+          model,
+        };
+      }
+      throw e;
+    } finally {
+      clearTimeout(timeoutId);
+    }
     const text = await response.text();
     if (!response.ok) {
       let errMsg = text.slice(0, 400);

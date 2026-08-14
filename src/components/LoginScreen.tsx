@@ -182,41 +182,41 @@ export function LoginScreen({
   };
 
   return (
-    <div className="h-screen overflow-y-auto bg-[#020C17] text-slate-100 flex flex-col font-body">
-      <header className="shrink-0 border-b border-white/10 px-6 py-4 flex items-center justify-between bg-[#040f1a]/80 backdrop-blur">
+    <div className="flex h-screen flex-col overflow-y-auto bg-transparent font-body text-foreground">
+      <header className="ide-glass-chrome flex h-12 shrink-0 items-center justify-between border-b border-border px-5 md:px-8">
         <button
           type="button"
           onClick={onBack}
-          className="inline-flex items-center gap-2 text-sm text-slate-400 hover:text-cyan-200 transition-colors"
+          className="btn-secondary-surface inline-flex h-8 items-center gap-1.5 rounded-md px-2.5 text-xs text-muted-foreground"
         >
-          <ChevronLeft className="w-4 h-4" aria-hidden />
+          <ChevronLeft className="h-4 w-4" aria-hidden />
           Back
         </button>
-        <div className="flex items-center gap-2 text-cyan-300">
-          <Logo className="w-8 h-8" />
-          <span className="font-headline text-lg tracking-tight">nebulla</span>
+        <div className="flex items-center gap-2">
+          <Logo className="h-8 w-8" />
+          <span className="app-logotype">Nebulla.beta</span>
         </div>
         <span className="w-16" aria-hidden />
       </header>
 
-      <main className="flex-1 flex items-center justify-center p-6 md:p-10">
-        <div className="w-full max-w-[420px] flex flex-col gap-8">
-          <div className="text-center space-y-2">
-            <h1 className="text-2xl md:text-3xl font-headline font-normal text-slate-100 tracking-tight">
+      <main className="flex flex-1 items-center justify-center p-6 md:p-10">
+        <div className="flex w-full max-w-[420px] flex-col gap-6">
+          <div className="space-y-2 text-center">
+            <h1 className="type-page">
               {heading ??
                 (emailMode === 'signup' && emailOpen ? 'Create your account' : 'Sign in to continue')}
             </h1>
-            <p className="text-sm text-slate-500 leading-relaxed">
+            <p className="type-body-dense text-muted-foreground">
               {subtitle ??
                 'Continue with GitHub, Google, or email. Your session is stored securely in a browser cookie.'}
             </p>
           </div>
 
           {existingUser ? (
-            <div className="rounded-2xl border border-cyan-500/30 bg-cyan-500/10 p-6 flex flex-col gap-3 text-center">
-              <p className="text-sm text-slate-300">
+            <div className="ide-glass-card flex flex-col gap-3 rounded-lg border border-border p-5 text-center">
+              <p className="type-body-dense text-muted-foreground">
                 You&apos;re already signed in as{' '}
-                <span className="text-cyan-200">
+                <span className="text-foreground">
                   {existingUser.email || existingUser.displayName || 'your account'}
                 </span>
                 . Free includes 1 trial project.
@@ -224,21 +224,21 @@ export function LoginScreen({
               <button
                 type="button"
                 onClick={onAuthenticated}
-                className="w-full py-3.5 px-4 rounded-xl bg-cyan-500/20 text-cyan-200 border border-cyan-500/40 font-headline text-[15px] font-medium hover:bg-cyan-500/30 transition-colors"
+                className="btn-cyan w-full"
               >
                 Open workspace
               </button>
             </div>
           ) : null}
 
-          <div className="rounded-2xl border border-white/10 bg-[#040f1a]/90 backdrop-blur-sm shadow-2xl shadow-black/40 p-8 flex flex-col gap-4">
+          <div className="ide-glass-card flex flex-col gap-3 rounded-lg border border-border p-6">
             <button
               type="button"
               onClick={() => void openGitHubOAuth()}
               disabled={!cloudOk || !githubOk || busy}
-              className="w-full py-3.5 px-4 rounded-xl bg-white text-[#0d1117] font-headline text-[15px] font-medium flex items-center justify-center gap-3 border border-white/20 shadow-lg shadow-black/20 hover:bg-slate-100 transition-colors disabled:opacity-45 disabled:cursor-not-allowed disabled:shadow-none"
+              className="btn-cyan flex w-full items-center justify-center gap-2 disabled:cursor-not-allowed disabled:opacity-45"
             >
-              <Github className="w-6 h-6 shrink-0" aria-hidden />
+              <Github className="h-5 w-5 shrink-0" aria-hidden />
               Continue with GitHub
             </button>
 
@@ -246,9 +246,9 @@ export function LoginScreen({
               type="button"
               onClick={() => void openGoogleOAuth()}
               disabled={!cloudOk || !googleOk || busy}
-              className="w-full py-3.5 px-4 rounded-xl bg-white text-[#0d1117] font-headline text-[15px] font-medium flex items-center justify-center gap-3 border border-white/20 shadow-lg shadow-black/20 hover:bg-slate-100 transition-colors disabled:opacity-45 disabled:cursor-not-allowed disabled:shadow-none"
+              className="btn-cyan flex w-full items-center justify-center gap-2 disabled:cursor-not-allowed disabled:opacity-45"
             >
-              <GoogleIcon className="w-5 h-5 shrink-0" />
+              <GoogleIcon className="h-5 w-5 shrink-0" />
               Continue with Google
             </button>
 
@@ -282,7 +282,7 @@ export function LoginScreen({
                 <div className="w-full border-t border-white/10" />
               </div>
               <div className="relative flex justify-center">
-                <span className="bg-[#040f1a] px-3 text-[11px] uppercase tracking-widest text-slate-500 font-headline">
+                <span className="type-micro bg-transparent px-3 uppercase tracking-widest">
                   or
                 </span>
               </div>
@@ -295,23 +295,23 @@ export function LoginScreen({
                 setError('');
               }}
               disabled={!cloudOk || busy}
-              className="w-full py-2.5 rounded-xl border border-white/10 text-slate-300 text-sm font-headline hover:bg-white/5 hover:border-white/15 transition-colors flex items-center justify-center gap-2 disabled:opacity-45 disabled:cursor-not-allowed"
+              className="btn-secondary-surface flex w-full items-center justify-center gap-2 disabled:cursor-not-allowed disabled:opacity-45"
             >
-              <Mail className="w-4 h-4 text-slate-500" aria-hidden />
+              <Mail className="h-4 w-4 text-muted-foreground" aria-hidden />
               {emailOpen ? 'Hide email sign-in' : 'Continue with email'}
             </button>
 
             {emailOpen ? (
               <form onSubmit={(e) => void submitEmail(e)} className="flex flex-col gap-4 pt-1">
-                <div className="flex rounded-lg border border-white/10 p-0.5 bg-black/25">
+                <div className="flex rounded-md border border-border p-0.5">
                   <button
                     type="button"
                     onClick={() => {
                       setEmailMode('signin');
                       setError('');
                     }}
-                    className={`flex-1 py-2 text-xs font-headline rounded-md transition-colors ${
-                      emailMode === 'signin' ? 'bg-cyan-500/20 text-cyan-300' : 'text-slate-500 hover:text-slate-300'
+                    className={`flex-1 rounded-md py-2 text-xs transition-colors ${
+                      emailMode === 'signin' ? 'btn-cyan' : 'text-muted-foreground hover:text-foreground'
                     }`}
                   >
                     Sign in
@@ -322,15 +322,15 @@ export function LoginScreen({
                       setEmailMode('signup');
                       setError('');
                     }}
-                    className={`flex-1 py-2 text-xs font-headline rounded-md transition-colors ${
-                      emailMode === 'signup' ? 'bg-cyan-500/20 text-cyan-300' : 'text-slate-500 hover:text-slate-300'
+                    className={`flex-1 rounded-md py-2 text-xs transition-colors ${
+                      emailMode === 'signup' ? 'btn-cyan' : 'text-muted-foreground hover:text-foreground'
                     }`}
                   >
                     Create account
                   </button>
                 </div>
                 <div>
-                  <label className="block text-[10px] uppercase tracking-wider text-slate-500 font-headline mb-1.5">
+                  <label className="type-micro mb-1.5 block uppercase tracking-wider">
                     Email
                   </label>
                   <input
@@ -338,13 +338,13 @@ export function LoginScreen({
                     autoComplete="email"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    className="w-full bg-black/35 border border-white/10 rounded-lg px-3 py-2.5 text-sm text-slate-200 placeholder:text-slate-600 focus:border-cyan-500/40 focus:ring-1 focus:ring-cyan-500/20 outline-none"
+                    className="ide-glass-input w-full rounded-md px-3 py-2 text-sm outline-none"
                     placeholder="you@example.com"
                     required
                   />
                 </div>
                 <div>
-                  <label className="block text-[10px] uppercase tracking-wider text-slate-500 font-headline mb-1.5">
+                  <label className="type-micro mb-1.5 block uppercase tracking-wider">
                     Password
                   </label>
                   <input
@@ -352,7 +352,7 @@ export function LoginScreen({
                     autoComplete={emailMode === 'signup' ? 'new-password' : 'current-password'}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    className="w-full bg-black/35 border border-white/10 rounded-lg px-3 py-2.5 text-sm text-slate-200 placeholder:text-slate-600 focus:border-cyan-500/40 focus:ring-1 focus:ring-cyan-500/20 outline-none"
+                    className="ide-glass-input w-full rounded-md px-3 py-2 text-sm outline-none"
                     placeholder={emailMode === 'signup' ? '8+ chars, letters and numbers' : 'Your password'}
                     required
                     minLength={emailMode === 'signup' ? 8 : undefined}
@@ -366,28 +366,28 @@ export function LoginScreen({
                       setForgotSent(false);
                       setError('');
                     }}
-                    className="text-xs text-cyan-500/80 hover:text-cyan-400 hover:underline self-end"
+                    className="type-label-sm self-end text-muted-foreground hover:text-foreground"
                   >
                     {forgotOpen ? 'Hide password reset' : 'Forgot password?'}
                   </button>
                 ) : null}
                 {forgotOpen && emailMode === 'signin' ? (
-                  <div className="rounded-lg border border-white/10 bg-black/25 p-3 space-y-3">
+                  <div className="space-y-3 rounded-lg border border-border bg-black/25 p-3">
                     {forgotSent ? (
-                      <p className="text-xs text-slate-300 leading-relaxed">
+                      <p className="text-xs leading-relaxed text-slate-300">
                         If an account exists for that email, a reset link was sent (or logged on the server in
                         development).
                       </p>
                     ) : (
                       <div className="space-y-3">
-                        <p className="text-xs text-slate-500 leading-relaxed">
+                        <p className="text-xs leading-relaxed text-slate-500">
                           We will email a reset link for email/password accounts.
                         </p>
                         <button
                           type="button"
                           onClick={() => void submitForgot()}
                           disabled={busy || !cloudOk || !email.trim()}
-                          className="w-full py-2 rounded-lg border border-cyan-500/30 text-cyan-200 text-xs font-headline hover:bg-cyan-500/15 disabled:opacity-50"
+                          className="btn-cyan w-full text-xs disabled:opacity-50"
                         >
                           {busy ? 'Sending…' : 'Send reset link'}
                         </button>
@@ -395,35 +395,35 @@ export function LoginScreen({
                     )}
                   </div>
                 ) : null}
-                {error ? <p className="text-sm text-red-400/95">{error}</p> : null}
+                {error ? <p className="type-body-dense text-destructive">{error}</p> : null}
                 <button
                   type="submit"
                   disabled={busy || !cloudOk}
-                  className="w-full py-3 rounded-xl bg-cyan-500/15 text-cyan-200 border border-cyan-500/35 font-headline text-sm hover:bg-cyan-500/25 transition-colors disabled:opacity-50"
+                  className="btn-cyan w-full disabled:opacity-50"
                 >
                   {busy ? 'Please wait…' : emailMode === 'signin' ? 'Sign in with email' : 'Create account'}
                 </button>
               </form>
             ) : null}
 
-            <label className="flex items-center justify-center gap-2 text-xs text-slate-500 cursor-pointer select-none pt-1">
+            <label className="type-label-sm flex cursor-pointer select-none items-center justify-center gap-2 pt-1">
               <input
                 type="checkbox"
                 checked={stayLoggedIn}
                 onChange={(e) => setStayLoggedIn(e.target.checked)}
-                className="rounded border-white/20 bg-black/40 text-cyan-500 focus:ring-cyan-500/30"
+                className="rounded border-border"
               />
               Stay signed in on this device
             </label>
           </div>
 
-          <p className="text-center text-[11px] text-slate-600 leading-relaxed px-2">
+          <p className="type-micro px-2 text-center leading-relaxed">
             By continuing you agree to our{' '}
-            <a href="/terms" className="text-cyan-500/80 hover:text-cyan-400 hover:underline" target="_blank" rel="noreferrer">
+            <a href="/terms" className="text-muted-foreground underline-offset-2 hover:text-foreground hover:underline" target="_blank" rel="noreferrer">
               Terms
             </a>{' '}
             and{' '}
-            <a href="/privacy" className="text-cyan-500/80 hover:text-cyan-400 hover:underline" target="_blank" rel="noreferrer">
+            <a href="/privacy" className="text-muted-foreground underline-offset-2 hover:text-foreground hover:underline" target="_blank" rel="noreferrer">
               Privacy Policy
             </a>
             .

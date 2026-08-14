@@ -124,7 +124,7 @@ export function wrapHtmlWithPreviewRuntimeBridge(html: string): string {
 
 /** Empty-workspace shell that also notifies parent (build). */
 export function emptyPreviewHtmlWithBridge(): string {
-  const body = `<!DOCTYPE html><html><head><meta charset="utf-8"/><title>No preview</title></head><body style="background:#0a1628;color:#94a3b8;font-family:system-ui;padding:2rem">No <code>index.html</code> in this workspace yet. Use <strong>Go</strong> to generate the app, then open Preview again.<script>
+  const body = `<!DOCTYPE html><html><head><meta charset="utf-8"/><title>No preview</title></head><body style="background:#141414;color:rgba(232,232,232,.66);font-family:ui-sans-serif,system-ui,sans-serif;padding:2rem">No <code>index.html</code> in this workspace yet. Use chat on Build to generate the app, then open Preview again.<script>
 (function(){
   try {
     parent.postMessage({

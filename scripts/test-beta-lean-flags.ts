@@ -3,6 +3,7 @@ import {
   isLegacyV0ApiFrozen,
   isPencilApiFrozen,
 } from "../lib/betaLeanFlags";
+import { envFlagEnabled } from "../src/lib/testingBranch.ts";
 
 const prevLegacy = process.env.ENABLE_LEGACY_V0;
 const prevPencil = process.env.ENABLE_PENCIL;
@@ -22,6 +23,13 @@ try {
   process.env.ENABLE_PENCIL = "no";
   assert.equal(isLegacyV0ApiFrozen(), true);
   assert.equal(isPencilApiFrozen(), true);
+
+  assert.equal(envFlagEnabled(undefined), false);
+  assert.equal(envFlagEnabled(""), false);
+  assert.equal(envFlagEnabled("0"), false);
+  assert.equal(envFlagEnabled("1"), true);
+  assert.equal(envFlagEnabled("true"), true);
+  assert.equal(envFlagEnabled("YES"), true);
 
   console.log("test-beta-lean-flags: ok");
 } finally {

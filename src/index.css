@@ -3,6 +3,31 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* Akkurat — Light / Regular / Mono only (no Bold) */
+@font-face {
+  font-family: "Akkurat";
+  src: url("/fonts/Akkurat-Light.ttf") format("truetype");
+  font-weight: 300;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Akkurat";
+  src: url("/fonts/Akkurat.ttf") format("truetype");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Akkurat Mono";
+  src: url("/fonts/Akkurat-Mono.ttf") format("truetype");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
 /*
  * Nebulla IDE — refined / delicate black theme (colors only).
  * Inspired by calm AI chat UIs: true black, hairline seams, rare accents.
@@ -53,7 +78,7 @@
   --chart-3: var(--misc);
   --chart-4: #5750cc;
   --chart-5: #c6937c;
-  --radius: 0.75rem;
+  --radius: 0.5rem; /* 8px — Nebulla shared sheet radius */
   --sidebar: #000000;
   --sidebar-foreground: #f2f2f2;
   --sidebar-primary: var(--primary);
@@ -93,10 +118,10 @@
   --color-chart-3: var(--chart-3);
   --color-chart-4: var(--chart-4);
   --color-chart-5: var(--chart-5);
-  --radius-sm: calc(var(--radius) - 4px);
-  --radius-md: calc(var(--radius) - 2px);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) + 4px);
+  --radius-sm: 0.375rem; /* 6px */
+  --radius-md: 0.5rem; /* 8px */
+  --radius-lg: 0.625rem; /* 10px */
+  --radius-xl: 0.75rem;
   --color-sidebar: var(--sidebar);
   --color-sidebar-foreground: var(--sidebar-foreground);
   --color-sidebar-primary: var(--sidebar-primary);
@@ -120,10 +145,14 @@
   --color-subtitle: var(--subtitle);
   --color-misc: var(--misc);
 
-  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-sans: "Akkurat", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   --font-body: var(--font-sans);
   --font-headline: var(--font-sans);
   --font-label: var(--font-sans);
+  /* UI mono labels stay Akkurat Mono; code editors use JetBrains Mono via .font-code */
+  --font-mono: "Akkurat Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  --font-code: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
+    monospace;
 }
 
 @layer base {
@@ -138,12 +167,18 @@
     letter-spacing: 0.01em;
   }
 
-  b,
-  strong,
+  /* Akkurat: 300 Light · 400 Regular only — never Bold */
+  .font-light {
+    font-weight: 300 !important;
+  }
+
+  .font-normal,
   .font-medium,
   .font-semibold,
   .font-bold,
-  .font-extrabold {
+  .font-extrabold,
+  b,
+  strong {
     font-weight: 400 !important;
   }
 
@@ -167,43 +202,81 @@
 }
 
 @layer utilities {
+  /* Industry coding face — Monaco / Code screen / inline code samples */
+  .font-code {
+    font-family: var(--font-code);
+    font-variant-ligatures: contextual;
+  }
+
+  /* Nebulla type scale — tight; titles never steal the work area */
   .type-body-md {
-    font-size: 0.875rem;
-    line-height: 1.55;
+    font-size: 0.8125rem; /* 13 */
+    line-height: 1.45;
+    font-weight: 400;
+    color: var(--foreground);
+  }
+
+  .type-body-dense {
+    font-size: 0.75rem; /* 12 */
+    line-height: 1.4;
     font-weight: 400;
     color: var(--foreground);
   }
 
   .type-label-sm {
-    font-size: 0.6875rem;
+    font-size: 0.6875rem; /* 11 */
     line-height: 1.35;
     font-weight: 400;
-    letter-spacing: 0.03em;
+    letter-spacing: 0.02em;
     color: var(--muted-foreground);
   }
 
   .type-title-sm {
-    font-size: 1rem;
-    line-height: 1.4;
+    font-size: 0.875rem; /* 14 */
+    line-height: 1.35;
     font-weight: 400;
-    letter-spacing: 0.01em;
+    letter-spacing: 0;
     color: var(--foreground);
+  }
+
+  .type-section {
+    font-size: 0.875rem; /* 14 */
+    line-height: 1.35;
+    font-weight: 400;
+    letter-spacing: 0;
+    color: var(--foreground);
+  }
+
+  .type-page {
+    font-size: 1.125rem; /* 18 */
+    line-height: 1.3;
+    font-weight: 400;
+    letter-spacing: -0.01em;
+    color: var(--foreground);
+  }
+
+  .type-micro {
+    font-size: 0.625rem; /* 10 */
+    line-height: 1.3;
+    font-weight: 400;
+    letter-spacing: 0.04em;
+    color: var(--muted-foreground);
   }
 
   .kyn-logotype {
     font-size: 0.8125rem;
     line-height: 1.25;
     font-weight: 400;
-    letter-spacing: 0.06rem;
+    letter-spacing: 0.02em;
     text-transform: lowercase;
     color: var(--foreground);
   }
 
   .app-logotype {
-    font-size: 0.8125rem;
+    font-size: 0.8125rem; /* 13 */
     line-height: 1.25;
     font-weight: 400;
-    letter-spacing: 0.04rem;
+    letter-spacing: 0.02em;
     text-transform: none;
     color: var(--foreground);
   }
@@ -466,339 +539,500 @@
 }
 
 /*
- * Trial: IDE foggy glass (shower-glass) — IDE shell only, not landing.
- * - Nebula photo + 60% black veil
- * - Cards/panels ~70% black + heavy blur (foggy, not clear glass)
- * - White regular type (no bold); cyan accents
- * Revert: delete this whole block; restore prior shell CSS from git if needed.
- * Also optional: remove `ide-glass-*` classes from MyProjectsHome.tsx
+ * TEMPORARY — Decision 4: monochrome architecture mode (structure only).
+ * No branding, starfield, glass, or accent colors. Revert via git / prior lock.
+ * Tokens below drive the whole AppShell (landing + IDE chrome). Preview iframes
+ * are separate documents and keep their own product colors.
  */
 .nebulla-ide-shell {
-  /* Shower-glass: denser fog on cards; chrome stays lighter so nebula shows through */
-  --ide-glass-fill: rgba(8, 12, 18, 0.7);
-  --ide-glass-fill-strong: rgba(8, 12, 18, 0.78);
-  --ide-glass-fill-soft: rgba(8, 12, 18, 0.55);
-  --ide-glass-chrome: rgba(0, 0, 0, 0.38);
-  --ide-glass-blur: blur(36px) saturate(1.35);
-  --ide-glass-blur-chrome: blur(22px) saturate(1.2);
-  --ide-cyan: #22d3ee;
+  /* ========== NEBULLA BRAND SYSTEM ========== */
+  /* One surface; structure from 1px lines; tight type; rare CTA fill */
+  --shell-bg: #141414;
+  --shell-border: rgba(255, 255, 255, 0.12);
+  --shell-border-strong: rgba(255, 255, 255, 0.18);
+  --ink: #e8e8e8;
+  --ink-muted: #a3a3a3;
+  --ink-dim: #737373;
+  --cta-fill: #e8e8e8;
+  --cta-ink: #141414;
+
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 10px;
+
+  --header-h: 48px;
+  --control-h: 32px;
+  --control-h-lg: 36px;
+  --icon-sm: 14px;
+  --icon-md: 16px;
+
+  --text-section: 0.875rem;
+  --text-body: 0.8125rem;
+  --text-dense: 0.75rem;
+  --text-label: 0.6875rem;
+
+  --ide-bg: var(--shell-bg);
+  --ide-surface: var(--shell-bg);
+  --ide-surface-raised: var(--shell-bg);
+  --ide-surface-soft: var(--shell-bg);
+  --ide-ink: var(--ink);
+  --ide-ink-muted: var(--ink-muted);
+  --ide-ink-dim: var(--ink-dim);
+  --ide-border: var(--shell-border);
+  --ide-border-strong: var(--shell-border-strong);
+
+  --ide-bg-image: none;
+  --ide-bg-overlay: 1;
+  --ide-glass-fill: var(--shell-bg);
+  --ide-glass-fill-strong: var(--shell-bg);
+  --ide-glass-fill-soft: var(--shell-bg);
+  --ide-glass-chrome: var(--shell-bg);
+  --ide-glass-blur: none;
+  --ide-glass-blur-chrome: none;
+
+  --ide-btn-color: var(--ink-muted);
+  --ide-btn-fill: 0%;
+  --ide-btn-border: 100%;
+  --ide-btn-fill-hover: 0%;
+  --ide-btn-border-hover: 100%;
+  --ide-btn-border-width: 1px;
+  --ide-btn-text: var(--ink);
+  --ide-cyan: var(--ink-muted);
+
+  /* ========== end brand tokens ========== */
 
   position: relative;
-  isolation: isolate;
-  background-color: #000000;
-  color: #ffffff;
+  color: var(--ide-ink);
+  background-color: var(--ide-bg) !important;
+  background-image: none !important;
+  font-family: "Akkurat", ui-sans-serif, system-ui, sans-serif;
+  font-size: var(--text-body);
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
 
-  /* Cyan accent + white type (IDE only) */
-  --primary: var(--ide-cyan);
-  --primary-container: #0891b2;
-  --on-primary-container: #ffffff;
-  --primary-foreground: #041016;
-  --ring: color-mix(in srgb, var(--ide-cyan) 42%, transparent);
-  --title: var(--ide-cyan);
-  --subtitle: #67e8f9;
-  --gradient-primary-cta: var(--ide-cyan);
-  --gradient-active-tab: linear-gradient(
-    90deg,
-    color-mix(in srgb, var(--ide-cyan) 16%, transparent) 0%,
-    transparent 70%
-  );
+  --primary: var(--ide-ink-muted);
+  --primary-container: var(--shell-bg);
+  --on-primary-container: var(--ide-ink);
+  --primary-foreground: #000000;
+  --ring: var(--shell-border-strong);
+  --title: var(--ide-ink);
+  --subtitle: var(--ide-ink-muted);
+  --misc: var(--ide-ink-dim);
+  --gradient-primary-cta: var(--shell-bg);
+  --gradient-active-tab: none;
+  --shadow-ambient-popover: none;
+  --success: var(--ide-ink-dim);
+  --destructive: #b0b0b0;
+  --destructive-foreground: #000000;
+  --chart-1: var(--ide-ink-muted);
+  --chart-2: var(--ide-ink-dim);
+  --chart-3: var(--ide-ink);
+  --chart-4: var(--ide-ink-muted);
+  --chart-5: var(--ide-ink-dim);
 
-  --foreground: #ffffff;
-  --card-foreground: #ffffff;
-  --popover-foreground: #ffffff;
-  --secondary-foreground: #ffffff;
-  --accent-foreground: #ffffff;
-  --sidebar-foreground: #ffffff;
-  --muted-foreground: rgba(255, 255, 255, 0.78);
-  --on-surface-variant: rgba(255, 255, 255, 0.72);
+  --foreground: var(--ide-ink);
+  --card-foreground: var(--ide-ink);
+  --popover-foreground: var(--ide-ink);
+  --secondary-foreground: var(--ide-ink);
+  --accent-foreground: var(--ide-ink);
+  --sidebar-foreground: var(--ide-ink);
+  --muted-foreground: var(--ink-muted);
+  --on-surface-variant: var(--ink-dim);
 
-  --border: rgba(255, 255, 255, 0.12);
-  --hairline: rgba(255, 255, 255, 0.1);
-  --outline-variant: rgba(255, 255, 255, 0.12);
-  --sidebar-border: rgba(255, 255, 255, 0.12);
+  --border: var(--shell-border);
+  --hairline: var(--shell-border);
+  --outline-variant: var(--shell-border);
+  --sidebar-border: var(--shell-border);
 
-  /* Foggy glass tokens (panels pick these up via utilities below) */
-  --surface: var(--ide-glass-fill);
-  --surface-container: var(--ide-glass-fill);
-  --surface-bright: var(--ide-glass-fill-soft);
-  --surface-container-highest: var(--ide-glass-fill-strong);
-  --secondary-container: var(--ide-glass-fill-soft);
-  --elevated: var(--ide-glass-fill);
-  --background: transparent;
-  --card: var(--ide-glass-fill);
-  --popover: var(--ide-glass-fill-strong);
-  --secondary: var(--ide-glass-fill-soft);
-  --muted: var(--ide-glass-fill-soft);
-  --accent: var(--ide-glass-fill-soft);
-  --input: var(--ide-glass-fill);
-  --sidebar: var(--ide-glass-fill-soft);
-  --sidebar-accent: var(--ide-glass-fill);
-  --sidebar-primary: var(--ide-cyan);
+  --surface: var(--shell-bg);
+  --surface-container: var(--shell-bg);
+  --surface-bright: var(--shell-bg);
+  --surface-container-highest: var(--shell-bg);
+  --secondary-container: var(--shell-bg);
+  --elevated: var(--shell-bg);
+  --background: var(--shell-bg);
+  --card: var(--shell-bg);
+  --popover: var(--shell-bg);
+  --secondary: var(--shell-bg);
+  --muted: var(--shell-bg);
+  --accent: var(--shell-bg);
+  --input: var(--shell-bg);
+  --sidebar: var(--shell-bg);
+  --sidebar-accent: var(--shell-bg);
+  --sidebar-primary: var(--ide-ink-muted);
 
-  --color-background: transparent;
-  --color-card: var(--ide-glass-fill);
-  --color-muted: var(--ide-glass-fill-soft);
-  --color-secondary: var(--ide-glass-fill-soft);
-  --color-sidebar: var(--ide-glass-fill-soft);
-  --color-surface: var(--ide-glass-fill);
-  --color-surface-container: var(--ide-glass-fill);
-  --color-surface-bright: var(--ide-glass-fill-soft);
-  --color-primary: var(--ide-cyan);
-  --color-foreground: #ffffff;
-  --color-muted-foreground: rgba(255, 255, 255, 0.78);
-  --color-border: rgba(255, 255, 255, 0.12);
+  --color-background: var(--shell-bg);
+  --color-card: var(--shell-bg);
+  --color-muted: var(--shell-bg);
+  --color-secondary: var(--shell-bg);
+  --color-sidebar: var(--shell-bg);
+  --color-surface: var(--shell-bg);
+  --color-surface-container: var(--shell-bg);
+  --color-surface-bright: var(--shell-bg);
+  --color-primary: var(--ide-ink-muted);
+  --color-foreground: var(--ide-ink);
+  --color-muted-foreground: var(--ide-ink-dim);
+  --color-border: var(--shell-border);
 }
 
-.nebulla-ide-shell::before {
-  content: '';
+/* Solid black stack — wallpaper/veil layers inert */
+.nebulla-ide-shell {
+  background-color: var(--ide-bg) !important;
+  background-image: none !important;
+}
+
+.nebulla-ide-shell__bg {
   position: fixed;
   inset: 0;
   z-index: 0;
   pointer-events: none;
-  background-color: #000000;
-  background-image: url('/images/ide-nebula-bg.png');
-  background-size: cover;
-  background-position: center;
-  background-repeat: no-repeat;
+  background-color: var(--ide-bg);
+  background-image: none;
 }
 
-/* Global darkening under panels — keep moderate so glass cards stay readable */
-.nebulla-ide-shell::after {
-  content: '';
+.nebulla-ide-shell__veil {
   position: fixed;
   inset: 0;
-  z-index: 0;
-  pointer-events: none;
-  background-color: rgba(0, 0, 0, 0.6);
-}
-
-.nebulla-ide-shell > * {
-  position: relative;
   z-index: 1;
+  pointer-events: none;
+  background-color: var(--ide-bg);
+  opacity: 0;
 }
 
-/*
- * Full-bleed pane backdrops must stay clear — otherwise cards only blur a black wall
- * and never get the shower-glass fog of the nebula.
- */
-.nebulla-ide-shell :is(.bg-background) {
-  background-color: transparent !important;
+.nebulla-ide-shell__content {
+  position: relative;
+  z-index: 2;
+  min-height: 0;
+  background: var(--ide-bg) !important;
+}
+
+.nebulla-ide-shell :is(.bg-background, .bg-transparent) {
+  background-color: var(--ide-bg) !important;
+  background-image: none !important;
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
 }
 
-/* Side rails / chrome — light fog */
-.nebulla-ide-shell :is(
-  .bg-black,
-  .bg-\[\#000\],
-  .bg-\[\#000000\],
-  .bg-card,
-  .bg-\[\#0a0a0a\],
-  .bg-\[\#0A0A0A\],
-  .bg-muted,
-  .bg-secondary,
-  .bg-\[\#111111\],
-  .bg-\[\#111\],
-  .bg-accent,
-  .bg-\[\#050508\],
+/* Flat panels — one fill; division via 1px low-contrast border only */
+.nebulla-ide-shell .ide-glass-chrome,
+.nebulla-ide-shell .ide-glass-card {
+  position: relative !important;
+  isolation: isolate;
+  background-color: var(--shell-bg) !important;
+  background-image: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  border-color: var(--shell-border) !important;
+  box-shadow: none !important;
+}
+
+.nebulla-ide-shell .ide-glass-card {
+  overflow: hidden !important;
+  background-color: var(--shell-bg) !important;
+}
+
+.nebulla-ide-shell .ide-glass-chrome::before,
+.nebulla-ide-shell .ide-glass-card::before,
+.nebulla-ide-shell .ide-glass-chrome::after,
+.nebulla-ide-shell .ide-glass-card::after {
+  content: none !important;
+  display: none !important;
+}
+
+.nebulla-ide-shell .ide-glass-chrome > *,
+.nebulla-ide-shell .ide-glass-card > * {
+  position: relative;
+  z-index: 2;
+}
+
+.nebulla-ide-shell .ide-glass-chrome :is(
   .surface-base,
   .surface-active,
   .surface-float,
   .elevation-popover,
-  .glass-panel
+  .glass-panel,
+  .bg-black,
+  .bg-card,
+  .bg-muted,
+  .bg-secondary,
+  .bg-accent,
+  .bg-background
 ) {
-  background-color: var(--ide-glass-chrome) !important;
-  backdrop-filter: var(--ide-glass-blur-chrome);
-  -webkit-backdrop-filter: var(--ide-glass-blur-chrome);
-  border-color: rgba(255, 255, 255, 0.12);
-}
-
-/* Start / My Projects — true shower-glass fog over the nebula */
-.nebulla-ide-shell .ide-glass-card {
-  position: relative;
-  overflow: hidden;
-  background-color: var(--ide-glass-fill) !important;
-  backdrop-filter: var(--ide-glass-blur) !important;
-  -webkit-backdrop-filter: var(--ide-glass-blur) !important;
-  border-color: rgba(255, 255, 255, 0.16) !important;
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.16),
-    inset 0 0 0 1px rgba(255, 255, 255, 0.04),
-    0 12px 40px rgba(0, 0, 0, 0.45);
-}
-
-/* Soft white haze on top of the blur = “fogged shower glass” */
-.nebulla-ide-shell .ide-glass-card::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  z-index: 0;
-  pointer-events: none;
-  border-radius: inherit;
-  background: linear-gradient(
-    160deg,
-    rgba(255, 255, 255, 0.14) 0%,
-    rgba(255, 255, 255, 0.03) 42%,
-    rgba(0, 0, 0, 0.12) 100%
-  );
-}
-
-.nebulla-ide-shell .ide-glass-card > * {
-  position: relative;
-  z-index: 1;
-}
-
-.nebulla-ide-shell .ide-glass-card--choice {
-  background-color: var(--ide-glass-fill-soft) !important;
-  backdrop-filter: blur(28px) saturate(1.25) !important;
-  -webkit-backdrop-filter: blur(28px) saturate(1.25) !important;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1);
-}
-
-.nebulla-ide-shell .ide-glass-card--choice:hover {
-  background-color: var(--ide-glass-fill) !important;
+  background-color: transparent !important;
+  background-image: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
 }
 
 .nebulla-ide-shell .ide-glass-card--selected {
-  background-color: var(--ide-glass-fill-strong) !important;
-  backdrop-filter: var(--ide-glass-blur) !important;
-  -webkit-backdrop-filter: var(--ide-glass-blur) !important;
-  /* Selected = stronger border only — no cyan outer glow */
-  border-color: rgba(255, 255, 255, 0.32) !important;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16);
+  border-color: var(--ide-border-strong) !important;
 }
 
 .nebulla-ide-shell .ide-glass-input {
-  background-color: rgba(0, 0, 0, 0.55) !important;
-  backdrop-filter: blur(24px) saturate(1.2) !important;
-  -webkit-backdrop-filter: blur(24px) saturate(1.2) !important;
-  color: #ffffff !important;
-  border-color: rgba(255, 255, 255, 0.14) !important;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  background-color: var(--shell-bg) !important;
+  color: var(--ide-ink) !important;
+  border: 1px solid var(--shell-border) !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
 }
 
-/* White type — regular weight only (keep status colors) */
-.nebulla-ide-shell :is(.font-bold, .font-semibold, .font-medium, .font-headline) {
+.nebulla-ide-shell .ide-glass-input:focus,
+.nebulla-ide-shell .ide-glass-input:focus-visible {
+  outline: 1px solid var(--ide-border-strong);
+  outline-offset: 1px;
+  box-shadow: none !important;
+  --tw-ring-shadow: 0 0 #0000 !important;
+}
+
+/* Shell chrome: Light (300) or Regular (400) only — no Bold */
+.nebulla-ide-shell :is(
+  .font-semibold,
+  .font-headline,
+  .font-medium,
+  .font-bold,
+  .font-extrabold,
+  .type-section,
+  .type-title-sm,
+  .type-page,
+  .app-logotype,
+  .kyn-logotype,
+  b,
+  strong
+) {
   font-weight: 400 !important;
 }
 
+.nebulla-ide-shell .font-light {
+  font-weight: 300 !important;
+}
+
+.nebulla-ide-shell h1,
+.nebulla-ide-shell h2,
+.nebulla-ide-shell h3 {
+  font-size: var(--text-section);
+  line-height: 1.35;
+  font-weight: 400;
+  letter-spacing: 0;
+}
+
+/* Landing headings inherit unless they carry a landing type class */
+.nebulla-ide-shell .nebula-landing-page h1:not(.landing-display),
+.nebulla-ide-shell .nebula-landing-page h2,
+.nebulla-ide-shell .nebula-landing-page h3 {
+  font-size: unset;
+  line-height: unset;
+  font-weight: unset;
+  letter-spacing: unset;
+}
+
 .nebulla-ide-shell :is(.text-foreground, .text-card-foreground, .text-popover-foreground) {
-  color: #ffffff !important;
+  color: var(--ide-ink) !important;
 }
 
 .nebulla-ide-shell .text-muted-foreground {
-  color: rgba(255, 255, 255, 0.78) !important;
+  color: var(--ink-muted) !important;
 }
 
-.nebulla-ide-shell :is(.text-slate-200, .text-slate-300, .text-slate-400, .text-slate-500) {
-  color: rgba(255, 255, 255, 0.82) !important;
+.nebulla-ide-shell .placeholder\:text-muted-foreground\/70::placeholder,
+.nebulla-ide-shell .placeholder\:text-muted-foreground\/50::placeholder {
+  color: var(--ink-dim) !important;
 }
 
-/* Cyan accents for interactive chrome */
-.nebulla-ide-shell :is(.text-primary, .text-cyan-300, .text-cyan-400, .text-cyan-200) {
-  color: var(--ide-cyan) !important;
+.nebulla-ide-shell :is(
+  .text-slate-100,
+  .text-slate-200,
+  .text-slate-300,
+  .text-slate-400,
+  .text-slate-500,
+  .text-slate-600
+) {
+  color: var(--ide-ink-muted) !important;
 }
 
-.nebulla-ide-shell .border-primary {
-  border-color: color-mix(in srgb, var(--ide-cyan) 45%, transparent);
+/* Neutralize former accent utilities (chrome only; not iframe docs) */
+.nebulla-ide-shell :is(
+  .text-primary,
+  .text-cyan-100,
+  .text-cyan-200,
+  .text-cyan-300,
+  .text-cyan-400,
+  .text-cyan-500,
+  .text-sky-300,
+  .text-sky-400,
+  .text-blue-400,
+  .text-purple-400,
+  .text-emerald-400,
+  .text-green-300,
+  .text-green-400,
+  .text-amber-50,
+  .text-amber-100,
+  .text-amber-200,
+  .text-rose-300,
+  .text-red-400,
+  .text-yellow-500
+) {
+  color: var(--ide-ink-muted) !important;
 }
 
-/* No glow rings — thin outline only */
+.nebulla-ide-shell :is(
+  [class*='bg-cyan-'],
+  [class*='bg-sky-'],
+  [class*='bg-blue-'],
+  [class*='bg-purple-'],
+  [class*='bg-emerald-'],
+  [class*='bg-amber-'],
+  [class*='bg-rose-'],
+  [class*='from-cyan'],
+  [class*='to-cyan'],
+  [class*='from-purple'],
+  [class*='to-indigo']
+) {
+  background-color: var(--shell-bg) !important;
+  background-image: none !important;
+}
+
+.nebulla-ide-shell :is(
+  [class*='border-cyan'],
+  [class*='border-sky'],
+  [class*='border-amber'],
+  [class*='border-emerald'],
+  [class*='border-purple'],
+  .border-primary
+) {
+  border-color: var(--ide-border) !important;
+}
+
 .nebulla-ide-shell .ring-primary,
 .nebulla-ide-shell [class*='ring-primary'] {
   --tw-ring-color: transparent;
-  --tw-ring-shadow: 0 0 0 1px color-mix(in srgb, var(--ide-cyan) 35%, transparent);
+  --tw-ring-shadow: 0 0 0 1px var(--ide-border-strong);
 }
 
-/* Canonical IDE control — same look as Start “Continue” */
+/* Primary: solid fill for affordance (only intentional second fill) */
 .nebulla-ide-shell .btn-cyan,
-.nebulla-ide-shell .ide-btn {
-  background-color: color-mix(in srgb, var(--ide-cyan) 12%, transparent);
-  color: rgba(255, 255, 255, 0.92);
-  border: 1px solid color-mix(in srgb, var(--ide-cyan) 35%, transparent);
+.nebulla-ide-shell .ide-btn,
+.nebulla-ide-shell .btn-primary-cta {
+  background-color: var(--cta-fill) !important;
+  color: var(--cta-ink) !important;
+  border: 1px solid var(--cta-fill) !important;
+  border-width: 1px !important;
+  font-size: var(--text-dense);
   font-weight: 400;
-  border-radius: 0.5rem;
-  box-shadow: none;
+  line-height: 1.2;
+  min-height: var(--control-h);
+  padding: 0 14px;
+  border-radius: var(--radius-md);
+  box-shadow: none !important;
 }
 
 .nebulla-ide-shell .btn-cyan:hover:not(:disabled),
-.nebulla-ide-shell .ide-btn:hover:not(:disabled) {
-  background-color: color-mix(in srgb, var(--ide-cyan) 22%, transparent);
-  border-color: color-mix(in srgb, var(--ide-cyan) 50%, transparent);
-  color: #ffffff;
-  box-shadow: none;
+.nebulla-ide-shell .ide-btn:hover:not(:disabled),
+.nebulla-ide-shell .btn-primary-cta:hover:not(:disabled) {
+  background-color: #ffffff !important;
+  border-color: #ffffff !important;
+  color: var(--cta-ink) !important;
+  box-shadow: none !important;
 }
 
 .nebulla-ide-shell .ide-btn--pressed,
 .nebulla-ide-shell .btn-cyan[aria-pressed='true'] {
-  background-color: color-mix(in srgb, var(--ide-cyan) 20%, transparent);
-  border-color: color-mix(in srgb, var(--ide-cyan) 48%, transparent);
-  color: #ffffff;
-  box-shadow: none;
-}
-
-/* Kill cyan glow on IDE chrome */
-.nebulla-ide-shell :is(
-  .shadow-cyan-500\/20,
-  .shadow-cyan-500\/25,
-  .shadow-\[0_0_24px_rgba\(34\,211\,238\,0\.18\)\]
-) {
+  background-color: #ffffff !important;
+  border-color: var(--shell-border-strong) !important;
+  color: var(--cta-ink) !important;
   box-shadow: none !important;
 }
 
-.nebulla-ide-shell :is(button, [role='button'], a.btn-cyan, a.ide-btn):focus-visible {
-  outline: 1px solid color-mix(in srgb, var(--ide-cyan) 45%, transparent);
-  outline-offset: 2px;
-  box-shadow: none;
-}
-
-/* Soften focus rings — no glow wash */
-.nebulla-ide-shell .ide-glass-input:focus,
-.nebulla-ide-shell .ide-glass-input:focus-visible {
-  --tw-ring-shadow: 0 0 0 1px color-mix(in srgb, var(--ide-cyan) 35%, transparent);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), var(--tw-ring-shadow);
-}
-
-/* Stage strip / active chrome — thin cyan edge, no glow */
-.nebulla-ide-shell .ring-primary\/50,
-.nebulla-ide-shell .ring-primary\/60,
-.nebulla-ide-shell [class*='ring-primary'] {
-  --tw-ring-color: transparent !important;
-  --tw-ring-shadow: 0 0 0 1px color-mix(in srgb, var(--ide-cyan) 40%, transparent) !important;
-}
-
-.nebulla-ide-shell .bg-primary {
-  background-color: var(--ide-cyan) !important;
-  color: #041016 !important;
-}
-
-/*
- * IDE chrome only (not App Preview iframe / generated app):
- * — no cyan bloom on borders
- * — text actions match Start “Continue” (btn-cyan)
- */
+/* Secondary: border-only on shell fill */
 .nebulla-ide-shell .btn-secondary-surface {
-  background-color: color-mix(in srgb, var(--ide-cyan) 12%, transparent) !important;
-  color: rgba(255, 255, 255, 0.92) !important;
-  border: 1px solid color-mix(in srgb, var(--ide-cyan) 35%, transparent) !important;
+  background-color: transparent !important;
+  color: var(--ide-btn-text) !important;
+  border: 1px solid var(--shell-border) !important;
+  font-size: var(--text-dense);
   font-weight: 400;
-  border-radius: 0.5rem;
+  line-height: 1.2;
+  min-height: var(--control-h);
+  border-radius: var(--radius-md);
   box-shadow: none !important;
 }
 
 .nebulla-ide-shell .btn-secondary-surface:hover:not(:disabled) {
-  background-color: color-mix(in srgb, var(--ide-cyan) 22%, transparent) !important;
-  border-color: color-mix(in srgb, var(--ide-cyan) 50%, transparent) !important;
-  color: #ffffff !important;
+  background-color: transparent !important;
+  border-color: var(--shell-border-strong) !important;
+  color: var(--ide-ink) !important;
   box-shadow: none !important;
 }
 
-/* Diffuse outer glows (cyan / purple / emerald / generic 0 0 Npx) */
+/* Icon controls — 32×32 */
+.nebulla-ide-shell .btn-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--control-h);
+  height: var(--control-h);
+  min-height: var(--control-h);
+  padding: 0;
+  border-radius: var(--radius-md);
+}
+
+.nebulla-ide-shell .ide-glass-card,
+.nebulla-ide-shell .ide-glass-chrome {
+  border-radius: 0;
+}
+
+.nebulla-ide-shell .ide-glass-card.rounded-lg,
+.nebulla-ide-shell .ide-glass-card.rounded-xl,
+.nebulla-ide-shell .ide-glass-card.rounded-2xl,
+.nebulla-ide-shell section.ide-glass-card,
+.nebulla-ide-shell div.ide-glass-card {
+  border-radius: var(--radius-md) !important;
+}
+
+.nebulla-ide-shell .ide-glass-input {
+  min-height: var(--control-h-lg);
+  padding: 8px 12px !important;
+  font-size: var(--text-body) !important;
+  border-radius: var(--radius-sm) !important;
+}
+
+.nebulla-ide-shell :is(
+  .shadow-cyan-500\/20,
+  .shadow-cyan-500\/25,
+  .shadow-\[0_0_24px_rgba\(34\,211\,238\,0\.18\)\]
+),
 .nebulla-ide-shell [class*='shadow-[0_0'],
 .nebulla-ide-shell [class*='shadow-cyan'],
 .nebulla-ide-shell [class*='shadow-purple'],
 .nebulla-ide-shell [class*='shadow-emerald'] {
   box-shadow: none !important;
+}
+
+.nebulla-ide-shell :is(button, [role='button'], a.btn-cyan, a.ide-btn):focus-visible {
+  outline: 1px solid var(--ide-border-strong);
+  outline-offset: 2px;
+  box-shadow: none;
+}
+
+.nebulla-ide-shell .ring-primary\/50,
+.nebulla-ide-shell .ring-primary\/60,
+.nebulla-ide-shell [class*='ring-primary'] {
+  --tw-ring-color: transparent !important;
+  --tw-ring-shadow: 0 0 0 1px var(--ide-border-strong) !important;
+}
+
+.nebulla-ide-shell .bg-primary {
+  background-color: var(--shell-bg) !important;
+  color: var(--ide-ink) !important;
 }
 
 .nebulla-ide-shell :is(button, [role='button'], a) {
@@ -809,24 +1043,53 @@
 .nebulla-ide-shell :is(button, [role='button']).ring-1,
 .nebulla-ide-shell :is(button, [role='button']).ring-2,
 .nebulla-ide-shell nav button[aria-current='true'] {
-  --tw-ring-shadow: 0 0 0 1px color-mix(in srgb, var(--ide-cyan) 40%, transparent) !important;
+  --tw-ring-shadow: 0 0 0 1px var(--ide-border-strong) !important;
   box-shadow: none !important;
 }
 
-/* Active left-rail icon — flat edge, no bloom */
 .nebulla-ide-shell nav button[aria-current='true'] {
-  background-color: color-mix(in srgb, var(--ide-cyan) 12%, transparent) !important;
-  color: #ffffff !important;
+  background-color: transparent !important;
+  border-color: var(--shell-border-strong) !important;
+  color: var(--ide-ink) !important;
 }
 
-/* Master Plan section list / content cards — hairline only */
 .nebulla-ide-shell .shadow-lg,
 .nebulla-ide-shell .shadow-xl,
 .nebulla-ide-shell .shadow-2xl {
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08) !important;
+  box-shadow: none !important;
 }
 
-/* Compact Live Activity throbber — Nebulla mark pulse (no giant card) */
+.nebulla-ide-shell .ide-resize-hit:hover,
+.nebulla-ide-shell .ide-resize-hit:active,
+.nebulla-ide-shell .ide-resize-hit-row:hover,
+.nebulla-ide-shell .ide-resize-hit-row:active {
+  background-color: var(--ide-border-strong) !important;
+}
+
+.nebulla-ide-shell .glass-panel {
+  background: var(--shell-bg) !important;
+  backdrop-filter: none !important;
+}
+
+/* Nested fills that used to stack grey-on-black → same shell field */
+.nebulla-ide-shell :is(
+  .bg-black,
+  .bg-card,
+  .bg-muted,
+  .bg-secondary,
+  .bg-accent,
+  .bg-popover,
+  .bg-\[\#0a0a0a\],
+  .bg-\[\#111111\],
+  .bg-\[\#1a1a1a\],
+  .bg-white\/\[0\.04\],
+  .bg-white\/5,
+  .bg-black\/40
+) {
+  background-color: var(--shell-bg) !important;
+  background-image: none !important;
+}
+
 @keyframes nebulla-throbber-pulse {
   0%,
   100% {
@@ -839,10 +1102,36 @@
   }
 }
 
+/* Guided funnel attention pulse (git / deploy icons) */
+@keyframes nebulla-guided-pulse-kf {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(232, 232, 232, 0.35);
+    transform: scale(1);
+  }
+  40% {
+    box-shadow: 0 0 0 6px rgba(232, 232, 232, 0);
+    transform: scale(1.08);
+  }
+}
+
+.nebulla-guided-pulse {
+  animation: nebulla-guided-pulse-kf 0.7s ease-in-out 3;
+  border-radius: 0.375rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nebulla-guided-pulse {
+    animation: none;
+    outline: 1px solid rgba(232, 232, 232, 0.5);
+  }
+}
+
 .nebulla-throbber {
   animation: nebulla-throbber-pulse 1.35s ease-in-out infinite;
   transform-origin: center center;
   will-change: transform, opacity;
+  filter: grayscale(1);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -850,4 +1139,138 @@
     animation: none;
     opacity: 1;
   }
+}
+
+.nebulla-ide-shell .nebula-landing-page {
+  background: var(--ide-bg) !important;
+  isolation: auto;
+  height: auto;
+  min-height: 100vh;
+  overflow-x: hidden;
+  overflow-y: auto;
+
+  /* Landing type + rhythm — scoped; shell chrome unchanged */
+  --landing-display: clamp(3rem, 5.5vw, 4.5rem); /* 48–72 */
+  --landing-title: clamp(1.375rem, 2.1vw, 1.75rem); /* 22–28 */
+  --landing-body: 1rem; /* 16 */
+  --landing-meta: 0.8125rem; /* 13 */
+  --landing-label: 0.6875rem; /* 11 */
+  --landing-ink: var(--ink);
+  --landing-ink-2: color-mix(in srgb, var(--ink) 66%, transparent);
+  --landing-ink-3: color-mix(in srgb, var(--ink) 45%, transparent);
+  --landing-space-1: 8px;
+  --landing-space-2: 16px;
+  --landing-space-3: 24px;
+  --landing-space-4: 48px;
+  --landing-space-5: 72px;
+  --landing-measure: 45rem; /* 720 */
+}
+
+.nebulla-ide-shell .landing-label {
+  font-family: "Akkurat", ui-sans-serif, system-ui, sans-serif;
+  font-size: var(--landing-label);
+  font-weight: 400;
+  letter-spacing: 0.1em;
+  line-height: 1.3;
+  text-transform: uppercase;
+  color: var(--landing-ink-3);
+}
+
+.nebulla-ide-shell .landing-label-mono {
+  font-family: var(--font-mono);
+  font-size: var(--landing-label);
+  font-weight: 400;
+  letter-spacing: 0.08em;
+  line-height: 1.3;
+  color: var(--landing-ink-3);
+}
+
+.nebulla-ide-shell .nebula-landing-page h1.landing-display {
+  font-family: "Akkurat", ui-sans-serif, system-ui, sans-serif;
+  font-weight: 400 !important;
+  font-size: clamp(3rem, 5.5vw, 4.5rem) !important;
+  line-height: 1.08 !important;
+  letter-spacing: -0.045em !important;
+  color: var(--ink);
+}
+
+.nebulla-ide-shell .landing-title {
+  font-size: var(--landing-title);
+  font-weight: 400;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+  color: var(--landing-ink);
+}
+
+.nebulla-ide-shell .landing-body {
+  font-size: var(--landing-body);
+  font-weight: 300 !important;
+  letter-spacing: 0;
+  line-height: 1.55;
+  color: var(--landing-ink-2);
+}
+
+.nebulla-ide-shell .landing-meta {
+  font-size: var(--landing-meta);
+  font-weight: 300 !important;
+  letter-spacing: 0;
+  line-height: 1.5;
+  color: var(--landing-ink-2);
+}
+
+.nebulla-ide-shell .landing-measure {
+  width: 100%;
+  max-width: var(--landing-measure);
+}
+
+.nebulla-ide-shell .landing-hero {
+  padding: var(--landing-space-5) 20px var(--landing-space-4);
+}
+
+@media (min-width: 768px) {
+  .nebulla-ide-shell .landing-hero {
+    padding: var(--landing-space-5) 40px;
+  }
+}
+
+.nebulla-ide-shell .landing-section {
+  padding: var(--landing-space-5) 20px;
+}
+
+@media (min-width: 768px) {
+  .nebulla-ide-shell .landing-section {
+    padding: var(--landing-space-5) 40px;
+  }
+}
+
+.nebulla-ide-shell :is(
+  .bg-\[\#020C17\],
+  .bg-\[\#040f1a\],
+  .bg-\[\#050508\],
+  .bg-\[\#020617\],
+  .bg-\[\#0d1117\],
+  .bg-\[\#161b22\]
+),
+.nebulla-ide-shell [class*='bg-[#020C17]'],
+.nebulla-ide-shell [class*='bg-[#040f1a]'],
+.nebulla-ide-shell [class*='bg-[#050508]'] {
+  background-color: var(--ide-surface) !important;
+  background-image: none !important;
+}
+
+/* Landing mock IDE chrome — same shell field */
+.nebulla-ide-shell .nebula-landing-page [class*='bg-[#'] {
+  background-color: var(--shell-bg) !important;
+}
+
+/* Logo keeps original brand color (do not grayscale) */
+.nebulla-ide-shell img[alt*='Nebulla'],
+.nebulla-ide-shell img[src*='nebulla-logo'] {
+  filter: none;
+  opacity: 1;
+}
+
+/* Status / success / warning chips in chrome → gray */
+.nebulla-ide-shell :is(.text-green-400, .text-red-500, .text-yellow-400, .text-orange-400) {
+  color: var(--ide-ink-muted) !important;
 }

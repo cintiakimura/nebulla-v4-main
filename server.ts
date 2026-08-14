@@ -60,6 +60,7 @@ import {
   MAIN_AI_ENV_VAR,
   MAIN_AI_KEY_SETUP_HINT,
   mainAiApiKeyTail,
+  requestHasClientAiKey,
   readMainAiApiKeyFromEnv,
   readPlatformSwarmApiKey,
   readPlatformTtsApiKey,
@@ -78,6 +79,7 @@ import { formatWorkspaceFileIndexBlock } from "./lib/ideAiContextBlocks";
 import {
   bootstrapMasterPlanFromWorkspace,
   ensurePreviewIndexHtml,
+  isLegacyNebulaBasicPreviewHtml,
   fillMissingMasterPlanSectionsLocal,
   hydrateAndPersistMasterPlan,
   readMasterPlanFile,
@@ -151,11 +153,7 @@ import {
   writtenPathsNeedRunnableSkeleton,
 } from "./lib/runnableAppSkeleton";
 import { runWorkspaceBuildCheck } from "./lib/workspaceBuildCheck";
-import {
-  ensureInteractiveProductPreview,
-  hasInteractiveProductPreview,
-  INTERACTIVE_PREVIEW_GO_BULLETS,
-} from "./lib/interactiveProductPreview";
+import { INTERACTIVE_PREVIEW_GO_BULLETS } from "./lib/interactiveProductPreview";
 import {
   masterPlanKeyForTabIndex,
   normalizeMasterPlanRecord,
@@ -570,8 +568,13 @@ async function startServer() {
     }
 
     const hasPlatformMain = grok.length >= 20;
+    const hasClientByok = requestHasClientAiKey(req);
     const hasMainAi =
-      hasPlatformMain || byok.xai.configured || byok.anthropic.configured || byok.openai.configured;
+      hasPlatformMain ||
+      hasClientByok ||
+      byok.xai.configured ||
+      byok.anthropic.configured ||
+      byok.openai.configured;
 
     res.json({
       ...render,
@@ -2051,7 +2054,7 @@ No approved UI code yet.
         templateRoot: NEBULA_PROJECT_ROOT,
         projectDisplayName: projectName,
       });
-      ensurePreviewIndexHtml(pp.workspaceRoot, projectName || "Untitled Project");
+      writeBasicUiScaffold(pp.workspaceRoot, projectName || "Untitled Project", { force: true });
       return res.json({ ok: true, cleared, removed, chatCleared });
     } catch (err: unknown) {
       return res.status(500).json({
@@ -2238,19 +2241,7 @@ No approved UI code yet.
       const pp = projectPathsFor(req);
       const demoUrl = readV0DemoUrl(pp.workspaceRoot);
       const hasReal = hasRealV0ApiGeneration(pp.workspaceRoot);
-      // Heal older coded workspaces: prefer interactive mock preview over file-list bridge.
-      try {
-        const early = resolveAppPreviewAuthority(pp.workspaceRoot);
-        if (
-          early.codedApp &&
-          early.mode === "post_code_bridge" &&
-          !hasInteractiveProductPreview(pp.workspaceRoot)
-        ) {
-          ensureInteractiveProductPreview(pp.workspaceRoot);
-        }
-      } catch (healErr) {
-        console.warn("[app-preview/meta] interactive preview heal:", healErr);
-      }
+      // Do not heal coded workspaces into the generic role-picker mock.
       const authority = resolveAppPreviewAuthority(pp.workspaceRoot);
       res.json({
         ok: true,
@@ -2295,19 +2286,7 @@ No approved UI code yet.
         pp.projectKey ||
         "Untitled Project";
 
-      // Working app output: when product UI exists but no bundler/build, serve interactive mock preview.
-      try {
-        const early = resolveAppPreviewAuthority(pp.workspaceRoot);
-        if (
-          early.codedApp &&
-          early.mode === "post_code_bridge" &&
-          !hasInteractiveProductPreview(pp.workspaceRoot)
-        ) {
-          ensureInteractiveProductPreview(pp.workspaceRoot, { projectName: displayName });
-        }
-      } catch (healErr) {
-        console.warn("[app-preview/bootstrap] interactive preview heal:", healErr);
-      }
+      // Coded app/src pages: serve those routes or an honest bridge — never the role-picker mock.
 
       const authority = resolveAppPreviewAuthority(pp.workspaceRoot);
       let html = "";
@@ -2335,6 +2314,12 @@ No approved UI code yet.
           return res.status(200).type("html").send(emptyPreviewHtmlWithBridge());
         }
         html = fs.readFileSync(idx, "utf8");
+      }
+
+      if (html && isLegacyNebulaBasicPreviewHtml(html)) {
+        writeBasicUiScaffold(pp.workspaceRoot, displayName, { force: true });
+        const idx = path.join(pp.workspaceRoot, "index.html");
+        html = fs.existsSync(idx) ? fs.readFileSync(idx, "utf8") : html;
       }
 
       const xfProto = (req.headers["x-forwarded-proto"] as string | undefined)?.split(",")[0]?.trim();
@@ -2656,16 +2641,7 @@ No approved UI code yet.
           console.warn("[apply-generated] runnable skeleton:", skelErr);
           runnable = inspectRunnableSkeleton(workspaceRoot);
         }
-        try {
-          const preview = ensureInteractiveProductPreview(workspaceRoot, {
-            projectName: projectNameEarly,
-            productFiles: written.filter((p) => writtenPathsNeedRunnableSkeleton([p])),
-          });
-          interactivePreviewPath = preview.path;
-          if (!written.includes(preview.path)) written.push(preview.path);
-        } catch (prevErr) {
-          console.warn("[apply-generated] interactive product preview:", prevErr);
-        }
+        /* After product UI files exist, do not write public/product-preview (role-picker mock). */
       } else if (written.length > 0) {
         runnable = inspectRunnableSkeleton(workspaceRoot);
       }
@@ -2687,30 +2663,34 @@ No approved UI code yet.
         interactivePreviewPath,
       });
 
+      // Defer so this request returns even if plan/mind-map IO is slow — do not block
+      // the next /sync-project-artifacts or a hard refresh on the same Node thread.
       if (written.length > 0) {
-        try {
-          const pp = projectPathsFor(req);
-          const body = req.body || {};
-          const projectName =
-            typeof body.projectName === "string" && body.projectName.trim()
-              ? String(body.projectName).trim()
-              : "Untitled Project";
-          const userNote = typeof body.userNote === "string" ? body.userNote.trim() : "";
-          bootstrapMasterPlanFromWorkspace({
-            workspaceRoot: pp.workspaceRoot,
-            masterPlanPath: pp.masterPlanPath,
-            projectName,
-            userNote,
-          });
-          hydrateAndPersistMasterPlan(pp.workspaceRoot, pp.masterPlanPath);
-          syncMindMapFromMasterPlan({
-            workspaceRoot: pp.workspaceRoot,
-            masterPlanPath: pp.masterPlanPath,
-            projectLabel: projectName,
-          });
-        } catch (syncErr) {
-          console.warn("[apply-generated] post-apply artifact sync:", syncErr);
-        }
+        const pp = projectPathsFor(req);
+        const body = req.body || {};
+        const projectName =
+          typeof body.projectName === "string" && body.projectName.trim()
+            ? String(body.projectName).trim()
+            : "Untitled Project";
+        const userNote = typeof body.userNote === "string" ? body.userNote.trim() : "";
+        setImmediate(() => {
+          try {
+            bootstrapMasterPlanFromWorkspace({
+              workspaceRoot: pp.workspaceRoot,
+              masterPlanPath: pp.masterPlanPath,
+              projectName,
+              userNote,
+            });
+            hydrateAndPersistMasterPlan(pp.workspaceRoot, pp.masterPlanPath);
+            syncMindMapFromMasterPlan({
+              workspaceRoot: pp.workspaceRoot,
+              masterPlanPath: pp.masterPlanPath,
+              projectLabel: projectName,
+            });
+          } catch (syncErr) {
+            console.warn("[apply-generated] post-apply artifact sync:", syncErr);
+          }
+        });
       }
     } catch (err: any) {
       res.status(500).json({ error: err?.message || "Failed to apply generated files" });

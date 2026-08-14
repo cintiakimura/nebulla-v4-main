@@ -5,7 +5,7 @@ import {
   isKeyAuthFailureMessage,
   userFacingContinueFailureMessage,
 } from '../src/lib/continueFailureTaxonomy';
-import { MAIN_AI_CHAT_SETUP_HINT } from '../src/lib/grokKey';
+import { MAIN_AI_CHAT_SETUP_HINT, XAI_INCORRECT_KEY_MESSAGE } from '../src/lib/grokKey';
 
 assert.equal(
   isKeyAuthFailureMessage('HTTP 401: Incorrect API key provided'),
@@ -50,6 +50,14 @@ const facing = userFacingContinueFailureMessage(
   'Grok chat is unavailable: no valid API key on the server.',
 );
 assert.equal(facing, MAIN_AI_CHAT_SETUP_HINT);
+
+assert.equal(
+  userFacingContinueFailureMessage(
+    'key/auth fail',
+    'HTTP 400: Incorrect API key provided. You can obtain an API key from https://console.x.ai.',
+  ),
+  XAI_INCORRECT_KEY_MESSAGE,
+);
 
 assert.match(
   continueFailureActivityLine('key/auth fail'),

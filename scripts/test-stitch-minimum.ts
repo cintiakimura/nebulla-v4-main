@@ -68,7 +68,7 @@ section('sanitize strips leaked auth fields on home');
 section('Gate fails 2-box Email-on-Home fixture');
 {
   const template = getTemplateById('mobile_home_hero_cards')!;
-  const tokens = buildDesignTokens('teal primary', [], 'medium');
+  const tokens = buildDesignTokens('teal primary', '', 'medium');
   const badSlots = {
     hero_title: 'Home',
     hero_subtitle: 'Web App',
@@ -107,6 +107,7 @@ section('Gate fails 2-box Email-on-Home fixture');
               fontWeight: 400,
               textAlign: 'left' as const,
               opacity: 1,
+              boxShadow: 'none',
             },
           },
           a: {
@@ -135,6 +136,7 @@ section('Gate fails 2-box Email-on-Home fixture');
               fontWeight: 400,
               textAlign: 'left' as const,
               opacity: 1,
+              boxShadow: 'none',
             },
           },
           b: {
@@ -163,6 +165,7 @@ section('Gate fails 2-box Email-on-Home fixture');
               fontWeight: 400,
               textAlign: 'left' as const,
               opacity: 1,
+              boxShadow: 'none',
             },
           },
         },
@@ -200,7 +203,7 @@ section('Gate fails 2-box Email-on-Home fixture');
 section('Repair + render Home reaches Stitch-minimum pass');
 {
   const template = getTemplateById('mobile_home_hero_cards')!;
-  const tokens = buildDesignTokens('Clean teal primary (#0F766E), light bg', [], 'medium');
+  const tokens = buildDesignTokens('Clean teal primary (#0F766E), light bg', '', 'medium');
   tokens.primary = '#0F766E';
   tokens.bg = '#F8FAFC';
   tokens.surface = '#FFFFFF';

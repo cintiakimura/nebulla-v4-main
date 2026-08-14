@@ -8,7 +8,7 @@ export function PricingPage() {
   }, []);
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-[#050508] text-sm text-[#8a8a8a]">
+    <div className="flex min-h-screen items-center justify-center bg-transparent text-sm text-[#8a8a8a]">
       Redirecting to payment…
     </div>
   );

@@ -17,6 +17,7 @@ import {
 } from '../../lib/nebulaCloud';
 import { fetchNebulaPublicConfig, type NebulaPublicConfig } from '../../lib/nebulaPublicConfig';
 import { getBrowserProjectKey, getBrowserProjectName } from '../../lib/nebulaProjectApi';
+import { FORCE_GUEST_MODE } from '../../lib/testingBranch';
 
 export type WorkspaceContext = {
   projectName: string;
@@ -97,8 +98,10 @@ export function WorkspaceSetupGate({
       }
       // Only auto-enter guest when the user last chose guest.
       // Never silently drop a cloud login into guest — that felt like "logged out on refresh".
+      // Testing branch: always guest (no login redirect).
       if (result.status === 'needs_login') {
-        if (getWorkspaceModePreference() === 'guest') {
+        if (FORCE_GUEST_MODE || getWorkspaceModePreference() === 'guest') {
+          setWorkspaceModePreference('guest');
           const g = bindGuestWorkspace();
           finishReady({
             projectName: g.projectName,
@@ -284,14 +287,14 @@ export function WorkspaceSetupGate({
       aria-modal="true"
       aria-label="Workspace setup"
     >
-      <div className="w-full max-w-md rounded-2xl border border-border bg-[var(--surface-bright)] p-6 shadow-2xl shadow-black/50">
-        <div className="mb-6 flex items-center gap-3">
-          <Logo className="h-9 w-9 shrink-0" />
+      <div className="ide-glass-card w-full max-w-md rounded-lg border border-border p-6 shadow-none">
+        <div className="mb-5 flex items-center gap-3">
+          <Logo className="h-8 w-8 shrink-0" />
           <div>
-            <h1 className="font-headline text-lg text-slate-50">
+            <h1 className="type-page">
               {phase.status === 'needs_project' ? 'Choose a project' : 'Workspace required'}
             </h1>
-            <p className="text-xs text-slate-500">
+            <p className="type-label-sm">
               {phase.status === 'needs_project'
                 ? 'Pick or create a project so Grok can write files.'
                 : 'Sign in and pick a project so Grok can write files.'}
@@ -360,8 +363,8 @@ export function WorkspaceSetupGate({
                     setEmailMode('signin');
                     setError(null);
                   }}
-                  className={`flex-1 py-2 text-xs rounded-md transition-colors ${
-                    emailMode === 'signin' ? 'bg-cyan-500/20 text-cyan-300' : 'text-slate-500 hover:text-slate-300'
+                  className={`flex-1 rounded-md py-2 text-xs transition-colors ${
+                    emailMode === 'signin' ? 'btn-cyan' : 'text-muted-foreground hover:text-foreground'
                   }`}
                 >
                   Sign in
@@ -372,8 +375,8 @@ export function WorkspaceSetupGate({
                     setEmailMode('signup');
                     setError(null);
                   }}
-                  className={`flex-1 py-2 text-xs rounded-md transition-colors ${
-                    emailMode === 'signup' ? 'bg-cyan-500/20 text-cyan-300' : 'text-slate-500 hover:text-slate-300'
+                  className={`flex-1 rounded-md py-2 text-xs transition-colors ${
+                    emailMode === 'signup' ? 'btn-cyan' : 'text-muted-foreground hover:text-foreground'
                   }`}
                 >
                   Create account

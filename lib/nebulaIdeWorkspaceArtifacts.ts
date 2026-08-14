@@ -548,15 +548,24 @@ export function syncMindMapFromMasterPlan(opts: {
   return { ...graph, written: true, routeCount, source };
 }
 
-export function writeBasicUiScaffold(workspaceRoot: string, projectName: string): string[] {
+/** Old cyan/navy V0 fallback — rewrite to Nebulla shell tokens. */
+export function isLegacyNebulaBasicPreviewHtml(html: string): boolean {
+  return /V0 credits unavailable|basic UI preview/i.test(html);
+}
+
+export function writeBasicUiScaffold(
+  workspaceRoot: string,
+  projectName: string,
+  opts?: { force?: boolean },
+): string[] {
   const written: string[] = [];
   const routes = discoverWorkspaceRoutes(workspaceRoot);
-  const title = projectName.trim() || "Nebula App";
+  const title = projectName.trim() || "App";
 
   const routeCards = routes
     .map((r) => {
       const label = r === "/" ? "Home" : r;
-      return `<a class="card" href="#"><span class="path">${r}</span><strong>${label}</strong><p>Scaffolded route — run <code>npm run dev</code> for live Next.js UI.</p></a>`;
+      return `<a class="card" href="#"><span class="path">${r}</span><strong>${label}</strong><p>Route on disk — open in Code, or run <code>npm run dev</code> for the live app.</p></a>`;
     })
     .join("\n");
 
@@ -565,33 +574,40 @@ export function writeBasicUiScaffold(workspaceRoot: string, projectName: string)
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="nebulla-preview" content="workspace-routes"/>
   <title>${title} — Preview</title>
   <style>
     * { box-sizing: border-box; }
-    body { margin: 0; font-family: system-ui, sans-serif; background: #0a1628; color: #e2e8f0; min-height: 100vh; }
-    header { padding: 1.5rem 2rem; border-bottom: 1px solid rgba(255,255,255,.08); }
-    h1 { margin: 0 0 .35rem; font-size: 1.35rem; color: #67e8f9; }
-    .sub { color: #94a3b8; font-size: .9rem; max-width: 42rem; line-height: 1.5; }
-    main { padding: 1.5rem 2rem 2.5rem; display: grid; gap: 1rem; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); }
-    .card { display: block; padding: 1rem 1.1rem; border-radius: 10px; border: 1px solid rgba(103,232,249,.25); background: rgba(15,23,42,.85); text-decoration: none; color: inherit; transition: border-color .15s; }
-    .card:hover { border-color: rgba(103,232,249,.55); }
-    .path { font-family: ui-monospace, monospace; font-size: .75rem; color: #64748b; }
-    .card strong { display: block; margin: .35rem 0; color: #f1f5f9; }
-    .card p { margin: 0; font-size: .8rem; color: #94a3b8; line-height: 1.4; }
-    code { background: rgba(0,0,0,.35); padding: .1rem .35rem; border-radius: 4px; font-size: .85em; }
+    body { margin: 0; font-family: ui-sans-serif, system-ui, sans-serif; background: #141414; color: #e8e8e8; min-height: 100vh; font-weight: 400; }
+    header { padding: 24px 24px 16px; border-bottom: 1px solid rgba(255,255,255,.12); }
+    h1 { margin: 0 0 8px; font-size: 1.25rem; font-weight: 400; letter-spacing: -0.02em; color: #e8e8e8; }
+    .sub { color: rgba(232,232,232,.66); font-size: .875rem; max-width: 36rem; line-height: 1.5; font-weight: 300; }
+    main { padding: 24px; display: grid; gap: 16px; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); }
+    .card { display: block; padding: 16px; border-radius: 8px; border: 1px solid rgba(255,255,255,.12); background: #141414; text-decoration: none; color: inherit; }
+    .card:hover { border-color: rgba(255,255,255,.18); }
+    .path { font-family: ui-monospace, monospace; font-size: .6875rem; letter-spacing: .06em; color: rgba(232,232,232,.45); }
+    .card strong { display: block; margin: 8px 0; font-weight: 400; color: #e8e8e8; }
+    .card p { margin: 0; font-size: .8125rem; color: rgba(232,232,232,.66); line-height: 1.45; font-weight: 300; }
+    code { background: rgba(255,255,255,.06); padding: .1rem .35rem; border-radius: 6px; font-size: .85em; }
   </style>
 </head>
 <body>
   <header>
     <h1>${title}</h1>
-    <p class="sub">Nebula <strong>basic UI preview</strong> (V0 credits unavailable). Routes detected in your workspace. Use the IDE <strong>Preview</strong> panel or terminal <code>npm run dev</code> for the full app.</p>
+    <p class="sub">Workspace routes on disk. This is not the live app — open a file in Code, or run <code>npm run dev</code>.</p>
   </header>
-  <main>${routeCards}</main>
+  <main>${routeCards || '<p class="sub">No routes detected yet.</p>'}</main>
 </body>
 </html>`;
 
   const idx = path.join(workspaceRoot, "index.html");
-  if (!fs.existsSync(idx) || fs.statSync(idx).size < 200) {
+  const existing = fs.existsSync(idx) ? fs.readFileSync(idx, "utf8") : "";
+  const shouldWrite =
+    Boolean(opts?.force) ||
+    !fs.existsSync(idx) ||
+    fs.statSync(idx).size < 200 ||
+    isLegacyNebulaBasicPreviewHtml(existing);
+  if (shouldWrite) {
     fs.writeFileSync(idx, html, "utf8");
     written.push("index.html");
   }
@@ -607,7 +623,10 @@ export function writeBasicUiScaffold(workspaceRoot: string, projectName: string)
 
 export function ensurePreviewIndexHtml(workspaceRoot: string, projectName: string): boolean {
   const idx = path.join(workspaceRoot, "index.html");
-  if (fs.existsSync(idx) && fs.statSync(idx).size > 200) return false;
-  writeBasicUiScaffold(workspaceRoot, projectName);
+  if (fs.existsSync(idx) && fs.statSync(idx).size > 200) {
+    const existing = fs.readFileSync(idx, "utf8");
+    if (!isLegacyNebulaBasicPreviewHtml(existing)) return false;
+  }
+  writeBasicUiScaffold(workspaceRoot, projectName, { force: true });
   return true;
 }

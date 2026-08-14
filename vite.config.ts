@@ -16,6 +16,13 @@ function resolveBuildId(): string {
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, '.', '');
+  /** Lab-only. Unset in production so auth / session / BYOK stay on. */
+  const forceGuest =
+    env.NEBULA_FORCE_GUEST ||
+    env.VITE_NEBULA_FORCE_GUEST ||
+    process.env.NEBULA_FORCE_GUEST ||
+    process.env.VITE_NEBULA_FORCE_GUEST ||
+    '';
   return {
     plugins: [
       react(),
@@ -101,6 +108,9 @@ export default defineConfig(({ mode }) => {
     },
     define: {
       __NEBULLA_BUILD_ID__: JSON.stringify(resolveBuildId()),
+      'import.meta.env.NEBULA_FORCE_GUEST': JSON.stringify(forceGuest),
+      'import.meta.env.VITE_NEBULA_FORCE_GUEST': JSON.stringify(forceGuest),
+      'process.env.NEBULA_FORCE_GUEST': JSON.stringify(forceGuest),
       'process.env.DEV_LOCAL_AUTH': JSON.stringify(env.DEV_LOCAL_AUTH ?? ''),
       'process.env.DEV_LOCAL_GITHUB_UID': JSON.stringify(env.DEV_LOCAL_GITHUB_UID ?? ''),
       'process.env.DEV_LOCAL_GITHUB_NAME': JSON.stringify(env.DEV_LOCAL_GITHUB_NAME ?? ''),
@@ -110,6 +120,10 @@ export default defineConfig(({ mode }) => {
     server: {
       hmr: {
         overlay: false,
+      },
+      watch: {
+        // Guest workspaces live here — writing mockup/code must not reload the IDE mid-chat.
+        ignored: ['**/data/**', '**/conversation-logs/**', '**/.git/**'],
       },
     },
   };

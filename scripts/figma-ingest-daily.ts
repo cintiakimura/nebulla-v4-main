@@ -192,12 +192,13 @@ export async function runFigmaIngestDaily(
   fs.mkdirSync(libraryRoot, { recursive: true });
 
   const lock = acquireIngestLock(libraryRoot, now0);
-  if (!lock.ok) {
+  if (lock.ok === false) {
+    const reason = lock.reason;
     let status = rollDayIfNeeded(readStatusFile(statusFile, now0), now0);
     status = touchStatus(
       status,
       {
-        message: `Rejected: ${lock.reason === "already_running" || lock.reason === "lock_held" ? "ingest already running" : lock.reason}`,
+        message: `Rejected: ${reason === "already_running" || reason === "lock_held" ? "ingest already running" : reason}`,
       },
       now0,
     );
@@ -339,30 +340,30 @@ export async function runFigmaIngestDaily(
       logStatus(status);
 
       const dl = await downloadFn(libraryRoot, token, row);
-      if (!dl.ok && dl.kind === "rate_limited") {
+      if (dl.ok === false) {
         const t = new Date();
         const left = filterPendingKeys(libraryRoot, allKeys).length;
-        status = touchStatus(
-          status,
-          {
-            state: "rate_limited",
-            currentFileKey: fileKey,
-            remainingKeys: left,
-            lastError: dl.error,
-            message: dl.retryAfter
-              ? `Waiting: rate limited (Retry-After=${dl.retryAfter}) — stopped run`
-              : "Waiting: rate limited — stopped run",
-          },
-          t,
-        );
-        writeStatusFile(statusFile, status);
-        logStatus(status);
-        return { status, exitCode: 3 };
-      }
-
-      if (!dl.ok) {
-        const t = new Date();
-        const left = filterPendingKeys(libraryRoot, allKeys).length;
+        if (dl.kind === "rate_limited") {
+          const err = dl.error;
+          const retryAfter = dl.retryAfter;
+          status = touchStatus(
+            status,
+            {
+              state: "rate_limited",
+              currentFileKey: fileKey,
+              remainingKeys: left,
+              lastError: err,
+              message: retryAfter
+                ? `Waiting: rate limited (Retry-After=${retryAfter}) — stopped run`
+                : "Waiting: rate limited — stopped run",
+            },
+            t,
+          );
+          writeStatusFile(statusFile, status);
+          logStatus(status);
+          return { status, exitCode: 3 };
+        }
+        const err = dl.error;
         if (dl.permanent) {
           // 403/404: leave without structure (do not invent). Count attempt toward daily cap; continue.
           status = touchStatus(
@@ -372,8 +373,8 @@ export async function runFigmaIngestDaily(
               downloadedToday: status.downloadedToday + 1,
               currentFileKey: null,
               remainingKeys: left,
-              lastError: dl.error,
-              message: `Skip permanent fail ${fileKey}: ${dl.error}`,
+              lastError: err,
+              message: `Skip permanent fail ${fileKey}: ${err}`,
             },
             t,
           );
@@ -388,8 +389,8 @@ export async function runFigmaIngestDaily(
             state: "error",
             currentFileKey: null,
             remainingKeys: left,
-            lastError: dl.error,
-            message: `Error on ${fileKey}: ${dl.error}`,
+            lastError: err,
+            message: `Error on ${fileKey}: ${err}`,
           },
           t,
         );
@@ -400,16 +401,17 @@ export async function runFigmaIngestDaily(
 
       const extracted = extractStructureForKey(libraryRoot, fileKey);
       const tAfter = new Date();
-      if (!extracted.ok) {
+      if (extracted.ok === false) {
+        const extractErr = extracted.error;
         status = touchStatus(
           status,
           {
             state: "error",
             downloadedToday: status.downloadedToday + 1,
             currentFileKey: null,
-            lastError: extracted.error,
+            lastError: extractErr,
             remainingKeys: filterPendingKeys(libraryRoot, allKeys).length,
-            message: `Downloaded ${fileKey} but extract failed: ${extracted.error}`,
+            message: `Downloaded ${fileKey} but extract failed: ${extractErr}`,
           },
           tAfter,
         );

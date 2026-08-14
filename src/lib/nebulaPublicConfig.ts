@@ -1,3 +1,5 @@
+import { getGrokRequestHeaders } from './grokUserKey';
+
 export type NebulaPublicConfig = {
   cloudStorageReady?: boolean;
   githubOAuthReady?: boolean;
@@ -48,7 +50,10 @@ export type NebulaPublicConfig = {
 
 export async function fetchNebulaPublicConfig(): Promise<NebulaPublicConfig> {
   try {
-    const r = await fetch('/api/config');
+    const r = await fetch('/api/config', {
+      credentials: 'include',
+      headers: getGrokRequestHeaders(),
+    });
     const d = (await r.json()) as NebulaPublicConfig;
     return d && typeof d === 'object' ? d : {};
   } catch {

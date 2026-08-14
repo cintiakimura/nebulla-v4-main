@@ -168,27 +168,54 @@ export async function sendIdeAssistantGrokTurn(options: {
   });
   const messagesPayload = [{ role: 'system' as const, content: systemPrompt }, ...mapped];
 
-  const data = await fetchJson<{
+  const GROK_CHAT_TIMEOUT_MS = 90_000;
+  const timeoutAbort = new AbortController();
+  const timeoutId =
+    typeof window !== 'undefined'
+      ? window.setTimeout(() => timeoutAbort.abort(), GROK_CHAT_TIMEOUT_MS)
+      : setTimeout(() => timeoutAbort.abort(), GROK_CHAT_TIMEOUT_MS);
+  if (signal) {
+    if (signal.aborted) timeoutAbort.abort();
+    else signal.addEventListener('abort', () => timeoutAbort.abort(), { once: true });
+  }
+
+  let data: {
     choices?: { message?: { content?: string; planningPhase?: string } }[];
     claudeFallbackNotice?: string;
-  }>(withProjectQuery('/api/grok/chat'), {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getGrokRequestHeaders() },
-    credentials: 'include',
-    signal,
-    body: JSON.stringify(
-      withProjectBody({
-        userId,
-        projectName: projectName || wsMeta.projectName,
-        chatModel: selection.chatModel,
-        aiProvider: selection.aiProvider,
-        buildMode,
-        workspaceContext,
-        onboardingAutopilot: false,
-        messages: messagesPayload,
-      }),
-    ),
-  });
+  };
+  try {
+    data = await fetchJson<{
+      choices?: { message?: { content?: string; planningPhase?: string } }[];
+      claudeFallbackNotice?: string;
+    }>(withProjectQuery('/api/grok/chat'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...getGrokRequestHeaders() },
+      credentials: 'include',
+      signal: timeoutAbort.signal,
+      body: JSON.stringify(
+        withProjectBody({
+          userId,
+          projectName: projectName || wsMeta.projectName,
+          chatModel: selection.chatModel,
+          aiProvider: selection.aiProvider,
+          buildMode,
+          workspaceContext,
+          onboardingAutopilot: false,
+          messages: messagesPayload,
+        }),
+      ),
+    });
+  } catch (e) {
+    if (timeoutAbort.signal.aborted && !signal?.aborted) {
+      throw new Error(
+        'Grok chat timed out after 90s. If a Master Plan is already saved, send “continue building” to start coding without waiting.',
+      );
+    }
+    throw e;
+  } finally {
+    if (typeof window !== 'undefined') window.clearTimeout(timeoutId);
+    else clearTimeout(timeoutId);
+  }
 
   const rawAssistantContent = data.choices?.[0]?.message?.content || '';
   const planningPhase = data.choices?.[0]?.message?.planningPhase || '';

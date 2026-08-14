@@ -1,5 +1,6 @@
 import { LoginScreen } from '@/components/LoginScreen';
 import { goToLanding, readLoginNextParam } from '../lib/authNavigate';
+import { markForceDashboardOnce } from '../lib/guidedFunnel';
 
 export function LoginPage() {
   const next = readLoginNextParam();
@@ -22,6 +23,14 @@ export function LoginPage() {
       /** Signup from "Try the App" must show the page even if a cookie session exists. */
       skipExistingSessionRedirect={isSignup}
       onAuthenticated={() => {
+        // T8 — return login → Dashboard, unless T1 already queued Build.
+        try {
+          if (localStorage.getItem('nebula_guided_enter_build_v1') !== '1') {
+            markForceDashboardOnce();
+          }
+        } catch {
+          markForceDashboardOnce();
+        }
         window.location.assign(next.startsWith('/') ? next : '/app');
       }}
       onBack={goToLanding}
