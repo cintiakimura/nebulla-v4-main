@@ -1,7 +1,12 @@
 import fs from "fs";
 import path from "path";
 import { readV0PromptMarkdown, writeV0PromptMarkdown } from "./nebulaUiStudioPipeline";
-import { writeUiBriefMarkdown } from "./nebulaUiBrief";
+import {
+  formatPageContractsMarkdown,
+  pagesTextHasParseableRoutes,
+  seedPagesFromGoal,
+  writeUiBriefMarkdown,
+} from "./nebulaUiBrief";
 import { summarizeDesignReferencesForPrompt } from "./nebulaDesignReferences";
 import {
   isVisualEditorEligible,
@@ -92,13 +97,16 @@ export function fillMissingMasterPlanSectionsLocal(opts: {
   }
 
   if (missing.includes("4. Pages and navigation")) {
-    next["4. Pages and navigation"] =
-      routes.length > 0
-        ? routes
-            .slice(0, 12)
-            .map((r) => `- **${r === "/" ? "Home" : r.replace(/^\//, "").replace(/[-_]/g, " ")}** (\`${r}\`)`)
-            .join("\n")
-        : "- **Home** (`/`)\n- **Dashboard** (`/dashboard`)";
+    const goalText = String(next["1. Goal of the app"] ?? goal);
+    const diskRoutes = routes.filter((r) => r !== "/");
+    const seeded =
+      diskRoutes.length > 0
+        ? routes.slice(0, 12).map((r) => ({
+            name: r === "/" ? "Home" : r.replace(/^\//, "").replace(/[-_]/g, " "),
+            route: r,
+          }))
+        : seedPagesFromGoal(goalText);
+    next["4. Pages and navigation"] = formatPageContractsMarkdown(seeded, goalText);
     updated.push("4. Pages and navigation");
   }
 
@@ -395,14 +403,19 @@ export function hydrateMasterPlanDerivedSections(
   let changed = false;
 
   const pagesSection = String(out["4. Pages and navigation"] ?? "").trim();
-  if (!pagesSection) {
+  const goal = String(out["1. Goal of the app"] ?? "").trim();
+  if (!pagesTextHasParseableRoutes(pagesSection)) {
     const routes = discoverWorkspaceRoutes(workspaceRoot);
-    if (routes.length) {
-      out["4. Pages and navigation"] = routes
-        .map((r) => `- **${r === "/" ? "Home" : routeToLabel(r, "App")}** (\`${r}\`)`)
-        .join("\n");
-      changed = true;
-    }
+    const diskRoutes = routes.filter((r) => r !== "/");
+    const seeded =
+      diskRoutes.length > 0
+        ? routes.slice(0, 12).map((r) => ({
+            name: r === "/" ? "Home" : routeToLabel(r, "App"),
+            route: r,
+          }))
+        : seedPagesFromGoal(goal);
+    out["4. Pages and navigation"] = formatPageContractsMarkdown(seeded, goal);
+    changed = true;
   }
 
   const uiSection = String(out["5. UI/UX design"] ?? "").trim();
@@ -412,7 +425,6 @@ export function hydrateMasterPlanDerivedSections(
       out["5. UI/UX design"] = prompt;
       changed = true;
     } else {
-      const goal = String(out["1. Goal of the app"] ?? "").trim();
       const pages = String(out["4. Pages and navigation"] ?? "").trim();
       const tech = String(out["2. Tech and Research"] ?? "").trim();
       const refHint = summarizeDesignReferencesForPrompt(workspaceRoot, 200);

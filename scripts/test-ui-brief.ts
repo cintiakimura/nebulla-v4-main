@@ -12,6 +12,8 @@ import {
   parsePagesFromUiBrief,
   writeUiBriefMarkdown,
 } from "../lib/nebulaUiBrief.ts";
+import { hydrateMasterPlanDerivedSections } from "../lib/nebulaIdeWorkspaceArtifacts.ts";
+import { uiBriefUsable } from "../lib/spineSequenceGates.ts";
 import { buildV0PromptMarkdown } from "../lib/nebulaUiStudioPipeline.ts";
 import { V0_PROMPT_MAX_CHARS } from "../lib/nebulaUiStudioPipeline.ts";
 
@@ -83,6 +85,41 @@ section("parsePagesFromUiBrief skips empty routes; recovers route from body");
     "route recovered from body",
   );
   assert.ok(pages.some((p) => p.name === "Login" && p.route === "/login"));
+}
+
+section("parsePagesFromUiBrief reads backtick-inside-parens bullets");
+{
+  const brief = [
+    "## Pages and navigation",
+    "",
+    "- **Home** (`/`)",
+    "- **Dashboard** (`/dashboard`)",
+    "- Practice (`/practice`)",
+  ].join("\n");
+  const pages = parsePagesFromUiBrief(brief);
+  assert.ok(pages.some((p) => p.route === "/"), "Home `/` from (`/`)");
+  assert.ok(pages.some((p) => p.name === "Dashboard" && p.route === "/dashboard"));
+  assert.ok(pages.some((p) => p.name === "Practice" && p.route === "/practice"));
+}
+
+section("research-ok + unparseable §4 seeds pages so brief is usable");
+{
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "nebulla-ui-brief-seed-"));
+  const thin: Record<string, string> = {
+    "1. Goal of the app": "tutor kids with ADHD — short practice sessions for students and teachers",
+    "2. Tech and Research": "Education web app. Research complete; competitors confirmed.",
+    "3. Features and KPIs": "Practice, teacher view, progress. KPI: sessions completed.",
+    "4. Pages and navigation": "Pages will be filled after research. Typical education screens TBD.",
+    "5. UI/UX design": "Calm, low-noise UI. Large type. Short sessions. High contrast CTAs.",
+  };
+  const { plan, changed } = hydrateMasterPlanDerivedSections(tmp, thin);
+  assert.equal(changed, true);
+  assert.match(String(plan["4. Pages and navigation"]), /###\s+Home\s+`\/`/);
+  assert.match(String(plan["4. Pages and navigation"]), /`\/practice`/);
+  const brief = buildUiBriefMarkdown(plan, tmp);
+  const pages = parsePagesFromUiBrief(brief);
+  assert.ok(pages.length >= 3, `expected seeded pages, got ${pages.length}`);
+  assert.ok(uiBriefUsable(brief), "seeded brief must pass Gate A");
 }
 
 console.log("\nAll ui-brief tests passed.\n");

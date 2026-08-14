@@ -144,8 +144,7 @@ export function buildUiBriefMarkdown(
     "",
     "For **every** page below, implement: purpose, primary_actions, data_entities, authz, empty_state, error_state, nav_links.",
     "",
-    pages ||
-      "(missing — complete Master Plan §4 with routes and page fields)",
+    resolvePagesMarkdown(pages, goal),
     "",
   ];
 
@@ -231,7 +230,115 @@ export function writeUiBriefMarkdown(
   return { written: true, content, path: UI_BRIEF_REL };
 }
 
-/** Parse page blocks from a ui-brief (### Name `/route` or ## under Pages section). */
+export function extractNamedRoutesFromPagesText(text: string): { name: string; route: string }[] {
+  const out: { name: string; route: string }[] = [];
+  const seen = new Set<string>();
+  const add = (name: string, route: string) => {
+    const r = route.replace(/`/g, "").trim();
+    if (!r.startsWith("/")) return;
+    const key = r.toLowerCase();
+    if (seen.has(key)) return;
+    seen.add(key);
+    const n =
+      name.replace(/\*\*/g, "").replace(/[()]/g, "").replace(/`/g, "").trim() ||
+      (r === "/" ? "Home" : r.replace(/^\//, "").replace(/[-_]/g, " "));
+    if (!n) return;
+    out.push({ name: n.split(/\s+/).slice(0, 6).join(" "), route: r });
+  };
+  for (const line of String(text || "").split("\n")) {
+    const t = line.trim();
+    if (!t || t.startsWith("#")) {
+      const heading = t.match(/^#{2,4}\s+(.+?)(?:\s+`(\/[^`]*)`|\s+\((`?\/[^)`]*)`?\))?\s*$/);
+      if (heading) {
+        const route = (heading[2] || heading[3] || "").replace(/`/g, "").trim();
+        add(heading[1], route);
+      }
+      continue;
+    }
+    const bt = t.match(/`(\/[^`]*)`/) || t.match(/\((\/[^)]*)\)/);
+    if (!bt?.[1]?.startsWith("/")) continue;
+    const name = t
+      .replace(/^[-*•]\s+/, "")
+      .replace(/^\d+[.)]\s+/, "")
+      .replace(/`\/[^`]+`/g, "")
+      .replace(/[()]/g, "")
+      .replace(/\*\*/g, "")
+      .replace(/\s+/g, " ")
+      .trim();
+    add(name, bt[1]);
+  }
+  return out;
+}
+
+/** Safe defaults so Gate A can auto-build a brief when §4 has no routes yet. */
+export function seedPagesFromGoal(goal: string): { name: string; route: string }[] {
+  const g = String(goal || "");
+  if (/\b(adhd|kids?|child|student|teacher|tutor|classroom|school|parent)\b/i.test(g)) {
+    return [
+      { name: "Home", route: "/" },
+      { name: "Practice", route: "/practice" },
+      { name: "Teacher", route: "/teacher" },
+      { name: "Progress", route: "/progress" },
+    ];
+  }
+  if (/\b(shop|store|cart|checkout|ecommerce)\b/i.test(g)) {
+    return [
+      { name: "Home", route: "/" },
+      { name: "Catalog", route: "/catalog" },
+      { name: "Cart", route: "/cart" },
+      { name: "Account", route: "/account" },
+    ];
+  }
+  return [
+    { name: "Home", route: "/" },
+    { name: "Dashboard", route: "/dashboard" },
+    { name: "Settings", route: "/settings" },
+  ];
+}
+
+export function formatPageContractsMarkdown(
+  pages: { name: string; route: string }[],
+  goal?: string,
+): string {
+  const purposeHint = String(goal || "").replace(/\s+/g, " ").trim().slice(0, 120);
+  return pages
+    .map((p) => {
+      const purpose =
+        p.route === "/"
+          ? purposeHint || "Primary landing — one clear next action"
+          : `Screen for ${p.name.toLowerCase()}`;
+      return [
+        `### ${p.name} \`${p.route}\``,
+        "",
+        `- Purpose: ${purpose}`,
+        `- Primary actions: Continue, back to Home`,
+        `- Data entities: session, ${p.name.toLowerCase()}`,
+        `- Authz: ${/teacher|parent|account|settings|progress/i.test(p.name) ? "signed-in adult" : "signed-in learner or public"}`,
+        `- Empty state: Nothing here yet — start from Home`,
+        `- Error state: Could not load — try again`,
+        `- Nav links: \`/\`, ${pages
+          .filter((x) => x.route !== p.route)
+          .slice(0, 3)
+          .map((x) => `\`${x.route}\``)
+          .join(", ")}`,
+      ].join("\n");
+    })
+    .join("\n\n");
+}
+
+export function pagesTextHasParseableRoutes(text: string): boolean {
+  return parsePagesFromUiBrief(`## Pages and navigation\n\n${String(text || "")}`).length > 0;
+}
+
+/** If §4 has no parseable routes, emit ### contracts so Gate A / UI Gen can proceed. */
+export function resolvePagesMarkdown(pagesSection: string, goal: string): string {
+  const pages = String(pagesSection || "").trim();
+  if (pagesTextHasParseableRoutes(pages)) return pages;
+  const extracted = extractNamedRoutesFromPagesText(pages);
+  const seeded = extracted.length > 0 ? extracted : seedPagesFromGoal(goal);
+  return formatPageContractsMarkdown(seeded, goal);
+}
+
 export function parsePagesFromUiBrief(brief: string): { name: string; route: string; body: string }[] {
   if (!brief.trim()) return [];
   const pagesIdx = brief.search(/##\s*Pages and navigation/i);
@@ -241,19 +348,16 @@ export function parsePagesFromUiBrief(brief: string): { name: string; route: str
 
   const pages: { name: string; route: string; body: string }[] = [];
   const headingRe =
-    /^###\s+(.+?)(?:\s+`(\/[^`]+)`|\s+\((`?\/[^)`]+)`?\))?\s*$/gm;
+    /^###\s+(.+?)(?:\s+`(\/[^`]*)`|\s+\((`?\/[^)`]*)`?\))?\s*$/gm;
   const matches = [...pagesBlock.matchAll(headingRe)];
   if (matches.length === 0) {
-    // Fallback: bullet lines with routes
-    for (const line of pagesBlock.split("\n")) {
-      const m = line.match(/^[-*•]\s+\*?\*?(.+?)\*?\*?\s*(?:\(|`)?(\/[\w\-./:{}\*]*)/);
-      if (m) {
-        pages.push({
-          name: m[1].replace(/\*\*/g, "").trim(),
-          route: m[2],
-          body: line.trim(),
-        });
-      }
+    // Fallback: bullets / lines with `/route` in backticks or parens (incl. (`/`) )
+    for (const extracted of extractNamedRoutesFromPagesText(pagesBlock)) {
+      pages.push({
+        name: extracted.name,
+        route: extracted.route,
+        body: `${extracted.name} ${extracted.route}`,
+      });
     }
     return pages;
   }
@@ -268,8 +372,9 @@ export function parsePagesFromUiBrief(brief: string): { name: string; route: str
     // Heading without `/route` — recover from body, else skip (empty routes break merge/UI Gen).
     if (!route.startsWith("/")) {
       const fromBody =
-        chunk.match(/`(\/[^`\s]+)`/) ||
-        chunk.match(/(?:^|[\s(])(\/[A-Za-z0-9_][\w\-./:{}\*]*)/);
+        chunk.match(/`(\/[^`]*)`/) ||
+        chunk.match(/\((\/[^)]*)\)/) ||
+        chunk.match(/(?:^|[\s(])(\/(?:[A-Za-z0-9_][\w\-./:{}\*]*)?)/);
       route = (fromBody?.[1] || "").trim();
     }
     if (!name || !route.startsWith("/")) continue;

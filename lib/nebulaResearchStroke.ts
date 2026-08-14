@@ -6,7 +6,7 @@
 import fs from "fs";
 import path from "path";
 import { callGrokWebSearch } from "./grokWebSearch";
-import { readMasterPlanFile } from "./nebulaIdeWorkspaceArtifacts";
+import { readMasterPlanFile, syncUiBriefFromMasterPlan } from "./nebulaIdeWorkspaceArtifacts";
 import { MASTER_PLAN_SECTION_KEYS } from "./masterPlanSections";
 import {
   RESEARCH_ARTIFACT_REL,
@@ -173,6 +173,15 @@ export function mergeResearchIntoMasterPlan(opts: {
   return { updated };
 }
 
+function mergeResearchAndSyncBrief(opts: {
+  workspaceRoot: string;
+  masterPlanPath: string;
+}): { updated: string[] } {
+  const merged = mergeResearchIntoMasterPlan(opts);
+  syncUiBriefFromMasterPlan(opts.workspaceRoot, opts.masterPlanPath);
+  return merged;
+}
+
 export async function runResearchStroke(opts: {
   apiKey: string;
   workspaceRoot: string;
@@ -192,7 +201,7 @@ export async function runResearchStroke(opts: {
 }> {
   const existing = assessResearchArtifact(opts.workspaceRoot, { goal: opts.goal });
   if (existing.ok && !opts.force) {
-    const merged = mergeResearchIntoMasterPlan({
+    const merged = mergeResearchAndSyncBrief({
       workspaceRoot: opts.workspaceRoot,
       masterPlanPath: opts.masterPlanPath,
     });
@@ -300,7 +309,7 @@ Mark each assumption CONFIRMED or CORRECTED after search.`;
         error: `Research below minimum: ${gate.reasons.join("; ")}`,
       };
     }
-    const merged = mergeResearchIntoMasterPlan({
+    const merged = mergeResearchAndSyncBrief({
       workspaceRoot: opts.workspaceRoot,
       masterPlanPath: opts.masterPlanPath,
     });
