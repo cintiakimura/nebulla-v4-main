@@ -92,7 +92,7 @@ export async function handleSmartChatMessage(
   opts?: SmartChatHandlerOptions,
 ): Promise<SmartChatHandlerResult> {
   const masterPlanComplete = opts?.masterPlanComplete === true;
-  const interactionMode = opts?.interactionMode === 'agent' ? 'agent' : 'chat';
+  const interactionMode = opts?.interactionMode === 'chat' ? 'chat' : 'agent';
   const modeMeta = detectChatMode(userText, { masterPlanComplete });
   const { mode, discoveryRequired } = modeMeta;
 

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Bot, Hand, Loader2, Mic, Paperclip, Send, Square, User, Wrench } from 'lucide-react';
+import { Bot, Hand, Loader2, MessageSquare, Mic, Paperclip, Send, Square, User, Wrench } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { fetchSessionUser, syncActiveCloudProjectFromSession, upsertCloudProject } from '../../lib/nebulaCloud';
 import { MAIN_AI_CHAT_SETUP_HINT } from '../../lib/grokKey';
@@ -3229,26 +3229,26 @@ export function AIChat() {
         <div className="surface-float relative rounded-md border border-transparent p-1.5 pt-1 ring-1 ring-[color-mix(in_srgb,var(--outline-variant)_12%,transparent)] transition-[box-shadow,background-color] duration-300 ease-out focus-within:ring-[color-mix(in_srgb,var(--outline-variant)_22%,transparent)]">
           <button
             type="button"
-            aria-pressed={assistantInteractionMode === 'agent'}
+            aria-pressed={assistantInteractionMode === 'chat'}
             title={
-              assistantInteractionMode === 'agent'
-                ? t('chat.mode.agentHint')
-                : t('chat.mode.chatHint')
+              assistantInteractionMode === 'chat'
+                ? t('chat.mode.chatHint')
+                : t('chat.mode.agentHint')
             }
             onClick={() =>
               void applyInteractionMode(
-                assistantInteractionMode === 'agent' ? 'chat' : 'agent',
+                assistantInteractionMode === 'chat' ? 'agent' : 'chat',
               )
             }
             className={cn(
               'absolute right-1.5 top-1 z-10 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-normal transition',
-              assistantInteractionMode === 'agent'
+              assistantInteractionMode === 'chat'
                 ? 'bg-primary/20 text-primary ring-1 ring-primary/30'
                 : 'bg-black/40 text-muted-foreground ring-1 ring-border hover:text-foreground',
             )}
           >
-            <Wrench className="h-3 w-3" aria-hidden />
-            {t('chat.mode.agent')}
+            <MessageSquare className="h-3 w-3" aria-hidden />
+            {t('chat.mode.chat')}
           </button>
           <textarea
             value={input}

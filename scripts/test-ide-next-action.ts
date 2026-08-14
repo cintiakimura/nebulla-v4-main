@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { computeIdeNextAction } from "../src/lib/ideNextAction.ts";
+import { normalizeInteractionMode } from "../src/lib/ideAssistantInteractionMode.ts";
 import { shouldApplyUiToPreview } from "../lib/uiGenerationEngine/applyPreviewShell.ts";
 import {
   ensureWorkspaceCreatedMarker,
@@ -24,6 +25,11 @@ const pending = computeIdeNextAction({
   interactionMode: "agent",
 });
 assert.equal(pending.id, "validate-slice");
+
+assert.equal(normalizeInteractionMode(null), "agent");
+assert.equal(normalizeInteractionMode(undefined), "agent");
+assert.equal(normalizeInteractionMode("agent"), "agent");
+assert.equal(normalizeInteractionMode("chat"), "chat");
 
 const incomplete = computeIdeNextAction({
   masterPlanStatus: {

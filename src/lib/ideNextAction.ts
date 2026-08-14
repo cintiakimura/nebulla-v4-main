@@ -68,8 +68,8 @@ export function computeIdeNextAction(opts: {
   if (interactionMode === 'chat') {
     return {
       id: 'switch-agent',
-      label: 'Switch to Agent to build',
-      detail: 'Plan looks ready — Agent mode runs Go and file applies.',
+      label: 'Turn off Chat to build',
+      detail: 'Chat is on — click Chat again so Go and file applies can run.',
     };
   }
 

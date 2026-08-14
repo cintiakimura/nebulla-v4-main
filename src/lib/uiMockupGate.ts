@@ -3,7 +3,6 @@
  * Single-API-key safe: architecture turn completes → mockup → coding (sequential).
  */
 
-import { openLocalFile } from './fileOperations';
 import { isMasterPlanReadyForUiMockup } from './masterPlanSections';
 import { getBrowserProjectKey, withProjectQuery } from './nebulaProjectApi';
 import { readResponseJson } from './apiFetch';
@@ -199,9 +198,13 @@ export async function assessUiMockupReadiness(options?: {
 
   let uiBriefLength = 0;
   try {
-    const opened = await openLocalFile('nebula-ui-studio/ui-brief.md');
-    if (opened.success !== false && opened.content) {
-      uiBriefLength = opened.content.trim().length;
+    const st = await fetch(withProjectQuery('/api/master-plan/status'), {
+      credentials: 'include',
+      cache: 'no-store',
+    });
+    if (st.ok) {
+      const body = (await readResponseJson(st)) as { uiBriefLength?: number };
+      if (typeof body.uiBriefLength === 'number') uiBriefLength = body.uiBriefLength;
     }
   } catch {
     uiBriefLength = 0;

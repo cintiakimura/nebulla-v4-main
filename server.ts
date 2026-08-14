@@ -1672,7 +1672,8 @@ No approved UI code yet.
       }
 
       if (!fullPath) {
-        return res.status(404).json({ error: "File not found" });
+        // 200 + success:false — missing ui-brief / early Plan files must not 404 the browser console.
+        return res.json({ success: false, error: "File not found" });
       }
       const size = fs.statSync(fullPath).size;
       if (size > FILE_OPEN_MAX_BYTES) {

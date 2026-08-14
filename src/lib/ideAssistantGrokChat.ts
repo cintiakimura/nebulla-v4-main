@@ -86,7 +86,7 @@ export async function sendIdeAssistantGrokTurn(options: {
   signal?: AbortSignal;
 }): Promise<{ assistantContent: string; planningPhase: string; claudeFallbackNotice?: string }> {
   const { textToSend, history, userId, projectName, ideAppendix, signal } = options;
-  const interactionMode = options.interactionMode === 'agent' ? 'agent' : 'chat';
+  const interactionMode = options.interactionMode === 'chat' ? 'chat' : 'agent';
   const hasAppStatusPayload =
     Boolean(options.hasAppStatusPayload) || /\[APP_STATUS_DEBUG\]/i.test(textToSend);
   // Chat lock never enters build/coding system appendix even if text looks like "build it".

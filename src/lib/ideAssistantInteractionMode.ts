@@ -2,18 +2,18 @@
  * Explicit Chat vs Agent interaction mode (user-controlled).
  * Orthogonal to chatModeDetector labels (guided/free/coding/…).
  *
- * Chat = brainstorm / discovery / plan discussion (no file writes).
- * Agent = coding pipeline (Go, START_CODING, file apply).
+ * Agent (default) = coding pipeline (Go, START_CODING, file apply).
+ * Chat = opt-in brainstorm / discovery / plan discussion (no file writes).
  *
- * Rationale: BYOK makes every agent turn cost the user; voice brainstorming
- * must not accidentally trigger coding.
+ * Users click **Chat** when they want to talk without building — not the
+ * other way around — so the coding agent is never blocked by a default-off Agent button.
  */
 
 import { t } from './i18n/t';
 
 export type IdeAssistantInteractionMode = 'chat' | 'agent';
 
-const STORAGE_PREFIX = 'nebula-assistant-interaction-mode:';
+const STORAGE_PREFIX = 'nebula-assistant-interaction-mode-v2:';
 
 export function interactionModeStorageKey(projectKey: string): string {
   const key = (projectKey || 'default').trim() || 'default';
@@ -23,10 +23,10 @@ export function interactionModeStorageKey(projectKey: string): string {
 export function normalizeInteractionMode(
   value: unknown,
 ): IdeAssistantInteractionMode {
-  return value === 'agent' ? 'agent' : 'chat';
+  return value === 'chat' ? 'chat' : 'agent';
 }
 
-/** Default is always Chat (safer for voice + incomplete Master Plan). */
+/** Default is Agent so coding/Go is never blocked until the user opts into Chat. */
 export function readStoredInteractionMode(
   projectKey: string,
 ): IdeAssistantInteractionMode {
@@ -35,7 +35,7 @@ export function readStoredInteractionMode(
       localStorage.getItem(interactionModeStorageKey(projectKey)),
     );
   } catch {
-    return 'chat';
+    return 'agent';
   }
 }
 

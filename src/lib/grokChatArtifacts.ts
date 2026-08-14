@@ -302,7 +302,7 @@ export function chatModeSystemAppendix(options: {
   const mode = (options.mode || '').trim();
   const hint = (options.codingHint || '').trim();
   const discoveryRequired = Boolean(options.discoveryRequired);
-  const interactionMode = options.interactionMode === 'agent' ? 'agent' : 'chat';
+  const interactionMode = options.interactionMode === 'chat' ? 'chat' : 'agent';
   const hasAppStatusPayload = Boolean(options.hasAppStatusPayload);
   const parts: string[] = [];
 

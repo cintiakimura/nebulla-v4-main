@@ -22,10 +22,10 @@ const enCommon: Catalog = {
 const enChat: Catalog = {
   'chat.mode.chat': 'Chat',
   'chat.mode.agent': 'Agent',
-  'chat.mode.chatHint': 'Plan & discuss — no file writes until Agent',
-  'chat.mode.agentHint': 'Can edit files and run Go when you ask',
+  'chat.mode.chatHint': 'Chat on — plan & discuss, no file writes. Click again to build.',
+  'chat.mode.agentHint': 'Building is on. Click Chat to plan without writing files.',
   'chat.greeting': 'Ready when you are — ask a question or continue what you want to create today.',
-  'chat.greetingSub': 'Plan in Chat, or switch to Agent when you want files changed.',
+  'chat.greetingSub': 'Ready to build when you ask. Click Chat if you only want to plan.',
   /** Softer empty state when My Projects / discovery is already the center hero. */
   'chat.greeting.projects': 'The center is for starting a project.',
   'chat.greetingSub.projects': 'Ask me anything here once you begin — or open a file to edit in Code.',
@@ -43,7 +43,7 @@ const enChat: Catalog = {
   'chat.voiceUnsupported': 'Voice for this language isn’t available here — using English.',
   'chat.switchToAgent': 'Switch to Agent',
   'chat.stayInChat': 'Stay in Chat',
-  'chat.goBlocked': 'Switch to Agent to run Go / apply file changes.',
+  'chat.goBlocked': 'Turn off Chat to run Go / apply file changes.',
   'chat.goCta': 'Go — write code to workspace',
   'chat.sendMessage': 'Send message',
   'chat.uploading': 'Uploading…',
@@ -52,7 +52,7 @@ const enChat: Catalog = {
   'chat.interruptVoice': 'Interrupt Grok voice',
   'chat.voiceStopped': 'Stopped voice playback and any pending dictation send.',
   'chat.stayHint': 'Staying in Chat — keep planning.',
-  'chat.goNeedsAgent': 'Go needs Agent mode — click to switch or use the Agent toggle',
+  'chat.goNeedsAgent': 'Turn off Chat to run Go — click Chat again',
   'chat.goAgentTitle': 'Go: Grok Code writes files to your workspace',
   'chat.openTalkOn':
     'Open talk is on — speak naturally. I wait at least 10s while you talk, then 3s after you pause, then send.',
@@ -63,9 +63,9 @@ const enChat: Catalog = {
   'chat.status.chat': 'Chat · plan & discuss',
   'chat.status.agent': 'Agent · coding',
   'chat.idle.chat':
-    'Chat mode — plan & discuss. Switch to Agent when you are ready to build or edit code.',
+    'Chat is on — plan & discuss. Click Chat again when you want to build or edit code.',
   'chat.idle.agent':
-    'Agent mode — Go runs Grok Code and writes files. Switch to Chat to plan without spending agent tokens.',
+    'Ready to build — Go writes files when you ask. Click Chat to plan without writing files.',
   'chat.switchPrompt':
     "You're in **Chat** (plan & discuss) — I won't write files or run the coding agent while we talk.{{discovery}}\n\nSwitch to **Agent** to {{kind}}?",
   'chat.switchKind.debug': 'debug',
@@ -152,10 +152,10 @@ const frCommon: Catalog = {
 const frChat: Catalog = {
   'chat.mode.chat': 'Chat',
   'chat.mode.agent': 'Agent',
-  'chat.mode.chatHint': 'Brainstorm libre — pas d’écriture de fichiers avant Agent',
-  'chat.mode.agentHint': 'Peut modifier les fichiers et lancer Go sur demande',
+  'chat.mode.chatHint': 'Chat activé — planifier sans écrire de fichiers. Cliquez pour revenir au build.',
+  'chat.mode.agentHint': 'Le build est actif. Cliquez sur Chat pour planifier sans écrire de fichiers.',
   'chat.greeting': 'Salut ! Qu’est-ce que tu aimerais créer aujourd’hui ?',
-  'chat.greetingSub': 'Brainstorm en Chat, ou passe en Agent pour modifier des fichiers.',
+  'chat.greetingSub': 'Prêt à construire dès que tu le demandes. Clique sur Chat pour seulement planifier.',
   'chat.placeholder.chat': 'Écrire à Nebulla…',
   'chat.placeholder.agent': 'Décris ce qu’il faut construire ou corriger…',
   'chat.attach': 'Joindre un fichier',
@@ -168,7 +168,7 @@ const frChat: Catalog = {
   'chat.voiceUnsupported': 'La voix pour cette langue n’est pas dispo — anglais utilisé.',
   'chat.switchToAgent': 'Passer en Agent',
   'chat.stayInChat': 'Rester en Chat',
-  'chat.goBlocked': 'Passe en Agent pour lancer Go / appliquer les fichiers.',
+  'chat.goBlocked': 'Désactive Chat pour lancer Go / appliquer les fichiers.',
   'chat.goCta': 'Go — écrire le code dans le projet',
   'chat.sendMessage': 'Envoyer le message',
   'chat.uploading': 'Téléversement…',
@@ -177,7 +177,7 @@ const frChat: Catalog = {
   'chat.interruptVoice': 'Couper la voix Grok',
   'chat.voiceStopped': 'Lecture vocale et dictée en attente arrêtées.',
   'chat.stayHint': 'On reste en Chat — continue à brainstormer.',
-  'chat.goNeedsAgent': 'Go nécessite le mode Agent — bascule ou utilise le sélecteur Agent',
+  'chat.goNeedsAgent': 'Désactive Chat pour lancer Go — clique à nouveau sur Chat',
   'chat.goAgentTitle': 'Go : Grok Code écrit les fichiers dans le projet',
   'chat.openTalkOn':
     'Open talk activé — parle naturellement. J’attends au moins 10 s pendant que tu parles, puis 3 s après une pause, puis j’envoie.',
@@ -188,9 +188,9 @@ const frChat: Catalog = {
   'chat.status.chat': 'Chat · brainstorm',
   'chat.status.agent': 'Agent · code',
   'chat.idle.chat':
-    'Mode Chat — brainstorm & plan. Passe en Agent pour construire ou modifier du code.',
+    'Chat activé — planifie. Clique à nouveau sur Chat pour construire ou modifier du code.',
   'chat.idle.agent':
-    'Mode Agent — Go lance Grok Code et écrit les fichiers. Passe en Chat pour brainstormer sans tokens agent.',
+    'Prêt à construire — Go écrit les fichiers sur demande. Clique sur Chat pour planifier sans écrire.',
   'chat.switchPrompt':
     'Tu es en **Chat** (brainstorm & plan) — je n’écris pas de fichiers ni ne lance l’agent de code pendant qu’on parle.{{discovery}}\n\nPasser en **Agent** pour {{kind}} ?',
   'chat.switchKind.debug': 'déboguer',
@@ -277,10 +277,10 @@ const itCommon: Catalog = {
 const itChat: Catalog = {
   'chat.mode.chat': 'Chat',
   'chat.mode.agent': 'Agent',
-  'chat.mode.chatHint': 'Brainstorm libero — nessuna scrittura file finché non sei in Agent',
-  'chat.mode.agentHint': 'Può modificare file ed eseguire Go quando lo chiedi',
+  'chat.mode.chatHint': 'Chat attivo — pianifica senza scrivere file. Clicca di nuovo per costruire.',
+  'chat.mode.agentHint': 'Il build è attivo. Clicca Chat per pianificare senza scrivere file.',
   'chat.greeting': 'Ciao! Cosa vorresti creare oggi?',
-  'chat.greetingSub': 'Brainstorm in Chat, o passa ad Agent per modificare i file.',
+  'chat.greetingSub': 'Pronto a costruire quando lo chiedi. Clicca Chat se vuoi solo pianificare.',
   'chat.placeholder.chat': 'Messaggio a Nebulla…',
   'chat.placeholder.agent': 'Descrivi cosa costruire o correggere…',
   'chat.attach': 'Allega file',
@@ -293,7 +293,7 @@ const itChat: Catalog = {
   'chat.voiceUnsupported': 'Voce non disponibile per questa lingua — uso inglese.',
   'chat.switchToAgent': 'Passa ad Agent',
   'chat.stayInChat': 'Resta in Chat',
-  'chat.goBlocked': 'Passa ad Agent per eseguire Go / applicare i file.',
+  'chat.goBlocked': 'Disattiva Chat per eseguire Go / applicare i file.',
   'chat.goCta': 'Go — scrivi il codice nel workspace',
   'chat.sendMessage': 'Invia messaggio',
   'chat.uploading': 'Caricamento…',
@@ -302,7 +302,7 @@ const itChat: Catalog = {
   'chat.interruptVoice': 'Interrompi voce Grok',
   'chat.voiceStopped': 'Riproduzione vocale e dettatura in sospeso interrotte.',
   'chat.stayHint': 'Resto in Chat — continua a fare brainstorm.',
-  'chat.goNeedsAgent': 'Go richiede la modalità Agent — passa ad Agent o usa il selettore',
+  'chat.goNeedsAgent': 'Disattiva Chat per eseguire Go — clicca di nuovo su Chat',
   'chat.goAgentTitle': 'Go: Grok Code scrive i file nel workspace',
   'chat.openTalkOn':
     'Open talk attivo — parla naturalmente. Aspetto almeno 10s mentre parli, poi 3s dopo una pausa, poi invio.',
@@ -313,9 +313,9 @@ const itChat: Catalog = {
   'chat.status.chat': 'Chat · brainstorm',
   'chat.status.agent': 'Agent · codice',
   'chat.idle.chat':
-    'Modalità Chat — brainstorm e piano. Passa ad Agent per costruire o modificare codice.',
+    'Chat attiva — pianifica. Clicca di nuovo Chat per costruire o modificare codice.',
   'chat.idle.agent':
-    'Modalità Agent — Go esegue Grok Code e scrive file. Passa a Chat per brainstorm senza token agent.',
+    'Pronto a costruire — Go scrive i file su richiesta. Clicca Chat per pianificare senza scrivere.',
   'chat.switchPrompt':
     'Sei in **Chat** (brainstorm e piano) — non scrivo file né avvio l’agent di coding mentre parliamo.{{discovery}}\n\nPassare ad **Agent** per {{kind}}?',
   'chat.switchKind.debug': 'eseguire debug',
@@ -402,10 +402,10 @@ const esCommon: Catalog = {
 const esChat: Catalog = {
   'chat.mode.chat': 'Chat',
   'chat.mode.agent': 'Agent',
-  'chat.mode.chatHint': 'Brainstorm libre — sin escribir archivos hasta Agent',
-  'chat.mode.agentHint': 'Puede editar archivos y ejecutar Go cuando lo pidas',
+  'chat.mode.chatHint': 'Chat activo — planifica sin escribir archivos. Clic de nuevo para construir.',
+  'chat.mode.agentHint': 'El build está activo. Clic en Chat para planificar sin escribir archivos.',
   'chat.greeting': '¿Qué tal? ¿Qué te gustaría crear hoy?',
-  'chat.greetingSub': 'Brainstorm en Chat, o pasa a Agent para cambiar archivos.',
+  'chat.greetingSub': 'Listo para construir cuando lo pidas. Clic en Chat si solo quieres planificar.',
   'chat.placeholder.chat': 'Mensaje a Nebulla…',
   'chat.placeholder.agent': 'Describe qué construir o corregir…',
   'chat.attach': 'Adjuntar archivo',
@@ -418,7 +418,7 @@ const esChat: Catalog = {
   'chat.voiceUnsupported': 'Voz no disponible para este idioma — uso inglés.',
   'chat.switchToAgent': 'Cambiar a Agent',
   'chat.stayInChat': 'Seguir en Chat',
-  'chat.goBlocked': 'Cambia a Agent para ejecutar Go / aplicar archivos.',
+  'chat.goBlocked': 'Desactiva Chat para ejecutar Go / aplicar archivos.',
   'chat.goCta': 'Go — escribir código en el workspace',
   'chat.sendMessage': 'Enviar mensaje',
   'chat.uploading': 'Subiendo…',
@@ -427,7 +427,7 @@ const esChat: Catalog = {
   'chat.interruptVoice': 'Interrumpir voz de Grok',
   'chat.voiceStopped': 'Se detuvo la voz y cualquier dictado pendiente.',
   'chat.stayHint': 'Sigues en Chat — sigue haciendo brainstorm.',
-  'chat.goNeedsAgent': 'Go necesita el modo Agent — cambia o usa el selector Agent',
+  'chat.goNeedsAgent': 'Desactiva Chat para ejecutar Go — clic de nuevo en Chat',
   'chat.goAgentTitle': 'Go: Grok Code escribe archivos en el workspace',
   'chat.openTalkOn':
     'Open talk activo — habla con naturalidad. Espero al menos 10s mientras hablas, luego 3s tras una pausa, y envío.',
@@ -438,9 +438,9 @@ const esChat: Catalog = {
   'chat.status.chat': 'Chat · brainstorm',
   'chat.status.agent': 'Agent · código',
   'chat.idle.chat':
-    'Modo Chat — brainstorm y plan. Pasa a Agent para construir o editar código.',
+    'Chat activo — planifica. Clic de nuevo en Chat para construir o editar código.',
   'chat.idle.agent':
-    'Modo Agent — Go ejecuta Grok Code y escribe archivos. Pasa a Chat para brainstorm sin tokens de agent.',
+    'Listo para construir — Go escribe archivos cuando lo pides. Clic en Chat para planificar sin escribir.',
   'chat.switchPrompt':
     'Estás en **Chat** (brainstorm y plan) — no escribiré archivos ni ejecutaré el agent de código mientras hablamos.{{discovery}}\n\n¿Cambiar a **Agent** para {{kind}}?',
   'chat.switchKind.debug': 'depurar',
@@ -527,10 +527,10 @@ const deCommon: Catalog = {
 const deChat: Catalog = {
   'chat.mode.chat': 'Chat',
   'chat.mode.agent': 'Agent',
-  'chat.mode.chatHint': 'Frei brainstormen — keine Dateischreibzugriffe vor Agent',
-  'chat.mode.agentHint': 'Kann Dateien bearbeiten und Go auf Anfrage ausführen',
+  'chat.mode.chatHint': 'Chat an — planen ohne Dateien zu schreiben. Erneut klicken zum Bauen.',
+  'chat.mode.agentHint': 'Build ist an. Klicke Chat, um ohne Dateischreiben zu planen.',
   'chat.greeting': 'Hey! Was möchtest du heute erstellen?',
-  'chat.greetingSub': 'Brainstorme im Chat oder wechsle zu Agent, um Dateien zu ändern.',
+  'chat.greetingSub': 'Bereit zu bauen, sobald du fragst. Klicke Chat, wenn du nur planen willst.',
   'chat.placeholder.chat': 'Nachricht an Nebulla…',
   'chat.placeholder.agent': 'Beschreibe, was gebaut oder behoben werden soll…',
   'chat.attach': 'Datei anhängen',
@@ -543,7 +543,7 @@ const deChat: Catalog = {
   'chat.voiceUnsupported': 'Stimme für diese Sprache nicht verfügbar — Englisch wird verwendet.',
   'chat.switchToAgent': 'Zu Agent wechseln',
   'chat.stayInChat': 'Im Chat bleiben',
-  'chat.goBlocked': 'Wechsle zu Agent, um Go auszuführen / Dateien anzuwenden.',
+  'chat.goBlocked': 'Chat aus, um Go auszuführen / Dateien anzuwenden.',
   'chat.goCta': 'Go — Code in den Workspace schreiben',
   'chat.sendMessage': 'Nachricht senden',
   'chat.uploading': 'Hochladen…',
@@ -552,7 +552,7 @@ const deChat: Catalog = {
   'chat.interruptVoice': 'Grok-Stimme unterbrechen',
   'chat.voiceStopped': 'Sprachwiedergabe und ausstehende Diktate gestoppt.',
   'chat.stayHint': 'Bleibe im Chat — weiter brainstormen.',
-  'chat.goNeedsAgent': 'Go braucht den Agent-Modus — wechsle oder nutze den Agent-Schalter',
+  'chat.goNeedsAgent': 'Chat aus, um Go auszuführen — klicke Chat erneut',
   'chat.goAgentTitle': 'Go: Grok Code schreibt Dateien in den Workspace',
   'chat.openTalkOn':
     'Open talk an — sprich natürlich. Ich warte mind. 10s während du sprichst, dann 3s nach einer Pause, dann sende ich.',
@@ -563,9 +563,9 @@ const deChat: Catalog = {
   'chat.status.chat': 'Chat · Brainstorming',
   'chat.status.agent': 'Agent · Coding',
   'chat.idle.chat':
-    'Chat-Modus — brainstormen & planen. Wechsle zu Agent, um Code zu bauen oder zu ändern.',
+    'Chat an — planen. Klicke Chat erneut, um Code zu bauen oder zu ändern.',
   'chat.idle.agent':
-    'Agent-Modus — Go führt Grok Code aus und schreibt Dateien. Wechsle zu Chat zum Brainstormen ohne Agent-Tokens.',
+    'Bereit zu bauen — Go schreibt Dateien auf Anfrage. Klicke Chat, um ohne Schreiben zu planen.',
   'chat.switchPrompt':
     'Du bist im **Chat** (Brainstorm & Plan) — ich schreibe keine Dateien und starte keinen Coding-Agenten während wir sprechen.{{discovery}}\n\nZu **Agent** wechseln, um zu {{kind}}?',
   'chat.switchKind.debug': 'debuggen',
