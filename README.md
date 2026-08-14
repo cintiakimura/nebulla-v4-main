@@ -17,6 +17,8 @@ npm run dev
 
 Open the URL printed by the server (default `http://localhost:3000`).
 
+**Guest vs production:** production defaults to signed-in auth (do not set `NEBULA_FORCE_GUEST` on Render). Local lab only: `NEBULA_FORCE_GUEST=1` in `.env` skips auth and uses a guest workspace.
+
 Useful scripts:
 
 | Command | Purpose |

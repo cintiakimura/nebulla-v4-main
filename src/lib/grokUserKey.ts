@@ -114,8 +114,8 @@ export async function saveGrokApiKeyRobust(value: string): Promise<{
     return { ok: false, source: 'local', error: 'Key looks too short or invalid.' };
   }
 
-  // Lab / guest: never trust account BYOK (no session, or a stale cookie that
-  // would wipe the local key after a false “saved on account”).
+  // Lab (`NEBULA_FORCE_GUEST=1`): local only. Production: PUT /api/byok/keys when
+  // a session exists; true guest (401) keeps the local key as fallback.
   if (FORCE_GUEST_MODE) {
     setStoredGrokApiKeyLocalOnly(t);
     clearAllMainAiAuthRejected();

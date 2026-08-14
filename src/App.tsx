@@ -22,7 +22,7 @@ function usePathname(): string {
 function AppRoutes() {
   const path = usePathname();
 
-  /** Try-free CTA — testing branch skips signup and opens the IDE as guest. */
+  /** Try-free CTA — lab guest (`NEBULA_FORCE_GUEST=1`) skips signup. */
   const enterTryFree = useCallback(() => {
     if (FORCE_GUEST_MODE) {
       goToApp();
@@ -35,7 +35,7 @@ function AppRoutes() {
   if (path === '/terms') return <TermsOfServicePage />;
   if (path === '/legal/dpa' || path === '/dpa') return <DpaPage />;
   if (path === '/reset-password') return <ResetPasswordPage />;
-  // Testing branch: no login / signup — always open the IDE in guest mode.
+  // Lab guest only: skip login/signup. Production renders LoginPage.
   if (path === '/login' || path === '/signup') {
     if (FORCE_GUEST_MODE) return <NebullaIDE />;
     return <LoginPage />;

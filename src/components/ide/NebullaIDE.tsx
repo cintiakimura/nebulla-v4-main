@@ -127,7 +127,7 @@ function NebullaIDEShell() {
   useEffect(() => {
     if (!workspaceCtx || welcomeCheckedRef.current) return;
     welcomeCheckedRef.current = true;
-    // UI redesign branch: skip Grok/cloud setup banners and BYOK welcome.
+    // Lab guest only (`NEBULA_FORCE_GUEST=1`). Production shows auth/cloud banners.
     if (UI_SHELL_ONLY) {
       setCloudBanner(null);
       setWelcomeOpen(false);

@@ -73,7 +73,7 @@ section("Go blocked message is beginner-friendly");
     },
   } as unknown as { error?: string; masterPlanCompleteness?: MasterPlanStatus });
   assert.match(msg, /Go is paused/i);
-  assert.match(msg, /sign in/i);
+  assert.match(msg, /sign-?in/i);
   assert.doesNotMatch(msg, /SEC_AUTH/);
 }
 

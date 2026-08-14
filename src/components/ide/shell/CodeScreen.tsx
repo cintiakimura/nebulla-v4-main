@@ -6,6 +6,7 @@ import {
   Folder,
   FolderOpen,
   Github,
+  GitCommit,
   Loader2,
   RefreshCw,
 } from 'lucide-react';

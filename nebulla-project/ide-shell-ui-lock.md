@@ -4,7 +4,7 @@
 **Scope:** Global — landing, login, legal, payment, and IDE share one look via `AppShell`  
 **Source of truth knobs:** `src/index.css` → `.nebulla-ide-shell` playground block  
 **Shell wrapper:** `src/components/AppShell.tsx`  
-**Testing flags:** `src/lib/testingBranch.ts` (`FORCE_GUEST_MODE` / `UI_SHELL_ONLY` = true)
+**Testing flags:** `src/lib/testingBranch.ts` — `FORCE_GUEST_MODE` / `UI_SHELL_ONLY` default **false** (prod). Lab: `NEBULA_FORCE_GUEST=1`.
 
 ---
 
@@ -88,8 +88,7 @@ No cyan outer glow on buttons, focus rings, or shadows.
 
 ## Testing flags
 
-- `FORCE_GUEST_MODE` — guest workspace, skip auth redirects  
-- `UI_SHELL_ONLY` — hide Grok/cloud setup banners and BYOK welcome  
+- `FORCE_GUEST_MODE` / `UI_SHELL_ONLY` — default off in production. Lab: `NEBULA_FORCE_GUEST=1` (guest workspace, skip auth, hide setup banners). Do not set on Render.
 
 ---
 

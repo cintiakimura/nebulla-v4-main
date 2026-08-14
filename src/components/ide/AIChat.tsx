@@ -2248,7 +2248,7 @@ export function AIChat() {
               (coding as { sliceLabel?: string | null }).sliceLabel ?? 'Foundation';
             const wouldAutoPrimary = shouldAutoRunPrimarySliceAfterFoundation({
               fastPrototypeTurn,
-              codingOk: coding.ok !== false,
+              codingOk: true,
               projectKey: diskProjectKey || projectName,
               sliceLabel: codingSliceLabel,
             });

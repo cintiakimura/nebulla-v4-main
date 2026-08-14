@@ -42,7 +42,9 @@ export function LandingHeroPrompt({ className }: { className?: string }) {
     setError('');
     try {
       const result = await continueFromLandingGoal(draft, startType);
-      if (!result.ok) setError(result.error);
+      if (result.ok === false) {
+        setError(result.error);
+      }
     } catch {
       setError('Could not continue. Try again.');
     } finally {

@@ -235,14 +235,9 @@ export function startGrokActivityWaitTicker(
 ): () => void {
   const started = Date.now();
   onTick(`${label}…`, 'wait', { currentOnly: true });
-  const schedule =
-    typeof window !== 'undefined'
-      ? window.setInterval.bind(window)
-      : (setInterval as unknown as typeof window.setInterval);
-  const clear =
-    typeof window !== 'undefined'
-      ? window.clearInterval.bind(window)
-      : (clearInterval as unknown as typeof window.clearInterval);
+  const w = typeof window !== 'undefined' ? window : null;
+  const schedule = w ? w.setInterval.bind(w) : setInterval;
+  const clear = w ? w.clearInterval.bind(w) : clearInterval;
   const id = schedule(() => {
     const elapsed = formatGrokActivityElapsed(started);
     onTick(elapsed ? `${label} (${elapsed})` : label, 'wait', { currentOnly: true });
