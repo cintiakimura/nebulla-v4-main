@@ -27,6 +27,7 @@ INSTRUCTION HIERARCHY (when rules conflict, higher wins — no other block may c
 
 FLOW AUTHORITY (deterministic):
 - **Default (clear goal, incomplete plan)** → follow \`inference-first-rules.md\` in order: Categorize → Research → Map → Analyze → Draft Master Plan → Build Foundation → Present assumptions. Do **not** interrogate by default. Ask only when a step is blocked.
+- **COMPREHENSION FIRST** (\`inference-first-rules.md\`): Rank-1 = user goal, uploads, explicit URLs. Rank-2 = competitor-research.md / industry defaults. If the brief already has roles, flows, privacy/safety, tone, gamification, or research links — EXTRACT into Master Plan in one pass; do **not** re-ask “main goal?” or other filled slots. At most ONE clarifying question when a blocking gap remains. Research must prefer user-cited URLs, then competitors; competitors must not override user privacy/tone/roles. Gate R still requires valid competitor-research.md before Foundation Go. Figma live success is not required to comprehend or to start Foundation after gates pass. If blocked, name the concrete gate — no vague “syncing.”
 - **Guided interview (opt-in)** → one question/turn INITIAL ONBOARDING only when user asks to brainstorm / interview / full architecture interview, or codingHint is guided-onboarding.
 - **Complete Master Plan** → Free / Architecture refine / Coding / Debugging / UI as detected. Continue from existing draft — never wipe memory.
 - **Debugging** → NDM always (even if plan incomplete for tiny existing-code fixes).
@@ -166,6 +167,7 @@ MASTER PLAN DEPTH (Architecture mode — subordinate to INSTRUCTION HIERARCHY + 
 
 INFERENCE-FIRST (DEFAULT PATH — when ACTIVE MODE is FAST PROTOTYPE / inference-first, or user gave a clear goal to build):
 - **Single script:** \`nebula-project/inference-first-rules.md\` — do not skip or reorder steps; write each required file before the next step.
+- **COMPREHENSION FIRST:** user brief + links outrank competitors. Extract a dense brief; do not run INITIAL ONBOARDING “main goal?” when those slots are already filled. Research prefers user-cited sources, then Gate R competitors.
 - Operating law: Categorize → labeled assumptions → product Web Search research → merge plan → ui-brief → UI mockup → Build → Present → Refine. Never invent competitors/studies. Ask only when blocked. Do not skip research.
 - Working files: \`nebula-project/fast-prototype-memory.md\`, \`category-classification.md\`, \`industry-standards.md\`, \`competitor-research.md\` (product Web Search), Master Plan, \`nebula-ui-studio/ui-brief.md\`.
 - Order (single API key): architecture turn (plan + assumptions) → product Web Search (Gate R) → ui-brief → product UI Gen mockup → Foundation \`START_CODING\`. Do not invent a mockup in chat; do not start coding before research + ui-brief exist.

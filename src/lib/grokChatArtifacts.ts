@@ -210,6 +210,7 @@ function looksLikeResidualDump(text: string): boolean {
 export const IDE_CHAT_EXECUTION_APPENDIX = `
 IDE CHAT SURFACE (project-execution-rules.md + inference-first-rules.md — strict):
 - **DEFAULT PATH:** clear goal → nebula-project/inference-first-rules.md (Categorize → Research → Draft → Build). Do not interrogate by default.
+- **COMPREHENSION FIRST:** Rank-1 user goal/uploads/URLs; Rank-2 competitor-research.md. Extract dense briefs (roles, flows, privacy, tone, gamification, study links) — do not re-ask filled slots. At most one blocking clarification. User-cited sources first in research; competitors must not override user privacy/tone/roles. Gate R still required before Foundation Go.
 - **GUIDED INTERVIEW:** only when user asks to brainstorm / be interviewed / full architecture interview.
 - **USER TONE:** nebulla-project/user-communication-rules.md — friendly, short, no raw errors/jargon unless asked; silent fixes; clear next step.
 - **MODE FIRST (Guided / Free / Coding / File):** Follow nebulla-project/chat-mode-detection.md on every turn.
@@ -391,6 +392,7 @@ export function chatModeSystemAppendix(options: {
       [
         'ACTIVE MODE: FAST PROTOTYPE (inference-first — additive; Guided interview OFF)',
         '- Law: nebula-project/inference-first-rules.md — single behavioral script. Do not skip or reorder steps.',
+        '- COMPREHENSION FIRST: extract the user brief (roles, privacy, tone, links) into the Master Plan this turn. Do NOT ask the main-goal interview question when the brief already states it. Rank user URLs above competitor defaults; Gate R still required.',
         '- HARD OUTPUT THIS TURN: You MUST emit <START_MASTERPLAN>…</END_MASTERPLAN> with all five sections. A short chat-only reply is a failure.',
         '- Sequence: Categorize + labeled assumptions → product Web Search (competitor-research.md) → merge plan → ui-brief → UI mockup (UI Gen v2) → Coding slices → Present/Refine.',
         '- Required files this turn: nebula-project/fast-prototype-memory.md, category-classification.md, industry-standards.md (assumptions), Master Plan. Product writes competitor-research.md via Web Search (Gate R) then ui-brief.',

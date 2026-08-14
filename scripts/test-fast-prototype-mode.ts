@@ -61,6 +61,20 @@ assert.ok(guided.startsWith(IDEA_DISCOVERY_BOOTSTRAP_PREFIX));
 assert.ok(!guided.includes('FAST PROTOTYPE'));
 assert.ok(guided.includes('Do NOT emit <START_MASTERPLAN>'));
 
+const denseBrief = [
+  'Web app that tutors kids with ADHD.',
+  'Roles: student, teacher, parent.',
+  'Privacy: no public profiles; adult consent required.',
+  'Tone: calm coach, never shame. Gamification: short streaks only.',
+  'Flows: practice session, teacher dashboard, progress.',
+  'Study: https://www.ncbi.nlm.nih.gov/pmc/articles/PMC1234567/',
+].join(' ');
+const dense = buildFastPrototypeBootstrap(denseBrief, 'Web App');
+assert.ok(dense.includes('User goal / brief:'));
+assert.ok(dense.includes(denseBrief.slice(0, 40)));
+assert.equal(/Ask exactly ONE question: the main goal/i.test(dense), false);
+assert.equal(/What's the main thing your app should do/i.test(dense), false);
+
 const fast = buildFastPrototypeBootstrap(
   'A mobile education app for kids to practice reading',
   'Mobile App',

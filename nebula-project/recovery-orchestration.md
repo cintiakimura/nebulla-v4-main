@@ -254,6 +254,7 @@ Work **one step per Agent turn / PR** after constitution install. Fix the **earl
 | 2026-08-14 | Render-only stack: apply drops supabase paths; Go/coding/security text never treat RLS as a hosted BaaS; skip warn “stack is Render-only” | Grok invented src/lib/supabase.ts from security language |
 | 2026-08-14 | Wired §11 spine phases 1–8: junk-goal stop; brief pages; Go label exact; hard-stop Go/UI Gen if plan/brief unusable after auto-repair | Conductor contract must match runtime; one key, one stroke |
 | 2026-08-14 | Phase 3 research is **mandatory** before ui-brief success and Foundation Go. Skip-with-reason removed as Fast Prototype default. Assumptions may pre-fill plan; Web Search overwrites/corrects. Demo skip `NEBULLA_SKIP_RESEARCH=1` default OFF. | Inference-first ≠ skip research; artifact `nebula-project/competitor-research.md` is load-bearing (Gate R) |
+| 2026-08-14 | COMPREHENSION FIRST: user brief + links rank above competitor research; extract dense briefs — do not re-interview filled slots. Gate R unchanged. | Stop “main goal?” loops when roles/privacy/tone/study URLs are already in the brief |
 
 ---
 

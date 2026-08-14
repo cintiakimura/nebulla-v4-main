@@ -87,6 +87,20 @@ Pure debug and pure file-open remain outside this script (existing Coding / Debu
 
 ---
 
+## COMPREHENSION FIRST
+
+Rank user brief above competitor research. Do not re-interview a dense brief.
+
+1. **Rank-1 sources:** the user’s goal text, uploads, and explicit URLs/links in the message.
+2. **Rank-2 sources:** `nebula-project/competitor-research.md` (Gate R) and industry defaults.
+3. **Extract in one pass** when the brief already specifies roles, main flows, privacy/safety, AI tone, gamification, or research links — write them into the Master Plan / working memory. **Do not** ask discovery questions for those slots.
+4. **Ask at most ONE** clarifying question only when a blocking gap remains (e.g. web vs mobile vs landing cannot be inferred).
+5. **Research stroke:** prioritize user-cited sources (e.g. a PMC/study URL) when present; then competitors. Competitors refine features/UI; they **must not** override user privacy, tone, or role constraints. Gate R still requires a valid `competitor-research.md` before Foundation Go.
+6. **Figma live success is not required** to comprehend the app or to start Foundation after gates pass.
+7. **If blocked:** name the concrete gate (research incomplete / security / ui-brief / …). Do not spin on vague “syncing.”
+
+---
+
 ## 3. Sequence lock
 
 Execute steps **3.1 → 10.2 in order**.  
