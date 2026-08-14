@@ -61,6 +61,21 @@ export function getBrowserProjectName(): string {
   return currentProjectName;
 }
 
+/**
+ * Workspace id vs display name.
+ * Never use `projectName` as a fallback for `projectKey` (and vice versa except
+ * when the display name is empty — APIs still need a non-empty projectName).
+ */
+export function resolveActiveProjectIds(diskProjectKey?: string | null): {
+  projectKey: string;
+  projectName: string;
+} {
+  const fromDisk = String(diskProjectKey || '').trim();
+  const projectKey = fromDisk || currentProjectKey || 'default';
+  const projectName = currentProjectName.trim() || projectKey;
+  return { projectKey, projectName };
+}
+
 function projectQueryParams(): string {
   const parts = [`projectKey=${encodeURIComponent(currentProjectKey)}`];
   if (currentProjectName) {
