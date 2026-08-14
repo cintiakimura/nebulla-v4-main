@@ -112,7 +112,7 @@ ${opts.memoryContent.slice(0, 90_000)}${researchNote}`;
           { role: "user", content: user },
         ],
         stream: false,
-        ...grokChatCompletionsExtras("plan"),
+        ...grokChatCompletionsExtras("plan", "grok-4-1-fast-reasoning"),
       }),
     });
 

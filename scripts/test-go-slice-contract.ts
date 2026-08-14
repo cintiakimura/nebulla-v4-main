@@ -1,13 +1,16 @@
 import assert from "node:assert/strict";
 import os from "node:os";
 import {
+  assessFoundationGoExit,
   assessOversizedGoApply,
   buildLocalPreCodingSummary,
   inferGoSliceFromWorkspace,
   isBareGoNote,
+  lockedUserConstraintsFromPlan,
   parseGoSliceLabel,
   shouldSkipPhaseALlm,
 } from "../lib/goSliceContract.ts";
+import { classifyGoFailure } from "../lib/goBlockedReason.ts";
 import fs from "node:fs";
 import path from "node:path";
 import {
@@ -108,6 +111,60 @@ assert.match(localSum, /ADHD|tutor|slice/i);
   const next = inferGoSliceFromWorkspace(root);
   assert.ok(next === "Auth" || next === "Primary" || next === "Secondary");
   fs.rmSync(root, { recursive: true, force: true });
+}
+
+{
+  const model400 = classifyGoFailure({
+    httpStatus: 400,
+    error: '{"code":"invalid-argument","error":"Model grok-code-fast-1 does not support parameter reasoningEffort."}',
+  });
+  assert.equal(model400.code, "GO_MODEL_REJECTED");
+  const research = classifyGoFailure({ code: "RESEARCH_INCOMPLETE" });
+  assert.equal(research.code, "RESEARCH_INCOMPLETE");
+  const key = classifyGoFailure({ httpStatus: 401, error: "Main AI API key is missing" });
+  assert.equal(key.code, "KEY_AUTH");
+  const timeout = classifyGoFailure({ error: "Grok Code timed out after 3 minutes. Try Go again with a narrower slice." });
+  assert.equal(timeout.code, "GO_TIMEOUT");
+}
+
+{
+  const empty = assessFoundationGoExit({ totalWritten: 0, writtenPaths: [], sliceLabel: "Foundation" });
+  assert.equal(empty.ok, false);
+  assert.equal(empty.blockedReason?.code, "GO_EMPTY_OUTPUT");
+
+  const publicOnly = assessFoundationGoExit({
+    totalWritten: 1,
+    writtenPaths: ["public/nebula-ui-gen-preview.html"],
+    sliceLabel: "Foundation",
+  });
+  assert.equal(publicOnly.ok, false);
+  assert.equal(publicOnly.blockedReason?.code, "APPLY_EMPTY_PRODUCT");
+
+  const thinShell = assessFoundationGoExit({
+    totalWritten: 2,
+    writtenPaths: ["src/App.tsx", "src/main.tsx"],
+    sliceLabel: "Foundation",
+  });
+  assert.equal(thinShell.ok, false);
+  assert.equal(thinShell.blockedReason?.code, "APPLY_EMPTY_PRODUCT");
+
+  const routes = assessFoundationGoExit({
+    totalWritten: 2,
+    writtenPaths: ["app/page.tsx", "app/practice/page.tsx"],
+    sliceLabel: "Foundation",
+    runnableRoot: false,
+  });
+  assert.equal(routes.ok, true);
+  assert.equal(routes.warnRunnable, true);
+}
+
+{
+  const lock = lockedUserConstraintsFromPlan({
+    "1. Goal of the app": "tutor kids with ADHD. Roles: student, teacher, parent. Privacy: no public profiles.",
+    "2. Tech and Research": "Calm coach tone. https://www.ncbi.nlm.nih.gov/pmc/articles/PMC1/",
+  });
+  assert.match(lock, /Roles/);
+  assert.match(lock, /Privacy/);
 }
 
 console.log("\n✓ go-slice + security propose + mind-map amend tests passed\n");

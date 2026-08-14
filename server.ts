@@ -139,8 +139,10 @@ import {
 import { MOCKUP_NON_AUTHORITATIVE_GO_BULLETS } from "./lib/codingMockupContract";
 import {
   buildLocalPreCodingSummary,
+  lockedUserConstraintsFromPlan,
   shouldSkipPhaseALlm,
 } from "./lib/goSliceContract";
+import { classifyGoFailure, goBlocked } from "./lib/goBlockedReason";
 import {
   buildCodedAppPreviewBridgeHtml,
   inferRoutesFromProductFiles,
@@ -4004,6 +4006,7 @@ PAGE: ${String(body.pageId || "Home")}
 VISUAL_MODEL_JSON:
 ${modelJson}`;
 
+      const visualModel = process.env.GROK_VISUAL_APPLY_MODEL?.trim() || "grok-4-1-fast-reasoning";
       const gRes = await fetch("https://api.x.ai/v1/chat/completions", {
         method: "POST",
         headers: {
@@ -4011,7 +4014,7 @@ ${modelJson}`;
           Authorization: `Bearer ${apiKey}`,
         },
         body: JSON.stringify({
-          model: process.env.GROK_VISUAL_APPLY_MODEL?.trim() || "grok-4-1-fast-reasoning",
+          model: visualModel,
           messages: [
             { role: "system", content: sys },
             {
@@ -4022,7 +4025,7 @@ ${modelJson}`;
           ],
           temperature: 0.2,
           max_tokens: 32000,
-          ...grokChatCompletionsExtras("go"),
+          ...grokChatCompletionsExtras("go", visualModel),
         }),
       });
       const gData = (await gRes.json()) as {
@@ -4638,7 +4641,7 @@ Rules:
           model: "grok-4-1-fast-reasoning",
           messages: [{ role: "system", content: executionSystemPrompt }, ...baseMessages.slice(-12)],
           stream: false,
-          ...grokChatCompletionsExtras("chat"),
+          ...grokChatCompletionsExtras("chat", "grok-4-1-fast-reasoning"),
         }),
       });
 
@@ -4772,13 +4775,25 @@ Rules:
     const apiKey = await resolveMainGrokApiKey(req);
 
     if (!apiKey) {
+      const blocked = goBlocked(
+        "KEY_AUTH",
+        `Main AI API key is missing. Set ${MAIN_AI_ENV_VAR} in the server .env file and restart.`,
+      );
       return res.status(401).json({
-        error: `Main AI API key is missing. Set ${MAIN_AI_ENV_VAR} in the server .env file and restart.`,
+        error: blocked.message,
+        code: blocked.code,
+        blockedReason: blocked,
       });
     }
     if (apiKey.length < 20) {
+      const blocked = goBlocked(
+        "KEY_AUTH",
+        `${MAIN_AI_ENV_VAR} in .env appears invalid. Update the value and restart the server.`,
+      );
       return res.status(400).json({
-        error: `${MAIN_AI_ENV_VAR} in .env appears invalid. Update the value and restart the server.`,
+        error: blocked.message,
+        code: blocked.code,
+        blockedReason: blocked,
       });
     }
 
@@ -4931,28 +4946,27 @@ Rules:
         );
       }
       if (!completeness.allowGo) {
-        failGoCodePreparing(
-          ppGo.workspaceRoot,
-          "Master Plan incomplete for Go. Fix gaps, then press Go again.",
-        );
+        const blocked = goBlocked("MASTER_PLAN_INCOMPLETE");
+        failGoCodePreparing(ppGo.workspaceRoot, blocked.message, blocked);
         return res.status(409).json({
-          error:
-            "Master Plan incomplete for Go (MASTER_PLAN_STRICT=strict). Fix gaps or set MASTER_PLAN_STRICT=warn|off.",
-          code: "MASTER_PLAN_INCOMPLETE",
+          error: blocked.message,
+          code: blocked.code,
+          blockedReason: blocked,
           masterPlanCompleteness: completeness,
         });
       }
 
       // Phase 2: IF after fill the plan is still unusable THEN hard-stop (even in warn mode).
       if (!isMasterPlanReadyForUiMockup(planSnapshot)) {
-        failGoCodePreparing(
-          ppGo.workspaceRoot,
+        const blocked = goBlocked(
+          "MASTER_PLAN_INCOMPLETE",
           "Master Plan is still too thin after fill. Add a usable §1 goal, type, and pages before UI Gen or Go.",
         );
+        failGoCodePreparing(ppGo.workspaceRoot, blocked.message, blocked);
         return res.status(409).json({
-          error:
-            "Master Plan is still too thin after fill. Add a usable §1 goal, type, and pages before UI Gen or Go.",
-          code: "MASTER_PLAN_INCOMPLETE",
+          error: blocked.message,
+          code: blocked.code,
+          blockedReason: blocked,
           masterPlanCompleteness: completeness,
         });
       }
@@ -4971,10 +4985,12 @@ Rules:
         });
         researchGate = stroke.gate;
         if (!stroke.ok || !researchGate.ok) {
-          failGoCodePreparing(ppGo.workspaceRoot, RESEARCH_STOPPED);
+          const blocked = goBlocked("RESEARCH_INCOMPLETE", stroke.error || RESEARCH_STOPPED);
+          failGoCodePreparing(ppGo.workspaceRoot, blocked.message, blocked);
           return res.status(409).json({
-            error: stroke.error || RESEARCH_STOPPED,
-            code: "RESEARCH_INCOMPLETE",
+            error: blocked.message,
+            code: blocked.code,
+            blockedReason: blocked,
             researchGate,
           });
         }
@@ -4987,13 +5003,12 @@ Rules:
 
       // Phase 4: IF ui-brief still missing, too short, or has no pages THEN block Go.
       if (!uiBriefUsable(uiArts.uiBrief.content)) {
-        failGoCodePreparing(
-          ppGo.workspaceRoot,
-          "Finish Master Plan §§4–5 so ui-brief can be generated. Foundation will not start.",
-        );
+        const blocked = goBlocked("UI_BRIEF_MISSING");
+        failGoCodePreparing(ppGo.workspaceRoot, blocked.message, blocked);
         return res.status(409).json({
-          error: "Finish Master Plan §§4–5 so ui-brief can be generated. Foundation will not start.",
-          code: "UI_BRIEF_MISSING",
+          error: blocked.message,
+          code: blocked.code,
+          blockedReason: blocked,
         });
       }
 
@@ -5057,14 +5072,22 @@ Strict rules:
           model: "grok-4-1-fast-reasoning",
           messages: phaseAMessages,
           stream: false,
-          ...grokChatCompletionsExtras("plan"),
+          ...grokChatCompletionsExtras("plan", "grok-4-1-fast-reasoning"),
         }),
       });
 
       if (!g4Res.ok) {
         const errText = await g4Res.text();
-        failGoCodePreparing(ppGo.workspaceRoot, `Grok 4 summary phase failed: ${errText.slice(0, 500)}`);
-        return res.status(g4Res.status).json({ error: `Grok 4 summary phase failed: ${errText.slice(0, 500)}` });
+        const blocked = classifyGoFailure({
+          httpStatus: g4Res.status,
+          error: `Grok 4 summary phase failed: ${errText.slice(0, 500)}`,
+        });
+        failGoCodePreparing(ppGo.workspaceRoot, blocked.message, blocked);
+        return res.status(g4Res.status).json({
+          error: blocked.message,
+          code: blocked.code,
+          blockedReason: blocked,
+        });
       }
 
       const g4Data = await g4Res.json();
@@ -5164,6 +5187,8 @@ Output the Foundation slice in THIS response (not the entire §4 app):
 
 File blocks only: \`\`\`file:relative/path\` … \`\`\` — no chat prose.
 
+${lockedUserConstraintsFromPlan(planSnapshot)}
+
 ${workflowContext}`
         : `You are Grok Code (coding phase; same ${MAIN_AI_ENV_VAR} as the main brain). The user pressed **Go** in the Nebulla assistant.
 
@@ -5196,6 +5221,8 @@ CRITICAL OUTPUT CONTRACT (no deviation):
 - If a file must be created/updated, include explicit path + full content or patch for that file.
 - Prefer one or more clear file blocks over prose.
 - If information is missing, make minimal safe assumptions and proceed with best-effort code for THIS slice.
+
+${lockedUserConstraintsFromPlan(planSnapshot)}
 
 ${workflowContext}`;
 
@@ -5283,12 +5310,12 @@ ${workflowContext}`;
       });
     } catch (error) {
       console.error("Error in /api/grok/go-code:", error);
+      const blocked = classifyGoFailure({
+        error: error instanceof Error ? error.message : "Failed to run Go (code) pipeline",
+      });
       try {
         const ppFail = projectPathsFor(req);
-        failGoCodePreparing(
-          ppFail.workspaceRoot,
-          error instanceof Error ? error.message : "Failed to run Go (code) pipeline",
-        );
+        failGoCodePreparing(ppFail.workspaceRoot, blocked.message, blocked);
       } catch {
         /* workspace unresolved */
       }
@@ -5297,7 +5324,9 @@ ${workflowContext}`;
         route: "/api/grok/go-code",
       });
       return res.status(500).json({
-        error: error instanceof Error ? error.message : "Failed to run Go (code) pipeline",
+        error: blocked.message,
+        code: blocked.code,
+        blockedReason: blocked,
       });
     }
   });

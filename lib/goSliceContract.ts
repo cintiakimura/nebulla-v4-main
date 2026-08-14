@@ -5,7 +5,8 @@
 
 import fs from "fs";
 import path from "path";
-import { inferRoutesFromProductFiles, listProductUiFiles } from "./workspaceCodedAppUi";
+import { assessApplyRouteDepth, inferRoutesFromProductFiles, listProductUiFiles } from "./workspaceCodedAppUi";
+import { goBlocked, type GoBlockedReason } from "./goBlockedReason";
 
 export const GO_SLICE_LABELS = [
   "Foundation",
@@ -158,4 +159,97 @@ export function shouldSkipPhaseALlm(opts: {
 }): boolean {
   if (!isBareGoNote(opts.userNote)) return false;
   return true;
+}
+
+const PRODUCT_PREFIX = /^(app|src|pages|components)\//i;
+
+function isDocsOrPublicOnly(paths: string[]): boolean {
+  const list = (paths || []).map((p) => p.replace(/\\/g, "/").replace(/^\.\//, ""));
+  if (list.length === 0) return false;
+  const product = list.filter((p) => PRODUCT_PREFIX.test(p));
+  if (product.length > 0) return false;
+  return list.every(
+    (p) =>
+      /^public\//i.test(p) ||
+      /\.html$/i.test(p) ||
+      /(^|\/)(master-plan|ui-brief|v0-prompt|competitor-research)\.(md|json)$/i.test(p) ||
+      /^(nebula-project|nebulla-project|nebula-ui-studio)\//i.test(p),
+  );
+}
+
+export type FoundationGoExit = {
+  ok: boolean;
+  warnRunnable: boolean;
+  blockedReason: GoBlockedReason | null;
+};
+
+/**
+ * One Foundation success: files applied, not plan/public-html-only, not zero product routes.
+ * Missing runnable skeleton is a warn when routes exist — not “done” for docs-only.
+ */
+export function assessFoundationGoExit(opts: {
+  totalWritten: number;
+  writtenPaths: string[];
+  sliceLabel?: GoSliceLabel | null;
+  runnableRoot?: boolean;
+  partialPlanOnly?: boolean;
+}): FoundationGoExit {
+  const paths = opts.writtenPaths || [];
+  const foundationLike = !opts.sliceLabel || /foundation/i.test(String(opts.sliceLabel));
+  const depth = assessApplyRouteDepth(paths);
+
+  if (opts.totalWritten <= 0 || paths.length === 0) {
+    return {
+      ok: false,
+      warnRunnable: false,
+      blockedReason: goBlocked("GO_EMPTY_OUTPUT"),
+    };
+  }
+  if (opts.partialPlanOnly || isDocsOrPublicOnly(paths)) {
+    return {
+      ok: false,
+      warnRunnable: false,
+      blockedReason: goBlocked("APPLY_EMPTY_PRODUCT"),
+    };
+  }
+  if (foundationLike && depth.zeroProductRoutes) {
+    return {
+      ok: false,
+      warnRunnable: false,
+      blockedReason: goBlocked(
+        "APPLY_EMPTY_PRODUCT",
+        `Stopped: Foundation wrote ${opts.totalWritten} file(s) but zero app/ or pages/ routes. Not a product shell — retry Go.`,
+      ),
+    };
+  }
+
+  const warnRunnable = foundationLike && opts.runnableRoot === false;
+  return { ok: true, warnRunnable, blockedReason: null };
+}
+
+/** Short locked constraints from Master Plan for the Go code prompt (not a new doc). */
+export function lockedUserConstraintsFromPlan(plan: Record<string, string>): string {
+  const goal = String(plan["1. Goal of the app"] || "").replace(/\s+/g, " ").trim();
+  const tech = String(plan["2. Tech and Research"] || "").replace(/\s+/g, " ").trim();
+  const blob = `${goal}\n${tech}`;
+  const lines: string[] = [];
+  const roles: string[] = [];
+  if (/\b(student|learner|child|kid)/i.test(blob)) roles.push("student/child");
+  if (/\bteacher/i.test(blob)) roles.push("teacher");
+  if (/\bparent|caregiver/i.test(blob)) roles.push("parent");
+  if (roles.length) lines.push(`Roles (do not drop): ${roles.join(", ")}`);
+  if (/\b(privacy|coppa|consent|pii|no public profile)/i.test(blob)) {
+    lines.push("Privacy: honor brief/plan constraints; no public learner profiles; adult consent when stated.");
+  }
+  if (/\b(calm|shame|tone|coach|adhd|low visual noise)/i.test(blob)) {
+    lines.push("Tone: calm coach, short sessions, low visual noise — do not override with generic gamification.");
+  }
+  if (/\bhttps?:\/\/\S+/i.test(blob)) {
+    lines.push("User-cited research URLs in the plan outrank competitor defaults for privacy/tone/roles.");
+  }
+  if (lines.length === 0 && goal) {
+    lines.push(`Goal lock: ${goal.slice(0, 180)}`);
+  }
+  if (lines.length === 0) return "";
+  return ["USER CONSTRAINTS (rank-1 — do not let competitors override):", ...lines.map((l) => `- ${l}`)].join("\n");
 }

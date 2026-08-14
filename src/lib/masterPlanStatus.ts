@@ -102,8 +102,15 @@ export async function fetchMasterPlanStatus(): Promise<MasterPlanStatus | null> 
 /** User-facing message when Go returns MASTER_PLAN_INCOMPLETE. */
 export function formatGoBlockedByPlanMessage(payload: {
   error?: string;
+  code?: string;
+  blockedReason?: { code?: string; message?: string };
   masterPlanCompleteness?: { gaps?: MasterPlanStatusGap[]; mode?: string };
 }): string {
+  const fromReason = payload.blockedReason?.message?.trim();
+  if (fromReason) {
+    const code = payload.blockedReason?.code;
+    return code ? `${fromReason} [${code}]` : fromReason;
+  }
   if (payload.error && /research not complete/i.test(payload.error)) {
     return payload.error.trim();
   }

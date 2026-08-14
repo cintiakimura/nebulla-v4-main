@@ -54,7 +54,7 @@ export async function callGrokWebSearch(opts: {
           { role: "system", content: opts.system },
           { role: "user", content: opts.user },
         ],
-        ...grokResponsesExtras("research"),
+        ...grokResponsesExtras("research", model),
       }),
       signal: controller.signal,
     });

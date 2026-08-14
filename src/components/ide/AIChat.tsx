@@ -172,7 +172,6 @@ import {
   getAppStatusDebugIssues,
   looksLikeBrokenAppComplaint,
   markAppRuntimePendingValidation,
-  reportAppRuntimeIssue,
   requestAppPreviewReload,
   resetAppRuntimeForProject,
   shouldMarkAppStatusValidation,
@@ -2333,9 +2332,7 @@ export function AIChat() {
           // Strict Go often blocks on security/sign-in — re-accept baseline once, then retry.
           if (
             !go.ok &&
-            /MASTER_PLAN_INCOMPLETE|incomplete for Go|Go is paused|planning pieces/i.test(
-              go.statusMessage || '',
-            )
+            go.blockedReason?.code === 'MASTER_PLAN_INCOMPLETE'
           ) {
             try {
               const sec = await fetchJson<{ ok?: boolean; applied?: boolean }>(
@@ -2373,6 +2370,7 @@ export function AIChat() {
             statusMessage: go.statusMessage,
             writtenCount: go.totalWritten,
             sliceLabel: go.sliceLabel ?? 'Foundation',
+            blockedReason: go.blockedReason,
           };
         }
         if (!agentAllowed && (hadCodingTag || hasGrokFileBlocks(raw))) {
@@ -2384,30 +2382,30 @@ export function AIChat() {
           }
         }
         if (coding.ran) {
+          const blockedLine =
+            coding.ok === false
+              ? coding.blockedReason
+                ? `${coding.blockedReason.message} [${coding.blockedReason.code}]`
+                : coding.statusMessage
+              : coding.statusMessage;
           setGrokActivity((prev) =>
             advanceGrokActivity(prev, showWorkActivity ? 5 : 3, {
-              currentAction: coding.statusMessage || 'Syncing mind map, explorer, and preview…',
-              ...(coding.statusMessage
+              currentAction:
+                coding.ok === false
+                  ? blockedLine || 'Foundation coding stopped'
+                  : coding.statusMessage || 'Syncing mind map, explorer, and preview…',
+              ...(blockedLine
                 ? {
-                    stepDetail: { index: showWorkActivity ? 4 : 2, detail: coding.statusMessage },
+                    stepDetail: { index: showWorkActivity ? 4 : 2, detail: blockedLine },
                     log: {
-                      message: coding.statusMessage,
+                      message: blockedLine,
                       kind: coding.ok === false ? 'error' : 'success',
                     },
                   }
                 : {}),
             }),
           );
-          if (
-            coding.ok === false &&
-            coding.statusMessage &&
-            !/429|too many requests|rate limit/i.test(coding.statusMessage)
-          ) {
-            reportAppRuntimeIssue({
-              technicalMessage: coding.statusMessage.slice(0, 800),
-              source: 'build',
-            });
-          }
+          // Go/coding failures are NOT App Preview issues — do not call reportAppRuntimeIssue.
           // Validate loop only after a successful apply (device IDE locale + Grok CONTENT_LOCALE unchanged).
           if (hasAppStatusPayload && shouldMarkAppStatusValidation(coding)) {
             const fps = getAppRuntimeSnapshot()

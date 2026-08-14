@@ -7,7 +7,8 @@ import { startGrokActivityWaitTicker } from './ideGrokActivityStatus';
 import { getGrokRequestHeaders } from './grokUserKey';
 import { formatGoBlockedByPlanMessage } from './masterPlanStatus';
 import { reportGoApplyTelemetry } from './contractTelemetryClient';
-import { assessOversizedGoApply, parseGoSliceLabel, type GoSliceLabel } from '../../lib/goSliceContract';
+import { assessFoundationGoExit, assessOversizedGoApply, parseGoSliceLabel, type GoSliceLabel } from '../../lib/goSliceContract';
+import { classifyGoFailure, formatBlockedReasonLine, type GoBlockedReason } from '../../lib/goBlockedReason';
 import { assessApplyRouteDepth } from '../../lib/workspaceCodedAppUi';
 import { UNSOLICITED_BAAS_SKIP_REASON } from '../../lib/mvpStackContract';
 import {
@@ -534,6 +535,8 @@ type GoCodePayload = {
   preCodingSummary?: string;
   summarySaved?: boolean;
   codeError?: string;
+  blockedReason?: GoBlockedReason;
+  code?: string;
   choices?: { message?: { content?: string } }[];
   error?: string;
   codeModel?: string;
@@ -617,10 +620,19 @@ async function pollGoCodeUntilDoneInner(
         return poll;
       }
       if (poll.error && !poll.choices?.length) {
-        return poll;
+        const blocked =
+          poll.blockedReason ||
+          classifyGoFailure({
+            code: poll.code,
+            error: poll.error,
+            codeError: poll.codeError,
+          });
+        return { ...poll, error: formatBlockedReasonLine(blocked), blockedReason: blocked, code: blocked.code };
       }
       if (poll.codeError && !poll.choices?.[0]?.message?.content?.trim()) {
-        return { ...poll, error: poll.codeError };
+        const blocked =
+          poll.blockedReason || classifyGoFailure({ code: poll.code, codeError: poll.codeError, error: poll.error });
+        return { ...poll, error: formatBlockedReasonLine(blocked), blockedReason: blocked, code: blocked.code };
       }
       if (!response.ok && !poll.pending) {
         return poll;
@@ -650,13 +662,15 @@ async function pollGoCodeUntilDoneInner(
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Go poll failed';
       if (Date.now() >= deadline || i >= GO_MAX_POLLS - 1) {
-        onProgress?.(msg, 'error');
-        return { error: msg };
+        const blocked = classifyGoFailure({ error: msg });
+        onProgress?.(formatBlockedReasonLine(blocked), 'error');
+        return { error: formatBlockedReasonLine(blocked), blockedReason: blocked, code: blocked.code };
       }
     }
   }
-  onProgress?.(GO_POLL_TIMEOUT_MESSAGE, 'error');
-  return { error: GO_POLL_TIMEOUT_MESSAGE };
+  const timedOut = classifyGoFailure({ error: GO_POLL_TIMEOUT_MESSAGE, code: 'GO_TIMEOUT' });
+  onProgress?.(formatBlockedReasonLine(timedOut), 'error');
+  return { error: formatBlockedReasonLine(timedOut), blockedReason: timedOut, code: timedOut.code };
 }
 
 async function kickGoCodeJob(options: {
@@ -785,21 +799,22 @@ async function kickGoCodeJob(options: {
         switchWaitLabel(GO_PREPARING_LABEL);
         return await pollGoCodeUntilDone(projectName, onProgress);
       }
-      if (
-        data.code === 'MASTER_PLAN_INCOMPLETE' ||
-        data.code === 'UI_BRIEF_MISSING' ||
-        data.code === 'RESEARCH_INCOMPLETE' ||
-        goRes.status === 409
-      ) {
-        const friendly = formatGoBlockedByPlanMessage(data);
-        onProgress?.(friendly.split('\n')[0] || 'Master Plan incomplete', 'warn');
-        throw new Error(friendly);
-      }
-      const msg =
-        typeof data.error === 'string' && data.error
-          ? data.error
-          : `Go Code failed (${goRes.status})`;
-      throw new Error(msg);
+      const blocked = classifyGoFailure({
+        httpStatus: goRes.status,
+        code: data.code,
+        error: data.error,
+        blockedReason: (data as GoCodePayload).blockedReason,
+      });
+      const friendly =
+        blocked.code === 'MASTER_PLAN_INCOMPLETE'
+          ? formatGoBlockedByPlanMessage({ ...data, blockedReason: blocked })
+          : formatBlockedReasonLine(blocked);
+      onProgress?.(friendly.split('\n')[0] || blocked.message, 'warn');
+      return {
+        error: friendly,
+        blockedReason: blocked,
+        code: blocked.code,
+      };
     }
 
     if (data.pending && data.coding) {
@@ -836,6 +851,7 @@ export async function runGoCodeAndApply(options: {
   totalWritten?: number;
   sliceLabel?: GoSliceLabel | null;
   oversizedWarning?: string | null;
+  blockedReason?: GoBlockedReason;
 }> {
   const { userId, projectName, userNote, messages, onProgress } = options;
   const baseMessages =
@@ -896,9 +912,17 @@ export async function runGoCodeAndApply(options: {
       });
 
       if (data.error && !data.choices?.length) {
-        onProgress?.(data.error || 'Go Code failed', 'error');
+        const blocked =
+          data.blockedReason ||
+          classifyGoFailure({ code: data.code, error: data.error, codeError: data.codeError });
+        onProgress?.(formatBlockedReasonLine(blocked), 'error');
         if (totalWritten > 0) break;
-        return { ok: false, statusMessage: data.error || 'Go Code failed.', totalWritten };
+        return {
+          ok: false,
+          statusMessage: formatBlockedReasonLine(blocked),
+          totalWritten,
+          blockedReason: blocked,
+        };
       }
 
       if (data.summarySaved && pass === 0) {
@@ -920,24 +944,27 @@ export async function runGoCodeAndApply(options: {
 
       const codeText = data.choices?.[0]?.message?.content?.trim() || '';
       if (data.codeError && !codeText) {
-        onProgress?.(`Grok Code error: ${data.codeError.slice(0, 200)}`, 'error');
+        const blocked =
+          data.blockedReason || classifyGoFailure({ code: data.code, codeError: data.codeError, error: data.error });
+        onProgress?.(formatBlockedReasonLine(blocked), 'error');
         if (totalWritten > 0) break;
         return {
           ok: false,
-          statusMessage: data.codeError.slice(0, 400),
+          statusMessage: formatBlockedReasonLine(blocked),
           totalWritten,
+          blockedReason: blocked,
         };
       }
 
       if (!codeText) {
         if (totalWritten > 0) break;
-        onProgress?.('Grok Code returned no file output', 'warn');
+        const blocked = classifyGoFailure({ code: 'GO_EMPTY_OUTPUT' });
+        onProgress?.(formatBlockedReasonLine(blocked), 'warn');
         return {
-          ok: Boolean(data.summarySaved),
-          statusMessage: data.summarySaved
-            ? 'Master Plan saved but Grok Code returned no files — try Go again.'
-            : 'Grok Code returned empty output.',
+          ok: false,
+          statusMessage: formatBlockedReasonLine(blocked),
           totalWritten,
+          blockedReason: blocked,
         };
       }
 
@@ -996,6 +1023,14 @@ export async function runGoCodeAndApply(options: {
       parseGoSliceLabel(userNote) ||
       parseGoSliceLabel('SLICE: Foundation');
     const oversized = assessOversizedGoApply({ sliceLabel, writtenPaths: allWrittenPaths });
+    const exit = assessFoundationGoExit({
+      totalWritten,
+      writtenPaths: allWrittenPaths,
+      sliceLabel,
+      runnableRoot: lastRunnable.runnableRoot,
+      partialPlanOnly,
+    });
+    const depth = assessApplyRouteDepth(allWrittenPaths);
     let statusMessage = buildGoCompleteMessage(
       totalWritten,
       allWrittenPaths,
@@ -1011,28 +1046,28 @@ export async function runGoCodeAndApply(options: {
       onProgress?.(oversized.message, 'warn');
     }
 
-    const depth = assessApplyRouteDepth(allWrittenPaths);
-    const foundationLike = !sliceLabel || /foundation/i.test(String(sliceLabel));
-    // Phase 6: Foundation with only App/main is a fail, not success.
-    if (foundationLike && depth.zeroProductRoutes && totalWritten > 0 && !partialPlanOnly) {
-      const pathNote = allWrittenPaths.slice(0, 12).join(', ') + (allWrittenPaths.length > 12 ? '…' : '');
-      const failMsg = `Foundation apply wrote ${totalWritten} file(s) [${pathNote}] but zero app/ or pages/ routes. Not a product shell — retry Go for Home/practice (or equivalent) routes.`;
-      onProgress?.(failMsg, 'error');
-      statusMessage = failMsg;
-    } else if (depth.authOnly && foundationLike) {
+    if (!exit.ok && exit.blockedReason) {
+      statusMessage = formatBlockedReasonLine(exit.blockedReason);
+      onProgress?.(statusMessage, 'error');
+    } else if (depth.authOnly && (!sliceLabel || /foundation/i.test(String(sliceLabel)))) {
       onProgress?.(
         'Auth routes landed; Home/practice/parent screens from the plan are still missing — next slice should add those routes.',
         'warn',
       );
       if (totalWritten > 0) onProgress?.(statusMessage, 'success');
-    } else if (totalWritten > 0) {
+    } else if (exit.ok && totalWritten > 0) {
+      if (exit.warnRunnable) {
+        onProgress?.(
+          'Foundation routes landed — add package.json / dev scripts so the app is runnable (soft warning).',
+          'warn',
+        );
+      }
       onProgress?.(statusMessage, 'success');
     }
 
     reportGoApplyTelemetry({ writtenPaths: allWrittenPaths, sliceLabel: sliceLabel || undefined });
 
-    const ok =
-      totalWritten > 0 && !partialPlanOnly && !(foundationLike && depth.zeroProductRoutes);
+    const ok = exit.ok;
     if (ok) {
       // Do not await — artifact sync used to freeze chat after files landed.
       // Client must still refresh mind map and open Plan (server hydrate does not dispatch UI events).
@@ -1053,12 +1088,19 @@ export async function runGoCodeAndApply(options: {
       totalWritten,
       sliceLabel,
       oversizedWarning: oversized.message,
+      blockedReason: exit.blockedReason || undefined,
     };
   } catch (e) {
-    const msg = e instanceof Error ? e.message : 'Go Code request failed';
-    const planBlocked = /Go is paused|planning pieces|Master Plan incomplete/i.test(msg);
-    onProgress?.(msg, planBlocked ? 'warn' : 'error');
-    return { ok: false, statusMessage: msg, totalWritten: 0 };
+    const blocked = classifyGoFailure({
+      error: e instanceof Error ? e.message : 'Go Code request failed',
+    });
+    onProgress?.(formatBlockedReasonLine(blocked), blocked.code === 'MASTER_PLAN_INCOMPLETE' ? 'warn' : 'error');
+    return {
+      ok: false,
+      statusMessage: formatBlockedReasonLine(blocked),
+      totalWritten: 0,
+      blockedReason: blocked,
+    };
   } finally {
     markFoundationGoInFlight(projectName, false);
   }
@@ -1083,6 +1125,7 @@ export async function handlePostGrokCodingTurn(options: {
   writtenCount?: number;
   writtenPaths?: string[];
   sliceLabel?: string | null;
+  blockedReason?: GoBlockedReason;
 }> {
   const { assistantContent, planningPhase, userId, projectName, userNote, onProgress } = options;
 
@@ -1096,29 +1139,44 @@ export async function handlePostGrokCodingTurn(options: {
       skipPostSync: true,
     });
     if (apply.ok) {
-      void afterFilesAppliedArtifacts(userNote, projectName, onProgress);
-      void triggerUiStudioBetaAfterFilesApplied({
+      const sliceLabel = parseGoSliceLabel(userNote) || parseGoSliceLabel(appCodeBlocks) || 'Foundation';
+      const exit = assessFoundationGoExit({
+        totalWritten: apply.writtenCount,
         writtenPaths: apply.writtenPaths,
-        projectName,
-        onProgress,
-      }).catch((e) => {
-        console.warn('[nebulaGrokCodingPipeline] background post-apply UI:', e);
+        sliceLabel,
+        runnableRoot: apply.runnableRoot,
+        partialPlanOnly: isPlanOnlyApply(apply.writtenPaths),
       });
+      if (exit.ok) {
+        void afterFilesAppliedArtifacts(userNote, projectName, onProgress);
+        void triggerUiStudioBetaAfterFilesApplied({
+          writtenPaths: apply.writtenPaths,
+          projectName,
+          onProgress,
+        }).catch((e) => {
+          console.warn('[nebulaGrokCodingPipeline] background post-apply UI:', e);
+        });
+      }
       return {
         ran: true,
-        ok: true,
-        statusMessage: apply.message,
+        ok: exit.ok,
+        statusMessage: exit.ok
+          ? apply.message
+          : formatBlockedReasonLine(exit.blockedReason!),
         writtenCount: apply.writtenCount,
         writtenPaths: apply.writtenPaths,
-        sliceLabel: parseGoSliceLabel(userNote) || parseGoSliceLabel(appCodeBlocks) || 'Foundation',
+        sliceLabel,
+        blockedReason: exit.blockedReason || undefined,
       };
     }
+    const blocked = classifyGoFailure({ error: apply.message, code: 'APPLY_EMPTY_PRODUCT' });
     return {
       ran: true,
       ok: false,
-      statusMessage: apply.message,
+      statusMessage: formatBlockedReasonLine(blocked),
       writtenCount: apply.writtenCount,
       writtenPaths: apply.writtenPaths,
+      blockedReason: blocked,
     };
   }
 
@@ -1168,5 +1226,6 @@ export async function handlePostGrokCodingTurn(options: {
     writtenCount: go.totalWritten,
     writtenPaths: undefined,
     sliceLabel: go.sliceLabel ?? 'Foundation',
+    blockedReason: go.blockedReason,
   };
 }

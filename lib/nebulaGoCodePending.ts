@@ -1,5 +1,6 @@
 import fs from "fs";
 import path from "path";
+import { goBlocked, type GoBlockedReason } from "./goBlockedReason";
 
 export type GoCodePendingState = {
   status: "preparing" | "running" | "done" | "error";
@@ -7,6 +8,7 @@ export type GoCodePendingState = {
   preCodingSummary?: string;
   codeText?: string;
   codeError?: string;
+  blockedReason?: GoBlockedReason;
   codeModel?: string;
   projectDisplayName?: string;
   /** Conversation log append happens once while result remains durable. */
@@ -20,6 +22,7 @@ export type GoCodeLastResult = {
   preCodingSummary?: string;
   codeText?: string;
   codeError?: string;
+  blockedReason?: GoBlockedReason;
   codeModel?: string;
   projectDisplayName?: string;
   consumed?: boolean;
@@ -80,7 +83,7 @@ export function writeGoCodeLastResult(
   workspaceRoot: string,
   state: Pick<
     GoCodePendingState,
-    "preCodingSummary" | "codeText" | "codeError" | "codeModel" | "projectDisplayName"
+    "preCodingSummary" | "codeText" | "codeError" | "blockedReason" | "codeModel" | "projectDisplayName"
   >,
 ): void {
   const p = goCodeLastResultPath(workspaceRoot);
@@ -90,6 +93,7 @@ export function writeGoCodeLastResult(
     preCodingSummary: state.preCodingSummary,
     codeText: state.codeText,
     codeError: state.codeError,
+    blockedReason: state.blockedReason,
     codeModel: state.codeModel,
     projectDisplayName: state.projectDisplayName,
     consumed: false,
@@ -109,13 +113,19 @@ export function clearGoCodeLastResult(workspaceRoot: string): void {
 /**
  * Phase 5: kick failed before scheduleGoCodeJob — poll must not stay “preparing” forever.
  */
-export function failGoCodePreparing(workspaceRoot: string, codeError: string): void {
+export function failGoCodePreparing(
+  workspaceRoot: string,
+  codeError: string,
+  blockedReason?: GoBlockedReason,
+): void {
   const cur = readGoCodePending(workspaceRoot);
   if (cur?.status !== "preparing") return;
+  const reason = blockedReason || goBlocked("GO_FAILED", codeError);
   writeGoCodePending(workspaceRoot, {
     ...cur,
     status: "error",
-    codeError: codeError.slice(0, 800),
+    codeError: (reason.message || codeError).slice(0, 800),
+    blockedReason: reason,
   });
 }
 
@@ -177,6 +187,7 @@ export function expireStaleGoCodePending(
       ...pending,
       status: "error",
       codeError: GO_TIMEOUT_MESSAGE,
+      blockedReason: goBlocked("GO_TIMEOUT", GO_TIMEOUT_MESSAGE),
     });
     return false;
   }
@@ -191,6 +202,10 @@ export function expireStaleGoCodePending(
       ...pending,
       status: "error",
       codeError: "Grok Code session expired on the server. Press Go once to retry.",
+      blockedReason: goBlocked(
+        "GO_TIMEOUT",
+        "Grok Code session expired on the server. Press Go once to retry.",
+      ),
     });
     return false;
   }

@@ -179,7 +179,7 @@ async function callXaiChatCompletion(
           model,
           messages,
           stream: false,
-          ...grokChatCompletionsExtras(stroke),
+          ...grokChatCompletionsExtras(stroke, model),
         }),
         signal: controller.signal,
       });

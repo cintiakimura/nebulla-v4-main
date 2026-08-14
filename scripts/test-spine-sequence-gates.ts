@@ -120,6 +120,32 @@ assert.equal(/honestSuccess = runtimeHealthy && honesty !==/.test(statusMenu), f
 section("Gate G — files/open rejects title-as-path");
 assert.match(server, /path must be a workspace-relative file, not the project title/);
 
+section("Go blockedReason — poll + chat (not App Preview)");
+{
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "go-block-"));
+  writeGoCodePending(tmp, {
+    status: "error",
+    startedAt: Date.now(),
+    codeError: "Model grok-code-fast-1 does not support parameter reasoningEffort.",
+    blockedReason: {
+      code: "GO_MODEL_REJECTED",
+      message: "Stopped: coding model rejected the request (invalid parameters). Retry Go — Foundation did not start.",
+    },
+  });
+  const poll = goCodePendingToPollResponse(readGoCodePending(tmp), false, tmp);
+  assert.equal(poll.ok, false);
+  assert.equal(poll.code, "GO_MODEL_REJECTED");
+  assert.equal((poll.blockedReason as { code?: string } | undefined)?.code, "GO_MODEL_REJECTED");
+  assert.match(String(poll.error || ""), /GO_MODEL_REJECTED/);
+  assert.equal(/preview hit a problem|source:\s*'build'/.test(String(poll.error || "")), false);
+}
+assert.match(chat, /do not call reportAppRuntimeIssue/);
+assert.equal(/reportAppRuntimeIssue\(/.test(chat), false);
+assert.match(pipeline, /assessFoundationGoExit/);
+assert.match(pipeline, /blockedReason: blocked/);
+assert.match(server, /blockedReason: blocked/);
+assert.match(server, /GO_MODEL_REJECTED|goBlocked\("RESEARCH_INCOMPLETE"/);
+
 console.log("\n✓ spine sequence gates passed\n");
 
 function section(name: string) {

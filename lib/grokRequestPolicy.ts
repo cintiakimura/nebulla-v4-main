@@ -22,6 +22,17 @@ export const RESEARCH_SEARCH_TOOLS: GrokBuiltInTool[] = [
   { type: "x_search" },
 ];
 
+/**
+ * xAI 400s `reasoning_effort` on coding/build models (built-in reasoning, not configurable).
+ * Chat Completions error: "Model grok-code-fast-1 does not support parameter reasoningEffort."
+ */
+export function modelSupportsReasoningEffort(model: string): boolean {
+  const m = String(model || "").trim().toLowerCase();
+  if (!m) return true;
+  if (/grok-code|grok-build/.test(m)) return false;
+  return true;
+}
+
 export function grokStrokePolicy(stroke: GrokStroke): GrokStrokePolicy {
   switch (stroke) {
     case "research":
@@ -31,24 +42,41 @@ export function grokStrokePolicy(stroke: GrokStroke): GrokStrokePolicy {
     case "plan":
       return { stroke, tools: [], reasoning_effort: "high" };
     case "go":
-      return { stroke, tools: [], reasoning_effort: "high" };
+      // Coding models (grok-code-fast-1 / grok-build) 400 on reasoning_effort — never send it on Go.
+      return { stroke, tools: [], reasoning_effort: null };
     case "ui_gen":
       return { stroke, tools: [], reasoning_effort: null };
   }
 }
 
-/** Chat Completions extras — never attach web/x search. */
-export function grokChatCompletionsExtras(stroke: GrokStroke): Record<string, unknown> {
+function effectiveReasoningEffort(
+  stroke: GrokStroke,
+  model?: string,
+): GrokReasoningEffort | null {
   const p = grokStrokePolicy(stroke);
-  if (!p.reasoning_effort) return {};
-  return { reasoning_effort: p.reasoning_effort };
+  if (!p.reasoning_effort) return null;
+  if (stroke === "go") return null;
+  const id = String(model || "").trim();
+  if (id && !modelSupportsReasoningEffort(id)) return null;
+  return p.reasoning_effort;
+}
+
+/** Chat Completions extras — never attach web/x search. Omit effort on models that 400. */
+export function grokChatCompletionsExtras(
+  stroke: GrokStroke,
+  model?: string,
+): Record<string, unknown> {
+  const effort = effectiveReasoningEffort(stroke, model);
+  if (!effort) return {};
+  return { reasoning_effort: effort };
 }
 
 /** Responses API extras. Search tools only on research. */
-export function grokResponsesExtras(stroke: GrokStroke): Record<string, unknown> {
+export function grokResponsesExtras(stroke: GrokStroke, model?: string): Record<string, unknown> {
   const p = grokStrokePolicy(stroke);
   const extra: Record<string, unknown> = {};
-  if (p.reasoning_effort) extra.reasoning = { effort: p.reasoning_effort };
+  const effort = effectiveReasoningEffort(stroke, model);
+  if (effort) extra.reasoning = { effort };
   extra.tools = p.tools;
   return extra;
 }
