@@ -101,6 +101,12 @@ section('mapRuntimeToFriendly network + build');
     source: 'build',
   });
   assert.equal(build.severity, 'error');
+  const rate = mapRuntimeToFriendly({
+    technicalMessage: 'Too many requests',
+    source: 'build',
+  });
+  assert.equal(rate.severity, 'warn');
+  assert.match(rate.friendlyTitle, /too many|trop|troppe|demasiadas|zu viele/i);
 }
 
 section('relativeAppStatusTime uses catalog (en)');

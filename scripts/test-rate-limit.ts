@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import {
   createRateLimiter,
+  isAiRateLimitedPath,
   resetRateLimitStore,
 } from "../lib/rateLimit";
 
@@ -54,5 +55,9 @@ const res3 = mockRes();
 limiter(mockReq(), res3, next);
 assert.equal(res3.statusCode, 429);
 assert.equal(nextCount, 2);
+
+assert.equal(isAiRateLimitedPath("/api/grok/go-code"), true);
+assert.equal(isAiRateLimitedPath("/api/grok/go-code/poll"), false);
+assert.equal(isAiRateLimitedPath("/api/grok/chat"), true);
 
 console.log("✓ rate limit blocks after max");

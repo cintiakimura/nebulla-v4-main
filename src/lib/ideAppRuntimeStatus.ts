@@ -113,7 +113,17 @@ export function mapRuntimeToFriendly(input: {
   const lower = msg.toLowerCase();
   const where = input.route?.trim() ? ` on ${input.route.trim()}` : '';
 
-  if (input.source === 'build' || /failed to load|preview couldn't load|net::|err_connection/i.test(msg)) {
+  if (/429|too many requests|rate limit/i.test(lower)) {
+    return {
+      severity: 'warn',
+      friendlyTitle: t('appStatus.friendly.rateLimitTitle'),
+      friendlyBody: t('appStatus.friendly.rateLimitBody'),
+    };
+  }
+
+  if (
+    /failed to load|preview couldn't load|net::|err_connection|iframe failed|preview bootstrap/i.test(msg)
+  ) {
     return {
       severity: 'error',
       friendlyTitle: t('appStatus.friendly.previewLoadTitle'),

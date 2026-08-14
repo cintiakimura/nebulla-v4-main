@@ -16,8 +16,8 @@ const GO_POLL_MS = 5000;
 const GO_MAX_POLLS = 90;
 const GO_CODE_MAX_PASSES = 2;
 
-/** One poll loop per project tab — avoids duplicate POST /go-code/poll spam. */
-let goCodePollInFlight: Promise<GoCodePayload> | null = null;
+/** One poll loop per project — do not join ADHD + children onto the same waiter. */
+const goCodePollInFlightByProject = new Map<string, Promise<GoCodePayload>>();
 
 function sleep(ms: number): Promise<void> {
   return new Promise((r) => window.setTimeout(r, ms));
@@ -355,15 +355,18 @@ async function pollGoCodeUntilDone(
   projectName: string,
   onProgress?: GrokActivityProgressFn,
 ): Promise<GoCodePayload> {
-  if (goCodePollInFlight) {
+  const key = projectName.trim() || 'default';
+  const existing = goCodePollInFlightByProject.get(key);
+  if (existing) {
     onProgress?.('Go already polling on server — joining existing wait…', 'info');
-    return goCodePollInFlight;
+    return existing;
   }
 
-  goCodePollInFlight = pollGoCodeUntilDoneInner(projectName, onProgress).finally(() => {
-    goCodePollInFlight = null;
+  const run = pollGoCodeUntilDoneInner(projectName, onProgress).finally(() => {
+    goCodePollInFlightByProject.delete(key);
   });
-  return goCodePollInFlight;
+  goCodePollInFlightByProject.set(key, run);
+  return run;
 }
 
 async function pollGoCodeUntilDoneInner(
@@ -380,8 +383,23 @@ async function pollGoCodeUntilDoneInner(
         body: JSON.stringify(withProjectBody({ projectName })),
       });
       const poll = await readResponseJson<
-        GoCodePayload & { hint?: string; elapsedMs?: number; error?: string; idle?: boolean }
+        GoCodePayload & {
+          hint?: string;
+          elapsedMs?: number;
+          error?: string;
+          idle?: boolean;
+          retryAfterSec?: number;
+        }
       >(response);
+      if (response.status === 429) {
+        const waitSec = Math.min(45, Math.max(5, Number(poll.retryAfterSec) || 12));
+        onProgress?.(
+          `Too many requests — waiting ${waitSec}s then continuing to poll (not a preview crash)…`,
+          'warn',
+        );
+        await sleep(waitSec * 1000);
+        continue;
+      }
       if (poll.idle) {
         if (i < 4) continue;
         return poll;
@@ -526,6 +544,16 @@ async function kickGoCodeJob(options: {
       }
     >(goRes);
     if (!goRes.ok) {
+      if (goRes.status === 429) {
+        const waitSec = Math.min(45, Math.max(8, Number((data as { retryAfterSec?: number }).retryAfterSec) || 15));
+        onProgress?.(
+          `Too many Grok kicks — waiting ${waitSec}s, then polling (files may already be generating)…`,
+          'warn',
+        );
+        await sleep(waitSec * 1000);
+        switchWaitLabel('Grok Code running on server');
+        return await pollGoCodeUntilDone(projectName, onProgress);
+      }
       if (data.code === 'MASTER_PLAN_INCOMPLETE' || goRes.status === 409) {
         const friendly = formatGoBlockedByPlanMessage(data);
         onProgress?.(friendly.split('\n')[0] || 'Master Plan incomplete', 'warn');

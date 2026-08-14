@@ -75,7 +75,20 @@ export function createRateLimiter(opts: RateLimitOptions) {
 /**
  * Path-prefix matcher — apply different limits to auth vs AI routes.
  * Call once as app.use(createApiRateLimitGate()).
+ * Grok kick/chat count; `/api/grok/go-code/poll` does not (would 429 in ~5 min).
  */
+export function isAiRateLimitedPath(
+  path: string,
+  aiPaths: string[] = ["/api/grok/chat", "/api/grok/go-code", "/api/grok/execute-project-rules"],
+  exactOnly: Set<string> = new Set(["/api/grok/go-code"]),
+): boolean {
+  const p = path.split("?")[0] || "";
+  return aiPaths.some((prefix) => {
+    if (exactOnly.has(prefix)) return p === prefix;
+    return p === prefix || p.startsWith(`${prefix}/`);
+  });
+}
+
 export function createApiRateLimitGate() {
   const authMax = Math.max(5, Number(process.env.RATE_LIMIT_AUTH_MAX || "30") || 30);
   const authWindow = Math.max(1000, Number(process.env.RATE_LIMIT_AUTH_WINDOW_MS || "900000") || 900_000);
@@ -97,6 +110,8 @@ export function createApiRateLimitGate() {
     "/api/auth/google",
   ];
   const aiPaths = ["/api/grok/chat", "/api/grok/go-code", "/api/grok/execute-project-rules"];
+  /** Local job status — must not share the Grok kick bucket (poll every 5s would 429 in ~5 min). */
+  const aiExactOnly = new Set(["/api/grok/go-code"]);
   const genPaths = [
     "/api/ui-studio-beta/generate",
     "/api/nebula-ui-studio/v0-generate",
@@ -117,7 +132,7 @@ export function createApiRateLimitGate() {
       genLimiter(req, res, next);
       return;
     }
-    if (aiPaths.some((p) => path === p || path.startsWith(`${p}/`))) {
+    if (isAiRateLimitedPath(path, aiPaths, aiExactOnly)) {
       aiLimiter(req, res, next);
       return;
     }

@@ -2169,7 +2169,11 @@ export function AIChat() {
                 : {}),
             }),
           );
-          if (coding.ok === false && coding.statusMessage) {
+          if (
+            coding.ok === false &&
+            coding.statusMessage &&
+            !/429|too many requests|rate limit/i.test(coding.statusMessage)
+          ) {
             reportAppRuntimeIssue({
               technicalMessage: coding.statusMessage.slice(0, 800),
               source: 'build',
