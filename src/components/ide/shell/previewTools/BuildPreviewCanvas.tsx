@@ -12,16 +12,22 @@ export function BuildPreviewCanvas() {
   const [rev, setRev] = useState(0);
   const [failed, setFailed] = useState(false);
   const retriedLegacyRef = useRef(false);
+  const retriedMockShellRef = useRef(false);
   const [hasSelection] = useState(false);
   const src = withProjectQuery(`/api/app-preview/bootstrap?_rev=${rev}`);
 
   useEffect(() => {
-    const onFilesApplied = () => {
+    const bump = () => {
       setFailed(false);
+      retriedMockShellRef.current = false;
       setRev((n) => n + 1);
     };
-    window.addEventListener('nebula-files-applied', onFilesApplied);
-    return () => window.removeEventListener('nebula-files-applied', onFilesApplied);
+    window.addEventListener('nebula-files-applied', bump);
+    window.addEventListener('nebula-reload-app-preview', bump);
+    return () => {
+      window.removeEventListener('nebula-files-applied', bump);
+      window.removeEventListener('nebula-reload-app-preview', bump);
+    };
   }, []);
 
   useEffect(() => installPreviewRuntimeMessageListener(), []);
@@ -74,6 +80,14 @@ export function BuildPreviewCanvas() {
                   /V0 credits unavailable|basic UI preview/i.test(html)
                 ) {
                   retriedLegacyRef.current = true;
+                  setRev((n) => n + 1);
+                  return;
+                }
+                if (
+                  !retriedMockShellRef.current &&
+                  /interactive-product-preview|Who are you today\?/i.test(html)
+                ) {
+                  retriedMockShellRef.current = true;
                   setRev((n) => n + 1);
                   return;
                 }

@@ -153,11 +153,7 @@ import {
   writtenPathsNeedRunnableSkeleton,
 } from "./lib/runnableAppSkeleton";
 import { runWorkspaceBuildCheck } from "./lib/workspaceBuildCheck";
-import {
-  ensureInteractiveProductPreview,
-  hasInteractiveProductPreview,
-  INTERACTIVE_PREVIEW_GO_BULLETS,
-} from "./lib/interactiveProductPreview";
+import { INTERACTIVE_PREVIEW_GO_BULLETS } from "./lib/interactiveProductPreview";
 import {
   masterPlanKeyForTabIndex,
   normalizeMasterPlanRecord,
@@ -2245,19 +2241,7 @@ No approved UI code yet.
       const pp = projectPathsFor(req);
       const demoUrl = readV0DemoUrl(pp.workspaceRoot);
       const hasReal = hasRealV0ApiGeneration(pp.workspaceRoot);
-      // Heal older coded workspaces: prefer interactive mock preview over file-list bridge.
-      try {
-        const early = resolveAppPreviewAuthority(pp.workspaceRoot);
-        if (
-          early.codedApp &&
-          early.mode === "post_code_bridge" &&
-          !hasInteractiveProductPreview(pp.workspaceRoot)
-        ) {
-          ensureInteractiveProductPreview(pp.workspaceRoot);
-        }
-      } catch (healErr) {
-        console.warn("[app-preview/meta] interactive preview heal:", healErr);
-      }
+      // Do not heal coded workspaces into the generic role-picker mock.
       const authority = resolveAppPreviewAuthority(pp.workspaceRoot);
       res.json({
         ok: true,
@@ -2302,19 +2286,7 @@ No approved UI code yet.
         pp.projectKey ||
         "Untitled Project";
 
-      // Working app output: when product UI exists but no bundler/build, serve interactive mock preview.
-      try {
-        const early = resolveAppPreviewAuthority(pp.workspaceRoot);
-        if (
-          early.codedApp &&
-          early.mode === "post_code_bridge" &&
-          !hasInteractiveProductPreview(pp.workspaceRoot)
-        ) {
-          ensureInteractiveProductPreview(pp.workspaceRoot, { projectName: displayName });
-        }
-      } catch (healErr) {
-        console.warn("[app-preview/bootstrap] interactive preview heal:", healErr);
-      }
+      // Coded app/src pages: serve those routes or an honest bridge — never the role-picker mock.
 
       const authority = resolveAppPreviewAuthority(pp.workspaceRoot);
       let html = "";
@@ -2669,16 +2641,7 @@ No approved UI code yet.
           console.warn("[apply-generated] runnable skeleton:", skelErr);
           runnable = inspectRunnableSkeleton(workspaceRoot);
         }
-        try {
-          const preview = ensureInteractiveProductPreview(workspaceRoot, {
-            projectName: projectNameEarly,
-            productFiles: written.filter((p) => writtenPathsNeedRunnableSkeleton([p])),
-          });
-          interactivePreviewPath = preview.path;
-          if (!written.includes(preview.path)) written.push(preview.path);
-        } catch (prevErr) {
-          console.warn("[apply-generated] interactive product preview:", prevErr);
-        }
+        /* After product UI files exist, do not write public/product-preview (role-picker mock). */
       } else if (written.length > 0) {
         runnable = inspectRunnableSkeleton(workspaceRoot);
       }

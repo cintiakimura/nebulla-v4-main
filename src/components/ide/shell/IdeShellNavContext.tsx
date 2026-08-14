@@ -2,6 +2,7 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useState,
   type ReactNode,
@@ -92,6 +93,16 @@ export function IdeShellNavProvider({ children }: { children: ReactNode }) {
   const goToCode = useCallback(() => {
     setActiveScreen('code');
   }, [setActiveScreen]);
+
+  useEffect(() => {
+    const onMessage = (ev: MessageEvent) => {
+      if ((ev.data as { type?: string } | null)?.type === 'nebula-open-code') {
+        goToCode();
+      }
+    };
+    window.addEventListener('message', onMessage);
+    return () => window.removeEventListener('message', onMessage);
+  }, [goToCode]);
 
   const goToPlan = useCallback(() => {
     setDashboardPanel('plan');
