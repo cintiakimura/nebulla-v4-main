@@ -10,17 +10,45 @@ import { reportGoApplyTelemetry } from './contractTelemetryClient';
 import { assessOversizedGoApply, parseGoSliceLabel, type GoSliceLabel } from '../../lib/goSliceContract';
 import { withProjectBody, withProjectQuery } from './nebulaProjectApi';
 import { triggerUiStudioBetaAfterFilesApplied } from './uiStudioBetaEngine';
+import {
+  FAST_PROTOTYPE_PRIMARY_SLICE_INSTRUCTION,
+  userNoteRequestsNextSlice,
+} from './fastPrototypeNextSlice';
 
 const START_CODING_RE = /<\s*START_CODING\s*>|\bSTART_CODING\b/i;
 const GO_POLL_MS = 5000;
 const GO_MAX_POLLS = 90;
 const GO_CODE_MAX_PASSES = 2;
+/** Ack after apply must never stall the coding turn (server may be busy on post-apply IO). */
+const GO_CONSUME_TIMEOUT_MS = 4000;
 
 /** One poll loop per project — do not join ADHD + children onto the same waiter. */
 const goCodePollInFlightByProject = new Map<string, Promise<GoCodePayload>>();
 
 function sleep(ms: number): Promise<void> {
   return new Promise((r) => window.setTimeout(r, ms));
+}
+
+/** Fire-and-forget ack so apply is not blocked if poll consume hangs. */
+function ackConsumedGoCodeResult(projectName: string): void {
+  const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+  const timer =
+    controller && typeof window !== 'undefined'
+      ? window.setTimeout(() => controller.abort(), GO_CONSUME_TIMEOUT_MS)
+      : null;
+  void fetch(withProjectQuery('/api/grok/go-code/poll'), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getGrokRequestHeaders() },
+    credentials: 'include',
+    signal: controller?.signal,
+    body: JSON.stringify(withProjectBody({ projectName, consume: true })),
+  })
+    .catch(() => {
+      /* keep durable result for retry */
+    })
+    .finally(() => {
+      if (timer != null) window.clearTimeout(timer);
+    });
 }
 
 export function hasGrokFileBlocks(text: string): boolean {
@@ -718,27 +746,20 @@ export async function runGoCodeAndApply(options: {
       }
 
       if (apply.ok && apply.writtenCount > 0) {
-        // Ack durable server result only after files are applied — missed polls can re-fetch until then.
-        try {
-          await fetch(withProjectQuery('/api/grok/go-code/poll'), {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', ...getGrokRequestHeaders() },
-            credentials: 'include',
-            body: JSON.stringify(withProjectBody({ projectName, consume: true })),
-          });
-        } catch {
-          /* keep durable result for retry */
-        }
+        onProgress?.('Slice files on disk — finishing apply (not waiting on poll ack)…', 'info');
+        // Never await consume — a hung poll ack left chat stuck on "Runnable skeleton filled".
+        ackConsumedGoCodeResult(projectName);
       }
 
       if (!apply.ok) {
-        partialPlanOnly = isPlanOnlyApply(apply.writtenPaths);
+        partialPlanOnly = isPlanOnlyApply(apply.writtenPaths) && apply.runnableRoot !== true;
         if (pass >= GO_CODE_MAX_PASSES - 1) break;
-        if (!isPlanOnlyApply(apply.writtenPaths)) break;
+        if (!partialPlanOnly) break;
         continue;
       }
 
-      partialPlanOnly = isPlanOnlyApply(apply.writtenPaths);
+      // Runnable Next/Vite skeleton counts as Foundation, even if this pass only filled config files.
+      partialPlanOnly = isPlanOnlyApply(apply.writtenPaths) && apply.runnableRoot !== true;
       if (!partialPlanOnly && apply.writtenCount >= 2) {
         break;
       }
@@ -882,7 +903,13 @@ export async function handlePostGrokCodingTurn(options: {
   }
 
   const codingSource = planning || assistantContent;
-  onProgress?.('START_CODING detected — launching Go Code pipeline', 'info');
+  const nextSlice = userNoteRequestsNextSlice(userNote);
+  onProgress?.(
+    nextSlice
+      ? 'START_CODING detected — launching Go Code for the next incomplete slice'
+      : 'START_CODING detected — launching Go Code pipeline',
+    'info',
+  );
   const go = await runGoCodeAndApply({
     userId,
     projectName,
@@ -892,8 +919,9 @@ export async function handlePostGrokCodingTurn(options: {
       { role: 'assistant', content: codingSource.slice(0, 12000) },
       {
         role: 'user',
-        content:
-          'START_CODING — implement ONE coherent Foundation slice only (Build → Debug → Next). Prefer app/, src/, components/, pages/ — not master-plan/ui-brief only. File blocks for this slice only — not the full §4 app.',
+        content: nextSlice
+          ? FAST_PROTOTYPE_PRIMARY_SLICE_INSTRUCTION
+          : 'START_CODING — implement ONE coherent Foundation slice only (Build → Debug → Next). Prefer app/, src/, components/, pages/ — not master-plan/ui-brief only. File blocks for this slice only — not the full §4 app.',
       },
     ],
   });

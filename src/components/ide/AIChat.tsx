@@ -71,8 +71,10 @@ import {
   SHORT_CODING_GO_SUMMARY,
 } from '../../lib/ideShortCodingNudge';
 import {
+  FAST_PROTOTYPE_PRIMARY_SLICE_INSTRUCTION,
   markFastPrototypePrimaryAutoRun,
   shouldAutoRunPrimarySliceAfterFoundation,
+  userNoteRequestsNextSlice,
 } from '../../lib/fastPrototypeNextSlice';
 import { setGrokCodingActive } from '../../lib/nebulaGrokCodingGate';
 import { runMasterPlanUiPipeline } from '../../lib/ideArtifactSync';
@@ -1617,6 +1619,7 @@ export function AIChat() {
     const session = await fetchSessionUser();
     const userId = session?.uid?.trim() || 'anonymous';
     let scheduledTts = false;
+    let queuePrimaryAfterUnlock = false;
 
     try {
       if (showWorkActivity) {
@@ -2068,10 +2071,12 @@ export function AIChat() {
             });
           }
           // After Foundation exists, "continue building" must request the NEXT slice — not Foundation again.
+          // Do not use !fastPrototypeTurn here: inference-first "continue building" still has that hint.
           const nextSliceGo =
-            (userForcedCoding || assistantCodingPromise || shortCodingNudge) &&
-            !onboardingBuildStart &&
-            !fastPrototypeTurn;
+            userNoteRequestsNextSlice(text) ||
+            ((userForcedCoding || assistantCodingPromise || shortCodingNudge) &&
+              !onboardingBuildStart &&
+              !fastPrototypeTurn);
           pushActivity(
             onboardingBuildStart
               ? 'Nothing more to add — launching Go Code pipeline'
@@ -2085,7 +2090,7 @@ export function AIChat() {
             'info',
           );
           const goSliceInstruction = nextSliceGo
-            ? 'START_CODING — implement the NEXT incomplete slice only (Build → Debug → Next). If Foundation shell already exists (app/_layout, routes), do NOT rewrite Foundation — prefer the next Master Plan page/feature (e.g. reading exercise, auth polish, teacher dashboard, parent progress). Prefer app/, src/, components/, pages/ — not master-plan/ui-brief only. File blocks for this slice only — not the full §4 app.'
+            ? FAST_PROTOTYPE_PRIMARY_SLICE_INSTRUCTION
             : 'START_CODING — implement ONE coherent Foundation slice only (Build → Debug → Next). Prefer app/, src/, components/, pages/ — not master-plan/ui-brief only. File blocks for this slice only — not the full §4 app.';
           const goMessages = [
             { role: 'assistant' as const, content: masterPlanSource.slice(0, 12000) },
@@ -2242,23 +2247,24 @@ export function AIChat() {
               );
             }
 
-            // Finish this slice immediately. Auto-awaiting Primary Go after Auth/Foundation
-            // left the composer stuck on "Grok Code running on server".
+            // Finish this slice immediately (do not nest another Go await — that stuck the composer).
+            // Queue Primary as a NEW turn after unlock so Landing / dashboards keep generating.
             const codingSliceLabel =
               (coding as { sliceLabel?: string | null }).sliceLabel ?? 'Foundation';
             const wouldAutoPrimary = shouldAutoRunPrimarySliceAfterFoundation({
-              fastPrototypeTurn,
+              fastPrototypeTurn: fastPrototypeTurn || uiMockupStarted,
               codingOk: true,
               projectKey: diskProjectKey || projectName,
               sliceLabel: codingSliceLabel,
             });
             if (wouldAutoPrimary) {
               markFastPrototypePrimaryAutoRun(diskProjectKey || projectName);
+              queuePrimaryAfterUnlock = true;
               pushActivity(
-                'Slice applied. Send “continue building” for the next (primary) slice — chat is unlocked.',
+                'Foundation slice applied — starting the next (primary) slice automatically…',
                 'success',
               );
-              setAccessoryHint('Slice done — type continue building for the next screen.');
+              setAccessoryHint('Starting primary screens next…');
               window.setTimeout(() => setAccessoryHint(null), 8000);
             }
 
@@ -2306,7 +2312,14 @@ export function AIChat() {
         }),
       );
     } finally {
+      sendingRef.current = false;
       setSending(false);
+      if (queuePrimaryAfterUnlock) {
+        window.setTimeout(() => {
+          if (sendingRef.current) return;
+          void sendChatRef.current('continue building');
+        }, 80);
+      }
       if (openTalkDesiredRef.current && !scheduledTts) {
         resumeOpenTalkIfWanted();
     }

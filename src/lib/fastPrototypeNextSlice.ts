@@ -59,3 +59,19 @@ export function shouldAutoRunPrimarySliceAfterFoundation(opts: {
 
 export const FAST_PROTOTYPE_PRIMARY_SLICE_INSTRUCTION =
   'START_CODING — SLICE: Primary — implement the NEXT incomplete primary feature slice only (Build → Debug → Next). If Foundation shell already exists, do NOT rewrite it. Prefer the core user job from Master Plan (e.g. reading exercise / kid practice screen). Prefer app/, src/, components/, pages/ — not master-plan/ui-brief only. File blocks for this slice only — not the full §4 app.';
+
+/**
+ * User/product asked for the next slice (not first Foundation).
+ * Bare "go" / "start coding" stay Foundation on a greenfield turn.
+ */
+export function userNoteRequestsNextSlice(note?: string | null): boolean {
+  const t = String(note || '').trim();
+  if (!t) return false;
+  if (/SLICE:\s*Primary/i.test(t)) return true;
+  if (/\bdo NOT rewrite Foundation\b/i.test(t)) return true;
+  if (/\bNEXT incomplete (primary )?feature slice\b/i.test(t)) return true;
+  if (/\b(continue|keep)\s+(building|implementing)\b/i.test(t)) return true;
+  if (/\bnext\s+slice\b/i.test(t)) return true;
+  if (/^(continue|continue\.|continue!|build\s+next)$/i.test(t)) return true;
+  return false;
+}
