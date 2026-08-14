@@ -76,6 +76,7 @@ import {
 import {
   buildAutopilotSliceInstruction,
   FAST_PROTOTYPE_PRIMARY_SLICE_INSTRUCTION,
+  APPLY_IN_FLIGHT_STALL_MS,
   FOUNDATION_APPLY_STALL_MS,
   getAutopilotSliceCount,
   incrementAutopilotSliceCount,
@@ -1323,14 +1324,14 @@ export function AIChat() {
 
   const sendChatRef = useRef<(override?: string) => Promise<void>>(async () => {});
 
-  // Foundation apply used to freeze on "Runnable skeleton filled". Unlock coding; do not auto-start Primary.
+  // Foundation apply used to freeze on "Applying N files" / "Runnable skeleton filled".
+  // Unlock coding; do not auto-start Primary.
   useEffect(() => {
     if (grokActivity.tone !== 'work') return;
     const last = grokActivity.liveLog[grokActivity.liveLog.length - 1]?.message || '';
-    if (looksLikeApplyInFlightStall(last)) {
-      return;
-    }
-    if (!looksLikePostApplyCodingStall(last)) return;
+    const applyInFlight = looksLikeApplyInFlightStall(last);
+    const postApplyStall = looksLikePostApplyCodingStall(last);
+    if (!applyInFlight && !postApplyStall) return;
     const timer = window.setTimeout(() => {
       if (!codingActivityRef.current) return;
       if (foundationStallRecoveredRef.current) return;
@@ -1338,9 +1339,21 @@ export function AIChat() {
       foundationStallRecoveredRef.current = true;
       const { projectName } = resolveActiveProjectIds(diskProjectKey);
       abortGoCodeWait(projectName);
-      pushActivity('Coding complete. Send Continue for the next slice — not started automatically.', 'success');
+      if (applyInFlight) {
+        pushActivity(
+          'Apply wait timed out — files may already be on disk. Send Continue for the next slice — not started automatically.',
+          'warn',
+        );
+      } else {
+        pushActivity(
+          'Coding complete. Send Continue for the next slice — not started automatically.',
+          'success',
+        );
+      }
       resetCodingActivity();
-    }, FOUNDATION_APPLY_STALL_MS);
+      sendingRef.current = false;
+      setSending(false);
+    }, applyInFlight ? APPLY_IN_FLIGHT_STALL_MS : FOUNDATION_APPLY_STALL_MS);
     return () => window.clearTimeout(timer);
   }, [diskProjectKey, grokActivity.liveLog, grokActivity.tone, pushActivity, resetCodingActivity]);
 

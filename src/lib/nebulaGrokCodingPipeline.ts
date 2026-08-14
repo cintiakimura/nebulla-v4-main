@@ -50,6 +50,8 @@ const GO_POLL_TIMEOUT_MESSAGE =
 /** One poll loop per project — do not join ADHD + children onto the same waiter. */
 const goCodePollInFlightByProject = new Map<string, Promise<GoCodePayload>>();
 const goCodePollAbortedByProject = new Set<string>();
+const goSessionAbortedByProject = new Set<string>();
+const applyAbortByProject = new Map<string, AbortController>();
 
 function goPollProjectKey(projectName?: string): string {
   return (projectName || '').trim() || 'default';
@@ -60,11 +62,21 @@ function clearCodingLocks(projectName: string): void {
   setGrokCodingActive(false);
 }
 
-/** Stop / timeout: abort poll wait and drop in-flight so UI Gen is not refused. */
+function isGoSessionAborted(projectName: string): boolean {
+  return goSessionAbortedByProject.has(goPollProjectKey(projectName));
+}
+
+/** Stop / timeout: abort poll + apply wait and drop in-flight so UI Gen is not refused. */
 export function abortGoCodeWait(projectName: string): void {
   const key = goPollProjectKey(projectName);
   goCodePollAbortedByProject.add(key);
+  goSessionAbortedByProject.add(key);
   goCodePollInFlightByProject.delete(key);
+  try {
+    applyAbortByProject.get(key)?.abort();
+  } catch {
+    /* ignore */
+  }
   clearCodingLocks(projectName);
 }
 
@@ -335,8 +347,19 @@ export async function applyGeneratedFiles(
   const stopApplyWait = startGrokActivityWaitTicker('Writing files to cloud workspace', (msg, kind, opts) =>
     onProgress?.(msg, kind, opts),
   );
+  const projectKey = goPollProjectKey(artifactContext?.projectName);
+  const applyAbort = new AbortController();
+  applyAbortByProject.set(projectKey, applyAbort);
   try {
     const applyTimed = abortAfter(APPLY_GENERATED_TIMEOUT_MS);
+    const onAbortTimed = () => {
+      try {
+        applyAbort.abort();
+      } catch {
+        /* ignore */
+      }
+    };
+    applyTimed.signal?.addEventListener('abort', onAbortTimed);
     let apply: {
       success?: boolean;
       written?: string[];
@@ -357,7 +380,7 @@ export async function applyGeneratedFiles(
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        signal: applyTimed.signal,
+        signal: applyAbort.signal,
         body: JSON.stringify(
           withProjectBody({
             content: clean,
@@ -535,6 +558,7 @@ export async function applyGeneratedFiles(
     onProgress?.(msg, 'error');
     return { ok: false, writtenCount: 0, skippedCount: 0, writtenPaths: [], message: msg, error: msg };
   } finally {
+    applyAbortByProject.delete(projectKey);
     stopApplyWait();
   }
 }
@@ -910,6 +934,9 @@ export async function runGoCodeAndApply(options: {
 
   markFoundationGoInFlight(projectName, true);
   setGrokCodingActive(true);
+  const jobKey = goPollProjectKey(projectName);
+  goSessionAbortedByProject.delete(jobKey);
+  goCodePollAbortedByProject.delete(jobKey);
   try {
     onProgress?.(`Go — ${goCodePassWaitLabel(1, noteSlice)}`, 'info');
 
@@ -921,6 +948,7 @@ export async function runGoCodeAndApply(options: {
     let lastRunnable: { runnableRoot?: boolean; runnableStatusLine?: string } = {};
 
     for (let pass = 0; pass < GO_CODE_MAX_PASSES; pass++) {
+      if (isGoSessionAborted(projectName)) break;
       passes = pass + 1;
       const continuation = pass > 0;
       const passMessages = continuation
@@ -1018,6 +1046,7 @@ export async function runGoCodeAndApply(options: {
       });
       totalWritten += apply.writtenCount;
       allWrittenPaths.push(...apply.writtenPaths);
+      if (isGoSessionAborted(projectName)) break;
       if (typeof apply.runnableRoot === 'boolean') {
         lastRunnable = {
           runnableRoot: apply.runnableRoot,
@@ -1105,7 +1134,7 @@ export async function runGoCodeAndApply(options: {
     reportGoApplyTelemetry({ writtenPaths: allWrittenPaths, sliceLabel: sliceLabel || undefined });
 
     const ok = exit.ok;
-    if (ok) {
+    if (ok && !isGoSessionAborted(projectName)) {
       // Do not await — artifact sync used to freeze chat after files landed.
       // Client must still refresh mind map and open Plan (server hydrate does not dispatch UI events).
       void afterFilesAppliedArtifacts(userNote, projectName, onProgress);

@@ -2722,27 +2722,11 @@ No approved UI code yet.
           ? String(bodyEarly.projectName).trim()
           : "Untitled Project";
 
-      let interactivePreviewPath: string | undefined;
-      // Inspect only on this request — ensureRunnableSkeleton used to run before res.json
-      // and left the client on "Writing files to cloud workspace" after files were already on disk.
       if (written.length > 0) {
         try {
           runnable = inspectRunnableSkeleton(workspaceRoot);
         } catch {
           runnable = null;
-        }
-        try {
-          const diskUi = listProductUiFiles(workspaceRoot, 24);
-          const diskDepth = assessApplyRouteDepth(diskUi.length ? diskUi : written);
-          if (!diskDepth.zeroProductRoutes) {
-            const preview = ensureInteractiveProductPreview(workspaceRoot, {
-              projectName: projectNameEarly,
-              productFiles: diskUi.length ? diskUi : written,
-            });
-            interactivePreviewPath = preview.path;
-          }
-        } catch (previewErr) {
-          console.warn("[apply-generated] interactive product preview:", previewErr);
         }
       }
 
@@ -2759,15 +2743,14 @@ No approved UI code yet.
         runnableStatusLine: runnable ? runnableStatusLine(runnable) : undefined,
         skeletonWritten: skeletonWritten.length ? skeletonWritten : undefined,
         deployable: Boolean(runnable?.runnable),
-        interactivePreview: Boolean(interactivePreviewPath),
-        interactivePreviewPath,
+        interactivePreview: false,
         productRoutes: applyDepth.productRoutes,
         thinCodeShell: applyDepth.thinCodeShell,
         zeroProductRoutes: applyDepth.zeroProductRoutes,
       });
 
-      // Defer so this request returns even if plan/mind-map IO is slow — do not block
-      // the next /sync-project-artifacts or a hard refresh on the same Node thread.
+      // Defer disk walks / preview HTML / plan sync — they used to run before res.json
+      // and left chat stuck on "Applying N file(s) to workspace".
       if (written.length > 0) {
         const pp = projectPathsFor(req);
         const body = req.body || {};
@@ -2779,6 +2762,14 @@ No approved UI code yet.
         const writtenSnapshot = [...written];
         setTimeout(() => {
           try {
+            const diskUi = listProductUiFiles(workspaceRoot, 24);
+            const diskDepth = assessApplyRouteDepth(diskUi.length ? diskUi : writtenSnapshot);
+            if (!diskDepth.zeroProductRoutes) {
+              ensureInteractiveProductPreview(workspaceRoot, {
+                projectName,
+                productFiles: diskUi.length ? diskUi : writtenSnapshot,
+              });
+            }
             if (writtenPathsNeedRunnableSkeleton(writtenSnapshot)) {
               ensureRunnableSkeleton(workspaceRoot, { projectName });
             }

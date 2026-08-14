@@ -54,8 +54,10 @@ assert.equal(
   false,
   'consume ack finally must not touch window without a guard (Node / non-browser)',
 );
-assert.match(applyFn, /applyTimed\.signal|signal: applyTimed/);
+assert.match(applyFn, /signal: applyAbort\.signal/);
+assert.match(applyFn, /applyAbortByProject/);
 assert.match(pollFn, /pollTimed\.signal|signal: pollTimed/);
+assert.match(goFn, /isGoSessionAborted\(projectName\)/);
 
 assert.equal(
   /await fetch\(withProjectQuery\('\/api\/grok\/go-code\/poll'\)/.test(goFn),
@@ -114,6 +116,8 @@ assert.equal(
 
 assert.match(chat, /looksLikePostApplyCodingStall/);
 assert.match(chat, /looksLikeApplyInFlightStall/);
+assert.match(chat, /APPLY_IN_FLIGHT_STALL_MS/);
+assert.match(chat, /Apply wait timed out/);
 assert.equal(
   /sendChatRef\.current\('continue building'\)/.test(chat),
   false,
@@ -133,6 +137,20 @@ assert.equal(
 
 const applyRoute = server.slice(server.indexOf('app.post("/api/files/apply-generated"'));
 assert.match(applyRoute, /res\.json\(/);
+{
+  const jsonIdx = applyRoute.indexOf('res.json(');
+  const previewIdx = applyRoute.indexOf('ensureInteractiveProductPreview');
+  const listUiIdx = applyRoute.indexOf('listProductUiFiles');
+  assert.ok(jsonIdx >= 0, 'apply-generated must res.json');
+  assert.ok(
+    previewIdx < 0 || previewIdx > jsonIdx,
+    'res.json must run before ensureInteractiveProductPreview',
+  );
+  assert.ok(
+    listUiIdx < 0 || listUiIdx > jsonIdx,
+    'res.json must run before listProductUiFiles',
+  );
+}
 assert.match(
   applyRoute,
   /setTimeout\(/,

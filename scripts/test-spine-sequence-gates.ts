@@ -68,6 +68,9 @@ assert.match(pipeline, /goPollBackoffMs\(i\)/);
 assert.match(pipeline, /clearCodingLocks\(projectName\)/);
 assert.match(pipeline, /export function abortGoCodeWait/);
 assert.match(chat, /abortGoCodeWait\(projectName\)/);
+assert.match(chat, /APPLY_IN_FLIGHT_STALL_MS/);
+assert.match(pipeline, /applyAbortByProject/);
+assert.match(pipeline, /if \(isGoSessionAborted\(projectName\)\) break/);
 
 section("Gate C preparing is not coding");
 {

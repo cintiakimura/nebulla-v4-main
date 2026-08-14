@@ -221,6 +221,8 @@ export function userNoteRequestsNextSlice(note?: string | null): boolean {
 
 /** Last activity line after apply — coding turn often froze here. */
 export const FOUNDATION_APPLY_STALL_MS = 4000;
+/** Apply POST stuck on "Applying N files" — unlock without starting Primary. */
+export const APPLY_IN_FLIGHT_STALL_MS = 15_000;
 
 export function looksLikePostApplyCodingStall(lastLogMessage?: string | null): boolean {
   return /Runnable skeleton filled/i.test(String(lastLogMessage || ''));

@@ -15,6 +15,7 @@ import {
   userNoteRequestsNextSlice,
   looksLikePostApplyCodingStall,
   looksLikeApplyInFlightStall,
+  APPLY_IN_FLIGHT_STALL_MS,
   FOUNDATION_APPLY_STALL_MS,
   nextAutopilotSliceLabel,
   shouldAutopilotAdvance,
@@ -167,6 +168,7 @@ assert.equal(looksLikeApplyInFlightStall('Writing files to cloud workspace'), tr
 assert.equal(looksLikeApplyInFlightStall('Applying 3 file(s) to workspace'), true);
 assert.equal(looksLikeApplyInFlightStall('Wrote 14 file(s) to workspace'), false);
 assert.ok(FOUNDATION_APPLY_STALL_MS >= 3000 && FOUNDATION_APPLY_STALL_MS <= 8000);
+assert.equal(APPLY_IN_FLIGHT_STALL_MS, 15_000);
 
 {
   const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -217,7 +219,14 @@ assert.ok(FOUNDATION_APPLY_STALL_MS >= 3000 && FOUNDATION_APPLY_STALL_MS <= 8000
     'post-apply stall must not start Primary in the same wait',
   );
   assert.match(stallBlock, /looksLikeApplyInFlightStall/);
+  assert.match(stallBlock, /APPLY_IN_FLIGHT_STALL_MS/);
+  assert.match(stallBlock, /Apply wait timed out/);
   assert.match(stallBlock, /Coding complete/);
+  assert.equal(
+    /Still writing files/.test(stallBlock),
+    false,
+    'apply-in-flight recovery must not wait forever',
+  );
   assert.equal(
     /sendChatRef\.current\(/.test(stallBlock),
     false,
