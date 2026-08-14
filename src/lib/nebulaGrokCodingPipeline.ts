@@ -24,6 +24,9 @@ const GO_CODE_MAX_PASSES = 2;
 const GO_CONSUME_TIMEOUT_MS = 4000;
 /** Hung apply left chat on "Writing files to cloud workspace". 3-file writes must not wait 45s. */
 const APPLY_GENERATED_TIMEOUT_MS = 12_000;
+const APPLY_TIMEOUT_MESSAGE =
+  'Apply timed out after 12s — checking whether files already landed on disk.';
+const APPLY_DISK_CONFIRM_MS = 4_000;
 /** One Go poll HTTP call must not block the whole wait. */
 const GO_POLL_FETCH_TIMEOUT_MS = 12_000;
 /** Hard max wait for Grok Code generation (matches server GO_CODE_JOB_TIMEOUT_MS). */
@@ -44,6 +47,47 @@ function isAbortError(e: unknown): boolean {
     return e.name === 'AbortError' || /aborted|abort/i.test(e.message);
   }
   return /aborted|abort/i.test(String(e));
+}
+
+function isApplyWaitTimeout(e: unknown): boolean {
+  if (isAbortError(e)) return true;
+  const msg = e instanceof Error ? e.message : String(e || '');
+  return /Apply timed out after 12s|The operation was aborted/i.test(msg);
+}
+
+async function confirmAppliedPathsOnDisk(expected: string[]): Promise<string[]> {
+  const want = expected
+    .map((p) => p.replace(/\\/g, '/').replace(/^\.\//, ''))
+    .filter((p) => p && !/supabase|firebase/i.test(p));
+  if (want.length === 0) return [];
+  const timed = abortAfter(APPLY_DISK_CONFIRM_MS);
+  try {
+    const data = await Promise.race([
+      fetchJson<{ nebulaFiles?: { relativePath?: string }[] }>(withProjectQuery('/api/source-control/overview'), {
+        credentials: 'include',
+        signal: timed.signal,
+      }),
+      rejectAfter(APPLY_DISK_CONFIRM_MS, 'disk confirm timed out'),
+    ]);
+    const onDisk = new Set(
+      (data.nebulaFiles ?? [])
+        .map((f) => String(f.relativePath || '').replace(/\\/g, '/').replace(/^\.\//, ''))
+        .filter(Boolean),
+    );
+    return want.filter((p) => onDisk.has(p) || [...onDisk].some((d) => d === p || d.endsWith(`/${p}`)));
+  } catch {
+    return [];
+  } finally {
+    timed.cancel();
+  }
+}
+
+function rejectAfter(ms: number, message: string): Promise<never> {
+  return new Promise((_, reject) => {
+    const w = typeof window !== 'undefined' ? window : null;
+    if (w) w.setTimeout(() => reject(new Error(message)), ms);
+    else setTimeout(() => reject(new Error(message)), ms);
+  });
 }
 
 function abortAfter(ms: number): { signal?: AbortSignal; cancel: () => void } {
@@ -257,8 +301,10 @@ export async function applyGeneratedFiles(
   if (paths.length > 0) {
     onProgress?.(`Applying ${paths.length} file(s) to workspace`, 'info');
   }
+  const stopApplyWait = startGrokActivityWaitTicker('Writing files to cloud workspace', (msg, kind, opts) =>
+    onProgress?.(msg, kind, opts),
+  );
   try {
-    onProgress?.('Writing files to cloud workspace', 'info');
     const applyTimed = abortAfter(APPLY_GENERATED_TIMEOUT_MS);
     let apply: {
       success?: boolean;
@@ -276,7 +322,7 @@ export async function applyGeneratedFiles(
       interactivePreviewPath?: string;
     };
     try {
-      apply = await fetchJson(withProjectQuery('/api/files/apply-generated'), {
+      const fetchP = fetchJson(withProjectQuery('/api/files/apply-generated'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
@@ -288,7 +334,14 @@ export async function applyGeneratedFiles(
             projectName: artifactContext?.projectName?.trim() || undefined,
           }),
         ),
+      }) as Promise<typeof apply>;
+      void fetchP.catch(() => {
+        /* abort after the 12s race — avoid an unhandled rejection */
       });
+      apply = await Promise.race([
+        fetchP,
+        rejectAfter(APPLY_GENERATED_TIMEOUT_MS, APPLY_TIMEOUT_MESSAGE),
+      ]);
     } finally {
       applyTimed.cancel();
     }
@@ -341,6 +394,9 @@ export async function applyGeneratedFiles(
         'warn',
       );
     }
+    if (writtenCount === 0 && skippedCount === 0) {
+      onProgress?.('No writable file blocks applied', 'warn');
+    }
     if (writtenCount > 0) {
       // Defer preview/tree events — sync dispatch after skeleton froze the coding turn
       // (listeners hit the API while apply-generated's setImmediate still owns the event loop).
@@ -381,36 +437,54 @@ export async function applyGeneratedFiles(
     };
   } catch (e) {
     const msg = e instanceof Error ? e.message : 'Failed to apply files';
-    if (isAbortError(e)) {
-      const assumed = extractGrokFilePaths(clean);
-      onProgress?.(
-        'Apply wait timed out — files often already landed; continuing (mind map + next slice)',
-        'warn',
-      );
-      window.setTimeout(() => {
-        try {
-          window.dispatchEvent(new CustomEvent('nebula-files-applied'));
-          window.dispatchEvent(new CustomEvent('nebula-mind-map-updated'));
-          window.dispatchEvent(new CustomEvent('nebula-open-mind-map'));
-        } catch {
-          /* ignore */
-        }
-        void afterFilesAppliedArtifacts(
-          artifactContext?.userNote,
-          artifactContext?.projectName,
-          onProgress,
+    if (isApplyWaitTimeout(e)) {
+      const expected = extractGrokFilePaths(clean);
+      const found = await confirmAppliedPathsOnDisk(expected);
+      if (found.length > 0) {
+        onProgress?.(
+          `Apply finished — ${found.length} file(s) already on disk (write wait timed out)`,
+          'success',
         );
-      }, 0);
+        window.setTimeout(() => {
+          try {
+            window.dispatchEvent(new CustomEvent('nebula-files-applied'));
+            window.dispatchEvent(new CustomEvent('nebula-reload-app-preview'));
+          } catch {
+            /* ignore */
+          }
+          if (!artifactContext?.skipPostSync) {
+            void afterFilesAppliedArtifacts(
+              artifactContext?.userNote,
+              artifactContext?.projectName,
+              onProgress,
+            );
+          }
+        }, 0);
+        return {
+          ok: true,
+          writtenCount: found.length,
+          skippedCount: 0,
+          writtenPaths: found,
+          message: `Applied ${found.length} file(s) (confirmed on disk after write wait timed out).`,
+        };
+      }
+      onProgress?.(
+        'Apply timed out — files were not confirmed on disk. Try Go again.',
+        'error',
+      );
       return {
-        ok: assumed.length > 0,
-        writtenCount: assumed.length,
+        ok: false,
+        writtenCount: 0,
         skippedCount: 0,
-        writtenPaths: assumed,
-        message: 'Apply timed out; continuing with requested file paths.',
+        writtenPaths: [],
+        message: 'Apply timed out — files were not confirmed on disk.',
+        error: APPLY_TIMEOUT_MESSAGE,
       };
     }
     onProgress?.(msg, 'error');
     return { ok: false, writtenCount: 0, skippedCount: 0, writtenPaths: [], message: msg, error: msg };
+  } finally {
+    stopApplyWait();
   }
 }
 

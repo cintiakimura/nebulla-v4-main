@@ -76,6 +76,15 @@ assert.match(
   'Go success must refresh mind map / Plan (not skip client events)',
 );
 assert.match(pipeline, /APPLY_GENERATED_TIMEOUT_MS = 12_000/);
+assert.match(applyFn, /Promise\.race/);
+assert.match(applyFn, /confirmAppliedPathsOnDisk|source-control\/overview/);
+assert.match(applyFn, /Apply finished —|already on disk/);
+assert.match(applyFn, /files were not confirmed on disk/i);
+assert.equal(
+  /Still writing files to the workspace — waiting for apply to finish/.test(chat),
+  false,
+  'apply-in-flight stall must not extend writing… forever',
+);
 
 assert.match(
   applyFn,

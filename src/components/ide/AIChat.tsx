@@ -1296,12 +1296,8 @@ export function AIChat() {
     if (grokActivity.tone !== 'work') return;
     const last = grokActivity.liveLog[grokActivity.liveLog.length - 1]?.message || '';
     if (looksLikeApplyInFlightStall(last)) {
-      const waitTimer = window.setTimeout(() => {
-        if (!codingActivityRef.current) return;
-        if (autoSliceAbortRef.current) return;
-        pushActivity('Still writing files to the workspace — waiting for apply to finish…', 'wait');
-      }, FOUNDATION_APPLY_STALL_MS);
-      return () => window.clearTimeout(waitTimer);
+      // applyGeneratedFiles owns the 12s hard timeout + disk confirm — do not extend "writing…"
+      return;
     }
     if (!looksLikePostApplyCodingStall(last)) return;
     const timer = window.setTimeout(() => {

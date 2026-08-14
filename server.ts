@@ -2596,7 +2596,8 @@ No approved UI code yet.
       }
       const userNoteGate =
         typeof req.body?.userNote === "string" ? String(req.body.userNote) : "";
-      const baasFilter = filterUnsolicitedBaaSBlocks(blocks, `${planBlob}\n${userNoteGate}`);
+      const baasPlanNote = `${planBlob}\n${userNoteGate}`;
+      const baasFilter = filterUnsolicitedBaaSBlocks(blocks, baasPlanNote);
       const blocksToWrite = baasFilter.kept;
       for (const p of baasFilter.skipped) skipped.push(p);
 
@@ -2627,23 +2628,14 @@ No approved UI code yet.
           : "Untitled Project";
 
       let interactivePreviewPath: string | undefined;
-      if (written.length > 0 && writtenPathsNeedRunnableSkeleton(written)) {
+      // Inspect only on this request — ensureRunnableSkeleton used to run before res.json
+      // and left the client on "Writing files to cloud workspace" after files were already on disk.
+      if (written.length > 0) {
         try {
-          const ensured = ensureRunnableSkeleton(workspaceRoot, {
-            projectName: projectNameEarly,
-          });
-          runnable = ensured;
-          skeletonWritten = ensured.written || [];
-          for (const rel of skeletonWritten) {
-            if (!written.includes(rel)) written.push(rel);
-          }
-        } catch (skelErr) {
-          console.warn("[apply-generated] runnable skeleton:", skelErr);
           runnable = inspectRunnableSkeleton(workspaceRoot);
+        } catch {
+          runnable = null;
         }
-        /* After product UI files exist, do not write public/product-preview (role-picker mock). */
-      } else if (written.length > 0) {
-        runnable = inspectRunnableSkeleton(workspaceRoot);
       }
 
       res.json({
@@ -2671,10 +2663,14 @@ No approved UI code yet.
         const projectName =
           typeof body.projectName === "string" && body.projectName.trim()
             ? String(body.projectName).trim()
-            : "Untitled Project";
+            : projectNameEarly;
         const userNote = typeof body.userNote === "string" ? body.userNote.trim() : "";
+        const writtenSnapshot = [...written];
         setTimeout(() => {
           try {
+            if (writtenPathsNeedRunnableSkeleton(writtenSnapshot)) {
+              ensureRunnableSkeleton(workspaceRoot, { projectName });
+            }
             bootstrapMasterPlanFromWorkspace({
               workspaceRoot: pp.workspaceRoot,
               masterPlanPath: pp.masterPlanPath,
