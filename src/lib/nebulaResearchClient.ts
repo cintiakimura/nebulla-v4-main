@@ -14,6 +14,14 @@ import {
 } from '../../lib/researchStages';
 import { isFoundationGoInFlight } from './foundationHeavyJob';
 
+export {
+  RESEARCH_STAGE_BRIEF,
+  RESEARCH_STAGE_MERGING,
+  RESEARCH_STAGE_SEARCHING,
+  RESEARCH_STAGE_WRITING,
+  RESEARCH_STOPPED,
+} from '../../lib/researchStages';
+
 export type ResearchStrokeResult = {
   ok: boolean;
   error?: string;

@@ -111,8 +111,7 @@ import {
   readinessBlocksAutoFoundation,
   setInferenceFirstStage,
 } from '../../lib/uiMockupGate';
-import { ensureResearchBeforeUiAndGo } from '../../lib/nebulaResearchClient';
-import { RESEARCH_STAGE_BRIEF, RESEARCH_STOPPED } from '../../lib/researchStages';
+import { ensureResearchBeforeUiAndGo, RESEARCH_STAGE_BRIEF, RESEARCH_STOPPED } from '../../lib/nebulaResearchClient';
 import { createProjectForCurrentSession } from '../../lib/nebulaCloud';
 import { handleSmartChatMessage, type SmartChatFilePreview } from '../../lib/smartChatHandler';
 import { isMasterPlanCompleteForDiscovery } from '../../lib/masterPlanSections';
