@@ -8,6 +8,7 @@ import { getGrokRequestHeaders } from './grokUserKey';
 import { formatGoBlockedByPlanMessage } from './masterPlanStatus';
 import { reportGoApplyTelemetry } from './contractTelemetryClient';
 import { assessOversizedGoApply, parseGoSliceLabel, type GoSliceLabel } from '../../lib/goSliceContract';
+import { UNSOLICITED_BAAS_SKIP_REASON } from '../../lib/mvpStackContract';
 import { withProjectBody, withProjectQuery } from './nebulaProjectApi';
 import { triggerUiStudioBetaAfterFilesApplied } from './uiStudioBetaEngine';
 import {
@@ -389,10 +390,7 @@ export async function applyGeneratedFiles(
       skippedCount > 0 &&
       (apply.skipped || []).some((p) => /supabase|firebase/i.test(p))
     ) {
-      onProgress?.(
-        `Skipped unsolicited vendor file(s) (Supabase/Firebase not in plan)`,
-        'warn',
-      );
+      onProgress?.(UNSOLICITED_BAAS_SKIP_REASON, 'warn');
     }
     if (writtenCount === 0 && skippedCount === 0) {
       onProgress?.('No writable file blocks applied', 'warn');

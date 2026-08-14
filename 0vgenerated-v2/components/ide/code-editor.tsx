@@ -11,66 +11,33 @@ const tabs = [
 ];
 
 const codeContent = `import { useState, useEffect } from 'react'
-import { createClient } from '@/lib/supabase/client'
-import type { User, Session } from '@supabase/supabase-js'
 
-interface AuthState {
-  user: User | null
-  session: Session | null
-  loading: boolean
-}
+type Role = 'teacher' | 'student' | null
 
 export function useAuth() {
-  const [state, setState] = useState<AuthState>({
-    user: null,
-    session: null,
-    loading: true,
-  })
-
-  const supabase = createClient()
+  const [role, setRole] = useState<Role>(null)
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    // Get initial session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setState({
-        user: session?.user ?? null,
-        session,
-        loading: false,
-      })
-    })
-
-    // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (_event, session) => {
-        setState({
-          user: session?.user ?? null,
-          session,
-          loading: false,
-        })
-      }
-    )
-
-    return () => subscription.unsubscribe()
+    try {
+      const saved = localStorage.getItem('mvp-role')
+      setRole(saved === 'teacher' || saved === 'student' ? saved : null)
+    } finally {
+      setLoading(false)
+    }
   }, [])
 
-  const signIn = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    })
-    if (error) throw error
+  const signIn = async (next: Role) => {
+    if (next) localStorage.setItem('mvp-role', next)
+    setRole(next)
   }
 
   const signOut = async () => {
-    const { error } = await supabase.auth.signOut()
-    if (error) throw error
+    localStorage.removeItem('mvp-role')
+    setRole(null)
   }
 
-  return {
-    ...state,
-    signIn,
-    signOut,
-  }
+  return { role, loading, signIn, signOut }
 }`;
 
 function highlightSyntax(code: string) {

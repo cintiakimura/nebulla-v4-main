@@ -48,7 +48,7 @@ import {
 } from '../../lib/uiGenStatusLabels';
 import { clearUiMockupStageFlags } from '../../lib/uiMockupGate';
 import { isLoadableStudioModel } from '../../../lib/uiMockupArtifactHonesty';
-import { NEBULA_STUDIO_SHOW_LIVE_APP } from '../../lib/uiStudioBetaEngine';
+import { NEBULA_STUDIO_SHOW_LIVE_APP, NEBULA_UI_STUDIO_BETA_BUSY } from '../../lib/uiStudioBetaEngine';
 
 const V0_FETCH_TIMEOUT_MS = 360_000;
 
@@ -574,6 +574,7 @@ export function IdeUiStudioBeta({
         regeneration_count?: number;
         max_regenerations?: number;
         final_status?: string;
+        recovery_path?: string;
         patternMode?: 'seed' | 'figma';
         quality_gate_result?: string;
         preview_applied?: boolean;
@@ -592,6 +593,14 @@ export function IdeUiStudioBeta({
       };
       if (typeof d.regeneration_count === 'number') setRegenCount(d.regeneration_count);
       if (typeof d.max_regenerations === 'number') setMaxRegens(d.max_regenerations);
+      if (
+        (d.regeneration_count || 0) >= (d.max_regenerations || 3) &&
+        (d.regeneration_count || 0) > 0 &&
+        d.recovery_path &&
+        d.recovery_path !== 'none'
+      ) {
+        setPreferenceRecovery(true);
+      }
       if (d.user_visible_stage) setEngineStage(d.user_visible_stage);
       if (d.patternMode) setPatternMode(d.patternMode);
       else if (d.figma_fallback_used) setPatternMode('seed');
@@ -1015,13 +1024,11 @@ export function IdeUiStudioBeta({
         setPreferenceRecovery(true);
         setPreferenceQuestion(
           data.preference_recovery_question ||
-            'I can see this still isn’t right. What bothers you most — layout, colors, spacing, missing sections, or overall style?',
+            t('uiStudio.generationsExhausted', { max: data.max_regenerations || maxRegens }),
         );
-        setError(data.error || 'Regeneration limit reached — preference recovery');
-        const waiting = buildWaitingModel(data.error || 'Preference recovery needed');
-        setModel(waiting);
-        baselineRef.current = cloneModel(waiting);
-        setHasEnginePreview(false);
+        setError('');
+        setEngineStage(data.user_visible_stage || 'Preference recovery needed');
+        // Keep last mockup — exhausted Generate again must not wipe the canvas.
         window.dispatchEvent(
           new CustomEvent('nebula-ui-studio-beta-complete', {
             detail: {
@@ -1201,7 +1208,22 @@ export function IdeUiStudioBeta({
       });
     };
     const onComplete = (ev: Event) => {
-      const detail = (ev as CustomEvent<{ editorModel?: EditorModel; context?: { page_name?: string } }>).detail;
+      const detail = (ev as CustomEvent<{
+        editorModel?: EditorModel;
+        context?: { page_name?: string; regeneration_count?: number; max_regenerations?: number };
+        regeneration_count?: number;
+        max_regenerations?: number;
+        preference_recovery?: boolean;
+      }>).detail;
+      if (typeof detail?.regeneration_count === 'number') setRegenCount(detail.regeneration_count);
+      else if (typeof detail?.context?.regeneration_count === 'number') {
+        setRegenCount(detail.context.regeneration_count);
+      }
+      if (typeof detail?.max_regenerations === 'number') setMaxRegens(detail.max_regenerations);
+      else if (typeof detail?.context?.max_regenerations === 'number') {
+        setMaxRegens(detail.context.max_regenerations);
+      }
+      if (detail?.preference_recovery) setPreferenceRecovery(true);
       if (detail?.editorModel?.pages && !isNebullaIdePlaceholderShell(detail.editorModel)) {
         applyEditorModel(
           detail.editorModel,
@@ -1216,11 +1238,19 @@ export function IdeUiStudioBeta({
         setEngineStage('Ready in preview');
       }
     };
+    const onBusy = (ev: Event) => {
+      const detail = (ev as CustomEvent<{ busy?: boolean; regeneration_count?: number; max_regenerations?: number }>).detail;
+      if (typeof detail?.busy === 'boolean') setBusy(detail.busy);
+      if (typeof detail?.regeneration_count === 'number') setRegenCount(detail.regeneration_count);
+      if (typeof detail?.max_regenerations === 'number') setMaxRegens(detail.max_regenerations);
+    };
     window.addEventListener('nebula-ui-studio-beta-run', onRun);
     window.addEventListener('nebula-ui-studio-beta-complete', onComplete);
+    window.addEventListener(NEBULA_UI_STUDIO_BETA_BUSY, onBusy);
     return () => {
       window.removeEventListener('nebula-ui-studio-beta-run', onRun);
       window.removeEventListener('nebula-ui-studio-beta-complete', onComplete);
+      window.removeEventListener(NEBULA_UI_STUDIO_BETA_BUSY, onBusy);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- mount listener once; runEngineGenerate closes over latest state via refs if needed
   }, [projectLabel, activePage]);
@@ -1764,6 +1794,14 @@ export function IdeUiStudioBeta({
   }
 
   const layerCount = page ? Object.keys(page.nodes).length : 0;
+  const atMaxRegens = regenCount >= maxRegens && regenCount > 0;
+  const remainingRegens = Math.max(0, maxRegens - regenCount);
+  const showPrimaryGenerate = !hasEnginePreview;
+  const showGenerateAgain = hasEnginePreview || regenCount > 0;
+  const generateAgainDisabled = busy || preferenceRecovery || atMaxRegens;
+  const generateAgainTitle = atMaxRegens
+    ? t('uiStudio.generationsExhausted', { max: maxRegens })
+    : t('uiStudio.generateAgainRemaining', { remaining: remainingRegens, max: maxRegens });
 
   return (
     <div
@@ -1776,9 +1814,18 @@ export function IdeUiStudioBeta({
             {error}
           </p>
         ) : null}
+        {atMaxRegens && !preferenceRecovery ? (
+          <p className="border-b border-border bg-card px-3 py-1.5 text-[11px] text-muted-foreground">
+            {t('uiStudio.generationsExhausted', { max: maxRegens })}
+          </p>
+        ) : null}
         {preferenceRecovery ? (
           <div className="border-b border-border bg-card px-3 py-2">
-            <p className="text-[11px] text-foreground whitespace-pre-wrap">{preferenceQuestion}</p>
+            <p className="text-[11px] text-foreground whitespace-pre-wrap">
+              {atMaxRegens
+                ? t('uiStudio.generationsExhausted', { max: maxRegens })
+                : preferenceQuestion}
+            </p>
             <div className="mt-2 flex flex-wrap gap-1.5">
               {(
                 [
@@ -1955,28 +2002,40 @@ export function IdeUiStudioBeta({
                 {engineStage}
               </span>
             ) : null}
-            <span className="hidden text-[10px] text-muted-foreground md:inline">
+            <span
+              className="rounded-md bg-secondary px-1.5 py-0.5 text-[10px] font-medium tabular-nums text-muted-foreground"
+              title={generateAgainTitle}
+            >
               {regenCount}/{maxRegens}
             </span>
-            <button
-              type="button"
-              disabled={busy}
-              onClick={() => void runEngineGenerate({ preferenceHints })}
-              className="btn-cyan rounded-md px-2.5 py-1 text-[11px] disabled:opacity-40 sm:px-3"
-              title={t('uiStudio.generateTitle')}
-            >
-              {busy ? <Loader2 className="mr-1 inline h-3 w-3 animate-spin" /> : null}
-              {t('uiStudio.generate')}
-            </button>
-            <button
-              type="button"
-              disabled={busy || preferenceRecovery || regenCount >= maxRegens}
-              onClick={() => void runEngineGenerate({ regenerate: true, preferenceHints })}
-              className="rounded-md border border-border px-2 py-1 text-[10px] text-foreground hover:bg-secondary disabled:opacity-40"
-              title={t('uiStudio.generateAgainTitle')}
-            >
-              {t('uiStudio.generateAgain')}
-            </button>
+            {showPrimaryGenerate ? (
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => void runEngineGenerate({ preferenceHints })}
+                className="btn-cyan rounded-md px-2.5 py-1 text-[11px] disabled:opacity-40 sm:px-3"
+                title={t('uiStudio.generateTitle')}
+              >
+                {busy ? <Loader2 className="mr-1 inline h-3 w-3 animate-spin" /> : null}
+                {t('uiStudio.generate')}
+              </button>
+            ) : null}
+            {showGenerateAgain ? (
+              <button
+                type="button"
+                disabled={generateAgainDisabled}
+                onClick={() => void runEngineGenerate({ regenerate: true, preferenceHints })}
+                className={cn(
+                  'rounded-md px-2 py-1 text-[10px] disabled:opacity-40',
+                  hasEnginePreview
+                    ? 'btn-cyan px-2.5 text-[11px] sm:px-3'
+                    : 'border border-border text-foreground hover:bg-secondary',
+                )}
+                title={generateAgainTitle}
+              >
+                {t('uiStudio.generateAgain')}
+              </button>
+            ) : null}
             {(lastGate === 'pass' || lastGate === 'repair') && hasEnginePreview ? (
               <button
                 type="button"
@@ -2039,7 +2098,7 @@ export function IdeUiStudioBeta({
               Coded app owns <strong className="font-medium">App Preview</strong>. This canvas is the
               editable visual model (not a second live product). Use{' '}
               <strong className="font-medium">Live app</strong> here to see the same Preview, or{' '}
-              <strong className="font-medium">Generate UI</strong> to refresh the model.
+              <strong className="font-medium">Generate again</strong> to refresh the model.
             </span>
             <button
               type="button"

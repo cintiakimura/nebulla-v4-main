@@ -4374,6 +4374,7 @@ ${modelJson}`;
         regeneration_count: policy.regeneration_count,
         max_regenerations: policy.max_regenerations,
         final_status: policy.final_status,
+        recovery_path: policy.recovery_path,
         page_key: policy.page_key,
         patternMode: meta.pattern_mode,
         quality_gate_result: meta.quality_gate_result,

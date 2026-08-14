@@ -1,5 +1,5 @@
 /**
- * MVP stack: no Supabase unless plan asks; artifact sync timeout constant.
+ * MVP stack: Render-only; no Supabase unless the user/plan explicitly names it.
  * Run: npx tsx scripts/test-mvp-stack-contract.ts
  */
 import assert from 'node:assert/strict';
@@ -13,6 +13,7 @@ import {
   planOrNoteAllowsExternalBaaS,
   shouldSkipUnsolicitedBaaSFile,
   sweepUnsolicitedBaaSFromWorkspace,
+  UNSOLICITED_BAAS_SKIP_REASON,
 } from '../lib/mvpStackContract.ts';
 import { SECURITY_BASELINE_DRAFT } from '../lib/securityBaselinePropose.ts';
 
@@ -21,15 +22,16 @@ const root = path.join(__dirname, '..');
 
 assert.equal(planOrNoteAllowsExternalBaaS('Expo mobile education app'), false);
 assert.equal(planOrNoteAllowsExternalBaaS('Use Supabase Auth + RLS'), true);
+assert.equal(planOrNoteAllowsExternalBaaS('I want Supabase'), true);
 assert.equal(
   planOrNoteAllowsExternalBaaS(SECURITY_BASELINE_DRAFT),
   false,
-  'security baseline prohibition must not count as choosing Supabase',
+  'security baseline must not count as choosing a hosted BaaS',
 );
 assert.equal(
   planOrNoteAllowsExternalBaaS(MVP_STACK_GO_BULLETS),
   false,
-  'Go stack bullets mentioning NOT Supabase must not allow the vendor',
+  'Go stack bullets must not count as choosing a hosted BaaS',
 );
 assert.equal(
   planOrNoteAllowsExternalBaaS(
@@ -46,7 +48,14 @@ assert.equal(
   ),
   true,
 );
-
+assert.equal(
+  shouldSkipUnsolicitedBaaSFile(
+    'src/utils/supabase-client.ts',
+    'export const url = process.env.SUPABASE_URL',
+    'kids reading MVP',
+  ),
+  true,
+);
 assert.equal(
   shouldSkipUnsolicitedBaaSFile(
     'lib/supabase.ts',
@@ -60,6 +69,14 @@ assert.equal(
     'lib/supabase.ts',
     "import { createClient } from '@supabase/supabase-js'",
     'Stack: Supabase + Expo',
+  ),
+  false,
+);
+assert.equal(
+  shouldSkipUnsolicitedBaaSFile(
+    'lib/supabase.ts',
+    "import { createClient } from '@supabase/supabase-js'",
+    'I want Supabase for auth',
   ),
   false,
 );
@@ -85,7 +102,7 @@ assert.equal(filtered.kept.length, 1);
 assert.equal(filtered.kept[0].relativePath, 'app/kid/home.tsx');
 assert.ok(filtered.skipped.includes('lib/supabase.ts'));
 assert.ok(filtered.skipped.some((p) => p.startsWith('supabase/')));
-assert.match(String(filtered.reason), /Skipped unsolicited/);
+assert.equal(filtered.reason, UNSOLICITED_BAAS_SKIP_REASON);
 
 {
   const baselineFiltered = filterUnsolicitedBaaSBlocks(
@@ -113,14 +130,39 @@ assert.equal(
   ),
   true,
 );
-assert.equal(
-  shouldSkipUnsolicitedBaaSFile(
-    'package.json',
-    '{"dependencies":{"@supabase/supabase-js":"2.0.0"}}',
+
+{
+  const pkg = filterUnsolicitedBaaSBlocks(
+    [
+      {
+        relativePath: 'package.json',
+        body: JSON.stringify({
+          dependencies: { react: '19.0.0', '@supabase/supabase-js': '2.0.0' },
+        }),
+      },
+    ],
     'kids reading MVP',
-  ),
-  false,
-);
+  );
+  assert.equal(pkg.kept.length, 1);
+  assert.equal(pkg.kept[0].relativePath, 'package.json');
+  assert.equal(/@supabase/.test(pkg.kept[0].body), false);
+  assert.match(pkg.kept[0].body, /"react"/);
+  assert.equal(pkg.reason, UNSOLICITED_BAAS_SKIP_REASON);
+}
+
+{
+  const allowed = filterUnsolicitedBaaSBlocks(
+    [
+      {
+        relativePath: 'lib/supabase.ts',
+        body: "import { createClient } from '@supabase/supabase-js'",
+      },
+    ],
+    'Please use Supabase Auth',
+  );
+  assert.equal(allowed.kept.length, 1);
+  assert.equal(allowed.skipped.length, 0);
+}
 
 {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'go-baas-sweep-'));
@@ -136,8 +178,11 @@ assert.equal(
   }
 }
 
-assert.match(MVP_STACK_GO_BULLETS, /NOT Supabase/);
-assert.match(SECURITY_BASELINE_DRAFT, /do \*\*not\*\* invent Supabase/i);
+assert.match(MVP_STACK_GO_BULLETS, /Render-only/);
+assert.match(MVP_STACK_GO_BULLETS, /Render PostgreSQL/);
+assert.equal(/add Supabase/i.test(MVP_STACK_GO_BULLETS), false);
+assert.equal(/supabase/i.test(SECURITY_BASELINE_DRAFT), false, 'baseline must not mention Supabase');
+assert.match(SECURITY_BASELINE_DRAFT, /in-app RLS|authorization checks|in-app/i);
 
 const goPrompt = fs.readFileSync(path.join(root, 'server.ts'), 'utf8');
 assert.match(goPrompt, /MVP_STACK_GO_BULLETS/);
@@ -147,6 +192,21 @@ assert.equal(
   false,
   'apply gate drops new vendor files only — do not auto-delete existing workspace files',
 );
+assert.equal(/add Supabase/i.test(goPrompt), false);
+
+const codingAppendix = fs.readFileSync(path.join(root, 'src/lib/grokChatArtifacts.ts'), 'utf8');
+const assistant = fs.readFileSync(path.join(root, 'src/lib/nebulaAssistantSystemPrompt.ts'), 'utf8');
+assert.equal(/add Supabase/i.test(codingAppendix), false);
+assert.equal(/add @supabase/i.test(codingAppendix), false);
+assert.equal(/add Supabase/i.test(assistant), false);
+assert.match(assistant, /Render PostgreSQL/);
+assert.match(codingAppendix, /Render-only stack|mock\/local role gates on Render/);
+
+const rootPkg = fs.readFileSync(path.join(root, 'package.json'), 'utf8');
+assert.equal(/@supabase/.test(rootPkg), false);
+
+const pipeline = fs.readFileSync(path.join(root, 'src/lib/nebulaGrokCodingPipeline.ts'), 'utf8');
+assert.match(pipeline, /UNSOLICITED_BAAS_SKIP_REASON/);
 
 const syncSrc = fs.readFileSync(path.join(root, 'src/lib/ideArtifactSync.ts'), 'utf8');
 assert.match(syncSrc, /ARTIFACT_SYNC_TIMEOUT_MS/);

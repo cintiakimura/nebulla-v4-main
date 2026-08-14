@@ -23,6 +23,8 @@ import {
   shouldAttemptRematch,
   shouldApplyUiToPreview,
   validateV2Quality,
+  readCyclePolicy,
+  writeCyclePolicy,
 } from '../lib/uiGenerationEngine/index.ts';
 import { selectTemplate, TEMPLATE_DEFS } from '../lib/uiGenerationEngine/v2/selectTemplate.ts';
 import { classifyPage } from '../lib/uiGenerationEngine/v2/classifyPage.ts';
@@ -132,8 +134,9 @@ section('runUiGenerationCycleV2 without live Figma / without Grok key');
   };
   assert.ok(meta.pattern_mode === 'seed' || meta.pattern_mode === 'figma');
   if (meta.pattern_mode === 'seed') {
-    // Seed path must never claim live Figma success (offline status is ok only with pattern_mode figma).
+    // Seed-only must never claim live or offline Figma success.
     assert.notEqual(meta.figma?.figma_status, 'success');
+    assert.notEqual(meta.figma?.figma_status, 'offline');
     assert.equal(meta.figma?.fallback_used, 'yes');
   }
   if (meta.pattern_mode === 'figma') {
@@ -158,6 +161,50 @@ section('runUiGenerationCycleV2 without live Figma / without Grok key');
     // Cycle may still ok=true; Preview withheld until Stitch-minimum pass
     assert.notEqual(result.previewApplied, true);
   }
+}
+
+section('Generate again increments; exhaust at 3 sets preference recovery');
+{
+  const first = await runUiGenerationCycleV2({
+    workspaceRoot: tmp,
+    masterPlanPath,
+    projectName: 'TaskFlow',
+    pageName: 'Home',
+    autoTriggered: true,
+    uiPhase: 'pre_code',
+  });
+  assert.equal(first.regeneration_count, 1, `auto first count, got ${first.regeneration_count}`);
+  assert.equal(first.max_regenerations, 3);
+  assert.notEqual(first.preference_recovery, true);
+
+  const again = await runUiGenerationCycleV2({
+    workspaceRoot: tmp,
+    masterPlanPath,
+    projectName: 'TaskFlow',
+    pageName: 'Home',
+    regenerate: true,
+  });
+  assert.ok(
+    (again.regeneration_count || 0) >= 2,
+    `Generate again should increment, got ${again.regeneration_count}`,
+  );
+  assert.notEqual(again.preference_recovery, true);
+
+  const policy = readCyclePolicy(tmp);
+  writeCyclePolicy(tmp, { ...policy, regeneration_count: 3, max_regenerations: 3 });
+  const exhausted = await runUiGenerationCycleV2({
+    workspaceRoot: tmp,
+    masterPlanPath,
+    projectName: 'TaskFlow',
+    pageName: 'Home',
+    regenerate: true,
+  });
+  assert.equal(exhausted.ok, false);
+  assert.equal(exhausted.preference_recovery, true);
+  assert.equal(exhausted.regeneration_count, 3);
+  assert.equal(exhausted.max_regenerations, 3);
+  const after = readCyclePolicy(tmp);
+  assert.equal(after.recovery_path, 'guided_improvement');
 }
 
 section('shouldApplyUiToPreview helper');

@@ -199,7 +199,7 @@ try {
     });
     assert.equal(rec.figma_status, 'offline');
     assert.equal(rec.figma_used, 'yes');
-    assert.ok(rec.selection_mode.startsWith('offline:'));
+    assert.ok(rec.selection_mode.startsWith('offline:bucket:'), rec.selection_mode);
     assert.equal(fetchCalls.length, 0);
   }
 
@@ -280,6 +280,7 @@ try {
     assert.notEqual(rec.figma_status, 'success');
     assert.notEqual(rec.figma_status, 'offline');
     assert.equal(rec.figma_used, 'no');
+    assert.ok(!rec.selection_mode.startsWith('offline:'), rec.selection_mode);
     assert.ok(rec.selection_mode.includes('seed') || rec.figma_status === 'weak_matches');
     assert.equal(fetchCalls.length, 0);
   }
@@ -340,6 +341,72 @@ try {
     assert.ok(nodes.some((n) => n.type === 'button'));
     assert.ok(nodes.filter((n) => n.type === 'container' || n.type === 'box').length >= 2);
     assert.ok(gate.gate === 'pass' || gate.gate === 'repair', `gate=${gate.gate} ${gate.issues}`);
+  }
+
+  section('6.1c Committed structure packs: kids Home offline + no Email + regions');
+  process.chdir(REPO);
+  delete process.env.FIGMA_LIVE_ON_GENERATE;
+  delete process.env.FIGMA_REFERENCE_FILE_KEYS;
+  delete process.env.FIGMA_REFERENCE_BUCKETS;
+  installFetchSpy();
+  {
+    const kidsClass: PageClassification = {
+      ...mobileClass,
+      product_function: 'course',
+      industry: 'education',
+    };
+    const rec = await retrieveFigmaReferences({
+      classification: kidsClass,
+      templateId: 'mobile_home_hero_cards',
+      seedState: { ...seedState, function: 'course', industry_class: 'education' },
+    });
+    assert.equal(rec.figma_status, 'offline', rec.figma_error || rec.selection_mode);
+    assert.equal(rec.figma_used, 'yes');
+    assert.ok(rec.selection_mode.startsWith('offline:bucket:'), rec.selection_mode);
+    assert.equal(fetchCalls.length, 0);
+    const template = getTemplateById('mobile_home_hero_cards')!;
+    const plan = parseStructureLayoutPlan(rec.structure_hints, 'home', template.id);
+    assert.equal(plan.enforceRegions, true);
+    const tokens = buildDesignTokens('teal primary', '', 'medium');
+    let slots = ensureSlotsForStructurePlan(
+      {},
+      plan,
+      'home',
+      'Kids Read',
+      ['Daily reading', 'Practice round', 'Teacher progress'],
+    );
+    assert.ok(!slots.field_1_label && !slots.field_2_label);
+    assert.ok(!Object.values(slots).some((v) => /^(email|password)$/i.test(String(v || '').trim())));
+    const model = renderTemplateModel({
+      template,
+      classification: kidsClass,
+      tokens,
+      slots,
+      figmaStatus: rec.figma_status,
+      structureHints: rec.structure_hints,
+    });
+    const gate = validateV2Quality({
+      model,
+      template,
+      tokens,
+      slots,
+      figmaStatus: rec.figma_status,
+      pageType: 'home',
+      selectionMode: rec.selection_mode,
+      navigationMode: 'bottom_tabs',
+    });
+    const nodes = Object.values(Object.values(model.pages)[0].nodes);
+    const texts = nodes.map((n) => String(n.text || '')).join(' ');
+    assert.ok(!/\bEmail\b/i.test(texts) && !/\bPassword\b/i.test(texts), texts.slice(0, 200));
+    if (gate.gate === 'pass') {
+      assert.ok(nodes.some((n) => /top_bar|identity|nav_bar/i.test(`${n.role} ${n.id}`)));
+      assert.ok(nodes.filter((n) => /^card$/i.test(n.role || '')).length >= 2);
+      assert.ok(nodes.some((n) => n.type === 'button'));
+      assert.ok(slots.hero_title || slots.nav_title);
+      assert.ok(slots.primary_cta);
+    } else {
+      assert.notEqual(gate.gate, 'pass');
+    }
   }
 
   section('6.1b Repo structure/ shortlist exists for ops');

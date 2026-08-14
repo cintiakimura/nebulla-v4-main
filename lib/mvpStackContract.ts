@@ -1,6 +1,7 @@
 /**
- * MVP stack contract — stop inventing Supabase/Firebase/etc. unless the plan or user asks.
- * Authority: nebulaAssistantSystemPrompt default architecture (Render Postgres + Nebulla API).
+ * MVP stack contract — Render-only by default.
+ * Supabase/Firebase are never implied by RLS/roles/security language.
+ * Authority: nebulaAssistantSystemPrompt (Render Postgres + Nebulla API).
  */
 
 import fs from "fs";
@@ -8,23 +9,22 @@ import path from "path";
 
 const VENDOR = String.raw`supabase|firebase|amplify|appwrite|convex|planetscale|neon\.tech|clerk\.com|auth0`;
 
-/** Affirmative stack choice — not “do not invent Supabase” / “stop repeating Supabase”. */
+/** Affirmative stack choice only — “I want Supabase”, “Use Supabase Auth”, “Stack: Supabase”. */
 const AFFIRMATIVE_VENDOR_RE = new RegExp(
-  String.raw`\b(?:use|using|used|choose|chosen|chose|adopt|adopted|via|with)\s+[\w\s+/,-]{0,40}\b(?:${VENDOR})\b` +
+  String.raw`\b(?:use|using|used|choose|chosen|chose|adopt|adopted|via|with|i want|we want|we need|please use|required)\s+[\w\s+/,-]{0,40}\b(?:${VENDOR})\b` +
     String.raw`|\b(?:stack|database|db|baas|auth|backend|vendor)\s*:\s*[^\n]{0,60}\b(?:${VENDOR})\b` +
     String.raw`|\b(?:${VENDOR})\s+(?:auth|postgres|database|client|backend|stack)\b` +
     String.raw`|\b(?:${VENDOR})\s*\+`,
   "gi",
 );
 
-/** Paths Grok invents when §2 mentions RLS + Expo. */
 const BLOCKED_VENDOR_PATH_RE =
   /(?:^|\/)(?:lib\/supabase(?:\.(ts|tsx|js|jsx)|\/)|supabase\/|firebase\/|lib\/firebase\.(ts|tsx|js|jsx)|supabase\.(ts|tsx|js|jsx))(?:\/|$)?/i;
 
 const BLOCKED_VENDOR_BODY_RE =
-  /@supabase\/supabase-js|createClient\s*\(\s*['"`]https?:\/\/[^'"`]*supabase|EXPO_PUBLIC_SUPABASE_|firebase\/app|initializeApp\s*\(/i;
+  /@supabase\/supabase-js|createClient\s*\(\s*['"`]https?:\/\/[^'"`]*supabase|EXPO_PUBLIC_SUPABASE_|SUPABASE_URL|SUPABASE_ANON_KEY|SUPABASE_SERVICE|firebase\/app|initializeApp\s*\(/i;
 
-/** Leftovers from a prior apply that treated “do not invent Supabase” as permission. */
+/** Leftovers from a prior apply that treated security language as permission. */
 export const KNOWN_UNSOLICITED_BAAS_FILES = [
   "lib/supabase.ts",
   "lib/supabase.tsx",
@@ -40,6 +40,9 @@ export const KNOWN_UNSOLICITED_BAAS_FILES = [
 ];
 
 const KNOWN_UNSOLICITED_BAAS_DIRS = ["supabase", "firebase"];
+
+export const UNSOLICITED_BAAS_SKIP_REASON =
+  "Skipped unsolicited Supabase files — stack is Render-only.";
 
 function vendorMentionIsProhibition(prefix: string, suffix: string): boolean {
   const before = prefix.replace(/\*/g, " ").replace(/\s+/g, " ");
@@ -59,8 +62,8 @@ function vendorMentionIsProhibition(prefix: string, suffix: string): boolean {
 }
 
 /**
- * True only when the plan/note *chooses* a vendor.
- * Prohibitions (“do not invent Supabase”) in the security baseline must not count.
+ * True only when the plan/note *chooses* a vendor (e.g. “I want Supabase”).
+ * Security baseline / RLS language must not count.
  */
 export function planOrNoteAllowsExternalBaaS(planOrNote: string): boolean {
   const text = String(planOrNote || "");
@@ -77,11 +80,39 @@ export function planOrNoteAllowsExternalBaaS(planOrNote: string): boolean {
 }
 
 export function isBlockedExternalBaaSPath(relativePath: string): boolean {
-  return BLOCKED_VENDOR_PATH_RE.test(String(relativePath || "").replace(/\\/g, "/"));
+  const rel = String(relativePath || "").replace(/\\/g, "/");
+  if (/supabase/i.test(rel)) return true;
+  return BLOCKED_VENDOR_PATH_RE.test(rel);
 }
 
 export function bodyLooksLikeBlockedExternalBaaS(body: string): boolean {
   return BLOCKED_VENDOR_BODY_RE.test(String(body || ""));
+}
+
+function stripUnsolicitedVendorFromManifest(relativePath: string, body: string): string {
+  const rel = relativePath.replace(/\\/g, "/");
+  if (/\.env/i.test(rel)) {
+    return body
+      .split("\n")
+      .filter((line) => !/^\s*(?:EXPO_PUBLIC_)?SUPABASE_/i.test(line))
+      .join("\n");
+  }
+  if (!/package\.json$/i.test(rel)) return body;
+  try {
+    const json = JSON.parse(body) as Record<string, unknown>;
+    for (const key of ["dependencies", "devDependencies", "peerDependencies", "optionalDependencies"]) {
+      const bag = json[key];
+      if (!bag || typeof bag !== "object") continue;
+      const next: Record<string, unknown> = { ...(bag as Record<string, unknown>) };
+      for (const dep of Object.keys(next)) {
+        if (/supabase/i.test(dep)) delete next[dep];
+      }
+      json[key] = next;
+    }
+    return `${JSON.stringify(json, null, 2)}\n`;
+  } catch {
+    return body.replace(/[^\n]*@supabase[^\n]*\n?/gi, "");
+  }
 }
 
 export function shouldSkipUnsolicitedBaaSFile(
@@ -91,17 +122,19 @@ export function shouldSkipUnsolicitedBaaSFile(
 ): boolean {
   if (planOrNoteAllowsExternalBaaS(planOrNote)) return false;
   const rel = String(relativePath || "").replace(/\\/g, "/");
-  if (/package\.json$|pnpm-lock|yarn\.lock|package-lock|readme/i.test(rel)) return false;
   if (isBlockedExternalBaaSPath(rel)) return true;
-  if (/^supabase\//i.test(rel) || /^firebase\//i.test(rel)) return true;
-  if (/(^|\/)supabase\.(ts|tsx|js|jsx)$/i.test(rel)) return true;
+  if (/^firebase\//i.test(rel) || /firebase/i.test(rel) && /\.(ts|tsx|js|jsx)$/i.test(rel)) return true;
   if (/\.(ts|tsx|js|jsx)$/i.test(rel) && bodyLooksLikeBlockedExternalBaaS(body)) return true;
-  if (/supabase|firebase/i.test(rel) && bodyLooksLikeBlockedExternalBaaS(body)) return true;
+  if (/\.env/i.test(rel) && /SUPABASE_/i.test(body)) {
+    const leftover = stripUnsolicitedVendorFromManifest(rel, body).trim();
+    return leftover.length === 0;
+  }
   return false;
 }
 
 /**
  * Drop unsolicited BaaS files when Master Plan / user note never named the vendor.
+ * package.json keeps other deps; @supabase/* is stripped.
  */
 export function filterUnsolicitedBaaSBlocks<T extends { relativePath: string; body: string }>(
   blocks: T[],
@@ -112,9 +145,26 @@ export function filterUnsolicitedBaaSBlocks<T extends { relativePath: string; bo
   }
   const kept: T[] = [];
   const skipped: string[] = [];
+  let strippedManifest = false;
   for (const b of blocks) {
+    const rel = b.relativePath.replace(/\\/g, "/");
     if (shouldSkipUnsolicitedBaaSFile(b.relativePath, b.body, planOrNote)) {
-      skipped.push(b.relativePath.replace(/\\/g, "/"));
+      skipped.push(rel);
+      continue;
+    }
+    if (/package\.json$/i.test(rel) && /@supabase|supabase-js/i.test(b.body)) {
+      kept.push({ ...b, body: stripUnsolicitedVendorFromManifest(rel, b.body) });
+      strippedManifest = true;
+      continue;
+    }
+    if (/\.env/i.test(rel) && /SUPABASE_/i.test(b.body)) {
+      const next = stripUnsolicitedVendorFromManifest(rel, b.body);
+      if (!next.trim()) {
+        skipped.push(rel);
+        continue;
+      }
+      kept.push({ ...b, body: next });
+      strippedManifest = true;
       continue;
     }
     kept.push(b);
@@ -123,9 +173,7 @@ export function filterUnsolicitedBaaSBlocks<T extends { relativePath: string; bo
     kept,
     skipped,
     reason:
-      skipped.length > 0
-        ? "Skipped unsolicited Supabase/Firebase files — plan did not name that vendor (use mock/local auth for MVP)."
-        : null,
+      skipped.length > 0 || strippedManifest ? UNSOLICITED_BAAS_SKIP_REASON : null,
   };
 }
 
@@ -144,7 +192,7 @@ function safeUnlinkUnderRoot(workspaceRoot: string, rel: string): boolean {
   }
 }
 
-/** Remove leftover unsolicited vendor files from a prior false-allow apply. */
+/** Optional leftover cleanup — apply gate does not call this (new applies only). */
 export function sweepUnsolicitedBaaSFromWorkspace(
   workspaceRoot: string,
   planOrNote: string,
@@ -163,9 +211,9 @@ export function sweepUnsolicitedBaaSFromWorkspace(
 }
 
 export const MVP_STACK_GO_BULLETS = `
-STACK / VENDORS (mandatory — stop repeating Supabase by default):
-- Default Nebulla MVP stack: Expo/React Native (or plan Project Type) + in-app auth/role gates + local/mock data or Nebulla/Render API — NOT Supabase, Firebase, Clerk, Auth0, Amplify unless Master Plan §2 or the user explicitly names that vendor.
-- Security baseline (RLS / roles / deny-by-default) means **enforce authz in app/server code** — it does NOT mean "add @supabase/supabase-js + supabase/migrations".
-- Do NOT emit lib/supabase.ts, supabase/**, firebase/**, or EXPO_PUBLIC_SUPABASE_* unless the plan/user explicitly requested that vendor.
-- For Login + roles in MVP: simple session/mock role switch or local auth stub is enough; wire a real BaaS only when named.
+STACK (mandatory — Render-only):
+- Default product stack: Render PostgreSQL + Render Web Service (Nebulla-hosted API) + in-app / mock / local session auth.
+- RLS / roles / deny-by-default = authorization checks in app/server code on that stack — never a hosted BaaS product.
+- Do not emit supabase or firebase client files, packages, or SUPABASE_* env vars. Do not put those packages in package.json.
+- Login + roles in MVP: mock role switch or local session stub on Render.
 `.trim();

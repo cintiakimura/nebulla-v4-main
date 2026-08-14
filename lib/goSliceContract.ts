@@ -154,7 +154,7 @@ export function buildLocalPreCodingSummary(opts: {
     focus && !isBareGoNote(focus) ? `- Session focus: ${focus}` : `- Session focus: next incomplete ${slice} work from Master Plan`,
     "- Files: app/, src/, components/, lib/ for this slice — prefer real screens over master-plan.json-only",
     "- Validate: routes render, no Nebulla IDE chrome (#080A14 / #00D4D4), auth fields only on Login",
-    "- Risks: inventing Supabase/Firebase unless §2 names the vendor; oversized multi-route dump",
+    "- Risks: hosted BaaS clients; oversized multi-route dump",
   ];
   return lines.join("\n").slice(0, 1200);
 }

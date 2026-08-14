@@ -61,7 +61,7 @@ Do not restate the full action list from workflow — quality bars only.
 - **Fallback quality:** PARTIAL/TIMEOUT + baseline is OK to continue.
 
 ### Step 4 — Gap-fill assumptions
-- **Quality bar / MUST:** Labeled assumptions for roles, MVP pages, stack default, nav, MVP auth (mock/local OK). Start **Deferred** security bullets (not implement). No forced Supabase/Firebase unless plan already names vendor.
+- **Quality bar / MUST:** Labeled assumptions for roles, MVP pages, stack default (Render Postgres + in-app/mock auth), nav. Start **Deferred** security bullets (not implement). Do not scaffold a hosted BaaS.
 - **MUST NOT:** Non-blocking brand interrogation; mid-run security theater that blocks Steps 5–12.
 - **Artifacts:** Assumptions + Deferred list in memory.
 - **Rooms:** policies-and-steps §2 + §4.
@@ -199,7 +199,7 @@ JSON keys MUST match `lib/masterPlanSections.ts` (canonical `"2. Tech and Resear
 3. Output only ` ```file:relative/path` ` blocks.
 
 **MVP stack:**
-- No unsolicited Supabase/Firebase/BaaS unless plan names the vendor.
+- Render PostgreSQL + Render Web Service + in-app / mock / local session. RLS = in-app authorization, not a hosted BaaS.
 - Prefer mock/local auth for first slices when Deferred.
 
 **Chat:** Do not paste app/UI code dumps; use apply pipeline.

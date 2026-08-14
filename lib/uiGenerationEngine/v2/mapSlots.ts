@@ -51,7 +51,10 @@ function itemLabels(input: SlotContentInput, count: number): string[] {
   const fromFeatures = input.features
     .map((f) => cleanLabel(f.replace(/^[-*•]\s*/, "").replace(/\*\*/g, ""), ""))
     .filter((f) => f && f.length <= 32 && !/^kpi\b/i.test(f));
-  const merged = [...fromFeatures, ...fromHeadings];
+  const pageNameLc = (input.pageName || "").trim().toLowerCase();
+  const merged = [...fromFeatures, ...fromHeadings].filter(
+    (m) => m.toLowerCase() !== pageNameLc && m.toLowerCase() !== "home",
+  );
   const uniq: string[] = [];
   for (const m of merged) {
     if (!uniq.some((u) => u.toLowerCase() === m.toLowerCase())) uniq.push(m);

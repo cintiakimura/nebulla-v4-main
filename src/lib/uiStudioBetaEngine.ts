@@ -8,7 +8,7 @@
  * Completes on HTTP result (or an already-ready status), not a pane complete event.
  */
 
-import { fetchJson } from './apiFetch';
+import { fetchJson, readResponseJson } from './apiFetch';
 import type { GrokActivityProgressFn } from './ideGrokActivityStatus';
 import { getGrokRequestHeaders } from './grokUserKey';
 import { withProjectBody, withProjectQuery } from './nebulaProjectApi';
@@ -29,6 +29,7 @@ export const NEBULA_STUDIO_SHOW_LIVE_APP = 'nebula-studio-show-live-app';
 
 export const NEBULA_UI_STUDIO_BETA_RUN = 'nebula-ui-studio-beta-run';
 export const NEBULA_UI_STUDIO_BETA_COMPLETE = 'nebula-ui-studio-beta-complete';
+export const NEBULA_UI_STUDIO_BETA_BUSY = 'nebula-ui-studio-beta-busy';
 
 export type UiStudioUiPhase = 'pre_code' | 'post_code' | 'manual';
 
@@ -119,6 +120,15 @@ export async function runUiStudioBetaGeneration(
     if (options.openPane !== false) {
       dispatchOpenUiStudioBeta();
     }
+    try {
+      window.dispatchEvent(
+        new CustomEvent(NEBULA_UI_STUDIO_BETA_BUSY, {
+          detail: { busy: true, regenerate: options.regenerate === true },
+        }),
+      );
+    } catch {
+      /* ignore */
+    }
 
     const phase = options.uiPhase;
     onProgress?.(
@@ -156,9 +166,8 @@ export async function runUiStudioBetaGeneration(
     const GENERATE_TIMEOUT_MS = 45_000;
     try {
       const data = await Promise.race([
-        fetchJson<UiStudioBetaGenerateResult & { error?: string }>(
-          withProjectQuery('/api/ui-studio-beta/generate'),
-          {
+        (async () => {
+          const response = await fetch(withProjectQuery('/api/ui-studio-beta/generate'), {
             method: 'POST',
             credentials: 'include',
             headers: { 'Content-Type': 'application/json', ...getGrokRequestHeaders() },
@@ -174,8 +183,9 @@ export async function runUiStudioBetaGeneration(
                 uiPhase: options.uiPhase,
               }),
             ),
-          },
-        ),
+          });
+          return readResponseJson<UiStudioBetaGenerateResult & { error?: string }>(response);
+        })(),
         new Promise<never>((_, reject) => {
           window.setTimeout(() => {
             reject(new Error('UI Studio Beta generation timed out — Foundation coding continues'));
@@ -184,6 +194,15 @@ export async function runUiStudioBetaGeneration(
       ]);
       if (data.preference_recovery) {
         onProgress?.(data.preference_recovery_question || 'Preference recovery needed', 'warn');
+        try {
+          window.dispatchEvent(
+            new CustomEvent(NEBULA_UI_STUDIO_BETA_COMPLETE, {
+              detail: { ok: false, ...data, preference_recovery: true },
+            }),
+          );
+        } catch {
+          /* ignore */
+        }
         return { ...data, ok: false, preference_recovery: true };
       }
       if (data.ok === false) {
@@ -204,6 +223,13 @@ export async function runUiStudioBetaGeneration(
     }
   })().finally(() => {
     inFlight = null;
+    try {
+      window.dispatchEvent(
+        new CustomEvent(NEBULA_UI_STUDIO_BETA_BUSY, { detail: { busy: false } }),
+      );
+    } catch {
+      /* ignore */
+    }
   });
 
   return inFlight;

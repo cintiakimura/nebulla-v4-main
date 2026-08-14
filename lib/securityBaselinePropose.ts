@@ -26,12 +26,12 @@ export const SECURITY_NEGATED_RE =
 
 export const SECURITY_BASELINE_DRAFT = `### Security baseline
 - **Auth model:** Sign-in required for private routes (session, magic link, or MVP mock role switch). For kids/education: parent/teacher accounts; COPPA-aware consent when under-13 data applies.
-- **Tenant isolation:** Scope data by workspace_id / classroom_id (or equivalent); deny-by-default authz on every query/mutation in **app/server code** (not a cue to add Supabase/Firebase unless the user/plan names that vendor).
+- **Tenant isolation:** Scope data by workspace_id / classroom_id (or equivalent); deny-by-default authorization on every query/mutation in **app/server code** (in-app RLS/role rules on the Render/Postgres stack — not a hosted BaaS product).
 - **Roles:** Define least-privilege roles (e.g. owner / member / viewer / teacher / parent / student) and enforce authz on every mutating action.
 - **Secrets:** API keys and tokens only in server env / Secrets — never in client bundles or Master Plan.
 - **PII:** Minimize personal data; do not log tokens or secrets; avoid collecting unnecessary child PII.
 - **Public routes:** Explicitly list which routes stay public (marketing / login only).
-- **MVP stack:** Prefer local/mock auth + in-app role gates; do **not** invent Supabase/Firebase clients unless explicitly chosen.
+- **MVP stack:** Render PostgreSQL + Render Web Service + local/mock auth + in-app role gates.
 - *(Assumption: security baseline drafted because the goal implies accounts or private/child data — correct if wrong.)*`;
 
 export function sectionHasSecurityBaseline(section2: string): boolean {

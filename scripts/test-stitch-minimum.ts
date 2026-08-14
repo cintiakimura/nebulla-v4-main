@@ -284,17 +284,40 @@ section('Golden kids-reading cycle: no Email on Home; gate pass or honest weak')
   const meta = JSON.parse(fs.readFileSync(metaPath, 'utf8')) as {
     slots?: Record<string, string>;
     quality_gate_result?: string;
-    figma?: { figma_status?: string };
+    preview_applied?: boolean;
     pattern_mode?: string;
+    figma?: { figma_status?: string; selection_mode?: string };
   };
   const s = meta.slots || slots || {};
   assert.ok(!s.field_1_label, 'Home must not have field_1_label');
   assert.ok(!Object.values(s).some((v) => /^email$/i.test(String(v || ''))), 'no Email label on Home');
+  assert.ok(!Object.values(s).some((v) => /^password$/i.test(String(v || ''))), 'no Password label on Home');
+  if (meta.pattern_mode === 'seed') {
+    assert.notEqual(meta.figma?.figma_status, 'offline');
+    assert.notEqual(meta.figma?.figma_status, 'success');
+  }
+  if (meta.figma?.figma_status === 'offline') {
+    assert.ok(
+      (meta.figma.selection_mode || '').startsWith('offline:bucket:'),
+      meta.figma.selection_mode,
+    );
+    assert.ok(s.hero_title || s.nav_title, 'offline Home needs identity');
+    assert.ok(s.primary_cta, 'offline Home needs CTA');
+    const contentTitles = Object.entries(s).filter(
+      ([k, v]) => /^(card|item|metric)_\d+_title$/i.test(k) && String(v || '').trim(),
+    );
+    if (meta.quality_gate_result === 'pass') {
+      assert.ok(contentTitles.length >= 2, 'offline Ready needs ≥2 content regions');
+      assert.equal(result.previewApplied, true);
+    } else {
+      assert.equal(result.previewApplied, false, 'empty shell must not Ready despite offline badge');
+    }
+  }
   assert.equal(meta.quality_gate_result, 'pass', `expected pass, got ${meta.quality_gate_result}`);
   assert.equal(result.previewApplied, true);
   assert.ok(!/^email$/i.test(String(s.hero_subtitle || '')));
   console.log(
-    `  → gate=${meta.quality_gate_result} figma=${meta.figma?.figma_status} pattern=${meta.pattern_mode}`,
+    `  → gate=${meta.quality_gate_result} figma=${meta.figma?.figma_status} mode=${meta.figma?.selection_mode} pattern=${meta.pattern_mode}`,
   );
 }
 

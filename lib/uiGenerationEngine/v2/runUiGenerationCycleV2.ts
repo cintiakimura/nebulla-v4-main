@@ -39,6 +39,7 @@ import {
   applyPlanToTokens,
   ensureSlotsForStructurePlan,
   parseStructureLayoutPlan,
+  structureRegionsSatisfied,
 } from "./applyStructureHints";
 import { retrieveFigmaReferences } from "./figmaReferences";
 import { mapSlots, sanitizeSlotsForPageType } from "./mapSlots";
@@ -403,6 +404,7 @@ export async function runUiGenerationCycleV2(
         state.project_name = (input.projectName || "").trim() || "Untitled project";
         state.created_at = nowIso();
         state.regeneration_count = prevPolicy.regeneration_count;
+        state.recovery_path = "guided_improvement";
         state.failure_reason = "Regeneration limit reached — preference recovery";
         stage("Preference recovery needed");
         const contextPath = persist(workspaceRoot, state);
@@ -435,6 +437,7 @@ export async function runUiGenerationCycleV2(
       state.created_at = nowIso();
       state.status = "failed";
       state.regeneration_count = prevPolicy.regeneration_count;
+      state.recovery_path = "guided_improvement";
       state.failure_reason =
         "UI generation already reached the regeneration limit for this cycle — not auto-starting.";
       stage("Blocked — regeneration limit");
@@ -941,6 +944,7 @@ export async function runUiGenerationCycleV2(
     structurePlan,
     classification.page_type,
     state.project_name,
+    state.priority_features,
   );
   slots = sanitizeSlotsForPageType(slots, classification.page_type);
   // CONTENT_LOCALE microcopy (optional Grok) — layout unchanged
@@ -991,6 +995,21 @@ export async function runUiGenerationCycleV2(
 
   // -------- Phase G — Quality gate + one repair --------
   stage("Validating");
+  const nodeRolesFrom = (m: typeof model): string[] => {
+    const page = Object.values(m.pages)[0];
+    return Object.values(page?.nodes || {}).map((n) => n.role || "");
+  };
+  const regionsOk = (m: typeof model, s: typeof slots) =>
+    structureRegionsSatisfied({
+      slots: s,
+      pageType: classification.page_type,
+      needsPrimaryCta: template.needsPrimaryCta,
+      nodeRoles: nodeRolesFrom(m),
+    });
+  const structureRequired =
+    structurePlan.enforceRegions &&
+    (figma.figma_status === "offline" || figma.figma_status === "success");
+
   let gate = validateV2Quality({
     model,
     template,
@@ -1003,7 +1022,9 @@ export async function runUiGenerationCycleV2(
     navigationMode: classification.navigation_mode,
   });
   state.repair_pass_used = "no";
-  if (gate.gate !== "pass") {
+  const needsRepair =
+    gate.gate !== "pass" || (structureRequired && !regionsOk(model, slots));
+  if (needsRepair) {
     state.repair_pass_used = "yes";
     const beforeKeys = Object.keys(slots).sort().join(",");
     slots = repairSlots(slots, classification.page_type);
@@ -1012,6 +1033,7 @@ export async function runUiGenerationCycleV2(
       structurePlan,
       classification.page_type,
       state.project_name,
+      state.priority_features,
     );
     slots = sanitizeSlotsForPageType(slots, classification.page_type);
     const afterKeys = Object.keys(slots).sort().join(",");
@@ -1038,6 +1060,18 @@ export async function runUiGenerationCycleV2(
       selectionMode: figma.selection_mode,
       navigationMode: classification.navigation_mode,
     });
+    if (structureRequired && !regionsOk(model, slots)) {
+      gate = {
+        gate: "weak",
+        issues: [
+          ...gate.issues,
+          "Offline structure regions unbound after repair — not Ready",
+        ],
+      };
+    } else if (gate.gate === "repair") {
+      // One repair already used — remaining stitch/library issues fail Ready.
+      gate = { gate: "weak", issues: gate.issues };
+    }
     appendStepLog(
       state,
       `Phase G repair — gate=${gate.gate}; slots ${beforeKeys === afterKeys ? "unchanged" : "rebound"}; issues=${gate.issues.join("; ") || "none"}`,
@@ -1118,11 +1152,14 @@ export async function runUiGenerationCycleV2(
           features: state.priority_features,
           preferenceFeedback,
         });
+        const extraHints =
+          pageClass.page_type === "auth" ? [] : figma.structure_hints;
         pageSlots = ensureSlotsForStructurePlan(
           pageSlots,
-          parseStructureLayoutPlan([], pageClass.page_type, pageTemplate.id),
+          parseStructureLayoutPlan(extraHints, pageClass.page_type, pageTemplate.id),
           pageClass.page_type,
           state.project_name,
+          state.priority_features,
         );
         pageSlots = sanitizeSlotsForPageType(pageSlots, pageClass.page_type);
         const pageModel = renderTemplateModel({
@@ -1131,7 +1168,7 @@ export async function runUiGenerationCycleV2(
           tokens,
           slots: pageSlots,
           figmaStatus: figma.figma_status,
-          structureHints: figma.structure_hints,
+          structureHints: extraHints,
         });
         const pageKey = uniquePageKey(
           pageSlots.hero_title || pageSlots.nav_title || pageName,
@@ -1199,11 +1236,15 @@ export async function runUiGenerationCycleV2(
   fs.mkdirSync(outDir, { recursive: true });
   fs.writeFileSync(path.join(outDir, "ui-generation-output.tsx"), code, "utf8");
 
-  const patternMode: "seed" | "figma" =
-    figma.figma_used === "yes" &&
-    (figma.figma_status === "success" || figma.figma_status === "offline")
-      ? "figma"
-      : "seed";
+  const libraryHit =
+    figma.figma_status === "success" ||
+    figma.figma_status === "offline" ||
+    figma.selection_mode.includes(":catalog:");
+  const structureAppliedToSlots =
+    libraryHit &&
+    regionsOk(model, slots) &&
+    (structurePlan.enforceRegions || figma.selection_mode.includes(":catalog:"));
+  const patternMode: "seed" | "figma" = structureAppliedToSlots ? "figma" : "seed";
   let previewWritten: string[] = [];
   let previewApplied = false;
   if (shouldApplyUiToPreview(gate.gate)) {

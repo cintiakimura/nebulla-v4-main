@@ -241,10 +241,16 @@ It does not allow free-floating absolute chaos.
 ## 6. Phase C — Forced Figma resource access
 
 ### C.1 Local library first on Generate (live opt-in)
-Generate UI reads the classified **local** reference library first: offline `raw/<fileKey>/document.json` → published catalog + Stitch / ui-brief → seed last resort.  
+Generate UI resource order (must match `figmaReferences.ts`):
+1. **PRIMARY for the first pre_code mockup:** offline committed `nebulla-project/figma-library/structure/<fileKey>/document.json` by bucket (`mobile` / `auth` / `landing` / `dashboard`)
+2. `raw/<fileKey>/document.json` if present
+3. published catalog profiles
+4. Stitch / ui-brief floor
+5. seed last
+
 Live Figma on Generate runs **only** when `FIGMA_LIVE_ON_GENERATE=1|true` **and** `FIGMA_API_KEY` is set **and** offline + catalog did not yield usable structure (default: live off).  
 Ingest/refresh scripts (`figma:download`, profile-drafts, publish) remain the place that may call live Figma for owned keys.  
-Never report live `success` when only seeds ran. If offline/catalog miss and live is off/unavailable, status is `weak_matches` / `skipped` (not fake success) and seed fallback is used.
+Never report `offline` or live `success` when only seeds ran. If offline/catalog miss and live is off/unavailable, status is `weak_matches` / `skipped` (not fake success) and seed fallback is used.
 
 ### C.2 Required Figma status values
 Exactly one:

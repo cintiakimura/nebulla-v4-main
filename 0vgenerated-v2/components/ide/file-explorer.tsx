@@ -44,7 +44,7 @@ const fileTree: FileNode[] = [
         name: "lib",
         type: "folder",
         children: [
-          { name: "supabase.ts", type: "file" },
+          { name: "session.ts", type: "file" },
           { name: "utils.ts", type: "file" },
         ],
       },

@@ -65,6 +65,9 @@ const en: Catalog = {
   'uiStudio.generateAgain': 'Generate again',
   'uiStudio.generateTitle': 'Run Nebulla UI Generation Engine from Master Plan (UI Studio Beta)',
   'uiStudio.generateAgainTitle': 'Generate again (max 3 attempts)',
+  'uiStudio.generateAgainRemaining': '{{remaining}} of {{max}} left',
+  'uiStudio.generationsExhausted':
+    'You’ve used {{max}} generations. Tell us what to change, or edit in Properties.',
   'uiStudio.applyToPreview': 'Apply to Preview',
   'uiStudio.applyToPreviewTitle': 'Write generated UI into App Preview shell',
   'uiStudio.previewSynced': 'Preview synced',
@@ -180,6 +183,9 @@ const fr: Catalog = {
   'uiStudio.generateAgain': 'Régénérer',
   'uiStudio.generateTitle': 'Lancer le moteur UI Nebulla depuis le Master Plan (UI Studio Beta)',
   'uiStudio.generateAgainTitle': 'Régénérer (max 3 essais)',
+  'uiStudio.generateAgainRemaining': '{{remaining}} sur {{max}} restants',
+  'uiStudio.generationsExhausted':
+    'Vous avez utilisé {{max}} générations. Dites-nous quoi changer, ou modifiez dans Propriétés.',
   'uiStudio.applyToPreview': 'Appliquer à l’aperçu',
   'uiStudio.applyToPreviewTitle': 'Écrire l’UI générée dans l’aperçu app',
   'uiStudio.previewSynced': 'Aperçu synchronisé',
@@ -290,6 +296,9 @@ const it: Catalog = {
   'uiStudio.generateAgain': 'Genera di nuovo',
   'uiStudio.generateTitle': 'Esegui il motore UI Nebulla dal Master Plan (UI Studio Beta)',
   'uiStudio.generateAgainTitle': 'Genera di nuovo (max 3 tentativi)',
+  'uiStudio.generateAgainRemaining': '{{remaining}} di {{max}} rimasti',
+  'uiStudio.generationsExhausted':
+    'Hai usato {{max}} generazioni. Dicci cosa cambiare, o modifica in Proprietà.',
   'uiStudio.applyToPreview': 'Applica all’anteprima',
   'uiStudio.applyToPreviewTitle': 'Scrivi l’UI generata nell’anteprima app',
   'uiStudio.previewSynced': 'Anteprima sincronizzata',
@@ -400,6 +409,9 @@ const es: Catalog = {
   'uiStudio.generateAgain': 'Generar de nuevo',
   'uiStudio.generateTitle': 'Ejecutar el motor UI Nebulla desde el Master Plan (UI Studio Beta)',
   'uiStudio.generateAgainTitle': 'Generar de nuevo (máx. 3 intentos)',
+  'uiStudio.generateAgainRemaining': '{{remaining}} de {{max}} restantes',
+  'uiStudio.generationsExhausted':
+    'Has usado {{max}} generaciones. Dinos qué cambiar, o edita en Propiedades.',
   'uiStudio.applyToPreview': 'Aplicar a vista previa',
   'uiStudio.applyToPreviewTitle': 'Escribir la UI generada en la vista previa',
   'uiStudio.previewSynced': 'Vista previa sincronizada',
@@ -510,6 +522,9 @@ const de: Catalog = {
   'uiStudio.generateAgain': 'Erneut generieren',
   'uiStudio.generateTitle': 'Nebulla-UI-Engine aus dem Master Plan starten (UI Studio Beta)',
   'uiStudio.generateAgainTitle': 'Erneut generieren (max. 3 Versuche)',
+  'uiStudio.generateAgainRemaining': '{{remaining}} von {{max}} übrig',
+  'uiStudio.generationsExhausted':
+    'Du hast {{max}} Generierungen genutzt. Sag uns, was sich ändern soll, oder bearbeite in Eigenschaften.',
   'uiStudio.applyToPreview': 'In Vorschau übernehmen',
   'uiStudio.applyToPreviewTitle': 'Generierte UI in die App-Vorschau schreiben',
   'uiStudio.previewSynced': 'Vorschau synchron',

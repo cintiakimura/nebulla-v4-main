@@ -288,19 +288,27 @@ export function renderTemplateModel(input: {
 }): V2EditorModel {
   const { template, classification, tokens, slots, figmaStatus } = input;
   const hintJoined = (input.structureHints || []).join("\n");
-  const forceCardStack = /VERTICAL auto-layout|card|content block|list/i.test(hintJoined);
+  const enforceRegions = /offline-structure:enforce-regions|region:identity/i.test(hintJoined);
+  const forceCardStack =
+    enforceRegions || /VERTICAL auto-layout|card|content block|list|region:content/i.test(hintJoined);
   const cardCount = forceCardStack || classification.page_type !== "empty" ? 3 : 2;
   const nodes: Record<string, V2Node> = {};
   const root = "root-page";
   const pageTitle = slots.hero_title || slots.nav_title || "Home";
   const regionIds: string[] = [];
 
-  const needsTabs = classification.navigation_mode === "bottom_tabs";
+  const needsTabs =
+    classification.navigation_mode === "bottom_tabs" ||
+    (enforceRegions &&
+      /region:nav/i.test(hintJoined) &&
+      classification.page_type !== "auth" &&
+      classification.page_type !== "landing");
   const needsSidebar =
     classification.navigation_mode === "sidebar" ||
     template.id === "web_dashboard_sidebar" ||
     template.id === "web_settings_two_column";
   const needsTopBar =
+    (enforceRegions && !/auth/i.test(template.id)) ||
     /^mobile_/i.test(template.id) ||
     classification.device === "mobile" ||
     needsTabs;

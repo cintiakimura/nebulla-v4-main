@@ -3,10 +3,11 @@
  * Authority: ui-generation-logic-v2.md §6 + ui-resource-selection-rubric.md
  *
  * Generate-time order (single path):
- * 1) offline `nebulla-project/figma-library/raw/<key>/document.json`
- * 2) published catalog profiles + Stitch / ui-brief hints
- * 3) internal seed patterns (last resort)
- * 4) live Figma only when FIGMA_LIVE_ON_GENERATE=1|true AND FIGMA_API_KEY set
+ * 1) offline `nebulla-project/figma-library/structure/<key>/document.json` (PRIMARY, first mockup)
+ * 2) offline `raw/<key>/document.json` if present
+ * 3) published catalog profiles + Stitch / ui-brief hints
+ * 4) internal seed patterns (last resort)
+ * 5) live Figma only when FIGMA_LIVE_ON_GENERATE=1|true AND FIGMA_API_KEY set
  *    AND offline + catalog did not yield usable structure (max 1 file, hard cap 2)
  *
  * Ingest/refresh (`npm run figma:download` etc.) may call live Figma freely.
@@ -243,15 +244,22 @@ function mapSeedToTemplateHints(templateId: V2TemplateId, structure: string): st
 function loadOfflineFigmaFile(fileKey: string): {
   name?: string;
   document?: FigmaNode;
+  source: "structure" | "raw";
 } | null {
   const key = fileKey.trim();
   if (!key) return null;
-  const roots = [
-    path.join(process.cwd(), "nebulla-project", "figma-library", "structure", key),
-    path.join(process.cwd(), "nebulla-project", "figma-library", "raw", key),
+  const roots: { dir: string; source: "structure" | "raw" }[] = [
+    {
+      dir: path.join(process.cwd(), "nebulla-project", "figma-library", "structure", key),
+      source: "structure",
+    },
+    {
+      dir: path.join(process.cwd(), "nebulla-project", "figma-library", "raw", key),
+      source: "raw",
+    },
   ];
   const seen = new Set<string>();
-  for (const dir of roots) {
+  for (const { dir, source } of roots) {
     if (seen.has(dir)) continue;
     seen.add(dir);
     const docPath = path.join(dir, "document.json");
@@ -261,7 +269,7 @@ function loadOfflineFigmaFile(fileKey: string): {
         name?: string;
         document?: FigmaNode;
       };
-      if (data?.document) return data;
+      if (data?.document) return { ...data, source };
     } catch {
       /* try next */
     }
@@ -311,21 +319,34 @@ function extractStructureHints(
   root: FigmaNode | undefined,
   classification: PageClassification,
   templateId: V2TemplateId,
-): { hints: string[]; frameNames: string[]; score: number } {
+): { hints: string[]; frameNames: string[]; score: number; usable: boolean } {
   const hints: string[] = [];
   const frameNames: string[] = [];
   let score = 0;
-  if (!root) return { hints, frameNames, score };
+  if (!root) return { hints, frameNames, score, usable: false };
 
   const walk = (n: FigmaNode, depth: number) => {
-    if (!n || depth > 6) return;
+    if (!n || depth > 8) return;
     const name = (n.name || "").trim();
     const type = (n.type || "").toUpperCase();
-    if ((type === "FRAME" || type === "COMPONENT" || type === "INSTANCE") && name) {
+    if (
+      (type === "FRAME" ||
+        type === "COMPONENT" ||
+        type === "INSTANCE" ||
+        type === "GROUP" ||
+        type === "CANVAS") &&
+      name
+    ) {
       frameNames.push(name);
       const lower = name.toLowerCase();
-      if (/header|hero|nav|tab|list|card|metric|cta|button|setting|auth|form/i.test(lower)) {
+      if (
+        /header|hero|nav|tab|list|card|metric|cta|button|setting|auth|form|home|feed|sign|login|title|brand/i.test(
+          lower,
+        )
+      ) {
         score += 2;
+      } else {
+        score += 1;
       }
       if (n.layoutMode === "VERTICAL") {
         hints.push(`frame "${name}" uses VERTICAL auto-layout`);
@@ -347,6 +368,14 @@ function extractStructureHints(
   };
   walk(root, 0);
 
+  const joined = frameNames.join(" ").toLowerCase();
+  if (/header|nav|title|brand|status bar/i.test(joined)) hints.push("region:identity");
+  if (/card|list|feed|content|metric|feature|home|dashboard/i.test(joined)) {
+    hints.push("region:content");
+  }
+  if (/cta|button|sign|primary/i.test(joined)) hints.push("region:cta");
+  if (/tab|bottom|nav/i.test(joined)) hints.push("region:nav");
+
   const deviceHint =
     classification.device === "mobile"
       ? frameNames.find((n) => /mobile|iphone|ios|phone/i.test(n))
@@ -364,8 +393,9 @@ function extractStructureHints(
   }
 
   hints.push(`adapt into template slots for ${templateId} — keep section order, discard decorative noise`);
-  const uniq = [...new Set(hints)].slice(0, 12);
-  return { hints: uniq, frameNames: frameNames.slice(0, 24), score };
+  const usable = frameNames.length >= 1 || score >= 4;
+  const uniq = [...new Set(hints)].slice(0, 16);
+  return { hints: uniq, frameNames: frameNames.slice(0, 24), score, usable };
 }
 
 function redactSecrets(msg: string): string {
@@ -537,7 +567,7 @@ export async function retrieveFigmaReferences(input: {
     ]),
   ].slice(0, resolveMaxFiles());
 
-  // 1) Offline extracts first
+  // 1) Offline extracts first (structure/ primary, then raw/)
   for (const fileKey of offlineScanKeys) {
     const offline = loadOfflineFigmaFile(fileKey);
     if (!offline?.document) continue;
@@ -546,7 +576,22 @@ export async function retrieveFigmaReferences(input: {
       input.classification,
       input.templateId,
     );
-    if (extracted.score < 4) continue;
+    const usable =
+      extracted.usable ||
+      (offline.source === "structure" && Boolean(offline.document.children?.length));
+    if (!usable) continue;
+    const bucket =
+      bucketForKey(fileKey, buckets) || preferredBucket || "mobile";
+    const regionHints = [
+      "offline-structure:enforce-regions",
+      "region:identity",
+      "region:content",
+      "region:cta",
+      input.classification.navigation_mode === "bottom_tabs" ||
+      input.classification.navigation_mode === "sidebar"
+        ? "region:nav"
+        : "",
+    ].filter(Boolean);
     return {
       reference_file_keys_configured: keysConfigured,
       env_guidance: envGuidance,
@@ -554,35 +599,36 @@ export async function retrieveFigmaReferences(input: {
         {
           key: fileKey,
           outcome: "ok",
-          score: extracted.score,
+          score: Math.max(extracted.score, 4),
           file_name: offline.name,
-          bucket: bucketForKey(fileKey, buckets),
+          bucket,
         },
       ],
-      selection_mode: `offline:${selectionModeBase}`,
-      preferred_bucket: preferredBucket,
+      selection_mode: `offline:bucket:${bucket}`,
+      preferred_bucket: preferredBucket || bucket,
       figma_used: "yes",
       figma_status: "offline",
       figma_error: "",
       candidates: [
         {
           id: `figma-offline:${fileKey}`,
-          reason: `Offline library "${offline.name || fileKey}" bucket=${bucketForKey(fileKey, buckets) || preferredBucket || "—"} score=${extracted.score}`,
+          reason: `Offline ${offline.source} library "${offline.name || fileKey}" bucket=${bucket} score=${extracted.score}`,
         },
         ...seedCandidates,
       ],
       selected_refs: [
         {
           id: `figma-offline:${fileKey}`,
-          why: `Offline library hit key=${fileKey} bucket=${bucketForKey(fileKey, buckets) || preferredBucket || "—"} → ${input.templateId}`,
+          why: `Offline ${offline.source} hit key=${fileKey} bucket=${bucket} → ${input.templateId}`,
         },
       ],
       fallback_used: "no",
       structure_hints: [
+        ...regionHints,
         ...extracted.hints,
         ...intelligenceHints,
         "Use Figma section order / card grouping / spacing only — do not copy decorative noise",
-      ].slice(0, 16),
+      ].slice(0, 18),
     };
   }
 

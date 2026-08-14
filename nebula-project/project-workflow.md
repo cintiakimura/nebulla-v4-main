@@ -78,7 +78,7 @@
 - **IF OK:** Go to Step 5
 - **IF PARTIAL/MISSING/TIMEOUT:** Defaults + PARTIAL → Go to Step 5
 - **Open room (only if needed):** `recovery-lab/proposed/policies-and-steps.md` §2 + §4
-- **Must not:** Ask non-blocking brand Qs; force Supabase/Firebase; block on security
+- **Must not:** Ask non-blocking brand Qs; force a hosted BaaS; block on security
 
 ### Step 5 — Write Master Plan §§1–5
 1. Emit `<START_MASTERPLAN>…</END_MASTERPLAN>` with exact five headers.

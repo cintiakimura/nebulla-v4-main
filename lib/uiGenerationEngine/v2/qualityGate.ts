@@ -16,6 +16,21 @@ import type { DesignBrief } from "../resources/types";
 import { stitchMinimumIssues } from "./applyStructureHints";
 import { sanitizeSlotsForPageType } from "./mapSlots";
 
+function looksSeedEmptyShell(input: {
+  nodes: { role?: string; id?: string; type?: string; text?: string }[];
+  pageType: V2PageType;
+  containers: number;
+}): boolean {
+  const { nodes, pageType, containers } = input;
+  if (nodes.length < 8 || containers < 3) return true;
+  const cards = nodes.filter((n) => /^card$/i.test(n.role || "")).length;
+  const identity = nodes.some((n) => /top_bar|identity|hero|nav_bar/i.test(`${n.role || ""} ${n.id || ""}`));
+  const buttons = nodes.filter((n) => n.type === "button").length;
+  if (pageType === "auth") return buttons < 1 || !identity;
+  if (pageType === "empty") return !identity;
+  return !identity || cards < 2;
+}
+
 function luma(hex: string): number {
   const h = (hex || "").replace("#", "");
   if (h.length < 6) return 0.5;
@@ -88,6 +103,47 @@ export function validateV2Quality(input: {
     templateId: template.id,
   });
   issues.push(...stitch);
+
+  const claimedLibrary =
+    figmaStatus === "offline" ||
+    figmaStatus === "success" ||
+    Boolean(selectionMode?.startsWith("offline:")) ||
+    Boolean(selectionMode?.includes(":catalog:"));
+  const seedEmpty = looksSeedEmptyShell({
+    nodes,
+    pageType,
+    containers: containers.length,
+  });
+
+  // Offline/catalog claimed must show product layout — never Ready on a seed-empty shell.
+  if (claimedLibrary) {
+    if (!hasIdentityRegion) {
+      issues.push("Library hit missing identity / header region");
+    }
+    if (pageType !== "auth" && pageType !== "empty") {
+      const cardCount = nodes.filter((n) => /^card$/i.test(n.role || "")).length;
+      if (cardCount < 2) {
+        issues.push("Library hit missing ≥2 content regions");
+      }
+    }
+    if (template.needsPrimaryCta && (buttons.length < 1 || !(slots.primary_cta || "").trim())) {
+      issues.push("Library hit missing required primary CTA");
+    }
+    if (seedEmpty) {
+      issues.push("Library/offline claimed but nodes look seed-empty — not Ready");
+    }
+  }
+
+  if (pageType !== "auth") {
+    const leakedAuth = nodes.some((n) => /^(email|password)$/i.test(String(n.text || "").trim()));
+    if (leakedAuth) {
+      issues.push("Stitch-minimum: auth fields on non-auth page");
+    }
+  }
+
+  if (seedEmpty && (pageType === "home" || pageType === "landing" || pageType === "dashboard" || pageType === "list")) {
+    issues.push("Stitch-minimum: empty / single blank hero-only shell");
+  }
 
   // Offline/library success without structure still failing stitch → call out honesty
   if (
@@ -209,10 +265,15 @@ export function validateV2Quality(input: {
 
   const uniq = [...new Set(issues)];
   const stitchRemain = uniq.filter(
-    (i) => i.startsWith("Stitch-minimum:") || i.includes("Library hit without"),
+    (i) =>
+      i.startsWith("Stitch-minimum:") ||
+      i.includes("Library hit") ||
+      i.includes("seed-empty") ||
+      i.includes("hero-only"),
   );
 
-  // Stitch-minimum is the exam: fail/repair until cleared. Soft brief polish does not block Ready.
+  // Stitch-minimum / library honesty is the exam: fail/repair until cleared.
+  // Soft brief polish does not block Ready. Weak/fail must not Ready.
   if (stitchRemain.length > 0) {
     if (uniq.length <= 2) return { gate: "repair", issues: uniq };
     return { gate: "weak", issues: uniq };
