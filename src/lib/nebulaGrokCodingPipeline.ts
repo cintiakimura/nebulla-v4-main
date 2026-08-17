@@ -1,5 +1,5 @@
 import { fetchJson, readResponseJson } from './apiFetch';
-import { extractGrokFilePaths, normalizeGrokFileBlockSyntax } from './grokChatArtifacts';
+import { extractGrokFilePaths, normalizeGrokFileBlockSyntax, buildApplyGeneratedPayload } from './grokChatArtifacts';
 import { runPostCodingWorkspaceSync } from './ideArtifactSync';
 import { cancelProjectBackgroundJobs } from './ideProjectReset';
 import type { GrokActivityProgressFn } from './ideGrokActivityStatus';
@@ -20,7 +20,7 @@ import {
   goPollActivityMessage,
   goPollBackoffMs,
 } from './spineSequenceGates';
-import { withProjectBody, withProjectQuery } from './nebulaProjectApi';
+import { getBrowserProjectKey, withProjectBody, withProjectQuery } from './nebulaProjectApi';
 import { dispatchStudioShowLiveApp, triggerUiStudioBetaAfterFilesApplied } from './uiStudioBetaEngine';
 import { markFoundationGoInFlight } from './foundationHeavyJob';
 import { setGrokCodingActive } from './nebulaGrokCodingGate';
@@ -96,6 +96,12 @@ function isApplyWaitTimeout(e: unknown): boolean {
   if (isAbortError(e)) return true;
   const msg = e instanceof Error ? e.message : String(e || '');
   return /Apply timed out after 12s|The operation was aborted/i.test(msg);
+}
+
+function isApplyTransportFailure(msg: string): boolean {
+  return /HTML instead of JSON|HTML block page|not found on this server|METHOD_NOT_ALLOWED|HTTP 403|HTTP 404|HTTP 405/i.test(
+    msg,
+  );
 }
 
 async function confirmAppliedPathsOnDisk(expected: string[]): Promise<string[]> {
@@ -376,14 +382,17 @@ export async function applyGeneratedFiles(
       interactivePreviewPath?: string;
     };
     try {
-      const fetchP = fetchJson(withProjectQuery('/api/files/apply-generated'), {
+      const fetchP = fetchJson('/api/files/apply-generated', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'x-nebula-project-key': getBrowserProjectKey(),
+        },
         credentials: 'include',
         signal: applyAbort.signal,
         body: JSON.stringify(
           withProjectBody({
-            content: clean,
+            ...buildApplyGeneratedPayload(clean),
             userNote: artifactContext?.userNote?.trim() || undefined,
             projectName: artifactContext?.projectName?.trim() || undefined,
           }),
@@ -555,7 +564,12 @@ export async function applyGeneratedFiles(
         error: APPLY_TIMEOUT_MESSAGE,
       };
     }
-    onProgress?.(msg, 'error');
+    onProgress?.(
+      isApplyTransportFailure(msg)
+        ? `File apply blocked: ${msg.replace(/^HTTP \d+:\s*/i, '')} Retry Go — this wait will not start Code pass 2.`
+        : msg,
+      'error',
+    );
     return { ok: false, writtenCount: 0, skippedCount: 0, writtenPaths: [], message: msg, error: msg };
   } finally {
     applyAbortByProject.delete(projectKey);
@@ -1047,6 +1061,13 @@ export async function runGoCodeAndApply(options: {
       totalWritten += apply.writtenCount;
       allWrittenPaths.push(...apply.writtenPaths);
       if (isGoSessionAborted(projectName)) break;
+      if (!apply.ok && isApplyTransportFailure(String(apply.error || apply.message || ''))) {
+        onProgress?.(
+          'File apply did not reach the workspace (host 403/HTML or GET). Not starting Code pass 2.',
+          'error',
+        );
+        break;
+      }
       if (typeof apply.runnableRoot === 'boolean') {
         lastRunnable = {
           runnableRoot: apply.runnableRoot,

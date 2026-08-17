@@ -15,6 +15,26 @@ import { matchBugDatabaseSnippets } from './bugDatabaseSnippet';
 
 export const MASTER_PLAN_TAB_NAMES = [...MASTER_PLAN_SECTION_KEYS] as const;
 
+/** UTF-8 → base64 so Cloudflare WAF is less likely to 403 JSX/HTML file bodies. */
+export function utf8ToBase64(text: string): string {
+  const bytes = new TextEncoder().encode(text);
+  let bin = '';
+  const chunk = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunk) {
+    bin += String.fromCharCode(...bytes.subarray(i, i + chunk));
+  }
+  return btoa(bin);
+}
+
+/** JSON body for POST /api/files/apply-generated (base64 preferred; plaintext fallback). */
+export function buildApplyGeneratedPayload(content: string): { contentBase64: string } | { content: string } {
+  try {
+    return { contentBase64: utf8ToBase64(content) };
+  } catch {
+    return { content };
+  }
+}
+
 /** Normalize common model mistakes before `/api/files/apply-generated`. */
 export function normalizeGrokFileBlockSyntax(raw: string): string {
   let s = raw

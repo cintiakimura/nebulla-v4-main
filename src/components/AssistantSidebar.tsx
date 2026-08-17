@@ -16,7 +16,7 @@ import {
 } from '../lib/grokKey';
 import { fetchNebulaPublicConfig } from '../lib/nebulaPublicConfig';
 import { dispatchOpenUiStudio, dispatchStartUiUxWorkflow } from '../lib/nebulaUiStudioEvents';
-import { withProjectBody, withProjectQuery } from '../lib/nebulaProjectApi';
+import { withProjectBody, withProjectQuery, getBrowserProjectKey } from '../lib/nebulaProjectApi';
 import {
   cancelProjectBackgroundJobs,
   ONBOARDING_DONE_KEY,
@@ -31,6 +31,7 @@ import {
   resolveLanguageState,
 } from '../lib/i18n/userLanguagePreferences';
 import { fetchConversationLogEntries } from '../lib/conversationLogClient';
+import { buildApplyGeneratedPayload } from '../lib/grokChatArtifacts';
 import { uploadFileToR2 } from '../lib/nebulaStorageClient';
 import {
   MIC_REENABLE_AFTER_TTS_MS,
@@ -600,10 +601,13 @@ export function AssistantSidebar({
                 parsedBlocks?: number;
                 usedFallbackPath?: string;
                 error?: string;
-              }>(withProjectQuery('/api/files/apply-generated'), {
+              }>('/api/files/apply-generated', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(withProjectBody({ content: goText })),
+                headers: {
+                  'Content-Type': 'application/json',
+                  'x-nebula-project-key': getBrowserProjectKey(),
+                },
+                body: JSON.stringify(withProjectBody(buildApplyGeneratedPayload(goText))),
               });
               if (apply.error) {
                 stopRealtimeCodingStatus();

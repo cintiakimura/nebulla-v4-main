@@ -2588,10 +2588,33 @@ No approved UI code yet.
     }
   });
 
+  const sendApplyGeneratedMethodNotAllowed = (_req: express.Request, res: express.Response) => {
+    res.setHeader("Allow", "POST");
+    res.status(405).json({
+      error:
+        "POST /api/files/apply-generated with JSON { content } or { contentBase64 }. GET is not file apply — Chrome DevTools opens a failed POST as GET.",
+      code: "METHOD_NOT_ALLOWED",
+    });
+  };
+  app.get("/api/files/apply-generated", sendApplyGeneratedMethodNotAllowed);
+  app.head("/api/files/apply-generated", sendApplyGeneratedMethodNotAllowed);
+  app.options("/api/files/apply-generated", (_req, res) => {
+    res.setHeader("Allow", "POST, OPTIONS");
+    res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type, x-nebula-project-key");
+    res.status(204).end();
+  });
   app.post("/api/files/apply-generated", (req, res) => {
     try {
       const { workspaceRoot } = projectPathsFor(req);
       let raw = typeof req.body?.content === "string" ? req.body.content : "";
+      if (!raw.trim() && typeof req.body?.contentBase64 === "string" && req.body.contentBase64.trim()) {
+        try {
+          raw = Buffer.from(String(req.body.contentBase64).trim(), "base64").toString("utf8");
+        } catch {
+          return res.status(400).json({ error: "contentBase64 is invalid" });
+        }
+      }
       if (!raw.trim()) return res.status(400).json({ error: "content is required" });
       raw = raw.replace(/"""file:/gi, "```file:").replace(/'''file:/gi, "```file:");
 

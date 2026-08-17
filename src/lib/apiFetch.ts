@@ -23,6 +23,11 @@ export async function readResponseJson<T>(response: Response): Promise<T> {
     throw new Error("Empty response from server");
   }
   if (isProbablyHtml(trimmed)) {
+    if (response.status === 403 || response.status === 406) {
+      throw new Error(
+        `HTTP ${response.status}: host returned an HTML block page instead of JSON (often Cloudflare). Retry Go — the file POST did not land.`
+      );
+    }
     throw new Error(
       "Received HTML instead of JSON. Run `npm run dev` for the full stack on port 3000, or `npm run preview` after `npm run build`."
     );

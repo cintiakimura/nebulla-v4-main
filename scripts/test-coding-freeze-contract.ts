@@ -137,6 +137,17 @@ assert.equal(
 
 const applyRoute = server.slice(server.indexOf('app.post("/api/files/apply-generated"'));
 assert.match(applyRoute, /res\.json\(/);
+assert.match(server, /app\.get\("\/api\/files\/apply-generated"/);
+assert.match(server, /METHOD_NOT_ALLOWED/);
+assert.match(server, /contentBase64/);
+assert.match(pipeline, /buildApplyGeneratedPayload/);
+assert.match(pipeline, /isApplyTransportFailure/);
+assert.match(goFn, /Not starting Code pass 2/);
+assert.equal(
+  /fetchJson\(withProjectQuery\('\/api\/files\/apply-generated'\)/.test(applyFn),
+  false,
+  'apply POST must not use a GET-shaped query URL (DevTools opens it as GET 404)',
+);
 {
   const jsonIdx = applyRoute.indexOf('res.json(');
   const previewIdx = applyRoute.indexOf('ensureInteractiveProductPreview');
