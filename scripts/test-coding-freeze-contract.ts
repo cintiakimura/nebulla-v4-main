@@ -14,6 +14,10 @@ import {
   writeGoCodePending,
 } from '../lib/nebulaGoCodePending.ts';
 import { goCodePendingToPollResponse } from '../lib/nebulaGoCodeJob.ts';
+import {
+  isApplyTransportFailure,
+  shouldSkipGoCodeSecondPassAfterApply,
+} from '../src/lib/applyTransportFailure.ts';
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const pipeline = fs.readFileSync(path.join(root, 'src/lib/nebulaGrokCodingPipeline.ts'), 'utf8');
@@ -141,8 +145,9 @@ assert.match(server, /app\.get\("\/api\/files\/apply-generated"/);
 assert.match(server, /METHOD_NOT_ALLOWED/);
 assert.match(server, /contentBase64/);
 assert.match(pipeline, /buildApplyGeneratedPayload/);
-assert.match(pipeline, /isApplyTransportFailure/);
+assert.match(pipeline, /shouldSkipGoCodeSecondPassAfterApply/);
 assert.match(goFn, /Not starting Code pass 2/);
+assert.match(applyRoute, /writtenCount: written\.length/);
 assert.equal(
   /fetchJson\(withProjectQuery\('\/api\/files\/apply-generated'\)/.test(applyFn),
   false,
@@ -219,5 +224,51 @@ assert.match(figma, /controller\.abort\(\), 4000\)/, 'live Figma fetch must time
   assert.equal(pollErr.coding, undefined);
   assert.equal(pollErr.codeError, 'xAI failed');
 }
+
+assert.equal(
+  isApplyTransportFailure(
+    'HTTP 403: host returned HTML instead of JSON (often Cloudflare 403/challenge). The file POST did not land.',
+  ),
+  true,
+);
+assert.equal(isApplyTransportFailure('Invalid JSON (502): <html>'), true);
+assert.equal(isApplyTransportFailure('No file blocks found'), false);
+assert.equal(
+  shouldSkipGoCodeSecondPassAfterApply({
+    ok: false,
+    writtenCount: 0,
+    error: 'HTTP 403: host returned HTML instead of JSON',
+  }),
+  true,
+);
+assert.equal(
+  shouldSkipGoCodeSecondPassAfterApply({
+    ok: false,
+    writtenCount: 0,
+    message: 'Apply timed out after 12s — checking whether files already landed on disk.',
+  }),
+  true,
+);
+assert.equal(
+  shouldSkipGoCodeSecondPassAfterApply({
+    ok: true,
+    writtenCount: 11,
+    message: 'Applied 11 file(s)',
+  }),
+  false,
+);
+assert.equal(
+  shouldSkipGoCodeSecondPassAfterApply({
+    ok: false,
+    writtenCount: 0,
+    error: 'No file blocks found',
+  }),
+  false,
+);
+assert.match(chat, /if \(!FAST_PROTOTYPE_SAME_SESSION_AUTOPILOT\)/);
+assert.match(
+  fs.readFileSync(path.join(root, 'src/lib/apiFetch.ts'), 'utf8'),
+  /host returned HTML instead of JSON/,
+);
 
 console.log('\n✓ coding freeze contract passed\n');

@@ -76,6 +76,7 @@ import {
 import {
   buildAutopilotSliceInstruction,
   FAST_PROTOTYPE_PRIMARY_SLICE_INSTRUCTION,
+  FAST_PROTOTYPE_SAME_SESSION_AUTOPILOT,
   APPLY_IN_FLIGHT_STALL_MS,
   FOUNDATION_APPLY_STALL_MS,
   getAutopilotSliceCount,
@@ -412,6 +413,16 @@ export function AIChat() {
 
   /** Next Go slice without a user chat message (Plan → mockup → Foundation already ran). */
   const runAutoNextSlice = useCallback(async () => {
+    if (!FAST_PROTOTYPE_SAME_SESSION_AUTOPILOT) {
+      pushActivity(
+        'Coding complete. Send Continue for the next slice — not started automatically.',
+        'success',
+      );
+      resetCodingActivity();
+      sendingRef.current = false;
+      setSending(false);
+      return;
+    }
     if (autoSliceAbortRef.current) return;
     if (autoSliceInFlightRef.current) return;
     if (interactionModeRef.current === 'chat') {
@@ -517,6 +528,7 @@ export function AIChat() {
   runAutoNextSliceRef.current = runAutoNextSlice;
 
   const scheduleAutopilotHandoff = useCallback(() => {
+    if (!FAST_PROTOTYPE_SAME_SESSION_AUTOPILOT) return;
     if (autoSliceAbortRef.current) return;
     if (autopilotHandoffScheduledRef.current) return;
     autopilotHandoffScheduledRef.current = true;

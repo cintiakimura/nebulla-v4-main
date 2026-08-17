@@ -6,20 +6,16 @@ import { installPreviewRuntimeMessageListener } from '../../../../lib/previewRun
 import { PreviewEditToolbar, type PreviewToolbarState } from './PreviewEditToolbar';
 import { PreviewWaitingThrobber } from './PreviewWaitingThrobber';
 import {
+  htmlLooksLikeShowablePreview,
+  previewMetaHasProductRoutes,
+} from '@/lib/workspaceCodedAppUi';
+import {
   applyUiStudioBetaToAppPreview,
   NEBULA_STUDIO_SHOW_LIVE_APP,
   NEBULA_UI_STUDIO_BETA_BUSY,
   NEBULA_UI_STUDIO_BETA_COMPLETE,
   runUiStudioBetaGeneration,
 } from '../../../../lib/uiStudioBetaEngine';
-
-function htmlLooksLikeVisualPreview(html: string): boolean {
-  const t = String(html || '');
-  if (t.length < 80) return false;
-  if (/No preview|No index\.html/i.test(t)) return false;
-  if (/coded-app-bridge/i.test(t) && !/ui-gen-mockup/i.test(t)) return false;
-  return /ui-gen-mockup|shell--phone|data-screen=/i.test(t);
-}
 
 /**
  * Preview column for Build: toolbar fixed above canvas, no outer “Preview” frame.
@@ -60,6 +56,12 @@ export function BuildPreviewCanvas() {
         previewStatusLabel?: string;
       };
       if (!res.ok) return;
+      if (previewMetaHasProductRoutes(data)) {
+        setHasVisualPreview(true);
+        setShowMockup(false);
+        setWaitStatus(data.previewStatusLabel?.trim() || 'Live app preview');
+        return;
+      }
       if (data.previewMode === 'empty' || data.previewHonesty === 'empty') {
         setHasVisualPreview(false);
       }
@@ -190,7 +192,7 @@ export function BuildPreviewCanvas() {
                 setRev((n) => n + 1);
                 return;
               }
-              const visual = htmlLooksLikeVisualPreview(html);
+              const visual = htmlLooksLikeShowablePreview(html);
               setHasVisualPreview(visual);
               if (visual) setFailed(false);
             } catch {

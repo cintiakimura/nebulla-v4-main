@@ -2756,6 +2756,7 @@ No approved UI code yet.
       res.json({
         success: true,
         written,
+        writtenCount: written.length,
         skipped,
         parsedBlocks: blocks.length,
         usedFallbackPath: fallbackPath || undefined,

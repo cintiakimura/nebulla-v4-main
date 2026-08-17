@@ -17,6 +17,8 @@ import {
   resolveAppPreviewAuthority,
   toHttpHeaderSafe,
   workspaceHasCodedAppUi,
+  htmlLooksLikeShowablePreview,
+  previewMetaHasProductRoutes,
 } from "../lib/workspaceCodedAppUi.ts";
 import {
   ensureInteractiveProductPreview,
@@ -268,6 +270,25 @@ section("Vite App+main is thin shell not Code exists success");
   assert.match(auth.statusLabel, /Code shell/i);
   assert.equal(/App looks OK/i.test(auth.statusLabel), false);
   fs.rmSync(root, { recursive: true, force: true });
+}
+
+section("canvas honesty — product preview / coded bridge is showable (not Figma HTML)");
+{
+  assert.equal(htmlLooksLikeShowablePreview("<html><body>No preview</body></html>"), false);
+  const mockup = `<!doctype html><html><head><meta name="nebulla-preview" content="ui-gen-mockup"></head><body><div class="shell--phone" data-screen="home">Home</div></body></html>`;
+  assert.equal(htmlLooksLikeShowablePreview(mockup), true);
+  const coded = `<!doctype html><html><body><div class="coded-app-bridge"><p>Code exists</p></div></body></html>`;
+  assert.equal(htmlLooksLikeShowablePreview(coded), true);
+  const interactive = `<!doctype html><html><body><main data-preview="interactive-product-preview">Who are you today</main></body></html>`;
+  assert.equal(htmlLooksLikeShowablePreview(interactive), true);
+  assert.equal(
+    previewMetaHasProductRoutes({ previewHonesty: "real_routes", previewMode: "interactive_product_preview" }),
+    true,
+  );
+  assert.equal(
+    previewMetaHasProductRoutes({ previewHonesty: "mockup_waiting", previewMode: "pre_code_mockup" }),
+    false,
+  );
 }
 
 console.log("\n✓ preview authority tests passed\n");

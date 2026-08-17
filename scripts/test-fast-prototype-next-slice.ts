@@ -213,6 +213,7 @@ assert.equal(APPLY_IN_FLIGHT_STALL_MS, 15_000);
     chat.indexOf('Foundation apply used to freeze'),
     chat.indexOf('Detect natural language project creation'),
   );
+  assert.match(chat, /if \(!FAST_PROTOTYPE_SAME_SESSION_AUTOPILOT\)/);
   assert.equal(
     /scheduleAutopilotHandoff\(\)/.test(stallBlock),
     false,

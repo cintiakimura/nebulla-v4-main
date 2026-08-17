@@ -28,6 +28,10 @@ import {
   FAST_PROTOTYPE_PRIMARY_SLICE_INSTRUCTION,
   userNoteRequestsNextSlice,
 } from './fastPrototypeNextSlice';
+import {
+  isApplyTransportFailure,
+  shouldSkipGoCodeSecondPassAfterApply,
+} from './applyTransportFailure';
 
 const START_CODING_RE = /<\s*START_CODING\s*>|\bSTART_CODING\b/i;
 /** Safety cap — wall clock GO_POLL_MAX_WAIT_MS is the real stop. */
@@ -96,12 +100,6 @@ function isApplyWaitTimeout(e: unknown): boolean {
   if (isAbortError(e)) return true;
   const msg = e instanceof Error ? e.message : String(e || '');
   return /Apply timed out after 12s|The operation was aborted/i.test(msg);
-}
-
-function isApplyTransportFailure(msg: string): boolean {
-  return /HTML instead of JSON|HTML block page|not found on this server|METHOD_NOT_ALLOWED|HTTP 403|HTTP 404|HTTP 405/i.test(
-    msg,
-  );
 }
 
 async function confirmAppliedPathsOnDisk(expected: string[]): Promise<string[]> {
@@ -374,6 +372,7 @@ export async function applyGeneratedFiles(
       usedFallbackPath?: string;
       baasSkippedReason?: string;
       error?: string;
+      writtenCount?: number;
       runnableRoot?: boolean;
       runnableStatusLine?: string;
       deployable?: boolean;
@@ -420,7 +419,10 @@ export async function applyGeneratedFiles(
       };
     }
     const writtenPaths = Array.isArray(apply.written) ? apply.written : [];
-    const writtenCount = writtenPaths.length;
+    const writtenCount =
+      typeof apply.writtenCount === 'number' && apply.writtenCount > 0
+        ? apply.writtenCount
+        : writtenPaths.length;
     const skippedCount = Array.isArray(apply.skipped) ? apply.skipped.length : 0;
     const depth = assessApplyRouteDepth(writtenPaths);
     // Phase 6: IF plan needs routes AND disk is App+main-only → not “App looks OK”.
@@ -1061,9 +1063,9 @@ export async function runGoCodeAndApply(options: {
       totalWritten += apply.writtenCount;
       allWrittenPaths.push(...apply.writtenPaths);
       if (isGoSessionAborted(projectName)) break;
-      if (!apply.ok && isApplyTransportFailure(String(apply.error || apply.message || ''))) {
+      if (shouldSkipGoCodeSecondPassAfterApply(apply)) {
         onProgress?.(
-          'File apply did not reach the workspace (host 403/HTML or GET). Not starting Code pass 2.',
+          'File apply did not reach the workspace (host HTML/403 or timeout). Not starting Code pass 2.',
           'error',
         );
         break;

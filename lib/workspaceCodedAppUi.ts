@@ -17,6 +17,30 @@ export const UI_GEN_MOCKUP_REL = "public/nebula-ui-gen-preview.html";
 export const CODED_APP_BRIDGE_MARKER = "coded-app-bridge";
 export { PRODUCT_PREVIEW_REL, PRODUCT_PREVIEW_MARKER };
 
+/** Iframe HTML is showable — mockup OR coded/product-preview. Do not require Figma-shaped markup. */
+export function htmlLooksLikeShowablePreview(html: string): boolean {
+  const t = String(html || "");
+  if (t.length < 80) return false;
+  if (/No preview|No index\.html/i.test(t)) return false;
+  if (/interactive-product-preview|coded-app-bridge/i.test(t)) return true;
+  return /ui-gen-mockup|shell--phone|data-screen=/i.test(t);
+}
+
+/** Product routes / interactive preview on disk — leave Waiting-for-mockup. */
+export function previewMetaHasProductRoutes(meta: {
+  previewHonesty?: string | null;
+  previewMode?: string | null;
+}): boolean {
+  const h = String(meta.previewHonesty || "");
+  const m = String(meta.previewMode || "");
+  return (
+    h === "real_routes" ||
+    m === "interactive_product_preview" ||
+    m === "live_app_static" ||
+    m === "post_code_bridge"
+  );
+}
+
 const SKIP_DIR = new Set([
   "node_modules",
   ".git",
