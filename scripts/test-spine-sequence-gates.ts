@@ -16,6 +16,7 @@ import {
   goPollActivityMessage,
   goPollBackoffMs,
   isUsableProjectGoal,
+  planRecordHasUsableGoal,
   uiBriefTooShort,
   uiBriefUsable,
 } from "../lib/spineSequenceGates.ts";
@@ -119,7 +120,21 @@ assert.equal(isUsableProjectGoal(""), false);
 assert.equal(isUsableProjectGoal("hi"), false);
 assert.equal(isUsableProjectGoal("test"), false);
 assert.equal(isUsableProjectGoal("tutor kids with ADHD"), true);
+assert.equal(planRecordHasUsableGoal(null), false);
+assert.equal(planRecordHasUsableGoal({}), false);
+assert.equal(planRecordHasUsableGoal({ "1. Goal of the app": "" }), false);
+assert.equal(
+  planRecordHasUsableGoal({ "1. Goal of the app": "tutor kids with ADHD" }),
+  true,
+);
 assert.match(chat, /ASK_FOR_SHORT_GOAL|Write a short goal for this app/);
+assert.match(chat, /No usable Master Plan goal yet/);
+assert.match(chat, /lastResearchError/);
+assert.equal(
+  /Foundation coding waiting — finish UI mockup/.test(chat),
+  false,
+  'empty plan / research 409 must Stop, not wait forever on Generate UI',
+);
 assert.match(server, /UI_BRIEF_MISSING/);
 assert.match(server, /isMasterPlanReadyForUiMockup/);
 

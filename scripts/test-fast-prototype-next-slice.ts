@@ -210,6 +210,11 @@ assert.equal(APPLY_IN_FLIGHT_STALL_MS, 15_000);
   );
   assert.match(
     chat,
+    /No usable Master Plan goal yet — drafting the plan first/,
+    'empty §1 must not skip Grok chat or hang on mockup waiting',
+  );
+  assert.match(
+    chat,
     /else if \(userForcedCoding \|\| assistantCodingPromise\)/,
     'explicit coding must defer mockup instead of regenerating UI Gen',
   );

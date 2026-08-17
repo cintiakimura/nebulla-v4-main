@@ -87,3 +87,12 @@ export function isUsableProjectGoal(goal: string): boolean {
 
 export const ASK_FOR_SHORT_GOAL =
   "Write a short goal for this app (who it is for and what it helps them do). I will not start the UI mockup or Foundation until that exists.";
+
+/** Empty Master Plan / missing §1 must not skip Grok chat or start research/Go. */
+export function planRecordHasUsableGoal(plan: Record<string, unknown> | null | undefined): boolean {
+  if (!plan || typeof plan !== "object") return false;
+  const goal = String(
+    plan["1. Goal of the app"] || plan["Goal of the app"] || plan.goal || "",
+  ).trim();
+  return isUsableProjectGoal(goal);
+}

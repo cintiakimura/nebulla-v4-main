@@ -138,7 +138,7 @@ import {
   type StartGuidedChatDetail,
 } from '../../lib/ideHomeEvents';
 import { shortNameFromIdea } from '../../lib/projectNameFromIdea';
-import { ASK_FOR_SHORT_GOAL, isUsableProjectGoal } from '../../lib/spineSequenceGates';
+import { ASK_FOR_SHORT_GOAL, isUsableProjectGoal, planRecordHasUsableGoal } from '../../lib/spineSequenceGates';
 import { ideContextSnippetForChat, useIdeWorkspace } from '@/components/ide/IdeWorkspaceContext';
 import { useIdeCenterTabs } from '@/components/ide/IdeCenterTabsContext';
 import { ChatFilePreview } from '@/components/ide/ChatFilePreview';
@@ -1850,11 +1850,31 @@ export function AIChat() {
     const userId = session?.uid?.trim() || 'anonymous';
     let scheduledTts = false;
 
-    const skipGrokChat =
+    let skipGrokChat =
       interactionModeRef.current === 'agent' &&
       (userForcedCoding || isFastPrototypeContinue) &&
       !onboardingBuildStart &&
       !hasAppStatusPayload;
+    if (skipGrokChat && userForcedCoding && !isFastPrototypeContinue) {
+      try {
+        const mpRes = await fetch(withProjectQuery('/api/master-plan/read'), {
+          credentials: 'include',
+          cache: 'no-store',
+        });
+        const plan = mpRes.ok
+          ? ((await readResponseJson(mpRes)) as Record<string, unknown>)
+          : null;
+        if (!planRecordHasUsableGoal(plan) && !isMasterPlanCompleteForDiscovery(plan)) {
+          skipGrokChat = false;
+          pushActivity(
+            'No usable Master Plan goal yet — drafting the plan first (not skipping Grok chat)',
+            'warn',
+          );
+        }
+      } catch {
+        skipGrokChat = false;
+      }
+    }
 
     try {
       if (showWorkActivity && !skipGrokChat) {
@@ -2104,6 +2124,7 @@ export function AIChat() {
       let uiMockupStarted = false;
       let mockupSkippedOrFailed = false;
       let architectureBlocked = false;
+      let lastResearchError: string | null = null;
       if (sendAbort.signal.aborted) {
         return;
       }
@@ -2114,7 +2135,8 @@ export function AIChat() {
         });
         if (!research.ok) {
           architectureBlocked = true;
-          pushActivity(research.error || RESEARCH_STOPPED, 'error');
+          lastResearchError = research.error || RESEARCH_STOPPED;
+          pushActivity(lastResearchError, 'error');
         } else {
           pushActivity(RESEARCH_STAGE_BRIEF, 'info');
         }
@@ -2243,12 +2265,19 @@ export function AIChat() {
           );
         }
         if (willCode && !foundationGate.ok) {
-          const persisted = await hasPersistedUiMockup();
-          if (!persisted) {
-            pushActivity(
-              'Foundation coding waiting — finish UI mockup (or open UI Studio → Generate) so App Preview is not empty',
-              'warn',
+          if (lastResearchError) {
+            holdCodingFailure(
+              /goal/i.test(lastResearchError)
+                ? `Stopped: ${lastResearchError} Master Plan is empty — coding did not start.`
+                : `Stopped: ${lastResearchError}`,
             );
+          } else {
+            const persisted = await hasPersistedUiMockup();
+            if (!persisted) {
+              holdCodingFailure(
+                'Stopped: Foundation cannot start — no usable plan/mockup yet. Send a short goal (who it is for and what it does), then Continue. Do not wait on Generate UI while §1 is empty.',
+              );
+            }
           }
         }
 
