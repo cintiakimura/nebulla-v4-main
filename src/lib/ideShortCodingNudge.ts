@@ -14,9 +14,12 @@ export function isUserExplicitCodingRequest(text: string): boolean {
   const t = String(text || '').trim();
   if (!t) return false;
   if (t.length > 400) return false;
+  if (/\bmaster\s*plan\b/i.test(t) && !/\b(code|coding|files?|slice)\b/i.test(t)) return false;
+  if (/\binterview\b/i.test(t)) return false;
   if (/^(go|go\.|go!)$/i.test(t)) return true;
-  // Soft-gate copy: "Reply continue" / "build next"
-  if (/^(continue|continue\.|continue!|build\s+next|next\s+slice)$/i.test(t)) return true;
+  // Soft-gate copy: "Reply continue" / "build next" / "continue please"
+  if (/^(please\s+)?(continue|build\s+next|next\s+slice)(\s+please)?[\s.!]*$/i.test(t)) return true;
+  if (/^(keep going|go ahead)[\s.!]*$/i.test(t)) return true;
   if (/\bSTART_CODING\b/i.test(t)) return true;
   if (/\b(start|begin|continue|keep)\s+coding\b/i.test(t)) return true;
   // "continue building" / "keep building the app" — common after Foundation stops
@@ -24,6 +27,12 @@ export function isUserExplicitCodingRequest(text: string): boolean {
   if (/\b(build|implement)\s+(next|the\s+next)\b/i.test(t)) return true;
   if (/\bnext\s+slice\b/i.test(t)) return true;
   if (/\b(write|generate|apply)\s+(the\s+)?(code|files?|foundation)\b/i.test(t)) return true;
+  if (/\b(finish|complete)\s+(the\s+)?(app|project|development|coding|build|prototype)\b/i.test(t)) {
+    return true;
+  }
+  if (/\b(can you|please)\s+(finish|complete|keep\s+building|keep\s+coding|continue)\b/i.test(t)) {
+    return true;
+  }
   if (/\b(foundation|coding)\s+slice\b/i.test(t) && /\b(start|run|do|please|now)\b/i.test(t)) {
     return true;
   }
@@ -45,6 +54,9 @@ export function isAssistantCodingPromise(text: string): boolean {
     /\b(starting|launching|running|proceeding with|beginning)\b.{0,40}\b(coding|foundation|go\s*code|file apply)\b/i.test(
       t,
     ) ||
+    /\bstarting\s+the\s+next\s+slice\b/i.test(t) ||
+    /\bmoving ahead\b.{0,80}\b(slice|slices|coding|foundation|flows?)\b/i.test(t) ||
+    /\bremaining slices\b/i.test(t) ||
     /\b(foundation\s+coding\s+slice|coding\s+slice\s+now)\b/i.test(t) ||
     // Prose-only next-slice claims (no START_CODING tag) must still force Go
     /\bnext\s+slice\b.{0,60}\b(landing|implement|building|writing|coding)\b/i.test(t) ||

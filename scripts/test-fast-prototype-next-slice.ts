@@ -13,6 +13,7 @@ import {
   markFastPrototypePrimaryAutoRun,
   FAST_PROTOTYPE_PRIMARY_SLICE_INSTRUCTION,
   userNoteRequestsNextSlice,
+  workspaceHasProductAppRoutes,
   looksLikePostApplyCodingStall,
   looksLikeApplyInFlightStall,
   APPLY_IN_FLIGHT_STALL_MS,
@@ -161,6 +162,13 @@ assert.equal(userNoteRequestsNextSlice('go'), false);
 assert.equal(userNoteRequestsNextSlice('start coding'), false);
 assert.equal(userNoteRequestsNextSlice(''), false);
 
+assert.equal(
+  workspaceHasProductAppRoutes(['index.html', 'postcss.config.js', 'tailwind.config.ts', 'README.md']),
+  false,
+);
+assert.equal(workspaceHasProductAppRoutes(['app/page.tsx', 'app/layout.tsx']), false);
+assert.equal(workspaceHasProductAppRoutes(['app/teacher/page.tsx', 'app/layout.tsx']), true);
+
 assert.equal(looksLikePostApplyCodingStall('Runnable skeleton filled: next-env.d.ts'), true);
 assert.equal(looksLikePostApplyCodingStall('Wrote 14 file(s) to workspace'), false);
 assert.equal(looksLikePostApplyCodingStall('Writing files to cloud workspace'), false);
@@ -188,10 +196,11 @@ assert.equal(APPLY_IN_FLIGHT_STALL_MS, 15_000);
     false,
     'must not inject a continue-building chat turn',
   );
+  assert.match(chat, /workspaceHasProductAppRoutes/);
   assert.match(
     chat,
-    /looksLikePostApplyCodingStall/,
-    'chat must recover when activity freezes on Runnable skeleton filled',
+    /foundationLanded &&/,
+    'Continue/finish must not request Primary while app/ routes are missing',
   );
   const pipeline = fs.readFileSync(path.join(root, 'src/lib/nebulaGrokCodingPipeline.ts'), 'utf8');
   assert.match(

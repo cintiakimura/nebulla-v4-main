@@ -203,6 +203,22 @@ export function buildAutopilotSliceInstruction(slice: AutopilotSliceLabel): stri
 }
 
 /**
+ * Client-safe: Foundation product routes on disk (not Vite App.tsx / layout-only).
+ * Continue/finish must not jump to Primary while this is false.
+ */
+export function workspaceHasProductAppRoutes(paths: string[]): boolean {
+  return (paths || []).some((raw) => {
+    const p = String(raw || '').replace(/\\/g, '/').replace(/^\.\//, '');
+    if (!/\.(tsx|jsx)$/i.test(p)) return false;
+    if (!/(^|\/)(app|pages)\//.test(p)) return false;
+    if (/(^|\/)(layout|template|loading|error|not-found|globals)\./i.test(p)) return false;
+    if (/(^|\/)app\/page\.(tsx|jsx)$/i.test(p)) return false;
+    if (/(^|\/)pages\/index\.(tsx|jsx)$/i.test(p)) return false;
+    return true;
+  });
+}
+
+/**
  * User/product asked for the next slice (not first Foundation).
  * Bare "go" / "start coding" stay Foundation on a greenfield turn.
  */

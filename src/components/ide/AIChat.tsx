@@ -86,6 +86,7 @@ import {
   resetAutopilotSliceCount,
   shouldAutopilotAdvance,
   userNoteRequestsNextSlice,
+  workspaceHasProductAppRoutes,
 } from '../../lib/fastPrototypeNextSlice';
 import { setGrokCodingActive } from '../../lib/nebulaGrokCodingGate';
 import { publishGrokActivity } from '../../lib/nebulaGrokActivityBus';
@@ -1523,6 +1524,9 @@ export function AIChat() {
             'NDM: Verify from App Status payload (do not ask what error they see). Analyze → Trace → Fix → Validate.';
         }
         if (smart.handledLocally && (smart.mode === 'file' || smart.switchToAgentSuggested)) {
+          if (smart.switchToAgentSuggested && isUserExplicitCodingRequest(rawText)) {
+            // Explicit continue/finish must code — do not stop at Switch-to-Agent CTA.
+          } else {
           const stamp = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
           const userMsg: Message = {
             id: `u-${Date.now()}`,
@@ -1557,6 +1561,7 @@ export function AIChat() {
             }
           }
           return;
+          }
         }
       } catch {
         /* fall through to normal Grok / Master Plan / Go chat */
@@ -1879,7 +1884,10 @@ export function AIChat() {
             });
             if (mpRes.ok) {
               const plan = (await readResponseJson(mpRes)) as Record<string, unknown>;
-              if (isMasterPlanCompleteForDiscovery(plan)) {
+              if (
+                isMasterPlanCompleteForDiscovery(plan) ||
+                (userForcedCoding && isFastPrototypeMode(diskProjectKey))
+              ) {
                 skippedGrokChat = true;
                 assistantContent =
                   'START_CODING — continuing from the saved Master Plan (skipped a second Grok chat wait).';
@@ -2004,7 +2012,7 @@ export function AIChat() {
           content: displayText.trim(),
           timestamp: ts,
         });
-      } else if (willCode && (onboardingBuildStart || shortCodingNudge)) {
+      } else if (willCode && (onboardingBuildStart || shortCodingNudge || userForcedCoding)) {
         toAppend.push({
           id: `a-${Date.now()}`,
           role: 'assistant',
@@ -2212,7 +2220,7 @@ export function AIChat() {
             `Stopped: ${readiness.reasons.join('; ') || 'ui-brief missing or too short'}. Finish Master Plan §§1–5 so ui-brief can be built from §4/§5 (and goal), then Generate UI. Foundation will not start while mockup is waiting.`,
             'error',
           );
-        } else if (userForcedCoding) {
+        } else if (userForcedCoding || assistantCodingPromise) {
           mockupSkippedOrFailed = true;
           pushActivity('mockup deferred — coding Foundation (you asked to code)', 'warn');
         } else if (fastPrototypeTurn || willCode) {
@@ -2325,12 +2333,14 @@ export function AIChat() {
             });
           }
           // After Foundation exists, "continue building" must request the NEXT slice — not Foundation again.
-          // Do not use !fastPrototypeTurn here: inference-first "continue building" still has that hint.
+          // Empty explorer (no app/ routes) stays Foundation even if the user said continue/finish.
+          const foundationLanded = workspaceHasProductAppRoutes(workspacePaths);
           const nextSliceGo =
-            userNoteRequestsNextSlice(text) ||
-            ((userForcedCoding || assistantCodingPromise || shortCodingNudge) &&
-              !onboardingBuildStart &&
-              !fastPrototypeTurn);
+            foundationLanded &&
+            (userNoteRequestsNextSlice(text) ||
+              ((userForcedCoding || assistantCodingPromise || shortCodingNudge) &&
+                !onboardingBuildStart &&
+                !fastPrototypeTurn));
           pushActivity(
             onboardingBuildStart
               ? 'Nothing more to add — launching Go Code pipeline'

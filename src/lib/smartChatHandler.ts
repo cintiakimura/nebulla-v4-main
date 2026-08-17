@@ -13,6 +13,7 @@ import {
   type ChatMode,
   type ChatModeResult,
 } from './chatModeDetector';
+import { isUserExplicitCodingRequest } from './ideShortCodingNudge';
 import {
   buildSwitchToAgentPrompt,
   isAgentLockedDetectorMode,
@@ -161,7 +162,8 @@ export async function handleSmartChatMessage(
     interactionMode === 'chat' &&
     isAgentLockedDetectorMode(mode) &&
     !inferenceFirst &&
-    !hardGuidedInterview
+    !hardGuidedInterview &&
+    !isUserExplicitCodingRequest(userText)
   ) {
     return {
       mode,
