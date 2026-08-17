@@ -88,6 +88,7 @@ import {
   userNoteRequestsNextSlice,
 } from '../../lib/fastPrototypeNextSlice';
 import { setGrokCodingActive } from '../../lib/nebulaGrokCodingGate';
+import { publishGrokActivity } from '../../lib/nebulaGrokActivityBus';
 import { runMasterPlanUiPipeline } from '../../lib/ideArtifactSync';
 import {
   applyUiStudioBetaToAppPreview,
@@ -148,6 +149,7 @@ import {
   updateGrokActivityCurrent,
   startGrokActivityWaitTicker,
   finishGrokActivity,
+  errorGrokActivity,
   patchGrokActivityV0Status,
   type GrokActivityProgressFn,
   type GrokActivityStatus,
@@ -165,7 +167,6 @@ import {
   stripAssistantTagsForVoice,
 } from '../../lib/voiceTtsShared';
 import { playTtsText } from '../../lib/ttsPlayback';
-import { IdeGrokActivityPanel } from './IdeGrokActivityPanel';
 import { IdeAppStatusMenuButton } from './IdeAppStatusMenu';
 import {
   APP_STATUS_EVENTS,
@@ -351,6 +352,15 @@ export function AIChat() {
     setGrokActivity(idleGrokActivity(interactionModeRef.current));
   }, []);
 
+  /** Keep the last error on the shell status strip — do not idle-wipe (that hid "Code pass 1" timeouts). */
+  const holdCodingFailure = useCallback((detail: string) => {
+    codingActivityRef.current = false;
+    setGrokCodingActive(false);
+    setV0WatchActive(false);
+    setV0Live(false);
+    setGrokActivity((prev) => errorGrokActivity(prev, 'Coding stopped', detail));
+  }, []);
+
   useEffect(() => {
     setGrokActivity((prev) =>
       prev.tone === 'ready'
@@ -358,6 +368,10 @@ export function AIChat() {
         : { ...prev, subhead: interactionModeIdleSubhead(assistantInteractionMode) },
     );
   }, [assistantInteractionMode, t]);
+
+  useEffect(() => {
+    publishGrokActivity({ activity: grokActivity, v0Live: v0Live || v0WatchActive });
+  }, [grokActivity, v0Live, v0WatchActive]);
 
   useEffect(() => {
     const onLooksFixed = () => {
@@ -668,13 +682,6 @@ export function AIChat() {
     });
   }, [grokActivity.liveLog]);
 
-  // Only while work/error — do not keep a tall card open because liveLog still has history.
-  const showActivityPanel =
-    grokActivity.tone === 'work' ||
-    grokActivity.tone === 'error' ||
-    v0WatchActive ||
-    v0Live;
-
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
   const [serverHasGrokKey, setServerHasGrokKey] = useState<boolean | null>(null);
@@ -769,9 +776,8 @@ export function AIChat() {
     setSending(false);
     const { projectName } = resolveActiveProjectIds(diskProjectKey);
     abortGoCodeWait(projectName);
-    resetCodingActivity();
-    pushActivity('Stopped — coding cancelled. Chat is unlocked.', 'info');
-  }, [diskProjectKey, pushActivity, resetCodingActivity]);
+    holdCodingFailure('Stopped — coding cancelled. Chat is unlocked.');
+  }, [diskProjectKey, holdCodingFailure]);
 
   const clearVoiceIdleTimer = () => {
     if (voiceIdleTimerRef.current != null) {
@@ -1352,22 +1358,21 @@ export function AIChat() {
       const { projectName } = resolveActiveProjectIds(diskProjectKey);
       abortGoCodeWait(projectName);
       if (applyInFlight) {
-        pushActivity(
+        holdCodingFailure(
           'Apply wait timed out — files may already be on disk. Send Continue for the next slice — not started automatically.',
-          'warn',
         );
       } else {
         pushActivity(
           'Coding complete. Send Continue for the next slice — not started automatically.',
           'success',
         );
+        resetCodingActivity();
       }
-      resetCodingActivity();
       sendingRef.current = false;
       setSending(false);
     }, applyInFlight ? APPLY_IN_FLIGHT_STALL_MS : FOUNDATION_APPLY_STALL_MS);
     return () => window.clearTimeout(timer);
-  }, [diskProjectKey, grokActivity.liveLog, grokActivity.tone, pushActivity, resetCodingActivity]);
+  }, [diskProjectKey, grokActivity.liveLog, grokActivity.tone, holdCodingFailure, pushActivity, resetCodingActivity]);
 
   /** Detect natural language project creation requests like "Create a new project: fitness tracker" */
   function detectProjectCreationIntent(text: string): { description: string } | null {
@@ -2463,7 +2468,7 @@ export function AIChat() {
             }, 8500);
           }
           if (coding.ok === false) {
-            resetCodingActivity();
+            holdCodingFailure(blockedLine || 'Foundation coding stopped');
           } else {
             // Artifact sync already ran inside Go/apply (single owner). Do not start a second
             // "Syncing project artifacts…" that can false-block the activity feed.
@@ -2513,10 +2518,10 @@ export function AIChat() {
       } catch (codingErr) {
         console.warn('[AIChat] coding apply:', codingErr);
         if (codingActivityRef.current) {
-          setSendError(
-            codingErr instanceof Error ? codingErr.message : 'Could not write files to workspace',
-          );
-          resetCodingActivity();
+          const fail =
+            codingErr instanceof Error ? codingErr.message : 'Could not write files to workspace';
+          setSendError(fail);
+          holdCodingFailure(fail);
         }
       }
 
@@ -2526,18 +2531,21 @@ export function AIChat() {
       }
 
     } catch (e) {
-      if (codingActivityRef.current) {
-        resetCodingActivity();
-      }
       const msg = e instanceof Error ? e.message : String(e);
       const failureClass = classifyContinueFailure({ message: msg });
       // Phase 7.0: on key/auth reject — surface clearly, clear false mockup flags, stop stampede.
       if (failureClass === 'key/auth fail' || isKeyAuthFailureMessage(msg)) {
         markMainAiAuthRejected(diskProjectKey);
         clearUiMockupStageFlags(diskProjectKey);
-        pushActivity(continueFailureActivityLine('key/auth fail', msg), 'error');
+      }
+      const line = continueFailureActivityLine(
+        failureClass === 'key/auth fail' || isKeyAuthFailureMessage(msg) ? 'key/auth fail' : failureClass,
+        msg,
+      );
+      if (codingActivityRef.current) {
+        holdCodingFailure(line);
       } else {
-        pushActivity(continueFailureActivityLine(failureClass, msg), 'error');
+        pushActivity(line, 'error');
       }
       const pubCfg = await fetchNebulaPublicConfig();
       setSendError(
@@ -2554,7 +2562,7 @@ export function AIChat() {
         resumeOpenTalkIfWanted();
     }
     }
-  }, [sending, activePath, activeTab?.content, serverHasGrokKey, micInputBlocked, workspaceRootLabel, gitBranch, tabs, pauseHandsFreeListening, resumeOpenTalkIfWanted, beginCodingActivity, pushActivity, resetCodingActivity, workspacePaths.length, noteUserMessageForMirror, prefs.contentMode, resolvedIdeLocale, t, localeLabels]);
+  }, [sending, activePath, activeTab?.content, serverHasGrokKey, micInputBlocked, workspaceRootLabel, gitBranch, tabs, pauseHandsFreeListening, resumeOpenTalkIfWanted, beginCodingActivity, holdCodingFailure, pushActivity, resetCodingActivity, workspacePaths.length, noteUserMessageForMirror, prefs.contentMode, resolvedIdeLocale, t, localeLabels]);
 
   sendChatRef.current = sendChat;
 
@@ -2925,7 +2933,7 @@ export function AIChat() {
       );
       if (!go.ok) {
         setSendError(go.statusMessage);
-        resetCodingActivity();
+        holdCodingFailure(go.statusMessage || 'Foundation coding stopped');
         return;
       }
       // Artifact sync + UI Studio Beta already ran inside runGoCodeAndApply (single owner).
@@ -2945,8 +2953,9 @@ export function AIChat() {
       );
       setV0Live(false);
     } catch (e) {
-      setSendError(e instanceof Error ? e.message : 'Coding failed');
-      resetCodingActivity();
+      const fail = e instanceof Error ? e.message : 'Coding failed';
+      setSendError(fail);
+      holdCodingFailure(fail);
     } finally {
       setSending(false);
       setAccessoryHint(null);
@@ -2954,7 +2963,7 @@ export function AIChat() {
         resumeOpenTalkIfWanted();
       }
     }
-  }, [micInputBlocked, sending, serverHasGrokKey, stopVoiceRecognition, refreshWorkspaceMeta, resumeOpenTalkIfWanted, pushActivity, beginCodingActivity, resetCodingActivity, workspacePaths.length]);
+  }, [micInputBlocked, sending, serverHasGrokKey, stopVoiceRecognition, refreshWorkspaceMeta, resumeOpenTalkIfWanted, pushActivity, beginCodingActivity, holdCodingFailure, resetCodingActivity, workspacePaths.length]);
 
   const applyInteractionMode = useCallback(
     async (mode: IdeAssistantInteractionMode, options?: { pendingText?: string }) => {
@@ -3102,10 +3111,6 @@ export function AIChat() {
         onVoiceNudge={onAppStatusVoiceNudge}
         rideStatus={rideStatusLine}
       />
-
-      {showActivityPanel ? (
-        <IdeGrokActivityPanel activity={grokActivity} v0Live={v0Live || v0WatchActive} />
-      ) : null}
 
       {showGrokKeyBanner ? (
         <div

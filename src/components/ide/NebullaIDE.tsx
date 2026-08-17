@@ -25,6 +25,7 @@ import { UI_SHELL_ONLY } from '../../lib/testingBranch';
 import { IdeShellNavProvider, useIdeShellNav } from '@/components/ide/shell/IdeShellNavContext';
 import { ShellHeader } from '@/components/ide/shell/ShellHeader';
 import { ShellBottomNav } from '@/components/ide/shell/ShellBottomNav';
+import { ShellGrokActivityStrip } from '@/components/ide/shell/ShellGrokActivityStrip';
 import { GuidedFunnelOverlays } from '@/components/ide/shell/GuidedFunnelOverlays';
 import { BuildScreen } from '@/components/ide/shell/BuildScreen';
 import { CodeScreen } from '@/components/ide/shell/CodeScreen';
@@ -305,6 +306,8 @@ function NebullaIDEShell() {
           </button>
         </div>
       ) : null}
+
+      {activeScreen !== 'dashboard' ? <ShellGrokActivityStrip /> : null}
 
       {/* Body + floating bottom nav. Workspace tabs stay mounted so Build↔Code↔Plan keeps UI state. */}
       <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">

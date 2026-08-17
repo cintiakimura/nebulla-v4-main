@@ -12,7 +12,7 @@ import {
   resetArtifactSyncInFlightForTests,
   withHardTimeout,
 } from '../src/lib/ideArtifactSync.ts';
-import { startGrokActivityWaitTicker } from '../src/lib/ideGrokActivityStatus.ts';
+import { startGrokActivityWaitTicker, GROK_WAIT_HEARTBEAT_TICKS } from '../src/lib/ideGrokActivityStatus.ts';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.join(__dirname, '..');
@@ -58,6 +58,19 @@ const root = path.join(__dirname, '..');
   assert.ok(
     !lines.some((l) => /— done/.test(l.msg)),
     'stopWait must not overwrite terminal status with info "— done"',
+  );
+}
+
+{
+  const lines: Array<{ msg: string; kind?: string; currentOnly?: boolean }> = [];
+  const stop = startGrokActivityWaitTicker('Code pass 1', (msg, kind, opts) => {
+    lines.push({ msg, kind, currentOnly: opts?.currentOnly });
+  }, 20);
+  await new Promise((r) => setTimeout(r, GROK_WAIT_HEARTBEAT_TICKS * 20 + 80));
+  stop();
+  assert.ok(
+    lines.some((l) => l.kind === 'info' && l.currentOnly === false && /still waiting/.test(l.msg)),
+    'wait ticker must commit a still-waiting heartbeat so chat is not silent on Code pass 1',
   );
 }
 

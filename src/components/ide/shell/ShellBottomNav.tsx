@@ -1,6 +1,8 @@
 import { BookMarked, Code2, MessageSquare } from 'lucide-react';
+import { useEffect, useState } from 'react';
 import { cn } from '@/lib/utils';
 import { useIdeShellNav } from './IdeShellNavContext';
+import { subscribeGrokActivity } from '../../../lib/nebulaGrokActivityBus';
 
 /**
  * Floating capsule workspace menu — Build · Code · Plan only.
@@ -8,6 +10,15 @@ import { useIdeShellNav } from './IdeShellNavContext';
  */
 export function ShellBottomNav() {
   const { activeScreen, goToBuild, goToCode, goToPlan } = useIdeShellNav();
+  const [codingBusy, setCodingBusy] = useState(false);
+
+  useEffect(
+    () =>
+      subscribeGrokActivity((snap) => {
+        setCodingBusy(snap.activity.tone === 'work' || Boolean(snap.v0Live));
+      }),
+    [],
+  );
 
   if (activeScreen !== 'build' && activeScreen !== 'code' && activeScreen !== 'plan') {
     return null;
@@ -39,7 +50,15 @@ export function ShellBottomNav() {
       <nav
         className="pointer-events-auto mb-3 flex items-center gap-0.5 rounded-full border border-[var(--shell-border)] bg-[var(--shell-bg)]/95 px-1.5 py-1 shadow-none backdrop-blur-sm"
         aria-label="Workspace"
+        aria-busy={codingBusy}
       >
+        {codingBusy ? (
+          <span
+            className="ml-1 mr-0.5 h-1.5 w-1.5 shrink-0 rounded-full bg-amber-300/90"
+            title="Coding still running"
+            aria-hidden
+          />
+        ) : null}
         {items.map(({ id, label, icon: Icon, onClick }) => {
           const active = activeScreen === id;
           return (

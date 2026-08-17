@@ -227,6 +227,9 @@ export function errorGrokActivity(
   return commitGrokActivityStatus(base, detail, 'error');
 }
 
+/** Commit a chat heartbeat about every 30s (12 ticks at the default 2.5s interval). */
+export const GROK_WAIT_HEARTBEAT_TICKS = 12;
+
 /** Elapsed ticks update current line only; first call commits the phase. */
 export function startGrokActivityWaitTicker(
   label: string,
@@ -234,13 +237,17 @@ export function startGrokActivityWaitTicker(
   intervalMs = 2500,
 ): () => void {
   const started = Date.now();
+  let ticks = 0;
   onTick(`${label}…`, 'wait', { currentOnly: true });
   const w = typeof window !== 'undefined' ? window : null;
   const schedule = w ? w.setInterval.bind(w) : setInterval;
   const clear = w ? w.clearInterval.bind(w) : clearInterval;
   const id = schedule(() => {
+    ticks += 1;
     const elapsed = formatGrokActivityElapsed(started);
-    onTick(elapsed ? `${label} (${elapsed})` : label, 'wait', { currentOnly: true });
+    const line = elapsed ? `${label} (${elapsed}) — still waiting` : `${label}…`;
+    const heartbeat = ticks > 0 && ticks % GROK_WAIT_HEARTBEAT_TICKS === 0;
+    onTick(line, heartbeat ? 'info' : 'wait', { currentOnly: !heartbeat });
   }, intervalMs);
   return () => {
     clear(id);

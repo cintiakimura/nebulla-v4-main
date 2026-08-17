@@ -21,6 +21,7 @@ import { fetchSessionUser, type NebulaSessionUser } from '../../../lib/nebulaClo
 import { fetchNebulaPublicConfig } from '../../../lib/nebulaPublicConfig';
 import { formatGithubConnectionStatus } from '../../../lib/githubDisplay';
 import { tryGuidedCommitSuccessToPlan } from '../../../lib/guidedFunnel';
+import { subscribeGrokActivity } from '../../../lib/nebulaGrokActivityBus';
 
 type GitEntry = { status: string; path: string };
 
@@ -125,6 +126,7 @@ export function CodeScreen() {
   const [commitOpen, setCommitOpen] = useState(false);
   const [sessionUser, setSessionUser] = useState<NebulaSessionUser | null>(null);
   const [githubOAuthReady, setGithubOAuthReady] = useState(false);
+  const [codingBusy, setCodingBusy] = useState(false);
 
   const hasChanges = changes.length > 0;
   const githubConnected = sessionUser?.provider === 'github';
@@ -155,6 +157,14 @@ export function CodeScreen() {
   useEffect(() => {
     void loadChanges();
   }, [loadChanges]);
+
+  useEffect(
+    () =>
+      subscribeGrokActivity((snap) => {
+        setCodingBusy(snap.activity.tone === 'work');
+      }),
+    [],
+  );
 
   useEffect(() => {
     const refresh = () => void loadChanges();
@@ -259,6 +269,12 @@ export function CodeScreen() {
           </button>
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto py-1">
+          {codingBusy ? (
+            <p className="px-3 py-2 text-[11px] leading-snug text-amber-100/90">
+              Coding still running — product files appear here when this pass finishes. An empty
+              explorer does not mean the job stopped.
+            </p>
+          ) : null}
           {overviewError ? (
             <p className="px-3 py-2 text-xs text-muted-foreground">{overviewError}</p>
           ) : null}

@@ -18,6 +18,7 @@ import {
   isApplyTransportFailure,
   shouldSkipGoCodeSecondPassAfterApply,
 } from '../src/lib/applyTransportFailure.ts';
+import { grokActivityStripVisible } from '../src/lib/nebulaGrokActivityBus.ts';
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const pipeline = fs.readFileSync(path.join(root, 'src/lib/nebulaGrokCodingPipeline.ts'), 'utf8');
@@ -133,6 +134,27 @@ assert.equal(
   'same wait must not hand off into Primary autopilot',
 );
 assert.match(chat, /abortGoCodeWait\(projectName\)/);
+assert.match(chat, /publishGrokActivity/);
+assert.match(chat, /holdCodingFailure/);
+assert.match(chat, /errorGrokActivity/);
+assert.equal(
+  /if \(coding\.ok === false\) \{\s*resetCodingActivity\(\)/.test(chat),
+  false,
+  'Go/coding failure must keep the error on the status strip — not idle-wipe',
+);
+assert.match(
+  fs.readFileSync(path.join(root, 'src/components/ide/NebullaIDE.tsx'), 'utf8'),
+  /ShellGrokActivityStrip/,
+);
+assert.match(
+  fs.readFileSync(path.join(root, 'src/components/ide/shell/ShellGrokActivityStrip.tsx'), 'utf8'),
+  /IdeGrokActivityPanel/,
+);
+assert.equal(
+  /IdeGrokActivityPanel/.test(chat),
+  false,
+  'chat-only activity panel hid coding status on Code/Plan',
+);
 assert.equal(
   /diskProjectKey\s*\|\|\s*getBrowserProjectName\(\)/.test(chat),
   false,
@@ -270,5 +292,23 @@ assert.match(
   fs.readFileSync(path.join(root, 'src/lib/apiFetch.ts'), 'utf8'),
   /host returned HTML instead of JSON/,
 );
+
+{
+  const idle = {
+    activity: {
+      headline: 'Ready',
+      liveLog: [],
+      steps: [],
+      activeStepIndex: 0,
+      tone: 'ready' as const,
+    },
+  };
+  const waiting = { ...idle, activity: { ...idle.activity, tone: 'work' as const, currentAction: 'Code pass 1' } };
+  const timedOut = { ...idle, activity: { ...idle.activity, tone: 'error' as const, currentAction: 'Grok Code timed out' } };
+  assert.equal(grokActivityStripVisible(null), false);
+  assert.equal(grokActivityStripVisible(idle), false);
+  assert.equal(grokActivityStripVisible(waiting), true);
+  assert.equal(grokActivityStripVisible(timedOut), true);
+}
 
 console.log('\n✓ coding freeze contract passed\n');
