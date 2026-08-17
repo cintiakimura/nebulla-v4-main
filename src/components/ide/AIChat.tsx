@@ -1850,8 +1850,14 @@ export function AIChat() {
     const userId = session?.uid?.trim() || 'anonymous';
     let scheduledTts = false;
 
+    const skipGrokChat =
+      interactionModeRef.current === 'agent' &&
+      (userForcedCoding || isFastPrototypeContinue) &&
+      !onboardingBuildStart &&
+      !hasAppStatusPayload;
+
     try {
-      if (showWorkActivity) {
+      if (showWorkActivity && !skipGrokChat) {
         setGrokActivity((prev) =>
           advanceGrokActivity(prev, 1, {
             currentAction: onboardingBuildStart
@@ -1862,45 +1868,22 @@ export function AIChat() {
         );
       }
 
-      const stopGrokWait = showWorkActivity
-        ? startGrokActivityWaitTicker('Waiting for Grok', (msg, kind, options) =>
-            pushActivity(msg, kind, options),
-          )
-        : () => {};
+      const stopGrokWait =
+        showWorkActivity && !skipGrokChat
+          ? startGrokActivityWaitTicker('Waiting for Grok', (msg, kind, options) =>
+              pushActivity(msg, kind, options),
+            )
+          : () => {};
       let assistantContent: string;
       let planningPhase: string;
       try {
-        const skipGrokForExistingPlan =
-          interactionModeRef.current === 'agent' &&
-          (userForcedCoding || isFastPrototypeContinue) &&
-          !onboardingBuildStart &&
-          !hasAppStatusPayload;
         let skippedGrokChat = false;
-        if (skipGrokForExistingPlan) {
-          try {
-            const mpRes = await fetch(withProjectQuery('/api/master-plan/read'), {
-              credentials: 'include',
-              cache: 'no-store',
-            });
-            if (mpRes.ok) {
-              const plan = (await readResponseJson(mpRes)) as Record<string, unknown>;
-              if (
-                isMasterPlanCompleteForDiscovery(plan) ||
-                (userForcedCoding && isFastPrototypeMode(diskProjectKey))
-              ) {
-                skippedGrokChat = true;
-                assistantContent =
-                  'START_CODING — continuing from the saved Master Plan (skipped a second Grok chat wait).';
-                planningPhase = 'START_CODING';
-                pushActivity(
-                  'Master Plan already on disk — skipping Grok chat, starting coding',
-                  'info',
-                );
-              }
-            }
-          } catch {
-            /* fall through to Grok */
-          }
+        if (skipGrokChat) {
+          skippedGrokChat = true;
+          assistantContent =
+            'START_CODING — continuing from the saved Master Plan (skipped a second Grok chat wait).';
+          planningPhase = 'START_CODING';
+          pushActivity('Explicit coding request — skipping Grok chat, starting coding', 'info');
         }
         if (!skippedGrokChat) {
           try {
@@ -2139,6 +2122,12 @@ export function AIChat() {
         architectureBlocked = architectureBlocked || readinessBlocksAutoFoundation(readiness);
         if (architectureBlocked && !research.ok) {
           /* Gate R failed — do not start UI Gen or Go */
+        } else if (userForcedCoding || assistantCodingPromise) {
+          mockupSkippedOrFailed = true;
+          if (research.ok) {
+            architectureBlocked = false;
+            pushActivity('mockup deferred — coding Foundation (you asked to code)', 'warn');
+          }
         } else if (readiness.ok) {
           markUiMockupStageStarted(diskProjectKey);
           pushActivity(
@@ -2220,9 +2209,6 @@ export function AIChat() {
             `Stopped: ${readiness.reasons.join('; ') || 'ui-brief missing or too short'}. Finish Master Plan §§1–5 so ui-brief can be built from §4/§5 (and goal), then Generate UI. Foundation will not start while mockup is waiting.`,
             'error',
           );
-        } else if (userForcedCoding || assistantCodingPromise) {
-          mockupSkippedOrFailed = true;
-          pushActivity('mockup deferred — coding Foundation (you asked to code)', 'warn');
         } else if (fastPrototypeTurn || willCode) {
           // Phase 4: never imply mockup waiting AND coding is fine.
           architectureBlocked = true;

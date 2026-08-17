@@ -9,27 +9,37 @@
 const GO_NUDGE_RE =
   /\b(press\s+go|click\s+go|hit\s+go|use\s+go|tap\s+go|run\s+go|start_coding|go\s+code)\b/i;
 
-/** User explicitly asked to code / Go — product must run Foundation or next slice, not only chat. */
-export function isUserExplicitCodingRequest(text: string): boolean {
-  const t = String(text || '').trim();
-  if (!t) return false;
-  if (t.length > 400) return false;
-  if (/\bmaster\s*plan\b/i.test(t) && !/\b(code|coding|files?|slice)\b/i.test(t)) return false;
-  if (/\binterview\b/i.test(t)) return false;
-  if (/^(go|go\.|go!)$/i.test(t)) return true;
-  // Soft-gate copy: "Reply continue" / "build next" / "continue please"
-  if (/^(please\s+)?(continue|build\s+next|next\s+slice)(\s+please)?[\s.!]*$/i.test(t)) return true;
-  if (/^(keep going|go ahead)[\s.!]*$/i.test(t)) return true;
+/** Strong signals — valid in a long START_CODING paste, not only a 400-char nudge. */
+function hasStrongExplicitCodingSignal(t: string): boolean {
   if (/\bSTART_CODING\b/i.test(t)) return true;
   if (/\b(start|begin|continue|keep)\s+coding\b/i.test(t)) return true;
-  // "continue building" / "keep building the app" — common after Foundation stops
   if (/\b(continue|keep)\s+(building|implementing)\b/i.test(t)) return true;
-  if (/\b(build|implement)\s+(next|the\s+next)\b/i.test(t)) return true;
-  if (/\bnext\s+slice\b/i.test(t)) return true;
   if (/\b(write|generate|apply)\s+(the\s+)?(code|files?|foundation)\b/i.test(t)) return true;
   if (/\b(finish|complete)\s+(the\s+)?(app|project|development|coding|build|prototype)\b/i.test(t)) {
     return true;
   }
+  return false;
+}
+
+/** User explicitly asked to code / Go — product must run Foundation or next slice, not only chat. */
+export function isUserExplicitCodingRequest(text: string): boolean {
+  const t = String(text || '').trim();
+  if (!t) return false;
+  if (/\binterview\b/i.test(t) && !/\bSTART_CODING\b/i.test(t) && !hasStrongExplicitCodingSignal(t)) {
+    return false;
+  }
+  if (/\bmaster\s*plan\b/i.test(t) && !/\b(code|coding|files?|slice|START_CODING)\b/i.test(t)) {
+    return false;
+  }
+  if (hasStrongExplicitCodingSignal(t)) return true;
+  // Short nudges only — a long paste without the signals above is discussion, not Go.
+  if (t.length > 400) return false;
+  if (/^(go|go\.|go!)$/i.test(t)) return true;
+  // Soft-gate copy: "Reply continue" / "build next" / "continue please"
+  if (/^(please\s+)?(continue|build\s+next|next\s+slice)(\s+please)?[\s.!]*$/i.test(t)) return true;
+  if (/^(keep going|go ahead)[\s.!]*$/i.test(t)) return true;
+  if (/\b(build|implement)\s+(next|the\s+next)\b/i.test(t)) return true;
+  if (/\bnext\s+slice\b/i.test(t)) return true;
   if (/\b(can you|please)\s+(finish|complete|keep\s+building|keep\s+coding|continue)\b/i.test(t)) {
     return true;
   }

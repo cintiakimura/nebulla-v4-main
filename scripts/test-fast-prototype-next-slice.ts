@@ -161,6 +161,12 @@ assert.equal(userNoteRequestsNextSlice(FAST_PROTOTYPE_PRIMARY_SLICE_INSTRUCTION)
 assert.equal(userNoteRequestsNextSlice('go'), false);
 assert.equal(userNoteRequestsNextSlice('start coding'), false);
 assert.equal(userNoteRequestsNextSlice(''), false);
+assert.equal(
+  userNoteRequestsNextSlice(
+    'START_CODING — continue building.\nStop after this slice. Do not auto-start the next slice.',
+  ),
+  true,
+);
 
 assert.equal(
   workspaceHasProductAppRoutes(['index.html', 'postcss.config.js', 'tailwind.config.ts', 'README.md']),
@@ -199,8 +205,13 @@ assert.equal(APPLY_IN_FLIGHT_STALL_MS, 15_000);
   assert.match(chat, /workspaceHasProductAppRoutes/);
   assert.match(
     chat,
-    /foundationLanded &&/,
-    'Continue/finish must not request Primary while app/ routes are missing',
+    /Explicit coding request — skipping Grok chat, starting coding/,
+    'START_CODING / continue building must not spend the heavy job on a confirm chat',
+  );
+  assert.match(
+    chat,
+    /else if \(userForcedCoding \|\| assistantCodingPromise\)/,
+    'explicit coding must defer mockup instead of regenerating UI Gen',
   );
   const pipeline = fs.readFileSync(path.join(root, 'src/lib/nebulaGrokCodingPipeline.ts'), 'utf8');
   assert.match(

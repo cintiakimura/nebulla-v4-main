@@ -23,6 +23,10 @@ assert.equal(isUserExplicitCodingRequest('finish the development please'), true)
 assert.equal(isUserExplicitCodingRequest('keep going'), true);
 assert.equal(isUserExplicitCodingRequest('finish the Master Plan'), false);
 assert.equal(isUserExplicitCodingRequest('continue the interview'), false);
+assert.equal(
+  isUserExplicitCodingRequest(`${'Please explain how routing works. '.repeat(20)}thanks`),
+  false,
+);
 assert.equal(isUserExplicitCodingRequest('build next'), true);
 assert.equal(isUserExplicitCodingRequest('next slice'), true);
 assert.equal(
@@ -30,6 +34,24 @@ assert.equal(
   true,
 );
 assert.equal(isUserExplicitCodingRequest('what is the Master Plan?'), false);
+
+const explicitStartCodingPaste = `START_CODING — continue building.
+
+This is an explicit coding request, not a chat discussion.
+
+Do not reply with a promise like “Sure, moving ahead” or “Starting the next slice” unless you also emit START_CODING and file blocks, and the product launches Go Code.
+
+Rules:
+- Agent mode, not Chat lock.
+- One slice only. If Code has no app/ or pages/ product routes (only index.html / postcss / tailwind / README), this is Foundation — layout, globals, root page, and the first real routes from Master Plan §4 (teacher / child / parent as needed). Do not jump to Primary. Do not rewrite the whole §4 app.
+- If Foundation routes already exist, implement the NEXT incomplete primary slice only (Build → Debug → Next). Prefer app/, src/, components/, pages/. Not master-plan or ui-brief only.
+- Ignore mockup pixels. Follow Master Plan + ui-brief. Mockup waiting is not a stop if I asked to code — label mockup deferred.
+- Do not start a second Grok chat job to confirm. Kick Go / apply.
+- Apply is POST file writes to the workspace. Stop after this slice. Do not auto-start the next slice.
+- If you cannot code, say Stopped with a real reason (research / ui-brief / timeout / empty output / no product routes / key) — do not say you are coding.`;
+assert.ok(explicitStartCodingPaste.length > 400);
+assert.equal(isUserExplicitCodingRequest(explicitStartCodingPaste), true);
+assert.equal(detectBuildModeIntent(explicitStartCodingPaste), true);
 
 assert.equal(detectBuildModeIntent('go'), true);
 assert.equal(detectBuildModeIntent('start coding now'), true);
