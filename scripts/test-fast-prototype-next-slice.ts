@@ -142,6 +142,9 @@ assert.equal(nextAutopilotSliceLabel('Secondary'), 'Polish');
   });
   assert.equal(d.advance, false);
   assert.equal(d.nextLabel, null);
+  assert.equal(d.stopReason, 'failed');
+  assert.match(d.message, /Foundation did not land/i);
+  assert.equal(/Foundation applied/i.test(d.message), false);
   assert.equal(/bypassing/i.test(d.message), false);
 }
 {
@@ -289,6 +292,7 @@ assert.match(
 );
 assert.match(chat, /if \(!FAST_PROTOTYPE_SAME_SESSION_AUTOPILOT\)/);
 assert.match(chat, /Foundation applied — send Continue for the next slice/);
+assert.match(chat, /codingOk: coding.ok !== false && wroteFiles/);
 assert.equal(
   /foundationGate = \{ ok: true, reason: 'explicit_skip' \}/.test(chat),
   false,

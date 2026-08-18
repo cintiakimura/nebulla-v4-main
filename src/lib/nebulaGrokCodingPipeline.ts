@@ -1128,7 +1128,12 @@ export async function runGoCodeAndApply(options: {
         const blocked =
           data.blockedReason ||
           classifyGoFailure({ code: data.code, error: data.error, codeError: data.codeError });
-        if (blocked.code === 'KEY_AUTH') {
+        const hardGate =
+          blocked.code === 'KEY_AUTH' ||
+          blocked.code === 'RESEARCH_INCOMPLETE' ||
+          blocked.code === 'MASTER_PLAN_INCOMPLETE' ||
+          blocked.code === 'UI_BRIEF_MISSING';
+        if (hardGate) {
           onProgress?.(formatBlockedReasonLine(blocked), 'error');
           return {
             ok: false,
@@ -1147,11 +1152,13 @@ export async function runGoCodeAndApply(options: {
           pass -= 1;
           continue;
         }
-        onProgress?.(
-          `${formatBlockedReasonLine(blocked)} — bypassing this slice and continuing`,
-          'warn',
-        );
-        break;
+        onProgress?.(formatBlockedReasonLine(blocked), 'error');
+        return {
+          ok: false,
+          statusMessage: formatBlockedReasonLine(blocked),
+          totalWritten,
+          blockedReason: blocked,
+        };
       }
 
       if (data.summarySaved && pass === 0) {
@@ -1182,8 +1189,13 @@ export async function runGoCodeAndApply(options: {
           pass -= 1;
           continue;
         }
-        onProgress?.(`${formatBlockedReasonLine(blocked)} — bypassing this slice`, 'warn');
-        break;
+        onProgress?.(formatBlockedReasonLine(blocked), 'error');
+        return {
+          ok: false,
+          statusMessage: formatBlockedReasonLine(blocked),
+          totalWritten,
+          blockedReason: blocked,
+        };
       }
 
       if (!codeText) {
@@ -1194,8 +1206,14 @@ export async function runGoCodeAndApply(options: {
           pass -= 1;
           continue;
         }
-        onProgress?.('Grok still empty — bypassing this slice and continuing', 'warn');
-        break;
+        const empty = goBlocked('GO_EMPTY_OUTPUT');
+        onProgress?.(formatBlockedReasonLine(empty), 'error');
+        return {
+          ok: false,
+          statusMessage: formatBlockedReasonLine(empty),
+          totalWritten,
+          blockedReason: empty,
+        };
       }
 
       lastCodeText = codeText;

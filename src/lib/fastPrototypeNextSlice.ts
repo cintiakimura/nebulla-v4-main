@@ -114,6 +114,14 @@ export function shouldAutopilotAdvance(opts: {
 }): AutopilotAdvanceDecision {
   const maxAuto = opts.maxAuto ?? MAX_AUTOPILOT_SLICES;
   if (!FAST_PROTOTYPE_SAME_SESSION_AUTOPILOT) {
+    if (!opts.codingOk) {
+      return {
+        advance: false,
+        nextLabel: null,
+        stopReason: 'failed',
+        message: 'Foundation did not land. Send Go to retry this slice — not Continue.',
+      };
+    }
     return {
       advance: false,
       nextLabel: null,

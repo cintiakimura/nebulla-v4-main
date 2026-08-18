@@ -81,7 +81,12 @@ assert.equal(
     goFn.indexOf('if (data.codeError && !codeText)'),
     goFn.indexOf('if (!codeText)'),
   );
-  assert.match(codeErrBlock, /relaunching this slice|bypassing this slice/);
+  assert.match(codeErrBlock, /relaunching this slice/);
+  assert.equal(
+    /bypassing this slice/.test(codeErrBlock),
+    false,
+    'empty Grok Code must stop, not bypass the slice',
+  );
   assert.equal(
     /ok:\s*Boolean\(data\.summarySaved\)/.test(codeErrBlock),
     false,
@@ -321,7 +326,9 @@ assert.equal(
 );
 assert.match(chat, /FAST_PROTOTYPE_SAME_SESSION_AUTOPILOT/);
 assert.match(chat, /scheduleAutopilotHandoff\(\)/);
-assert.match(pipeline, /Grok still empty — bypassing this slice/);
+assert.match(pipeline, /goBlocked\('GO_EMPTY_OUTPUT'\)/);
+assert.equal(/bypassing this slice and continuing/.test(pipeline), false);
+assert.match(chat, /stopReason === 'failed'/);
 assert.match(chat, /isAbortLikeError\(e\) && mpSaved > 0/);
 assert.match(chat, /looksLikeApplyInFlightStall\(last\) && goStarted/);
 assert.match(chat, /applyStallStartedAtRef/);

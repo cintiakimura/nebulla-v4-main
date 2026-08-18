@@ -2626,13 +2626,20 @@ export function AIChat() {
           ).productRouteCount;
           const { projectKey } = resolveActiveProjectIds(diskProjectKey);
           const autoDecision = shouldAutopilotAdvance({
-            codingOk: coding.ok !== false,
+            codingOk: coding.ok !== false && wroteFiles,
             lastSlice: codingSliceLabel,
             autoCount: getAutopilotSliceCount(projectKey),
             autopilotKickoff: true,
             productRouteCount: lastAutoProductRouteCountRef.current,
           });
-          pushActivity(autoDecision.message, autoDecision.advance ? 'info' : 'success');
+          pushActivity(
+            autoDecision.message,
+            autoDecision.advance
+              ? 'info'
+              : autoDecision.stopReason === 'failed'
+                ? 'error'
+                : 'success',
+          );
           if (autoDecision.advance) {
             if (codingProblems.length > 0) {
               setGrokActivity((prev) => finishGrokActivityWithProblems(prev, codingProblems));
