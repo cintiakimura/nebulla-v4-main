@@ -46,5 +46,10 @@ export function grokActivityLooksInFlight(activity: { tone?: string; currentActi
 
 export function grokActivityStripVisible(next: GrokActivityBroadcast | null): boolean {
   if (!next) return false;
-  return grokActivityLooksInFlight(next.activity) || Boolean(next.v0Live);
+  if (next.v0Live) return true;
+  if (grokActivityLooksInFlight(next.activity)) return true;
+  const a = next.activity;
+  if ((a.liveLog?.length || 0) > 0) return true;
+  const headline = String(a.headline || '').trim();
+  return Boolean(headline && headline !== 'Ready');
 }

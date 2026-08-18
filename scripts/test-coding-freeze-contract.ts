@@ -81,7 +81,7 @@ assert.equal(
     goFn.indexOf('if (data.codeError && !codeText)'),
     goFn.indexOf('if (!codeText)'),
   );
-  assert.match(codeErrBlock, /ok:\s*false/);
+  assert.match(codeErrBlock, /relaunching this slice|bypassing this slice/);
   assert.equal(
     /ok:\s*Boolean\(data\.summarySaved\)/.test(codeErrBlock),
     false,
@@ -129,11 +129,18 @@ assert.equal(
   false,
   'stall recovery must not wait for a chat message',
 );
-assert.equal(
-  /scheduleAutopilotHandoff\(\)/.test(chat),
-  false,
-  'same wait must not hand off into Primary autopilot',
-);
+{
+  const stallBlock = chat.slice(
+    chat.indexOf('Foundation apply used to freeze'),
+    chat.indexOf('Detect natural language project creation'),
+  );
+  assert.equal(
+    /scheduleAutopilotHandoff\(\)/.test(stallBlock),
+    false,
+    'apply stall must not start the next slice',
+  );
+}
+assert.match(chat, /scheduleAutopilotHandoff\(\)/);
 assert.match(chat, /abortGoCodeWait\(projectName\)/);
 assert.match(chat, /publishGrokActivity/);
 assert.match(chat, /holdCodingFailure/);
@@ -312,7 +319,9 @@ assert.equal(
   }),
   false,
 );
-assert.match(chat, /if \(!FAST_PROTOTYPE_SAME_SESSION_AUTOPILOT\)/);
+assert.match(chat, /FAST_PROTOTYPE_SAME_SESSION_AUTOPILOT/);
+assert.match(chat, /scheduleAutopilotHandoff\(\)/);
+assert.match(pipeline, /Grok still empty — bypassing this slice/);
 assert.match(chat, /isAbortLikeError\(e\) && mpSaved > 0/);
 assert.match(chat, /looksLikeApplyInFlightStall\(last\) && goStarted/);
 assert.match(chat, /applyStallStartedAtRef/);
@@ -353,6 +362,15 @@ assert.match(
   assert.equal(grokActivityStripVisible(waiting), true);
   assert.equal(grokActivityStripVisible(timedOut), true);
   assert.equal(grokActivityStripVisible(applying), true);
+  const finished = {
+    ...idle,
+    activity: {
+      ...idle.activity,
+      headline: 'Coding finished',
+      liveLog: [{ id: '2', at: 2, message: 'Slice complete', kind: 'success' as const }],
+    },
+  };
+  assert.equal(grokActivityStripVisible(finished), true);
 }
 
 console.log('\n✓ coding freeze contract passed\n');

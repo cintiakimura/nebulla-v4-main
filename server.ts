@@ -105,7 +105,6 @@ import { softenSecurityBlocksForMvpGo } from "./lib/mvpDeliveryGates";
 import { draftSection4AmendmentsForRoutes } from "./lib/mindMapAmendmentPropose";
 import { isMasterPlanReadyForUiMockup } from "./lib/masterPlanCompleteness";
 import { uiBriefUsable } from "./lib/spineSequenceGates";
-import { ensureMasterPlanBeforeGo } from "./lib/nebulaMasterPlanSynthesis";
 import { assessResearchArtifact, RESEARCH_STOPPED } from "./lib/researchArtifact";
 import { isResearchJobActive, runResearchStroke } from "./lib/nebulaResearchStroke";
 import { grokChatCompletionsExtras } from "./lib/grokRequestPolicy";
@@ -4870,14 +4869,30 @@ Rules:
         });
       }
       if (existingGo?.status === "preparing") {
-        return res.json({
-          preCodingSummary: existingGo.preCodingSummary,
-          pending: true,
-          preparing: true,
-          coding: false,
-          resumed: true,
-          hint: "Preparing plan before Grok Code — job not scheduled yet.",
-        });
+        if (isGoCodeJobActive(ppGo.workspaceRoot)) {
+          return res.json({
+            preCodingSummary: existingGo.preCodingSummary,
+            pending: true,
+            preparing: true,
+            coding: false,
+            resumed: true,
+            hint: "Preparing plan before Grok Code — job not scheduled yet.",
+          });
+        }
+        const prepAge = Date.now() - (existingGo.startedAt || Date.now());
+        if (prepAge < 6_000) {
+          return res.json({
+            preCodingSummary: existingGo.preCodingSummary,
+            pending: true,
+            preparing: true,
+            coding: false,
+            resumed: true,
+            hint: "Preparing plan before Grok Code — job not scheduled yet.",
+          });
+        }
+        console.warn(
+          `[go-code] orphan preparing (${Math.round(prepAge / 1000)}s, no job) — scheduling Foundation with local summary`,
+        );
       }
 
       // Phase 5: mark preparing BEFORE plan-fill so a 55s client abort + poll is not a false “Grok Code running”.
@@ -4914,27 +4929,29 @@ Rules:
         completeness?: ReturnType<typeof assessMasterPlanCompletenessWithWorkspace>;
       } = { written: [], source: "skipped" };
       if (!continuation) {
-        mpFill = await ensureMasterPlanBeforeGo({
-          apiKey,
-          workspaceRoot: ppGo.workspaceRoot,
-          masterPlanPath,
-          planSnapshot,
-          memoryContent: memory,
-          projectName: convProject,
-          userNote: note,
-        });
-        if (mpFill.written.length > 0) {
-          console.log(
-            `[go-code] Master Plan filled (${mpFill.source}): ${mpFill.written.join(", ")}`,
-          );
-          try {
-            const refreshed = readMasterPlanFile(masterPlanPath);
-            for (const [k, v] of Object.entries(refreshed)) {
-              if (typeof v === "string") planSnapshot[k] = v;
+        // Local fill only — Grok plan synthesis here used to burn the 55s kick abort
+        // and leave poll on "preparing" until GO_TIMEOUT (no Grok Code job).
+        try {
+          const local = fillMissingMasterPlanSectionsLocal({
+            workspaceRoot: ppGo.workspaceRoot,
+            masterPlanPath,
+            projectName: convProject,
+            userNote: note,
+          });
+          mpFill = { written: local.updated || [], source: "local" };
+          if (mpFill.written.length > 0) {
+            console.log(`[go-code] Master Plan local fill: ${mpFill.written.join(", ")}`);
+            try {
+              const refreshed = readMasterPlanFile(masterPlanPath);
+              for (const [k, v] of Object.entries(refreshed)) {
+                if (typeof v === "string") planSnapshot[k] = v;
+              }
+            } catch {
+              /* ignore */
             }
-          } catch {
-            /* ignore */
           }
+        } catch {
+          mpFill = { written: [], source: "skipped" };
         }
       }
 
@@ -5008,29 +5025,12 @@ Rules:
         console.warn("[go-code] bypass thin Master Plan — continuing Foundation");
       }
 
-      // Phase 3 Gate R: research preferred; missing research does not 409 the coding agent.
+      // Gate R: do not await Web Search on this request — that left Foundation unscheduled.
       const goalForResearch = String(planSnapshot["1. Goal of the app"] || note || convProject);
-      let researchGate = assessResearchArtifact(ppGo.workspaceRoot, { goal: goalForResearch });
+      const researchGate = assessResearchArtifact(ppGo.workspaceRoot, { goal: goalForResearch });
       if (!researchGate.ok) {
-        const stroke = await runResearchStroke({
-          apiKey,
-          workspaceRoot: ppGo.workspaceRoot,
-          masterPlanPath,
-          projectKey: ppGo.projectKey,
-          projectName: convProject,
-          goal: goalForResearch,
-        });
-        researchGate = stroke.gate;
-        if (!stroke.ok || !researchGate.ok) {
-          gateWarnings.push(stroke.error || RESEARCH_STOPPED);
-          console.warn("[go-code] bypass RESEARCH_INCOMPLETE — continuing Foundation");
-        } else {
-          try {
-            uiArts = syncUiArtifactsFromMasterPlan(ppGo.workspaceRoot, masterPlanPath);
-          } catch {
-            /* brief refresh after merge */
-          }
-        }
+        gateWarnings.push(RESEARCH_STOPPED);
+        console.warn("[go-code] bypass RESEARCH_INCOMPLETE — scheduling Foundation without waiting on research");
       }
 
       // Phase 4: ui-brief preferred; missing brief does not 409 the coding agent.
@@ -5060,7 +5060,7 @@ Rules:
         }
       }
       const existingSummary = String(plan[PRE_CODING_SUMMARY_KEY] ?? "").trim();
-      const skipPhaseA = shouldSkipPhaseALlm({ userNote: note, existingSummary });
+      const skipPhaseA = true;
 
       if (skipPhaseA) {
         summary = isUsablePreCodingSummary(existingSummary)

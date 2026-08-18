@@ -21,6 +21,7 @@ import {
   nextAutopilotSliceLabel,
   shouldAutopilotAdvance,
   MAX_AUTOPILOT_SLICES,
+  FAST_PROTOTYPE_SAME_SESSION_AUTOPILOT,
   buildAutopilotSliceInstruction,
 } from '../src/lib/fastPrototypeNextSlice.ts';
 import {
@@ -44,8 +45,8 @@ assert.equal(
     projectKey: 'p1',
     sliceLabel: 'Foundation',
   }),
-  false,
-  'same-session autopilot is off — Foundation must not auto-start Primary',
+  true,
+  'same-session autopilot starts Primary after Foundation',
 );
 
 markFastPrototypePrimaryAutoRun('p1');
@@ -80,7 +81,7 @@ assert.equal(
   false,
 );
 
-// First Go often returns Auth for shell+login — still do not auto Primary in the same wait.
+// First Go often returns Auth for shell+login — still auto Primary.
 assert.equal(
   shouldAutoRunPrimarySliceAfterFoundation({
     fastPrototypeTurn: true,
@@ -88,7 +89,7 @@ assert.equal(
     projectKey: 'p-auth',
     sliceLabel: 'Auth',
   }),
-  false,
+  true,
 );
 
 assert.match(FAST_PROTOTYPE_PRIMARY_SLICE_INSTRUCTION, /SLICE: Primary/);
@@ -106,9 +107,10 @@ assert.equal(nextAutopilotSliceLabel('Secondary'), 'Polish');
     autoCount: 0,
     autopilotKickoff: true,
   });
-  assert.equal(d.advance, false);
-  assert.equal(d.stopReason, 'session_complete');
-  assert.match(d.message, /not started automatically/i);
+  assert.equal(d.advance, true);
+  assert.equal(d.nextLabel, 'Primary');
+  assert.equal(d.stopReason, 'next');
+  assert.match(d.message, /Starting Primary slice automatically/i);
 }
 {
   const d = shouldAutopilotAdvance({
@@ -118,7 +120,7 @@ assert.equal(nextAutopilotSliceLabel('Secondary'), 'Polish');
     autopilotKickoff: true,
   });
   assert.equal(d.advance, false);
-  assert.equal(d.stopReason, 'session_complete');
+  assert.equal(d.stopReason, 'done');
 }
 {
   const d = shouldAutopilotAdvance({
@@ -128,7 +130,7 @@ assert.equal(nextAutopilotSliceLabel('Secondary'), 'Polish');
     autopilotKickoff: true,
   });
   assert.equal(d.advance, false);
-  assert.equal(d.stopReason, 'session_complete');
+  assert.equal(d.stopReason, 'cap');
 }
 {
   const d = shouldAutopilotAdvance({
@@ -137,8 +139,9 @@ assert.equal(nextAutopilotSliceLabel('Secondary'), 'Polish');
     autoCount: 0,
     autopilotKickoff: true,
   });
-  assert.equal(d.advance, false);
-  assert.equal(d.stopReason, 'failed');
+  assert.equal(d.advance, true);
+  assert.equal(d.nextLabel, 'Primary');
+  assert.match(d.message, /bypassing/i);
 }
 {
   const d = shouldAutopilotAdvance({
@@ -148,8 +151,8 @@ assert.equal(nextAutopilotSliceLabel('Secondary'), 'Polish');
     autopilotKickoff: true,
     productRouteCount: 2,
   });
-  assert.equal(d.advance, false);
-  assert.equal(d.nextLabel, null);
+  assert.equal(d.advance, true);
+  assert.equal(d.nextLabel, 'Primary');
 }
 assert.match(buildAutopilotSliceInstruction('Secondary'), /SLICE: Secondary/);
 
@@ -267,7 +270,8 @@ assert.equal(APPLY_IN_FLIGHT_STALL_MS, 15_000);
     chat.indexOf('Foundation apply used to freeze'),
     chat.indexOf('Detect natural language project creation'),
   );
-  assert.match(chat, /if \(!FAST_PROTOTYPE_SAME_SESSION_AUTOPILOT\)/);
+assert.equal(FAST_PROTOTYPE_SAME_SESSION_AUTOPILOT, true);
+assert.match(chat, /if \(!FAST_PROTOTYPE_SAME_SESSION_AUTOPILOT\)/);
   assert.equal(
     /scheduleAutopilotHandoff\(\)/.test(stallBlock),
     false,

@@ -780,6 +780,26 @@ async function pollGoCodeUntilDoneInner(
       }
       const phase = classifyGoPoll(poll);
       if (phase === 'preparing' || (poll.pending && poll.preparing && !poll.coding)) {
+        const elapsed = Number(poll.elapsedMs) || 0;
+        if (elapsed >= 12_000 && i > 0 && i % 3 === 0) {
+          onProgress?.('Foundation still preparing — nudging server to schedule Grok Code', 'warn');
+          try {
+            const nudgeTimed = abortAfter(8_000);
+            try {
+              await fetch(withProjectQuery('/api/grok/go-code'), {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', ...getGrokRequestHeaders() },
+                credentials: 'include',
+                signal: nudgeTimed.signal,
+                body: JSON.stringify(withProjectBody({ projectName })),
+              });
+            } finally {
+              nudgeTimed.cancel();
+            }
+          } catch {
+            /* next poll */
+          }
+        }
         if (i === 0 || i % 6 === 0) {
           onProgress?.(goPollActivityMessage('preparing', poll.elapsedMs), 'info');
         }
@@ -1034,6 +1054,8 @@ export async function runGoCodeAndApply(options: {
     let passes = 0;
     let partialPlanOnly = false;
     let lastRunnable: { runnableRoot?: boolean; runnableStatusLine?: string } = {};
+    let grokRelaunches = 0;
+    const MAX_GROK_RELAUNCHES = 1;
 
     for (let pass = 0; pass < GO_CODE_MAX_PASSES; pass++) {
       if (isGoSessionAborted(projectName)) break;
@@ -1070,14 +1092,30 @@ export async function runGoCodeAndApply(options: {
         const blocked =
           data.blockedReason ||
           classifyGoFailure({ code: data.code, error: data.error, codeError: data.codeError });
-        onProgress?.(formatBlockedReasonLine(blocked), 'error');
+        if (blocked.code === 'KEY_AUTH') {
+          onProgress?.(formatBlockedReasonLine(blocked), 'error');
+          return {
+            ok: false,
+            statusMessage: formatBlockedReasonLine(blocked),
+            totalWritten,
+            blockedReason: blocked,
+          };
+        }
         if (totalWritten > 0) break;
-        return {
-          ok: false,
-          statusMessage: formatBlockedReasonLine(blocked),
-          totalWritten,
-          blockedReason: blocked,
-        };
+        if (
+          grokRelaunches < MAX_GROK_RELAUNCHES &&
+          (blocked.code === 'GO_TIMEOUT' || blocked.code === 'GO_EMPTY_OUTPUT' || blocked.code === 'GO_FAILED')
+        ) {
+          grokRelaunches += 1;
+          onProgress?.('No Grok Code result — relaunching this slice once', 'warn');
+          pass -= 1;
+          continue;
+        }
+        onProgress?.(
+          `${formatBlockedReasonLine(blocked)} — bypassing this slice and continuing`,
+          'warn',
+        );
+        break;
       }
 
       if (data.summarySaved && pass === 0) {
@@ -1101,26 +1139,27 @@ export async function runGoCodeAndApply(options: {
       if (data.codeError && !codeText) {
         const blocked =
           data.blockedReason || classifyGoFailure({ code: data.code, codeError: data.codeError, error: data.error });
-        onProgress?.(formatBlockedReasonLine(blocked), 'error');
         if (totalWritten > 0) break;
-        return {
-          ok: false,
-          statusMessage: formatBlockedReasonLine(blocked),
-          totalWritten,
-          blockedReason: blocked,
-        };
+        if (grokRelaunches < MAX_GROK_RELAUNCHES) {
+          grokRelaunches += 1;
+          onProgress?.('Grok Code error with no files — relaunching this slice once', 'warn');
+          pass -= 1;
+          continue;
+        }
+        onProgress?.(`${formatBlockedReasonLine(blocked)} — bypassing this slice`, 'warn');
+        break;
       }
 
       if (!codeText) {
         if (totalWritten > 0) break;
-        const blocked = classifyGoFailure({ code: 'GO_EMPTY_OUTPUT' });
-        onProgress?.(formatBlockedReasonLine(blocked), 'warn');
-        return {
-          ok: false,
-          statusMessage: formatBlockedReasonLine(blocked),
-          totalWritten,
-          blockedReason: blocked,
-        };
+        if (grokRelaunches < MAX_GROK_RELAUNCHES) {
+          grokRelaunches += 1;
+          onProgress?.('Grok returned no files — relaunching this slice once', 'warn');
+          pass -= 1;
+          continue;
+        }
+        onProgress?.('Grok still empty — bypassing this slice and continuing', 'warn');
+        break;
       }
 
       lastCodeText = codeText;

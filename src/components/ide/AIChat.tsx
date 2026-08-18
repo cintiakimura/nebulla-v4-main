@@ -355,7 +355,17 @@ export function AIChat() {
     setGrokCodingActive(false);
     setV0WatchActive(false);
     setV0Live(false);
-    setGrokActivity(idleGrokActivity(interactionModeRef.current));
+    setGrokActivity((prev) => {
+      if ((prev.liveLog?.length || 0) > 0 || prev.tone === 'error' || prev.tone === 'work') {
+        return finishGrokActivity(
+          prev,
+          prev.headline || 'Coding finished',
+          prev.steps?.length ? prev.steps : goWorkSteps(),
+          prev.footer || prev.currentAction,
+        );
+      }
+      return idleGrokActivity(interactionModeRef.current);
+    });
   }, []);
 
   /** Keep the last error on the shell status strip — do not idle-wipe (that hid "Code pass 1" timeouts). */
@@ -368,11 +378,12 @@ export function AIChat() {
   }, []);
 
   useEffect(() => {
-    setGrokActivity((prev) =>
-      prev.tone === 'ready'
-        ? idleGrokActivity(assistantInteractionMode)
-        : { ...prev, subhead: interactionModeIdleSubhead(assistantInteractionMode) },
-    );
+    setGrokActivity((prev) => {
+      if ((prev.liveLog?.length || 0) > 0 || prev.tone !== 'ready') {
+        return { ...prev, subhead: interactionModeIdleSubhead(assistantInteractionMode) };
+      }
+      return idleGrokActivity(assistantInteractionMode);
+    });
   }, [assistantInteractionMode, t]);
 
   useEffect(() => {
@@ -502,18 +513,18 @@ export function AIChat() {
           markMainAiAuthRejected(diskProjectKey);
           pushActivity(continueFailureActivityLine('key/auth fail', go.statusMessage || ''), 'error');
           setSendError(go.statusMessage || 'API key rejected — autopilot stopped.');
-        } else {
-          pushActivity(
-            go.statusMessage ||
-              'Slice apply failed — autopilot paused. Fix with Agent, then send a new message.',
-            'error',
-          );
+          resetCodingActivity();
+          return;
         }
-        resetCodingActivity();
-        return;
+        pushActivity(
+          go.statusMessage
+            ? `${go.statusMessage} — bypassing and continuing`
+            : 'Slice apply failed — bypassing and continuing',
+          'warn',
+        );
       }
       const again = shouldAutopilotAdvance({
-        codingOk: true,
+        codingOk: go.ok,
         lastSlice: lastAutoSliceLabelRef.current,
         autoCount: getAutopilotSliceCount(projectKey),
         autopilotKickoff: true,
@@ -532,12 +543,19 @@ export function AIChat() {
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       const failureClass = classifyContinueFailure({ message: msg });
-      pushActivity(continueFailureActivityLine(failureClass, msg), 'error');
       if (failureClass === 'key/auth fail' || isKeyAuthFailureMessage(msg)) {
+        pushActivity(continueFailureActivityLine(failureClass, msg), 'error');
         markMainAiAuthRejected(diskProjectKey);
         setSendError(msg);
+        resetCodingActivity();
+        return;
       }
-      resetCodingActivity();
+      pushActivity(`${continueFailureActivityLine(failureClass, msg)} — bypassing and continuing`, 'warn');
+      autoSliceInFlightRef.current = false;
+      window.setTimeout(() => {
+        void runAutoNextSliceRef.current();
+      }, 120);
+      return;
     } finally {
       autoSliceInFlightRef.current = false;
       sendingRef.current = false;
@@ -2551,28 +2569,31 @@ export function AIChat() {
               /* ignore */
             }
             pushActivity('Coding slice done — opening live App Preview (not the UI Studio mockup)', 'success');
-
-            const codingSliceLabel =
-              (coding as { sliceLabel?: string | null }).sliceLabel ?? 'Foundation';
-            lastAutoSliceLabelRef.current = codingSliceLabel;
-            lastAutoProductRouteCountRef.current = (
-              coding as { productRouteCount?: number }
-            ).productRouteCount;
-            const { projectKey } = resolveActiveProjectIds(diskProjectKey);
-            const autoDecision = shouldAutopilotAdvance({
-              codingOk: coding.ok !== false,
-              lastSlice: codingSliceLabel,
-              autoCount: getAutopilotSliceCount(projectKey),
-              autopilotKickoff: fastPrototypeTurn || uiMockupStarted,
-              productRouteCount: lastAutoProductRouteCountRef.current,
-            });
-            pushActivity(autoDecision.message, 'success');
           }
-          codingActivityRef.current = false;
-          setGrokCodingActive(false);
-          setV0WatchActive(false);
-          setV0Live(false);
-          if (codingProblems.length > 0) {
+
+          const codingSliceLabel =
+            (coding as { sliceLabel?: string | null }).sliceLabel ?? 'Foundation';
+          lastAutoSliceLabelRef.current = codingSliceLabel;
+          lastAutoProductRouteCountRef.current = (
+            coding as { productRouteCount?: number }
+          ).productRouteCount;
+          const { projectKey } = resolveActiveProjectIds(diskProjectKey);
+          const autoDecision = shouldAutopilotAdvance({
+            codingOk: coding.ok !== false,
+            lastSlice: codingSliceLabel,
+            autoCount: getAutopilotSliceCount(projectKey),
+            autopilotKickoff: true,
+            productRouteCount: lastAutoProductRouteCountRef.current,
+          });
+          pushActivity(autoDecision.message, autoDecision.advance ? 'info' : 'success');
+          if (autoDecision.advance) {
+            if (codingProblems.length > 0) {
+              setGrokActivity((prev) => finishGrokActivityWithProblems(prev, codingProblems));
+            }
+            scheduleAutopilotHandoff();
+          } else if (codingProblems.length > 0) {
+            codingActivityRef.current = false;
+            setGrokCodingActive(false);
             setGrokActivity((prev) => finishGrokActivityWithProblems(prev, codingProblems));
           } else {
             resetCodingActivity();

@@ -47,7 +47,7 @@ export async function fetchResearchStatus(): Promise<{ ok: boolean; pending?: bo
 
 async function waitForInFlightResearch(onProgress?: GrokActivityProgressFn): Promise<ResearchStrokeResult> {
   onProgress?.(RESEARCH_STAGE_SEARCHING, 'info');
-  for (let i = 0; i < 36; i++) {
+  for (let i = 0; i < 4; i++) {
     await new Promise((r) => setTimeout(r, 2500));
     const st = await fetchResearchStatus();
     if (st.ok) return { ok: true, reused: true };

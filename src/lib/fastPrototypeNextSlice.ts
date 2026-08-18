@@ -86,10 +86,10 @@ export function nextAutopilotSliceLabel(current?: string | null): AutopilotSlice
 export const MAX_AUTOPILOT_SLICES = 3;
 
 /**
- * Same-session Primary/Secondary/Polish chain is a euro sink.
- * Cap remains a safety net if this is re-enabled. User Continue starts the next slice.
+ * One user prompt → Foundation through Polish without waiting for Continue.
+ * Cap remains a safety net against infinite Go loops.
  */
-export const FAST_PROTOTYPE_SAME_SESSION_AUTOPILOT = false;
+export const FAST_PROTOTYPE_SAME_SESSION_AUTOPILOT = true;
 
 export type AutopilotAdvanceDecision = {
   advance: boolean;
@@ -112,14 +112,6 @@ export function shouldAutopilotAdvance(opts: {
   productRouteCount?: number;
 }): AutopilotAdvanceDecision {
   const maxAuto = opts.maxAuto ?? MAX_AUTOPILOT_SLICES;
-  if (!opts.codingOk) {
-    return {
-      advance: false,
-      nextLabel: null,
-      stopReason: 'failed',
-      message: 'Slice apply failed — paused. Fix the failing slice, then send Continue.',
-    };
-  }
   if (!FAST_PROTOTYPE_SAME_SESSION_AUTOPILOT) {
     return {
       advance: false,
@@ -136,6 +128,14 @@ export function shouldAutopilotAdvance(opts: {
       message: 'Autopilot only follows the initial Plan → mockup → Foundation run.',
     };
   }
+  if (opts.autoCount >= maxAuto) {
+    return {
+      advance: false,
+      nextLabel: null,
+      stopReason: 'cap',
+      message: `Autopilot reached ${maxAuto} follow-up slices. Review Preview or send a new goal.`,
+    };
+  }
   const thinProduct =
     typeof opts.productRouteCount === 'number' && opts.productRouteCount < 3;
   if (looksLikePolishSlice(opts.lastSlice) && !thinProduct) {
@@ -144,14 +144,6 @@ export function shouldAutopilotAdvance(opts: {
       nextLabel: null,
       stopReason: 'done',
       message: 'Autopilot finished (Polish slice). Review Preview — Stop or send a new goal.',
-    };
-  }
-  if (opts.autoCount >= maxAuto) {
-    return {
-      advance: false,
-      nextLabel: null,
-      stopReason: 'cap',
-      message: `Autopilot reached ${maxAuto} follow-up slices. Review Preview or send a new goal.`,
     };
   }
   const lastSlice = thinProduct ? 'Foundation' : opts.lastSlice;
@@ -168,7 +160,9 @@ export function shouldAutopilotAdvance(opts: {
     advance: true,
     nextLabel,
     stopReason: 'next',
-    message: `Starting ${nextLabel} slice automatically…`,
+    message: opts.codingOk
+      ? `Starting ${nextLabel} slice automatically…`
+      : `Slice had issues — bypassing and starting ${nextLabel} anyway…`,
   };
 }
 
