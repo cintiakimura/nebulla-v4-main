@@ -194,15 +194,20 @@ section("Gate R — research mandatory");
 assert.match(chat, /ensureResearchBeforeUiAndGo/);
 assert.match(chat, /goal:\s*projectName/);
 assert.match(chat, /RESEARCH_STOPPED/);
+assert.match(chat, /syncPlanViewsAfterResearch/);
+assert.match(chat, /planTurnNoChatCode/);
 assert.match(server, /RESEARCH_INCOMPLETE/);
 assert.match(server, /\/api\/grok\/research/);
 assert.match(server, /runResearchStroke/);
+assert.match(server, /isResearchJobActive\(ppGo\.workspaceRoot\)/);
+assert.match(server, /code: "RESEARCH_IN_FLIGHT"/);
 assert.equal(/Foundation may still start/.test(chat), false);
 
 section("Gate F — one heavy job");
 assert.match(studio, /isFoundationGoInFlight/);
 assert.match(server, /FOUNDATION_GO_IN_FLIGHT/);
 assert.match(pipeline, /markFoundationGoInFlight/);
+assert.match(pipeline, /RESEARCH_IN_FLIGHT/);
 
 section("Gate E — App looks OK only on real_routes");
 assert.match(statusMenu, /honesty === 'real_routes'/);

@@ -4878,6 +4878,16 @@ Rules:
 
       // Phase 5: IF a Go job is already running → join poll only (do not kick again).
       const existingGo = readGoCodePending(ppGo.workspaceRoot);
+      if (isResearchJobActive(ppGo.workspaceRoot)) {
+        return res.status(409).json({
+          ok: false,
+          pending: true,
+          preparing: true,
+          coding: false,
+          error: "Research still running — coding waits (one heavy job).",
+          code: "RESEARCH_IN_FLIGHT",
+        });
+      }
       if (existingGo?.status === "running" || isGoCodeJobActive(ppGo.workspaceRoot)) {
         return res.json({
           preCodingSummary: existingGo?.preCodingSummary,

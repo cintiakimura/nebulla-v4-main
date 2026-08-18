@@ -226,8 +226,13 @@ assert.equal(APPLY_IN_FLIGHT_STALL_MS, 15_000);
   );
   assert.match(
     chat,
-    /persistedMockup \|\| alreadyHasProduct/,
-    'bare go must run UI Gen unless a mockup or product routes already exist',
+    /persistedMockup &&/,
+    'skip pre-code mockup only when a loadable mockup is already on disk',
+  );
+  assert.match(
+    chat,
+    /alreadyHasProduct &&[\s\S]*!fastPrototypeTurn/,
+    'leftover app routes must not skip UI Gen on the first Fast Prototype turn',
   );
   assert.match(
     chat,

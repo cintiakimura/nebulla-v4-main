@@ -422,16 +422,15 @@ export function chatModeSystemAppendix(options: {
     parts.push(
       [
         'ACTIVE MODE: FAST PROTOTYPE (inference-first — additive; Guided interview OFF)',
-        '- Law: nebula-project/inference-first-rules.md — single behavioral script. Do not skip or reorder steps.',
-        '- COMPREHENSION FIRST: extract the user brief (roles, privacy, tone, links) into the Master Plan this turn. Do NOT ask the main-goal interview question when the brief already states it. Rank user URLs above competitor defaults; Gate R still required.',
-        '- HARD OUTPUT THIS TURN: You MUST emit <START_MASTERPLAN>…</END_MASTERPLAN> with all five sections. A short chat-only reply is a failure.',
-        '- Sequence: Categorize + labeled assumptions → product Web Search (competitor-research.md) → merge plan → ui-brief → UI mockup (UI Gen v2) → Coding slices → Present/Refine.',
-        '- Required files this turn: nebula-project/fast-prototype-memory.md, category-classification.md, industry-standards.md (assumptions), Master Plan. Product writes competitor-research.md via Web Search (Gate R) then ui-brief.',
-        '- Never invent competitors, studies, or statistics. Prefer labeled assumptions over asking questions. Do NOT skip research. Do NOT treat skip-with-reason as done.',
-        '- Do not claim ui-brief success until Gate R. Do not run UI Gen yourself — product triggers UI Studio Beta after research + §§1–5 + ui-brief (before coding finishes).',
-        '- Emit START_CODING for Foundation only; product queues coding AFTER research + mockup stage (one API key — no parallel architecture+UI+codegen).',
+        '- Law: nebula-project/inference-first-rules.md for quality (no invented competitors; labeled assumptions). Guided interview OFF.',
+        '- THIS TURN = PLAN ONLY. Do not emit START_CODING, <START_CODING>, or app ```file:``` blocks. Do not invent competitor-research.md.',
+        '- COMPREHENSION FIRST: extract the user brief (roles, privacy, tone, links) into the Master Plan this turn. Always fill §1 Goal. Do NOT ask the main-goal interview when the brief already states it.',
+        '- HARD OUTPUT THIS TURN: <START_MASTERPLAN>…</END_MASTERPLAN> with all five sections (real §1). A short chat-only reply is a failure.',
+        '- Required files this turn: nebula-project/fast-prototype-memory.md, category-classification.md, industry-standards.md (assumptions), Master Plan.',
+        '- AFTER this reply the product runs one heavy job at a time: Web Search (Gate R) → merge plan + ui-brief → UI Gen v2 mockup → Foundation Go. Do not skip research.',
+        '- Never invent competitors, studies, or statistics. Prefer labeled assumptions over asking questions.',
         '- Anti-amnesia: read working files before acting; do not restart Step 3.1 if a valid draft exists.',
-        '- Chat: ≤4 short lines (assumptions). All substance in tags + file blocks.',
+        '- Chat: ≤4 short lines (assumptions). All substance in Master Plan tags + nebula-project/ file blocks.',
       ].join('\n'),
     );
   } else if (

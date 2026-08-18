@@ -2099,19 +2099,23 @@ export function AIChat() {
       }
 
       let masterPlanPipeline: Awaited<ReturnType<typeof runMasterPlanUiPipeline>> = {};
-      if (mpSaved > 0) {
+      const syncPlanViewsAfterResearch = async () => {
+        if (mpSaved <= 0 && !fastPrototypeTurn && !willCode) return;
         if (showWorkActivity) {
           setGrokActivity((prev) =>
             advanceGrokActivity(prev, 3, {
               currentAction: willCode
-                ? 'UI pipeline — mind map + ui-brief (mockup before coding)…'
+                ? 'Mind map + ui-brief from researched Master Plan…'
                 : 'Syncing mind map + ui-brief from Master Plan…',
               stepDetail: {
                 index: 2,
-                detail: `Saved ${mpSaved} Master Plan section(s). Building mind map + ui-brief from §4/§5…`,
+                detail:
+                  mpSaved > 0
+                    ? `Saved ${mpSaved} Master Plan section(s). Building mind map + ui-brief after research…`
+                    : 'Building mind map + ui-brief after research…',
               },
               log: {
-                message: `Master Plan updated — ${mpSaved} tab(s); syncing mind map + ui-brief`,
+                message: 'Syncing mind map + ui-brief (after Web Search, not before)',
                 kind: 'success',
               },
             }),
@@ -2131,6 +2135,8 @@ export function AIChat() {
             /* ignore */
           }
         }
+      };
+      if (mpSaved > 0) {
         setInferenceFirstStage('plan_drafted', diskProjectKey);
       }
 
@@ -2204,12 +2210,15 @@ export function AIChat() {
         });
         if (!research.ok && research.softAbort) {
           noteProblem('Research request interrupted — continuing Foundation');
+        } else if (!research.ok && research.stillPending) {
+          noteProblem('Research still running — coding waits (one heavy job)');
         } else if (!research.ok) {
           lastResearchError = research.error || RESEARCH_STOPPED;
           noteProblem(lastResearchError);
         } else {
           pushActivity(RESEARCH_STAGE_BRIEF, 'info');
         }
+        await syncPlanViewsAfterResearch();
         const readiness = await assessUiMockupReadiness({ projectKey: diskProjectKey });
         if (readinessBlocksAutoFoundation(readiness) && readiness.reasons.length) {
           noteProblem(`Architecture incomplete: ${readiness.reasons.join('; ')}`);
@@ -2217,14 +2226,22 @@ export function AIChat() {
         const persistedMockup = await hasPersistedUiMockup();
         const alreadyHasProduct = workspaceHasProductAppRoutes(workspacePaths);
         if (
-          (persistedMockup || alreadyHasProduct) &&
+          persistedMockup &&
           (userForcedCoding || assistantCodingPromise || fastPrototypeTurn)
         ) {
           mockupSkippedOrFailed = true;
           pushActivity(
-            persistedMockup
-              ? 'UI mockup already on disk — mockup deferred — coding Foundation'
-              : 'Product routes already on disk — mockup deferred — coding next slice',
+            'UI mockup already on disk — mockup deferred — coding Foundation',
+            'info',
+          );
+        } else if (
+          alreadyHasProduct &&
+          (userForcedCoding || assistantCodingPromise) &&
+          !fastPrototypeTurn
+        ) {
+          mockupSkippedOrFailed = true;
+          pushActivity(
+            'Product routes already on disk — mockup deferred — coding next slice',
             'info',
           );
         } else if (readiness.ok) {
@@ -2295,6 +2312,8 @@ export function AIChat() {
             `Architecture inputs incomplete (${readiness.reasons.join('; ') || 'plan/ui-brief'}) — continuing Foundation anyway`,
           );
         }
+      } else if (mpSaved > 0) {
+        await syncPlanViewsAfterResearch();
       }
 
       if (
@@ -2356,8 +2375,11 @@ export function AIChat() {
           });
         }
 
+        // Fast Prototype plan turn must not apply app file blocks / START_CODING from the
+        // same Grok reply — product launches Foundation Go after research + mockup.
+        const planTurnNoChatCode = fastPrototypeTurn && !userForcedCoding;
         let coding =
-          agentAllowed && willCode && foundationGate.ok
+          agentAllowed && willCode && foundationGate.ok && !planTurnNoChatCode
           ? await handlePostGrokCodingTurn({
               assistantContent: masterPlanSource,
               planningPhase,

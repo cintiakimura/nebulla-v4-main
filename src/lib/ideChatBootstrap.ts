@@ -36,7 +36,8 @@ export function buildFastPrototypeContinueBootstrap(): string {
     `2) \`\`\`file:nebula-project/fast-prototype-memory.md\` … \`\`\`\n` +
     `3) \`\`\`file:nebula-project/category-classification.md\` … \`\`\`\n` +
     `4) \`\`\`file:nebula-project/industry-standards.md\` … \`\`\` (assumption defaults only).\n` +
-    `Do NOT invent competitor names. Do NOT write a fake competitor-research.md. Product runs Web Search and writes nebula-project/competitor-research.md before ui-brief success and Foundation Go.\n` +
+    `Do NOT invent competitor names. Do NOT write a fake competitor-research.md. Do NOT emit START_CODING or app file blocks.\n` +
+    `Product runs Web Search next, then ui-brief, then UI mockup, then Foundation Go (one job at a time).\n` +
     `Do NOT skip research. Chat: at most 4 short lines listing assumptions.`
   );
 }
@@ -107,25 +108,25 @@ export function buildFastPrototypeBootstrap(
     : `User chose Fast Prototype without a written goal yet. Ask exactly ONE question: the main goal (exact wording from INITIAL ONBOARDING goal question). After they answer, do not interview further — infer and draft.\n\n`;
 
   return (
-    `${FAST_PROTOTYPE_BOOTSTRAP_PREFIX} Follow nebula-project/inference-first-rules.md EXACTLY (additive; do NOT run Guided Discovery interview). ` +
-    `Do not skip or reorder steps. Complete each step and write its required file output before the next. ${typeClause}\n\n` +
+    `${FAST_PROTOTYPE_BOOTSTRAP_PREFIX} Follow nebula-project/inference-first-rules.md for quality (no invented competitors; labeled assumptions). ` +
+    `Do NOT run Guided Discovery interview. ${typeClause}\n\n` +
     goalBlock +
-    `This turn — architecture + labeled assumptions only (product owns Phase 3 Web Search):\n` +
-    `2.2 Write nebula-project/fast-prototype-memory.md (mode, activation reason, timestamp, goal).\n` +
-    `3.1–3.2 Categorize → nebula-project/category-classification.md (if confidence low: ONE question and stop).\n` +
-    `4.1–4.2 industry-standards.md as ASSUMPTION defaults (roles, security baseline when kids/accounts/payments). Do not treat this as finished research.\n` +
-    `Do NOT invent competitor names. Do NOT write nebula-project/competitor-research.md with guessed products — product runs Web Search and writes that file (Gate R) before ui-brief success and Foundation Go. Do not skip research.\n` +
-    `7.1–7.6 Draft all five Master Plan sections inside <START_MASTERPLAN>…</END_MASTERPLAN> with REAL content (never placeholder "Build Untitled…" or empty cyan shells). Label inferred fields as assumptions; research will overwrite them:\n` +
+    `THIS TURN = PLAN ONLY (one Grok job). Do not research, mockup, or write app code in this reply.\n` +
+    `Write nebula-project/fast-prototype-memory.md (mode, timestamp, goal).\n` +
+    `Categorize → nebula-project/category-classification.md (if confidence low: ONE question and stop).\n` +
+    `industry-standards.md as ASSUMPTION defaults only (roles, security baseline when kids/accounts/payments). Not finished research.\n` +
+    `Do NOT invent competitor names. Do NOT write nebula-project/competitor-research.md with guessed products.\n` +
+    `Do NOT emit START_CODING, <START_CODING>, or app \`\`\`file:\` blocks (app/, src/, pages/, components/). nebula-project/ files are OK.\n` +
+    `Draft all five Master Plan sections inside <START_MASTERPLAN>…</END_MASTERPLAN> with REAL content (never placeholder "Build Untitled…" or empty cyan shells). Always fill §1 Goal. Label inferred fields as assumptions; Web Search will overwrite competitors:\n` +
     `- §1 Goal: purpose, primary users/roles, in/out of scope.\n` +
-    `- §2 Tech and Research: Project Type; competitors = TBD until Web Search; **include Security baseline** when accounts/kids/students/private data apply (auth model, tenant isolation or classroom_id, roles, secrets, PII, deny-by-default).\n` +
+    `- §2 Tech and Research: Project Type; competitors = TBD until Web Search; **include Security baseline** when accounts/kids/students/private data apply.\n` +
     `- §3 Features + at least one testable KPI (assumption-ranked; research will correct).\n` +
-    `- §4 Pages: every page with route \`/…\` AND fields purpose, primary_actions, data_entities, authz, empty_state, error_state, nav_links (minimum 3–5 pages for a product app).\n` +
+    `- §4 Pages: every page with route \`/…\` AND fields purpose, primary_actions, data_entities, authz, empty_state, error_state, nav_links (minimum 3–5 pages).\n` +
     `- §5 UI tokens: mood, hex palette, typography, density, radius, motion, components, nav (15–25 lines).\n` +
     `List assumptions + stage=plan_drafted in fast-prototype-memory.md.\n` +
-    `Do NOT claim ui-brief is complete this turn — product builds nebula-ui-studio/ui-brief.md after Gate R (research notes).\n` +
-    `Do NOT generate the visual mockup yourself — after research + brief the product runs UI Gen v2 (Step 8.3) before coding (single API key queue).\n` +
-    `Then emit START_CODING / <START_CODING> for Step 9.1 Foundation only — product runs coding AFTER UI mockup is triggered (research + ui-brief must already exist).\n` +
-    `End with a short summary: category, assumptions, main pages, that Web Search research comes next. Prefer coherent first draft over interrogation.`
+    `Do NOT claim ui-brief is complete this turn.\n` +
+    `AFTER this reply the product runs one heavy job at a time: Web Search (Gate R) → merge plan + ui-brief → UI Gen v2 mockup → Foundation Go. Do not skip research.\n` +
+    `End with ≤4 lines: category, assumptions, main pages, that Web Search comes next.`
   );
 }
 

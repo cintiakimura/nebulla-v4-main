@@ -179,8 +179,10 @@ try {
   assert.match(chat, /ensureResearchBeforeUiAndGo/);
   assert.match(chat, /research\.softAbort/);
   const researchClient = fs.readFileSync(path.join(root, "src/lib/nebulaResearchClient.ts"), "utf8");
-  assert.match(researchClient, /softAbort: true/);
+  assert.match(researchClient, /softAbort:/);
   assert.match(researchClient, /isAbortLikeError/);
+  assert.match(researchClient, /stillPending/);
+  assert.match(researchClient, /RESEARCH_IN_FLIGHT_WAIT_LOOPS = 36/);
   assert.match(server, /code: "RESEARCH_INCOMPLETE"/);
   assert.match(server, /inferGoalFromPlanRecord/);
   assert.match(chat, /goal:\s*projectName/);

@@ -940,7 +940,7 @@ async function kickGoCodeJob(options: {
       window.clearTimeout(kickTimer);
     }
 
-    const data = await readResponseJson<
+    let data = await readResponseJson<
       GoCodePayload & {
         code?: string;
         masterPlanCompleteness?: {
@@ -949,6 +949,42 @@ async function kickGoCodeJob(options: {
         };
       }
     >(goRes);
+    if (!goRes.ok && goRes.status === 409 && String(data.code || '') === 'RESEARCH_IN_FLIGHT') {
+      onProgress?.(
+        String(data.error || 'Research still running — coding waits (one heavy job).'),
+        'warn',
+      );
+      switchWaitLabel(GO_PREPARING_LABEL);
+      for (let w = 0; w < 18; w++) {
+        await sleep(5000);
+        const retryController = new AbortController();
+        const retryTimer = window.setTimeout(() => retryController.abort(), GO_KICK_TIMEOUT_MS);
+        try {
+          goRes = await fetch(withProjectQuery('/api/grok/go-code'), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', ...getGrokRequestHeaders() },
+            credentials: 'include',
+            signal: retryController.signal,
+            body: JSON.stringify(
+              withProjectBody({
+                userId,
+                projectName,
+                userNote: userNote?.trim() || undefined,
+                messages,
+                continuation: continuation || undefined,
+              }),
+            ),
+          });
+          data = await readResponseJson(goRes);
+        } catch {
+          continue;
+        } finally {
+          window.clearTimeout(retryTimer);
+        }
+        if (goRes.ok || String(data.code || '') !== 'RESEARCH_IN_FLIGHT') break;
+        onProgress?.('Research still running — coding waits (one heavy job).', 'wait');
+      }
+    }
     if (!goRes.ok) {
       if (goRes.status === 429) {
         const waitSec = Math.min(45, Math.max(8, Number((data as { retryAfterSec?: number }).retryAfterSec) || 15));

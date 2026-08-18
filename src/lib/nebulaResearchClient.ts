@@ -31,7 +31,13 @@ export type ResearchStrokeResult = {
   gate?: { ok: boolean; competitorCount?: number; reasons?: string[] };
   /** Fetch aborted/timed out — not a real Gate R fail. */
   softAbort?: boolean;
+  /** Web Search job still running — do not start Go/UI Gen. */
+  stillPending?: boolean;
 };
+
+/** Wait up to ~90s for an in-flight research stroke (do not start Go in parallel). */
+export const RESEARCH_IN_FLIGHT_WAIT_LOOPS = 36;
+export const RESEARCH_IN_FLIGHT_WAIT_MS = 2500;
 
 export async function fetchResearchStatus(): Promise<{ ok: boolean; pending?: boolean }> {
   try {
@@ -47,12 +53,15 @@ export async function fetchResearchStatus(): Promise<{ ok: boolean; pending?: bo
 
 async function waitForInFlightResearch(onProgress?: GrokActivityProgressFn): Promise<ResearchStrokeResult> {
   onProgress?.(RESEARCH_STAGE_SEARCHING, 'info');
-  for (let i = 0; i < 4; i++) {
-    await new Promise((r) => setTimeout(r, 2500));
+  for (let i = 0; i < RESEARCH_IN_FLIGHT_WAIT_LOOPS; i++) {
+    await new Promise((r) => setTimeout(r, RESEARCH_IN_FLIGHT_WAIT_MS));
     const st = await fetchResearchStatus();
     if (st.ok) return { ok: true, reused: true };
     if (!st.pending) break;
   }
+  const st = await fetchResearchStatus();
+  if (st.ok) return { ok: true, reused: true };
+  if (st.pending) return { ok: false, error: RESEARCH_STOPPED, stillPending: true };
   return { ok: false, error: RESEARCH_STOPPED };
 }
 
@@ -106,8 +115,15 @@ export async function ensureResearchBeforeUiAndGo(options: {
     return { ok: true, reused: data.reused, wrote: data.wrote, gate: data.gate };
   } catch (e) {
     if (isAbortLikeError(e)) {
-      onProgress?.('Research request interrupted — continuing from saved Master Plan', 'warn');
-      return { ok: false, error: 'research_soft_abort', softAbort: true };
+      onProgress?.('Research request interrupted — waiting for in-flight stroke (one heavy job)', 'warn');
+      const waited = await waitForInFlightResearch(onProgress);
+      if (waited.ok) return waited;
+      return {
+        ok: false,
+        error: waited.stillPending ? waited.error : 'research_soft_abort',
+        softAbort: !waited.stillPending,
+        stillPending: waited.stillPending,
+      };
     }
     const err = e instanceof Error ? e.message : RESEARCH_STOPPED;
     onProgress?.(err, 'error');
