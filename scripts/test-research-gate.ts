@@ -320,6 +320,11 @@ try {
   assert.match(chat, /willCode = false/);
   assert.match(chat, /planningPhase = 'PLAN_READY'/);
   assert.equal(/planningPhase = 'START_CODING'/.test(chat), false);
+  assert.match(chat, /isOrchestrationOnlyPlanSource\(planningPhase\)/);
+  assert.match(chat, /Foundation already on disk — send Continue/);
+  const artifacts = fs.readFileSync(path.join(root, "src/lib/grokChatArtifacts.ts"), "utf8");
+  assert.match(artifacts, /export function isOrchestrationOnlyPlanSource/);
+  assert.match(artifacts, /if \(isOrchestrationOnlyPlanSource\(source\)\) return 0/);
   assert.match(chat, /blockedCode: coding\.blockedReason\?\.code/);
   assert.match(
     fs.readFileSync(path.join(root, "lib/nebulaResearchStroke.ts"), "utf8"),

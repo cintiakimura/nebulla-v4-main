@@ -111,10 +111,28 @@ export function extractGrokFilePaths(raw: string): string[] {
   return [...new Set(paths)];
 }
 
+/** Skip-chat / phase tokens must never be written into Master Plan tabs. */
+export function isOrchestrationOnlyPlanSource(source: string): boolean {
+  const t = String(source || '').trim();
+  if (!t) return true;
+  if (/^(PLAN_READY|START_CODING|ARCHITECTURE)$/i.test(t)) return true;
+  if (/<START_MASTERPLAN>/i.test(t)) return false;
+  if (/###?\s*\d\.\s*(Goal of the app|Tech and Research|Features and KPIs)/i.test(t)) return false;
+  if (t.length < 400 && /\b(PLAN_READY|START_CODING)\b/i.test(t)) return true;
+  if (
+    t.length < 400 &&
+    /Master Plan already on disk|continuing research before coding|Grok chat timed out/i.test(t)
+  ) {
+    return true;
+  }
+  return false;
+}
+
 export async function persistMasterPlanFromAssistantSource(
   source: string,
   onProgress?: (message: string) => void,
 ): Promise<number> {
+  if (isOrchestrationOnlyPlanSource(source)) return 0;
   const inner = extractMasterPlanInner(source);
   let parsed = inner ? parseMasterPlanBlock(inner) : {};
   if (Object.keys(parsed).length === 0) {
@@ -122,7 +140,7 @@ export async function persistMasterPlanFromAssistantSource(
   }
   if (Object.keys(parsed).length === 0) return 0;
   const goalBody = (parsed[1] ?? '').trim();
-  if (/\bSTART_CODING\b/i.test(goalBody)) {
+  if (/\bSTART_CODING\b/i.test(goalBody) || /\bPLAN_READY\b/i.test(goalBody)) {
     parsed[1] = '';
   }
   if (!(parsed[1] ?? '').trim()) {

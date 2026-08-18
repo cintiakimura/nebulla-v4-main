@@ -4776,7 +4776,7 @@ Rules:
         });
       }
       const existingGoal = String(plan["1. Goal of the app"] || "").trim();
-      if (!existingGoal || existingGoal.length < 48) {
+      if (!existingGoal || existingGoal.length < 48 || !isUsableProjectGoal(existingGoal)) {
         const seeded = seedGoalOfTheAppSection(plan, [goal, convProject]);
         if (seeded) {
           try {

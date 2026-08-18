@@ -57,6 +57,7 @@ import { fetchConversationLogEntries } from '../../lib/conversationLogClient';
 import {
   formatAssistantForIdeChatDisplay,
   persistMasterPlanFromAssistantSource,
+  isOrchestrationOnlyPlanSource,
 } from '../../lib/grokChatArtifacts';
 import { sanitizeAssistantChatText } from '../../../lib/assistantChatSanitize';
 import { dispatchOpenUiStudio, dispatchStartUiUxWorkflow } from '../../lib/nebulaUiStudioEvents';
@@ -2023,7 +2024,9 @@ export function AIChat() {
         stopGrokWait();
       }
       const raw = assistantContent.trim();
-      const masterPlanSource = (planningPhase || raw).trim();
+      const masterPlanSource = (
+        isOrchestrationOnlyPlanSource(planningPhase) ? raw : planningPhase || raw
+      ).trim();
       if (showWorkActivity) {
         pushActivity(`Grok replied (${raw.length.toLocaleString()} chars)`, 'success');
         setGrokActivity((prev) =>
@@ -2444,7 +2447,20 @@ export function AIChat() {
           shortCodingNudge ||
           userForcedCoding ||
           assistantCodingPromise;
-        if (!coding.ran && agentAllowed && foundationGate.ok && forceGoPipeline) {
+        const foundationAlreadyLanded = workspaceHasProductAppRoutes(workspacePaths);
+        const wantsNextSlice = userNoteRequestsNextSlice(text);
+        if (
+          !coding.ran &&
+          agentAllowed &&
+          foundationGate.ok &&
+          forceGoPipeline &&
+          foundationAlreadyLanded &&
+          !wantsNextSlice &&
+          !onboardingBuildStart
+        ) {
+          pushActivity('Foundation already on disk — send Continue for the next slice.', 'success');
+          resetCodingActivity();
+        } else if (!coding.ran && agentAllowed && foundationGate.ok && forceGoPipeline) {
           if (!codingActivityRef.current) {
             beginCodingActivity('Starting code — first slice', goWorkSteps(), {
               subhead: onboardingBuildStart
@@ -2466,12 +2482,7 @@ export function AIChat() {
           // After Foundation exists, "continue building" must request the NEXT slice — not Foundation again.
           // Empty explorer (no app/ routes) stays Foundation even if the user said continue/finish.
           const foundationLanded = workspaceHasProductAppRoutes(workspacePaths);
-          const nextSliceGo =
-            foundationLanded &&
-            (userNoteRequestsNextSlice(text) ||
-              ((userForcedCoding || assistantCodingPromise || shortCodingNudge) &&
-                !onboardingBuildStart &&
-                !fastPrototypeTurn));
+          const nextSliceGo = foundationLanded && wantsNextSlice;
           pushActivity(
             onboardingBuildStart
               ? 'Nothing more to add — launching Go Code pipeline'

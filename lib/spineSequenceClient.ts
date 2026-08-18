@@ -75,6 +75,7 @@ export function isUsableProjectGoal(goal: string): boolean {
   if (t.length < 8) return false;
   if (!/[a-zA-Z]{3,}/.test(t)) return false;
   if (/\bSTART_CODING\b/i.test(t)) return false;
+  if (/\bPLAN_READY\b/i.test(t)) return false;
   if (/\b(Authz:|Empty state:|Primary actions:)\b/i.test(t)) return false;
   const lower = t.toLowerCase().replace(/[.!?]+$/g, "").trim();
   if (
@@ -85,6 +86,13 @@ export function isUsableProjectGoal(goal: string): boolean {
     return false;
   }
   return true;
+}
+
+/** Empty, too short, or orchestration stub (PLAN_READY / START_CODING) — rewrite §1. */
+export function goalSectionNeedsReseed(goal: string): boolean {
+  const t = String(goal || "").trim();
+  if (!t || t.length < MIN_SEEDED_GOAL_CHARS) return true;
+  return !isUsableProjectGoal(t);
 }
 
 export const ASK_FOR_SHORT_GOAL =
@@ -136,6 +144,7 @@ export function seedGoalOfTheAppSection(
   if (!coreRaw) return "";
   const who = coreRaw
     .replace(/\bSTART_CODING\b/gi, " ")
+    .replace(/\bPLAN_READY\b/gi, " ")
     .replace(/\s+/g, " ")
     .trim()
     .slice(0, 280);

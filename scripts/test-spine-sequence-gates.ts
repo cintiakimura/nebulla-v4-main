@@ -192,6 +192,31 @@ assert.match(
   );
   assert.equal(String(codingStub[1] || "").trim(), "");
 }
+{
+  const phaseStub = parseMasterPlanBlock("PLAN_READY");
+  assert.equal(String(phaseStub[1] || "").trim(), "");
+}
+{
+  const skipStub = parseMasterPlanBlock(
+    "Master Plan already on disk — continuing research before coding (not START_CODING yet).",
+  );
+  assert.equal(String(skipStub[1] || "").trim(), "");
+}
+assert.equal(isUsableProjectGoal("PLAN_READY"), false);
+assert.equal(
+  isUsableProjectGoal(
+    "Project Type: Web App\n\nPLAN_READY\n\nUsers, problem, and MVP scope for this workspace.",
+  ),
+  false,
+);
+{
+  const repaired = seedGoalOfTheAppSection(
+    { "1. Goal of the app": "Project Type: Web App\n\nPLAN_READY\n\nUsers, problem, and MVP scope for this workspace." },
+    ["tutor kids with ADHD"],
+  );
+  assert.match(repaired, /tutor kids with ADHD/i);
+  assert.equal(/PLAN_READY/.test(repaired), false);
+}
 assert.match(chat, /ASK_FOR_SHORT_GOAL|Write a short goal for this app/);
 assert.match(chat, /No usable Master Plan goal yet/);
 assert.match(chat, /lastResearchError/);

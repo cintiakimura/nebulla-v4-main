@@ -32,7 +32,7 @@ export const MASTER_PLAN_ALL_KEYS = [
 ] as const;
 
 const ORCHESTRATION_DUMP_RE =
-  /Project Execution Rules|INITIAL ONBOARDING|START_CODING|AUTOMATED WORKFLOW|TAB \d HIDDEN RULES/i;
+  /Project Execution Rules|INITIAL ONBOARDING|START_CODING|PLAN_READY|AUTOMATED WORKFLOW|TAB \d HIDDEN RULES/i;
 
 const SECTION_META: { index: number; titlePattern: string }[] = [
   { index: 1, titlePattern: "Goal of the app" },
@@ -112,6 +112,10 @@ function parsePreambleBeforeNumberedSections(block: string): string {
   const text = preamble.join("\n").trim();
   if (text.length < 8) return "";
   if (ORCHESTRATION_DUMP_RE.test(text)) return "";
+  if (/^(PLAN_READY|START_CODING|ARCHITECTURE)$/i.test(text)) return "";
+  if (/Master Plan already on disk|continuing research before coding|Grok chat timed out/i.test(text)) {
+    return "";
+  }
   return text;
 }
 

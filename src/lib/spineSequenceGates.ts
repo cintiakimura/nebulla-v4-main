@@ -15,6 +15,7 @@ export {
   goPollActivityMessage,
   goPollBackoffMs,
   isUsableProjectGoal,
+  goalSectionNeedsReseed,
   planRecordHasUsableGoal,
   inferGoalFromPlanRecord,
   seedGoalOfTheAppSection,

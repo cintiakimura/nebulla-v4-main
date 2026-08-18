@@ -15,7 +15,7 @@ import {
 } from "./visualUiEditorWorkspace";
 
 import { MASTER_PLAN_ALL_KEYS, MASTER_PLAN_USER_SECTION_KEYS, normalizeMasterPlanRecord } from "./masterPlanSections";
-import { seedGoalOfTheAppSection } from "./spineSequenceClient";
+import { goalSectionNeedsReseed, seedGoalOfTheAppSection } from "./spineSequenceClient";
 import {
   buildConcreteUiuxSection,
   isGenericUiuxBoilerplate,
@@ -71,7 +71,7 @@ export function fillMissingMasterPlanSectionsLocal(opts: {
 
   const goalNow = String(next["1. Goal of the app"] ?? "").trim();
   const seededGoal = seedGoalOfTheAppSection(next, [note, name]);
-  if (seededGoal && (!goalNow || goalNow.length < MIN_MASTER_PLAN_SECTION_CHARS)) {
+  if (seededGoal && goalSectionNeedsReseed(goalNow)) {
     next["1. Goal of the app"] = seededGoal;
     updated.push("1. Goal of the app");
   }
@@ -400,7 +400,7 @@ export function hydrateMasterPlanDerivedSections(
 
   const seededGoal = seedGoalOfTheAppSection(out);
   const goalNow = String(out["1. Goal of the app"] ?? "").trim();
-  if (seededGoal && (!goalNow || goalNow.length < MIN_MASTER_PLAN_SECTION_CHARS)) {
+  if (seededGoal && goalSectionNeedsReseed(goalNow)) {
     out["1. Goal of the app"] = seededGoal;
     changed = true;
   }
