@@ -174,6 +174,14 @@ assert.equal(
 );
 assert.equal(workspaceHasProductAppRoutes(['app/page.tsx', 'app/layout.tsx']), false);
 assert.equal(workspaceHasProductAppRoutes(['app/teacher/page.tsx', 'app/layout.tsx']), true);
+assert.equal(
+  workspaceHasProductAppRoutes([
+    'app/layout.tsx',
+    'src/screens/KidHomeScreen.tsx',
+    'src/screens/TeacherDashboardScreen.tsx',
+  ]),
+  true,
+);
 
 assert.equal(looksLikePostApplyCodingStall('Runnable skeleton filled: next-env.d.ts'), true);
 assert.equal(looksLikePostApplyCodingStall('Wrote 14 file(s) to workspace'), false);

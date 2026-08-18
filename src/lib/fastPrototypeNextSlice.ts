@@ -207,15 +207,24 @@ export function buildAutopilotSliceInstruction(slice: AutopilotSliceLabel): stri
  * Continue/finish must not jump to Primary while this is false.
  */
 export function workspaceHasProductAppRoutes(paths: string[]): boolean {
-  return (paths || []).some((raw) => {
-    const p = String(raw || '').replace(/\\/g, '/').replace(/^\.\//, '');
+  const list = (paths || []).map((raw) => String(raw || '').replace(/\\/g, '/').replace(/^\.\//, ''));
+  const nestedRoute = list.some((p) => {
     if (!/\.(tsx|jsx)$/i.test(p)) return false;
-    if (!/(^|\/)(app|pages)\//.test(p)) return false;
+    if (!/(^|\/)((src\/)?app|(src\/)?pages)\//.test(p)) return false;
     if (/(^|\/)(layout|template|loading|error|not-found|globals)\./i.test(p)) return false;
     if (/(^|\/)app\/page\.(tsx|jsx)$/i.test(p)) return false;
+    if (/(^|\/)src\/app\/page\.(tsx|jsx)$/i.test(p)) return false;
     if (/(^|\/)pages\/index\.(tsx|jsx)$/i.test(p)) return false;
     return true;
   });
+  if (nestedRoute) return true;
+  const productScreens = list.filter(
+    (p) =>
+      /(^|\/)[A-Za-z][A-Za-z0-9]+Screen\.(tsx|jsx)$/i.test(p) &&
+      !/ErrorBoundary/i.test(p) &&
+      !/(^|\/)(Login|Register|SignIn|SignUp|Auth)Screen\.(tsx|jsx)$/i.test(p),
+  );
+  return productScreens.length >= 1;
 }
 
 /**

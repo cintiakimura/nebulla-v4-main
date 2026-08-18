@@ -180,6 +180,25 @@ assert.match(localSum, /ADHD|tutor|slice/i);
   });
   assert.equal(routes.ok, true);
   assert.equal(routes.warnRunnable, true);
+
+  const screenShell = assessFoundationGoExit({
+    totalWritten: 14,
+    writtenPaths: [
+      "app/layout.tsx",
+      "src/components/ErrorBoundary.tsx",
+      "src/context/AuthContext.tsx",
+      "src/navigation/RootNavigator.tsx",
+      "src/screens/KidExerciseScreen.tsx",
+      "src/screens/KidHistoryScreen.tsx",
+      "src/screens/KidHomeScreen.tsx",
+      "src/screens/LoginScreen.tsx",
+      "src/screens/ParentProgressScreen.tsx",
+      "src/screens/TeacherDashboardScreen.tsx",
+    ],
+    sliceLabel: "Foundation",
+  });
+  assert.equal(screenShell.ok, true);
+  assert.equal(screenShell.blockedReason, null);
 }
 
 {
@@ -205,6 +224,18 @@ assert.match(localSum, /ADHD|tutor|slice/i);
       writtenPaths: ["src/App.tsx", "src/main.tsx"],
     }),
     true,
+  );
+  assert.equal(
+    shouldRunGoCodeSecondPass({
+      totalWritten: 8,
+      writtenPaths: [
+        "app/layout.tsx",
+        "src/screens/KidHomeScreen.tsx",
+        "src/screens/TeacherDashboardScreen.tsx",
+        "src/navigation/RootNavigator.tsx",
+      ],
+    }),
+    false,
   );
   assert.equal(shouldRunGoCodeSecondPass({ totalWritten: 0, writtenPaths: [] }), true);
   assert.equal(

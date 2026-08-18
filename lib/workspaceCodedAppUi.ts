@@ -136,13 +136,18 @@ export function workspaceHasCodedAppUi(workspaceRoot: string): boolean {
   return listProductUiFiles(workspaceRoot, 8).length >= 1;
 }
 
-/** Next app page files and pages/* files - not Vite src/App.tsx + src/main.tsx. */
+function normalizeProductPath(raw: string): string {
+  return String(raw || "").replace(/\\/g, "/").replace(/^\.\//, "");
+}
+
+/** Next app page files, pages/*, src/app/*, and *Screen.tsx — not Vite src/App.tsx + src/main.tsx. */
 export function listProductRouteFiles(paths: string[]): string[] {
   return (paths || []).filter((raw) => {
-    const p = String(raw || "").replace(/\\/g, "/");
+    const p = normalizeProductPath(raw);
     return (
-      /^app\/(?:.+\/)?page\.(tsx|jsx|js)$/i.test(p) ||
-      /^(?:src\/)?pages\/.+\.(tsx|jsx|js)$/i.test(p)
+      /^(?:src\/)?app\/(?:.+\/)?page\.(tsx|jsx|js)$/i.test(p) ||
+      /^(?:src\/)?pages\/.+\.(tsx|jsx|js)$/i.test(p) ||
+      /(^|\/)(?!ErrorBoundary)[A-Za-z][A-Za-z0-9]+Screen\.(tsx|jsx)$/i.test(p)
     );
   });
 }
@@ -407,16 +412,16 @@ export function resolveAppPreviewAuthority(workspaceRoot: string): AppPreviewAut
   );
 }
 
-/** Routes implied by app/ and pages/ product files (for honest post-code preview). */
+/** Routes implied by app/, src/app/, pages/, and *Screen.tsx files (for honest post-code preview). */
 export function inferRoutesFromProductFiles(productFiles: string[]): string[] {
   const routes = new Set<string>();
   for (const raw of productFiles || []) {
-    const p = String(raw || "").replace(/\\/g, "/");
-    if (/^app\/page\.(tsx|jsx|js)$/i.test(p)) {
+    const p = normalizeProductPath(raw);
+    if (/^(?:src\/)?app\/page\.(tsx|jsx|js)$/i.test(p)) {
       routes.add("/");
       continue;
     }
-    const appPage = p.match(/^app\/(.+)\/page\.(tsx|jsx|js)$/i);
+    const appPage = p.match(/^(?:src\/)?app\/(.+)\/page\.(tsx|jsx|js)$/i);
     if (appPage) {
       routes.add(`/${appPage[1].replace(/\/index$/i, "")}`);
       continue;
@@ -425,6 +430,12 @@ export function inferRoutesFromProductFiles(productFiles: string[]): string[] {
     if (pages) {
       const slug = pages[1].replace(/\/index$/i, "").replace(/^index$/i, "");
       routes.add(`/${slug.replace(/\[(.+?)\]/g, ":$1")}`);
+      continue;
+    }
+    const screen = p.match(/(^|\/)([A-Za-z][A-Za-z0-9]+)Screen\.(tsx|jsx)$/);
+    if (screen && !/^ErrorBoundary$/i.test(screen[2])) {
+      const slug = screen[2].replace(/([a-z0-9])([A-Z])/g, "$1-$2").toLowerCase();
+      if (slug) routes.add(`/${slug}`);
     }
   }
   return [...routes].sort();

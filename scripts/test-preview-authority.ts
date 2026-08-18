@@ -81,6 +81,18 @@ section("inferRoutesFromProductFiles from app/ pages");
     "components/TutorSession.tsx",
   ]);
   assert.deepEqual(routes, ["/", "/kid", "/login"]);
+  const srcApp = inferRoutesFromProductFiles(["src/app/page.tsx", "src/app/teacher/page.tsx"]);
+  assert.deepEqual(srcApp, ["/", "/teacher"]);
+  const screens = inferRoutesFromProductFiles([
+    "app/layout.tsx",
+    "src/components/ErrorBoundary.tsx",
+    "src/screens/KidHomeScreen.tsx",
+    "src/screens/TeacherDashboardScreen.tsx",
+    "src/screens/LoginScreen.tsx",
+  ]);
+  assert.ok(screens.includes("/kid-home"));
+  assert.ok(screens.includes("/teacher-dashboard"));
+  assert.ok(screens.includes("/login"));
 }
 
 section("workspace-routes scaffold yields to UI Gen mockup");
