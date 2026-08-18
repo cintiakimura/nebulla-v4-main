@@ -2222,7 +2222,11 @@ export function AIChat() {
         }
         await syncPlanViewsAfterResearch();
         const readiness = await assessUiMockupReadiness({ projectKey: diskProjectKey });
-        if (readinessBlocksAutoFoundation(readiness) && readiness.reasons.length) {
+        if (
+          readinessBlocksAutoFoundation(readiness) &&
+          readiness.reasons.length &&
+          !lastResearchError
+        ) {
           noteProblem(`Architecture incomplete: ${readiness.reasons.join('; ')}`);
         }
         const persistedMockup = await hasPersistedUiMockup();
@@ -2339,6 +2343,13 @@ export function AIChat() {
           noteProblem(stopMsg);
           pushActivity(stopMsg, 'error');
           willCode = false;
+          try {
+            window.dispatchEvent(
+              new CustomEvent('nebula-preview-wait-status', { detail: { status: stopMsg } }),
+            );
+          } catch {
+            /* ignore */
+          }
           if (codingProblems.length > 0) {
             codingActivityRef.current = false;
             setGrokCodingActive(false);

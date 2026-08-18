@@ -39,27 +39,44 @@ export type ResearchStrokeResult = {
 export const RESEARCH_IN_FLIGHT_WAIT_LOOPS = 36;
 export const RESEARCH_IN_FLIGHT_WAIT_MS = 2500;
 
-export async function fetchResearchStatus(): Promise<{ ok: boolean; pending?: boolean }> {
+export async function fetchResearchStatus(goal?: string): Promise<{
+  ok: boolean;
+  pending?: boolean;
+  competitorCount?: number;
+}> {
   try {
-    const st = await fetchJson<{ ok?: boolean; pending?: boolean }>(
-      withProjectQuery('/api/grok/research/status'),
-      { credentials: 'include', cache: 'no-store', headers: getGrokRequestHeaders() },
-    );
-    return { ok: st.ok === true, pending: st.pending === true };
+    const q = goal?.trim()
+      ? withProjectQuery(`/api/grok/research/status?goal=${encodeURIComponent(goal.trim())}`)
+      : withProjectQuery('/api/grok/research/status');
+    const st = await fetchJson<{
+      ok?: boolean;
+      pending?: boolean;
+      gate?: { ok?: boolean; competitorCount?: number };
+    }>(q, { credentials: 'include', cache: 'no-store', headers: getGrokRequestHeaders() });
+    const competitorCount =
+      typeof st.gate?.competitorCount === 'number' ? st.gate.competitorCount : 0;
+    return {
+      ok: st.ok === true && competitorCount >= 5,
+      pending: st.pending === true,
+      competitorCount,
+    };
   } catch {
     return { ok: false };
   }
 }
 
-async function waitForInFlightResearch(onProgress?: GrokActivityProgressFn): Promise<ResearchStrokeResult> {
+async function waitForInFlightResearch(
+  onProgress?: GrokActivityProgressFn,
+  goal?: string,
+): Promise<ResearchStrokeResult> {
   onProgress?.(RESEARCH_STAGE_SEARCHING, 'info');
   for (let i = 0; i < RESEARCH_IN_FLIGHT_WAIT_LOOPS; i++) {
     await new Promise((r) => setTimeout(r, RESEARCH_IN_FLIGHT_WAIT_MS));
-    const st = await fetchResearchStatus();
+    const st = await fetchResearchStatus(goal);
     if (st.ok) return { ok: true, reused: true };
     if (!st.pending) break;
   }
-  const st = await fetchResearchStatus();
+  const st = await fetchResearchStatus(goal);
   if (st.ok) return { ok: true, reused: true };
   if (st.pending) return { ok: false, error: RESEARCH_STOPPED, stillPending: true };
   return { ok: false, error: RESEARCH_STOPPED };
@@ -76,12 +93,12 @@ export async function ensureResearchBeforeUiAndGo(options: {
     return { ok: false, error: 'Foundation Go in flight' };
   }
 
-  const existing = await fetchResearchStatus();
+  const existing = await fetchResearchStatus(options.goal);
   if (existing.ok) {
     return { ok: true, reused: true };
   }
   if (existing.pending) {
-    const waited = await waitForInFlightResearch(onProgress);
+    const waited = await waitForInFlightResearch(onProgress, options.goal);
     if (!waited.ok) onProgress?.(waited.error || RESEARCH_STOPPED, 'error');
     return waited;
   }
@@ -103,12 +120,12 @@ export async function ensureResearchBeforeUiAndGo(options: {
       },
     );
     if (data.pending && !data.ok) {
-      return waitForInFlightResearch(onProgress);
+      return waitForInFlightResearch(onProgress, options.goal);
     }
     if (data.wrote) onProgress?.(RESEARCH_STAGE_WRITING, 'info');
     if (data.ok && data.reused !== true) onProgress?.(RESEARCH_STAGE_MERGING, 'info');
     if (!data.ok) {
-      const err = data.error || RESEARCH_STOPPED;
+      const err = (data.error || RESEARCH_STOPPED).replace(/^HTTP \d+:\s*/, '');
       onProgress?.(err, 'error');
       return { ok: false, error: err, gate: data.gate };
     }
@@ -116,7 +133,7 @@ export async function ensureResearchBeforeUiAndGo(options: {
   } catch (e) {
     if (isAbortLikeError(e)) {
       onProgress?.('Research request interrupted — waiting for in-flight stroke (one heavy job)', 'warn');
-      const waited = await waitForInFlightResearch(onProgress);
+      const waited = await waitForInFlightResearch(onProgress, options.goal);
       if (waited.ok) return waited;
       return {
         ok: false,
@@ -125,7 +142,7 @@ export async function ensureResearchBeforeUiAndGo(options: {
         stillPending: waited.stillPending,
       };
     }
-    const err = e instanceof Error ? e.message : RESEARCH_STOPPED;
+    const err = (e instanceof Error ? e.message : RESEARCH_STOPPED).replace(/^HTTP \d+:\s*/, '');
     onProgress?.(err, 'error');
     return { ok: false, error: err };
   }

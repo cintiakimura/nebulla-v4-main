@@ -299,7 +299,41 @@ Mark each assumption CONFIRMED or CORRECTED after search.`;
       goal: opts.goal,
     });
     writeResearchArtifact(opts.workspaceRoot, body);
-    const gate = assessResearchArtifact(opts.workspaceRoot, { goal: opts.goal });
+    let gate = assessResearchArtifact(opts.workspaceRoot, { goal: opts.goal });
+    if (!gate.ok) {
+      const repaired = await callGrokWebSearch({
+        apiKey: opts.apiKey,
+        system: `You are rewriting a competitor-research markdown file so it passes a strict parser.
+Output the full markdown document with these headings exactly:
+# Competitor research
+## Category
+## Assumptions
+## Competitors
+## Feature map
+## UI/UX patterns
+## Evidence
+Rules: ## Competitors must be a numbered list of ${RESEARCH_MIN_COMPETITORS}–${RESEARCH_MAX_COMPETITORS} real product names (one name per line, e.g. "1. Khan Academy — practice app"). No tables. ## Feature map must be a numbered list of at least 3 recurring features.
+Real names only — never invent companies. If no study exists, write: No supporting studies found for this feature.`,
+        user: `Gate R failed: ${gate.reasons.join("; ")}
+
+Project: ${opts.projectName}
+Goal:
+${opts.goal.slice(0, 1500)}
+
+Rewrite the draft below so ## Competitors is a numbered list of ${RESEARCH_MIN_COMPETITORS}–${RESEARCH_MAX_COMPETITORS} real products.
+
+Previous draft:
+${body.slice(0, 6000)}`,
+      });
+      if (repaired.ok) {
+        const next = ensureMeta(extractMarkdownDocument(repaired.text), {
+          projectKey: opts.projectKey,
+          goal: opts.goal,
+        });
+        writeResearchArtifact(opts.workspaceRoot, next);
+        gate = assessResearchArtifact(opts.workspaceRoot, { goal: opts.goal });
+      }
+    }
     if (!gate.ok) {
       return {
         ok: false,

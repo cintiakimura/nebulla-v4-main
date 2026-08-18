@@ -65,23 +65,50 @@ function looksInvented(name: string): boolean {
   return false;
 }
 
-/** Bullet / numbered / table-cell names under ## Competitors. */
+const COMPETITOR_HEADER =
+  /^(name|competitor|product|app|source|url|link|notes|description|ranking|rank)$/i;
+
+function cleanCompetitorName(raw: string): string {
+  let name = String(raw || "")
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+    .replace(/[*_`]/g, "")
+    .replace(/\(https?:\/\/[^)]+\)/gi, "")
+    .trim();
+  name = name.split("|")[0].trim();
+  name = name.replace(/\s+[—–].*$/, "").replace(/\s+:\s+.*$/, "").trim();
+  if (name.length > 80) name = name.slice(0, 80).trim();
+  if (COMPETITOR_HEADER.test(name)) return "";
+  return name;
+}
+
+function addCompetitorName(raw: string, names: string[], seen: Set<string>): void {
+  const name = cleanCompetitorName(raw);
+  if (!name || looksInvented(name)) return;
+  const key = name.toLowerCase();
+  if (seen.has(key)) return;
+  seen.add(key);
+  names.push(name);
+}
+
+function isTableSeparator(line: string): boolean {
+  return /^\s*\|?\s*:?-{2,}.*\|/.test(line) || /^\s*\|?\s*[-:| ]+$/.test(line);
+}
+
+/** Bullet / numbered / table / bold names under ## Competitors. */
 export function parseCompetitorNames(md: string): string[] {
   const section = sliceSection(md, /##\s*Competitors\b/i);
   if (!section) return [];
   const names: string[] = [];
   const seen = new Set<string>();
   for (const line of section.split("\n")) {
+    if (!line.trim() || isTableSeparator(line)) continue;
     const bullet = line.match(/^\s*[-*•]\s+(?:\*\*)?([^*|\n]+?)(?:\*\*)?(?:\s*[—–|:(-]|$)/);
     const numbered = line.match(/^\s*\d+[.)]\s+(?:\*\*)?([^*|\n]+?)(?:\*\*)?(?:\s*[—–|:(-]|$)/);
-    const raw = (bullet?.[1] || numbered?.[1] || "").trim();
+    const bold = line.match(/^\s*\*\*([^*]+)\*\*/);
+    const table = line.match(/^\s*\|\s*([^|\n]+)\|/);
+    const raw = (bullet?.[1] || numbered?.[1] || bold?.[1] || table?.[1] || "").trim();
     if (!raw) continue;
-    const name = raw.replace(/\[([^\]]+)\]\([^)]+\)/, "$1").trim();
-    if (looksInvented(name)) continue;
-    const key = name.toLowerCase();
-    if (seen.has(key)) continue;
-    seen.add(key);
-    names.push(name);
+    addCompetitorName(raw, names, seen);
     if (names.length >= RESEARCH_MAX_COMPETITORS) break;
   }
   return names;
@@ -101,7 +128,14 @@ export function countRankedFeatures(md: string): number {
     sliceSection(md, /##\s*(Feature map|Ranked features|Recurring features)\b/i) ||
     sliceSection(md, /##\s*Features\b/i);
   if (!section) return 0;
-  return section.split("\n").filter((l) => /^\s*([-*•]|\d+[.)])\s+\S/.test(l)).length;
+  const bullets = section.split("\n").filter((l) => /^\s*([-*•]|\d+[.)])\s+\S/.test(l)).length;
+  if (bullets >= 3) return bullets;
+  const tableRows = section.split("\n").filter((l) => {
+    if (!/^\s*\|/.test(l) || isTableSeparator(l)) return false;
+    const first = (l.split("|").map((c) => c.trim()).filter(Boolean)[0] || "");
+    return first.length > 1 && !COMPETITOR_HEADER.test(first) && !/^(feature|recurring)$/i.test(first);
+  }).length;
+  return Math.max(bullets, tableRows);
 }
 
 export function hasEvidenceSection(md: string): boolean {

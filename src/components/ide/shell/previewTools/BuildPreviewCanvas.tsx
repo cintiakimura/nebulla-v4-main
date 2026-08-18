@@ -103,12 +103,17 @@ export function BuildPreviewCanvas() {
         bump();
       }
     };
+    const onWaitStatus = (ev: Event) => {
+      const status = String((ev as CustomEvent<{ status?: string }>).detail?.status || '').trim();
+      if (status) setWaitStatus(status.slice(0, 120));
+    };
     window.addEventListener('nebula-files-applied', bump);
     window.addEventListener('nebula-reload-app-preview', bump);
     window.addEventListener('nebula-preview-show-mockup', onShowMockup);
     window.addEventListener(NEBULA_STUDIO_SHOW_LIVE_APP, onShowLive);
     window.addEventListener(NEBULA_UI_STUDIO_BETA_BUSY, onBusy);
     window.addEventListener(NEBULA_UI_STUDIO_BETA_COMPLETE, onComplete);
+    window.addEventListener('nebula-preview-wait-status', onWaitStatus);
     return () => {
       window.removeEventListener('nebula-files-applied', bump);
       window.removeEventListener('nebula-reload-app-preview', bump);
@@ -116,6 +121,7 @@ export function BuildPreviewCanvas() {
       window.removeEventListener(NEBULA_STUDIO_SHOW_LIVE_APP, onShowLive);
       window.removeEventListener(NEBULA_UI_STUDIO_BETA_BUSY, onBusy);
       window.removeEventListener(NEBULA_UI_STUDIO_BETA_COMPLETE, onComplete);
+      window.removeEventListener('nebula-preview-wait-status', onWaitStatus);
     };
   }, [bump, refreshWaitState]);
 

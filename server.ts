@@ -4814,12 +4814,15 @@ Rules:
   app.get("/api/grok/research/status", (req, res) => {
     try {
       const pp = projectPathsFor(req);
-      let goal = "";
+      let plan: Record<string, string> = {};
       try {
-        goal = String(readMasterPlanFile(pp.masterPlanPath)["1. Goal of the app"] || "");
+        plan = readMasterPlanFile(pp.masterPlanPath);
       } catch {
-        goal = "";
+        plan = {};
       }
+      const qGoal = typeof req.query.goal === "string" ? req.query.goal : "";
+      const qName = typeof req.query.projectName === "string" ? req.query.projectName : "";
+      const goal = inferGoalFromPlanRecord(plan, [qGoal, qName]);
       const gate = assessResearchArtifact(pp.workspaceRoot, { goal });
       return res.json({
         ok: gate.ok,

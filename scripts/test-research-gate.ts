@@ -11,11 +11,13 @@ import {
   RESEARCH_ARTIFACT_REL,
   RESEARCH_STOPPED,
   assessResearchArtifact,
+  parseCompetitorNames,
   writeResearchArtifact,
 } from "../lib/researchArtifact.ts";
 import { RESEARCH_STAGE_SEARCHING } from "../lib/researchStages.ts";
 import { canStartUiMockup, readinessBlocksAutoFoundation } from "../src/lib/uiMockupGate.ts";
 import { buildFastPrototypeBootstrap } from "../src/lib/ideChatBootstrap.ts";
+import { finishGrokActivityWithProblems } from "../src/lib/ideGrokActivityStatus.ts";
 import { formatGoBlockedByPlanMessage } from "../src/lib/masterPlanStatus.ts";
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -113,6 +115,43 @@ try {
     assert.ok(gate.competitorCount <= 10);
   }
 
+  section("table / bold competitor names still count");
+  {
+    const md = [
+      "# Competitor research",
+      "## Category",
+      "ADHD tutor",
+      "## Assumptions",
+      "- CONFIRMED: short sessions.",
+      "## Competitors",
+      "| Name | URL |",
+      "| --- | --- |",
+      "| Khan Academy | https://khanacademy.org |",
+      "| Duolingo | https://duolingo.com |",
+      "| Prodigy Math | https://prodigygame.com |",
+      "**Todoist** — tasks",
+      "5. Forest — focus timer",
+      "6. Focus@Will — audio",
+      "## Feature map",
+      "| Feature | Count |",
+      "| --- | --- |",
+      "| Timed practice | 6 |",
+      "| Adult progress | 5 |",
+      "| One next action | 4 |",
+      "## UI/UX patterns",
+      "Low density kid home with one primary CTA and large tap targets for ADHD.",
+      "## Evidence",
+      "No supporting studies found for this feature.",
+    ].join("\n");
+    const names = parseCompetitorNames(md);
+    assert.ok(names.length >= 5, names.join(", "));
+    assert.ok(names.includes("Khan Academy"));
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "research-table-"));
+    writeResearchArtifact(tmp, md);
+    const gate = assessResearchArtifact(tmp);
+    assert.equal(gate.ok, true, gate.reasons.join("; "));
+  }
+
   section("demo skip flag → ok skipped (not production default)");
   {
     process.env.NEBULLA_SKIP_RESEARCH = "1";
@@ -193,6 +232,22 @@ try {
     'failed Gate R must not start Foundation',
   );
   assert.equal(/bypass RESEARCH_INCOMPLETE/.test(server), false);
+  assert.match(server, /inferGoalFromPlanRecord\(plan, \[qGoal, qName\]\)/);
+  assert.match(researchClient, /competitorCount >= 5/);
+  assert.match(
+    fs.readFileSync(path.join(root, "lib/nebulaResearchStroke.ts"), "utf8"),
+    /Rewrite the draft below so ## Competitors is a numbered list/,
+  );
+  assert.match(chat, /nebula-preview-wait-status/);
+  {
+    const done = finishGrokActivityWithProblems(null, [
+      "Architecture incomplete: research not complete (need ≥5 real competitors + rankings)",
+      "Stopped: research not complete — Foundation will not start.",
+    ]);
+    const banner = String(done.currentAction || done.steps?.[0]?.detail || done.steps?.[0]?.label || "");
+    assert.match(banner, /Stopped: research not complete/);
+    assert.equal(/Architecture incomplete:.*Stopped:/.test(banner), false);
+  }
 
   console.log("\n✓ research gate passed\n");
 } finally {

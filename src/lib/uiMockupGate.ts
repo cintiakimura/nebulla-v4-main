@@ -245,17 +245,28 @@ export async function assessUiMockupReadiness(options?: {
         uiBriefLength?: number;
         uiBriefPageCount?: number;
         researchOk?: boolean;
+        researchReasons?: string[];
       };
       if (typeof body.uiBriefLength === 'number') uiBriefLength = body.uiBriefLength;
       if (typeof body.uiBriefPageCount === 'number') uiBriefPageCount = body.uiBriefPageCount;
       if (typeof body.researchOk === 'boolean') researchOk = body.researchOk;
+      if (!researchOk) {
+        const fromServer = Array.isArray(body.researchReasons)
+          ? body.researchReasons.filter((x): x is string => typeof x === 'string' && x.trim().length > 0)
+          : [];
+        reasons.push(
+          fromServer.length
+            ? `research not complete (${fromServer.slice(0, 2).join('; ')})`
+            : 'research not complete (need ≥5 real competitors + rankings)',
+        );
+      }
     }
   } catch {
     uiBriefLength = 0;
     uiBriefPageCount = 0;
     researchOk = false;
   }
-  if (!researchOk) {
+  if (!researchOk && !reasons.some((r) => /research not complete/i.test(r))) {
     reasons.push('research not complete (need ≥5 real competitors + rankings)');
   }
   if (uiBriefLength < UI_BRIEF_MIN || uiBriefPageCount < 1) {

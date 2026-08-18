@@ -206,12 +206,13 @@ export function finishGrokActivityWithProblems(
   prev: GrokActivityStatus | null,
   problems: string[],
 ): GrokActivityStatus {
-  const detail = problems
-    .map((p) => p.replace(/\s+/g, ' ').trim())
-    .filter(Boolean)
-    .slice(0, 6)
-    .join(' · ')
-    .slice(0, 280);
+  const unique = [
+    ...new Set(
+      problems.map((p) => p.replace(/\s+/g, ' ').trim()).filter(Boolean),
+    ),
+  ];
+  const stopped = [...unique].reverse().find((p) => /^Stopped:/i.test(p));
+  const detail = (stopped || unique[unique.length - 1] || '').slice(0, 280);
   return errorGrokActivity(
     prev,
     'Finished with issues',
