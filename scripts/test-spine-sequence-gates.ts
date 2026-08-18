@@ -129,6 +129,7 @@ assert.equal(isUsableProjectGoal(""), false);
 assert.equal(isUsableProjectGoal("hi"), false);
 assert.equal(isUsableProjectGoal("test"), false);
 assert.equal(isUsableProjectGoal("tutor kids with ADHD"), true);
+assert.equal(isUsableProjectGoal("Project Type: Web App START_CODING Users, problem, and MVP scope"), false);
 assert.equal(planRecordHasUsableGoal(null), false);
 assert.equal(planRecordHasUsableGoal({}), false);
 assert.equal(planRecordHasUsableGoal({ "1. Goal of the app": "" }), false);
@@ -184,6 +185,12 @@ assert.match(
   );
   assert.equal(String(skippedGoal[1] || "").trim(), "");
   assert.match(String(skippedGoal[2] || ""), /Next\.js/);
+}
+{
+  const codingStub = parseMasterPlanBlock(
+    "START_CODING — continuing from the saved Master Plan (skipped a second Grok chat wait).",
+  );
+  assert.equal(String(codingStub[1] || "").trim(), "");
 }
 assert.match(chat, /ASK_FOR_SHORT_GOAL|Write a short goal for this app/);
 assert.match(chat, /No usable Master Plan goal yet/);
@@ -251,7 +258,16 @@ assert.match(server, /bypass MASTER_PLAN_INCOMPLETE/);
 assert.equal(/bypass RESEARCH_INCOMPLETE/.test(server), false);
 assert.equal(/coding continues without waiting for Gate R/.test(server), false);
 assert.equal(/scheduling Foundation without waiting on research/.test(server), false);
-assert.match(server, /failGoCodePreparing\(ppGo\.workspaceRoot, blocked\.message, blocked\)/);
+assert.match(server, /failGoCodePreparing\(ppGo\.workspaceRoot, blocked\.message, blocked\)|Gate R before any preparing job/);
+{
+  const goPost = server.slice(server.indexOf('app.post("/api/grok/go-code"'));
+  const pollAt = goPost.indexOf('app.post("/api/grok/go-code/poll"');
+  const goBody = goPost.slice(0, pollAt > 0 ? pollAt : 12000);
+  assert.ok(
+    goBody.indexOf('assessResearchArtifact') < goBody.indexOf('writeGoCodePending'),
+    'Gate R must run before writeGoCodePending',
+  );
+}
 assert.match(server, /inferGoalFromPlanRecord/);
 assert.match(server, /seedGoalOfTheAppSection/);
 assert.match(server, /coding continues/);

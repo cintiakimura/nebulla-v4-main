@@ -4,6 +4,8 @@
  * Capped — no infinite Go loops.
  */
 
+import { RESEARCH_STOPPED } from '../../lib/researchStages';
+
 export type AutopilotSliceLabel =
   | 'Foundation'
   | 'Auth'
@@ -111,10 +113,20 @@ export function shouldAutopilotAdvance(opts: {
   maxAuto?: number;
   /** Product app/ or pages/ routes from this apply — < 3 means Foundation is not done. */
   productRouteCount?: number;
+  /** When Gate R failed, do not tell the user to Send Go. */
+  blockedCode?: string;
 }): AutopilotAdvanceDecision {
   const maxAuto = opts.maxAuto ?? MAX_AUTOPILOT_SLICES;
   if (!FAST_PROTOTYPE_SAME_SESSION_AUTOPILOT) {
     if (!opts.codingOk) {
+      if (opts.blockedCode === 'RESEARCH_INCOMPLETE') {
+        return {
+          advance: false,
+          nextLabel: null,
+          stopReason: 'failed',
+          message: `${RESEARCH_STOPPED} Retry research — not Go — until Gate R is complete.`,
+        };
+      }
       return {
         advance: false,
         nextLabel: null,

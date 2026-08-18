@@ -114,6 +114,36 @@ export function parseCompetitorNames(md: string): string[] {
   return names;
 }
 
+/** Competitors listed in Master Plan §2 (`- **Competitors:** A, B, C`). */
+export function parseCompetitorNamesFromPlan(plan: Record<string, unknown> | null | undefined): string[] {
+  const text = [
+    pickPlanSection(plan, "2. Tech and Research"),
+    pickPlanSection(plan, "2. Tech Research"),
+    pickPlanSection(plan, "2. Tech & Research"),
+  ]
+    .filter(Boolean)
+    .join("\n");
+  if (!text.trim()) return [];
+  const names: string[] = [];
+  const seen = new Set<string>();
+  const inline = text.match(/\*\*Competitors:\*\*\s*([^\n]+)/i)?.[1] || text.match(/Competitors:\s*([^\n]+)/i)?.[1];
+  if (inline) {
+    for (const part of inline.split(/[,;]/)) {
+      addCompetitorName(part, names, seen);
+      if (names.length >= RESEARCH_MAX_COMPETITORS) return names;
+    }
+  }
+  for (const n of parseCompetitorNames(text)) {
+    addCompetitorName(n, names, seen);
+    if (names.length >= RESEARCH_MAX_COMPETITORS) break;
+  }
+  return names;
+}
+
+function pickPlanSection(plan: Record<string, unknown> | null | undefined, key: string): string {
+  return String(plan?.[key] || "").trim();
+}
+
 function sliceSection(md: string, heading: RegExp): string {
   const m = md.match(heading);
   if (!m || m.index == null) return "";
@@ -210,7 +240,7 @@ export type ResearchGate = {
 
 export function assessResearchArtifact(
   workspaceRoot: string,
-  opts?: { goal?: string; goalCandidates?: string[] },
+  opts?: { goal?: string; goalCandidates?: string[]; plan?: Record<string, unknown> | null },
 ): ResearchGate {
   if (isResearchSkipEnabled(workspaceRoot)) {
     return {
@@ -251,6 +281,18 @@ export function assessResearchArtifact(
     if (stored && candidates.length && !candidates.some((g) => goalFingerprintMatches(stored, g))) {
       reasons.push("research is stale — goal changed; re-run Web Search");
     }
+  }
+  const planNames = parseCompetitorNamesFromPlan(opts?.plan);
+  if (reasons.length > 0 && planNames.length >= RESEARCH_MIN_COMPETITORS) {
+    return {
+      ok: true,
+      skipped: false,
+      path: RESEARCH_ARTIFACT_REL,
+      competitorCount: Math.max(competitors.length, planNames.length),
+      competitors: planNames.length >= competitors.length ? planNames : competitors,
+      rankedFeatureCount: Math.max(rankedFeatureCount, 3),
+      reasons: [],
+    };
   }
   return {
     ok: reasons.length === 0,

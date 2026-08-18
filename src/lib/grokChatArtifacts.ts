@@ -121,6 +121,10 @@ export async function persistMasterPlanFromAssistantSource(
     parsed = parseMasterPlanBlock(source);
   }
   if (Object.keys(parsed).length === 0) return 0;
+  const goalBody = (parsed[1] ?? '').trim();
+  if (/\bSTART_CODING\b/i.test(goalBody)) {
+    parsed[1] = '';
+  }
   if (!(parsed[1] ?? '').trim()) {
     const planLike: Record<string, string> = {};
     for (let i = 1; i <= MASTER_PLAN_SECTION_KEYS.length; i++) {

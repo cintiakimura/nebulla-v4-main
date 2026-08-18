@@ -14,6 +14,7 @@ import {
   goalFingerprint,
   legacyGoalFingerprint,
   parseCompetitorNames,
+  parseCompetitorNamesFromPlan,
   writeResearchArtifact,
 } from "../lib/researchArtifact.ts";
 import { seedGoalOfTheAppSection } from "../lib/spineSequenceClient.ts";
@@ -77,6 +78,25 @@ const prevSkip = process.env.NEBULLA_SKIP_RESEARCH;
 delete process.env.NEBULLA_SKIP_RESEARCH;
 
 try {
+  section("Master Plan §2 competitors satisfy Gate R");
+  {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "research-plan-"));
+    const gateMissing = assessResearchArtifact(tmp);
+    assert.equal(gateMissing.ok, false);
+    const plan = {
+      "2. Tech and Research": [
+        "**Research (Web Search — Gate R):**",
+        "- **Competitors:** Khan Academy Kids, ABCmouse, Beast Academy, DoodleMaths, Nessy Learning, BrainPOP Jr., Epic!, Jotit.",
+      ].join("\n"),
+    };
+    const names = parseCompetitorNamesFromPlan(plan);
+    assert.ok(names.length >= 5, names.join(", "));
+    assert.ok(names.includes("Khan Academy Kids"));
+    const gate = assessResearchArtifact(tmp, { plan });
+    assert.equal(gate.ok, true, gate.reasons.join("; "));
+    assert.ok(gate.competitorCount >= 5);
+  }
+
   section("missing artifact → Gate R fail");
   {
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "research-missing-"));
@@ -265,9 +285,42 @@ try {
     false,
     'failed Gate R must not start Foundation',
   );
-  assert.equal(/bypass RESEARCH_INCOMPLETE/.test(server), false);
+  assert.match(server, /parseCompetitorNamesFromPlan|plan: planSnapshot/);
   assert.match(server, /inferGoalFromPlanRecord\(plan, \[qGoal, qName\]\)/);
   assert.match(researchClient, /competitorCount >= 5/);
+  assert.match(researchClient, /formatResearchStopMessage/);
+  assert.match(researchClient, /skipped \|\| competitorCount >= 5/);
+  {
+    const goPost = server.slice(server.indexOf('app.post("/api/grok/go-code"'));
+    const pollAt = goPost.indexOf('app.post("/api/grok/go-code/poll"');
+    const goBody = goPost.slice(0, pollAt > 0 ? pollAt : 12000);
+    const assessAt = goBody.indexOf('assessResearchArtifact');
+    const pendingAt = goBody.indexOf('writeGoCodePending');
+    assert.ok(
+      assessAt >= 0 && assessAt < pendingAt,
+      'Gate R must 409 before writeGoCodePending',
+    );
+    assert.equal(/bypass RESEARCH_INCOMPLETE/.test(goBody), false);
+  }
+  {
+    const pipeline = fs.readFileSync(path.join(root, "src/lib/nebulaGrokCodingPipeline.ts"), "utf8");
+    const goFn = pipeline.slice(pipeline.indexOf('export async function runGoCodeAndApply'));
+    const ensureAt = goFn.indexOf('blockGoIfResearchIncomplete');
+    const inflightAt = goFn.indexOf('markFoundationGoInFlight(projectName, true)');
+    assert.ok(ensureAt >= 0 && ensureAt < inflightAt, 'client must not mark Go in-flight before Gate R');
+    assert.match(pipeline, /START_CODING detected/);
+    const handoff = pipeline.slice(pipeline.indexOf('export async function handlePostGrokCodingTurn'));
+    assert.ok(
+      handoff.indexOf('blockGoIfResearchIncomplete') < handoff.indexOf('START_CODING detected'),
+      'must not log START_CODING detected before Gate R',
+    );
+    assert.equal(/Go — \$\{goCodePassWaitLabel\(1/.test(goFn.slice(0, inflightAt + 80)), false);
+  }
+  assert.match(chat, /if \(!research\.ok\)/);
+  assert.match(chat, /willCode = false/);
+  assert.match(chat, /planningPhase = 'PLAN_READY'/);
+  assert.equal(/planningPhase = 'START_CODING'/.test(chat), false);
+  assert.match(chat, /blockedCode: coding\.blockedReason\?\.code/);
   assert.match(
     fs.readFileSync(path.join(root, "lib/nebulaResearchStroke.ts"), "utf8"),
     /Rewrite the draft below so ## Competitors is a numbered list/,

@@ -149,6 +149,19 @@ assert.equal(nextAutopilotSliceLabel('Secondary'), 'Polish');
 }
 {
   const d = shouldAutopilotAdvance({
+    codingOk: false,
+    lastSlice: 'Foundation',
+    autoCount: 0,
+    autopilotKickoff: true,
+    blockedCode: 'RESEARCH_INCOMPLETE',
+  });
+  assert.equal(d.advance, false);
+  assert.equal(d.stopReason, 'failed');
+  assert.match(d.message, /research not complete/i);
+  assert.equal(/Send Go to retry/i.test(d.message), false);
+}
+{
+  const d = shouldAutopilotAdvance({
     codingOk: true,
     lastSlice: 'Secondary',
     autoCount: 0,
@@ -220,8 +233,8 @@ assert.equal(APPLY_IN_FLIGHT_STALL_MS, 15_000);
   assert.match(chat, /workspaceHasProductAppRoutes/);
   assert.match(
     chat,
-    /Explicit coding request — skipping Grok chat, starting coding/,
-    'START_CODING / continue building must not spend the heavy job on a confirm chat',
+    /skipping Grok chat; research next \(not coding yet\)/,
+    'retry / go must skip Grok chat but must not claim coding started before Gate R',
   );
   assert.match(
     chat,
@@ -231,8 +244,10 @@ assert.equal(APPLY_IN_FLIGHT_STALL_MS, 15_000);
   assert.match(
     chat,
     /Master Plan already on disk — skipping Grok chat/,
-    'retry / go must not spend 90s on Grok chat when the plan is already saved',
+    'retry / go / build must not spend 90s on Grok chat when the plan is already saved',
   );
+  assert.match(chat, /buildMode\)/);
+  assert.match(chat, /Grok chat timed out after 90s — Master Plan is saved/);
   assert.match(
     chat,
     /persistedMockup &&/,

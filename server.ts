@@ -1384,6 +1384,7 @@ No approved UI code yet.
       const researchGate = assessResearchArtifact(pp.workspaceRoot, {
         goal: goalForResearch,
         goalCandidates: [section1, qName],
+        plan: plan as Record<string, unknown>,
       });
       res.json({
         mode: completeness.mode,
@@ -4247,7 +4248,13 @@ ${modelJson}`;
           code: "RESEARCH_IN_FLIGHT",
         });
       }
-      const researchGateUi = assessResearchArtifact(pp.workspaceRoot);
+      let planForUiGate: Record<string, string> = {};
+      try {
+        planForUiGate = readMasterPlanFile(pp.masterPlanPath);
+      } catch {
+        planForUiGate = {};
+      }
+      const researchGateUi = assessResearchArtifact(pp.workspaceRoot, { plan: planForUiGate });
       if (!researchGateUi.ok) {
         return res.status(409).json({
           ok: false,
@@ -4832,6 +4839,7 @@ Rules:
       const gate = assessResearchArtifact(pp.workspaceRoot, {
         goal,
         goalCandidates: [qGoal, qName],
+        plan,
       });
       return res.json({
         ok: gate.ok,
@@ -4909,6 +4917,42 @@ Rules:
           hint: "Joining in-flight Foundation job — poll /api/grok/go-code/poll",
         });
       }
+      // Gate R before any preparing job — incomplete research must not look like Go started.
+      {
+        let planForGate: Record<string, string> = {};
+        try {
+          if (fs.existsSync(masterPlanPath)) {
+            const raw = JSON.parse(fs.readFileSync(masterPlanPath, "utf8"));
+            if (raw && typeof raw === "object") {
+              for (const [k, v] of Object.entries(raw)) {
+                if (typeof v === "string") planForGate[k] = v;
+              }
+            }
+          }
+        } catch {
+          planForGate = {};
+        }
+        const goalForResearchEarly = inferGoalFromPlanRecord(planForGate, [note, convProject]);
+        const researchGateEarly = assessResearchArtifact(ppGo.workspaceRoot, {
+          goal: goalForResearchEarly,
+          goalCandidates: [note, convProject],
+          plan: planForGate,
+        });
+        if (!researchGateEarly.ok) {
+          const blocked = goBlocked("RESEARCH_INCOMPLETE", [
+            goBlocked("RESEARCH_INCOMPLETE").message,
+            ...researchGateEarly.reasons.slice(0, 3),
+          ].filter(Boolean).join(" "));
+          return res.status(409).json({
+            ok: false,
+            error: blocked.message,
+            code: blocked.code,
+            blockedReason: blocked,
+            reasons: researchGateEarly.reasons,
+          });
+        }
+      }
+
       if (existingGo?.status === "preparing") {
         if (isGoCodeJobActive(ppGo.workspaceRoot)) {
           return res.json({
@@ -5068,7 +5112,11 @@ Rules:
 
       // Gate R: do not await Web Search on this request — that left Foundation unscheduled.
       const goalForResearch = inferGoalFromPlanRecord(planSnapshot, [note, convProject]);
-      const researchGate = assessResearchArtifact(ppGo.workspaceRoot, { goal: goalForResearch });
+      const researchGate = assessResearchArtifact(ppGo.workspaceRoot, {
+        goal: goalForResearch,
+        goalCandidates: [note, convProject],
+        plan: planSnapshot,
+      });
       if (!researchGate.ok) {
         const blocked = goBlocked("RESEARCH_INCOMPLETE");
         failGoCodePreparing(ppGo.workspaceRoot, blocked.message, blocked);

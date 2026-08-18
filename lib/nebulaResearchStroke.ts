@@ -237,15 +237,6 @@ export async function runResearchStroke(opts: {
 
   researchJobs.add(opts.workspaceRoot);
   try {
-    writeResearchArtifact(
-      opts.workspaceRoot,
-      buildAssumptionStub({
-        goal: opts.goal,
-        projectKey: opts.projectKey,
-        projectType: opts.projectType,
-      }),
-    );
-
     const plan = readMasterPlanFile(opts.masterPlanPath);
     const typeHint =
       opts.projectType ||

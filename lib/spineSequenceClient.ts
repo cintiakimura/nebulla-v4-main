@@ -74,6 +74,8 @@ export function isUsableProjectGoal(goal: string): boolean {
   const t = String(goal || "").trim().replace(/\s+/g, " ");
   if (t.length < 8) return false;
   if (!/[a-zA-Z]{3,}/.test(t)) return false;
+  if (/\bSTART_CODING\b/i.test(t)) return false;
+  if (/\b(Authz:|Empty state:|Primary actions:)\b/i.test(t)) return false;
   const lower = t.toLowerCase().replace(/[.!?]+$/g, "").trim();
   if (
     /^(untitled(\s+project)?|new project|test(ing)?|hello|hi|hey|asdf+|xxx+|foo|bar|ok|okay|go|start)$/i.test(
@@ -129,22 +131,22 @@ export function seedGoalOfTheAppSection(
   const existing = pickPlanText(plan?.["1. Goal of the app"]);
   if (existing.length >= MIN_SEEDED_GOAL_CHARS && isUsableProjectGoal(existing)) return existing;
   const inferred = inferGoalFromPlanRecord(plan, extraFallbacks);
-  const core =
+  const coreRaw =
     existing.length >= 8 && isUsableProjectGoal(existing) ? existing : inferred;
-  if (!core) return "";
-  const who = core.replace(/\s+/g, " ").trim().slice(0, 280);
-  const pages = pickPlanText(plan?.["4. Pages and navigation"]).replace(/\s+/g, " ").slice(0, 220);
-  const features = pickPlanText(plan?.["3. Features and KPIs"]).replace(/\s+/g, " ").slice(0, 220);
+  if (!coreRaw) return "";
+  const who = coreRaw
+    .replace(/\bSTART_CODING\b/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 280);
+  if (!who || !isUsableProjectGoal(who)) return "";
   return [
     "Project Type: Web App",
     "",
     who,
     "",
     "Users, problem, and MVP scope for this workspace.",
-    pages && pages !== who ? `\nPages: ${pages}` : "",
-    features && features !== who ? `\nFeatures: ${features}` : "",
   ]
-    .filter((line) => line !== "")
     .join("\n")
     .trim()
     .slice(0, 2000);

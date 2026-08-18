@@ -111,6 +111,7 @@ function parsePreambleBeforeNumberedSections(block: string): string {
   }
   const text = preamble.join("\n").trim();
   if (text.length < 8) return "";
+  if (ORCHESTRATION_DUMP_RE.test(text)) return "";
   return text;
 }
 

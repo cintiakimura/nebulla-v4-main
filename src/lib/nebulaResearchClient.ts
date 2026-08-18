@@ -39,10 +39,21 @@ export type ResearchStrokeResult = {
 export const RESEARCH_IN_FLIGHT_WAIT_LOOPS = 36;
 export const RESEARCH_IN_FLIGHT_WAIT_MS = 2500;
 
+export function formatResearchStopMessage(reasons?: string[]): string {
+  const extra = (reasons || [])
+    .map((r) => String(r || '').trim())
+    .filter(Boolean)
+    .slice(0, 3)
+    .join('; ');
+  return extra ? `${RESEARCH_STOPPED} ${extra}` : RESEARCH_STOPPED;
+}
+
 export async function fetchResearchStatus(goal?: string): Promise<{
   ok: boolean;
   pending?: boolean;
+  skipped?: boolean;
   competitorCount?: number;
+  reasons?: string[];
 }> {
   try {
     const q = goal?.trim()
@@ -51,17 +62,23 @@ export async function fetchResearchStatus(goal?: string): Promise<{
     const st = await fetchJson<{
       ok?: boolean;
       pending?: boolean;
-      gate?: { ok?: boolean; competitorCount?: number };
+      gate?: { ok?: boolean; skipped?: boolean; competitorCount?: number; reasons?: string[] };
     }>(q, { credentials: 'include', cache: 'no-store', headers: getGrokRequestHeaders() });
     const competitorCount =
       typeof st.gate?.competitorCount === 'number' ? st.gate.competitorCount : 0;
+    const skipped = st.gate?.skipped === true;
+    const reasons = Array.isArray(st.gate?.reasons)
+      ? st.gate.reasons.filter((r): r is string => typeof r === 'string' && r.trim().length > 0)
+      : [];
     return {
-      ok: st.ok === true && competitorCount >= 5,
+      ok: st.ok === true && (skipped || competitorCount >= 5),
       pending: st.pending === true,
+      skipped,
       competitorCount,
+      reasons,
     };
   } catch {
-    return { ok: false };
+    return { ok: false, reasons: ['research status unavailable'] };
   }
 }
 
@@ -78,8 +95,9 @@ async function waitForInFlightResearch(
   }
   const st = await fetchResearchStatus(goal);
   if (st.ok) return { ok: true, reused: true };
-  if (st.pending) return { ok: false, error: RESEARCH_STOPPED, stillPending: true };
-  return { ok: false, error: RESEARCH_STOPPED };
+  const stop = formatResearchStopMessage(st.reasons);
+  if (st.pending) return { ok: false, error: stop, stillPending: true, gate: { ok: false, reasons: st.reasons } };
+  return { ok: false, error: stop, gate: { ok: false, reasons: st.reasons } };
 }
 
 export async function ensureResearchBeforeUiAndGo(options: {
@@ -125,9 +143,11 @@ export async function ensureResearchBeforeUiAndGo(options: {
     if (data.wrote) onProgress?.(RESEARCH_STAGE_WRITING, 'info');
     if (data.ok && data.reused !== true) onProgress?.(RESEARCH_STAGE_MERGING, 'info');
     if (!data.ok) {
-      const err = (data.error || RESEARCH_STOPPED).replace(/^HTTP \d+:\s*/, '');
-      onProgress?.(err, 'error');
-      return { ok: false, error: err, gate: data.gate };
+      const err = formatResearchStopMessage(data.gate?.reasons).replace(/^HTTP \d+:\s*/, '');
+      const detail = (data.error || err).replace(/^HTTP \d+:\s*/, '');
+      const stop = /research not complete/i.test(detail) ? formatResearchStopMessage(data.gate?.reasons) : detail;
+      onProgress?.(stop, 'error');
+      return { ok: false, error: stop, gate: data.gate };
     }
     return { ok: true, reused: data.reused, wrote: data.wrote, gate: data.gate };
   } catch (e) {

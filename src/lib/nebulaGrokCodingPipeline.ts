@@ -29,6 +29,10 @@ import {
   userNoteRequestsNextSlice,
 } from './fastPrototypeNextSlice';
 import {
+  ensureResearchBeforeUiAndGo,
+  formatResearchStopMessage,
+} from './nebulaResearchClient';
+import {
   isApplyTransportFailure,
   shouldSkipGoCodeSecondPassAfterApply,
 } from './applyTransportFailure';
@@ -1042,6 +1046,20 @@ async function kickGoCodeJob(options: {
   }
 }
 
+/** Gate R — never mark Go in-flight or POST go-code until research is ok (or demo skip). */
+async function blockGoIfResearchIncomplete(
+  projectName: string,
+  onProgress?: GrokActivityProgressFn,
+): Promise<GoBlockedReason | null> {
+  const research = await ensureResearchBeforeUiAndGo({
+    projectName,
+    goal: projectName,
+    onProgress,
+  });
+  if (research.ok) return null;
+  return goBlocked('RESEARCH_INCOMPLETE', formatResearchStopMessage(research.gate?.reasons));
+}
+
 export async function runGoCodeAndApply(options: {
   userId: string;
   projectName: string;
@@ -1076,14 +1094,22 @@ export async function runGoCodeAndApply(options: {
           },
         ];
 
+  const researchBlock = await blockGoIfResearchIncomplete(projectName, onProgress);
+  if (researchBlock) {
+    return {
+      ok: false,
+      statusMessage: formatBlockedReasonLine(researchBlock),
+      totalWritten: 0,
+      blockedReason: researchBlock,
+    };
+  }
+
   markFoundationGoInFlight(projectName, true);
   setGrokCodingActive(true);
   const jobKey = goPollProjectKey(projectName);
   goSessionAbortedByProject.delete(jobKey);
   goCodePollAbortedByProject.delete(jobKey);
   try {
-    onProgress?.(`Go — ${goCodePassWaitLabel(1, noteSlice)}`, 'info');
-
     let totalWritten = 0;
     const allWrittenPaths: string[] = [];
     let lastCodeText = '';
@@ -1453,6 +1479,17 @@ export async function handlePostGrokCodingTurn(options: {
 
   if (!wantsCoding) {
     return { ran: false };
+  }
+
+  const researchBlock = await blockGoIfResearchIncomplete(projectName, onProgress);
+  if (researchBlock) {
+    onProgress?.(formatBlockedReasonLine(researchBlock), 'error');
+    return {
+      ran: true,
+      ok: false,
+      statusMessage: formatBlockedReasonLine(researchBlock),
+      blockedReason: researchBlock,
+    };
   }
 
   const nextSlice = userNoteRequestsNextSlice(userNote);

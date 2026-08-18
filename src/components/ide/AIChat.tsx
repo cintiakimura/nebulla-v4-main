@@ -119,7 +119,12 @@ import {
   readinessBlocksAutoFoundation,
   setInferenceFirstStage,
 } from '../../lib/uiMockupGate';
-import { ensureResearchBeforeUiAndGo, RESEARCH_STAGE_BRIEF, RESEARCH_STOPPED } from '../../lib/nebulaResearchClient';
+import {
+  ensureResearchBeforeUiAndGo,
+  formatResearchStopMessage,
+  RESEARCH_STAGE_BRIEF,
+  RESEARCH_STOPPED,
+} from '../../lib/nebulaResearchClient';
 import { createProjectForCurrentSession } from '../../lib/nebulaCloud';
 import { handleSmartChatMessage, type SmartChatFilePreview } from '../../lib/smartChatHandler';
 import { isMasterPlanCompleteForDiscovery } from '../../lib/masterPlanSections';
@@ -1905,10 +1910,12 @@ export function AIChat() {
       (userForcedCoding || isFastPrototypeContinue) &&
       !onboardingBuildStart &&
       !hasAppStatusPayload;
-    if (
-      (skipGrokChat && userForcedCoding && !isFastPrototypeContinue) ||
-      (fastPrototypeTurn && !onboardingBuildStart && !hasAppStatusPayload)
-    ) {
+    const maySkipChatIfPlanExists =
+      interactionModeRef.current === 'agent' &&
+      !onboardingBuildStart &&
+      !hasAppStatusPayload &&
+      (userForcedCoding || isFastPrototypeContinue || fastPrototypeTurn || buildMode);
+    if (maySkipChatIfPlanExists) {
       try {
         const mpRes = await fetch(withProjectQuery('/api/master-plan/read'), {
           credentials: 'include',
@@ -1919,13 +1926,13 @@ export function AIChat() {
           : null;
         const hasPlan =
           planRecordHasUsableGoal(plan) || isMasterPlanCompleteForDiscovery(plan);
-        if (fastPrototypeTurn && hasPlan) {
+        if (hasPlan) {
           skipGrokChat = true;
           pushActivity(
             'Master Plan already on disk — skipping Grok chat, continuing research / mockup / Foundation',
             'info',
           );
-        } else if (skipGrokChat && !hasPlan) {
+        } else if (skipGrokChat) {
           skipGrokChat = false;
           pushActivity(
             'No usable Master Plan goal yet — drafting the plan first (not skipping Grok chat)',
@@ -1933,7 +1940,7 @@ export function AIChat() {
           );
         }
       } catch {
-        if (!fastPrototypeTurn) skipGrokChat = false;
+        if (!fastPrototypeTurn && !buildMode) skipGrokChat = false;
       }
     }
 
@@ -1962,9 +1969,12 @@ export function AIChat() {
         if (skipGrokChat) {
           skippedGrokChat = true;
           assistantContent =
-            'START_CODING — continuing from the saved Master Plan (skipped a second Grok chat wait).';
-          planningPhase = 'START_CODING';
-          pushActivity('Explicit coding request — skipping Grok chat, starting coding', 'info');
+            'Master Plan already on disk — continuing research before coding (not START_CODING yet).';
+          planningPhase = 'PLAN_READY';
+          pushActivity(
+            'Master Plan on disk — skipping Grok chat; research next (not coding yet)',
+            'info',
+          );
         }
         if (!skippedGrokChat) {
           try {
@@ -1991,17 +2001,17 @@ export function AIChat() {
             const grokMsg = grokErr instanceof Error ? grokErr.message : String(grokErr);
             if (
               (/timed out/i.test(grokMsg) || isAbortLikeError(grokErr)) &&
-              (userForcedCoding || fastPrototypeTurn)
+              (userForcedCoding || fastPrototypeTurn || buildMode)
             ) {
               pushActivity(
                 isAbortLikeError(grokErr)
                   ? 'Grok chat interrupted — continuing from saved Master Plan'
-                  : `${grokMsg} — continuing coding from saved Master Plan`,
+                  : 'Grok chat timed out after 90s — Master Plan is saved; continuing research / mockup / Foundation (not waiting on chat).',
                 'warn',
               );
               assistantContent =
-                'START_CODING — Grok chat timed out; continue from the saved Master Plan.';
-              planningPhase = 'START_CODING';
+                'Grok chat timed out; Master Plan is saved — continuing research before coding.';
+              planningPhase = 'PLAN_READY';
             } else {
               throw grokErr;
             }
@@ -2221,16 +2231,28 @@ export function AIChat() {
         });
         if (!research.ok && research.softAbort) {
           lastResearchError = RESEARCH_STOPPED;
-          noteProblem(lastResearchError);
-        } else if (!research.ok && research.stillPending) {
-          lastResearchError = RESEARCH_STOPPED;
-          noteProblem(lastResearchError);
-        } else if (!research.ok) {
-          lastResearchError = research.error || RESEARCH_STOPPED;
-          noteProblem(lastResearchError);
+        }
+        if (!research.ok) {
+          const stopMsg = formatResearchStopMessage(research.gate?.reasons);
+          lastResearchError = lastResearchError || stopMsg;
+          codingProblems.push(lastResearchError);
+          pushActivity(lastResearchError, 'error');
+          willCode = false;
+          try {
+            window.dispatchEvent(
+              new CustomEvent('nebula-preview-wait-status', { detail: { status: stopMsg } }),
+            );
+          } catch {
+            /* ignore */
+          }
+          codingActivityRef.current = false;
+          setGrokCodingActive(false);
+          setGrokActivity((prev) => finishGrokActivityWithProblems(prev, codingProblems));
         } else {
           pushActivity(RESEARCH_STAGE_BRIEF, 'info');
+          lastResearchError = null;
         }
+        if (!lastResearchError) {
         await syncPlanViewsAfterResearch();
         const readiness = await assessUiMockupReadiness({ projectKey: diskProjectKey });
         if (
@@ -2327,12 +2349,14 @@ export function AIChat() {
             `Stopped: architecture inputs incomplete (${readiness.reasons.join('; ') || 'plan/ui-brief'}) — Foundation will not start.`,
           );
         }
+        }
       } else if (mpSaved > 0) {
         await syncPlanViewsAfterResearch();
       }
 
       if (
         !willCode &&
+        !lastResearchError &&
         agentAllowed &&
         fastPrototypeTurn &&
         (uiMockupStarted || mockupSkippedOrFailed)
@@ -2631,6 +2655,7 @@ export function AIChat() {
             autoCount: getAutopilotSliceCount(projectKey),
             autopilotKickoff: true,
             productRouteCount: lastAutoProductRouteCountRef.current,
+            blockedCode: coding.blockedReason?.code,
           });
           pushActivity(
             autoDecision.message,

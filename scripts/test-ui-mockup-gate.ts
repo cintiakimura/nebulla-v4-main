@@ -221,6 +221,14 @@ assert.equal(statusLooksReadyForSkip({ final_status: 'accepted' }), false);
     false,
     'Foundation must not treat session mockup flags as success',
   );
+  assert.match(
+    codingGate,
+    /researchSkipped === true \|\| body\.researchOk === true/,
+    'Gate R fail-closed: mockup skip must not start Foundation',
+  );
+  const blockIdx = codingGate.indexOf('if (!researchAllowsGo)');
+  const skipReturn = codingGate.indexOf("reason: 'explicit_skip'");
+  assert.ok(blockIdx >= 0 && skipReturn > blockIdx);
 }
 
 {

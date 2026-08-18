@@ -138,19 +138,24 @@ export async function canStartFoundationCoding(options?: {
   /** True when Stage B could not run or returned failure (skip path). */
   mockupSkippedOrFailed?: boolean;
 }): Promise<{ ok: boolean; reason: FoundationCodingGateReason }> {
+  let researchAllowsGo = false;
   try {
     const st = await fetch(withProjectQuery('/api/master-plan/status'), {
       credentials: 'include',
       cache: 'no-store',
     });
     if (st.ok) {
-      const body = (await readResponseJson(st)) as { researchOk?: boolean };
-      if (body.researchOk === false) {
-        return { ok: false, reason: 'blocked' };
-      }
+      const body = (await readResponseJson(st)) as {
+        researchOk?: boolean;
+        researchSkipped?: boolean;
+      };
+      researchAllowsGo = body.researchSkipped === true || body.researchOk === true;
     }
   } catch {
-    /* server Gate R still enforces on Go */
+    researchAllowsGo = false;
+  }
+  if (!researchAllowsGo) {
+    return { ok: false, reason: 'blocked' };
   }
   if (await hasPersistedUiMockup()) {
     return { ok: true, reason: 'mockup_ready' };

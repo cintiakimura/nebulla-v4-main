@@ -208,7 +208,7 @@ export async function sendIdeAssistantGrokTurn(options: {
   } catch (e) {
     if (timeoutAbort.signal.aborted && !signal?.aborted) {
       throw new Error(
-        'Grok chat timed out after 90s. If a Master Plan is already saved, send “continue building” to start coding without waiting.',
+        'Grok chat timed out after 90s. If a Master Plan is already saved, coding continues from it — you do not need to wait or re-send the prompt.',
       );
     }
     throw e;
