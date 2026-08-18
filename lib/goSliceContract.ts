@@ -62,6 +62,21 @@ export function formatSlicePromptLine(slice: GoSliceLabel): string {
   return `SLICE: ${slice}`;
 }
 
+/** Keep Go from emitting a generic SaaS shell when the goal is a real product job. */
+export function productSliceQualityLine(goal: string): string {
+  const g = String(goal || "");
+  if (/\b(adhd|kids?|child|student|teacher|tutor|classroom|school|parent|lesson|practice)\b/i.test(g)) {
+    return (
+      "MUST: child Home with ONE next-lesson CTA; a working practice/session (3+ steps or a timer, then complete); teacher or parent progress. " +
+      "MUST NOT: Dashboard + Settings + Who are you today as the product."
+    );
+  }
+  return (
+    "MUST: Home is the core user job with a working primary CTA (mock data OK). " +
+    "MUST NOT: generic Dashboard + Settings + role picker as the whole app."
+  );
+}
+
 /** Soft warn when apply looks like a full-app dump for a non-Foundation slice. */
 export function assessOversizedGoApply(opts: {
   sliceLabel?: GoSliceLabel | null;
@@ -167,6 +182,7 @@ export function buildLocalPreCodingSummary(opts: {
     `- This Go: ${slice} slice only — Build → Debug → Next; do not dump every §4 route`,
     focus && !isBareGoNote(focus) ? `- Session focus: ${focus}` : `- Session focus: next incomplete ${slice} work from Master Plan`,
     "- Files: app/, src/, components/, lib/ for this slice — prefer real screens over master-plan.json-only",
+    `- Quality: ${productSliceQualityLine(name)}`,
     "- Validate: routes render, no Nebulla IDE chrome (#080A14 / #00D4D4), auth fields only on Login",
     "- Risks: hosted BaaS clients; oversized multi-route dump",
   ];
@@ -227,6 +243,7 @@ export function buildCompactGoCodeUserPrompt(opts: {
   const task = opts.continuation
     ? "CONTINUATION — emit the current slice file blocks now. Do NOT implement every §4 route."
     : "Run the coding pass now. Output ONE coherent slice only (Build → Debug → Next) — not the full app.";
+  const quality = productSliceQualityLine(goal);
   return [
     slice,
     `Session focus: ${focus || "(next incomplete slice)"}`,
@@ -240,6 +257,8 @@ export function buildCompactGoCodeUserPrompt(opts: {
     "",
     "ui-brief pages:",
     briefPages || "(none parsed)",
+    "",
+    quality,
     "",
     task,
     "File blocks only: ```file:relative/path``` — no chat prose.",

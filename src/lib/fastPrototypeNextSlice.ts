@@ -86,10 +86,11 @@ export function nextAutopilotSliceLabel(current?: string | null): AutopilotSlice
 export const MAX_AUTOPILOT_SLICES = 3;
 
 /**
- * One user prompt → Foundation through Polish without waiting for Continue.
- * Cap remains a safety net against infinite Go loops.
+ * Product finish = A until two golden production runs (see recovery-orchestration Decision Log).
+ * One prompt → Foundation → stop. User Continue for Primary.
+ * Do not set true until A is boring and Gate R + product routes are real.
  */
-export const FAST_PROTOTYPE_SAME_SESSION_AUTOPILOT = true;
+export const FAST_PROTOTYPE_SAME_SESSION_AUTOPILOT = false;
 
 export type AutopilotAdvanceDecision = {
   advance: boolean;
@@ -117,7 +118,7 @@ export function shouldAutopilotAdvance(opts: {
       advance: false,
       nextLabel: null,
       stopReason: 'session_complete',
-      message: 'Coding complete. Send Continue for the next slice — not started automatically.',
+      message: 'Foundation applied — send Continue for the next slice.',
     };
   }
   if (!opts.autopilotKickoff) {
@@ -184,7 +185,7 @@ export function shouldAutoRunPrimarySliceAfterFoundation(opts: {
 }
 
 export const FAST_PROTOTYPE_PRIMARY_SLICE_INSTRUCTION =
-  'START_CODING — SLICE: Primary — implement the NEXT incomplete primary feature slice only (Build → Debug → Next). If Foundation shell already exists, do NOT rewrite it. Prefer the core user job from Master Plan (e.g. reading exercise / kid practice screen). Prefer app/, src/, components/, pages/ — not master-plan/ui-brief only. File blocks for this slice only — not the full §4 app.';
+  'START_CODING — SLICE: Primary — implement the NEXT incomplete primary feature slice only (Build → Debug → Next). If Foundation shell already exists, do NOT rewrite it. Core user job from Master Plan: kid Home with one next-lesson CTA + a working practice/session (steps or timer, then complete) — not a Who-are-you role picker as the whole home. Prefer app/, src/, components/, pages/ — not master-plan/ui-brief only. File blocks for this slice only — not the full §4 app.';
 
 export function buildAutopilotSliceInstruction(slice: AutopilotSliceLabel): string {
   if (slice === 'Primary') return FAST_PROTOTYPE_PRIMARY_SLICE_INSTRUCTION;

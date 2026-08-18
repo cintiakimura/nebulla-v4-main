@@ -3,12 +3,14 @@ import os from "node:os";
 import {
   assessFoundationGoExit,
   assessOversizedGoApply,
+  buildCompactGoCodeUserPrompt,
   buildLocalPreCodingSummary,
   inferGoSliceFromWorkspace,
   clampClaimedSliceToWorkspace,
   isBareGoNote,
   lockedUserConstraintsFromPlan,
   parseGoSliceLabel,
+  productSliceQualityLine,
   shouldRunGoCodeSecondPass,
   shouldSkipPhaseALlm,
 } from "../lib/goSliceContract.ts";
@@ -106,6 +108,18 @@ const localSum = buildLocalPreCodingSummary({
 });
 assert.match(localSum, /^SLICE:/);
 assert.match(localSum, /ADHD|tutor|slice/i);
+assert.match(productSliceQualityLine("tutor kids with ADHD"), /MUST NOT: Dashboard/);
+assert.match(
+  buildCompactGoCodeUserPrompt({
+    sliceLine: "SLICE: Primary",
+    goal: "tutor kids with ADHD — short practice for students and teachers",
+    pagesSection: "### Practice `/practice`\n",
+    constraints: "",
+    uiBriefPageList: "- Practice `/practice`",
+    sessionFocus: "Primary",
+  }),
+  /next-lesson|MUST NOT: Dashboard/,
+);
 
 {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "nebulla-slice-thin-"));

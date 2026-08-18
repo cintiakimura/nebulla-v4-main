@@ -446,7 +446,7 @@ export function AIChat() {
   const runAutoNextSlice = useCallback(async () => {
     if (!FAST_PROTOTYPE_SAME_SESSION_AUTOPILOT) {
       pushActivity(
-        'Coding complete. Send Continue for the next slice — not started automatically.',
+        'Foundation applied — send Continue for the next slice.',
         'success',
       );
       resetCodingActivity();
@@ -2209,9 +2209,11 @@ export function AIChat() {
           onProgress: pushActivity,
         });
         if (!research.ok && research.softAbort) {
-          noteProblem('Research request interrupted — continuing Foundation');
+          lastResearchError = RESEARCH_STOPPED;
+          noteProblem(lastResearchError);
         } else if (!research.ok && research.stillPending) {
-          noteProblem('Research still running — coding waits (one heavy job)');
+          lastResearchError = RESEARCH_STOPPED;
+          noteProblem(lastResearchError);
         } else if (!research.ok) {
           lastResearchError = research.error || RESEARCH_STOPPED;
           noteProblem(lastResearchError);
@@ -2301,15 +2303,13 @@ export function AIChat() {
       });
           } else {
             clearUiMockupStageFlags(diskProjectKey);
-            mockupSkippedOrFailed = true;
             noteProblem(
-              `UI mockup did not finish (${mockup.error || 'unknown'}) — continuing Foundation anyway`,
+              `Stopped: UI mockup did not finish (${mockup.error || 'unknown'}) — Foundation will not start.`,
             );
           }
         } else if (fastPrototypeTurn || willCode) {
-          mockupSkippedOrFailed = true;
           noteProblem(
-            `Architecture inputs incomplete (${readiness.reasons.join('; ') || 'plan/ui-brief'}) — continuing Foundation anyway`,
+            `Stopped: architecture inputs incomplete (${readiness.reasons.join('; ') || 'plan/ui-brief'}) — Foundation will not start.`,
           );
         }
       } else if (mpSaved > 0) {
@@ -2320,30 +2320,32 @@ export function AIChat() {
         !willCode &&
         agentAllowed &&
         fastPrototypeTurn &&
-        (uiMockupStarted || mockupSkippedOrFailed || mpSaved > 0)
+        (uiMockupStarted || mockupSkippedOrFailed)
       ) {
         willCode = true;
       }
 
       try {
-        // Phase 5 — Foundation proceeds even if mockup/research gates failed (issues land on the status bar).
+        // Policy A: Foundation starts only after Gate R + mockup (or persisted mockup / Continue skip).
         let foundationGate = willCode
           ? await canStartFoundationCoding({ mockupSkippedOrFailed })
           : { ok: false as const, reason: 'blocked' as const };
         if (willCode && !foundationGate.ok) {
-          if (lastResearchError) {
-            noteProblem(
-              isAbortLikeMessage(lastResearchError)
-                ? 'Research interrupted — continuing Foundation anyway'
-                : lastResearchError,
-            );
-            lastResearchError = null;
+          const stopMsg =
+            lastResearchError && !isAbortLikeMessage(lastResearchError)
+              ? lastResearchError
+              : RESEARCH_STOPPED;
+          lastResearchError = null;
+          noteProblem(stopMsg);
+          pushActivity(stopMsg, 'error');
+          willCode = false;
+          if (codingProblems.length > 0) {
+            codingActivityRef.current = false;
+            setGrokCodingActive(false);
+            setGrokActivity((prev) => finishGrokActivityWithProblems(prev, codingProblems));
           } else {
-            noteProblem(
-              'Foundation gate was blocked (plan/mockup/research) — continuing Foundation anyway',
-            );
+            resetCodingActivity();
           }
-          foundationGate = { ok: true, reason: 'explicit_skip' };
         }
 
         if (willCode && foundationGate.ok && !codingActivityRef.current) {

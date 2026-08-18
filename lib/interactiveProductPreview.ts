@@ -136,8 +136,9 @@ ${filesSample || "<li><code>(no product files listed)</code></li>"}
   <script>
 (function () {
   var SCREENS = ${screensJson};
+  var PROJECT = ${JSON.stringify((opts.projectName || "App").slice(0, 80))};
   var STORAGE_KEY = "nebulla_product_preview_v1";
-  var state = { screen: "home", role: "guest", uploadName: "", progress: 12, sessionStarted: false };
+  var state = { screen: "home", role: "guest", uploadName: "", progress: 12, sessionStarted: false, step: 0 };
   try {
     var saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || "null");
     if (saved && typeof saved === "object") state = Object.assign(state, saved);
@@ -175,17 +176,39 @@ ${filesSample || "<li><code>(no product files listed)</code></li>"}
   }
 
   function homeHtml() {
+    var hasTutor = SCREENS.some(function (s) { return s.id === "tutor"; });
     var roles = SCREENS.filter(function (s) { return s.kind === "role"; });
+    var roleRow = roles.length
+      ? '<p style="font-size:12px;margin:16px 0 8px;color:#64748B">Switch role</p><div class="grid">' +
+        roles.map(function (r) {
+          var id = r.id.replace(/^role-/, "");
+          return '<button type="button" class="role" data-role="' + id + '"><strong>' + r.label + '</strong><span style="color:#64748B;font-size:13px">Continue as ' + r.label.toLowerCase() + '</span></button>';
+        }).join("") +
+        '</div>'
+      : "";
+    if (hasTutor) {
+      return (
+        '<div class="card">' +
+          '<h1>Next short session</h1>' +
+          '<p>Calm 2-minute practice for <strong>' + PROJECT + '</strong>. One thing at a time.</p>' +
+          '<div class="progress" aria-hidden="true"><i style="width:' + state.progress + '%"></i></div>' +
+          '<p>Progress ' + state.progress + '%</p>' +
+          '<div class="row"><button type="button" class="cta" id="goTutor">Start session</button></div>' +
+          roleRow +
+          '<div class="toast" id="toast"></div>' +
+        '</div>'
+      );
+    }
     var roleButtons = roles.length
       ? roles.map(function (r) {
           var id = r.id.replace(/^role-/, "");
           return '<button type="button" class="role" data-role="' + id + '"><strong>' + r.label + '</strong><span style="color:#64748B;font-size:13px">Continue as ' + r.label.toLowerCase() + '</span></button>';
         }).join("")
-      : '<button type="button" class="role" data-role="user"><strong>Continue</strong><span style="color:#64748B;font-size:13px">Enter the app</span></button>';
+      : '<button type="button" class="cta" id="goHome">Enter the app</button>';
     return (
       '<div class="card">' +
-        '<h1>Who are you today?</h1>' +
-        '<p>Interactive preview with mock data. Pick a role to continue the happy path.</p>' +
+        '<h1>Welcome</h1>' +
+        '<p>Interactive preview with mock data. Use the primary action to continue the happy path.</p>' +
         '<div class="grid">' + roleButtons + '</div>' +
         '<div class="toast" id="toast"></div>' +
       '</div>'
@@ -214,13 +237,24 @@ ${filesSample || "<li><code>(no product files listed)</code></li>"}
   }
 
   function tutorHtml() {
+    var steps = [
+      "Find a quiet spot and get comfortable.",
+      "Look at one thing in front of you.",
+      "Breathe in slowly through your nose.",
+      "Hold for a moment, then breathe out gently.",
+      "Nice work — this session is complete."
+    ];
+    var i = Math.max(0, Math.min(Number(state.step) || 0, steps.length - 1));
+    var done = i >= steps.length - 1;
     return (
       '<div class="card">' +
         '<h1>Tutor session</h1>' +
-        '<p>' + (state.sessionStarted ? "Session running with mock prompts." : "Ready when you are — mock buddy session.") + '</p>' +
+        '<p>' + steps[i] + '</p>' +
+        '<div class="progress" aria-hidden="true"><i style="width:' + Math.round(((i + 1) / steps.length) * 100) + '%"></i></div>' +
+        '<p>Step ' + (i + 1) + ' of ' + steps.length + '</p>' +
         '<div class="row">' +
-          '<button type="button" class="cta" id="startSession">' + (state.sessionStarted ? "Continue session" : "Start session") + '</button>' +
-          '<button type="button" class="ghost" id="endSession"' + (state.sessionStarted ? "" : " disabled title=\\"Start a session first\\"") + '>End session</button>' +
+          '<button type="button" class="cta" id="nextStep">' + (done ? "Back home" : "Next") + '</button>' +
+          '<button type="button" class="ghost" id="goHome">Home</button>' +
         '</div>' +
         '<div class="toast" id="toast"></div>' +
       '</div>'
@@ -288,7 +322,23 @@ ${filesSample || "<li><code>(no product files listed)</code></li>"}
       });
     });
     var goTutor = document.getElementById("goTutor");
-    if (goTutor) goTutor.onclick = function () { state.screen = "tutor"; persist(); paint(); };
+    if (goTutor) goTutor.onclick = function () { state.screen = "tutor"; state.step = 0; persist(); paint(); };
+    var nextStep = document.getElementById("nextStep");
+    if (nextStep) nextStep.onclick = function () {
+      var last = 4;
+      if ((state.step || 0) >= last) {
+        state.screen = "home";
+        state.sessionStarted = true;
+        state.progress = Math.min(100, state.progress + 16);
+        persist();
+        paint();
+        return;
+      }
+      state.step = (state.step || 0) + 1;
+      state.sessionStarted = true;
+      persist();
+      paint();
+    };
     var goUpload = document.getElementById("goUpload");
     if (goUpload) goUpload.onclick = function () { state.screen = "upload"; persist(); paint(); };
     var goRewards = document.getElementById("goRewards");
@@ -412,7 +462,8 @@ export function ensureInteractiveProductPreview(
 /** Coding contract — dead controls are not allowed on the happy path. */
 export const INTERACTIVE_PREVIEW_GO_BULLETS = `
 WORKING APP OUTPUT (mandatory for product UI slices):
-- After Foundation/Primary, the user must be able to **use** the happy path (click roles / start session / upload mock), not only see files in Explorer.
+- After Foundation/Primary, the user must be able to **use** the happy path (start a session / complete a step / see progress), not only see files in Explorer.
+- Home is the core job (next lesson), not a full-page "Who are you today?" role picker. Role switch is a small control.
 - Wire primary controls with mock/localStorage/in-memory state in the same slice. Silent no-op buttons are forbidden.
 - If a control cannot ship in this slice: disable it and label why (e.g. "Next slice: real AI"). Never leave a primary CTA that does nothing.
 - Nebulla may serve public/product-preview as an Interactive preview (mock data) when the iframe cannot run Vite/Next — still implement real client wiring in app/ source.

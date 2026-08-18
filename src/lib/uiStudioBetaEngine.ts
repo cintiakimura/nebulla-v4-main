@@ -275,7 +275,7 @@ export async function runUiStudioBetaGeneration(
           /* status miss */
         }
         const error =
-          'UI mockup did not finish — continuing Foundation anyway. Use Generate UI if Preview is still empty.';
+          'UI mockup did not finish — Foundation will not start. Use Generate UI if Preview is still empty.';
         onProgress?.(error, 'warn');
         return { ok: false, error };
       }

@@ -255,6 +255,7 @@ Work **one step per Agent turn / PR** after constitution install. Fix the **earl
 | 2026-08-14 | Wired §11 spine phases 1–8: junk-goal stop; brief pages; Go label exact; hard-stop Go/UI Gen if plan/brief unusable after auto-repair | Conductor contract must match runtime; one key, one stroke |
 | 2026-08-14 | Phase 3 research is **mandatory** before ui-brief success and Foundation Go. Skip-with-reason removed as Fast Prototype default. Assumptions may pre-fill plan; Web Search overwrites/corrects. Demo skip `NEBULLA_SKIP_RESEARCH=1` default OFF. | Inference-first ≠ skip research; artifact `nebula-project/competitor-research.md` is load-bearing (Gate R) |
 | 2026-08-14 | COMPREHENSION FIRST: user brief + links rank above competitor research; extract dense briefs — do not re-interview filled slots. Gate R unchanged. | Stop “main goal?” loops when roles/privacy/tone/study URLs are already in the brief |
+| 2026-08-18 | Product finish = A until two goldens. One prompt → Foundation → stop. User Continue for Primary. `FAST_PROTOTYPE_SAME_SESSION_AUTOPILOT = false`. Failed research/mockup does not start Foundation. | Stop the next Agent from turning autopilot back on while Gate R / apply are still flaky |
 
 ---
 

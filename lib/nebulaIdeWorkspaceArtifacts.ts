@@ -4,7 +4,7 @@ import { readV0PromptMarkdown, writeV0PromptMarkdown } from "./nebulaUiStudioPip
 import {
   formatPageContractsMarkdown,
   pagesTextHasParseableRoutes,
-  seedPagesFromGoal,
+  pagesForPlanFromGoalAndDisk,
   writeUiBriefMarkdown,
 } from "./nebulaUiBrief";
 import { summarizeDesignReferencesForPrompt } from "./nebulaDesignReferences";
@@ -99,15 +99,10 @@ export function fillMissingMasterPlanSectionsLocal(opts: {
 
   if (missing.includes("4. Pages and navigation")) {
     const goalText = String(next["1. Goal of the app"] ?? goal);
-    const diskRoutes = routes.filter((r) => r !== "/");
-    const seeded =
-      diskRoutes.length > 0
-        ? routes.slice(0, 12).map((r) => ({
-            name: r === "/" ? "Home" : r.replace(/^\//, "").replace(/[-_]/g, " "),
-            route: r,
-          }))
-        : seedPagesFromGoal(goalText);
-    next["4. Pages and navigation"] = formatPageContractsMarkdown(seeded, goalText);
+    next["4. Pages and navigation"] = formatPageContractsMarkdown(
+      pagesForPlanFromGoalAndDisk(goalText, routes),
+      goalText,
+    );
     updated.push("4. Pages and navigation");
   }
 
@@ -414,14 +409,7 @@ export function hydrateMasterPlanDerivedSections(
   const goal = String(out["1. Goal of the app"] ?? "").trim();
   if (!pagesTextHasParseableRoutes(pagesSection)) {
     const routes = discoverWorkspaceRoutes(workspaceRoot);
-    const diskRoutes = routes.filter((r) => r !== "/");
-    const seeded =
-      diskRoutes.length > 0
-        ? routes.slice(0, 12).map((r) => ({
-            name: r === "/" ? "Home" : routeToLabel(r, "App"),
-            route: r,
-          }))
-        : seedPagesFromGoal(goal);
+    const seeded = pagesForPlanFromGoalAndDisk(goal, routes);
     out["4. Pages and navigation"] = formatPageContractsMarkdown(seeded, goal);
     changed = true;
   }

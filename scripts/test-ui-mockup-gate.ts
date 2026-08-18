@@ -207,8 +207,8 @@ assert.equal(statusLooksReadyForSkip({ final_status: 'accepted' }), false);
   );
   assert.match(engine, /statusLooksReadyForSkip\(existing\)/);
   assert.match(engine, /GENERATE_TIMEOUT_MS = 180_000/);
-  assert.match(engine, /continuing Foundation anyway/);
-  assert.equal(/Foundation will not start/.test(engine), false);
+  assert.equal(/continuing Foundation anyway/.test(engine), false);
+  assert.match(engine, /Foundation will not start/);
   assert.equal(
     /final === 'generated' \|\| final === 'refined'/.test(engine),
     false,

@@ -186,6 +186,13 @@ try {
   assert.match(server, /code: "RESEARCH_INCOMPLETE"/);
   assert.match(server, /inferGoalFromPlanRecord/);
   assert.match(chat, /goal:\s*projectName/);
+  assert.equal(/continuing Foundation anyway/.test(chat), false);
+  assert.equal(
+    /foundationGate = \{ ok: true, reason: 'explicit_skip' \}/.test(chat),
+    false,
+    'failed Gate R must not start Foundation',
+  );
+  assert.equal(/bypass RESEARCH_INCOMPLETE/.test(server), false);
 
   console.log("\n✓ research gate passed\n");
 } finally {

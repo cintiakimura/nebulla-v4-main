@@ -109,7 +109,13 @@ section("Gate C preparing does not expire at 90s without job");
 section("Gate A/B chat — no silent continue / false coding-ok");
 assert.equal(/Foundation may still start/.test(chat), false);
 assert.match(chat, /mockup deferred — coding Foundation/);
-assert.match(chat, /continuing Foundation anyway/);
+assert.equal(/continuing Foundation anyway/.test(chat), false);
+assert.match(chat, /Foundation will not start/);
+assert.equal(
+  /foundationGate = \{ ok: true, reason: 'explicit_skip' \}/.test(chat),
+  false,
+  'blocked research/mockup must not override Foundation gate',
+);
 assert.match(server, /syncUiArtifactsFromMasterPlan/);
 assert.match(server, /status: "preparing"/);
 assert.equal(uiBriefTooShort(79), true);
@@ -241,13 +247,15 @@ assert.match(pipeline, /assessFoundationGoExit/);
 assert.match(pipeline, /blockedReason: blocked/);
 assert.match(server, /blockedReason: blocked/);
 assert.match(server, /gateWarnings/);
-assert.match(server, /bypass RESEARCH_INCOMPLETE|bypass MASTER_PLAN_INCOMPLETE/);
+assert.match(server, /bypass MASTER_PLAN_INCOMPLETE/);
+assert.equal(/bypass RESEARCH_INCOMPLETE/.test(server), false);
+assert.equal(/coding continues without waiting for Gate R/.test(server), false);
+assert.equal(/scheduling Foundation without waiting on research/.test(server), false);
+assert.match(server, /failGoCodePreparing\(ppGo\.workspaceRoot, blocked\.message, blocked\)/);
 assert.match(server, /inferGoalFromPlanRecord/);
 assert.match(server, /seedGoalOfTheAppSection/);
-assert.match(server, /coding continues without waiting for Gate R/);
 assert.match(server, /coding continues/);
 assert.match(server, /orphan preparing/);
-assert.match(server, /scheduling Foundation without waiting on research/);
 assert.match(pipeline, /nudging server to schedule Grok Code/);
 assert.match(server, /buildCompactGoCodeUserPrompt/);
 assert.match(server, /isUsablePreCodingSummary\(existingSummary\)/);

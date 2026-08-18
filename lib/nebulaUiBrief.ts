@@ -296,6 +296,50 @@ export function seedPagesFromGoal(goal: string): { name: string; route: string }
   ];
 }
 
+const GENERIC_SHELL_ROUTES = new Set([
+  "/",
+  "/dashboard",
+  "/settings",
+  "/login",
+  "/auth",
+  "/signin",
+  "/sign-in",
+]);
+
+/** Leftover SaaS stubs must not replace education/product pages in §4. */
+export function diskRoutesLookLikeGenericShell(routes: string[]): boolean {
+  const cleaned = (routes || []).map((r) => {
+    const s = String(r || "").trim();
+    if (!s || s === "/") return "/";
+    const withSlash = s.startsWith("/") ? s : `/${s}`;
+    return withSlash.replace(/\/+$/, "") || "/";
+  });
+  if (cleaned.length === 0) return true;
+  return cleaned.every((r) => GENERIC_SHELL_ROUTES.has(r.toLowerCase()));
+}
+
+export function pagesForPlanFromGoalAndDisk(
+  goal: string,
+  diskRoutes: string[],
+): { name: string; route: string }[] {
+  const fromGoal = seedPagesFromGoal(goal);
+  const goalHasProductPages = fromGoal.some(
+    (p) => p.route !== "/" && p.route !== "/dashboard" && p.route !== "/settings",
+  );
+  const nested = (diskRoutes || []).filter((r) => r && r !== "/");
+  if (diskRoutesLookLikeGenericShell(diskRoutes) && goalHasProductPages) {
+    return fromGoal;
+  }
+  if (nested.length > 0) {
+    const list = diskRoutes[0] === "/" || nested.length < diskRoutes.length ? diskRoutes : ["/", ...nested];
+    return list.slice(0, 12).map((r) => ({
+      name: r === "/" ? "Home" : r.replace(/^\//, "").replace(/[-_]/g, " "),
+      route: r.startsWith("/") ? r : `/${r}`,
+    }));
+  }
+  return fromGoal;
+}
+
 export function formatPageContractsMarkdown(
   pages: { name: string; route: string }[],
   goal?: string,

@@ -5058,8 +5058,14 @@ Rules:
       const goalForResearch = inferGoalFromPlanRecord(planSnapshot, [note, convProject]);
       const researchGate = assessResearchArtifact(ppGo.workspaceRoot, { goal: goalForResearch });
       if (!researchGate.ok) {
-        gateWarnings.push("research not complete — coding continues without waiting for Gate R.");
-        console.warn("[go-code] bypass RESEARCH_INCOMPLETE — scheduling Foundation without waiting on research");
+        const blocked = goBlocked("RESEARCH_INCOMPLETE");
+        failGoCodePreparing(ppGo.workspaceRoot, blocked.message, blocked);
+        return res.status(409).json({
+          ok: false,
+          error: blocked.message,
+          code: blocked.code,
+          blockedReason: blocked,
+        });
       }
 
       // Phase 4: ui-brief preferred; missing brief does not 409 the coding agent.
@@ -5270,7 +5276,7 @@ Master Plan (project-execution-rules — MUST be complete before code):
 
 Implementation (ONE SLICE per Go — Build → Debug → Next):
 - Implement only the slice named in "${PRE_CODING_SUMMARY_KEY}" (or infer next incomplete slice: Foundation first if no app shell exists).
-- Foundation for a multi-page plan: \`app/layout.tsx\` + root \`app/page.tsx\` + at least one more \`app/<route>/page.tsx\` from §4, with working primary controls (mock data OK). Do not stop at a single static dashboard.
+- Foundation for a multi-page plan: \`app/layout.tsx\` + root \`app/page.tsx\` + at least one more \`app/<route>/page.tsx\` from §4, with working primary controls (mock data OK). Do not stop at a single static dashboard. Home must be the core user job (for tutoring/ADHD: child's next short lesson), not Dashboard + Settings + "Who are you today?".
 - Later slices: smallest coherent set (often 3–8 file blocks). Do NOT emit every §4 route in one pass.
 - Include master-plan.json updates IN THE SAME response if needed — never as the only file when app code is due.
 - Honor security baseline (RLS/tenant filters) in Auth/Data slices.

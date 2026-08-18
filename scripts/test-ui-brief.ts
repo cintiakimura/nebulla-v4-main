@@ -138,4 +138,25 @@ section("empty §1 hydrates from project name + other tabs");
   assert.match(String(plan["1. Goal of the app"]), /Kid Home|ADHD|Web App/i);
 }
 
+section("generic dashboard/settings on disk do not replace ADHD §4 pages");
+{
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "nebulla-ui-brief-generic-disk-"));
+  fs.mkdirSync(path.join(tmp, "app", "dashboard"), { recursive: true });
+  fs.mkdirSync(path.join(tmp, "app", "settings"), { recursive: true });
+  fs.writeFileSync(path.join(tmp, "app", "page.tsx"), "export default function Home(){return null}\n");
+  fs.writeFileSync(path.join(tmp, "app", "dashboard", "page.tsx"), "export default function Dash(){return null}\n");
+  fs.writeFileSync(path.join(tmp, "app", "settings", "page.tsx"), "export default function Settings(){return null}\n");
+  const thin: Record<string, string> = {
+    "1. Goal of the app": "tutor kids with ADHD — short practice sessions for students and teachers",
+    "2. Tech and Research": "Education web app. Research complete; competitors confirmed.",
+    "3. Features and KPIs": "Practice, teacher view, progress. KPI: sessions completed.",
+    "4. Pages and navigation": "Pages TBD after coding.",
+    "5. UI/UX design": "Calm, low-noise UI. Large type. Short sessions. High contrast CTAs.",
+  };
+  const { plan } = hydrateMasterPlanDerivedSections(tmp, thin);
+  assert.match(String(plan["4. Pages and navigation"]), /`\/practice`/);
+  assert.match(String(plan["4. Pages and navigation"]), /`\/teacher`/);
+  assert.equal(/`\/dashboard`/.test(String(plan["4. Pages and navigation"])), false);
+}
+
 console.log("\nAll ui-brief tests passed.\n");
