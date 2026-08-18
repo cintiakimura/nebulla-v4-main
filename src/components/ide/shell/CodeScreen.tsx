@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { TerminalPanel } from '@/components/ide/TerminalPanel';
 import {
   ChevronDown,
   ChevronRight,
@@ -24,6 +25,16 @@ import { tryGuidedCommitSuccessToPlan } from '../../../lib/guidedFunnel';
 import { subscribeGrokActivity } from '../../../lib/nebulaGrokActivityBus';
 
 type GitEntry = { status: string; path: string };
+
+const TERMINAL_COLLAPSED_KEY = 'nebula_code_terminal_collapsed_v1';
+
+function readTerminalCollapsed(): boolean {
+  try {
+    return sessionStorage.getItem(TERMINAL_COLLAPSED_KEY) !== '0';
+  } catch {
+    return true;
+  }
+}
 
 function statusLetter(status: string): string {
   const idx = status[0] ?? ' ';
@@ -127,6 +138,7 @@ export function CodeScreen() {
   const [sessionUser, setSessionUser] = useState<NebulaSessionUser | null>(null);
   const [githubOAuthReady, setGithubOAuthReady] = useState(false);
   const [codingBusy, setCodingBusy] = useState(false);
+  const [terminalCollapsed, setTerminalCollapsed] = useState(readTerminalCollapsed);
 
   const hasChanges = changes.length > 0;
   const githubConnected = sessionUser?.provider === 'github';
@@ -314,6 +326,29 @@ export function CodeScreen() {
 
         <div className="min-h-0 flex-1 overflow-hidden">
           <IdeFileEditor active={activeScreen === 'code'} />
+        </div>
+        <div
+          className={
+            terminalCollapsed
+              ? 'h-8 shrink-0'
+              : 'flex h-[38%] min-h-[10rem] max-h-[18rem] shrink-0 flex-col overflow-hidden'
+          }
+          data-testid="code-terminal-dock"
+        >
+          <TerminalPanel
+            collapsed={terminalCollapsed}
+            onToggleCollapse={() => {
+              setTerminalCollapsed((prev) => {
+                const next = !prev;
+                try {
+                  sessionStorage.setItem(TERMINAL_COLLAPSED_KEY, next ? '1' : '0');
+                } catch {
+                  /* ignore */
+                }
+                return next;
+              });
+            }}
+          />
         </div>
       </main>
 

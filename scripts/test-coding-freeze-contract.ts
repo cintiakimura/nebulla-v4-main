@@ -155,6 +155,20 @@ assert.equal(
   false,
   'chat-only activity panel hid coding status on Code/Plan',
 );
+assert.match(chat, /ChatGrokStatusPane/);
+{
+  const pane = fs.readFileSync(path.join(root, 'src/components/ide/ChatGrokStatusPane.tsx'), 'utf8');
+  assert.match(pane, /max-h-\[50%\]/);
+  assert.match(pane, /chat-grok-status-pane/);
+}
+{
+  const codeScreen = fs.readFileSync(path.join(root, 'src/components/ide/shell/CodeScreen.tsx'), 'utf8');
+  assert.match(codeScreen, /TerminalPanel/);
+  assert.match(codeScreen, /code-terminal-dock/);
+  const term = fs.readFileSync(path.join(root, 'src/components/ide/TerminalPanel.tsx'), 'utf8');
+  assert.match(term, /\/api\/terminal\/exec/);
+  assert.match(term, /onToggleCollapse/);
+}
 assert.equal(
   /diskProjectKey\s*\|\|\s*getBrowserProjectName\(\)/.test(chat),
   false,

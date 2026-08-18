@@ -30,6 +30,7 @@ import {
   resetProjectFromScratch,
 } from '../../lib/ideProjectReset';
 import { sendIdeAssistantGrokTurn } from '../../lib/ideAssistantGrokChat';
+import { ChatGrokStatusPane } from './ChatGrokStatusPane';
 import { openSettingsAiKeys } from './shell/SettingsScreen';
 import {
   conversationEntriesToIdeMessages,
@@ -3196,6 +3197,8 @@ export function AIChat() {
           ) : null}
         </div>
       ) : null}
+
+      <ChatGrokStatusPane activity={grokActivity} v0Live={v0Live || v0WatchActive} />
 
       {sendError ? (
         <div

@@ -7,7 +7,7 @@ import { useChatPreviewSplit } from './previewTools/useChatPreviewSplit';
 
 /**
  * Build page: resizable chat + preview with new preview toolbar.
- * No terminal, explorer, or Preview card chrome.
+ * Status lives in the chat column (max 50%). Terminal is on Code.
  */
 export function BuildScreen() {
   const { goal } = useIdeShellNav();
@@ -44,7 +44,7 @@ export function BuildScreen() {
             Goal · {goal}
           </p>
         ) : null}
-        <div className="min-h-0 flex-1 overflow-y-auto">
+        <div className="min-h-0 flex-1 overflow-hidden">
           <AIChat />
         </div>
       </aside>
