@@ -106,7 +106,7 @@ section("Gate C preparing does not expire at 90s without job");
 section("Gate A/B chat — no silent continue / false coding-ok");
 assert.equal(/Foundation may still start/.test(chat), false);
 assert.match(chat, /mockup deferred — coding Foundation/);
-assert.match(chat, /Foundation will not start while mockup is waiting/);
+assert.match(chat, /continuing Foundation anyway/);
 assert.match(server, /syncUiArtifactsFromMasterPlan/);
 assert.match(server, /status: "preparing"/);
 assert.equal(uiBriefTooShort(79), true);

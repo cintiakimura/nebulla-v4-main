@@ -275,8 +275,8 @@ export async function runUiStudioBetaGeneration(
           /* status miss */
         }
         const error =
-          'UI mockup did not finish — Foundation will not start. Use Generate UI (do not wait on Code pass 1).';
-        onProgress?.(error, 'error');
+          'UI mockup did not finish — continuing Foundation anyway. Use Generate UI if Preview is still empty.';
+        onProgress?.(error, 'warn');
         return { ok: false, error };
       }
       const error = e instanceof Error ? e.message : 'UI Studio Beta generation failed';

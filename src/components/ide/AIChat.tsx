@@ -152,6 +152,7 @@ import {
   updateGrokActivityCurrent,
   startGrokActivityWaitTicker,
   finishGrokActivity,
+  finishGrokActivityWithProblems,
   errorGrokActivity,
   patchGrokActivityV0Status,
   type GrokActivityProgressFn,
@@ -1375,19 +1376,21 @@ export function AIChat() {
       if (foundationStallRecoveredRef.current) return;
       if (autoSliceAbortRef.current) return;
       foundationStallRecoveredRef.current = true;
+      if (applyInFlight) {
+        // Warn only — aborting here used to kill Code pass 1 / apply mid-flight.
+        pushActivity(
+          'Apply is taking longer than usual — still waiting (not stopping the code agent)',
+          'warn',
+        );
+        return;
+      }
       const { projectName } = resolveActiveProjectIds(diskProjectKey);
       abortGoCodeWait(projectName);
-      if (applyInFlight) {
-        holdCodingFailure(
-          'Apply wait timed out — files may already be on disk. Send Continue for the next slice — not started automatically.',
-        );
-      } else {
-        pushActivity(
-          'Coding complete. Send Continue for the next slice — not started automatically.',
-          'success',
-        );
-        resetCodingActivity();
-      }
+      pushActivity(
+        'Coding complete. Send Continue for the next slice — not started automatically.',
+        'success',
+      );
+      resetCodingActivity();
       sendingRef.current = false;
       setSending(false);
     }, remaining);
@@ -1869,6 +1872,13 @@ export function AIChat() {
     const userId = session?.uid?.trim() || 'anonymous';
     let scheduledTts = false;
     let mpSaved = 0;
+    const codingProblems: string[] = [];
+    const noteProblem = (msg: string) => {
+      const line = String(msg || '').replace(/\s+/g, ' ').trim();
+      if (!line) return;
+      codingProblems.push(line);
+      pushActivity(line, 'warn');
+    };
 
     let skipGrokChat =
       interactionModeRef.current === 'agent' &&
@@ -2151,7 +2161,6 @@ export function AIChat() {
       // Stage B — UI mockup after plan + ui-brief, BEFORE coding (single API key queue).
       let uiMockupStarted = false;
       let mockupSkippedOrFailed = false;
-      let architectureBlocked = false;
       let lastResearchError: string | null = null;
       if (sendAbort.signal.aborted) {
         // A newer send replaced this controller — do not stack a second heavy job.
@@ -2173,26 +2182,24 @@ export function AIChat() {
           onProgress: pushActivity,
         });
         if (!research.ok && research.softAbort) {
-          pushActivity('Research request interrupted — continuing from saved Master Plan', 'warn');
+          noteProblem('Research request interrupted — continuing Foundation');
         } else if (!research.ok) {
-          architectureBlocked = true;
           lastResearchError = research.error || RESEARCH_STOPPED;
-          pushActivity(lastResearchError, 'error');
+          noteProblem(lastResearchError);
         } else {
           pushActivity(RESEARCH_STAGE_BRIEF, 'info');
         }
         const readiness = await assessUiMockupReadiness({ projectKey: diskProjectKey });
-        architectureBlocked = architectureBlocked || readinessBlocksAutoFoundation(readiness);
+        if (readinessBlocksAutoFoundation(readiness) && readiness.reasons.length) {
+          noteProblem(`Architecture incomplete: ${readiness.reasons.join('; ')}`);
+        }
         const persistedMockup = await hasPersistedUiMockup();
         const alreadyHasProduct = workspaceHasProductAppRoutes(workspacePaths);
-        if (architectureBlocked && !research.ok && !research.softAbort) {
-          /* Gate R failed — do not start UI Gen or Go */
-        } else if (
+        if (
           (persistedMockup || alreadyHasProduct) &&
           (userForcedCoding || assistantCodingPromise || fastPrototypeTurn)
         ) {
           mockupSkippedOrFailed = true;
-          architectureBlocked = false;
           pushActivity(
             persistedMockup
               ? 'UI mockup already on disk — mockup deferred — coding Foundation'
@@ -2255,24 +2262,16 @@ export function AIChat() {
         return next;
       });
           } else {
-            architectureBlocked = true;
             clearUiMockupStageFlags(diskProjectKey);
-            holdCodingFailure(
-              `Stopped: ${mockup.error || 'UI mockup did not finish'}. Preview stays Waiting for mockup — use Generate UI. Foundation will not start.`,
+            mockupSkippedOrFailed = true;
+            noteProblem(
+              `UI mockup did not finish (${mockup.error || 'unknown'}) — continuing Foundation anyway`,
             );
           }
-        } else if (architectureBlocked) {
-          // Gate R or Gate A failed — hard-stop Go.
-          pushActivity(
-            `Stopped: ${readiness.reasons.join('; ') || 'ui-brief missing or too short'}. Finish Master Plan §§1–5 so ui-brief can be built from §4/§5 (and goal), then Generate UI. Foundation will not start while mockup is waiting.`,
-            'error',
-          );
         } else if (fastPrototypeTurn || willCode) {
-          // Phase 4: never imply mockup waiting AND coding is fine.
-          architectureBlocked = true;
-          pushActivity(
-            `Stopped: ${readiness.reasons.join('; ') || 'architecture inputs incomplete'}. Finish Master Plan + ui-brief, then Generate UI. Foundation will not start while mockup is waiting.`,
-            'error',
+          mockupSkippedOrFailed = true;
+          noteProblem(
+            `Architecture inputs incomplete (${readiness.reasons.join('; ') || 'plan/ui-brief'}) — continuing Foundation anyway`,
           );
         }
       }
@@ -2281,38 +2280,30 @@ export function AIChat() {
         !willCode &&
         agentAllowed &&
         fastPrototypeTurn &&
-        !architectureBlocked &&
         (uiMockupStarted || mockupSkippedOrFailed || mpSaved > 0)
       ) {
         willCode = true;
       }
 
       try {
-        // Phase 5 — Foundation only after persisted mockup or explicit skip (no arch-doc false “coding”).
+        // Phase 5 — Foundation proceeds even if mockup/research gates failed (issues land on the status bar).
         let foundationGate = willCode
           ? await canStartFoundationCoding({ mockupSkippedOrFailed })
           : { ok: false as const, reason: 'blocked' as const };
         if (willCode && !foundationGate.ok) {
-          if (lastResearchError && isAbortLikeMessage(lastResearchError)) {
-            pushActivity(
-              'Research interrupted — Master Plan is saved. Finish UI mockup before Foundation.',
-              'warn',
+          if (lastResearchError) {
+            noteProblem(
+              isAbortLikeMessage(lastResearchError)
+                ? 'Research interrupted — continuing Foundation anyway'
+                : lastResearchError,
             );
             lastResearchError = null;
-          } else if (lastResearchError) {
-            holdCodingFailure(
-              /goal/i.test(lastResearchError)
-                ? `Stopped: ${lastResearchError} Master Plan is empty — coding did not start.`
-                : `Stopped: ${lastResearchError}`,
-            );
           } else {
-            const persisted = await hasPersistedUiMockup();
-            if (!persisted) {
-              holdCodingFailure(
-                'Stopped: Foundation cannot start — no usable plan/mockup yet. Send a short goal (who it is for and what it does), then Continue. Do not wait on Generate UI while §1 is empty.',
-              );
-            }
+            noteProblem(
+              'Foundation gate was blocked (plan/mockup/research) — continuing Foundation anyway',
+            );
           }
+          foundationGate = { ok: true, reason: 'explicit_skip' };
         }
 
         if (willCode && foundationGate.ok && !codingActivityRef.current) {
@@ -2526,9 +2517,15 @@ export function AIChat() {
               window.setTimeout(() => setAccessoryHint(null), 4500);
             }, 8500);
           }
-          if (coding.ok === false) {
-            holdCodingFailure(blockedLine || 'Foundation coding stopped');
-          } else {
+          if (coding.ok === false || coding.blockedReason) {
+            noteProblem(
+              coding.blockedReason
+                ? `${coding.blockedReason.message} [${coding.blockedReason.code}]`
+                : blockedLine || 'Foundation coding reported a problem',
+            );
+          }
+          const wroteFiles = (coding.writtenCount ?? coding.writtenPaths?.length ?? 0) > 0;
+          if (coding.ok !== false || wroteFiles) {
             // Artifact sync already ran inside Go/apply (single owner). Do not start a second
             // "Syncing project artifacts…" that can false-block the activity feed.
             if (mpSaved > 0) {
@@ -2561,13 +2558,21 @@ export function AIChat() {
             ).productRouteCount;
             const { projectKey } = resolveActiveProjectIds(diskProjectKey);
             const autoDecision = shouldAutopilotAdvance({
-              codingOk: true,
+              codingOk: coding.ok !== false,
               lastSlice: codingSliceLabel,
               autoCount: getAutopilotSliceCount(projectKey),
               autopilotKickoff: fastPrototypeTurn || uiMockupStarted,
               productRouteCount: lastAutoProductRouteCountRef.current,
             });
             pushActivity(autoDecision.message, 'success');
+          }
+          codingActivityRef.current = false;
+          setGrokCodingActive(false);
+          setV0WatchActive(false);
+          setV0Live(false);
+          if (codingProblems.length > 0) {
+            setGrokActivity((prev) => finishGrokActivityWithProblems(prev, codingProblems));
+          } else {
             resetCodingActivity();
           }
         } else if (hasAppStatusPayload && agentAllowed && assistantSkippedNdmVerify(raw)) {
@@ -3003,11 +3008,29 @@ export function AIChat() {
             : {}),
         }),
       );
-      if (!go.ok) {
-        setSendError(go.statusMessage);
-        holdCodingFailure(go.statusMessage || 'Foundation coding stopped');
-        return;
-      }
+      if (!go.ok || go.blockedReason) {
+        const problems = [
+          go.blockedReason
+            ? `${go.blockedReason.message} [${go.blockedReason.code}]`
+            : go.statusMessage || 'Foundation coding reported a problem',
+        ];
+        if (go.ok) {
+          try {
+            window.dispatchEvent(new CustomEvent('nebula-master-plan-updated'));
+            window.dispatchEvent(new CustomEvent('nebula-files-applied'));
+          } catch {
+            /* ignore */
+          }
+          dispatchStudioShowLiveApp();
+          pushActivity('Coding slice done — issues noted on the status bar', 'warn');
+        } else {
+          setSendError(go.statusMessage);
+        }
+        codingActivityRef.current = false;
+        setGrokCodingActive(false);
+        setV0Live(false);
+        setGrokActivity((prev) => finishGrokActivityWithProblems(prev, problems));
+      } else {
       // Artifact sync + UI Studio Beta already ran inside runGoCodeAndApply (single owner).
       // Do not start a second "Syncing project artifacts…" — that was the forever spinner after Slice complete.
       try {
@@ -3024,6 +3047,7 @@ export function AIChat() {
         finishGrokActivity(prev, 'Coding finished', goWorkSteps(), go.statusMessage),
       );
       setV0Live(false);
+      }
     } catch (e) {
       const fail = e instanceof Error ? e.message : 'Coding failed';
       setSendError(fail);

@@ -202,6 +202,23 @@ export function finishGrokActivity(
   return base;
 }
 
+export function finishGrokActivityWithProblems(
+  prev: GrokActivityStatus | null,
+  problems: string[],
+): GrokActivityStatus {
+  const detail = problems
+    .map((p) => p.replace(/\s+/g, ' ').trim())
+    .filter(Boolean)
+    .slice(0, 6)
+    .join(' · ')
+    .slice(0, 280);
+  return errorGrokActivity(
+    prev,
+    'Finished with issues',
+    detail || 'Coding finished — issues are listed in the status log.',
+  );
+}
+
 export function errorGrokActivity(
   prev: GrokActivityStatus | null,
   headline: string,

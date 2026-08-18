@@ -4991,33 +4991,22 @@ Rules:
           `[go-code] Master Plan gaps mode=${completeness.mode} shape=${completeness.shape} count=${completeness.gaps.length} allowGo=${completeness.allowGo}`,
         );
       }
+      const gateWarnings: string[] = [];
       if (!completeness.allowGo) {
         const blocked = goBlocked("MASTER_PLAN_INCOMPLETE");
-        failGoCodePreparing(ppGo.workspaceRoot, blocked.message, blocked);
-        return res.status(409).json({
-          error: blocked.message,
-          code: blocked.code,
-          blockedReason: blocked,
-          masterPlanCompleteness: completeness,
-        });
+        gateWarnings.push(blocked.message);
+        console.warn("[go-code] bypass MASTER_PLAN_INCOMPLETE — continuing Foundation", blocked.message);
       }
 
-      // Phase 2: IF after fill the plan is still unusable THEN hard-stop (even in warn mode).
+      // Phase 2: IF after fill the plan is still unusable — warn and continue (status bar owns the issue).
       if (!isMasterPlanReadyForUiMockup(planSnapshot)) {
-        const blocked = goBlocked(
-          "MASTER_PLAN_INCOMPLETE",
-          "Master Plan is still too thin after fill. Add a usable §1 goal, type, and pages before UI Gen or Go.",
+        gateWarnings.push(
+          "Master Plan is still thin after fill — continuing Foundation anyway.",
         );
-        failGoCodePreparing(ppGo.workspaceRoot, blocked.message, blocked);
-        return res.status(409).json({
-          error: blocked.message,
-          code: blocked.code,
-          blockedReason: blocked,
-          masterPlanCompleteness: completeness,
-        });
+        console.warn("[go-code] bypass thin Master Plan — continuing Foundation");
       }
 
-      // Phase 3 Gate R: research artifact required before ui-brief success and Go.
+      // Phase 3 Gate R: research preferred; missing research does not 409 the coding agent.
       const goalForResearch = String(planSnapshot["1. Goal of the app"] || note || convProject);
       let researchGate = assessResearchArtifact(ppGo.workspaceRoot, { goal: goalForResearch });
       if (!researchGate.ok) {
@@ -5031,31 +5020,25 @@ Rules:
         });
         researchGate = stroke.gate;
         if (!stroke.ok || !researchGate.ok) {
-          const blocked = goBlocked("RESEARCH_INCOMPLETE", stroke.error || RESEARCH_STOPPED);
-          failGoCodePreparing(ppGo.workspaceRoot, blocked.message, blocked);
-          return res.status(409).json({
-            error: blocked.message,
-            code: blocked.code,
-            blockedReason: blocked,
-            researchGate,
-          });
-        }
-        try {
-          uiArts = syncUiArtifactsFromMasterPlan(ppGo.workspaceRoot, masterPlanPath);
-        } catch {
-          /* brief refresh after merge */
+          gateWarnings.push(stroke.error || RESEARCH_STOPPED);
+          console.warn("[go-code] bypass RESEARCH_INCOMPLETE — continuing Foundation");
+        } else {
+          try {
+            uiArts = syncUiArtifactsFromMasterPlan(ppGo.workspaceRoot, masterPlanPath);
+          } catch {
+            /* brief refresh after merge */
+          }
         }
       }
 
-      // Phase 4: IF ui-brief still missing, too short, or has no pages THEN block Go.
+      // Phase 4: ui-brief preferred; missing brief does not 409 the coding agent.
       if (!uiBriefUsable(uiArts.uiBrief.content)) {
         const blocked = goBlocked("UI_BRIEF_MISSING");
-        failGoCodePreparing(ppGo.workspaceRoot, blocked.message, blocked);
-        return res.status(409).json({
-          error: blocked.message,
-          code: blocked.code,
-          blockedReason: blocked,
-        });
+        gateWarnings.push(blocked.message);
+        console.warn("[go-code] bypass UI_BRIEF_MISSING — continuing Foundation");
+      }
+      if (gateWarnings.length) {
+        console.warn(`[go-code] ${gateWarnings.length} gate warning(s) — coding continues`);
       }
 
       let summary = "";
@@ -5355,6 +5338,7 @@ ${workflowContext}`;
         masterPlanFillSource: mpFill.source,
         v0PromptWritten: v0Sync.written,
         v0PromptLength: v0Sync.content.length,
+        gateWarnings: gateWarnings.length ? gateWarnings : undefined,
         hint: continuation
           ? "Grok Code continuation running — wait for Go complete (do not press Go again)."
           : "Master Plan synced from discovery. Grok Code is running — wait for Go complete (1–3 min); do not press Go again.",

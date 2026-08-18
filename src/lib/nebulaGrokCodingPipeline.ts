@@ -434,8 +434,11 @@ export async function applyGeneratedFiles(
         'success',
       );
       if (depth.zeroProductRoutes) {
+        const viteShell = writtenPaths.some((p) => /^src\/(App|main)\.(tsx|jsx)$/i.test(p));
         onProgress?.(
-          'Zero app/ or pages/ routes in this apply — Vite src/App.tsx + src/main.tsx is not a product shell',
+          viteShell
+            ? 'Zero app/ or pages/ routes in this apply — Vite src/App.tsx + src/main.tsx is not a product shell'
+            : 'Zero app/ or pages/ routes in this apply — index.html alone is not a product shell',
           'warn',
         );
       } else {
@@ -893,6 +896,13 @@ async function kickGoCodeJob(options: {
       };
     }
 
+    const warnings = Array.isArray((data as { gateWarnings?: unknown }).gateWarnings)
+      ? ((data as { gateWarnings: unknown[] }).gateWarnings.filter((w) => typeof w === 'string') as string[])
+      : [];
+    for (const w of warnings) {
+      onProgress?.(`Gate noted — continuing: ${w.replace(/^Stopped:\s*/i, '')}`, 'warn');
+    }
+
     if (data.pending && data.coding) {
       switchWaitLabel(codingLabel);
       onProgress?.(
@@ -1138,9 +1148,9 @@ export async function runGoCodeAndApply(options: {
       onProgress?.(oversized.message, 'warn');
     }
 
+    const ok = exit.ok || totalWritten > 0;
     if (!exit.ok && exit.blockedReason) {
-      statusMessage = formatBlockedReasonLine(exit.blockedReason);
-      onProgress?.(statusMessage, 'error');
+      onProgress?.(formatBlockedReasonLine(exit.blockedReason), totalWritten > 0 ? 'warn' : 'error');
     } else if (depth.authOnly && (!sliceLabel || /foundation/i.test(String(sliceLabel)))) {
       onProgress?.(
         'Auth routes landed; Home/practice/parent screens from the plan are still missing — next slice should add those routes.',
@@ -1159,7 +1169,6 @@ export async function runGoCodeAndApply(options: {
 
     reportGoApplyTelemetry({ writtenPaths: allWrittenPaths, sliceLabel: sliceLabel || undefined });
 
-    const ok = exit.ok;
     if (ok && !isGoSessionAborted(projectName)) {
       // Do not await — artifact sync used to freeze chat after files landed.
       // Client must still refresh mind map and open Plan (server hydrate does not dispatch UI events).
@@ -1222,6 +1231,7 @@ export async function handlePostGrokCodingTurn(options: {
   productRouteCount?: number;
 }> {
   const { assistantContent, planningPhase, userId, projectName, userNote, onProgress } = options;
+  let launchGoAfterThinHandoff = false;
 
   const appCodeBlocks = filterGrokContentToAppCodeFiles(assistantContent);
   if (appCodeBlocks) {
@@ -1250,29 +1260,28 @@ export async function handlePostGrokCodingTurn(options: {
         }).catch((e) => {
           console.warn('[nebulaGrokCodingPipeline] background post-apply UI:', e);
         });
+        return {
+          ran: true,
+          ok: true,
+          statusMessage: apply.message,
+          writtenCount: apply.writtenCount,
+          writtenPaths: apply.writtenPaths,
+          sliceLabel,
+          productRouteCount: assessApplyRouteDepth(apply.writtenPaths).productRoutes.length,
+        };
       }
-      return {
-        ran: true,
-        ok: exit.ok,
-        statusMessage: exit.ok
-          ? apply.message
-          : formatBlockedReasonLine(exit.blockedReason!),
-        writtenCount: apply.writtenCount,
-        writtenPaths: apply.writtenPaths,
-        sliceLabel,
-        blockedReason: exit.blockedReason || undefined,
-        productRouteCount: assessApplyRouteDepth(apply.writtenPaths).productRoutes.length,
-      };
+      onProgress?.(
+        'Chat handoff was not a product shell — launching Foundation Go (index.html alone is not done)',
+        'warn',
+      );
+      launchGoAfterThinHandoff = true;
+    } else {
+      onProgress?.(
+        `Chat file apply did not land (${apply.message || 'empty'}). Launching Foundation Go…`,
+        'warn',
+      );
+      launchGoAfterThinHandoff = true;
     }
-    const blocked = classifyGoFailure({ error: apply.message, code: 'APPLY_EMPTY_PRODUCT' });
-    return {
-      ran: true,
-      ok: false,
-      statusMessage: formatBlockedReasonLine(blocked),
-      writtenCount: apply.writtenCount,
-      writtenPaths: apply.writtenPaths,
-      blockedReason: blocked,
-    };
   }
 
   if (hasOnlyArchitectureFileBlocks(assistantContent)) {
@@ -1284,7 +1293,8 @@ export async function handlePostGrokCodingTurn(options: {
 
   const planning = planningPhase.trim();
   // Only START_CODING / explicit coding tags launch Go — never ANSWER_Qn (tab approval ≠ implement).
-  const wantsCoding = isCodingIntent(planning) || isCodingIntent(assistantContent);
+  const wantsCoding =
+    launchGoAfterThinHandoff || isCodingIntent(planning) || isCodingIntent(assistantContent);
 
   if (!wantsCoding) {
     return { ran: false };

@@ -250,6 +250,18 @@ assert.equal(APPLY_IN_FLIGHT_STALL_MS, 15_000);
     'post-apply preview events must be deferred so they cannot stall coding',
   );
   assert.match(applyFn, /dispatchStudioShowLiveApp/);
+  const handoff = pipeline.slice(pipeline.indexOf('export async function handlePostGrokCodingTurn'));
+  assert.match(
+    handoff,
+    /launchGoAfterThinHandoff/,
+    'index.html-only chat handoff must launch Foundation Go, not APPLY_EMPTY_PRODUCT stop',
+  );
+  assert.match(handoff, /Chat handoff was not a product shell — launching Foundation Go/);
+  assert.equal(
+    /ok: exit\.ok/.test(handoff.slice(0, 1800)),
+    false,
+    'thin chat apply must not return APPLY_EMPTY_PRODUCT as the coding result',
+  );
 
   const stallBlock = chat.slice(
     chat.indexOf('Foundation apply used to freeze'),

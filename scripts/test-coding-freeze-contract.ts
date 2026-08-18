@@ -122,7 +122,7 @@ assert.equal(
 assert.match(chat, /looksLikePostApplyCodingStall/);
 assert.match(chat, /looksLikeApplyInFlightStall/);
 assert.match(chat, /APPLY_IN_FLIGHT_STALL_MS/);
-assert.match(chat, /Apply wait timed out/);
+assert.match(chat, /still waiting \(not stopping the code agent\)/);
 assert.equal(
   /sendChatRef\.current\('continue building'\)/.test(chat),
   false,
@@ -137,6 +137,7 @@ assert.match(chat, /abortGoCodeWait\(projectName\)/);
 assert.match(chat, /publishGrokActivity/);
 assert.match(chat, /holdCodingFailure/);
 assert.match(chat, /errorGrokActivity/);
+assert.match(chat, /finishGrokActivityWithProblems/);
 assert.equal(
   /if \(coding\.ok === false\) \{\s*resetCodingActivity\(\)/.test(chat),
   false,
