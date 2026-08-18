@@ -1905,7 +1905,10 @@ export function AIChat() {
       (userForcedCoding || isFastPrototypeContinue) &&
       !onboardingBuildStart &&
       !hasAppStatusPayload;
-    if (skipGrokChat && userForcedCoding && !isFastPrototypeContinue) {
+    if (
+      (skipGrokChat && userForcedCoding && !isFastPrototypeContinue) ||
+      (fastPrototypeTurn && !onboardingBuildStart && !hasAppStatusPayload)
+    ) {
       try {
         const mpRes = await fetch(withProjectQuery('/api/master-plan/read'), {
           credentials: 'include',
@@ -1914,7 +1917,15 @@ export function AIChat() {
         const plan = mpRes.ok
           ? ((await readResponseJson(mpRes)) as Record<string, unknown>)
           : null;
-        if (!planRecordHasUsableGoal(plan) && !isMasterPlanCompleteForDiscovery(plan)) {
+        const hasPlan =
+          planRecordHasUsableGoal(plan) || isMasterPlanCompleteForDiscovery(plan);
+        if (fastPrototypeTurn && hasPlan) {
+          skipGrokChat = true;
+          pushActivity(
+            'Master Plan already on disk — skipping Grok chat, continuing research / mockup / Foundation',
+            'info',
+          );
+        } else if (skipGrokChat && !hasPlan) {
           skipGrokChat = false;
           pushActivity(
             'No usable Master Plan goal yet — drafting the plan first (not skipping Grok chat)',
@@ -1922,7 +1933,7 @@ export function AIChat() {
           );
         }
       } catch {
-        skipGrokChat = false;
+        if (!fastPrototypeTurn) skipGrokChat = false;
       }
     }
 

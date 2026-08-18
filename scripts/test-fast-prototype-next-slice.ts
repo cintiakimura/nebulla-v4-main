@@ -227,6 +227,11 @@ assert.equal(APPLY_IN_FLIGHT_STALL_MS, 15_000);
   );
   assert.match(
     chat,
+    /Master Plan already on disk — skipping Grok chat/,
+    'retry / go must not spend 90s on Grok chat when the plan is already saved',
+  );
+  assert.match(
+    chat,
     /persistedMockup &&/,
     'skip pre-code mockup only when a loadable mockup is already on disk',
   );

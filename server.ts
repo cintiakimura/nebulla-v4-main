@@ -1375,10 +1375,16 @@ No approved UI code yet.
       completeness = softenSecurityBlocksForMvpGo(completeness);
       // Optional acknowledgment only — coding/Go must not depend on this.
       const securityProposal = buildSecurityBaselineProposal(plan);
+      const section1 = String((plan as Record<string, string>)["1. Goal of the app"] || "");
+      const qName = typeof req.query.projectName === "string" ? req.query.projectName : "";
       const goalForResearch = inferGoalFromPlanRecord(plan as Record<string, unknown>, [
-        (plan as Record<string, string>)["1. Goal of the app"] || "",
+        section1,
+        qName,
       ]);
-      const researchGate = assessResearchArtifact(pp.workspaceRoot, { goal: goalForResearch });
+      const researchGate = assessResearchArtifact(pp.workspaceRoot, {
+        goal: goalForResearch,
+        goalCandidates: [section1, qName],
+      });
       res.json({
         mode: completeness.mode,
         ok: completeness.ok,
@@ -4823,7 +4829,10 @@ Rules:
       const qGoal = typeof req.query.goal === "string" ? req.query.goal : "";
       const qName = typeof req.query.projectName === "string" ? req.query.projectName : "";
       const goal = inferGoalFromPlanRecord(plan, [qGoal, qName]);
-      const gate = assessResearchArtifact(pp.workspaceRoot, { goal });
+      const gate = assessResearchArtifact(pp.workspaceRoot, {
+        goal,
+        goalCandidates: [qGoal, qName],
+      });
       return res.json({
         ok: gate.ok,
         pending: isResearchJobActive(pp.workspaceRoot),

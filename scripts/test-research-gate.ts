@@ -11,9 +11,12 @@ import {
   RESEARCH_ARTIFACT_REL,
   RESEARCH_STOPPED,
   assessResearchArtifact,
+  goalFingerprint,
+  legacyGoalFingerprint,
   parseCompetitorNames,
   writeResearchArtifact,
 } from "../lib/researchArtifact.ts";
+import { seedGoalOfTheAppSection } from "../lib/spineSequenceClient.ts";
 import { RESEARCH_STAGE_SEARCHING } from "../lib/researchStages.ts";
 import { canStartUiMockup, readinessBlocksAutoFoundation } from "../src/lib/uiMockupGate.ts";
 import { buildFastPrototypeBootstrap } from "../src/lib/ideChatBootstrap.ts";
@@ -150,6 +153,37 @@ try {
     writeResearchArtifact(tmp, md);
     const gate = assessResearchArtifact(tmp);
     assert.equal(gate.ok, true, gate.reasons.join("; "));
+  }
+
+  section("seeded §1 does not stale research for the same project");
+  {
+    const short = "tutor kids with ADHD";
+    const seeded = seedGoalOfTheAppSection(
+      {
+        "1. Goal of the app": "",
+        "4. Pages and navigation": "### Kid Home `/`\nPractice for ADHD kids.",
+      },
+      [short],
+    );
+    assert.match(seeded, /Project Type/i);
+    assert.equal(goalFingerprint(short), goalFingerprint(seeded));
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "research-seed-fp-"));
+    writeResearchArtifact(
+      tmp,
+      validResearchMd().replace(/goal_fingerprint:\s*\S+/, `goal_fingerprint: ${goalFingerprint(short)}`),
+    );
+    const gate = assessResearchArtifact(tmp, { goal: seeded, goalCandidates: [short] });
+    assert.equal(gate.ok, true, gate.reasons.join("; "));
+    const tmpLegacy = fs.mkdtempSync(path.join(os.tmpdir(), "research-legacy-fp-"));
+    writeResearchArtifact(
+      tmpLegacy,
+      validResearchMd().replace(
+        /goal_fingerprint:\s*\S+/,
+        `goal_fingerprint: ${legacyGoalFingerprint(seeded)}`,
+      ),
+    );
+    const legacyGate = assessResearchArtifact(tmpLegacy, { goal: seeded });
+    assert.equal(legacyGate.ok, true, legacyGate.reasons.join("; "));
   }
 
   section("demo skip flag → ok skipped (not production default)");

@@ -154,11 +154,43 @@ export function hasAssumptionsSection(md: string): boolean {
   return Boolean(section && section.length > 40);
 }
 
-export function goalFingerprint(goal: string): string {
-  const t = String(goal || "").trim().toLowerCase().replace(/\s+/g, " ").slice(0, 400);
+export function stableGoalCore(goal: string): string {
+  const lines = String(goal || "")
+    .split(/\n+/)
+    .map((l) => l.trim())
+    .filter(Boolean);
+  const kept: string[] = [];
+  for (const line of lines) {
+    if (/^Project Type:/i.test(line)) continue;
+    if (/^Users, problem, and MVP scope/i.test(line)) continue;
+    if (/^Pages:/i.test(line)) continue;
+    if (/^Features:/i.test(line)) continue;
+    kept.push(line);
+  }
+  return kept.join(" ").trim().toLowerCase().slice(0, 160);
+}
+
+function hashGoalString(t: string): string {
+  const s = String(t || "").trim().toLowerCase().replace(/\s+/g, " ");
   let h = 0;
-  for (let i = 0; i < t.length; i++) h = ((h << 5) - h + t.charCodeAt(i)) | 0;
+  for (let i = 0; i < s.length; i++) h = ((h << 5) - h + s.charCodeAt(i)) | 0;
   return String(h);
+}
+
+export function goalFingerprint(goal: string): string {
+  const core = stableGoalCore(goal);
+  return hashGoalString(core || String(goal || "").trim());
+}
+
+/** Raw 400-char hash used before seed boilerplate was stripped. */
+export function legacyGoalFingerprint(goal: string): string {
+  return hashGoalString(String(goal || "").trim().toLowerCase().replace(/\s+/g, " ").slice(0, 400));
+}
+
+export function goalFingerprintMatches(stored: string, goal: string): boolean {
+  if (!stored) return true;
+  const g = String(goal || "");
+  return stored === goalFingerprint(g) || stored === legacyGoalFingerprint(g);
 }
 
 export function parseGoalFingerprint(md: string): string {
@@ -178,7 +210,7 @@ export type ResearchGate = {
 
 export function assessResearchArtifact(
   workspaceRoot: string,
-  opts?: { goal?: string },
+  opts?: { goal?: string; goalCandidates?: string[] },
 ): ResearchGate {
   if (isResearchSkipEnabled(workspaceRoot)) {
     return {
@@ -211,10 +243,12 @@ export function assessResearchArtifact(
     reasons.push('evidence section missing (need sources or "No supporting studies found for this feature.")');
   }
   if (!hasAssumptionsSection(md)) reasons.push("assumptions list missing");
-  if (opts?.goal && md.trim()) {
-    const fp = goalFingerprint(opts.goal);
+  if (md.trim()) {
     const stored = parseGoalFingerprint(md);
-    if (stored && stored !== fp) {
+    const candidates = [opts?.goal, ...(opts?.goalCandidates || [])]
+      .map((g) => String(g || "").trim())
+      .filter(Boolean);
+    if (stored && candidates.length && !candidates.some((g) => goalFingerprintMatches(stored, g))) {
       reasons.push("research is stale — goal changed; re-run Web Search");
     }
   }
