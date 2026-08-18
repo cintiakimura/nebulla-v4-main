@@ -322,6 +322,13 @@ try {
   assert.equal(/planningPhase = 'START_CODING'/.test(chat), false);
   assert.match(chat, /isOrchestrationOnlyPlanSource\(planningPhase\)/);
   assert.match(chat, /Foundation already on disk — send Continue/);
+  {
+    const idxLanded = chat.indexOf('const foundationAlreadyLanded');
+    const idxHandoff = chat.lastIndexOf('await handlePostGrokCodingTurn');
+    const idxPass1 = chat.indexOf("currentAction: 'Grok Code — Code pass 1");
+    assert.ok(idxLanded >= 0 && idxHandoff > idxLanded, 'stop Go before START_CODING handoff when Foundation exists');
+    assert.ok(idxPass1 > idxLanded, 'do not show Code pass 1 before Foundation-on-disk check');
+  }
   const artifacts = fs.readFileSync(path.join(root, "src/lib/grokChatArtifacts.ts"), "utf8");
   assert.match(artifacts, /export function isOrchestrationOnlyPlanSource/);
   assert.match(artifacts, /if \(isOrchestrationOnlyPlanSource\(source\)\) return 0/);

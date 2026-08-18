@@ -2397,6 +2397,20 @@ export function AIChat() {
           }
         }
 
+        const foundationAlreadyLanded = workspaceHasProductAppRoutes(workspacePaths);
+        const wantsNextSlice = userNoteRequestsNextSlice(text);
+        if (
+          willCode &&
+          foundationGate.ok &&
+          foundationAlreadyLanded &&
+          !wantsNextSlice &&
+          !onboardingBuildStart
+        ) {
+          pushActivity('Foundation already on disk — send Continue for the next slice.', 'success');
+          willCode = false;
+          resetCodingActivity();
+        }
+
         if (willCode && foundationGate.ok && !codingActivityRef.current) {
           beginCodingActivity('Grok Code — writing files to workspace', goWorkSteps(), {
             subhead:
@@ -2447,8 +2461,6 @@ export function AIChat() {
           shortCodingNudge ||
           userForcedCoding ||
           assistantCodingPromise;
-        const foundationAlreadyLanded = workspaceHasProductAppRoutes(workspacePaths);
-        const wantsNextSlice = userNoteRequestsNextSlice(text);
         if (
           !coding.ran &&
           agentAllowed &&

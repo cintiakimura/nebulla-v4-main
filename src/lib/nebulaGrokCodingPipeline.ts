@@ -677,6 +677,7 @@ type GoCodePayload = {
   preparing?: boolean;
   idle?: boolean;
   hint?: string;
+  elapsedMs?: number;
   v0PromptWritten?: boolean;
   v0PromptLength?: number;
   continuation?: boolean;
@@ -837,6 +838,40 @@ async function pollGoCodeUntilDoneInner(
   return { error: formatBlockedReasonLine(timedOut), blockedReason: timedOut, code: timedOut.code };
 }
 
+function goPollLooksTimedOut(p: {
+  code?: string;
+  blockedReason?: GoBlockedReason;
+  elapsedMs?: number;
+}): boolean {
+  if (p.code === 'GO_TIMEOUT' || p.blockedReason?.code === 'GO_TIMEOUT') return true;
+  if (typeof p.elapsedMs === 'number' && p.elapsedMs >= GO_POLL_MAX_WAIT_MS) return true;
+  return false;
+}
+
+/** One poll after GO_TIMEOUT — apply files if they already landed; do not wait another 3 min. */
+async function recoverUnconsumedGoResult(projectName: string): Promise<GoCodePayload | null> {
+  try {
+    const timed = abortAfter(GO_POLL_FETCH_TIMEOUT_MS);
+    let response: Response;
+    try {
+      response = await fetch(withProjectQuery('/api/grok/go-code/poll'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...getGrokRequestHeaders() },
+        credentials: 'include',
+        signal: timed.signal,
+        body: JSON.stringify(withProjectBody({ projectName })),
+      });
+    } finally {
+      timed.cancel();
+    }
+    const poll = await readResponseJson<GoCodePayload>(response);
+    if (poll.choices?.[0]?.message?.content?.trim()) return poll;
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 async function kickGoCodeJob(options: {
   userId: string;
   projectName: string;
@@ -866,6 +901,10 @@ async function kickGoCodeJob(options: {
       }
       prePoll = await readResponseJson<GoCodePayload>(preRes);
       if (prePoll.idle) {
+        prePoll = null;
+      } else if (goPollLooksTimedOut(prePoll)) {
+        onProgress?.('Previous Code pass already timed out — not joining it', 'warn');
+        await cancelProjectBackgroundJobs();
         prePoll = null;
       } else if (prePoll.pending && prePoll.coding) {
         onProgress?.(GO_JOIN_LABEL, 'warn');
@@ -1141,7 +1180,7 @@ export async function runGoCodeAndApply(options: {
         );
       }
 
-      const data = await kickGoCodeJob({
+      let data = await kickGoCodeJob({
         userId,
         projectName,
         userNote,
@@ -1169,22 +1208,46 @@ export async function runGoCodeAndApply(options: {
           };
         }
         if (totalWritten > 0) break;
-        if (
+        if (blocked.code === 'GO_TIMEOUT') {
+          const recovered = await recoverUnconsumedGoResult(projectName);
+          if (recovered?.choices?.[0]?.message?.content?.trim()) {
+            onProgress?.('Recovering unapplied Go Code result from server', 'info');
+            data = recovered;
+          } else {
+            onProgress?.(formatBlockedReasonLine(blocked), 'error');
+            try {
+              window.dispatchEvent(
+                new CustomEvent('nebula-preview-wait-status', {
+                  detail: { status: formatBlockedReasonLine(blocked) },
+                }),
+              );
+            } catch {
+              /* ignore */
+            }
+            return {
+              ok: false,
+              statusMessage: formatBlockedReasonLine(blocked),
+              totalWritten,
+              blockedReason: blocked,
+            };
+          }
+        } else if (
           grokRelaunches < MAX_GROK_RELAUNCHES &&
-          (blocked.code === 'GO_TIMEOUT' || blocked.code === 'GO_EMPTY_OUTPUT' || blocked.code === 'GO_FAILED')
+          (blocked.code === 'GO_EMPTY_OUTPUT' || blocked.code === 'GO_FAILED')
         ) {
           grokRelaunches += 1;
           onProgress?.('No Grok Code result — relaunching this slice once', 'warn');
           pass -= 1;
           continue;
+        } else {
+          onProgress?.(formatBlockedReasonLine(blocked), 'error');
+          return {
+            ok: false,
+            statusMessage: formatBlockedReasonLine(blocked),
+            totalWritten,
+            blockedReason: blocked,
+          };
         }
-        onProgress?.(formatBlockedReasonLine(blocked), 'error');
-        return {
-          ok: false,
-          statusMessage: formatBlockedReasonLine(blocked),
-          totalWritten,
-          blockedReason: blocked,
-        };
       }
 
       if (data.summarySaved && pass === 0) {
@@ -1209,19 +1272,34 @@ export async function runGoCodeAndApply(options: {
         const blocked =
           data.blockedReason || classifyGoFailure({ code: data.code, codeError: data.codeError, error: data.error });
         if (totalWritten > 0) break;
-        if (grokRelaunches < MAX_GROK_RELAUNCHES) {
+        if (blocked.code === 'GO_TIMEOUT') {
+          const recovered = await recoverUnconsumedGoResult(projectName);
+          if (recovered?.choices?.[0]?.message?.content?.trim()) {
+            onProgress?.('Recovering unapplied Go Code result from server', 'info');
+            data = recovered;
+          } else {
+            onProgress?.(formatBlockedReasonLine(blocked), 'error');
+            return {
+              ok: false,
+              statusMessage: formatBlockedReasonLine(blocked),
+              totalWritten,
+              blockedReason: blocked,
+            };
+          }
+        } else if (grokRelaunches < MAX_GROK_RELAUNCHES) {
           grokRelaunches += 1;
           onProgress?.('Grok Code error with no files — relaunching this slice once', 'warn');
           pass -= 1;
           continue;
+        } else {
+          onProgress?.(formatBlockedReasonLine(blocked), 'error');
+          return {
+            ok: false,
+            statusMessage: formatBlockedReasonLine(blocked),
+            totalWritten,
+            blockedReason: blocked,
+          };
         }
-        onProgress?.(formatBlockedReasonLine(blocked), 'error');
-        return {
-          ok: false,
-          statusMessage: formatBlockedReasonLine(blocked),
-          totalWritten,
-          blockedReason: blocked,
-        };
       }
 
       if (!codeText) {

@@ -11,7 +11,7 @@ import { withProjectBody, withProjectQuery, getBrowserProjectName } from './nebu
 import { buildLanguagePromptAppendix } from './i18n/languagePromptAppendix';
 import type { IdeLocaleCode } from './i18n/locales';
 import type { ContentLanguageMode } from './i18n/userLanguagePreferences';
-import { seedGoalOfTheAppSection } from './spineSequenceGates';
+import { isUsableProjectGoal, seedGoalOfTheAppSection } from './spineSequenceGates';
 import { matchBugDatabaseSnippets } from './bugDatabaseSnippet';
 
 export const MASTER_PLAN_TAB_NAMES = [...MASTER_PLAN_SECTION_KEYS] as const;
@@ -140,7 +140,11 @@ export async function persistMasterPlanFromAssistantSource(
   }
   if (Object.keys(parsed).length === 0) return 0;
   const goalBody = (parsed[1] ?? '').trim();
-  if (/\bSTART_CODING\b/i.test(goalBody) || /\bPLAN_READY\b/i.test(goalBody)) {
+  if (
+    /\bSTART_CODING\b/i.test(goalBody) ||
+    /\bPLAN_READY\b/i.test(goalBody) ||
+    !isUsableProjectGoal(goalBody)
+  ) {
     parsed[1] = '';
   }
   if (!(parsed[1] ?? '').trim()) {

@@ -72,6 +72,14 @@ assert.equal(
 assert.match(goFn, /ackConsumedGoCodeResult/);
 assert.match(goFn, /if \(data\.error && !data\.choices\?\.length\)/);
 assert.equal(
+  /blocked\.code === 'GO_TIMEOUT' \|\| blocked\.code === 'GO_EMPTY_OUTPUT' \|\| blocked\.code === 'GO_FAILED'/.test(goFn),
+  false,
+  'GO_TIMEOUT must not relaunch/join the same 3-minute job',
+);
+assert.match(goFn, /recoverUnconsumedGoResult/);
+assert.match(pipeline, /goPollLooksTimedOut|Previous Code pass already timed out/);
+assert.match(pipeline, /GO_POLL_MAX_WAIT_MS = 180_000/);
+assert.equal(
   /if \(data\.error && !data\.summarySaved/.test(goFn),
   false,
   'Go timeout/error must fail even when pre-coding summary was saved',

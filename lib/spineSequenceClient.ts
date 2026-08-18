@@ -76,7 +76,11 @@ export function isUsableProjectGoal(goal: string): boolean {
   if (!/[a-zA-Z]{3,}/.test(t)) return false;
   if (/\bSTART_CODING\b/i.test(t)) return false;
   if (/\bPLAN_READY\b/i.test(t)) return false;
-  if (/\b(Authz:|Empty state:|Primary actions:)\b/i.test(t)) return false;
+  if (/\b(Authz|Empty state|Error state|Primary actions|Data entities|Nav links)\s*:/i.test(t)) {
+    return false;
+  }
+  if (/\bPurpose:\s*Primary landing\b/i.test(t)) return false;
+  if (/^Home\s+'?\/'?/i.test(t) || /\bHome\s+'\/'\s*-/i.test(t)) return false;
   const lower = t.toLowerCase().replace(/[.!?]+$/g, "").trim();
   if (
     /^(untitled(\s+project)?|new project|test(ing)?|hello|hi|hey|asdf+|xxx+|foo|bar|ok|okay|go|start)$/i.test(
@@ -100,13 +104,13 @@ export const ASK_FOR_SHORT_GOAL =
 
 /** Empty Master Plan / missing §1 must not skip Grok chat or start research/Go. */
 export function planRecordHasUsableGoal(plan: Record<string, unknown> | null | undefined): boolean {
-  return Boolean(inferGoalFromPlanRecord(plan));
+  return isUsableProjectGoal(pickPlanText(plan?.["1. Goal of the app"]));
 }
 
 const pickPlanText = (raw: unknown): string => String(raw || "").trim();
 
 /**
- * Goal for research / Go when §1 is blank but §§2–5 or the project name exist.
+ * Goal for research / Go when §1 is blank. Prefer project name / user note over page contracts.
  */
 export function inferGoalFromPlanRecord(
   plan: Record<string, unknown> | null | undefined,
@@ -118,8 +122,6 @@ export function inferGoalFromPlanRecord(
     pickPlanText(plan?.goal),
     ...extraFallbacks.map((x) => String(x || "").trim()),
     pickPlanText(plan?.["3. Features and KPIs"]),
-    pickPlanText(plan?.["4. Pages and navigation"]),
-    pickPlanText(plan?.["2. Tech and Research"]),
   ];
   for (const c of candidates) {
     if (!c) continue;
@@ -145,6 +147,7 @@ export function seedGoalOfTheAppSection(
   const who = coreRaw
     .replace(/\bSTART_CODING\b/gi, " ")
     .replace(/\bPLAN_READY\b/gi, " ")
+    .replace(/\b(Authz|Empty state|Error state|Primary actions|Data entities|Nav links)\s*:[^.\n]*/gi, " ")
     .replace(/\s+/g, " ")
     .trim()
     .slice(0, 280);

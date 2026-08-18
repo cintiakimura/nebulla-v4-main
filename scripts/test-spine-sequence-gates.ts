@@ -130,6 +130,12 @@ assert.equal(isUsableProjectGoal("hi"), false);
 assert.equal(isUsableProjectGoal("test"), false);
 assert.equal(isUsableProjectGoal("tutor kids with ADHD"), true);
 assert.equal(isUsableProjectGoal("Project Type: Web App START_CODING Users, problem, and MVP scope"), false);
+assert.equal(
+  isUsableProjectGoal(
+    "Project Type: Web App Home '/' - Purpose: Primary landing — one clear next action - Primary actions: Continue - Authz: public - Empty state: Nothing here yet",
+  ),
+  false,
+);
 assert.equal(planRecordHasUsableGoal(null), false);
 assert.equal(planRecordHasUsableGoal({}), false);
 assert.equal(planRecordHasUsableGoal({ "1. Goal of the app": "" }), false);
@@ -142,7 +148,8 @@ assert.equal(
     "1. Goal of the app": "",
     "4. Pages and navigation": "### Kid Home `/`\nPractice for ADHD kids with short sessions.\n",
   }),
-  true,
+  false,
+  'page contracts in §4 are not a Goal of the app',
 );
 assert.match(
   inferGoalFromPlanRecord(
@@ -216,6 +223,18 @@ assert.equal(
   );
   assert.match(repaired, /tutor kids with ADHD/i);
   assert.equal(/PLAN_READY/.test(repaired), false);
+}
+{
+  const repairedPages = seedGoalOfTheAppSection(
+    {
+      "1. Goal of the app":
+        "Project Type: Web App\nHome '/' - Purpose: Primary landing — one clear next action - Primary actions: Continue, back to Home - Authz: signed-in learner or public - Empty state: Nothing here yet — start from Home",
+    },
+    ["mobile education app for kids"],
+  );
+  assert.match(repairedPages, /mobile education app for kids/i);
+  assert.equal(/Primary actions:/i.test(repairedPages), false);
+  assert.equal(/Authz:/i.test(repairedPages), false);
 }
 assert.match(chat, /ASK_FOR_SHORT_GOAL|Write a short goal for this app/);
 assert.match(chat, /No usable Master Plan goal yet/);
