@@ -288,6 +288,13 @@ assert.equal(
   false,
 );
 assert.match(chat, /if \(!FAST_PROTOTYPE_SAME_SESSION_AUTOPILOT\)/);
+assert.match(chat, /isAbortLikeError\(e\) && mpSaved > 0/);
+assert.match(chat, /looksLikeApplyInFlightStall\(last\) && goStarted/);
+assert.match(chat, /Code pass 1 \(waiting for generated files\)/);
+assert.equal(
+  /holdCodingFailure\(line\).*signal is aborted/.test(chat),
+  false,
+);
 assert.match(
   fs.readFileSync(path.join(root, 'src/lib/apiFetch.ts'), 'utf8'),
   /host returned HTML instead of JSON/,

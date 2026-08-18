@@ -2,6 +2,7 @@
  * Client: Phase 3 research stroke (Web Search) before UI Gen / Go.
  */
 
+import { isAbortLikeError } from './abortLikeError';
 import { fetchJson } from './apiFetch';
 import type { GrokActivityProgressFn } from './ideGrokActivityStatus';
 import { getGrokRequestHeaders } from './grokUserKey';
@@ -28,6 +29,8 @@ export type ResearchStrokeResult = {
   reused?: boolean;
   wrote?: boolean;
   gate?: { ok: boolean; competitorCount?: number; reasons?: string[] };
+  /** Fetch aborted/timed out — not a real Gate R fail. */
+  softAbort?: boolean;
 };
 
 export async function fetchResearchStatus(): Promise<{ ok: boolean; pending?: boolean }> {
@@ -102,6 +105,10 @@ export async function ensureResearchBeforeUiAndGo(options: {
     }
     return { ok: true, reused: data.reused, wrote: data.wrote, gate: data.gate };
   } catch (e) {
+    if (isAbortLikeError(e)) {
+      onProgress?.('Research request interrupted — continuing from saved Master Plan', 'warn');
+      return { ok: false, error: 'research_soft_abort', softAbort: true };
+    }
     const err = e instanceof Error ? e.message : RESEARCH_STOPPED;
     onProgress?.(err, 'error');
     return { ok: false, error: err };

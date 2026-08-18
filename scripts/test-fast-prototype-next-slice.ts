@@ -223,8 +223,17 @@ assert.equal(APPLY_IN_FLIGHT_STALL_MS, 15_000);
   );
   assert.match(
     chat,
-    /else if \(userForcedCoding \|\| assistantCodingPromise\)/,
-    'explicit coding must defer mockup instead of regenerating UI Gen',
+    /persistedMockup \|\| alreadyHasProduct/,
+    'bare go must run UI Gen unless a mockup or product routes already exist',
+  );
+  assert.match(
+    chat,
+    /UI mockup already on disk — mockup deferred — coding Foundation/,
+  );
+  assert.equal(
+    /UI mockup timed out — mockup deferred — coding Foundation/.test(chat),
+    false,
+    '45s UI abandon must not start Code pass 1',
   );
   const pipeline = fs.readFileSync(path.join(root, 'src/lib/nebulaGrokCodingPipeline.ts'), 'utf8');
   assert.match(

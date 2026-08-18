@@ -6,10 +6,12 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { isAbortLikeError, isAbortLikeMessage } from '../src/lib/abortLikeError.ts';
 import {
   ARTIFACT_SYNC_TIMEOUT_MS,
   isArtifactSyncTimeoutError,
   resetArtifactSyncInFlightForTests,
+  resetMasterPlanUiPipelineInFlightForTests,
   withHardTimeout,
 } from '../src/lib/ideArtifactSync.ts';
 import { startGrokActivityWaitTicker, GROK_WAIT_HEARTBEAT_TICKS } from '../src/lib/ideGrokActivityStatus.ts';
@@ -21,6 +23,9 @@ const root = path.join(__dirname, '..');
   assert.ok(ARTIFACT_SYNC_TIMEOUT_MS >= 45_000 && ARTIFACT_SYNC_TIMEOUT_MS <= 90_000);
   assert.equal(isArtifactSyncTimeoutError(new Error('Artifact sync timed out')), true);
   assert.equal(isArtifactSyncTimeoutError(new Error('The operation was aborted')), true);
+  assert.equal(isArtifactSyncTimeoutError(new Error('signal is aborted without reason')), true);
+  assert.equal(isAbortLikeError(new Error('signal is aborted without reason')), true);
+  assert.equal(isAbortLikeMessage('signal is aborted without reason'), true);
   assert.equal(isArtifactSyncTimeoutError(new Error('ENOENT')), false);
 }
 
@@ -99,6 +104,26 @@ const root = path.join(__dirname, '..');
   );
 
   const chat = fs.readFileSync(path.join(root, 'src/components/ide/AIChat.tsx'), 'utf8');
+  const pipelineSrc = fs.readFileSync(path.join(root, 'src/lib/ideArtifactSync.ts'), 'utf8');
+  assert.match(pipelineSrc, /abortWithTimeoutReason/);
+  assert.match(pipelineSrc, /plan is saved; continuing/);
+  assert.match(pipelineSrc, /softFailed: true/);
+  assert.match(pipelineSrc, /masterPlanUiPipelineInFlight/);
+  assert.equal(
+    /Mind map sync timed out — retry from Master Plan/.test(pipelineSrc),
+    false,
+    'pipeline abort must not look like a hard stop',
+  );
+  const pipelineFn = pipelineSrc.slice(pipelineSrc.indexOf('async function runMasterPlanUiPipelineOnce'));
+  assert.equal(
+    /onProgress\?\.\([\s\S]*?,\s*'error'/.test(pipelineFn.slice(0, 1800)),
+    false,
+    'mind-map pipeline abort must be warn, not error',
+  );
+  assert.match(chat, /research\.softAbort/);
+  assert.match(chat, /isAbortLikeError/);
+  assert.match(chat, /Master Plan is saved; continuing to mockup \/ Foundation/);
+  assert.match(chat, /Request interrupted — Master Plan is saved/);
   // Direct Go path must not re-await a second post-coding workspace sync after Go already synced.
   const goHandler = chat.slice(chat.indexOf('runGoCodeAndApply({'));
   const secondGoBlock = goHandler.includes('const go = await runGoCodeAndApply')
@@ -116,4 +141,5 @@ const root = path.join(__dirname, '..');
 }
 
 resetArtifactSyncInFlightForTests();
+resetMasterPlanUiPipelineInFlightForTests();
 console.log('\n✓ artifact sync timeout / soft-fail contract passed\n');

@@ -177,6 +177,10 @@ try {
   assert.match(grokSearch, /\/v1\/responses/);
   assert.match(grokSearch, /web_search/);
   assert.match(chat, /ensureResearchBeforeUiAndGo/);
+  assert.match(chat, /research\.softAbort/);
+  const researchClient = fs.readFileSync(path.join(root, "src/lib/nebulaResearchClient.ts"), "utf8");
+  assert.match(researchClient, /softAbort: true/);
+  assert.match(researchClient, /isAbortLikeError/);
   assert.match(server, /code: "RESEARCH_INCOMPLETE"/);
 
   console.log("\n✓ research gate passed\n");

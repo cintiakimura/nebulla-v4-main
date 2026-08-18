@@ -1,3 +1,4 @@
+import { abortWithTimeoutReason, isAbortLikeError } from './abortLikeError';
 import { fetchJson } from './apiFetch';
 import type { GrokActivityProgressFn } from './ideGrokActivityStatus';
 import { startGrokActivityWaitTicker } from './ideGrokActivityStatus';
@@ -37,7 +38,18 @@ export type MasterPlanUiPipelineResult = {
   v0Error?: string;
   v0Written?: string[];
   hasRealV0?: boolean;
+  timedOut?: boolean;
+  softFailed?: boolean;
 };
+
+const MASTER_PLAN_UI_PIPELINE_TIMEOUT_MS = 90_000;
+
+/** Single-flight so persist event + chat cannot stack two pipeline POSTs. */
+let masterPlanUiPipelineInFlight: Promise<MasterPlanUiPipelineResult> | null = null;
+
+export function resetMasterPlanUiPipelineInFlightForTests(): void {
+  masterPlanUiPipelineInFlight = null;
+}
 
 /**
  * After Master Plan save: mind map (§4); optional prompt file sync on server.
@@ -51,38 +63,54 @@ export async function runMasterPlanUiPipeline(options?: {
   quietV0Status?: boolean;
   onProgress?: GrokActivityProgressFn;
 }): Promise<MasterPlanUiPipelineResult> {
+  if (masterPlanUiPipelineInFlight) {
+    options?.onProgress?.(
+      'Mind map sync already running — waiting on the same job…',
+      'wait',
+      { currentOnly: true },
+    );
+    return masterPlanUiPipelineInFlight;
+  }
+  const run = runMasterPlanUiPipelineOnce(options).finally(() => {
+    masterPlanUiPipelineInFlight = null;
+  });
+  masterPlanUiPipelineInFlight = run;
+  return run;
+}
+
+async function runMasterPlanUiPipelineOnce(options?: {
+  projectName?: string;
+  autoV0?: boolean;
+  onProgress?: GrokActivityProgressFn;
+}): Promise<MasterPlanUiPipelineResult> {
   const onProgress = options?.onProgress;
+  const timeoutMs = MASTER_PLAN_UI_PIPELINE_TIMEOUT_MS;
+  const ac = typeof AbortController !== 'undefined' ? new AbortController() : null;
+  const timeoutId =
+    ac && typeof window !== 'undefined'
+      ? window.setTimeout(() => abortWithTimeoutReason(ac, 'Mind map sync timed out'), timeoutMs)
+      : null;
+  const stopWait = startGrokActivityWaitTicker('Syncing mind map on server', (msg, kind, opts) =>
+    onProgress?.(msg, kind, opts),
+  );
   try {
     onProgress?.('Syncing mind map from Master Plan…', 'info');
-    const stopWait = startGrokActivityWaitTicker('Syncing mind map on server', (msg, kind, opts) =>
-      onProgress?.(msg, kind, opts),
+    const result = await withHardTimeout(
+      fetchJson<MasterPlanUiPipelineResult>(withProjectQuery('/api/ide/master-plan-ui-pipeline'), {
+        method: 'POST',
+        headers: ideArtifactHeaders(),
+        credentials: 'include',
+        signal: ac?.signal,
+        body: JSON.stringify(
+          withProjectBody({
+            projectName: options?.projectName?.trim() || undefined,
+            autoV0: false,
+          }),
+        ),
+      }),
+      timeoutMs,
+      'Mind map sync timed out',
     );
-    let result: MasterPlanUiPipelineResult;
-    const ac = typeof AbortController !== 'undefined' ? new AbortController() : null;
-    const timeoutId =
-      ac && typeof window !== 'undefined'
-        ? window.setTimeout(() => ac.abort(), 90_000)
-        : null;
-    try {
-      result = await Promise.race([
-        fetchJson<MasterPlanUiPipelineResult>(withProjectQuery('/api/ide/master-plan-ui-pipeline'), {
-          method: 'POST',
-          headers: ideArtifactHeaders(),
-          credentials: 'include',
-          signal: ac?.signal,
-          body: JSON.stringify(
-            withProjectBody({
-              projectName: options?.projectName?.trim() || undefined,
-              autoV0: false,
-            }),
-          ),
-        }),
-        rejectAfterMs(90_000, 'Mind map sync timed out'),
-      ]);
-    } finally {
-      if (timeoutId != null) window.clearTimeout(timeoutId);
-      stopWait();
-    }
     if ((result.mindMapPageCount ?? 0) > 0) {
       onProgress?.(`Mind map synced — ${result.mindMapPageCount} page node(s)`, 'success');
     } else {
@@ -91,14 +119,17 @@ export async function runMasterPlanUiPipeline(options?: {
     return { ...result, v0Triggered: false };
   } catch (e) {
     console.warn('[ideArtifactSync] master-plan-ui-pipeline:', e);
-    const msg = e instanceof Error ? e.message : 'Mind map sync failed';
+    const timedOut = isArtifactSyncTimeoutError(e);
     onProgress?.(
-      msg.includes('fetch failed') || msg.includes('Failed to fetch') || /timed out|aborted/i.test(msg)
-        ? 'Mind map sync timed out — retry from Master Plan'
-        : 'Mind map sync request failed',
-      'error',
+      timedOut
+        ? 'Mind map sync timed out — plan is saved; continuing'
+        : 'Mind map sync failed — plan is saved; continuing',
+      'warn',
     );
-    return {};
+    return { ok: false, v0Triggered: false, timedOut, softFailed: true };
+  } finally {
+    if (timeoutId != null && typeof window !== 'undefined') window.clearTimeout(timeoutId);
+    stopWait();
   }
 }
 
@@ -214,11 +245,7 @@ export function rejectAfterMs(ms: number, message: string): Promise<never> {
 }
 
 export function isArtifactSyncTimeoutError(e: unknown): boolean {
-  if (typeof DOMException !== 'undefined' && e instanceof DOMException && e.name === 'AbortError') {
-    return true;
-  }
-  const msg = e instanceof Error ? e.message : String(e);
-  return /aborted|abort|timeout|timed out/i.test(msg);
+  return isAbortLikeError(e);
 }
 
 /**

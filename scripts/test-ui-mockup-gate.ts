@@ -206,6 +206,13 @@ assert.equal(statusLooksReadyForSkip({ final_status: 'accepted' }), false);
     'utf8',
   );
   assert.match(engine, /statusLooksReadyForSkip\(existing\)/);
+  assert.match(engine, /GENERATE_TIMEOUT_MS = 180_000/);
+  assert.match(engine, /Foundation will not start/);
+  assert.equal(
+    /UI Studio Beta generation timed out — mockup deferred/.test(engine),
+    false,
+    'UI Gen timeout must not defer into Foundation / Code pass 1',
+  );
   assert.equal(
     /final === 'generated' \|\| final === 'refined'/.test(engine),
     false,

@@ -8,8 +8,10 @@
  * Completes on HTTP result (or an already-ready status), not a pane complete event.
  */
 
+import { isAbortLikeError } from './abortLikeError';
 import { fetchJson, readResponseJson } from './apiFetch';
 import type { GrokActivityProgressFn } from './ideGrokActivityStatus';
+import { startGrokActivityWaitTicker } from './ideGrokActivityStatus';
 import { getGrokRequestHeaders } from './grokUserKey';
 import { withProjectBody, withProjectQuery } from './nebulaProjectApi';
 import { dispatchOpenCenterPanel } from '@/components/ide/IdeCenterTabsContext';
@@ -195,7 +197,10 @@ export async function runUiStudioBetaGeneration(
       /* generate below */
     }
 
-    const GENERATE_TIMEOUT_MS = 45_000;
+    const GENERATE_TIMEOUT_MS = 180_000;
+    const stopWait = startGrokActivityWaitTicker('Generating UI mockup', (msg, kind, opts) =>
+      onProgress?.(msg, kind, opts),
+    );
     try {
       const data = await Promise.race([
         (async () => {
@@ -220,7 +225,7 @@ export async function runUiStudioBetaGeneration(
         })(),
         new Promise<never>((_, reject) => {
           window.setTimeout(() => {
-            reject(new Error('UI Studio Beta generation timed out — mockup deferred'));
+            reject(new Error('UI mockup still running after 3 minutes'));
           }, GENERATE_TIMEOUT_MS);
         }),
       ]);
@@ -252,9 +257,33 @@ export async function runUiStudioBetaGeneration(
       }
       return { ok: applied.ok !== false, ...data, error: applied.ok ? undefined : applied.error };
     } catch (e) {
+      if (isAbortLikeError(e) || /still running|timed out/i.test(e instanceof Error ? e.message : '')) {
+        try {
+          const st = await fetchJson<{
+            has_loadable_model?: boolean;
+            user_visible_stage?: string;
+          }>(withProjectQuery('/api/ui-studio-beta/status'), {
+            credentials: 'include',
+            headers: getGrokRequestHeaders(),
+          });
+          if (statusLooksReadyForSkip(st)) {
+            onProgress?.(st.user_visible_stage || 'UI mockup ready after wait', 'success');
+            const applied = await applyUiStudioBetaToAppPreview(onProgress);
+            return { ok: applied.ok, error: applied.ok ? undefined : applied.error };
+          }
+        } catch {
+          /* status miss */
+        }
+        const error =
+          'UI mockup did not finish — Foundation will not start. Use Generate UI (do not wait on Code pass 1).';
+        onProgress?.(error, 'error');
+        return { ok: false, error };
+      }
       const error = e instanceof Error ? e.message : 'UI Studio Beta generation failed';
       onProgress?.(error, 'error');
       return { ok: false, error };
+    } finally {
+      stopWait();
     }
   })().finally(() => {
     inFlight = null;

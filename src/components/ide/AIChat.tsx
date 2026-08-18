@@ -15,6 +15,7 @@ import {
   userFacingContinueFailureMessage,
 } from '../../lib/continueFailureTaxonomy';
 import { fetchNebulaPublicConfig } from '../../lib/nebulaPublicConfig';
+import { isAbortLikeError, isAbortLikeMessage } from '../../lib/abortLikeError';
 import { fetchJson, readResponseJson } from '../../lib/apiFetch';
 import {
   getBrowserProjectKey,
@@ -1348,7 +1349,10 @@ export function AIChat() {
   useEffect(() => {
     if (grokActivity.tone !== 'work') return;
     const last = grokActivity.liveLog[grokActivity.liveLog.length - 1]?.message || '';
-    const applyInFlight = looksLikeApplyInFlightStall(last);
+    const goStarted = grokActivity.liveLog.some((e) =>
+      /Go — |Code pass 1|Received Grok Code/i.test(e.message),
+    );
+    const applyInFlight = looksLikeApplyInFlightStall(last) && goStarted;
     const postApplyStall = looksLikePostApplyCodingStall(last);
     if (!applyInFlight && !postApplyStall) return;
     const timer = window.setTimeout(() => {
@@ -1849,6 +1853,7 @@ export function AIChat() {
     const session = await fetchSessionUser();
     const userId = session?.uid?.trim() || 'anonymous';
     let scheduledTts = false;
+    let mpSaved = 0;
 
     let skipGrokChat =
       interactionModeRef.current === 'agent' &&
@@ -1928,8 +1933,16 @@ export function AIChat() {
             }));
           } catch (grokErr) {
             const grokMsg = grokErr instanceof Error ? grokErr.message : String(grokErr);
-            if (/timed out/i.test(grokMsg) && (userForcedCoding || fastPrototypeTurn)) {
-              pushActivity(`${grokMsg} — continuing coding from saved Master Plan`, 'warn');
+            if (
+              (/timed out/i.test(grokMsg) || isAbortLikeError(grokErr)) &&
+              (userForcedCoding || fastPrototypeTurn)
+            ) {
+              pushActivity(
+                isAbortLikeError(grokErr)
+                  ? 'Grok chat interrupted — continuing from saved Master Plan'
+                  : `${grokMsg} — continuing coding from saved Master Plan`,
+                'warn',
+              );
               assistantContent =
                 'START_CODING — Grok chat timed out; continue from the saved Master Plan.';
               planningPhase = 'START_CODING';
@@ -1955,7 +1968,7 @@ export function AIChat() {
         );
       }
 
-      const mpSaved = await persistMasterPlanFromAssistantSource(
+      mpSaved = await persistMasterPlanFromAssistantSource(
         masterPlanSource,
         showWorkActivity ? pushActivity : undefined,
       );
@@ -2126,14 +2139,27 @@ export function AIChat() {
       let architectureBlocked = false;
       let lastResearchError: string | null = null;
       if (sendAbort.signal.aborted) {
-        return;
+        // A newer send replaced this controller — do not stack a second heavy job.
+        if (sendingAbortRef.current !== sendAbort) {
+          return;
+        }
+        if (mpSaved > 0 && (userForcedCoding || fastPrototypeTurn || willCode)) {
+          pushActivity(
+            'Chat send interrupted — Master Plan is saved; continuing to mockup / Foundation',
+            'warn',
+          );
+        } else {
+          return;
+        }
       }
       if (agentAllowed && (fastPrototypeTurn || willCode || mpSaved > 0)) {
         const research = await ensureResearchBeforeUiAndGo({
           projectName,
           onProgress: pushActivity,
         });
-        if (!research.ok) {
+        if (!research.ok && research.softAbort) {
+          pushActivity('Research request interrupted — continuing from saved Master Plan', 'warn');
+        } else if (!research.ok) {
           architectureBlocked = true;
           lastResearchError = research.error || RESEARCH_STOPPED;
           pushActivity(lastResearchError, 'error');
@@ -2142,14 +2168,22 @@ export function AIChat() {
         }
         const readiness = await assessUiMockupReadiness({ projectKey: diskProjectKey });
         architectureBlocked = architectureBlocked || readinessBlocksAutoFoundation(readiness);
-        if (architectureBlocked && !research.ok) {
+        const persistedMockup = await hasPersistedUiMockup();
+        const alreadyHasProduct = workspaceHasProductAppRoutes(workspacePaths);
+        if (architectureBlocked && !research.ok && !research.softAbort) {
           /* Gate R failed — do not start UI Gen or Go */
-        } else if (userForcedCoding || assistantCodingPromise) {
+        } else if (
+          (persistedMockup || alreadyHasProduct) &&
+          (userForcedCoding || assistantCodingPromise || fastPrototypeTurn)
+        ) {
           mockupSkippedOrFailed = true;
-          if (research.ok) {
-            architectureBlocked = false;
-            pushActivity('mockup deferred — coding Foundation (you asked to code)', 'warn');
-          }
+          architectureBlocked = false;
+          pushActivity(
+            persistedMockup
+              ? 'UI mockup already on disk — mockup deferred — coding Foundation'
+              : 'Product routes already on disk — mockup deferred — coding next slice',
+            'info',
+          );
         } else if (readiness.ok) {
           markUiMockupStageStarted(diskProjectKey);
           pushActivity(
@@ -2157,7 +2191,7 @@ export function AIChat() {
             'info',
           );
           setAccessoryHint(
-            'UI mockup next — grounded in Master Plan + ui-brief. Coding slices follow.',
+            'UI mockup next — grounded in Master Plan + ui-brief. Coding waits until the mockup lands.',
           );
           window.setTimeout(() => setAccessoryHint(null), 8000);
           if (showWorkActivity) {
@@ -2171,22 +2205,10 @@ export function AIChat() {
               }),
             );
           }
-          const mockup = await Promise.race([
-            triggerUiStudioBetaAfterPlanReady({
-              projectName,
-              onProgress: pushActivity,
-            }),
-            new Promise<{ ok: false; error: string }>((resolve) => {
-              window.setTimeout(
-                () =>
-                  resolve({
-                    ok: false,
-                    error: 'UI mockup timed out — mockup deferred — coding Foundation',
-                  }),
-                45_000,
-              );
-            }),
-          ]);
+          const mockup = await triggerUiStudioBetaAfterPlanReady({
+            projectName,
+            onProgress: pushActivity,
+          });
           if (mockup.ok) {
             uiMockupStarted = true;
             const applied = await applyUiStudioBetaToAppPreview(pushActivity);
@@ -2218,11 +2240,10 @@ export function AIChat() {
         return next;
       });
           } else {
-            mockupSkippedOrFailed = true;
+            architectureBlocked = true;
             clearUiMockupStageFlags(diskProjectKey);
-            pushActivity(
-              `UI mockup: ${mockup.error || 'incomplete'} — mockup deferred — coding Foundation (Studio can regenerate later)`,
-              'warn',
+            holdCodingFailure(
+              `Stopped: ${mockup.error || 'UI mockup did not finish'}. Preview stays Waiting for mockup — use Generate UI. Foundation will not start.`,
             );
           }
         } else if (architectureBlocked) {
@@ -2256,16 +2277,14 @@ export function AIChat() {
         let foundationGate = willCode
           ? await canStartFoundationCoding({ mockupSkippedOrFailed })
           : { ok: false as const, reason: 'blocked' as const };
-        // User said "go" / "start coding" — do not stall on mockup/security polish.
-        if (willCode && !foundationGate.ok && (userForcedCoding || assistantCodingPromise) && !architectureBlocked) {
-          foundationGate = { ok: true, reason: 'explicit_skip' };
-          pushActivity(
-            'mockup deferred — coding Foundation (you asked to code)',
-            'info',
-          );
-        }
         if (willCode && !foundationGate.ok) {
-          if (lastResearchError) {
+          if (lastResearchError && isAbortLikeMessage(lastResearchError)) {
+            pushActivity(
+              'Research interrupted — Master Plan is saved. Finish UI mockup before Foundation.',
+              'warn',
+            );
+            lastResearchError = null;
+          } else if (lastResearchError) {
             holdCodingFailure(
               /goal/i.test(lastResearchError)
                 ? `Stopped: ${lastResearchError} Master Plan is empty — coding did not start.`
@@ -2303,8 +2322,8 @@ export function AIChat() {
                 ? `Mind map: ${masterPlanPipeline.mindMapPageCount} page(s).`
                 : undefined;
             return advanceGrokActivity(prev, showWorkActivity ? 5 : 2, {
-              currentAction: 'Grok Code generating files — applying to workspace…',
-              log: { message: 'Running Grok Code / file apply (after UI mockup stage)', kind: 'info' },
+              currentAction: 'Grok Code — Code pass 1 (waiting for generated files)…',
+              log: { message: 'Running Grok Code — apply starts after Code pass 1 returns files', kind: 'info' },
               ...(mm ? { stepDetail: { index: showWorkActivity ? 4 : 1, detail: mm } } : {}),
             });
           });
@@ -2542,7 +2561,12 @@ export function AIChat() {
         }
       } catch (codingErr) {
         console.warn('[AIChat] coding apply:', codingErr);
-        if (codingActivityRef.current) {
+        if (isAbortLikeError(codingErr) && mpSaved > 0) {
+          pushActivity(
+            'Coding request interrupted — Master Plan is saved. Send go to retry Foundation.',
+            'warn',
+          );
+        } else if (codingActivityRef.current) {
           const fail =
             codingErr instanceof Error ? codingErr.message : 'Could not write files to workspace';
           setSendError(fail);
@@ -2557,6 +2581,14 @@ export function AIChat() {
 
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
+      if (isAbortLikeError(e) && mpSaved > 0) {
+        pushActivity(
+          'Request interrupted — Master Plan is saved. Send go to start Foundation.',
+          'warn',
+        );
+        resetCodingActivity();
+        return;
+      }
       const failureClass = classifyContinueFailure({ message: msg });
       // Phase 7.0: on key/auth reject — surface clearly, clear false mockup flags, stop stampede.
       if (failureClass === 'key/auth fail' || isKeyAuthFailureMessage(msg)) {
