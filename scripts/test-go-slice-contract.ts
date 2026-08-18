@@ -246,6 +246,22 @@ assert.match(localSum, /ADHD|tutor|slice/i);
     }),
     true,
   );
+  assert.equal(
+    shouldRunGoCodeSecondPass({
+      totalWritten: 5,
+      writtenPaths: ["index.html", "styles.css", "js/data.js", "js/app.js", "README.md"],
+    }),
+    false,
+    "static HTML+JS product must not start Code pass 2",
+  );
+  const htmlProduct = assessFoundationGoExit({
+    totalWritten: 5,
+    writtenPaths: ["index.html", "styles.css", "js/data.js", "js/app.js", "README.md"],
+    sliceLabel: "Foundation",
+    runnableRoot: false,
+  });
+  assert.equal(htmlProduct.ok, true);
+  assert.equal(htmlProduct.blockedReason, null);
 }
 
 console.log("\n✓ go-slice + security propose + mind-map amend tests passed\n");

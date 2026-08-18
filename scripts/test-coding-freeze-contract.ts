@@ -304,6 +304,8 @@ assert.equal(
 assert.match(chat, /if \(!FAST_PROTOTYPE_SAME_SESSION_AUTOPILOT\)/);
 assert.match(chat, /isAbortLikeError\(e\) && mpSaved > 0/);
 assert.match(chat, /looksLikeApplyInFlightStall\(last\) && goStarted/);
+assert.match(chat, /applyStallStartedAtRef/);
+assert.match(pipeline, /not starting Code pass 2 \(product files already landed\)/);
 assert.match(chat, /Code pass 1 \(waiting for generated files\)/);
 assert.equal(
   /holdCodingFailure\(line\).*signal is aborted/.test(chat),
@@ -326,10 +328,20 @@ assert.match(
   };
   const waiting = { ...idle, activity: { ...idle.activity, tone: 'work' as const, currentAction: 'Code pass 1' } };
   const timedOut = { ...idle, activity: { ...idle.activity, tone: 'error' as const, currentAction: 'Grok Code timed out' } };
+  const applying = {
+    ...idle,
+    activity: {
+      ...idle.activity,
+      tone: 'ready' as const,
+      currentAction: 'Applying 9 file(s) to workspace',
+      liveLog: [{ id: '1', at: 1, message: 'Applying 9 file(s) to workspace', kind: 'info' as const }],
+    },
+  };
   assert.equal(grokActivityStripVisible(null), false);
   assert.equal(grokActivityStripVisible(idle), false);
   assert.equal(grokActivityStripVisible(waiting), true);
   assert.equal(grokActivityStripVisible(timedOut), true);
+  assert.equal(grokActivityStripVisible(applying), true);
 }
 
 console.log('\n✓ coding freeze contract passed\n');

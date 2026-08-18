@@ -37,7 +37,14 @@ export function subscribeGrokActivity(onChange: (next: GrokActivityBroadcast) =>
   return () => window.removeEventListener(EVENT, handler);
 }
 
+export function grokActivityLooksInFlight(activity: { tone?: string; currentAction?: string; liveLog?: { message?: string }[] }): boolean {
+  if (activity.tone === 'work' || activity.tone === 'error') return true;
+  const last = activity.liveLog?.[activity.liveLog.length - 1]?.message || '';
+  const line = `${activity.currentAction || ''} ${last}`;
+  return /Applying \d+ file|Writing files to cloud workspace|Code pass|still waiting|Grok Code/i.test(line);
+}
+
 export function grokActivityStripVisible(next: GrokActivityBroadcast | null): boolean {
   if (!next) return false;
-  return next.activity.tone === 'work' || next.activity.tone === 'error' || Boolean(next.v0Live);
+  return grokActivityLooksInFlight(next.activity) || Boolean(next.v0Live);
 }

@@ -140,6 +140,20 @@ function normalizeProductPath(raw: string): string {
   return String(raw || "").replace(/\\/g, "/").replace(/^\.\//, "");
 }
 
+/**
+ * Static HTML+JS product (index.html + js/app.js) — not Vite App/main and not a mockup-only public file.
+ * Pass 1 often lands this instead of app/page.tsx; it must not trigger Code pass 2.
+ */
+export function isStaticHtmlProductApply(paths: string[]): boolean {
+  const list = (paths || []).map(normalizeProductPath);
+  const hasIndex = list.some((p) => p === "index.html" || p === "public/index.html");
+  const hasBundledApp = list.some(
+    (p) => /^js\/.+\.js$/i.test(p) || /(^|\/)app\.js$/i.test(p),
+  );
+  const hasViteMain = list.some((p) => /^src\/(main|App)\.(tsx|jsx|js)$/i.test(p));
+  return hasIndex && hasBundledApp && !hasViteMain;
+}
+
 /** Next app page files, pages/*, src/app/*, and *Screen.tsx — not Vite src/App.tsx + src/main.tsx. */
 export function listProductRouteFiles(paths: string[]): string[] {
   return (paths || []).filter((raw) => {

@@ -339,6 +339,7 @@ export function AIChat() {
   const lastV0StatusRef = useRef<string>('');
   const pendingAgentResendRef = useRef<string | null>(null);
   const foundationStallRecoveredRef = useRef(false);
+  const applyStallStartedAtRef = useRef<number | null>(null);
   const autoSliceAbortRef = useRef(false);
   const autoSliceInFlightRef = useRef(false);
   const lastAutoSliceLabelRef = useRef<string | null>(null);
@@ -1346,16 +1347,29 @@ export function AIChat() {
   const sendChatRef = useRef<(override?: string) => Promise<void>>(async () => {});
 
   // Foundation apply used to freeze on "Applying N files" / "Runnable skeleton filled".
-  // Unlock coding; do not auto-start Primary.
+  // Unlock coding; do not auto-start Primary. Heartbeats must not reset the apply clock.
   useEffect(() => {
-    if (grokActivity.tone !== 'work') return;
+    if (grokActivity.tone !== 'work') {
+      applyStallStartedAtRef.current = null;
+      return;
+    }
     const last = grokActivity.liveLog[grokActivity.liveLog.length - 1]?.message || '';
     const goStarted = grokActivity.liveLog.some((e) =>
       /Go — |Code pass 1|Received Grok Code/i.test(e.message),
     );
     const applyInFlight = looksLikeApplyInFlightStall(last) && goStarted;
     const postApplyStall = looksLikePostApplyCodingStall(last);
-    if (!applyInFlight && !postApplyStall) return;
+    if (!applyInFlight && !postApplyStall) {
+      applyStallStartedAtRef.current = null;
+      return;
+    }
+    if (applyInFlight && applyStallStartedAtRef.current == null) {
+      applyStallStartedAtRef.current = Date.now();
+    }
+    const started = applyStallStartedAtRef.current ?? Date.now();
+    const remaining = applyInFlight
+      ? Math.max(0, APPLY_IN_FLIGHT_STALL_MS - (Date.now() - started))
+      : FOUNDATION_APPLY_STALL_MS;
     const timer = window.setTimeout(() => {
       if (!codingActivityRef.current) return;
       if (foundationStallRecoveredRef.current) return;
@@ -1376,7 +1390,7 @@ export function AIChat() {
       }
       sendingRef.current = false;
       setSending(false);
-    }, applyInFlight ? APPLY_IN_FLIGHT_STALL_MS : FOUNDATION_APPLY_STALL_MS);
+    }, remaining);
     return () => window.clearTimeout(timer);
   }, [diskProjectKey, grokActivity.liveLog, grokActivity.tone, holdCodingFailure, pushActivity, resetCodingActivity]);
 

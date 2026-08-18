@@ -5,7 +5,7 @@
 
 import fs from "fs";
 import path from "path";
-import { assessApplyRouteDepth, listProductUiFiles } from "./workspaceCodedAppUi";
+import { assessApplyRouteDepth, isStaticHtmlProductApply, listProductUiFiles } from "./workspaceCodedAppUi";
 import { goBlocked, type GoBlockedReason } from "./goBlockedReason";
 
 export const GO_SLICE_LABELS = [
@@ -204,6 +204,7 @@ export function shouldRunGoCodeSecondPass(opts: {
 }): boolean {
   if (opts.totalWritten <= 0 || !opts.writtenPaths?.length) return true;
   if (opts.partialPlanOnly) return true;
+  if (isStaticHtmlProductApply(opts.writtenPaths)) return false;
   return assessApplyRouteDepth(opts.writtenPaths).zeroProductRoutes;
 }
 
@@ -298,6 +299,10 @@ export function assessFoundationGoExit(opts: {
       warnRunnable: false,
       blockedReason: goBlocked("APPLY_EMPTY_PRODUCT"),
     };
+  }
+  if (isStaticHtmlProductApply(paths)) {
+    const warnRunnable = foundationLike && opts.runnableRoot === false;
+    return { ok: true, warnRunnable, blockedReason: null };
   }
   if (foundationLike && depth.zeroProductRoutes) {
     return {

@@ -1078,7 +1078,6 @@ export async function runGoCodeAndApply(options: {
       }
 
       if (apply.ok && apply.writtenCount > 0) {
-        onProgress?.('Slice files on disk — coding complete for this wait (not starting the next slice)…', 'info');
         ackConsumedGoCodeResult(projectName);
       }
 
@@ -1091,6 +1090,10 @@ export async function runGoCodeAndApply(options: {
           partialPlanOnly,
         })
       ) {
+        onProgress?.(
+          'Slice files on disk — not starting Code pass 2 (product files already landed).',
+          'success',
+        );
         break;
       }
     }
