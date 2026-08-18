@@ -16,6 +16,8 @@ export {
   goPollBackoffMs,
   isUsableProjectGoal,
   planRecordHasUsableGoal,
+  inferGoalFromPlanRecord,
+  seedGoalOfTheAppSection,
   uiBriefTooShort,
 } from '../../lib/spineSequenceClient';
 export type { GoPollPhase } from '../../lib/spineSequenceClient';

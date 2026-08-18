@@ -15,6 +15,7 @@ import {
 } from "./visualUiEditorWorkspace";
 
 import { MASTER_PLAN_ALL_KEYS, MASTER_PLAN_USER_SECTION_KEYS, normalizeMasterPlanRecord } from "./masterPlanSections";
+import { seedGoalOfTheAppSection } from "./spineSequenceClient";
 import {
   buildConcreteUiuxSection,
   isGenericUiuxBoilerplate,
@@ -68,10 +69,10 @@ export function fillMissingMasterPlanSectionsLocal(opts: {
   const next = { ...plan };
   const updated: string[] = [];
 
-  if (!String(next["1. Goal of the app"] ?? "").trim()) {
-    next["1. Goal of the app"] =
-      note ||
-      `Build **${name}** — product goal from discovery (refine in chat). Users, problem, and scope for this workspace.`;
+  const goalNow = String(next["1. Goal of the app"] ?? "").trim();
+  const seededGoal = seedGoalOfTheAppSection(next, [note, name]);
+  if (seededGoal && (!goalNow || goalNow.length < MIN_MASTER_PLAN_SECTION_CHARS)) {
+    next["1. Goal of the app"] = seededGoal;
     updated.push("1. Goal of the app");
   }
 
@@ -401,6 +402,13 @@ export function hydrateMasterPlanDerivedSections(
 ): { plan: Record<string, string>; changed: boolean } {
   const out = { ...plan };
   let changed = false;
+
+  const seededGoal = seedGoalOfTheAppSection(out);
+  const goalNow = String(out["1. Goal of the app"] ?? "").trim();
+  if (seededGoal && (!goalNow || goalNow.length < MIN_MASTER_PLAN_SECTION_CHARS)) {
+    out["1. Goal of the app"] = seededGoal;
+    changed = true;
+  }
 
   const pagesSection = String(out["4. Pages and navigation"] ?? "").trim();
   const goal = String(out["1. Goal of the app"] ?? "").trim();

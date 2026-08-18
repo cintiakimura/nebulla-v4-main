@@ -15,11 +15,14 @@ import {
   classifyGoPoll,
   goPollActivityMessage,
   goPollBackoffMs,
+  inferGoalFromPlanRecord,
   isUsableProjectGoal,
   planRecordHasUsableGoal,
+  seedGoalOfTheAppSection,
   uiBriefTooShort,
   uiBriefUsable,
 } from "../lib/spineSequenceGates.ts";
+import { parseMasterPlanBlock } from "../lib/masterPlanSections.ts";
 import {
   expireStaleGoCodePending,
   readGoCodePending,
@@ -127,6 +130,55 @@ assert.equal(
   planRecordHasUsableGoal({ "1. Goal of the app": "tutor kids with ADHD" }),
   true,
 );
+assert.equal(
+  planRecordHasUsableGoal({
+    "1. Goal of the app": "",
+    "4. Pages and navigation": "### Kid Home `/`\nPractice for ADHD kids with short sessions.\n",
+  }),
+  true,
+);
+assert.match(
+  inferGoalFromPlanRecord(
+    { "1. Goal of the app": "" },
+    ["tutor kids with ADHD"],
+  ),
+  /tutor kids with ADHD/,
+);
+{
+  const seeded = seedGoalOfTheAppSection(
+    {
+      "1. Goal of the app": "",
+      "4. Pages and navigation": "### Kid Home `/`\nPractice for ADHD kids with short sessions.\n",
+    },
+    ["tutor kids with ADHD"],
+  );
+  assert.match(seeded, /tutor kids with ADHD|Kid Home/i);
+  assert.ok(seeded.length >= 48);
+}
+{
+  const parsed = parseMasterPlanBlock(
+    [
+      "A calm tutoring web app for kids with ADHD.",
+      "",
+      "### 2. Tech and Research",
+      "Next.js App Router + Tailwind.",
+      "",
+      "### 3. Features and KPIs",
+      "Short lessons and progress for teachers.",
+    ].join("\n"),
+  );
+  assert.match(String(parsed[1] || ""), /calm tutoring web app/i);
+  assert.match(String(parsed[2] || ""), /Next\.js/);
+}
+{
+  const skippedGoal = parseMasterPlanBlock(
+    ["### 2. Tech and Research", "Next.js stack for an ADHD tutor.", "### 3. Features and KPIs", "Timed practice."].join(
+      "\n",
+    ),
+  );
+  assert.equal(String(skippedGoal[1] || "").trim(), "");
+  assert.match(String(skippedGoal[2] || ""), /Next\.js/);
+}
 assert.match(chat, /ASK_FOR_SHORT_GOAL|Write a short goal for this app/);
 assert.match(chat, /No usable Master Plan goal yet/);
 assert.match(chat, /lastResearchError/);
@@ -140,6 +192,7 @@ assert.match(server, /isMasterPlanReadyForUiMockup/);
 
 section("Gate R — research mandatory");
 assert.match(chat, /ensureResearchBeforeUiAndGo/);
+assert.match(chat, /goal:\s*projectName/);
 assert.match(chat, /RESEARCH_STOPPED/);
 assert.match(server, /RESEARCH_INCOMPLETE/);
 assert.match(server, /\/api\/grok\/research/);
@@ -184,6 +237,9 @@ assert.match(pipeline, /blockedReason: blocked/);
 assert.match(server, /blockedReason: blocked/);
 assert.match(server, /gateWarnings/);
 assert.match(server, /bypass RESEARCH_INCOMPLETE|bypass MASTER_PLAN_INCOMPLETE/);
+assert.match(server, /inferGoalFromPlanRecord/);
+assert.match(server, /seedGoalOfTheAppSection/);
+assert.match(server, /coding continues without waiting for Gate R/);
 assert.match(server, /coding continues/);
 assert.match(server, /orphan preparing/);
 assert.match(server, /scheduling Foundation without waiting on research/);

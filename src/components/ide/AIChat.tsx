@@ -2199,6 +2199,7 @@ export function AIChat() {
       if (agentAllowed && (fastPrototypeTurn || willCode || mpSaved > 0)) {
         const research = await ensureResearchBeforeUiAndGo({
           projectName,
+          goal: projectName,
           onProgress: pushActivity,
         });
         if (!research.ok && research.softAbort) {

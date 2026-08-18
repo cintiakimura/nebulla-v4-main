@@ -182,6 +182,8 @@ try {
   assert.match(researchClient, /softAbort: true/);
   assert.match(researchClient, /isAbortLikeError/);
   assert.match(server, /code: "RESEARCH_INCOMPLETE"/);
+  assert.match(server, /inferGoalFromPlanRecord/);
+  assert.match(chat, /goal:\s*projectName/);
 
   console.log("\n✓ research gate passed\n");
 } finally {

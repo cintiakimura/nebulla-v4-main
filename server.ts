@@ -104,7 +104,12 @@ import {
 import { softenSecurityBlocksForMvpGo } from "./lib/mvpDeliveryGates";
 import { draftSection4AmendmentsForRoutes } from "./lib/mindMapAmendmentPropose";
 import { isMasterPlanReadyForUiMockup } from "./lib/masterPlanCompleteness";
-import { uiBriefUsable } from "./lib/spineSequenceGates";
+import {
+  inferGoalFromPlanRecord,
+  isUsableProjectGoal,
+  seedGoalOfTheAppSection,
+  uiBriefUsable,
+} from "./lib/spineSequenceGates";
 import { assessResearchArtifact, RESEARCH_STOPPED } from "./lib/researchArtifact";
 import { isResearchJobActive, runResearchStroke } from "./lib/nebulaResearchStroke";
 import { grokChatCompletionsExtras } from "./lib/grokRequestPolicy";
@@ -1370,9 +1375,9 @@ No approved UI code yet.
       completeness = softenSecurityBlocksForMvpGo(completeness);
       // Optional acknowledgment only — coding/Go must not depend on this.
       const securityProposal = buildSecurityBaselineProposal(plan);
-      const goalForResearch = String(
+      const goalForResearch = inferGoalFromPlanRecord(plan as Record<string, unknown>, [
         (plan as Record<string, string>)["1. Goal of the app"] || "",
-      );
+      ]);
       const researchGate = assessResearchArtifact(pp.workspaceRoot, { goal: goalForResearch });
       res.json({
         mode: completeness.mode,
@@ -4733,29 +4738,43 @@ Rules:
         });
       }
       const body = req.body || {};
+      const convProject =
+        typeof body.projectName === "string" && body.projectName.trim()
+          ? String(body.projectName).trim()
+          : "Untitled Project";
       let goal =
         typeof body.goal === "string" && body.goal.trim()
           ? String(body.goal).trim()
           : "";
-      if (!goal) {
-        try {
-          const plan = readMasterPlanFile(pp.masterPlanPath);
-          goal = String(plan["1. Goal of the app"] || "").trim();
-        } catch {
-          goal = "";
-        }
+      let plan: Record<string, string> = {};
+      try {
+        plan = readMasterPlanFile(pp.masterPlanPath);
+      } catch {
+        plan = {};
       }
-      if (!goal) {
+      if (!isUsableProjectGoal(goal)) {
+        goal = inferGoalFromPlanRecord(plan, [convProject]);
+      }
+      if (!isUsableProjectGoal(goal)) {
         return res.status(409).json({
           ok: false,
           error: "Write a short usable goal before research.",
           code: "RESEARCH_INCOMPLETE",
         });
       }
-      const convProject =
-        typeof body.projectName === "string" && body.projectName.trim()
-          ? String(body.projectName).trim()
-          : "Untitled Project";
+      const existingGoal = String(plan["1. Goal of the app"] || "").trim();
+      if (!existingGoal || existingGoal.length < 48) {
+        const seeded = seedGoalOfTheAppSection(plan, [goal, convProject]);
+        if (seeded) {
+          try {
+            const next = { ...plan, "1. Goal of the app": seeded };
+            fs.mkdirSync(path.dirname(pp.masterPlanPath), { recursive: true });
+            fs.writeFileSync(pp.masterPlanPath, JSON.stringify(next, null, 2), "utf8");
+          } catch {
+            /* non-fatal — research can still run on inferred goal */
+          }
+        }
+      }
       const result = await runResearchStroke({
         apiKey,
         workspaceRoot: pp.workspaceRoot,
@@ -5026,10 +5045,10 @@ Rules:
       }
 
       // Gate R: do not await Web Search on this request — that left Foundation unscheduled.
-      const goalForResearch = String(planSnapshot["1. Goal of the app"] || note || convProject);
+      const goalForResearch = inferGoalFromPlanRecord(planSnapshot, [note, convProject]);
       const researchGate = assessResearchArtifact(ppGo.workspaceRoot, { goal: goalForResearch });
       if (!researchGate.ok) {
-        gateWarnings.push(RESEARCH_STOPPED);
+        gateWarnings.push("research not complete — coding continues without waiting for Gate R.");
         console.warn("[go-code] bypass RESEARCH_INCOMPLETE — scheduling Foundation without waiting on research");
       }
 
@@ -5271,7 +5290,7 @@ ${workflowContext}`;
         .join("\n");
       const compactUser = buildCompactGoCodeUserPrompt({
         sliceLine,
-        goal: String(planSnapshot["1. Goal of the app"] || ""),
+        goal: inferGoalFromPlanRecord(planSnapshot, [note, convProject]),
         pagesSection: String(planSnapshot["4. Pages and navigation"] || ""),
         constraints: lockedUserConstraintsFromPlan(planSnapshot),
         uiBriefPageList: briefPages,

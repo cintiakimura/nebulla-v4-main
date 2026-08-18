@@ -92,7 +92,26 @@ export function parseMasterPlanBlock(block: string): Partial<Record<number, stri
     return mergeParsedSections(merged, rescued);
   }
 
+  if (!(merged[1] || "").trim()) {
+    const preamble = parsePreambleBeforeNumberedSections(trimmed);
+    if (preamble) merged[1] = preamble;
+  }
+
   return merged;
+}
+
+/** Text before ### 2. / 1. Goal heading is the product goal when Grok skipped §1. */
+function parsePreambleBeforeNumberedSections(block: string): string {
+  const lines = block.split("\n");
+  const preamble: string[] = [];
+  for (const line of lines) {
+    if (LINE_HEADING_RE.test(line)) break;
+    if (/^\s{0,3}#{1,4}\s*[2-6]\.\s+/i.test(line)) break;
+    preamble.push(line);
+  }
+  const text = preamble.join("\n").trim();
+  if (text.length < 8) return "";
+  return text;
 }
 
 function parseByLineHeadings(block: string): Partial<Record<number, string>> {

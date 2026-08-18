@@ -7,10 +7,11 @@ import {
   masterPlanSectionSeparationRules,
 } from './masterPlanSections';
 import { fetchJson } from './apiFetch';
-import { withProjectBody, withProjectQuery } from './nebulaProjectApi';
+import { withProjectBody, withProjectQuery, getBrowserProjectName } from './nebulaProjectApi';
 import { buildLanguagePromptAppendix } from './i18n/languagePromptAppendix';
 import type { IdeLocaleCode } from './i18n/locales';
 import type { ContentLanguageMode } from './i18n/userLanguagePreferences';
+import { seedGoalOfTheAppSection } from './spineSequenceGates';
 import { matchBugDatabaseSnippets } from './bugDatabaseSnippet';
 
 export const MASTER_PLAN_TAB_NAMES = [...MASTER_PLAN_SECTION_KEYS] as const;
@@ -120,6 +121,16 @@ export async function persistMasterPlanFromAssistantSource(
     parsed = parseMasterPlanBlock(source);
   }
   if (Object.keys(parsed).length === 0) return 0;
+  if (!(parsed[1] ?? '').trim()) {
+    const planLike: Record<string, string> = {};
+    for (let i = 1; i <= MASTER_PLAN_SECTION_KEYS.length; i++) {
+      const key = MASTER_PLAN_SECTION_KEYS[i - 1];
+      const body = (parsed[i] ?? '').trim();
+      if (body) planLike[key] = body;
+    }
+    const seeded = seedGoalOfTheAppSection(planLike, [getBrowserProjectName()]);
+    if (seeded) parsed[1] = seeded;
+  }
   onProgress?.('Saving Master Plan tabs…');
   let saved = 0;
   for (let tabIndex = 1; tabIndex <= MASTER_PLAN_SECTION_KEYS.length; tabIndex++) {

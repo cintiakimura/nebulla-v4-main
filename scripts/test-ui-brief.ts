@@ -122,4 +122,20 @@ section("research-ok + unparseable §4 seeds pages so brief is usable");
   assert.ok(uiBriefUsable(brief), "seeded brief must pass Gate A");
 }
 
+section("empty §1 hydrates from project name + other tabs");
+{
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "nebulla-ui-brief-goal-"));
+  const rest: Record<string, string> = {
+    "1. Goal of the app": "",
+    "2. Tech and Research": "Education web app. Research complete; competitors confirmed. Next.js App Router.",
+    "3. Features and KPIs": "Practice, teacher view, progress. KPI: sessions completed.",
+    "4. Pages and navigation": "### Kid Home `/`\nShort ADHD practice sessions for kids, teachers, and parents.\n",
+    "5. UI/UX design": "Calm, low-noise UI. Large type. Short sessions. High contrast CTAs.",
+  };
+  const { plan, changed } = hydrateMasterPlanDerivedSections(tmp, rest);
+  assert.equal(changed, true);
+  assert.ok(String(plan["1. Goal of the app"] || "").trim().length >= 48);
+  assert.match(String(plan["1. Goal of the app"]), /Kid Home|ADHD|Web App/i);
+}
+
 console.log("\nAll ui-brief tests passed.\n");

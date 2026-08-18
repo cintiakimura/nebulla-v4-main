@@ -90,9 +90,62 @@ export const ASK_FOR_SHORT_GOAL =
 
 /** Empty Master Plan / missing §1 must not skip Grok chat or start research/Go. */
 export function planRecordHasUsableGoal(plan: Record<string, unknown> | null | undefined): boolean {
-  if (!plan || typeof plan !== "object") return false;
-  const goal = String(
-    plan["1. Goal of the app"] || plan["Goal of the app"] || plan.goal || "",
-  ).trim();
-  return isUsableProjectGoal(goal);
+  return Boolean(inferGoalFromPlanRecord(plan));
+}
+
+const pickPlanText = (raw: unknown): string => String(raw || "").trim();
+
+/**
+ * Goal for research / Go when §1 is blank but §§2–5 or the project name exist.
+ */
+export function inferGoalFromPlanRecord(
+  plan: Record<string, unknown> | null | undefined,
+  extraFallbacks: string[] = [],
+): string {
+  const candidates = [
+    pickPlanText(plan?.["1. Goal of the app"]),
+    pickPlanText(plan?.["Goal of the app"]),
+    pickPlanText(plan?.goal),
+    ...extraFallbacks.map((x) => String(x || "").trim()),
+    pickPlanText(plan?.["3. Features and KPIs"]),
+    pickPlanText(plan?.["4. Pages and navigation"]),
+    pickPlanText(plan?.["2. Tech and Research"]),
+  ];
+  for (const c of candidates) {
+    if (!c) continue;
+    const slice = c.replace(/\s+/g, " ").trim();
+    if (isUsableProjectGoal(slice.slice(0, 400))) return c.slice(0, 2000);
+  }
+  return "";
+}
+
+const MIN_SEEDED_GOAL_CHARS = 48;
+
+/** Persistable §1 when Grok skipped the Goal tab but the rest of the plan (or project name) exists. */
+export function seedGoalOfTheAppSection(
+  plan: Record<string, unknown> | null | undefined,
+  extraFallbacks: string[] = [],
+): string {
+  const existing = pickPlanText(plan?.["1. Goal of the app"]);
+  if (existing.length >= MIN_SEEDED_GOAL_CHARS && isUsableProjectGoal(existing)) return existing;
+  const inferred = inferGoalFromPlanRecord(plan, extraFallbacks);
+  const core =
+    existing.length >= 8 && isUsableProjectGoal(existing) ? existing : inferred;
+  if (!core) return "";
+  const who = core.replace(/\s+/g, " ").trim().slice(0, 280);
+  const pages = pickPlanText(plan?.["4. Pages and navigation"]).replace(/\s+/g, " ").slice(0, 220);
+  const features = pickPlanText(plan?.["3. Features and KPIs"]).replace(/\s+/g, " ").slice(0, 220);
+  return [
+    "Project Type: Web App",
+    "",
+    who,
+    "",
+    "Users, problem, and MVP scope for this workspace.",
+    pages && pages !== who ? `\nPages: ${pages}` : "",
+    features && features !== who ? `\nFeatures: ${features}` : "",
+  ]
+    .filter((line) => line !== "")
+    .join("\n")
+    .trim()
+    .slice(0, 2000);
 }
