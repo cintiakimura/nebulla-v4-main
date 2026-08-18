@@ -62,6 +62,7 @@ import { sanitizeAssistantChatText } from '../../../lib/assistantChatSanitize';
 import { dispatchOpenUiStudio, dispatchStartUiUxWorkflow } from '../../lib/nebulaUiStudioEvents';
 import {
   abortGoCodeWait,
+  abortApplyWait,
   ackConsumedGoCodeResult,
   handlePostGrokCodingTurn,
   applyArchitectureArtifactsFromAssistant,
@@ -1377,9 +1378,10 @@ export function AIChat() {
       if (autoSliceAbortRef.current) return;
       foundationStallRecoveredRef.current = true;
       if (applyInFlight) {
-        // Warn only — aborting here used to kill Code pass 1 / apply mid-flight.
+        const { projectName } = resolveActiveProjectIds(diskProjectKey);
+        abortApplyWait(projectName);
         pushActivity(
-          'Apply is taking longer than usual — still waiting (not stopping the code agent)',
+          'Apply POST still open — checking disk (not stopping coding)',
           'warn',
         );
         return;

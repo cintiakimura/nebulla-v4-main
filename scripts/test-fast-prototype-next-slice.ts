@@ -275,7 +275,8 @@ assert.equal(APPLY_IN_FLIGHT_STALL_MS, 15_000);
   );
   assert.match(stallBlock, /looksLikeApplyInFlightStall/);
   assert.match(stallBlock, /APPLY_IN_FLIGHT_STALL_MS/);
-  assert.match(stallBlock, /still waiting \(not stopping the code agent\)/);
+  assert.match(stallBlock, /checking disk \(not stopping coding\)/);
+  assert.match(stallBlock, /abortApplyWait\(projectName\)/);
   assert.match(stallBlock, /Coding complete/);
   assert.equal(
     /Still writing files/.test(stallBlock),

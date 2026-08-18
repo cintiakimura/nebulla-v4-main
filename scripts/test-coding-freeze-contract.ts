@@ -122,7 +122,8 @@ assert.equal(
 assert.match(chat, /looksLikePostApplyCodingStall/);
 assert.match(chat, /looksLikeApplyInFlightStall/);
 assert.match(chat, /APPLY_IN_FLIGHT_STALL_MS/);
-assert.match(chat, /still waiting \(not stopping the code agent\)/);
+assert.match(chat, /checking disk \(not stopping coding\)/);
+assert.match(chat, /abortApplyWait\(projectName\)/);
 assert.equal(
   /sendChatRef\.current\('continue building'\)/.test(chat),
   false,
@@ -183,6 +184,10 @@ assert.match(server, /METHOD_NOT_ALLOWED/);
 assert.match(server, /contentBase64/);
 assert.match(pipeline, /buildApplyGeneratedPayload/);
 assert.match(pipeline, /shouldSkipGoCodeSecondPassAfterApply/);
+assert.match(pipeline, /abortApplyWait/);
+assert.match(pipeline, /\/api\/files\/exists/);
+assert.match(pipeline, /Files already on disk/);
+assert.match(server, /app.post\("\/api\/files\/exists"/);
 assert.match(goFn, /Not starting Code pass 2/);
 assert.match(applyRoute, /writtenCount: written\.length/);
 assert.equal(
@@ -194,6 +199,7 @@ assert.equal(
   const jsonIdx = applyRoute.indexOf('res.json(');
   const previewIdx = applyRoute.indexOf('ensureInteractiveProductPreview');
   const listUiIdx = applyRoute.indexOf('listProductUiFiles');
+  const inspectIdx = applyRoute.indexOf('inspectRunnableSkeleton');
   assert.ok(jsonIdx >= 0, 'apply-generated must res.json');
   assert.ok(
     previewIdx < 0 || previewIdx > jsonIdx,
@@ -202,6 +208,10 @@ assert.equal(
   assert.ok(
     listUiIdx < 0 || listUiIdx > jsonIdx,
     'res.json must run before listProductUiFiles',
+  );
+  assert.ok(
+    inspectIdx < 0 || inspectIdx > jsonIdx,
+    'res.json must run before inspectRunnableSkeleton',
   );
 }
 assert.match(

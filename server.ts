@@ -2588,6 +2588,33 @@ No approved UI code yet.
     }
   });
 
+  /** Cheap disk check — apply POST must not wait on git/source-control overview. */
+  app.post("/api/files/exists", (req, res) => {
+    try {
+      const { workspaceRoot } = projectPathsFor(req);
+      const raw = Array.isArray(req.body?.paths) ? req.body.paths : [];
+      const found: string[] = [];
+      for (const item of raw.slice(0, 40)) {
+        const rel = String(item || "")
+          .replace(/\\/g, "/")
+          .replace(/^\.\//, "")
+          .trim();
+        if (!rel || rel.includes("..") || /(^|\/)\.git(\/|$)|(^|\/)node_modules(\/|$)/i.test(rel)) {
+          continue;
+        }
+        const target = path.resolve(workspaceRoot, rel);
+        if (!target.startsWith(workspaceRoot)) continue;
+        if (fs.existsSync(target)) found.push(rel);
+      }
+      res.json({ found });
+    } catch (e) {
+      res.status(500).json({
+        error: e instanceof Error ? e.message : "exists check failed",
+        found: [],
+      });
+    }
+  });
+
   const sendApplyGeneratedMethodNotAllowed = (_req: express.Request, res: express.Response) => {
     res.setHeader("Allow", "POST");
     res.status(405).json({
@@ -2727,32 +2754,9 @@ No approved UI code yet.
       }
 
       const applyDepth = assessApplyRouteDepth(written);
-      // Phase 6: list paths; App+main-only is not a multi-page product shell.
-      console.log(
-        `[apply-generated] wrote ${written.length} file(s): ${written.slice(0, 20).join(", ")}${
-          written.length > 20 ? "…" : ""
-        }`,
-      );
-      console.log(
-        `[apply-generated] product routes: ${applyDepth.productRoutes.join(", ") || "(none)"} thinShell=${applyDepth.thinCodeShell}`,
-      );
 
-      let runnable: ReturnType<typeof inspectRunnableSkeleton> | null = null;
-      let skeletonWritten: string[] = [];
-      const bodyEarly = req.body || {};
-      const projectNameEarly =
-        typeof bodyEarly.projectName === "string" && bodyEarly.projectName.trim()
-          ? String(bodyEarly.projectName).trim()
-          : "Untitled Project";
-
-      if (written.length > 0) {
-        try {
-          runnable = inspectRunnableSkeleton(workspaceRoot);
-        } catch {
-          runnable = null;
-        }
-      }
-
+      // Ack writes immediately. Preview/mind-map used to run before res.json
+      // and left chat stuck on "Applying N file(s) to workspace".
       res.json({
         success: true,
         written,
@@ -2761,27 +2765,25 @@ No approved UI code yet.
         parsedBlocks: blocks.length,
         usedFallbackPath: fallbackPath || undefined,
         baasSkippedReason: baasFilter.reason || undefined,
-        runnableRoot: runnable?.runnable ?? false,
-        appRoot: runnable?.appRootRel ?? ".",
-        framework: runnable?.framework ?? "unknown",
-        runnableStatusLine: runnable ? runnableStatusLine(runnable) : undefined,
-        skeletonWritten: skeletonWritten.length ? skeletonWritten : undefined,
-        deployable: Boolean(runnable?.runnable),
+        runnableRoot: false,
+        appRoot: ".",
+        framework: "unknown",
+        runnableStatusLine: undefined,
+        skeletonWritten: undefined,
+        deployable: false,
         interactivePreview: false,
         productRoutes: applyDepth.productRoutes,
         thinCodeShell: applyDepth.thinCodeShell,
         zeroProductRoutes: applyDepth.zeroProductRoutes,
       });
 
-      // Defer disk walks / preview HTML / plan sync — they used to run before res.json
-      // and left chat stuck on "Applying N file(s) to workspace".
       if (written.length > 0) {
         const pp = projectPathsFor(req);
         const body = req.body || {};
         const projectName =
           typeof body.projectName === "string" && body.projectName.trim()
             ? String(body.projectName).trim()
-            : projectNameEarly;
+            : "Untitled Project";
         const userNote = typeof body.userNote === "string" ? body.userNote.trim() : "";
         const writtenSnapshot = [...written];
         setTimeout(() => {
@@ -2812,7 +2814,7 @@ No approved UI code yet.
           } catch (syncErr) {
             console.warn("[apply-generated] post-apply artifact sync:", syncErr);
           }
-        }, 50);
+        }, 0);
       }
     } catch (err: any) {
       res.status(500).json({ error: err?.message || "Failed to apply generated files" });

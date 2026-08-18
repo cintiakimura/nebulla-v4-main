@@ -70,17 +70,23 @@ function isGoSessionAborted(projectName: string): boolean {
   return goSessionAbortedByProject.has(goPollProjectKey(projectName));
 }
 
+/** Unblock a hung apply POST without cancelling Grok Code / the Go session. */
+export function abortApplyWait(projectName: string): void {
+  const key = goPollProjectKey(projectName);
+  try {
+    applyAbortByProject.get(key)?.abort();
+  } catch {
+    /* ignore */
+  }
+}
+
 /** Stop / timeout: abort poll + apply wait and drop in-flight so UI Gen is not refused. */
 export function abortGoCodeWait(projectName: string): void {
   const key = goPollProjectKey(projectName);
   goCodePollAbortedByProject.add(key);
   goSessionAbortedByProject.add(key);
   goCodePollInFlightByProject.delete(key);
-  try {
-    applyAbortByProject.get(key)?.abort();
-  } catch {
-    /* ignore */
-  }
+  abortApplyWait(projectName);
   clearCodingLocks(projectName);
 }
 
@@ -110,16 +116,21 @@ async function confirmAppliedPathsOnDisk(expected: string[]): Promise<string[]> 
   const timed = abortAfter(APPLY_DISK_CONFIRM_MS);
   try {
     const data = await Promise.race([
-      fetchJson<{ nebulaFiles?: { relativePath?: string }[] }>(withProjectQuery('/api/source-control/overview'), {
+      fetchJson<{ found?: string[] }>('/api/files/exists', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-nebula-project-key': getBrowserProjectKey(),
+        },
         credentials: 'include',
         signal: timed.signal,
+        body: JSON.stringify(withProjectBody({ paths: want.slice(0, 40) })),
       }),
       rejectAfter(APPLY_DISK_CONFIRM_MS, 'disk confirm timed out'),
     ]);
+    const found = Array.isArray(data.found) ? data.found : [];
     const onDisk = new Set(
-      (data.nebulaFiles ?? [])
-        .map((f) => String(f.relativePath || '').replace(/\\/g, '/').replace(/^\.\//, ''))
-        .filter(Boolean),
+      found.map((p) => String(p || '').replace(/\\/g, '/').replace(/^\.\//, '')).filter(Boolean),
     );
     return want.filter((p) => onDisk.has(p) || [...onDisk].some((d) => d === p || d.endsWith(`/${p}`)));
   } catch {
@@ -127,6 +138,21 @@ async function confirmAppliedPathsOnDisk(expected: string[]): Promise<string[]> 
   } finally {
     timed.cancel();
   }
+}
+
+function diskLooksApplied(expected: string[], found: string[]): boolean {
+  if (found.length === 0) return false;
+  const need = Math.max(1, Math.ceil(expected.length * 0.4));
+  return found.length >= need;
+}
+
+/** Architecture docs / package.json-only writes are not “index.html is not a product shell”. */
+function shouldWarnZeroProductRoutes(writtenPaths: string[]): boolean {
+  return writtenPaths.some((p) =>
+    /^(index\.html|src\/(App|main)\.(tsx|jsx)|app\/|pages\/|src\/(pages|app)\/)/i.test(
+      String(p || '').replace(/\\/g, '/').replace(/^\.\//, ''),
+    ),
+  );
 }
 
 function rejectAfter(ms: number, message: string): Promise<never> {
@@ -364,22 +390,24 @@ export async function applyGeneratedFiles(
       }
     };
     applyTimed.signal?.addEventListener('abort', onAbortTimed);
-    let apply: {
-      success?: boolean;
-      written?: string[];
-      skipped?: string[];
-      parsedBlocks?: number;
-      usedFallbackPath?: string;
-      baasSkippedReason?: string;
-      error?: string;
-      writtenCount?: number;
-      runnableRoot?: boolean;
-      runnableStatusLine?: string;
-      deployable?: boolean;
-      skeletonWritten?: string[];
-      interactivePreview?: boolean;
-      interactivePreviewPath?: string;
-    };
+    let apply:
+      | {
+          success?: boolean;
+          written?: string[];
+          skipped?: string[];
+          parsedBlocks?: number;
+          usedFallbackPath?: string;
+          baasSkippedReason?: string;
+          error?: string;
+          writtenCount?: number;
+          runnableRoot?: boolean;
+          runnableStatusLine?: string;
+          deployable?: boolean;
+          skeletonWritten?: string[];
+          interactivePreview?: boolean;
+          interactivePreviewPath?: string;
+        }
+      | undefined;
     try {
       const fetchP = fetchJson('/api/files/apply-generated', {
         method: 'POST',
@@ -397,15 +425,49 @@ export async function applyGeneratedFiles(
           }),
         ),
       }) as Promise<typeof apply>;
-      void fetchP.catch(() => {
-        /* abort after the 12s race — avoid an unhandled rejection */
-      });
-      apply = await Promise.race([
-        fetchP,
-        rejectAfter(APPLY_GENERATED_TIMEOUT_MS, APPLY_TIMEOUT_MESSAGE),
-      ]);
+
+      let postErr: unknown;
+      const settled = fetchP.then(
+        (value) => {
+          apply = value;
+        },
+        (err) => {
+          postErr = err;
+        },
+      );
+
+      const deadline = Date.now() + APPLY_GENERATED_TIMEOUT_MS;
+      while (!apply && Date.now() < deadline) {
+        const waitMs = Math.min(800, Math.max(50, deadline - Date.now()));
+        await Promise.race([settled, sleep(waitMs)]);
+        if (apply) break;
+        if (postErr && !isApplyWaitTimeout(postErr)) {
+          throw postErr;
+        }
+        if (paths.length > 0) {
+          const found = await confirmAppliedPathsOnDisk(paths);
+          if (diskLooksApplied(paths, found)) {
+            onProgress?.(
+              `Files already on disk (${found.length}) — continuing without waiting for apply POST`,
+              'success',
+            );
+            apply = {
+              success: true,
+              written: found,
+              writtenCount: found.length,
+            };
+            break;
+          }
+        }
+      }
+      if (!apply) {
+        throw postErr instanceof Error ? postErr : new Error(APPLY_TIMEOUT_MESSAGE);
+      }
     } finally {
       applyTimed.cancel();
+    }
+    if (!apply) {
+      throw new Error(APPLY_TIMEOUT_MESSAGE);
     }
     if (apply.error) {
       onProgress?.(`Apply failed: ${apply.error}`, 'error');
@@ -433,7 +495,7 @@ export async function applyGeneratedFiles(
         }`,
         'success',
       );
-      if (depth.zeroProductRoutes) {
+      if (depth.zeroProductRoutes && shouldWarnZeroProductRoutes(writtenPaths)) {
         const viteShell = writtenPaths.some((p) => /^src\/(App|main)\.(tsx|jsx)$/i.test(p));
         onProgress?.(
           viteShell

@@ -5,6 +5,7 @@
  */
 export {
   abortGoCodeWait,
+  abortApplyWait,
   ackConsumedGoCodeResult,
   applyArchitectureArtifactsFromAssistant,
   applyGeneratedFiles,
