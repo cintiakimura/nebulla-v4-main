@@ -16,6 +16,43 @@ export type AutopilotSliceLabel =
 
 const primaryAutoDoneKeys = new Set<string>();
 const autoSliceCountByProject = new Map<string, number>();
+const lastSliceByProject = new Map<string, string>();
+
+function lastSliceStorageKey(projectKey: string): string {
+  return `nebula:fast-proto-last-slice:${projectKey || 'default'}`;
+}
+
+export function persistLastAppliedSlice(projectKey: string, slice?: string | null): void {
+  const key = projectKey || 'default';
+  const label = String(slice || '').trim();
+  if (!label) return;
+  lastSliceByProject.set(key, label);
+  try {
+    if (typeof sessionStorage !== 'undefined') {
+      sessionStorage.setItem(lastSliceStorageKey(key), label);
+    }
+  } catch {
+    /* ignore */
+  }
+}
+
+export function readLastAppliedSlice(projectKey: string): string | null {
+  const key = projectKey || 'default';
+  const mem = lastSliceByProject.get(key);
+  if (mem) return mem;
+  try {
+    if (typeof sessionStorage !== 'undefined') {
+      const v = sessionStorage.getItem(lastSliceStorageKey(key));
+      if (v?.trim()) {
+        lastSliceByProject.set(key, v.trim());
+        return v.trim();
+      }
+    }
+  } catch {
+    /* ignore */
+  }
+  return null;
+}
 
 export function hasFastPrototypePrimaryAutoRun(projectKey: string): boolean {
   return primaryAutoDoneKeys.has(projectKey || 'default');
@@ -45,6 +82,7 @@ export function resetAutopilotSliceCount(projectKey: string): void {
 export function resetFastPrototypePrimaryAutoRunForTests(): void {
   primaryAutoDoneKeys.clear();
   autoSliceCountByProject.clear();
+  lastSliceByProject.clear();
 }
 
 export function looksLikeFoundationSlice(sliceLabel?: string | null): boolean {
@@ -131,14 +169,14 @@ export function shouldAutopilotAdvance(opts: {
         advance: false,
         nextLabel: null,
         stopReason: 'failed',
-        message: 'Foundation did not land. Send Go to retry this slice — not Continue.',
+        message: policyAFailedMessage(opts.lastSlice),
       };
     }
     return {
       advance: false,
       nextLabel: null,
       stopReason: 'session_complete',
-      message: 'Foundation applied — send Continue for the next slice.',
+      message: policyAStopMessage(opts.lastSlice),
     };
   }
   if (!opts.autopilotKickoff) {
@@ -204,17 +242,62 @@ export function shouldAutoRunPrimarySliceAfterFoundation(opts: {
   return looksLikePrePrimaryShellSlice(opts.sliceLabel);
 }
 
+const DO_NOT_REWRITE_FOUNDATION =
+  'If Foundation/product routes already exist, do NOT rewrite them — do not re-emit package.json, layout, login, or existing pages unless this slice must change them.';
+
 export const FAST_PROTOTYPE_PRIMARY_SLICE_INSTRUCTION =
-  'START_CODING — SLICE: Primary — implement the NEXT incomplete primary feature slice only (Build → Debug → Next). If Foundation shell already exists, do NOT rewrite it. Core user job from Master Plan: kid Home with one next-lesson CTA + a working practice/session (steps or timer, then complete) — not a Who-are-you role picker as the whole home. Prefer app/, src/, components/, pages/ — not master-plan/ui-brief only. File blocks for this slice only — not the full §4 app.';
+  'START_CODING — SLICE: Primary — implement the NEXT incomplete primary feature slice only (Build → Debug → Next). ' +
+  `${DO_NOT_REWRITE_FOUNDATION} ` +
+  'Core user job from Master Plan: kid Home with one next-lesson CTA + a working practice/session (steps or timer, then complete) — not a Who-are-you role picker as the whole home. Prefer app/, src/, components/, pages/ — not master-plan/ui-brief only. File blocks for this slice only — not the full §4 app.';
 
 export function buildAutopilotSliceInstruction(slice: AutopilotSliceLabel): string {
   if (slice === 'Primary') return FAST_PROTOTYPE_PRIMARY_SLICE_INSTRUCTION;
   return (
     `START_CODING — SLICE: ${slice} — implement the NEXT incomplete ${slice} slice only (Build → Debug → Next). ` +
-    `If Foundation shell already exists, do NOT rewrite it. Prefer Master Plan pages not yet on disk ` +
+    `${DO_NOT_REWRITE_FOUNDATION} Prefer Master Plan pages/features not yet complete ` +
     `(teacher dashboard, parent progress, child hub, rewards). Prefer app/, src/, components/, pages/. ` +
     `File blocks for this slice only — not the full §4 app.`
   );
+}
+
+/** Policy A copy after a slice lands — Continue must name the next slice, not always Foundation. */
+export function policyAStopMessage(lastSlice?: string | null): string {
+  const label = String(lastSlice || 'Foundation').trim() || 'Foundation';
+  if (looksLikePolishSlice(label)) {
+    return 'Polish applied. Review Preview — or send a new goal.';
+  }
+  if (/\bsecondary\b/i.test(label)) {
+    return 'Secondary applied — send Continue for Polish.';
+  }
+  if (/\bprimary\b/i.test(label)) {
+    return 'Primary applied — send Continue for Secondary.';
+  }
+  return 'Foundation applied — send Continue for the next slice.';
+}
+
+export function policyAFailedMessage(lastSlice?: string | null): string {
+  if (!lastSlice || looksLikePrePrimaryShellSlice(lastSlice)) {
+    return 'Foundation did not land. Send Go to retry this slice — not Continue.';
+  }
+  return `${String(lastSlice).trim()} did not land. Send Go to retry this slice — not Continue.`;
+}
+
+/**
+ * Continue after Foundation/Primary/… — never Foundation again when product routes exist.
+ * Returns null when Polish already landed (nothing left to Continue).
+ */
+export function resolveNextContinueSlice(opts: {
+  lastSlice?: string | null;
+  projectKey?: string;
+  productRoutesOnDisk?: boolean;
+}): AutopilotSliceLabel | null {
+  const last =
+    String(opts.lastSlice || '').trim() ||
+    readLastAppliedSlice(opts.projectKey || '') ||
+    (opts.productRoutesOnDisk ? 'Foundation' : '');
+  if (!last) return 'Foundation';
+  if (looksLikePolishSlice(last)) return null;
+  return nextAutopilotSliceLabel(last);
 }
 
 /**
