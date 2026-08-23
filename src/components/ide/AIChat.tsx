@@ -88,7 +88,9 @@ import {
   looksLikeApplyInFlightStall,
   looksLikePostApplyCodingStall,
   persistLastAppliedSlice,
+  parsePersistedSliceLabel,
   policyAStopMessage,
+  preferLaterSlice,
   readLastAppliedSlice,
   resetAutopilotSliceCount,
   resolveNextContinueSlice,
@@ -136,7 +138,7 @@ import {
 } from '../../lib/nebulaResearchClient';
 import { createProjectForCurrentSession } from '../../lib/nebulaCloud';
 import { handleSmartChatMessage, type SmartChatFilePreview } from '../../lib/smartChatHandler';
-import { isMasterPlanCompleteForDiscovery } from '../../lib/masterPlanSections';
+import { isMasterPlanCompleteForDiscovery, PRE_CODING_SUMMARY_KEY } from '../../lib/masterPlanSections';
 import {
   interactionModeIdleSubhead,
   type IdeAssistantInteractionMode,
@@ -505,6 +507,10 @@ export function AIChat() {
       autoCount: getAutopilotSliceCount(projectKey),
       autopilotKickoff: true,
       productRouteCount: lastAutoProductRouteCountRef.current,
+      productRoutesOnDisk:
+        /\b(primary|secondary|polish)\b/i.test(String(lastAutoSliceLabelRef.current || '')) ||
+        (typeof lastAutoProductRouteCountRef.current === 'number' &&
+          lastAutoProductRouteCountRef.current >= 3),
     });
     if (!decision.advance || !decision.nextLabel) {
       pushActivity(decision.message, 'success');
@@ -539,9 +545,12 @@ export function AIChat() {
         messages: [{ role: 'user', content: instruction }],
         onProgress: pushActivity,
       });
-      lastAutoSliceLabelRef.current = go.sliceLabel || decision.nextLabel;
-      lastAutoProductRouteCountRef.current = go.productRouteCount;
-      persistLastAppliedSlice(projectKey, lastAutoSliceLabelRef.current);
+      // Persist the slice we launched — Grok dump / thin apply must not rewrite it to Foundation.
+      if (go.ok) {
+        lastAutoSliceLabelRef.current = decision.nextLabel;
+        lastAutoProductRouteCountRef.current = go.productRouteCount;
+        persistLastAppliedSlice(projectKey, decision.nextLabel);
+      }
       if (autoSliceAbortRef.current) {
         resetCodingActivity();
         return;
@@ -557,8 +566,8 @@ export function AIChat() {
         }
         pushActivity(
           go.statusMessage
-            ? `${go.statusMessage} — bypassing and continuing`
-            : 'Slice apply failed — bypassing and continuing',
+            ? `${go.statusMessage} — autopilot stopped (not asking for Continue)`
+            : 'Slice apply failed — autopilot stopped (not asking for Continue)',
           'warn',
         );
       }
@@ -568,6 +577,10 @@ export function AIChat() {
         autoCount: getAutopilotSliceCount(projectKey),
         autopilotKickoff: true,
         productRouteCount: lastAutoProductRouteCountRef.current,
+        productRoutesOnDisk:
+          /\b(primary|secondary|polish)\b/i.test(String(lastAutoSliceLabelRef.current || '')) ||
+          (typeof lastAutoProductRouteCountRef.current === 'number' &&
+            lastAutoProductRouteCountRef.current >= 3),
       });
       if (again.advance) {
         pushActivity(again.message, 'info');
@@ -1947,6 +1960,7 @@ export function AIChat() {
         lastSlice: lastAutoSliceLabelRef.current,
         projectKey: resolveActiveProjectIds(diskProjectKey).projectKey,
       });
+    let planSliceFromDisk: string | null = null;
 
     let skipGrokChat =
       interactionModeRef.current === 'agent' &&
@@ -1969,9 +1983,22 @@ export function AIChat() {
           : null;
         const hasPlan = planRecordHasUsableGoal(plan);
         if (hasPlan) {
+          planSliceFromDisk = parsePersistedSliceLabel(
+            String((plan as Record<string, unknown>)[PRE_CODING_SUMMARY_KEY] ?? ''),
+          );
+          if (planSliceFromDisk) {
+            lastAutoSliceLabelRef.current = preferLaterSlice(
+              lastAutoSliceLabelRef.current,
+              planSliceFromDisk,
+            );
+          }
           skipGrokChat = true;
+          const nextSliceSkip =
+            userNoteRequestsNextSlice(text) && foundationLandedOnDisk();
           pushActivity(
-            'Master Plan already on disk — skipping Grok chat, continuing research / mockup / Foundation',
+            nextSliceSkip
+              ? 'Master Plan already on disk — skipping Grok chat; next slice only (not recoding Foundation)'
+              : 'Master Plan already on disk — skipping Grok chat, continuing research / mockup / Foundation',
             'info',
           );
         } else if (skipGrokChat) {
@@ -2476,7 +2503,7 @@ export function AIChat() {
         }
 
         const foundationAlreadyLanded = foundationLandedOnDisk();
-        const wantsNextSlice = userNoteRequestsNextSlice(text);
+        let wantsNextSlice = userNoteRequestsNextSlice(text);
         if (
           willCode &&
           foundationGate.ok &&
@@ -2484,9 +2511,13 @@ export function AIChat() {
           !wantsNextSlice &&
           !onboardingBuildStart
         ) {
-          pushActivity('Foundation already on disk — send Continue for the next slice.', 'success');
-          willCode = false;
-          resetCodingActivity();
+          if (FAST_PROTOTYPE_SAME_SESSION_AUTOPILOT) {
+            wantsNextSlice = true;
+          } else {
+            pushActivity('Foundation already on disk — send Continue for the next slice.', 'success');
+            willCode = false;
+            resetCodingActivity();
+          }
         }
 
         if (willCode && foundationGate.ok) {
@@ -2514,6 +2545,7 @@ export function AIChat() {
         // Fast Prototype plan turn must not apply app file blocks / START_CODING from the
         // same Grok reply — product launches Foundation Go after research + mockup.
         const planTurnNoChatCode = fastPrototypeTurn && !userForcedCoding;
+        let launchedGoSlice: string | null = null;
         let coding =
           agentAllowed && willCode && foundationGate.ok && !planTurnNoChatCode && !skipGrokChat
           ? await handlePostGrokCodingTurn({
@@ -2533,6 +2565,14 @@ export function AIChat() {
           shortCodingNudge ||
           userForcedCoding ||
           assistantCodingPromise;
+        if (
+          FAST_PROTOTYPE_SAME_SESSION_AUTOPILOT &&
+          foundationAlreadyLanded &&
+          !wantsNextSlice &&
+          !onboardingBuildStart
+        ) {
+          wantsNextSlice = true;
+        }
         if (
           !coding.ran &&
           agentAllowed &&
@@ -2555,6 +2595,8 @@ export function AIChat() {
                 lastSlice: lastAutoSliceLabelRef.current,
                 projectKey: continueProjectKey,
                 productRoutesOnDisk: foundationLanded,
+                workspacePaths: diskPaths,
+                planSlice: planSliceFromDisk,
               })
             : null;
           if (nextSliceGo && !nextContinueLabel) {
@@ -2580,6 +2622,7 @@ export function AIChat() {
                       : 'START_CODING — launching Go Code pipeline',
             wantsNextSlice && !foundationLanded ? 'warn' : 'info',
           );
+          launchedGoSlice = nextContinueLabel;
           const goSliceInstruction = nextContinueLabel
             ? buildAutopilotSliceInstruction(nextContinueLabel)
             : FOUNDATION_SLICE_INSTRUCTION;
@@ -2768,7 +2811,9 @@ export function AIChat() {
           }
 
           const codingSliceLabel =
-            (coding as { sliceLabel?: string | null }).sliceLabel ?? 'Foundation';
+            launchedGoSlice ||
+            (coding as { sliceLabel?: string | null }).sliceLabel ||
+            'Foundation';
           const { projectKey } = resolveActiveProjectIds(diskProjectKey);
           if (coding.ok !== false && wroteFiles) {
             lastAutoSliceLabelRef.current = codingSliceLabel;

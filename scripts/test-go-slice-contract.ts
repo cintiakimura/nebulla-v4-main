@@ -5,6 +5,7 @@ import {
   assessOversizedGoApply,
   buildCompactGoCodeUserPrompt,
   buildLocalPreCodingSummary,
+  applyClampedSliceToSummary,
   inferGoSliceFromWorkspace,
   clampClaimedSliceToWorkspace,
   isBareGoNote,
@@ -148,6 +149,25 @@ assert.match(
   );
   assert.equal(inferGoSliceFromWorkspace(root), "Primary");
   assert.equal(clampClaimedSliceToWorkspace("SLICE: Secondary", root), "Primary");
+  const continueSecondary =
+    "START_CODING — SLICE: Secondary — implement the NEXT incomplete Secondary slice only";
+  const rebuilt = buildLocalPreCodingSummary({
+    workspaceRoot: root,
+    userNote: continueSecondary,
+    existingSummary: "SLICE: Foundation\n- Project: tutor kids with ADHD",
+    projectName: "tutor kids with ADHD",
+  });
+  assert.match(
+    rebuilt,
+    /^SLICE: Secondary/m,
+    'Continue Secondary must not reuse/clamp a leftover Foundation summary',
+  );
+  const rewritten = applyClampedSliceToSummary(
+    "SLICE: Foundation\n- Project: tutor kids with ADHD",
+    root,
+    continueSecondary,
+  );
+  assert.match(rewritten, /^SLICE: Secondary/);
   fs.rmSync(root, { recursive: true, force: true });
 }
 

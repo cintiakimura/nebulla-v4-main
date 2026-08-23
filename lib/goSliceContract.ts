@@ -151,8 +151,15 @@ export function clampClaimedSliceToWorkspace(
 }
 
 /** Rewrite PRE_CODING_SUMMARY so SLICE: cannot skip ahead of disk. */
-export function applyClampedSliceToSummary(summary: string, workspaceRoot: string): string {
-  const clamped = clampClaimedSliceToWorkspace(summary, workspaceRoot);
+export function applyClampedSliceToSummary(
+  summary: string,
+  workspaceRoot: string,
+  userNote?: string | null,
+): string {
+  // Continue sends SLICE: Primary|Secondary|Polish — that is Mode A authority.
+  // Do not clamp it back to a leftover Foundation summary on disk.
+  const fromNote = parseGoSliceLabel(userNote);
+  const clamped = fromNote || clampClaimedSliceToWorkspace(summary, workspaceRoot);
   const rest = String(summary || "").replace(/^\s*SLICE\s*:[^\n]*\n?/i, "").trim();
   return rest ? `SLICE: ${clamped}\n${rest}` : `SLICE: ${clamped}`;
 }
@@ -172,7 +179,8 @@ export function buildLocalPreCodingSummary(opts: {
     fromNote ||
     (!opts.userNote?.trim() || isBareGoNote(opts.userNote) ? fromExisting : null) ||
     inferGoSliceFromWorkspace(opts.workspaceRoot);
-  const slice = clampClaimedSliceToWorkspace(rawSlice, opts.workspaceRoot);
+  // Explicit Continue slice must survive — clamp only guards LLM / bare-go guesses.
+  const slice = fromNote || clampClaimedSliceToWorkspace(rawSlice, opts.workspaceRoot);
   const name = (opts.projectName || "App").trim().slice(0, 64);
   const focus = String(opts.userNote || "").trim().slice(0, 180);
   const lines = [

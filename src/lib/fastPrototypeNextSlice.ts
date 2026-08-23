@@ -1,7 +1,7 @@
 /**
- * Fast Prototype next-slice helpers (Mode A).
- * One prompt → research → mockup → Foundation → stop.
- * User Continue advances only after Foundation product routes are on disk.
+ * Fast Prototype next-slice helpers (Mode B).
+ * One prompt → research → mockup → Foundation → Primary → Secondary → Polish.
+ * Do not ask the user to type Continue between slices.
  */
 
 import { RESEARCH_STOPPED } from '../../lib/researchStages';
@@ -113,6 +113,64 @@ export function looksLikePolishSlice(sliceLabel?: string | null): boolean {
   return /\bpolish\b/i.test(String(sliceLabel || '').trim());
 }
 
+function sliceProgressRank(slice?: string | null): number {
+  const t = String(slice || '').trim();
+  if (/\bpolish\b/i.test(t)) return 5;
+  if (/\bsecondary\b/i.test(t)) return 4;
+  if (/\bprimary\b/i.test(t)) return 3;
+  if (/\bdata\+?api\b/i.test(t)) return 2;
+  if (/\bauth\b/i.test(t)) return 1;
+  if (/\bfoundation\b/i.test(t)) return 0;
+  return -1;
+}
+
+/** Keep the later of two slice labels (Secondary beats a stale Foundation persist). */
+export function preferLaterSlice(a?: string | null, b?: string | null): string | null {
+  const left = String(a || '').trim() || null;
+  const right = String(b || '').trim() || null;
+  if (sliceProgressRank(left) >= sliceProgressRank(right)) return left || right;
+  return right || left;
+}
+
+/** SLICE: line from Master Plan pre-coding summary (or any tagged note). */
+export function parsePersistedSliceLabel(text?: string | null): AutopilotSliceLabel | null {
+  const tagged = String(text || '').match(
+    /\bSLICE\s*:\s*(Foundation|Auth|Data\+API|Primary|Secondary|Polish)\b/i,
+  );
+  if (!tagged?.[1]) return null;
+  const key = tagged[1].toLowerCase();
+  if (key === 'polish') return 'Polish';
+  if (key === 'secondary') return 'Secondary';
+  if (key === 'primary') return 'Primary';
+  if (key === 'data+api') return 'Data+API';
+  if (key === 'auth') return 'Auth';
+  return 'Foundation';
+}
+
+/**
+ * Poisoned "Foundation" persist after kid Home already exists must not
+ * send Continue back to Primary forever.
+ */
+export function healLastAppliedSlice(
+  lastSlice?: string | null,
+  workspacePaths?: string[],
+): string | null {
+  const last = String(lastSlice || '').trim() || null;
+  if (last && sliceProgressRank(last) >= 3) return last;
+  const hasPrimaryHint = (workspacePaths || []).some((raw) => {
+    const p = normalizeWorkspacePath(raw);
+    return (
+      /(^|\/)app\/kid\/home\/page\.(tsx|jsx|js)$/i.test(p) ||
+      /(^|\/)src\/app\/kid\/home\/page\.(tsx|jsx|js)$/i.test(p) ||
+      /(^|\/)app\/home\/page\.(tsx|jsx|js)$/i.test(p) ||
+      /(^|\/)app\/practice\/page\.(tsx|jsx|js)$/i.test(p) ||
+      /KidHomeScreen\.(tsx|jsx)$/i.test(p)
+    );
+  });
+  if (hasPrimaryHint) return 'Primary';
+  return last;
+}
+
 /** After Foundation/Auth/Data, jump to Primary pages (mock auth is not a hard gate). */
 export function nextAutopilotSliceLabel(current?: string | null): AutopilotSliceLabel {
   const label = String(current || 'Foundation').trim();
@@ -126,10 +184,10 @@ export function nextAutopilotSliceLabel(current?: string | null): AutopilotSlice
 export const MAX_AUTOPILOT_SLICES = 3;
 
 /**
- * Mode A: one prompt → research → mockup → Foundation → stop.
- * Do not auto-start Primary. User Continue is the only next-slice trigger.
+ * Mode B: one prompt → research → mockup → Foundation → auto Primary → Secondary → Polish.
+ * User Continue is not required between slices.
  */
-export const FAST_PROTOTYPE_SAME_SESSION_AUTOPILOT = false;
+export const FAST_PROTOTYPE_SAME_SESSION_AUTOPILOT = true;
 
 /** Nested app/pages routes (or product screens) required before Foundation is “on disk”. */
 export const FOUNDATION_PRODUCT_ROUTE_MIN = 3;
@@ -168,7 +226,8 @@ export function shouldAutopilotAdvance(opts: {
   const maxAuto = opts.maxAuto ?? MAX_AUTOPILOT_SLICES;
   const thinThisTurn =
     typeof opts.productRouteCount === 'number' && opts.productRouteCount < FOUNDATION_PRODUCT_ROUTE_MIN;
-  const foundationOnDisk = opts.productRoutesOnDisk === true;
+  const lastImpliesFoundationLanded = sliceProgressRank(opts.lastSlice) >= 3;
+  const foundationOnDisk = opts.productRoutesOnDisk === true || lastImpliesFoundationLanded;
   const foundationMissing = !foundationOnDisk && (thinThisTurn || !opts.codingOk);
   if (!opts.codingOk || (thinThisTurn && !foundationOnDisk)) {
     if (opts.blockedCode === 'RESEARCH_INCOMPLETE') {
@@ -324,12 +383,15 @@ export function resolveNextContinueSlice(opts: {
   lastSlice?: string | null;
   projectKey?: string;
   productRoutesOnDisk?: boolean;
+  workspacePaths?: string[];
+  planSlice?: string | null;
 }): AutopilotSliceLabel | null {
   if (!opts.productRoutesOnDisk) return 'Foundation';
-  const last =
-    String(opts.lastSlice || '').trim() ||
-    readLastAppliedSlice(opts.projectKey || '') ||
-    'Foundation';
+  const combined = preferLaterSlice(
+    opts.lastSlice,
+    preferLaterSlice(readLastAppliedSlice(opts.projectKey || ''), opts.planSlice),
+  );
+  const last = healLastAppliedSlice(combined, opts.workspacePaths) || 'Foundation';
   if (looksLikePolishSlice(last)) return null;
   return nextAutopilotSliceLabel(last);
 }

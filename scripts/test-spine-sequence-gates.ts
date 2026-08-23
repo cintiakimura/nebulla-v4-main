@@ -366,6 +366,11 @@ assert.match(server, /orphan preparing/);
 assert.match(pipeline, /nudging server to schedule Grok Code/);
 assert.match(server, /buildCompactGoCodeUserPrompt/);
 assert.match(server, /isUsablePreCodingSummary\(existingSummary\)/);
+assert.match(
+  server,
+  /noteSlice === existingSlice/,
+  'Continue must rebuild PRE_CODING_SUMMARY when userNote slice differs from leftover Foundation',
+);
 assert.equal(/withMem\.slice\(\s*-16\s*\)/.test(server), false);
 
 console.log("\n✓ spine sequence gates passed\n");

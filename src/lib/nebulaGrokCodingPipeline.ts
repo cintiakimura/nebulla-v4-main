@@ -1377,13 +1377,12 @@ export async function runGoCodeAndApply(options: {
     }
 
     const depth = assessApplyRouteDepth(allWrittenPaths);
-    let sliceLabel =
+    // Prefer the slice we asked for. A thin this-turn apply must not relabel
+    // Secondary/Polish as Foundation (that sent Continue back to Primary).
+    const sliceLabel =
       parseGoSliceLabel(userNote) ||
       parseGoSliceLabel(lastCodeText) ||
       parseGoSliceLabel('SLICE: Foundation');
-    if (depth.productRoutes.length < 3 && sliceLabel && /secondary|polish/i.test(sliceLabel)) {
-      sliceLabel = 'Foundation';
-    }
     const oversized = assessOversizedGoApply({ sliceLabel, writtenPaths: allWrittenPaths });
     const exit = assessFoundationGoExit({
       totalWritten,

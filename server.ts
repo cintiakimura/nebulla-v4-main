@@ -5158,7 +5158,12 @@ Rules:
       const skipPhaseA = true;
 
       if (skipPhaseA) {
-        summary = isUsablePreCodingSummary(existingSummary)
+        const noteSlice = parseGoSliceLabel(note);
+        const existingSlice = parseGoSliceLabel(existingSummary);
+        const reuseExisting =
+          isUsablePreCodingSummary(existingSummary) &&
+          (!noteSlice || noteSlice === existingSlice);
+        summary = reuseExisting
           ? existingSummary.slice(0, 2000)
           : buildLocalPreCodingSummary({
               workspaceRoot: ppGo.workspaceRoot,
@@ -5239,8 +5244,10 @@ Strict rules:
         });
       }
       summary = summary.slice(0, 2000);
-      summary = applyClampedSliceToSummary(summary, ppGo.workspaceRoot);
+      summary = applyClampedSliceToSummary(summary, ppGo.workspaceRoot, note);
       }
+
+      summary = applyClampedSliceToSummary(String(summary || "").slice(0, 2000), ppGo.workspaceRoot, note);
 
       // Session notes belong only in PRE_CODING_SUMMARY — never pollute §1 Goal
       // (Project Type parsing + v0 one-liner depend on a clean goal).
@@ -5270,7 +5277,7 @@ Strict rules:
         if (!summary) {
           summary = "Continue implementation from master-plan.json and project-execution-rules.md.";
         }
-        summary = applyClampedSliceToSummary(summary, ppGo.workspaceRoot);
+        summary = applyClampedSliceToSummary(summary, ppGo.workspaceRoot, note);
         uiArts = syncUiArtifactsFromMasterPlan(ppGo.workspaceRoot, masterPlanPath);
         v0Sync = {
           content: uiArts.v0Prompt.content,
