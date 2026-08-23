@@ -2037,6 +2037,7 @@ export function AIChat() {
           : () => {};
       let assistantContent: string;
       let planningPhase: string;
+      let linkedContextStatus: string | undefined;
       try {
         let skippedGrokChat = false;
         if (skipGrokChat) {
@@ -2056,7 +2057,7 @@ export function AIChat() {
         }
         if (!skippedGrokChat) {
           try {
-            ({ assistantContent, planningPhase } = await sendIdeAssistantGrokTurn({
+            ({ assistantContent, planningPhase, linkedContextStatus } = await sendIdeAssistantGrokTurn({
               textToSend: text,
               history: historyForApi,
               userId,
@@ -2094,6 +2095,12 @@ export function AIChat() {
               throw grokErr;
             }
           }
+        }
+        if (linkedContextStatus) {
+          pushActivity(
+            linkedContextStatus,
+            /could not load linked page/i.test(linkedContextStatus) ? 'warn' : 'info',
+          );
         }
         // Phase 7.0: a successful chat turn clears sticky key/auth rejection.
         clearMainAiAuthRejected(diskProjectKey);

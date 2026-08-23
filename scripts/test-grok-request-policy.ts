@@ -92,6 +92,9 @@ section("Wiring — search tools only on research Responses call");
   assert.equal(/web_search|x_search/.test(uiGrok), false);
   assert.equal(/web_search|x_search/.test(goJob), false);
   assert.match(chat, /grokChatCompletionsExtras\(stroke, model\)/);
+  const linkFetch = fs.readFileSync(path.join(root, "lib/linkContextFetch.ts"), "utf8");
+  assert.equal(/web_search|x_search/.test(linkFetch), false);
+  assert.equal(/captureLinkedContextFromUserMessage/.test(goJob), false);
 }
 
 section("Gate R unchanged");

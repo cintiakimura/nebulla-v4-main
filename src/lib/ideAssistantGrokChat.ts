@@ -84,7 +84,12 @@ export async function sendIdeAssistantGrokTurn(options: {
   contentLocale?: IdeLocaleCode;
   contentMode?: ContentLanguageMode;
   signal?: AbortSignal;
-}): Promise<{ assistantContent: string; planningPhase: string; claudeFallbackNotice?: string }> {
+}): Promise<{
+  assistantContent: string;
+  planningPhase: string;
+  claudeFallbackNotice?: string;
+  linkedContextStatus?: string;
+}> {
   const { textToSend, history, userId, projectName, ideAppendix, signal } = options;
   const interactionMode = options.interactionMode === 'chat' ? 'chat' : 'agent';
   const hasAppStatusPayload =
@@ -182,11 +187,13 @@ export async function sendIdeAssistantGrokTurn(options: {
   let data: {
     choices?: { message?: { content?: string; planningPhase?: string } }[];
     claudeFallbackNotice?: string;
+    linkedContextStatus?: string;
   };
   try {
     data = await fetchJson<{
       choices?: { message?: { content?: string; planningPhase?: string } }[];
       claudeFallbackNotice?: string;
+      linkedContextStatus?: string;
     }>(withProjectQuery('/api/grok/chat'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...getGrokRequestHeaders() },
@@ -225,5 +232,9 @@ export async function sendIdeAssistantGrokTurn(options: {
     planningPhase,
     claudeFallbackNotice:
       typeof data.claudeFallbackNotice === 'string' ? data.claudeFallbackNotice : undefined,
+    linkedContextStatus:
+      typeof data.linkedContextStatus === 'string' && data.linkedContextStatus.trim()
+        ? data.linkedContextStatus.trim()
+        : undefined,
   };
 }

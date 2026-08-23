@@ -115,6 +115,12 @@ import { assessResearchArtifact, RESEARCH_STOPPED } from "./lib/researchArtifact
 import { isResearchJobActive, runResearchStroke } from "./lib/nebulaResearchStroke";
 import { grokChatCompletionsExtras } from "./lib/grokRequestPolicy";
 import {
+  buildLinkedContextAppendix,
+  captureLinkedContextFromUserMessage,
+  lastUserMessageContent,
+  readLinkedContext,
+} from "./lib/linkContextFetch";
+import {
   addDesignReference,
   readDesignReferences,
   summarizeDesignReferencesForPrompt,
@@ -4709,9 +4715,17 @@ ${modelJson}`;
       const memory = buildMemorySystemContent(convScopeExec);
       const incomingMessages: { role: string; content?: string }[] = Array.isArray(messages) ? messages : [];
       const baseMessages = injectMemoryIntoMessages(incomingMessages, memory);
+      await captureLinkedContextFromUserMessage({
+        workspaceRoot: ppExecRules.workspaceRoot,
+        userText: lastUserMessageContent(incomingMessages),
+      });
+      const linkedPlanAppendix = buildLinkedContextAppendix(
+        readLinkedContext(ppExecRules.workspaceRoot),
+      );
       const executionSystemPrompt = `Execute project-execution-rules.md strictly (single orchestration file).
 Read and follow this context in exact order:
 ${workflowContext}
+${linkedPlanAppendix ? `\n${linkedPlanAppendix}` : ""}
 
 Rules:
 - Trigger source is Q1 approved.
@@ -5425,8 +5439,9 @@ ${workflowContext}`;
         sessionFocus: note || (continuation ? "(foundation shell)" : "(next incomplete slice)"),
         continuation,
       });
+      const existingLinked = buildLinkedContextAppendix(readLinkedContext(ppGo.workspaceRoot));
       const codeMessages: { role: string; content: string }[] = [
-        { role: "system", content: codeSystemPrompt },
+        { role: "system", content: existingLinked ? `${codeSystemPrompt}\n\n${existingLinked}` : codeSystemPrompt },
         { role: "user", content: compactUser },
       ];
 
@@ -5878,7 +5893,25 @@ ${answer.slice(0, 8000)}`;
       : "CONVERSATION_MODE: ON — short natural prose only; no markdown code fences, UI briefs, v0 prompts, Master Plan bodies, or full file bodies in chat.";
     const includeServerFileIndex =
       serverFileIndexBlock && !workspaceContextFromClient.includes("WORKSPACE_FILE_INDEX");
-    const workspaceSystem = [workspaceBlock, rulesBlock, modeBlock, includeServerFileIndex ? serverFileIndexBlock : ""]
+    let linkedContextStatus = "";
+    try {
+      const linkCap = await captureLinkedContextFromUserMessage({
+        workspaceRoot: ppChat.workspaceRoot,
+        userText: lastUserMessageContent(messagesForApi),
+      });
+      linkedContextStatus = linkCap.status;
+    } catch (linkErr) {
+      console.warn("[grok/chat] linked context fetch:", linkErr);
+      linkedContextStatus = "Could not load linked page — continuing without it.";
+    }
+    const linkedAppendix = buildLinkedContextAppendix(readLinkedContext(ppChat.workspaceRoot));
+    const workspaceSystem = [
+      workspaceBlock,
+      rulesBlock,
+      modeBlock,
+      includeServerFileIndex ? serverFileIndexBlock : "",
+      linkedAppendix,
+    ]
       .filter(Boolean)
       .join("\n");
     const sysIdx = messagesForApi.findIndex((m) => m.role === "system");
@@ -6066,6 +6099,9 @@ ${answer.slice(0, 8000)}`;
       if (completion.fallbackNotice) {
         (payload as { claudeFallbackNotice?: string }).claudeFallbackNotice =
           completion.fallbackNotice;
+      }
+      if (linkedContextStatus) {
+        (payload as { linkedContextStatus?: string }).linkedContextStatus = linkedContextStatus;
       }
       res.json(payload);
     } catch (error) {
