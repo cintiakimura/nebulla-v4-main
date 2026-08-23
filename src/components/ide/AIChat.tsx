@@ -1873,7 +1873,7 @@ export function AIChat() {
           onProgress: pushActivity,
         });
         if (result.ok) {
-          await applyUiStudioBetaToAppPreview(pushActivity);
+          await applyUiStudioBetaToAppPreview(pushActivity, { preferMockup: true });
           pushActivity('UI mockup ready — App Preview updated. Goal was not rewritten.', 'success');
         } else {
           pushActivity(result.error || 'UI generation failed — retry Generate UI.', 'error');

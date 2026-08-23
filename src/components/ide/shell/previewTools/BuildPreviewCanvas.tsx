@@ -28,6 +28,7 @@ export function BuildPreviewCanvas() {
   const [generateBusy, setGenerateBusy] = useState(false);
   const [engineBusy, setEngineBusy] = useState(false);
   const [hasVisualPreview, setHasVisualPreview] = useState(false);
+  const [liveAvailable, setLiveAvailable] = useState(false);
   const [waitStatus, setWaitStatus] = useState('Waiting for mockup');
   const retriedLegacyRef = useRef(false);
   const retriedMockShellRef = useRef(false);
@@ -57,11 +58,13 @@ export function BuildPreviewCanvas() {
         previewStatusLabel?: string;
       };
       if (!res.ok) return;
-      if (previewMetaHasProductRoutes(data)) {
+      const live = previewMetaHasProductRoutes(data);
+      setLiveAvailable(live);
+      if (live) {
         setHasVisualPreview(true);
         if (keepMockupRef.current) {
           setShowMockup(true);
-          setWaitStatus('UI mockup ready');
+          setWaitStatus('UI mockup ready — Use app to click through the practice flow');
           return;
         }
         setShowMockup(false);
@@ -85,7 +88,9 @@ export function BuildPreviewCanvas() {
 
   useEffect(() => {
     void refreshWaitState();
-    const onShowMockup = () => {
+    const onShowMockup = (ev: Event) => {
+      const force = Boolean((ev as CustomEvent<{ force?: boolean }>).detail?.force);
+      if (force) keepMockupRef.current = true;
       void (async () => {
         try {
           const res = await fetch(withProjectQuery('/api/app-preview/meta'), {
@@ -96,7 +101,7 @@ export function BuildPreviewCanvas() {
             previewHonesty?: string;
             previewMode?: string;
           };
-          setShowMockup(keepMockupRef.current || !previewMetaHasProductRoutes(data));
+          setShowMockup(keepMockupRef.current || force || !previewMetaHasProductRoutes(data));
         } catch {
           setShowMockup(true);
         }
@@ -105,6 +110,7 @@ export function BuildPreviewCanvas() {
     };
     const onShowLive = () => {
       keepMockupRef.current = false;
+      setLiveAvailable(true);
       setShowMockup(false);
       bump();
     };
@@ -152,6 +158,13 @@ export function BuildPreviewCanvas() {
 
   useEffect(() => installPreviewRuntimeMessageListener(), []);
 
+  const showLiveApp = useCallback(() => {
+    keepMockupRef.current = false;
+    setShowMockup(false);
+    setWaitStatus('Live app preview');
+    bump();
+  }, [bump]);
+
   const onGenerateUi = useCallback(async () => {
     if (generateBusy) return;
     setGenerateBusy(true);
@@ -167,7 +180,7 @@ export function BuildPreviewCanvas() {
         uiPhase: 'manual',
       });
       if (result.ok) {
-        await applyUiStudioBetaToAppPreview();
+        await applyUiStudioBetaToAppPreview(undefined, { preferMockup: true });
       }
       await refreshWaitState();
       bump();
@@ -183,11 +196,18 @@ export function BuildPreviewCanvas() {
       <PreviewEditToolbar
         hasSelection={hasSelection}
         generateBusy={generateBusy || engineBusy}
+        liveAvailable={liveAvailable}
+        showingMockup={showMockup}
         onGenerateUi={() => void onGenerateUi()}
+        onShowLiveApp={showLiveApp}
         onApplyToAll={(_state: PreviewToolbarState) => {
           /* stub until selection bridge */
         }}
         onDone={() => {
+          if (liveAvailable) {
+            showLiveApp();
+            return;
+          }
           tryGuidedDoneToCode();
         }}
         onUndo={() => {

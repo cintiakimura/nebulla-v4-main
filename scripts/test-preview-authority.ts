@@ -317,6 +317,22 @@ section("canvas honesty — product preview / coded bridge is showable (not Figm
   );
   assert.match(canvas, /keepMockupRef/);
   assert.match(canvas, /keepMockupRef\.current = true/);
+  assert.match(canvas, /onShowLiveApp/);
+  assert.match(canvas, /liveAvailable/);
+  const toolbar = fs.readFileSync(
+    path.join(path.dirname(fileURLToPath(import.meta.url)), "../src/components/ide/shell/previewTools/PreviewEditToolbar.tsx"),
+    "utf8",
+  );
+  assert.match(toolbar, /Use app/);
+  assert.equal(/onDone\?\.\(\);\s*\n\s*\}/.test(toolbar.slice(toolbar.indexOf("Apply to all"))), false);
+  const engine = fs.readFileSync(
+    path.join(path.dirname(fileURLToPath(import.meta.url)), "../src/lib/uiStudioBetaEngine.ts"),
+    "utf8",
+  );
+  assert.match(engine, /opts\?\.preferMockup/);
+  assert.match(engine, /dispatchPreviewShowMockup\(true\)/);
+  assert.match(engine, /else if \(data\.mockupOnlyArtifact\)/);
+  assert.match(engine, /dispatchStudioShowLiveApp\(\)/);
 }
 
 console.log("\n✓ preview authority tests passed\n");

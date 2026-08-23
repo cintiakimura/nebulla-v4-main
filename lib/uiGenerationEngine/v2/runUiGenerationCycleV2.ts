@@ -397,6 +397,10 @@ export async function runUiGenerationCycleV2(
     if (!hasLoadable) {
       state.regeneration_count = 1;
       appendStepLog(state, "Empty mockup repair — regenerate treated as first seed cycle");
+    } else if (input.uiPhase === "manual") {
+      // User asked to Generate UI after coding — always run; do not trap in preference recovery.
+      state.regeneration_count = Math.min(3, Math.max(1, (prevPolicy.regeneration_count || 0) + 1));
+      appendStepLog(state, "Manual Generate UI — regen allowed after coding");
     } else {
       const next = (prevPolicy.regeneration_count || 0) + 1;
       if (next > 3) {

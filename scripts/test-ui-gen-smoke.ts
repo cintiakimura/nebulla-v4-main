@@ -205,6 +205,20 @@ section('Generate again increments; exhaust at 3 sets preference recovery');
   assert.equal(exhausted.max_regenerations, 3);
   const after = readCyclePolicy(tmp);
   assert.equal(after.recovery_path, 'guided_improvement');
+
+  const manualAfterLimit = await runUiGenerationCycleV2({
+    workspaceRoot: tmp,
+    masterPlanPath,
+    projectName: 'TaskFlow',
+    pageName: 'Home',
+    regenerate: true,
+    uiPhase: 'manual',
+  });
+  assert.notEqual(
+    manualAfterLimit.preference_recovery,
+    true,
+    'chat/toolbar Generate UI after coding must still run',
+  );
 }
 
 section('shouldApplyUiToPreview helper');

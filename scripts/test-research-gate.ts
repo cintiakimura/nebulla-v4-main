@@ -395,6 +395,7 @@ try {
   assert.match(artifacts, /if \(!hasPlanShape\) return 0/);
   assert.match(chat, /userNoteRequestsUiGeneration/);
   assert.match(chat, /uiPhase: 'manual'/);
+  assert.match(chat, /preferMockup: true/);
   assert.match(chat, /blockedCode: coding\.blockedReason\?\.code/);
   assert.match(
     fs.readFileSync(path.join(root, "lib/nebulaResearchStroke.ts"), "utf8"),

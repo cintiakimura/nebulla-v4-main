@@ -106,6 +106,15 @@ export function dispatchStudioShowLiveApp(): void {
   }
 }
 
+/** Show the UI Gen mockup. `force` keeps it after Foundation (manual Generate UI). */
+export function dispatchPreviewShowMockup(force = false): void {
+  try {
+    window.dispatchEvent(new CustomEvent('nebula-preview-show-mockup', { detail: { force } }));
+  } catch {
+    /* ignore */
+  }
+}
+
 export function dispatchOpenUiStudioBeta(): void {
   dispatchOpenCenterPanel('ui-studio-beta');
 }
@@ -122,7 +131,8 @@ export async function runUiStudioBetaGeneration(
   inFlight = (async () => {
     const onProgress = options.onProgress;
     // Phase 5: IF Foundation Go is running → do not start a second silent UI Gen brain.
-    if (isFoundationGoInFlight(options.projectName)) {
+    // Auto UI Gen waits; an explicit Generate UI after coding must not die on a stale client lock.
+    if (isFoundationGoInFlight(options.projectName) && options.uiPhase !== 'manual') {
       onProgress?.(
         'Foundation Go running — UI Gen waiting (one heavy job). Generate UI after the slice finishes.',
         'warn',
@@ -140,6 +150,7 @@ export async function runUiStudioBetaGeneration(
         error: 'Research in flight — UI Gen not started in parallel (one heavy job).',
       };
     }
+    const preferMockup = options.uiPhase === 'manual' || options.regenerate === true;
     if (options.openPane !== false) {
       dispatchOpenUiStudioBeta();
     }
@@ -180,9 +191,9 @@ export async function runUiStudioBetaGeneration(
       });
       if (statusLooksReadyForSkip(existing) && !options.regenerate) {
         onProgress?.(existing.user_visible_stage || 'Ready in preview', 'success');
-        const applied = await applyUiStudioBetaToAppPreview(onProgress);
+        const applied = await applyUiStudioBetaToAppPreview(onProgress, { preferMockup });
         try {
-          window.dispatchEvent(new CustomEvent('nebula-preview-show-mockup'));
+          dispatchPreviewShowMockup(preferMockup);
           window.dispatchEvent(new CustomEvent('nebula-reload-app-preview'));
         } catch {
           /* ignore */
@@ -247,10 +258,10 @@ export async function runUiStudioBetaGeneration(
         return data;
       }
       onProgress?.(data.user_visible_stage || 'Ready in preview', 'success');
-      const applied = await applyUiStudioBetaToAppPreview(onProgress);
+      const applied = await applyUiStudioBetaToAppPreview(onProgress, { preferMockup });
       try {
         window.dispatchEvent(new CustomEvent(NEBULA_UI_STUDIO_BETA_COMPLETE, { detail: { ok: true, ...data } }));
-        window.dispatchEvent(new CustomEvent('nebula-preview-show-mockup'));
+        dispatchPreviewShowMockup(preferMockup);
         window.dispatchEvent(new CustomEvent('nebula-reload-app-preview'));
       } catch {
         /* ignore */
@@ -268,7 +279,7 @@ export async function runUiStudioBetaGeneration(
           });
           if (statusLooksReadyForSkip(st)) {
             onProgress?.(st.user_visible_stage || 'UI mockup ready after wait', 'success');
-            const applied = await applyUiStudioBetaToAppPreview(onProgress);
+            const applied = await applyUiStudioBetaToAppPreview(onProgress, { preferMockup });
             return { ok: applied.ok, error: applied.ok ? undefined : applied.error };
           }
         } catch {
@@ -302,6 +313,7 @@ export async function runUiStudioBetaGeneration(
 /** Push last successful UI Gen meta into App Preview (index.html shell). */
 export async function applyUiStudioBetaToAppPreview(
   onProgress?: GrokActivityProgressFn,
+  opts?: { preferMockup?: boolean },
 ): Promise<{ ok: boolean; error?: string }> {
   try {
     const data = await fetchJson<{
@@ -332,7 +344,14 @@ export async function applyUiStudioBetaToAppPreview(
     );
     try {
       window.dispatchEvent(new CustomEvent('nebula-files-applied'));
-      window.dispatchEvent(new CustomEvent('nebula-preview-show-mockup'));
+      if (opts?.preferMockup) {
+        dispatchPreviewShowMockup(true);
+      } else if (data.mockupOnlyArtifact) {
+        // Auto post-code: coded app owns Preview — do not steal the iframe.
+        dispatchStudioShowLiveApp();
+      } else {
+        dispatchPreviewShowMockup(false);
+      }
       window.dispatchEvent(new CustomEvent('nebula-reload-app-preview'));
       window.dispatchEvent(new CustomEvent('nebula-open-app-preview'));
     } catch {

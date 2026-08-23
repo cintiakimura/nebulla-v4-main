@@ -37,6 +37,10 @@ type Props = {
   /** Single Generate UI control for the Build preview canvas. */
   onGenerateUi?: () => void;
   generateBusy?: boolean;
+  /** Coded product routes exist — Preview can show the live practice app. */
+  liveAvailable?: boolean;
+  showingMockup?: boolean;
+  onShowLiveApp?: () => void;
   className?: string;
 };
 
@@ -52,6 +56,9 @@ export function PreviewEditToolbar({
   onRedo,
   onGenerateUi,
   generateBusy = false,
+  liveAvailable = false,
+  showingMockup = true,
+  onShowLiveApp,
   className,
 }: Props) {
   const [mode, setMode] = useState<PreviewToolMode>('grab');
@@ -149,7 +156,14 @@ export function PreviewEditToolbar({
       role="toolbar"
       aria-label="Preview edit tools"
     >
-      {toolBtn('grab', 'Grab', <Move className="h-3.5 w-3.5" aria-hidden />)}
+      {liveAvailable && !showingMockup ? (
+        <span className="mr-1 shrink-0 rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-medium text-emerald-300">
+          Live app
+        </span>
+      ) : null}
+      {showingMockup ? (
+        <>
+          {toolBtn('grab', 'Grab', <Move className="h-3.5 w-3.5" aria-hidden />)}
       {toolBtn('move', 'Move', <Hand className="h-3.5 w-3.5" aria-hidden />)}
       {toolBtn('resize', 'Resize', <Scaling className="h-3.5 w-3.5" aria-hidden />)}
 
@@ -305,6 +319,8 @@ export function PreviewEditToolbar({
           </button>
         </div>
       ) : null}
+        </>
+      ) : null}
 
       <button
         type="button"
@@ -317,13 +333,25 @@ export function PreviewEditToolbar({
         {generateBusy ? <Loader2 className="mr-1 inline h-3 w-3 animate-spin" aria-hidden /> : null}
         Generate UI
       </button>
+      {liveAvailable && showingMockup && onShowLiveApp ? (
+        <button
+          type="button"
+          title="Open the clickable practice app (not this static mockup)"
+          aria-label="Use app"
+          onClick={() => onShowLiveApp()}
+          className="btn-cyan ml-1 h-8 shrink-0 rounded-md px-2.5 text-[11px]"
+        >
+          Use app
+        </button>
+      ) : null}
+      {showingMockup ? (
+        <>
       <button
         type="button"
         title={hasSelection ? 'Apply to all' : 'Apply to all (select an element first)'}
         aria-label="Apply to all"
         onClick={() => {
           noopUnlessSelected(() => onApplyToAll?.(snapshot()));
-          onDone?.();
         }}
         className="btn-secondary-surface ml-1 h-8 shrink-0 rounded-md px-2.5 text-[11px]"
       >
@@ -331,9 +359,9 @@ export function PreviewEditToolbar({
       </button>
       <button
         type="button"
-        title="Done — continue to Code"
+        title={liveAvailable ? 'Use the live practice app' : 'Done — continue to Code'}
         aria-label="Done"
-        onClick={() => onDone?.()}
+        onClick={() => (liveAvailable && onShowLiveApp ? onShowLiveApp() : onDone?.())}
         className="btn-cyan h-8 shrink-0 rounded-md px-2.5 text-[11px]"
       >
         Done
@@ -367,6 +395,8 @@ export function PreviewEditToolbar({
       ) : (
         <Maximize2 className="ml-auto hidden h-3.5 w-3.5 shrink-0 text-muted-foreground sm:block" aria-hidden />
       )}
+        </>
+      ) : null}
     </div>
   );
 }
