@@ -158,15 +158,19 @@ export function shouldAutopilotAdvance(opts: {
   /** Kickoff turn (Fast Prototype / mockup→Foundation). */
   autopilotKickoff: boolean;
   maxAuto?: number;
-  /** Product app/ or pages/ routes from this apply — < 3 means Foundation is not done. */
+  /** Product app/ or pages/ routes from this apply — < 3 means this turn did not land a shell. */
   productRouteCount?: number;
+  /** Workspace already has Foundation routes (ignore this-turn 0 on a timed-out Primary). */
+  productRoutesOnDisk?: boolean;
   /** When Gate R failed, do not tell the user to Send Go. */
   blockedCode?: string;
 }): AutopilotAdvanceDecision {
   const maxAuto = opts.maxAuto ?? MAX_AUTOPILOT_SLICES;
-  const thinProduct =
+  const thinThisTurn =
     typeof opts.productRouteCount === 'number' && opts.productRouteCount < FOUNDATION_PRODUCT_ROUTE_MIN;
-  if (!opts.codingOk || thinProduct) {
+  const foundationOnDisk = opts.productRoutesOnDisk === true;
+  const foundationMissing = !foundationOnDisk && (thinThisTurn || !opts.codingOk);
+  if (!opts.codingOk || (thinThisTurn && !foundationOnDisk)) {
     if (opts.blockedCode === 'RESEARCH_INCOMPLETE') {
       return {
         advance: false,
@@ -175,11 +179,19 @@ export function shouldAutopilotAdvance(opts: {
         message: `${RESEARCH_STOPPED} Retry research — not Go — until Gate R is complete.`,
       };
     }
+    if (opts.blockedCode === 'GO_TIMEOUT') {
+      return {
+        advance: false,
+        nextLabel: null,
+        stopReason: 'failed',
+        message: policyATimeoutMessage(opts.lastSlice, foundationOnDisk),
+      };
+    }
     return {
       advance: false,
       nextLabel: null,
       stopReason: 'failed',
-      message: policyAFailedMessage(thinProduct ? 'Foundation' : opts.lastSlice),
+      message: policyAFailedMessage(foundationMissing ? 'Foundation' : opts.lastSlice),
     };
   }
   if (!FAST_PROTOTYPE_SAME_SESSION_AUTOPILOT) {
@@ -290,6 +302,18 @@ export function policyAFailedMessage(lastSlice?: string | null): string {
     return FOUNDATION_RETRY_ACTIVITY;
   }
   return `${String(lastSlice).trim()} did not land. Retry Go for this slice — not Continue for the next.`;
+}
+
+/** Timed-out next slice must not tell the user Foundation never landed. */
+export function policyATimeoutMessage(lastSlice?: string | null, foundationOnDisk?: boolean): string {
+  if (!foundationOnDisk) {
+    return `Grok Code timed out [GO_TIMEOUT]. ${FOUNDATION_RETRY_ACTIVITY}`;
+  }
+  const label =
+    !lastSlice || looksLikePrePrimaryShellSlice(lastSlice)
+      ? 'Primary'
+      : String(lastSlice).trim();
+  return `Grok Code timed out [GO_TIMEOUT]. ${label} did not land. Send Go to retry ${label} — Foundation is already on disk.`;
 }
 
 /**

@@ -2743,12 +2743,15 @@ export function AIChat() {
             }
           }
           const wroteFiles = (coding.writtenCount ?? coding.writtenPaths?.length ?? 0) > 0;
+          const foundationOnDisk = workspaceFoundationLanded(workspacePaths);
           const landedRoutes =
             typeof coding.productRouteCount === 'number'
               ? coding.productRouteCount
               : wroteFiles
                 ? undefined
-                : 0;
+                : foundationOnDisk
+                  ? undefined
+                  : 0;
           if (coding.ok !== false && wroteFiles) {
             // Artifact sync already ran inside Go/apply (single owner). Do not start a second
             // "Syncing project artifacts…" that can false-block the activity feed.
@@ -2777,12 +2780,12 @@ export function AIChat() {
 
           const codingSliceLabel =
             (coding as { sliceLabel?: string | null }).sliceLabel ?? 'Foundation';
-          lastAutoProductRouteCountRef.current = (
-            coding as { productRouteCount?: number }
-          ).productRouteCount;
           const { projectKey } = resolveActiveProjectIds(diskProjectKey);
           if (coding.ok !== false && wroteFiles) {
             lastAutoSliceLabelRef.current = codingSliceLabel;
+            lastAutoProductRouteCountRef.current = (
+              coding as { productRouteCount?: number }
+            ).productRouteCount;
             persistLastAppliedSlice(projectKey, codingSliceLabel);
           }
           const autoDecision = shouldAutopilotAdvance({
@@ -2791,6 +2794,7 @@ export function AIChat() {
             autoCount: getAutopilotSliceCount(projectKey),
             autopilotKickoff: true,
             productRouteCount: lastAutoProductRouteCountRef.current ?? landedRoutes,
+            productRoutesOnDisk: foundationOnDisk,
             blockedCode: coding.blockedReason?.code,
           });
           pushActivity(

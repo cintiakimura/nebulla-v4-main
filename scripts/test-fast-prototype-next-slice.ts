@@ -19,6 +19,7 @@ import {
   resolveNextContinueSlice,
   policyAFailedMessage,
   policyAStopMessage,
+  policyATimeoutMessage,
   FOUNDATION_RETRY_ACTIVITY,
   looksLikePostApplyCodingStall,
   looksLikeApplyInFlightStall,
@@ -195,6 +196,37 @@ assert.equal(nextAutopilotSliceLabel('Secondary'), 'Polish');
   assert.equal(d.stopReason, 'failed');
   assert.equal(d.message, FOUNDATION_RETRY_ACTIVITY);
 }
+{
+  const d = shouldAutopilotAdvance({
+    codingOk: false,
+    lastSlice: 'Primary',
+    autoCount: 0,
+    autopilotKickoff: true,
+    productRouteCount: 0,
+    productRoutesOnDisk: true,
+    blockedCode: 'GO_TIMEOUT',
+  });
+  assert.equal(d.advance, false);
+  assert.equal(d.stopReason, 'failed');
+  assert.match(d.message, /GO_TIMEOUT/);
+  assert.match(d.message, /Primary did not land/);
+  assert.match(d.message, /Foundation is already on disk/);
+  assert.equal(/Retry Go for Foundation — not Continue for Primary/i.test(d.message), false);
+}
+{
+  const d = shouldAutopilotAdvance({
+    codingOk: false,
+    lastSlice: 'Primary',
+    autoCount: 0,
+    autopilotKickoff: true,
+    productRouteCount: 0,
+    productRoutesOnDisk: false,
+    blockedCode: 'GO_TIMEOUT',
+  });
+  assert.match(d.message, /Foundation did not land/);
+  assert.match(d.message, /GO_TIMEOUT/);
+}
+assert.match(policyATimeoutMessage('Primary', true), /Primary did not land/);
 assert.equal(
   resolveNextContinueSlice({ productRoutesOnDisk: false, lastSlice: 'Primary' }),
   'Foundation',
@@ -280,6 +312,7 @@ assert.equal(APPLY_IN_FLIGHT_STALL_MS, 15_000);
   );
   assert.match(chat, /workspaceFoundationLanded/);
   assert.match(chat, /FOUNDATION_RETRY_ACTIVITY/);
+  assert.match(chat, /productRoutesOnDisk: foundationOnDisk/);
   assert.match(chat, /Retry research/);
   assert.match(chat, /fetchResearchStatus\(projectName\)/);
   assert.match(
