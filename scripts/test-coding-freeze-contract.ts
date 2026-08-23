@@ -182,6 +182,11 @@ assert.match(chat, /ChatGrokStatusPane/);
   const pane = fs.readFileSync(path.join(root, 'src/components/ide/ChatGrokStatusPane.tsx'), 'utf8');
   assert.match(pane, /max-h-\[50%\]/);
   assert.match(pane, /chat-grok-status-pane/);
+  assert.equal(
+    /activity\.liveLog\[activity\.liveLog\.length - 1\]/.test(pane),
+    false,
+    'historical Code pass log must not keep the pane busy after Foundation lands',
+  );
 }
 {
   const codeScreen = fs.readFileSync(path.join(root, 'src/components/ide/shell/CodeScreen.tsx'), 'utf8');

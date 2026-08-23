@@ -38,9 +38,9 @@ export function subscribeGrokActivity(onChange: (next: GrokActivityBroadcast) =>
 }
 
 export function grokActivityLooksInFlight(activity: { tone?: string; currentAction?: string; liveLog?: { message?: string }[] }): boolean {
+  if (activity.tone === 'ready') return false;
   if (activity.tone === 'work' || activity.tone === 'error') return true;
-  const last = activity.liveLog?.[activity.liveLog.length - 1]?.message || '';
-  const line = `${activity.currentAction || ''} ${last}`;
+  const line = String(activity.currentAction || '');
   return /Applying \d+ file|Writing files to cloud workspace|Code pass|still waiting|Grok Code/i.test(line);
 }
 

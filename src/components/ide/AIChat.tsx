@@ -379,7 +379,7 @@ export function AIChat() {
           prev,
           prev.headline || 'Coding finished',
           prev.steps?.length ? prev.steps : goWorkSteps(),
-          prev.footer || prev.currentAction,
+          prev.footer,
         );
       }
       return idleGrokActivity(interactionModeRef.current);

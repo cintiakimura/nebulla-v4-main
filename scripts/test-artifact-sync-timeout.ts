@@ -14,7 +14,14 @@ import {
   resetMasterPlanUiPipelineInFlightForTests,
   withHardTimeout,
 } from '../src/lib/ideArtifactSync.ts';
-import { startGrokActivityWaitTicker, GROK_WAIT_HEARTBEAT_TICKS } from '../src/lib/ideGrokActivityStatus.ts';
+import {
+  startGrokActivityWaitTicker,
+  GROK_WAIT_HEARTBEAT_TICKS,
+  finishGrokActivity,
+  isGrokWaitHeartbeatLine,
+  pruneGrokWaitHeartbeats,
+} from '../src/lib/ideGrokActivityStatus.ts';
+import { grokActivityLooksInFlight } from '../src/lib/nebulaGrokActivityBus.ts';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.join(__dirname, '..');
@@ -77,6 +84,38 @@ const root = path.join(__dirname, '..');
     lines.some((l) => l.kind === 'info' && l.currentOnly === false && /still waiting/.test(l.msg)),
     'wait ticker must commit a still-waiting heartbeat so chat is not silent on Code pass 1',
   );
+}
+
+{
+  assert.equal(isGrokWaitHeartbeatLine('Code pass 1 (2m 0s) — still waiting'), true);
+  assert.equal(isGrokWaitHeartbeatLine('Foundation applied — send Continue for the next slice.'), false);
+  const pruned = pruneGrokWaitHeartbeats([
+    { id: '1', at: 1, message: 'Code pass 1 (2m 0s) — still waiting', kind: 'info' },
+    { id: '2', at: 2, message: 'Foundation applied — send Continue for the next slice.', kind: 'success' },
+  ]);
+  assert.equal(pruned.length, 1);
+  assert.match(pruned[0].message, /Foundation applied/);
+  const finished = finishGrokActivity(
+    {
+      headline: 'Coding',
+      tone: 'work',
+      liveLog: [
+        { id: '1', at: 1, message: 'Code pass 1 (2m 0s) — still waiting', kind: 'info' },
+        { id: '2', at: 2, message: 'Foundation applied — send Continue for the next slice.', kind: 'success' },
+      ],
+      steps: [],
+      activeStepIndex: 0,
+      currentAction: 'Code pass 1 (2m 0s) — still waiting',
+    },
+    'Coding finished',
+    [],
+    'Code pass 1 (2m 0s) — still waiting',
+  );
+  assert.equal(finished.tone, 'ready');
+  assert.equal(finished.currentAction, undefined);
+  assert.equal(finished.footer, undefined);
+  assert.equal(finished.liveLog.some((e) => /still waiting/i.test(e.message)), false);
+  assert.equal(grokActivityLooksInFlight(finished), false);
 }
 
 {

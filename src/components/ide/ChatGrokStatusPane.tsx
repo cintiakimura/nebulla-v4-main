@@ -38,7 +38,7 @@ export function ChatGrokStatusPane({
   const isWork = activity.tone === 'work';
   const isError = activity.tone === 'error';
   const applying = /Applying \d+ file|Writing files to cloud workspace|Code pass/i.test(
-    `${activity.currentAction || ''} ${activity.liveLog[activity.liveLog.length - 1]?.message || ''}`,
+    activity.currentAction || '',
   );
   const busy = isWork || v0Live || applying;
   const hasLog = activity.liveLog.length > 0 || Boolean(activity.currentAction?.trim());

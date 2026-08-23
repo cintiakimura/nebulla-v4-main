@@ -56,6 +56,17 @@ export function normalizeActivityMessage(message: string): string {
     .trim();
 }
 
+/** Wait-ticker heartbeat — must not stay in the log after the slice finishes. */
+export function isGrokWaitHeartbeatLine(message?: string | null): boolean {
+  return /— still waiting\s*$/i.test(String(message || '').trim());
+}
+
+export function pruneGrokWaitHeartbeats(
+  log: GrokActivityLogEntry[] | undefined,
+): GrokActivityLogEntry[] {
+  return (log || []).filter((e) => !isGrokWaitHeartbeatLine(e.message));
+}
+
 export function formatGrokActivityElapsed(startedAt?: number, now = Date.now()): string | null {
   if (!startedAt) return null;
   const sec = Math.max(0, Math.floor((now - startedAt) / 1000));
@@ -186,13 +197,14 @@ export function finishGrokActivity(
   footer?: string,
   finalLog?: string,
 ): GrokActivityStatus {
+  const footerClean = isGrokWaitHeartbeatLine(footer) ? undefined : footer;
   const base: GrokActivityStatus = {
     headline,
     steps,
     activeStepIndex: steps.length,
-    footer,
+    footer: footerClean,
     tone: 'ready',
-    liveLog: prev?.liveLog ?? [],
+    liveLog: pruneGrokWaitHeartbeats(prev?.liveLog),
     startedAt: prev?.startedAt,
     currentAction: undefined,
   };
