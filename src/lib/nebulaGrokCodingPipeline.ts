@@ -1141,6 +1141,7 @@ export async function runGoCodeAndApply(options: {
       blockedReason: researchBlock,
     };
   }
+  onProgress?.('Grok Code — Code pass 1 (waiting for generated files)…', 'info');
 
   markFoundationGoInFlight(projectName, true);
   setGrokCodingActive(true);

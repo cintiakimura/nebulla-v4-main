@@ -308,6 +308,10 @@ try {
     const ensureAt = goFn.indexOf('blockGoIfResearchIncomplete');
     const inflightAt = goFn.indexOf('markFoundationGoInFlight(projectName, true)');
     assert.ok(ensureAt >= 0 && ensureAt < inflightAt, 'client must not mark Go in-flight before Gate R');
+    assert.ok(
+      goFn.indexOf("Code pass 1 (waiting for generated files)") > ensureAt,
+      'pipeline must not emit Code pass 1 before Gate R',
+    );
     assert.match(pipeline, /START_CODING detected/);
     const handoff = pipeline.slice(pipeline.indexOf('export async function handlePostGrokCodingTurn'));
     assert.ok(
@@ -336,6 +340,13 @@ try {
     const idxPass1 = chat.indexOf("currentAction: 'Grok Code — Code pass 1");
     assert.ok(idxLanded >= 0 && idxHandoff > idxLanded, 'stop Go before START_CODING handoff when Foundation exists');
     assert.ok(idxPass1 > idxLanded, 'do not show Code pass 1 before Foundation-on-disk check');
+    const idxEarlyGo = chat.indexOf("beginCodingActivity(\n        'Build mode");
+    assert.equal(idxEarlyGo, -1, 'build/Fast Prototype must not start coding chrome before research');
+    assert.match(chat, /beginPlanActivity/);
+    const idxEnsure = chat.indexOf('ensureResearchBeforeUiAndGo');
+    const idxGoApply = chat.lastIndexOf('await runGoCodeAndApply');
+    assert.ok(idxEnsure >= 0 && idxPass1 > idxEnsure, 'Code pass 1 UI only after research helper');
+    assert.ok(idxGoApply > idxPass1, 'Code pass 1 UI immediately before runGoCodeAndApply');
   }
   const artifacts = fs.readFileSync(path.join(root, "src/lib/grokChatArtifacts.ts"), "utf8");
   assert.match(artifacts, /export function isOrchestrationOnlyPlanSource/);

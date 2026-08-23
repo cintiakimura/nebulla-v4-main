@@ -450,6 +450,16 @@ export function AIChat() {
     [],
   );
 
+  /** Plan / research / mockup feed — must not set Grok coding-active or Go work steps. */
+  const beginPlanActivity = useCallback(
+    (headline: string, steps: GrokActivityStep[], options?: Parameters<typeof createGrokActivity>[2]) => {
+      codingActivityRef.current = true;
+      stickToBottomRef.current = true;
+      setGrokActivity(createGrokActivity(headline, steps, options));
+    },
+    [],
+  );
+
   const pushActivity = useCallback<GrokActivityProgressFn>((message, kind = 'info', options) => {
     if (!codingActivityRef.current) return;
     setGrokActivity((prev) =>
@@ -1861,36 +1871,22 @@ export function AIChat() {
       /* ignore */
     }
     if (onboardingBuildStart) {
-      beginCodingActivity(
-        'Discovery complete — saving Master Plan and starting code',
-        chatWorkSteps(),
-        {
-          subhead:
-            'Nothing more to add — writing Master Plan, then Grok Code builds the first slice.',
-          initialLog: `Discovery complete — "${rawText.trim()}"`,
-        },
-      );
-      pushActivity('Final discovery confirmed — Master Plan + START_CODING', 'info');
+      beginPlanActivity('Saving Master Plan…', chatWorkSteps(), {
+        subhead: 'Discovery complete — plan and research next. Coding waits.',
+        initialLog: `Discovery complete — "${rawText.trim()}"`,
+      });
+      pushActivity('Saving Master Plan…', 'info');
     } else if (fastPrototypeTurn) {
-      beginCodingActivity(
-        'Fast Prototype — inferring standards and drafting the first build',
-        chatWorkSteps(),
-        {
-          subhead:
-            'Industry defaults → draft Master Plan (assumptions labeled) → Foundation slice.',
-          initialLog: 'Fast Prototype mode — inference-first (Guided interview skipped)',
-        },
-      );
-      pushActivity('Fast Prototype — drafting Master Plan from inferred standards', 'info');
+      beginPlanActivity('Fast Prototype — drafting the plan', chatWorkSteps(), {
+        subhead: 'Researching competitors… Coding waits until Gate R and mockup allow Go.',
+        initialLog: 'Fast Prototype — plan and research (not coding yet)',
+      });
+      pushActivity('Researching competitors…', 'info');
     } else if (buildMode) {
-      beginCodingActivity(
-        'Build mode — Grok is implementing your request',
-        chatWorkSteps(),
-        {
-          subhead: 'Master Plan → Grok Code → files on disk.',
-          initialLog: `Build mode — "${rawText.slice(0, 80)}${rawText.length > 80 ? '…' : ''}"`,
-        },
-      );
+      beginPlanActivity('Preparing plan and research…', chatWorkSteps(), {
+        subhead: 'Master Plan → research → mockup. Coding starts only if Go is allowed.',
+        initialLog: `Build mode — "${rawText.slice(0, 80)}${rawText.length > 80 ? '…' : ''}"`,
+      });
       pushActivity(`Project: ${getBrowserProjectName().trim() || 'Untitled project'}`, 'info');
     }
 
@@ -2510,35 +2506,9 @@ export function AIChat() {
           }
         }
 
-        if (willCode && foundationGate.ok && !codingActivityRef.current) {
-          beginCodingActivity('Grok Code — writing files to workspace', goWorkSteps(), {
-            subhead:
-              foundationGate.reason === 'mockup_ready'
-                ? 'UI mockup on disk — Foundation coding slice next.'
-                : foundationGate.reason === 'explicit_skip'
-                  ? 'mockup deferred — coding Foundation'
-                  : uiMockupStarted
-                    ? 'UI mockup triggered — now Foundation coding slice.'
-                    : 'Master Plan → Grok Code → files on disk.',
-            initialLog: 'Coding stage — after architecture (and UI mockup when ready)',
-          });
-        }
-
         if (willCode && foundationGate.ok) {
           sendingRef.current = true;
           setSending(true);
-          setInferenceFirstStage('coding', diskProjectKey);
-          setGrokActivity((prev) => {
-            const mm =
-              masterPlanPipeline.mindMapPageCount != null && masterPlanPipeline.mindMapPageCount > 0
-                ? `Mind map: ${masterPlanPipeline.mindMapPageCount} page(s).`
-                : undefined;
-            return advanceGrokActivity(prev, showWorkActivity ? 5 : 2, {
-              currentAction: 'Grok Code — Code pass 1 (waiting for generated files)…',
-              log: { message: 'Running Grok Code — apply starts after Code pass 1 returns files', kind: 'info' },
-              ...(mm ? { stepDetail: { index: showWorkActivity ? 4 : 1, detail: mm } } : {}),
-            });
-          });
         }
 
         // Fast Prototype plan turn must not apply app file blocks / START_CODING from the
@@ -2575,24 +2545,6 @@ export function AIChat() {
           pushActivity('Foundation already on disk — send Continue for the next slice.', 'success');
           resetCodingActivity();
         } else if (!coding.ran && agentAllowed && foundationGate.ok && forceGoPipeline) {
-          if (!codingActivityRef.current) {
-            beginCodingActivity('Starting code — first slice', goWorkSteps(), {
-              subhead: onboardingBuildStart
-                ? 'Nothing more to add — Master Plan saved, Grok Code building files.'
-                : userForcedCoding || assistantCodingPromise || shortCodingNudge
-                  ? 'You asked to continue — Grok Code building the next incomplete slice now.'
-                  : fastPrototypeTurn
-                    ? 'Fast Prototype draft ready — Grok Code building Foundation.'
-                    : 'Starting Grok Code for the next slice.',
-              initialLog: onboardingBuildStart
-                ? 'Discovery complete — auto START_CODING'
-                : userForcedCoding || assistantCodingPromise || shortCodingNudge
-                  ? 'User continue building / next slice — auto Go Code'
-                  : fastPrototypeTurn
-                    ? 'Fast Prototype — auto START_CODING'
-                    : 'Auto coding pass (no Go button)',
-            });
-          }
           // After Foundation exists, "continue building" must request the NEXT slice — not Foundation again.
           // Empty explorer (no app/ routes) stays Foundation even if the user said continue/finish.
           const foundationLanded = foundationLandedOnDisk();
@@ -2637,6 +2589,21 @@ export function AIChat() {
               content: goSliceInstruction,
             },
           ];
+          beginCodingActivity('Grok Code — writing files to workspace', goWorkSteps(), {
+            subhead: nextContinueLabel
+              ? `Go — ${nextContinueLabel} slice`
+              : wantsNextSlice && !foundationLanded
+                ? FOUNDATION_RETRY_ACTIVITY
+                : 'Foundation coding slice',
+            initialLog: 'Running Grok Code — apply starts after Code pass 1 returns files',
+          });
+          setInferenceFirstStage('coding', diskProjectKey);
+          setGrokActivity((prev) =>
+            advanceGrokActivity(prev, showWorkActivity ? 5 : 2, {
+              currentAction: 'Grok Code — Code pass 1 (waiting for generated files)…',
+              log: { message: 'Running Grok Code — apply starts after Code pass 1 returns files', kind: 'info' },
+            }),
+          );
           let go = await runGoCodeAndApply({
             userId,
             projectName,
@@ -2905,7 +2872,7 @@ export function AIChat() {
         resumeOpenTalkIfWanted();
     }
     }
-  }, [sending, activePath, activeTab?.content, serverHasGrokKey, micInputBlocked, workspaceRootLabel, gitBranch, tabs, pauseHandsFreeListening, resumeOpenTalkIfWanted, beginCodingActivity, holdCodingFailure, pushActivity, resetCodingActivity, workspacePaths.length, noteUserMessageForMirror, prefs.contentMode, resolvedIdeLocale, t, localeLabels]);
+  }, [sending, activePath, activeTab?.content, serverHasGrokKey, micInputBlocked, workspaceRootLabel, gitBranch, tabs, pauseHandsFreeListening, resumeOpenTalkIfWanted, beginCodingActivity, beginPlanActivity, holdCodingFailure, pushActivity, resetCodingActivity, workspacePaths.length, noteUserMessageForMirror, prefs.contentMode, resolvedIdeLocale, t, localeLabels]);
 
   sendChatRef.current = sendChat;
 
@@ -3196,18 +3163,32 @@ export function AIChat() {
     stickToBottomRef.current = true;
     setSending(true);
     setSendError(null);
-    beginCodingActivity('Coding — one slice', goWorkSteps(), {
-      subhead: 'One coherent slice (Build → Debug → Next). Validate before the next slice.',
-      initialLog: userNote
-        ? `Coding started — slice focus: ${userNote.slice(0, 120)}`
-        : 'Coding started — next incomplete slice',
-    });
 
     void cancelProjectBackgroundJobs();
 
     const session = await fetchSessionUser();
     const userId = session?.uid?.trim() || 'anonymous';
     const projectName = getBrowserProjectName().trim() || 'Untitled project';
+    const researchSt = await fetchResearchStatus(projectName);
+    if (!researchSt.ok) {
+      const stopMsg = formatResearchStopMessage(researchSt.reasons);
+      setSendError(stopMsg);
+      setAccessoryHint('Retry research — Foundation will not start until Gate R is complete.');
+      window.setTimeout(() => setAccessoryHint(null), 8000);
+      sendingRef.current = false;
+      setSending(false);
+      return;
+    }
+    beginCodingActivity('Grok Code — writing files to workspace', goWorkSteps(), {
+      subhead: 'One coherent slice (Build → Debug → Next). Validate before the next slice.',
+      initialLog: 'Running Grok Code — apply starts after Code pass 1 returns files',
+    });
+    setGrokActivity((prev) =>
+      advanceGrokActivity(prev, 2, {
+        currentAction: 'Grok Code — Code pass 1 (waiting for generated files)…',
+        log: { message: 'Running Grok Code — apply starts after Code pass 1 returns files', kind: 'info' },
+      }),
+    );
 
     try {
       setGrokActivity((prev) =>

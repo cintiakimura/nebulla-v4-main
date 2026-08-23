@@ -340,6 +340,23 @@ assert.equal(APPLY_IN_FLIGHT_STALL_MS, 15_000);
     'must not inject a continue-building chat turn',
   );
   assert.match(chat, /foundationLandedOnDisk/);
+  assert.match(chat, /beginPlanActivity/);
+  assert.equal(
+    /beginCodingActivity\(\s*'Discovery complete/.test(chat),
+    false,
+    'discovery must not start coding chrome before Gate R',
+  );
+  assert.equal(
+    /beginCodingActivity\(\s*'Fast Prototype/.test(chat),
+    false,
+    'Fast Prototype must not start coding chrome before Gate R',
+  );
+  assert.equal(
+    /beginCodingActivity\(\s*'Build mode/.test(chat),
+    false,
+    'build mode must not start coding chrome before Gate R',
+  );
+  assert.equal(/Starting code — first slice/.test(chat), false);
   assert.match(chat, /\/api\/source-control\/overview/);
   assert.match(chat, /stale empty explorer|diskPaths/);
   assert.match(chat, /FOUNDATION_RETRY_ACTIVITY/);
