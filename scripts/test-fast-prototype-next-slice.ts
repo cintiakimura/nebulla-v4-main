@@ -251,6 +251,29 @@ assert.equal(
   workspaceFoundationLanded(['app/a/page.tsx', 'app/b/page.tsx', 'app/c/page.tsx']),
   true,
 );
+{
+  const firstGo = [
+    'package.json',
+    'app/globals.css',
+    'app/layout.tsx',
+    'app/page.tsx',
+    'app/teacher/dashboard/page.tsx',
+    'app/parent/dashboard/page.tsx',
+  ];
+  assert.equal(countWorkspaceProductRoutes(firstGo), 3);
+  assert.equal(workspaceFoundationLanded(firstGo), true);
+  assert.equal(
+    resolveNextContinueSlice({ productRoutesOnDisk: workspaceFoundationLanded(firstGo), lastSlice: 'Foundation' }),
+    'Primary',
+  );
+}
+assert.equal(
+  workspaceFoundationLanded(['app/teacher/dashboard/page.tsx', 'app/parent/dashboard/page.tsx'], {
+    lastSlice: 'Foundation',
+  }),
+  true,
+  'persisted Foundation + nested routes must not redo Foundation on Continue',
+);
 assert.match(buildAutopilotSliceInstruction('Secondary'), /SLICE: Secondary/);
 
 assert.equal(userNoteRequestsNextSlice('continue building'), true);
@@ -310,7 +333,8 @@ assert.equal(APPLY_IN_FLIGHT_STALL_MS, 15_000);
     false,
     'must not inject a continue-building chat turn',
   );
-  assert.match(chat, /workspaceFoundationLanded/);
+  assert.match(chat, /foundationLandedOnDisk/);
+  assert.match(chat, /workspaceFoundationLanded\(workspacePaths/);
   assert.match(chat, /FOUNDATION_RETRY_ACTIVITY/);
   assert.match(chat, /productRoutesOnDisk: foundationOnDisk/);
   assert.match(chat, /Retry research/);

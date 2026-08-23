@@ -339,12 +339,12 @@ function normalizeWorkspacePath(raw: string): string {
 }
 
 function isNestedProductRouteFile(p: string): boolean {
-  if (!/\.(tsx|jsx)$/i.test(p)) return false;
+  if (!/\.(tsx|jsx|js)$/i.test(p)) return false;
   if (!/(^|\/)((src\/)?app|(src\/)?pages)\//.test(p)) return false;
   if (/(^|\/)(layout|template|loading|error|not-found|globals)\./i.test(p)) return false;
-  if (/(^|\/)app\/page\.(tsx|jsx)$/i.test(p)) return false;
-  if (/(^|\/)src\/app\/page\.(tsx|jsx)$/i.test(p)) return false;
-  if (/(^|\/)pages\/index\.(tsx|jsx)$/i.test(p)) return false;
+  if (/(^|\/)app\/page\.(tsx|jsx|js)$/i.test(p)) return false;
+  if (/(^|\/)src\/app\/page\.(tsx|jsx|js)$/i.test(p)) return false;
+  if (/(^|\/)pages\/index\.(tsx|jsx|js)$/i.test(p)) return false;
   return true;
 }
 
@@ -356,25 +356,57 @@ function isProductScreenFile(p: string): boolean {
   );
 }
 
-/** Nested app/pages routes or product screens (layout / root page do not count). */
+/**
+ * Unique product routes — same rules as assessApplyRouteDepth / inferRoutesFromProductFiles.
+ * `app/page.tsx` counts as `/` so Continue matches “Product routes: /, /parent/…, /teacher/…”.
+ */
 export function countWorkspaceProductRoutes(paths: string[]): number {
-  const list = (paths || []).map(normalizeWorkspacePath);
-  const nested = list.filter(isNestedProductRouteFile);
-  if (nested.length) return nested.length;
-  return list.filter(isProductScreenFile).length;
+  const routes = new Set<string>();
+  for (const raw of paths || []) {
+    const p = normalizeWorkspacePath(raw);
+    if (/^(?:src\/)?app\/page\.(tsx|jsx|js)$/i.test(p)) {
+      routes.add('/');
+      continue;
+    }
+    const appPage = p.match(/^(?:src\/)?app\/(.+)\/page\.(tsx|jsx|js)$/i);
+    if (appPage) {
+      routes.add(`/${appPage[1].replace(/\/index$/i, '')}`);
+      continue;
+    }
+    const pages = p.match(/^(?:src\/)?pages\/(.+)\.(tsx|jsx|js)$/i);
+    if (pages) {
+      const slug = pages[1].replace(/\/index$/i, '').replace(/^index$/i, '');
+      routes.add(`/${slug.replace(/\[(.+?)\]/g, ':$1')}`);
+      continue;
+    }
+    if (isProductScreenFile(p)) {
+      const screen = p.match(/(^|\/)([A-Za-z][A-Za-z0-9]+)Screen\.(tsx|jsx)$/);
+      if (screen) {
+        const slug = screen[2].replace(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase();
+        if (slug) routes.add(`/${slug}`);
+      }
+    }
+  }
+  return routes.size;
 }
 
 /**
- * Client-safe: Foundation product routes on disk (not Vite App.tsx / layout-only).
- * Continue/finish must not jump to Primary while this is false.
+ * Client-safe: at least one nested app/pages route (not Vite App.tsx / layout-only / root page).
  */
 export function workspaceHasProductAppRoutes(paths: string[]): boolean {
-  return countWorkspaceProductRoutes(paths) >= 1;
+  const list = (paths || []).map(normalizeWorkspacePath);
+  return list.some(isNestedProductRouteFile) || list.filter(isProductScreenFile).length >= 1;
 }
 
-/** Mode A: Foundation has landed only when enough product routes exist. */
-export function workspaceFoundationLanded(paths: string[]): boolean {
-  return countWorkspaceProductRoutes(paths) >= FOUNDATION_PRODUCT_ROUTE_MIN;
+/** Mode A: Foundation has landed — same threshold as apply, or we already persisted a slice. */
+export function workspaceFoundationLanded(
+  paths: string[],
+  opts?: { lastSlice?: string | null; projectKey?: string },
+): boolean {
+  if (countWorkspaceProductRoutes(paths) >= FOUNDATION_PRODUCT_ROUTE_MIN) return true;
+  const last =
+    String(opts?.lastSlice || '').trim() || readLastAppliedSlice(opts?.projectKey || '');
+  return Boolean(last) && workspaceHasProductAppRoutes(paths);
 }
 
 /**

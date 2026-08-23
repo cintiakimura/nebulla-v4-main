@@ -1929,6 +1929,11 @@ export function AIChat() {
       codingProblems.push(line);
       pushActivity(line, 'warn');
     };
+    const foundationLandedOnDisk = () =>
+      workspaceFoundationLanded(workspacePaths, {
+        lastSlice: lastAutoSliceLabelRef.current,
+        projectKey: resolveActiveProjectIds(diskProjectKey).projectKey,
+      });
 
     let skipGrokChat =
       interactionModeRef.current === 'agent' &&
@@ -1993,7 +1998,7 @@ export function AIChat() {
         if (skipGrokChat) {
           skippedGrokChat = true;
           const nextSliceOnly =
-            userNoteRequestsNextSlice(text) && workspaceFoundationLanded(workspacePaths);
+            userNoteRequestsNextSlice(text) && foundationLandedOnDisk();
           assistantContent = nextSliceOnly
             ? 'Master Plan already on disk — coding the next incomplete slice (not Foundation).'
             : 'Master Plan already on disk — continuing research before coding (not yet).';
@@ -2259,7 +2264,7 @@ export function AIChat() {
           return;
         }
       }
-      const foundationAlreadyLanded = workspaceFoundationLanded(workspacePaths);
+      const foundationAlreadyLanded = foundationLandedOnDisk();
       const wantsNextSlice = userNoteRequestsNextSlice(text);
       if (agentAllowed && (fastPrototypeTurn || willCode || mpSaved > 0)) {
         if (wantsNextSlice && foundationAlreadyLanded) {
@@ -2457,7 +2462,7 @@ export function AIChat() {
           }
         }
 
-        const foundationAlreadyLanded = workspaceFoundationLanded(workspacePaths);
+        const foundationAlreadyLanded = foundationLandedOnDisk();
         const wantsNextSlice = userNoteRequestsNextSlice(text);
         if (
           willCode &&
@@ -2531,7 +2536,7 @@ export function AIChat() {
               projectName,
               userNote: text,
               onProgress: codingActivityRef.current ? pushActivity : undefined,
-              productRoutesOnDisk: workspaceFoundationLanded(workspacePaths),
+              productRoutesOnDisk: foundationLandedOnDisk(),
             })
           : { ran: false };
         // No Go button: user "go" / Discovery / Fast Prototype / assistant coding promise starts coding.
@@ -2573,7 +2578,7 @@ export function AIChat() {
           }
           // After Foundation exists, "continue building" must request the NEXT slice — not Foundation again.
           // Empty explorer (no app/ routes) stays Foundation even if the user said continue/finish.
-          const foundationLanded = workspaceFoundationLanded(workspacePaths);
+          const foundationLanded = foundationLandedOnDisk();
           const nextSliceGo = foundationLanded && wantsNextSlice;
           const { projectKey: continueProjectKey } = resolveActiveProjectIds(diskProjectKey);
           const nextContinueLabel = nextSliceGo
@@ -2743,7 +2748,7 @@ export function AIChat() {
             }
           }
           const wroteFiles = (coding.writtenCount ?? coding.writtenPaths?.length ?? 0) > 0;
-          const foundationOnDisk = workspaceFoundationLanded(workspacePaths);
+          const foundationOnDisk = foundationLandedOnDisk();
           const landedRoutes =
             typeof coding.productRouteCount === 'number'
               ? coding.productRouteCount
