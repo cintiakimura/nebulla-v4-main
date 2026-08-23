@@ -242,7 +242,7 @@ assert.match(
 }
 {
   const skipStub = parseMasterPlanBlock(
-    "Master Plan already on disk — continuing research before coding (not START_CODING yet).",
+    "Master Plan already on disk — continuing research before coding (not yet).",
   );
   assert.equal(String(skipStub[1] || "").trim(), "");
 }

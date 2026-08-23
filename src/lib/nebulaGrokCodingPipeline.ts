@@ -25,7 +25,9 @@ import { dispatchStudioShowLiveApp, triggerUiStudioBetaAfterFilesApplied } from 
 import { markFoundationGoInFlight } from './foundationHeavyJob';
 import { setGrokCodingActive } from './nebulaGrokCodingGate';
 import {
+  buildAutopilotSliceInstruction,
   FAST_PROTOTYPE_PRIMARY_SLICE_INSTRUCTION,
+  resolveNextContinueSlice,
   userNoteRequestsNextSlice,
 } from './fastPrototypeNextSlice';
 import {
@@ -1378,8 +1380,8 @@ export async function runGoCodeAndApply(options: {
 
     const depth = assessApplyRouteDepth(allWrittenPaths);
     let sliceLabel =
-      parseGoSliceLabel(lastCodeText) ||
       parseGoSliceLabel(userNote) ||
+      parseGoSliceLabel(lastCodeText) ||
       parseGoSliceLabel('SLICE: Foundation');
     if (depth.productRoutes.length < 3 && sliceLabel && /secondary|polish/i.test(sliceLabel)) {
       sliceLabel = 'Foundation';
@@ -1571,6 +1573,17 @@ export async function handlePostGrokCodingTurn(options: {
   }
 
   const nextSlice = userNoteRequestsNextSlice(userNote);
+  const nextLabel = nextSlice
+    ? resolveNextContinueSlice({
+        projectKey: projectName,
+        productRoutesOnDisk: true,
+      })
+    : null;
+  const instruction = nextLabel
+    ? buildAutopilotSliceInstruction(nextLabel)
+    : nextSlice
+      ? FAST_PROTOTYPE_PRIMARY_SLICE_INSTRUCTION
+      : (userNote || 'START_CODING — Foundation slice only').slice(0, 2000);
   onProgress?.(
     nextSlice
       ? 'START_CODING detected — launching Go Code for the next incomplete slice'
@@ -1580,14 +1593,12 @@ export async function handlePostGrokCodingTurn(options: {
   const go = await runGoCodeAndApply({
     userId,
     projectName,
-    userNote,
+    userNote: instruction,
     onProgress,
     messages: [
       {
         role: 'user',
-        content: nextSlice
-          ? FAST_PROTOTYPE_PRIMARY_SLICE_INSTRUCTION
-          : (userNote || 'START_CODING — Foundation slice only').slice(0, 2000),
+        content: instruction,
       },
     ],
   });

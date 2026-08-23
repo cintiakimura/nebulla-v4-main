@@ -233,6 +233,18 @@ assert.equal(APPLY_IN_FLIGHT_STALL_MS, 15_000);
   assert.match(chat, /workspaceHasProductAppRoutes/);
   assert.match(
     chat,
+    /messagesRef\.current\.length > 0\) return/,
+    'refresh must not redo Fast Prototype when chat history already exists',
+  );
+  assert.match(
+    chat,
+    /Research \+ mockup already done — coding the next slice/,
+    'Continue must not re-run Web Search / UI Gen',
+  );
+  assert.match(chat, /resolveNextContinueSlice/);
+  assert.match(chat, /persistLastAppliedSlice/);
+  assert.match(
+    chat,
     /skipping Grok chat; research next \(not coding yet\)/,
     'retry / go must skip Grok chat but must not claim coding started before Gate R',
   );
@@ -306,7 +318,7 @@ assert.match(
   'Decision Log A: do not turn same-session autopilot back on',
 );
 assert.match(chat, /if \(!FAST_PROTOTYPE_SAME_SESSION_AUTOPILOT\)/);
-assert.match(chat, /Foundation applied — send Continue for the next slice/);
+assert.match(chat, /policyAStopMessage/);
 assert.match(chat, /codingOk: coding.ok !== false && wroteFiles/);
 assert.equal(
   /foundationGate = \{ ok: true, reason: 'explicit_skip' \}/.test(chat),

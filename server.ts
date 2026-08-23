@@ -2766,6 +2766,22 @@ No approved UI code yet.
 
       const applyDepth = assessApplyRouteDepth(written);
 
+      // Honest runnable check is sync fs (package.json + scripts). Do not hardcode false —
+      // that left every Foundation apply saying "Runnable root: no" after writing package.json.
+      if (writtenPathsNeedRunnableSkeleton(written)) {
+        try {
+          ensureRunnableSkeleton(workspaceRoot, {
+            projectName:
+              typeof req.body?.projectName === "string" && req.body.projectName.trim()
+                ? String(req.body.projectName).trim()
+                : "Untitled Project",
+          });
+        } catch {
+          /* inspect still reports what is on disk */
+        }
+      }
+      const runnable = inspectRunnableSkeleton(workspaceRoot);
+
       // Ack writes immediately. Preview/mind-map used to run before res.json
       // and left chat stuck on "Applying N file(s) to workspace".
       res.json({
@@ -2776,12 +2792,12 @@ No approved UI code yet.
         parsedBlocks: blocks.length,
         usedFallbackPath: fallbackPath || undefined,
         baasSkippedReason: baasFilter.reason || undefined,
-        runnableRoot: false,
-        appRoot: ".",
-        framework: "unknown",
-        runnableStatusLine: undefined,
-        skeletonWritten: undefined,
-        deployable: false,
+        runnableRoot: runnable.runnable,
+        appRoot: runnable.appRootRel,
+        framework: runnable.framework,
+        runnableStatusLine: runnableStatusLine(runnable),
+        skeletonWritten: runnable.written,
+        deployable: runnable.runnable,
         interactivePreview: false,
         productRoutes: applyDepth.productRoutes,
         thinCodeShell: applyDepth.thinCodeShell,

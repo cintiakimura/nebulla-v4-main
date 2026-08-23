@@ -230,8 +230,13 @@ assert.equal(
     'res.json must run before listProductUiFiles',
   );
   assert.ok(
-    inspectIdx < 0 || inspectIdx > jsonIdx,
-    'res.json must run before inspectRunnableSkeleton',
+    inspectIdx >= 0 && inspectIdx < jsonIdx,
+    'apply-generated must inspect package.json before res.json — do not hardcode runnableRoot: false',
+  );
+  assert.equal(
+    /runnableRoot:\s*false/.test(applyRoute.slice(0, jsonIdx + 80)),
+    false,
+    'do not hardcode runnableRoot: false when package.json just landed',
   );
 }
 assert.match(
