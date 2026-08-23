@@ -26,12 +26,13 @@ import { markFoundationGoInFlight } from './foundationHeavyJob';
 import { setGrokCodingActive } from './nebulaGrokCodingGate';
 import {
   buildAutopilotSliceInstruction,
-  FAST_PROTOTYPE_PRIMARY_SLICE_INSTRUCTION,
+  FOUNDATION_RETRY_ACTIVITY,
+  FOUNDATION_SLICE_INSTRUCTION,
   resolveNextContinueSlice,
   userNoteRequestsNextSlice,
 } from './fastPrototypeNextSlice';
 import {
-  ensureResearchBeforeUiAndGo,
+  fetchResearchStatus,
   formatResearchStopMessage,
 } from './nebulaResearchClient';
 import {
@@ -924,15 +925,10 @@ async function kickGoCodeJob(options: {
     await cancelProjectBackgroundJobs();
   }
 
-  let waitLabel = continuation ? 'Grok Code continuation on server' : GO_PREPARING_LABEL;
-  let stopWait = startGrokActivityWaitTicker(waitLabel, (msg, kind, opts) =>
-    onProgress?.(msg, kind, opts),
-  );
-
+  let stopWait = () => {};
   const switchWaitLabel = (next: string) => {
     stopWait();
-    waitLabel = next;
-    stopWait = startGrokActivityWaitTicker(waitLabel, (msg, kind, opts) =>
+    stopWait = startGrokActivityWaitTicker(next, (msg, kind, opts) =>
       onProgress?.(msg, kind, opts),
     );
   };
@@ -1051,7 +1047,10 @@ async function kickGoCodeJob(options: {
         blocked.code === 'MASTER_PLAN_INCOMPLETE'
           ? formatGoBlockedByPlanMessage({ ...data, blockedReason: blocked })
           : formatBlockedReasonLine(blocked);
-      onProgress?.(friendly.split('\n')[0] || blocked.message, 'warn');
+      onProgress?.(
+        friendly.split('\n')[0] || blocked.message,
+        blocked.code === 'RESEARCH_INCOMPLETE' ? 'error' : 'warn',
+      );
       return {
         error: friendly,
         blockedReason: blocked,
@@ -1092,13 +1091,11 @@ async function blockGoIfResearchIncomplete(
   projectName: string,
   onProgress?: GrokActivityProgressFn,
 ): Promise<GoBlockedReason | null> {
-  const research = await ensureResearchBeforeUiAndGo({
-    projectName,
-    goal: projectName,
-    onProgress,
-  });
+  const research = await fetchResearchStatus(projectName);
   if (research.ok) return null;
-  return goBlocked('RESEARCH_INCOMPLETE', formatResearchStopMessage(research.gate?.reasons));
+  const stop = formatResearchStopMessage(research.reasons);
+  onProgress?.(stop, 'error');
+  return goBlocked('RESEARCH_INCOMPLETE', stop);
 }
 
 export async function runGoCodeAndApply(options: {
@@ -1312,7 +1309,7 @@ export async function runGoCodeAndApply(options: {
           pass -= 1;
           continue;
         }
-        const empty = goBlocked('GO_EMPTY_OUTPUT');
+        const empty = goBlocked('NO_FILE_BLOCKS');
         onProgress?.(formatBlockedReasonLine(empty), 'error');
         return {
           ok: false,
@@ -1409,7 +1406,23 @@ export async function runGoCodeAndApply(options: {
       onProgress?.(oversized.message, 'warn');
     }
 
-    const ok = exit.ok || totalWritten > 0;
+    const ok = exit.ok && totalWritten > 0;
+    if (!ok && totalWritten === 0) {
+      const blocked =
+        exit.blockedReason ||
+        (lastCodeText ? goBlocked('APPLY_FAILED') : goBlocked('NO_FILE_BLOCKS'));
+      onProgress?.(formatBlockedReasonLine(blocked), 'error');
+      return {
+        ok: false,
+        statusMessage: formatBlockedReasonLine(blocked),
+        codeText: lastCodeText,
+        totalWritten: 0,
+        sliceLabel,
+        oversizedWarning: oversized.message,
+        blockedReason: blocked,
+        productRouteCount: depth.productRoutes.length,
+      };
+    }
     if (!exit.ok && exit.blockedReason) {
       onProgress?.(formatBlockedReasonLine(exit.blockedReason), totalWritten > 0 ? 'warn' : 'error');
     } else if (depth.authOnly && (!sliceLabel || /foundation/i.test(String(sliceLabel)))) {
@@ -1481,6 +1494,7 @@ export async function handlePostGrokCodingTurn(options: {
   projectName: string;
   userNote?: string;
   onProgress?: GrokActivityProgressFn;
+  productRoutesOnDisk?: boolean;
 }): Promise<{
   ran: boolean;
   ok?: boolean;
@@ -1492,6 +1506,7 @@ export async function handlePostGrokCodingTurn(options: {
   productRouteCount?: number;
 }> {
   const { assistantContent, planningPhase, userId, projectName, userNote, onProgress } = options;
+  const productRoutesOnDisk = options.productRoutesOnDisk === true;
   let launchGoAfterThinHandoff = false;
 
   const appCodeBlocks = filterGrokContentToAppCodeFiles(assistantContent);
@@ -1576,17 +1591,18 @@ export async function handlePostGrokCodingTurn(options: {
   const nextLabel = nextSlice
     ? resolveNextContinueSlice({
         projectKey: projectName,
-        productRoutesOnDisk: true,
+        productRoutesOnDisk,
       })
     : null;
   const instruction = nextLabel
     ? buildAutopilotSliceInstruction(nextLabel)
-    : nextSlice
-      ? FAST_PROTOTYPE_PRIMARY_SLICE_INSTRUCTION
-      : (userNote || 'START_CODING — Foundation slice only').slice(0, 2000);
+    : (userNote || FOUNDATION_SLICE_INSTRUCTION).slice(0, 2000);
+  if (nextSlice && !productRoutesOnDisk) {
+    onProgress?.(FOUNDATION_RETRY_ACTIVITY, 'warn');
+  }
   onProgress?.(
-    nextSlice
-      ? 'START_CODING detected — launching Go Code for the next incomplete slice'
+    nextSlice && productRoutesOnDisk && nextLabel
+      ? `START_CODING detected — launching Go Code for ${nextLabel}`
       : 'START_CODING detected — launching Go Code pipeline',
     'info',
   );

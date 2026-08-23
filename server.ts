@@ -5126,23 +5126,7 @@ Rules:
         console.warn("[go-code] bypass thin Master Plan — continuing Foundation");
       }
 
-      // Gate R: do not await Web Search on this request — that left Foundation unscheduled.
-      const goalForResearch = inferGoalFromPlanRecord(planSnapshot, [note, convProject]);
-      const researchGate = assessResearchArtifact(ppGo.workspaceRoot, {
-        goal: goalForResearch,
-        goalCandidates: [note, convProject],
-        plan: planSnapshot,
-      });
-      if (!researchGate.ok) {
-        const blocked = goBlocked("RESEARCH_INCOMPLETE");
-        failGoCodePreparing(ppGo.workspaceRoot, blocked.message, blocked);
-        return res.status(409).json({
-          ok: false,
-          error: blocked.message,
-          code: blocked.code,
-          blockedReason: blocked,
-        });
-      }
+      // Gate R already 409'd before writeGoCodePending — do not fail a preparing job here.
 
       // Phase 4: ui-brief preferred; missing brief does not 409 the coding agent.
       if (!uiBriefUsable(uiArts.uiBrief.content)) {

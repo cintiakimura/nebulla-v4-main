@@ -318,6 +318,14 @@ try {
   }
   assert.match(chat, /if \(!research\.ok\)/);
   assert.match(chat, /willCode = false/);
+  assert.match(chat, /Retry research/);
+  {
+    const idxPass1 = chat.indexOf("currentAction: 'Grok Code — Code pass 1");
+    const idxGateR = chat.indexOf('const st = await fetchResearchStatus(projectName)');
+    assert.ok(idxGateR >= 0 && idxPass1 > idxGateR, 'do not show Code pass 1 before Gate R re-check');
+    assert.match(chat, /FOUNDATION_RETRY_ACTIVITY|Retry Go for Foundation/);
+    assert.equal(/continuing Foundation anyway/.test(chat), false);
+  }
   assert.match(chat, /planningPhase = 'PLAN_READY'/);
   assert.equal(/planningPhase = 'START_CODING'/.test(chat), false);
   assert.match(chat, /isOrchestrationOnlyPlanSource\(planningPhase\)/);

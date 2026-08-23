@@ -10,6 +10,8 @@ export const GO_BLOCKED_CODES = [
   "GO_MODEL_REJECTED",
   "GO_TIMEOUT",
   "GO_EMPTY_OUTPUT",
+  "NO_FILE_BLOCKS",
+  "APPLY_FAILED",
   "APPLY_EMPTY_PRODUCT",
   "KEY_AUTH",
   "GO_FAILED",
@@ -30,6 +32,8 @@ export const GO_BLOCKED_MESSAGES: Record<GoBlockedCode, string> = {
   GO_MODEL_REJECTED: "Stopped: coding model rejected the request (invalid parameters). Retry Go — Foundation did not start.",
   GO_TIMEOUT: "Stopped: Grok Code timed out after 3 minutes. Try Go again with a narrower slice.",
   GO_EMPTY_OUTPUT: "Stopped: Grok Code returned no file output. Try Go again.",
+  NO_FILE_BLOCKS: "Stopped: Grok Code returned no file blocks. Foundation did not start.",
+  APPLY_FAILED: "Stopped: file apply wrote 0 files. Foundation did not land.",
   APPLY_EMPTY_PRODUCT:
     "Stopped: Foundation wrote no product routes (app/ or pages/). Not a product shell — retry Go.",
   KEY_AUTH: "Stopped: Main AI API key is missing or rejected. Set the key on the server and retry.",
@@ -138,8 +142,14 @@ export function classifyGoFailure(input: {
   if (/zero app\/ or pages\/ routes|no product routes|apply_empty_product|not a product shell/i.test(lower)) {
     return goBlocked("APPLY_EMPTY_PRODUCT", text);
   }
+  if (/no file blocks|NO_FILE_BLOCKS/i.test(lower)) {
+    return goBlocked("NO_FILE_BLOCKS", text);
+  }
   if (/empty output|no file output|returned no files|go_empty_output/i.test(lower)) {
     return goBlocked("GO_EMPTY_OUTPUT", text);
+  }
+  if (/apply failed|APPLY_FAILED|wrote 0 file|apply timed out/i.test(lower)) {
+    return goBlocked("APPLY_FAILED", text);
   }
   return goBlocked("GO_FAILED", text || undefined);
 }

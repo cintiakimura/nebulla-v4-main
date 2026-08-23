@@ -339,7 +339,7 @@ assert.equal(
 );
 assert.match(chat, /FAST_PROTOTYPE_SAME_SESSION_AUTOPILOT/);
 assert.match(chat, /scheduleAutopilotHandoff\(\)/);
-assert.match(pipeline, /goBlocked\('GO_EMPTY_OUTPUT'\)/);
+assert.match(pipeline, /goBlocked\('NO_FILE_BLOCKS'\)|goBlocked\('GO_EMPTY_OUTPUT'\)/);
 assert.equal(/bypassing this slice and continuing/.test(pipeline), false);
 assert.match(chat, /stopReason === 'failed'/);
 assert.match(chat, /isAbortLikeError\(e\) && mpSaved > 0/);

@@ -93,7 +93,10 @@ import {
   resolveNextContinueSlice,
   shouldAutopilotAdvance,
   userNoteRequestsNextSlice,
+  workspaceFoundationLanded,
   workspaceHasProductAppRoutes,
+  FOUNDATION_RETRY_ACTIVITY,
+  FOUNDATION_SLICE_INSTRUCTION,
 } from '../../lib/fastPrototypeNextSlice';
 import { setGrokCodingActive } from '../../lib/nebulaGrokCodingGate';
 import { publishGrokActivity } from '../../lib/nebulaGrokActivityBus';
@@ -461,10 +464,18 @@ export function AIChat() {
   /** Next Go slice without a user chat message (Plan → mockup → Foundation already ran). */
   const runAutoNextSlice = useCallback(async () => {
     if (!FAST_PROTOTYPE_SAME_SESSION_AUTOPILOT) {
-      pushActivity(
-        policyAStopMessage(lastAutoSliceLabelRef.current),
-        'success',
-      );
+      const { projectKey: stopKey } = resolveActiveProjectIds(diskProjectKey);
+      const landed =
+        typeof lastAutoProductRouteCountRef.current === 'number' &&
+        lastAutoProductRouteCountRef.current >= 3;
+      const decision = shouldAutopilotAdvance({
+        codingOk: landed,
+        lastSlice: lastAutoSliceLabelRef.current,
+        autoCount: getAutopilotSliceCount(stopKey),
+        autopilotKickoff: true,
+        productRouteCount: lastAutoProductRouteCountRef.current,
+      });
+      pushActivity(decision.message, decision.stopReason === 'failed' ? 'error' : 'success');
       resetCodingActivity();
       sendingRef.current = false;
       setSending(false);
@@ -519,6 +530,7 @@ export function AIChat() {
       });
       lastAutoSliceLabelRef.current = go.sliceLabel || decision.nextLabel;
       lastAutoProductRouteCountRef.current = go.productRouteCount;
+      persistLastAppliedSlice(projectKey, lastAutoSliceLabelRef.current);
       if (autoSliceAbortRef.current) {
         resetCodingActivity();
         return;
@@ -1981,7 +1993,7 @@ export function AIChat() {
         if (skipGrokChat) {
           skippedGrokChat = true;
           const nextSliceOnly =
-            userNoteRequestsNextSlice(text) && workspaceHasProductAppRoutes(workspacePaths);
+            userNoteRequestsNextSlice(text) && workspaceFoundationLanded(workspacePaths);
           assistantContent = nextSliceOnly
             ? 'Master Plan already on disk — coding the next incomplete slice (not Foundation).'
             : 'Master Plan already on disk — continuing research before coding (not yet).';
@@ -2247,7 +2259,7 @@ export function AIChat() {
           return;
         }
       }
-      const foundationAlreadyLanded = workspaceHasProductAppRoutes(workspacePaths);
+      const foundationAlreadyLanded = workspaceFoundationLanded(workspacePaths);
       const wantsNextSlice = userNoteRequestsNextSlice(text);
       if (agentAllowed && (fastPrototypeTurn || willCode || mpSaved > 0)) {
         if (wantsNextSlice && foundationAlreadyLanded) {
@@ -2256,6 +2268,8 @@ export function AIChat() {
             lastResearchError = formatResearchStopMessage(st.reasons);
             codingProblems.push(lastResearchError);
             pushActivity(lastResearchError, 'error');
+            setAccessoryHint('Retry research — Foundation will not start until Gate R is complete.');
+            window.setTimeout(() => setAccessoryHint(null), 8000);
             willCode = false;
             codingActivityRef.current = false;
             setGrokCodingActive(false);
@@ -2281,6 +2295,8 @@ export function AIChat() {
           lastResearchError = lastResearchError || stopMsg;
           codingProblems.push(lastResearchError);
           pushActivity(lastResearchError, 'error');
+          setAccessoryHint('Retry research — Foundation will not start until Gate R is complete.');
+          window.setTimeout(() => setAccessoryHint(null), 8000);
           willCode = false;
           try {
             window.dispatchEvent(
@@ -2421,6 +2437,8 @@ export function AIChat() {
           lastResearchError = null;
           noteProblem(stopMsg);
           pushActivity(stopMsg, 'error');
+          setAccessoryHint('Retry research — Foundation will not start until Gate R is complete.');
+          window.setTimeout(() => setAccessoryHint(null), 8000);
           willCode = false;
           try {
             window.dispatchEvent(
@@ -2438,7 +2456,7 @@ export function AIChat() {
           }
         }
 
-        const foundationAlreadyLanded = workspaceHasProductAppRoutes(workspacePaths);
+        const foundationAlreadyLanded = workspaceFoundationLanded(workspacePaths);
         const wantsNextSlice = userNoteRequestsNextSlice(text);
         if (
           willCode &&
@@ -2450,6 +2468,23 @@ export function AIChat() {
           pushActivity('Foundation already on disk — send Continue for the next slice.', 'success');
           willCode = false;
           resetCodingActivity();
+        }
+
+        if (willCode && foundationGate.ok) {
+          const st = await fetchResearchStatus(projectName);
+          if (!st.ok) {
+            const stopMsg = formatResearchStopMessage(st.reasons);
+            lastResearchError = stopMsg;
+            noteProblem(stopMsg);
+            pushActivity(stopMsg, 'error');
+            setAccessoryHint('Retry research — Foundation will not start until Gate R is complete.');
+            window.setTimeout(() => setAccessoryHint(null), 8000);
+            willCode = false;
+            foundationGate = { ok: false as const, reason: 'blocked' as const };
+            codingActivityRef.current = false;
+            setGrokCodingActive(false);
+            setGrokActivity((prev) => finishGrokActivityWithProblems(prev, codingProblems));
+          }
         }
 
         if (willCode && foundationGate.ok && !codingActivityRef.current) {
@@ -2495,6 +2530,7 @@ export function AIChat() {
               projectName,
               userNote: text,
               onProgress: codingActivityRef.current ? pushActivity : undefined,
+              productRoutesOnDisk: workspaceFoundationLanded(workspacePaths),
             })
           : { ran: false };
         // No Go button: user "go" / Discovery / Fast Prototype / assistant coding promise starts coding.
@@ -2536,7 +2572,7 @@ export function AIChat() {
           }
           // After Foundation exists, "continue building" must request the NEXT slice — not Foundation again.
           // Empty explorer (no app/ routes) stays Foundation even if the user said continue/finish.
-          const foundationLanded = workspaceHasProductAppRoutes(workspacePaths);
+          const foundationLanded = workspaceFoundationLanded(workspacePaths);
           const nextSliceGo = foundationLanded && wantsNextSlice;
           const { projectKey: continueProjectKey } = resolveActiveProjectIds(diskProjectKey);
           const nextContinueLabel = nextSliceGo
@@ -2552,21 +2588,26 @@ export function AIChat() {
             sendingRef.current = false;
             setSending(false);
           } else {
+          if (wantsNextSlice && !foundationLanded) {
+            pushActivity(FOUNDATION_RETRY_ACTIVITY, 'warn');
+          }
           pushActivity(
             onboardingBuildStart
               ? 'Nothing more to add — launching Go Code pipeline'
               : nextContinueLabel
                 ? `Continue — launching ${nextContinueLabel} slice (not Foundation)`
-                : userForcedCoding
-                  ? 'User asked to code — launching Go Code pipeline'
-                  : fastPrototypeTurn
-                    ? 'Fast Prototype — launching Go Code pipeline'
-                    : 'START_CODING — launching Go Code pipeline',
-            'info',
+                : wantsNextSlice && !foundationLanded
+                  ? 'Retry Foundation (Go) — not Continue for Primary'
+                  : userForcedCoding
+                    ? 'User asked to code — launching Go Code pipeline'
+                    : fastPrototypeTurn
+                      ? 'Fast Prototype — launching Go Code pipeline'
+                      : 'START_CODING — launching Go Code pipeline',
+            wantsNextSlice && !foundationLanded ? 'warn' : 'info',
           );
           const goSliceInstruction = nextContinueLabel
             ? buildAutopilotSliceInstruction(nextContinueLabel)
-            : 'START_CODING — implement ONE coherent Foundation slice only (Build → Debug → Next). Prefer app/, src/, components/, pages/ — not master-plan/ui-brief only. File blocks for this slice only — not the full §4 app.';
+            : FOUNDATION_SLICE_INSTRUCTION;
           const goMessages = [
             {
               role: 'user' as const,
@@ -2695,9 +2736,19 @@ export function AIChat() {
                 ? `${coding.blockedReason.message} [${coding.blockedReason.code}]`
                 : blockedLine || 'Foundation coding reported a problem',
             );
+            if (coding.blockedReason?.code === 'RESEARCH_INCOMPLETE') {
+              setAccessoryHint('Retry research — Foundation will not start until Gate R is complete.');
+              window.setTimeout(() => setAccessoryHint(null), 8000);
+            }
           }
           const wroteFiles = (coding.writtenCount ?? coding.writtenPaths?.length ?? 0) > 0;
-          if (coding.ok !== false || wroteFiles) {
+          const landedRoutes =
+            typeof coding.productRouteCount === 'number'
+              ? coding.productRouteCount
+              : wroteFiles
+                ? undefined
+                : 0;
+          if (coding.ok !== false && wroteFiles) {
             // Artifact sync already ran inside Go/apply (single owner). Do not start a second
             // "Syncing project artifacts…" that can false-block the activity feed.
             if (mpSaved > 0) {
@@ -2725,18 +2776,20 @@ export function AIChat() {
 
           const codingSliceLabel =
             (coding as { sliceLabel?: string | null }).sliceLabel ?? 'Foundation';
-          lastAutoSliceLabelRef.current = codingSliceLabel;
           lastAutoProductRouteCountRef.current = (
             coding as { productRouteCount?: number }
           ).productRouteCount;
           const { projectKey } = resolveActiveProjectIds(diskProjectKey);
-          persistLastAppliedSlice(projectKey, codingSliceLabel);
+          if (coding.ok !== false && wroteFiles) {
+            lastAutoSliceLabelRef.current = codingSliceLabel;
+            persistLastAppliedSlice(projectKey, codingSliceLabel);
+          }
           const autoDecision = shouldAutopilotAdvance({
             codingOk: coding.ok !== false && wroteFiles,
             lastSlice: codingSliceLabel,
             autoCount: getAutopilotSliceCount(projectKey),
             autopilotKickoff: true,
-            productRouteCount: lastAutoProductRouteCountRef.current,
+            productRouteCount: lastAutoProductRouteCountRef.current ?? landedRoutes,
             blockedCode: coding.blockedReason?.code,
           });
           pushActivity(

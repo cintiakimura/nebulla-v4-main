@@ -14,6 +14,12 @@ import {
   FAST_PROTOTYPE_PRIMARY_SLICE_INSTRUCTION,
   userNoteRequestsNextSlice,
   workspaceHasProductAppRoutes,
+  workspaceFoundationLanded,
+  countWorkspaceProductRoutes,
+  resolveNextContinueSlice,
+  policyAFailedMessage,
+  policyAStopMessage,
+  FOUNDATION_RETRY_ACTIVITY,
   looksLikePostApplyCodingStall,
   looksLikeApplyInFlightStall,
   APPLY_IN_FLIGHT_STALL_MS,
@@ -47,7 +53,7 @@ assert.equal(
     sliceLabel: 'Foundation',
   }),
   false,
-  'policy A: Foundation stop — Continue for Primary, no same-session autopilot',
+  'Mode A: Foundation success does not auto-start Primary',
 );
 
 markFastPrototypePrimaryAutoRun('p1');
@@ -90,7 +96,7 @@ assert.equal(
     sliceLabel: 'Auth',
   }),
   false,
-  'policy A: Auth/shell labels must not auto-start Primary',
+  'Mode A: Auth/shell does not auto-start Primary',
 );
 
 assert.match(FAST_PROTOTYPE_PRIMARY_SLICE_INSTRUCTION, /SLICE: Primary/);
@@ -107,11 +113,12 @@ assert.equal(nextAutopilotSliceLabel('Secondary'), 'Polish');
     lastSlice: 'Foundation',
     autoCount: 0,
     autopilotKickoff: true,
+    productRouteCount: 5,
   });
   assert.equal(d.advance, false);
   assert.equal(d.nextLabel, null);
   assert.equal(d.stopReason, 'session_complete');
-  assert.match(d.message, /Foundation applied — send Continue/i);
+  assert.match(d.message, /Foundation applied — send Continue for the next slice/i);
 }
 {
   const d = shouldAutopilotAdvance({
@@ -119,9 +126,11 @@ assert.equal(nextAutopilotSliceLabel('Secondary'), 'Polish');
     lastSlice: 'Polish',
     autoCount: 1,
     autopilotKickoff: true,
+    productRouteCount: 6,
   });
   assert.equal(d.advance, false);
   assert.equal(d.stopReason, 'session_complete');
+  assert.match(d.message, /Polish applied/i);
 }
 {
   const d = shouldAutopilotAdvance({
@@ -129,6 +138,7 @@ assert.equal(nextAutopilotSliceLabel('Secondary'), 'Polish');
     lastSlice: 'Primary',
     autoCount: MAX_AUTOPILOT_SLICES,
     autopilotKickoff: true,
+    productRouteCount: 5,
   });
   assert.equal(d.advance, false);
   assert.equal(d.stopReason, 'session_complete');
@@ -169,8 +179,46 @@ assert.equal(nextAutopilotSliceLabel('Secondary'), 'Polish');
     productRouteCount: 2,
   });
   assert.equal(d.advance, false);
-  assert.equal(d.stopReason, 'session_complete');
+  assert.equal(d.stopReason, 'failed');
+  assert.match(d.message, /Foundation did not land/i);
+  assert.equal(/send Continue for the next slice/i.test(d.message), false);
 }
+{
+  const d = shouldAutopilotAdvance({
+    codingOk: true,
+    lastSlice: 'Foundation',
+    autoCount: 0,
+    autopilotKickoff: true,
+    productRouteCount: 0,
+  });
+  assert.equal(d.advance, false);
+  assert.equal(d.stopReason, 'failed');
+  assert.equal(d.message, FOUNDATION_RETRY_ACTIVITY);
+}
+assert.equal(
+  resolveNextContinueSlice({ productRoutesOnDisk: false, lastSlice: 'Primary' }),
+  'Foundation',
+);
+assert.equal(
+  resolveNextContinueSlice({ productRoutesOnDisk: false }),
+  'Foundation',
+);
+assert.equal(
+  resolveNextContinueSlice({ productRoutesOnDisk: true, lastSlice: 'Foundation' }),
+  'Primary',
+);
+assert.equal(
+  resolveNextContinueSlice({ productRoutesOnDisk: true, lastSlice: 'Primary' }),
+  'Secondary',
+);
+assert.match(policyAFailedMessage('Foundation'), /Retry Go for Foundation/);
+assert.match(policyAStopMessage('Foundation'), /Foundation applied — send Continue/);
+assert.equal(countWorkspaceProductRoutes(['app/teacher/page.tsx']), 1);
+assert.equal(workspaceFoundationLanded(['app/teacher/page.tsx']), false);
+assert.equal(
+  workspaceFoundationLanded(['app/a/page.tsx', 'app/b/page.tsx', 'app/c/page.tsx']),
+  true,
+);
 assert.match(buildAutopilotSliceInstruction('Secondary'), /SLICE: Secondary/);
 
 assert.equal(userNoteRequestsNextSlice('continue building'), true);
@@ -230,7 +278,10 @@ assert.equal(APPLY_IN_FLIGHT_STALL_MS, 15_000);
     false,
     'must not inject a continue-building chat turn',
   );
-  assert.match(chat, /workspaceHasProductAppRoutes/);
+  assert.match(chat, /workspaceFoundationLanded/);
+  assert.match(chat, /FOUNDATION_RETRY_ACTIVITY/);
+  assert.match(chat, /Retry research/);
+  assert.match(chat, /fetchResearchStatus\(projectName\)/);
   assert.match(
     chat,
     /messagesRef\.current\.length > 0\) return/,
@@ -285,6 +336,15 @@ assert.equal(APPLY_IN_FLIGHT_STALL_MS, 15_000);
     /userNoteRequestsNextSlice\(userNote\)/,
     'explicit Continue may request Primary, not rewrite Foundation',
   );
+  assert.equal(
+    /productRoutesOnDisk:\s*true/.test(pipeline),
+    false,
+    'Continue must not assume product routes exist',
+  );
+  assert.match(pipeline, /fetchResearchStatus/);
+  assert.match(pipeline, /FOUNDATION_RETRY_ACTIVITY/);
+  assert.match(pipeline, /goBlocked\('NO_FILE_BLOCKS'\)/);
+  assert.match(pipeline, /goBlocked\('APPLY_FAILED'\)/);
   assert.match(pipeline, /shouldRunGoCodeSecondPass/);
   assert.match(pipeline, /clearCodingLocks/);
   const applyFn = pipeline.slice(pipeline.indexOf('export async function applyGeneratedFiles'));
@@ -315,7 +375,7 @@ assert.equal(FAST_PROTOTYPE_SAME_SESSION_AUTOPILOT, false);
 assert.match(
   fs.readFileSync(path.join(root, 'src/lib/fastPrototypeNextSlice.ts'), 'utf8'),
   /FAST_PROTOTYPE_SAME_SESSION_AUTOPILOT = false/,
-  'Decision Log A: do not turn same-session autopilot back on',
+  'Mode A: autopilot stays off',
 );
 assert.match(chat, /if \(!FAST_PROTOTYPE_SAME_SESSION_AUTOPILOT\)/);
 assert.match(chat, /policyAStopMessage/);

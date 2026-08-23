@@ -1,7 +1,7 @@
 /**
- * Fast Prototype / inference-first autopilot: after Foundation lands, auto-run
- * the next slices (Primary → Secondary → Polish) without a user chat message.
- * Capped — no infinite Go loops.
+ * Fast Prototype next-slice helpers (Mode A).
+ * One prompt → research → mockup → Foundation → stop.
+ * User Continue advances only after Foundation product routes are on disk.
  */
 
 import { RESEARCH_STOPPED } from '../../lib/researchStages';
@@ -126,11 +126,20 @@ export function nextAutopilotSliceLabel(current?: string | null): AutopilotSlice
 export const MAX_AUTOPILOT_SLICES = 3;
 
 /**
- * Product finish = A until two golden production runs (see recovery-orchestration Decision Log).
- * One prompt → Foundation → stop. User Continue for Primary.
- * Do not set true until A is boring and Gate R + product routes are real.
+ * Mode A: one prompt → research → mockup → Foundation → stop.
+ * Do not auto-start Primary. User Continue is the only next-slice trigger.
  */
 export const FAST_PROTOTYPE_SAME_SESSION_AUTOPILOT = false;
+
+/** Nested app/pages routes (or product screens) required before Foundation is “on disk”. */
+export const FOUNDATION_PRODUCT_ROUTE_MIN = 3;
+
+/** Continue with empty explorer — retry Foundation, not Primary. */
+export const FOUNDATION_RETRY_ACTIVITY =
+  'Foundation did not land. Retry Go for Foundation — not Continue for Primary.';
+
+export const FOUNDATION_SLICE_INSTRUCTION =
+  'START_CODING — implement ONE coherent Foundation slice only (Build → Debug → Next). Prefer app/, src/, components/, pages/ — not master-plan/ui-brief only. File blocks for this slice only — not the full §4 app.';
 
 export type AutopilotAdvanceDecision = {
   advance: boolean;
@@ -155,23 +164,25 @@ export function shouldAutopilotAdvance(opts: {
   blockedCode?: string;
 }): AutopilotAdvanceDecision {
   const maxAuto = opts.maxAuto ?? MAX_AUTOPILOT_SLICES;
-  if (!FAST_PROTOTYPE_SAME_SESSION_AUTOPILOT) {
-    if (!opts.codingOk) {
-      if (opts.blockedCode === 'RESEARCH_INCOMPLETE') {
-        return {
-          advance: false,
-          nextLabel: null,
-          stopReason: 'failed',
-          message: `${RESEARCH_STOPPED} Retry research — not Go — until Gate R is complete.`,
-        };
-      }
+  const thinProduct =
+    typeof opts.productRouteCount === 'number' && opts.productRouteCount < FOUNDATION_PRODUCT_ROUTE_MIN;
+  if (!opts.codingOk || thinProduct) {
+    if (opts.blockedCode === 'RESEARCH_INCOMPLETE') {
       return {
         advance: false,
         nextLabel: null,
         stopReason: 'failed',
-        message: policyAFailedMessage(opts.lastSlice),
+        message: `${RESEARCH_STOPPED} Retry research — not Go — until Gate R is complete.`,
       };
     }
+    return {
+      advance: false,
+      nextLabel: null,
+      stopReason: 'failed',
+      message: policyAFailedMessage(thinProduct ? 'Foundation' : opts.lastSlice),
+    };
+  }
+  if (!FAST_PROTOTYPE_SAME_SESSION_AUTOPILOT) {
     return {
       advance: false,
       nextLabel: null,
@@ -195,24 +206,22 @@ export function shouldAutopilotAdvance(opts: {
       message: `Autopilot reached ${maxAuto} follow-up slices. Review Preview or send a new goal.`,
     };
   }
-  const thinProduct =
-    typeof opts.productRouteCount === 'number' && opts.productRouteCount < 3;
-  if (looksLikePolishSlice(opts.lastSlice) && !thinProduct) {
+  if (looksLikePolishSlice(opts.lastSlice)) {
     return {
       advance: false,
       nextLabel: null,
       stopReason: 'done',
-      message: 'Autopilot finished (Polish slice). Review Preview — Stop or send a new goal.',
+      message: 'MVP ready — review App Preview. Send a new goal or ask for changes.',
     };
   }
-  const lastSlice = thinProduct ? 'Foundation' : opts.lastSlice;
-  const nextLabel = thinProduct ? 'Primary' : nextAutopilotSliceLabel(lastSlice);
+  const lastSlice = opts.lastSlice;
+  const nextLabel = nextAutopilotSliceLabel(lastSlice);
   if (nextLabel === 'Polish' && looksLikePolishSlice(lastSlice)) {
     return {
       advance: false,
       nextLabel: null,
       stopReason: 'done',
-      message: 'Autopilot finished. Review Preview — Stop or send a new goal.',
+      message: 'MVP ready — review App Preview. Send a new goal or ask for changes.',
     };
   }
   return {
@@ -251,6 +260,7 @@ export const FAST_PROTOTYPE_PRIMARY_SLICE_INSTRUCTION =
   'Core user job from Master Plan: kid Home with one next-lesson CTA + a working practice/session (steps or timer, then complete) — not a Who-are-you role picker as the whole home. Prefer app/, src/, components/, pages/ — not master-plan/ui-brief only. File blocks for this slice only — not the full §4 app.';
 
 export function buildAutopilotSliceInstruction(slice: AutopilotSliceLabel): string {
+  if (slice === 'Foundation') return FOUNDATION_SLICE_INSTRUCTION;
   if (slice === 'Primary') return FAST_PROTOTYPE_PRIMARY_SLICE_INSTRUCTION;
   return (
     `START_CODING — SLICE: ${slice} — implement the NEXT incomplete ${slice} slice only (Build → Debug → Next). ` +
@@ -277,9 +287,9 @@ export function policyAStopMessage(lastSlice?: string | null): string {
 
 export function policyAFailedMessage(lastSlice?: string | null): string {
   if (!lastSlice || looksLikePrePrimaryShellSlice(lastSlice)) {
-    return 'Foundation did not land. Send Go to retry this slice — not Continue.';
+    return FOUNDATION_RETRY_ACTIVITY;
   }
-  return `${String(lastSlice).trim()} did not land. Send Go to retry this slice — not Continue.`;
+  return `${String(lastSlice).trim()} did not land. Retry Go for this slice — not Continue for the next.`;
 }
 
 /**
@@ -291,13 +301,43 @@ export function resolveNextContinueSlice(opts: {
   projectKey?: string;
   productRoutesOnDisk?: boolean;
 }): AutopilotSliceLabel | null {
+  if (!opts.productRoutesOnDisk) return 'Foundation';
   const last =
     String(opts.lastSlice || '').trim() ||
     readLastAppliedSlice(opts.projectKey || '') ||
-    (opts.productRoutesOnDisk ? 'Foundation' : '');
-  if (!last) return 'Foundation';
+    'Foundation';
   if (looksLikePolishSlice(last)) return null;
   return nextAutopilotSliceLabel(last);
+}
+
+function normalizeWorkspacePath(raw: string): string {
+  return String(raw || '').replace(/\\/g, '/').replace(/^\.\//, '');
+}
+
+function isNestedProductRouteFile(p: string): boolean {
+  if (!/\.(tsx|jsx)$/i.test(p)) return false;
+  if (!/(^|\/)((src\/)?app|(src\/)?pages)\//.test(p)) return false;
+  if (/(^|\/)(layout|template|loading|error|not-found|globals)\./i.test(p)) return false;
+  if (/(^|\/)app\/page\.(tsx|jsx)$/i.test(p)) return false;
+  if (/(^|\/)src\/app\/page\.(tsx|jsx)$/i.test(p)) return false;
+  if (/(^|\/)pages\/index\.(tsx|jsx)$/i.test(p)) return false;
+  return true;
+}
+
+function isProductScreenFile(p: string): boolean {
+  return (
+    /(^|\/)[A-Za-z][A-Za-z0-9]+Screen\.(tsx|jsx)$/i.test(p) &&
+    !/ErrorBoundary/i.test(p) &&
+    !/(^|\/)(Login|Register|SignIn|SignUp|Auth)Screen\.(tsx|jsx)$/i.test(p)
+  );
+}
+
+/** Nested app/pages routes or product screens (layout / root page do not count). */
+export function countWorkspaceProductRoutes(paths: string[]): number {
+  const list = (paths || []).map(normalizeWorkspacePath);
+  const nested = list.filter(isNestedProductRouteFile);
+  if (nested.length) return nested.length;
+  return list.filter(isProductScreenFile).length;
 }
 
 /**
@@ -305,24 +345,12 @@ export function resolveNextContinueSlice(opts: {
  * Continue/finish must not jump to Primary while this is false.
  */
 export function workspaceHasProductAppRoutes(paths: string[]): boolean {
-  const list = (paths || []).map((raw) => String(raw || '').replace(/\\/g, '/').replace(/^\.\//, ''));
-  const nestedRoute = list.some((p) => {
-    if (!/\.(tsx|jsx)$/i.test(p)) return false;
-    if (!/(^|\/)((src\/)?app|(src\/)?pages)\//.test(p)) return false;
-    if (/(^|\/)(layout|template|loading|error|not-found|globals)\./i.test(p)) return false;
-    if (/(^|\/)app\/page\.(tsx|jsx)$/i.test(p)) return false;
-    if (/(^|\/)src\/app\/page\.(tsx|jsx)$/i.test(p)) return false;
-    if (/(^|\/)pages\/index\.(tsx|jsx)$/i.test(p)) return false;
-    return true;
-  });
-  if (nestedRoute) return true;
-  const productScreens = list.filter(
-    (p) =>
-      /(^|\/)[A-Za-z][A-Za-z0-9]+Screen\.(tsx|jsx)$/i.test(p) &&
-      !/ErrorBoundary/i.test(p) &&
-      !/(^|\/)(Login|Register|SignIn|SignUp|Auth)Screen\.(tsx|jsx)$/i.test(p),
-  );
-  return productScreens.length >= 1;
+  return countWorkspaceProductRoutes(paths) >= 1;
+}
+
+/** Mode A: Foundation has landed only when enough product routes exist. */
+export function workspaceFoundationLanded(paths: string[]): boolean {
+  return countWorkspaceProductRoutes(paths) >= FOUNDATION_PRODUCT_ROUTE_MIN;
 }
 
 /**

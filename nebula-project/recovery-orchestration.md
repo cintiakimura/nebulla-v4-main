@@ -256,6 +256,8 @@ Work **one step per Agent turn / PR** after constitution install. Fix the **earl
 | 2026-08-14 | Phase 3 research is **mandatory** before ui-brief success and Foundation Go. Skip-with-reason removed as Fast Prototype default. Assumptions may pre-fill plan; Web Search overwrites/corrects. Demo skip `NEBULLA_SKIP_RESEARCH=1` default OFF. | Inference-first ≠ skip research; artifact `nebula-project/competitor-research.md` is load-bearing (Gate R) |
 | 2026-08-14 | COMPREHENSION FIRST: user brief + links rank above competitor research; extract dense briefs — do not re-interview filled slots. Gate R unchanged. | Stop “main goal?” loops when roles/privacy/tone/study URLs are already in the brief |
 | 2026-08-18 | Product finish = A until two goldens. One prompt → Foundation → stop. User Continue for Primary. `FAST_PROTOTYPE_SAME_SESSION_AUTOPILOT = false`. Failed research/mockup does not start Foundation. | Stop the next Agent from turning autopilot back on while Gate R / apply are still flaky |
+| 2026-08-23 | Product finish = B. One prompt → research → mockup → Foundation → Primary → Secondary → Polish. `FAST_PROTOTYPE_SAME_SESSION_AUTOPILOT = true`. Failed Gate R still stops. Refresh does not restart Code pass 1. | User must not babysit Continue; first prompt should land a functional MVP |
+| 2026-08-23 | Product finish restored = A. `FAST_PROTOTYPE_SAME_SESSION_AUTOPILOT = false`. One Foundation lands or fails honestly. Continue with empty explorer = Retry Foundation, not Primary. Gate R 409 never looks like Code pass 1. | Production looped Code pass 1 / Continue before Foundation landed; Mode B stays off |
 
 ---
 
