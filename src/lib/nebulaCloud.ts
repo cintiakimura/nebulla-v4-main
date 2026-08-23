@@ -63,6 +63,38 @@ export function clearWorkspaceModePreference(): void {
   }
 }
 
+/** Pick the saved cloud row — never fall through to an empty Untitled if we already have a key/name. */
+export function pickPreferredCloudProject(
+  projects: CloudProjectRow[],
+  opts?: {
+    preferredName?: string;
+    preferredKey?: string;
+    currentName?: string;
+    currentKey?: string;
+    /** When false, do not bind an unrelated first row (project picker). Default true. */
+    allowFallback?: boolean;
+  },
+): CloudProjectRow | undefined {
+  if (!Array.isArray(projects) || projects.length === 0) return undefined;
+  const name = String(opts?.preferredName || '').trim();
+  const key = sanitizeBrowserProjectKey(String(opts?.preferredKey || '').trim());
+  const currentName = String(opts?.currentName || '').trim();
+  const currentKey = sanitizeBrowserProjectKey(String(opts?.currentKey || '').trim());
+  const byName = (n: string) => projects.find((p) => p.name.trim() === n);
+  const byKey = (k: string) =>
+    projects.find((p) => {
+      const wid = sanitizeBrowserProjectKey(String(p.workspace_id || '').trim());
+      return wid === k || sanitizeBrowserProjectKey(p.name) === k;
+    });
+  return (
+    (name ? byName(name) : undefined) ||
+    (key && key !== 'default' ? byKey(key) : undefined) ||
+    (currentName ? byName(currentName) : undefined) ||
+    (currentKey && currentKey !== 'default' ? byKey(currentKey) : undefined) ||
+    (opts?.allowFallback === false ? undefined : projects[0])
+  );
+}
+
 function persistActiveCloudSelection(name: string, diskKey: string): void {
   try {
     localStorage.setItem(ACTIVE_CLOUD_PROJECT_NAME_KEY, name);
@@ -335,30 +367,73 @@ export async function syncActiveCloudProjectFromSession(): Promise<{
   if (projects.length === 0) return { synced: false };
 
   let preferredName = '';
+  let preferredKey = '';
   try {
     preferredName = localStorage.getItem(ACTIVE_CLOUD_PROJECT_NAME_KEY)?.trim() || '';
+    preferredKey = localStorage.getItem(ACTIVE_CLOUD_PROJECT_KEY_LS)?.trim() || '';
   } catch {
     /* ignore */
   }
 
-  let row = preferredName ? projects.find((p) => p.name === preferredName) : undefined;
-  if (!row) row = projects[0];
+  const row = pickPreferredCloudProject(projects, {
+    preferredName,
+    preferredKey,
+    currentName: getBrowserProjectName(),
+    currentKey: getBrowserProjectKey(),
+  });
+  if (!row) return { synced: false };
 
   const name = row.name.trim() || 'Untitled project';
   const diskKey = sanitizeBrowserProjectKey(
     (row.workspace_id && String(row.workspace_id).trim()) || name,
   );
 
+  const alreadyBound =
+    getBrowserProjectName().trim() === name && getBrowserProjectKey() === diskKey;
   setBrowserProjectName(name);
   setBrowserProjectKey(diskKey);
-  clearIdeWorkspaceMetaCache();
   const guestActive = readActiveGuestProjectId();
   if (guestActive) clearActiveGuestProjectId();
   setWorkspaceModePreference('cloud');
   persistActiveCloudSelection(name, diskKey);
-  dispatchWorkspaceSynced(name, diskKey);
+  if (!alreadyBound) {
+    clearIdeWorkspaceMetaCache();
+    dispatchWorkspaceSynced(name, diskKey);
+  }
 
   return { synced: true, projectName: name, projectKey: diskKey };
+}
+
+/** Persist the active name/key so refresh reopens this workspace, not a blank Untitled. */
+export async function rememberActiveCloudProject(): Promise<void> {
+  const name = getBrowserProjectName().trim();
+  const key = getBrowserProjectKey();
+  if (!name || !key) return;
+  persistActiveCloudSelection(name, key);
+  const writeGuestHint = () => {
+    const idx = readGuestIndex();
+    if (idx.some((e) => e.id === key)) {
+      updateGuestIndexMeta(key, name);
+    } else {
+      writeGuestIndex([{ id: key, name, updatedAt: new Date().toISOString() }, ...idx]);
+    }
+    writeActiveGuestProjectId(key);
+  };
+  if (FORCE_GUEST_MODE) {
+    writeGuestHint();
+    return;
+  }
+  try {
+    const user = await fetchSessionUser();
+    if (!user?.uid) {
+      writeGuestHint();
+      return;
+    }
+    // Do not POST a new named row here — free tier is 1 project and empty pages
+    // must not invent a second workspace. Selection is already in localStorage.
+  } catch {
+    writeGuestHint();
+  }
 }
 
 function dispatchWorkspaceSynced(projectName: string, projectKey: string): void {
@@ -434,6 +509,7 @@ export async function createProjectForCurrentSession(name: string): Promise<{
   writeActiveGuestProjectId(entry.id);
   setBrowserProjectKey(entry.id);
   setBrowserProjectName(entry.name);
+  persistActiveCloudSelection(entry.name, entry.id);
   setWorkspaceModePreference('guest');
   clearIdeWorkspaceMetaCache();
   dispatchWorkspaceSynced(entry.name, entry.id);
@@ -475,6 +551,7 @@ export function bindGuestWorkspace(): { projectName: string; projectKey: string 
 
   setBrowserProjectKey(key);
   setBrowserProjectName(name);
+  persistActiveCloudSelection(name, key);
   setWorkspaceModePreference('guest');
   clearIdeWorkspaceMetaCache();
   dispatchWorkspaceSynced(name, key);
@@ -538,12 +615,21 @@ export async function ensureCloudWorkspaceReady(): Promise<WorkspaceReadyResult>
   }
 
   let preferredName = '';
+  let preferredKey = '';
   try {
     preferredName = localStorage.getItem(ACTIVE_CLOUD_PROJECT_NAME_KEY)?.trim() || '';
+    preferredKey = localStorage.getItem(ACTIVE_CLOUD_PROJECT_KEY_LS)?.trim() || '';
   } catch {
     /* ignore */
   }
-  if (preferredName && projects.some((p) => p.name === preferredName)) {
+  const known = pickPreferredCloudProject(projects, {
+    preferredName,
+    preferredKey,
+    currentName: getBrowserProjectName(),
+    currentKey: getBrowserProjectKey(),
+    allowFallback: false,
+  });
+  if (known) {
     const sync = await syncActiveCloudProjectFromSession();
     if (sync.synced && sync.projectName && sync.projectKey) {
       return {

@@ -20,6 +20,7 @@ import {
 } from './ideShellScreens';
 import {
   markGuidedStartOnReady,
+  NEBULA_START_GUIDED_ON_READY_KEY,
   peekPendingProjectIdea,
   setPendingProjectIdea,
   setPendingProjectType,
@@ -67,10 +68,18 @@ export function commitLandingGoalHandoff(
 }
 
 /**
- * If durable shell goal exists but pending idea was cleared/lost before agent ran,
- * re-queue the pending idea (does not force a new guided flag every time).
+ * Re-queue Fast Prototype only when landing / My Projects armed a start
+ * (`nebula_start_guided_on_ready`). A leftover shell goal must not restart
+ * the pipeline on every Build visit / refresh.
  */
 export function ensurePendingIdeaFromShellGoal(): void {
+  let armed = false;
+  try {
+    armed = localStorage.getItem(NEBULA_START_GUIDED_ON_READY_KEY) === '1';
+  } catch {
+    armed = false;
+  }
+  if (!armed) return;
   const goal = readStoredShellGoal();
   if (!goal) return;
   if (!peekPendingProjectIdea()) {

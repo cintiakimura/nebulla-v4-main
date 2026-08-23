@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Bot, Hand, Loader2, MessageSquare, Mic, Paperclip, Send, Square, User, Wrench } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { fetchSessionUser, syncActiveCloudProjectFromSession, upsertCloudProject } from '../../lib/nebulaCloud';
+import { fetchSessionUser, rememberActiveCloudProject, syncActiveCloudProjectFromSession, upsertCloudProject } from '../../lib/nebulaCloud';
 import { MAIN_AI_CHAT_SETUP_HINT } from '../../lib/grokKey';
 import { getGrokRequestHeaders, hasUsableGrokKeyForChat } from '../../lib/grokUserKey';
 import {
@@ -1239,6 +1239,8 @@ export function AIChat() {
   }, [sending, grokActivity.tone]);
 
   const startGuidedDiscovery = useCallback(() => {
+    consumeGuidedStartOnReady();
+    void rememberActiveCloudProject();
     clearDiscoveryClosed(diskProjectKey);
     const startMode = consumePendingStartMode();
     setStoredStartMode(startMode, diskProjectKey);
@@ -1348,9 +1350,35 @@ export function AIChat() {
     // Refresh must not redo Fast Prototype / Code pass 1 when chat or product files already exist.
     if (messagesRef.current.length > 0) return;
     if (workspaceHasProductAppRoutes(workspacePaths)) return;
-    bootstrapStartedRef.current = true;
-    consumeGuidedStartOnReady();
-    startGuidedDiscovery();
+    // Leftover shell-goal idea without a fresh landing/My Projects handoff — keep the saved project.
+    if (!guidedFlag) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const mpRes = await fetch(withProjectQuery('/api/master-plan/read'), {
+          credentials: 'include',
+          cache: 'no-store',
+        });
+        if (cancelled) return;
+        if (mpRes.ok) {
+          const plan = (await readResponseJson(mpRes)) as Record<string, unknown>;
+          if (planRecordHasUsableGoal(plan)) {
+            consumeGuidedStartOnReady();
+            return;
+          }
+        }
+      } catch {
+        /* empty / unread plan — may still bootstrap */
+      }
+      if (cancelled || bootstrapStartedRef.current || sendingRef.current) return;
+      if (messagesRef.current.length > 0) return;
+      bootstrapStartedRef.current = true;
+      consumeGuidedStartOnReady();
+      startGuidedDiscovery();
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [serverHasGrokKey, chatHistoryReady, messages.length, diskProjectKey, startGuidedDiscovery, workspacePaths]);
 
   useEffect(() => {
@@ -2159,6 +2187,9 @@ export function AIChat() {
           getBrowserProjectName(),
         ],
       );
+      if (mpSaved > 0) {
+        void rememberActiveCloudProject();
+      }
 
       if (/<NEBULA_UI_STUDIO_PROMPT>/i.test(masterPlanSource)) {
         dispatchOpenUiStudio({ tab: 'mockups' });
