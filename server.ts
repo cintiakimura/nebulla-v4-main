@@ -106,8 +106,10 @@ import { draftSection4AmendmentsForRoutes } from "./lib/mindMapAmendmentPropose"
 import { isMasterPlanReadyForUiMockup } from "./lib/masterPlanCompleteness";
 import {
   ASK_FOR_SHORT_GOAL,
+  distillBriefToGoalSection,
   inferGoalFromPlanRecord,
   isUsableProjectGoal,
+  looksLikeRawUserPrompt,
   seedGoalOfTheAppSection,
   uiBriefUsable,
 } from "./lib/spineSequenceGates";
@@ -1537,8 +1539,12 @@ No approved UI code yet.
         plan = JSON.parse(fs.readFileSync(pp.masterPlanPath, "utf8"));
       }
       
-      // Update the specific tab content using mapped tabName as key
-      (plan as any)[tabName] = content;
+      // Goal tab: never persist the raw landing/chat prompt as §1.
+      let nextContent = String(content ?? "");
+      if (tabIndex === 1 && looksLikeRawUserPrompt(nextContent)) {
+        nextContent = distillBriefToGoalSection(nextContent) || nextContent;
+      }
+      (plan as any)[tabName] = nextContent;
 
       fs.writeFileSync(pp.masterPlanPath, JSON.stringify(plan, null, 2), "utf8");
       const v0Sync = ensureV0PromptSynced(pp);

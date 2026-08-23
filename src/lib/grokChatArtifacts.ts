@@ -12,8 +12,10 @@ import { buildLanguagePromptAppendix } from './i18n/languagePromptAppendix';
 import type { IdeLocaleCode } from './i18n/locales';
 import type { ContentLanguageMode } from './i18n/userLanguagePreferences';
 import {
+  distillBriefToGoalSection,
   extractProductGoalFromSection,
   isUsableProjectGoal,
+  looksLikeRawUserPrompt,
   seedGoalOfTheAppSection,
 } from './spineSequenceGates';
 import { peekPendingProjectIdea } from './ideHomeEvents';
@@ -153,14 +155,21 @@ export async function persistMasterPlanFromAssistantSource(
   }
   if (Object.keys(parsed).length === 0) return 0;
   const goalBody = (parsed[1] ?? '').trim();
+  const briefHint = extraGoalFallbacks.filter(Boolean).join('\n');
   if (
     /\bSTART_CODING\b/i.test(goalBody) ||
     /\bPLAN_READY\b/i.test(goalBody) ||
+    looksLikeRawUserPrompt(goalBody, briefHint) ||
     !isUsableProjectGoal(goalBody)
   ) {
-    parsed[1] = extractProductGoalFromSection(goalBody);
+    parsed[1] =
+      distillBriefToGoalSection(goalBody || briefHint, briefHint) ||
+      extractProductGoalFromSection(goalBody);
   }
-  if (!isUsableProjectGoal((parsed[1] ?? '').trim())) {
+  if (
+    !isUsableProjectGoal((parsed[1] ?? '').trim()) ||
+    looksLikeRawUserPrompt((parsed[1] ?? '').trim(), briefHint)
+  ) {
     const planLike: Record<string, string> = {};
     for (let i = 1; i <= MASTER_PLAN_SECTION_KEYS.length; i++) {
       const key = MASTER_PLAN_SECTION_KEYS[i - 1];

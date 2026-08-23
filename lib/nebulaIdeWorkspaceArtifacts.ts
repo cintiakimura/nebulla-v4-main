@@ -89,7 +89,7 @@ export function fillMissingMasterPlanSectionsLocal(opts: {
     memoryGoal,
     name,
   ]);
-  if (seededGoal && goalSectionNeedsReseed(goalNow)) {
+  if (seededGoal && goalSectionNeedsReseed(goalNow, note)) {
     next["1. Goal of the app"] = seededGoal;
     updated.push("1. Goal of the app");
   }

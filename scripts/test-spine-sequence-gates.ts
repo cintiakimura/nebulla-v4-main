@@ -21,6 +21,8 @@ import {
   inferGoalFromPlanRecord,
   isCodingCommandNote,
   isUsableProjectGoal,
+  looksLikeRawUserPrompt,
+  distillBriefToGoalSection,
   planRecordHasUsableGoal,
   seedGoalOfTheAppSection,
   uiBriefTooShort,
@@ -155,6 +157,33 @@ assert.equal(
   "Build a mobile education app for children aged 7–10 to practice daily reading.",
 );
 assert.equal(extractGoalFromUserNote("continue"), "");
+{
+  const rawPrompt = [
+    "Build a privacy-first learning companion for children that delivers homework support with adaptive micro-learning, teacher upload/camera capture, parent progress visibility, and an AI tutor grounded in the cognitive-load / educational-neuroscience approach described in the study below — never a surveillance or content-piracy product.",
+    "",
+    "https://example.com/study/cognitive-load",
+    "",
+    "Primary users: children, teachers, parents.",
+    "In scope: homework help, adaptive sessions, teacher capture, parent progress.",
+    "Out of scope: surveillance, content piracy.",
+  ].join("\n");
+  assert.equal(looksLikeRawUserPrompt(rawPrompt), true);
+  const distilled = distillBriefToGoalSection(rawPrompt, "Mobile App");
+  assert.match(distilled, /privacy-first learning companion/i);
+  assert.match(distilled, /Project Type: Mobile App/i);
+  assert.equal(/https?:\/\//.test(distilled), false);
+  assert.equal(/study below/i.test(distilled), false);
+  assert.ok(distilled.length <= 900);
+  assert.ok((distilled.match(/Primary users:/gi) || []).length <= 1);
+  const seededDump = seedGoalOfTheAppSection({ "1. Goal of the app": rawPrompt }, [rawPrompt]);
+  assert.equal(looksLikeRawUserPrompt(seededDump), false);
+  assert.match(seededDump, /privacy-first learning companion/i);
+  const extracted = extractGoalFromUserNote(
+    `FAST PROTOTYPE MODE. User goal / brief:\n"""\n${rawPrompt}\n"""\n`,
+  );
+  assert.ok(extracted.length <= 400);
+  assert.equal(/https?:\/\//.test(extracted), false);
+}
 assert.match(
   extractProductGoalFromSection(
     "Daily reading practice for kids 7–10. Teachers assign. Parents view weekly progress.\nPrimary actions: Start lesson\nAuthz: child",

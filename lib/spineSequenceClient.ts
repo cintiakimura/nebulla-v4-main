@@ -88,26 +88,140 @@ export function isCodingCommandNote(note?: string | null): boolean {
   return false;
 }
 
+function unwrapUserBrief(raw: string): string {
+  const tagged = raw.match(/User goal \/ brief:\s*"""([\s\S]*?)"""/i);
+  if (tagged?.[1]?.trim()) return tagged[1].trim();
+  if (/FAST PROTOTYPE|User goal/i.test(raw)) {
+    const quoted = raw.match(/"""([\s\S]*?)"""/);
+    if (quoted?.[1]?.trim()) return quoted[1].trim();
+  }
+  return raw.trim();
+}
+
+function clipAtWord(text: string, maxChars: number): string {
+  const s = String(text || "").trim();
+  if (s.length <= maxChars) return s;
+  const cut = s.slice(0, maxChars);
+  const at = Math.max(
+    cut.lastIndexOf(". "),
+    cut.lastIndexOf("—"),
+    cut.lastIndexOf(" – "),
+    cut.lastIndexOf("; "),
+    cut.lastIndexOf(", "),
+  );
+  return (at >= 80 ? cut.slice(0, at) : cut).replace(/[,;:\s—–-]+$/, "").trim();
+}
+
+/** Opening purpose only — never the whole landing essay. */
+export function firstPurposeSentences(text: string, maxChars = 400): string {
+  const firstPara = String(text || "").split(/\n\s*\n/)[0] || String(text || "");
+  let t = firstPara
+    .replace(/https?:\/\/\S+/gi, " ")
+    .replace(/described in the study below\s*[—–\-:,]?\s*/gi, " ")
+    .replace(/\bFAST PROTOTYPE (MODE|CONTINUE)\.\s*/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  const parts = t.match(/[^.!?]+[.!?]+(?:\s+|$)/g);
+  if (parts && parts.length > 0) {
+    t = parts.slice(0, 2).join(" ").trim();
+  }
+  return clipAtWord(t, maxChars);
+}
+
+function labeledLine(raw: string, re: RegExp): string {
+  const m = String(raw || "").match(re);
+  return (m?.[1] || "").replace(/\s+/g, " ").trim();
+}
+
+function inferProjectTypeFromBrief(text: string): string {
+  const t = String(text || "");
+  if (/\bmobile app\b/i.test(t) || (/\bmobile\b/i.test(t) && !/\bweb app\b/i.test(t))) {
+    return "Mobile App";
+  }
+  if (/\blanding page\b/i.test(t)) return "Landing Page";
+  return "Web App";
+}
+
+function normalizeGoalCompare(s: string): string {
+  return String(s || "")
+    .toLowerCase()
+    .replace(/https?:\/\/\S+/g, " ")
+    .replace(/project type:\s*[^\n]+/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/**
+ * True when §1 is the user's raw prompt (or an essay dump), not a Goal tab.
+ */
+export function looksLikeRawUserPrompt(section?: string | null, rawBrief?: string | null): boolean {
+  const t = String(section || "").trim();
+  if (!t) return false;
+  if (/User goal \/ brief:|FAST PROTOTYPE (MODE|CONTINUE)\./i.test(t)) return true;
+  if (/described in the study below/i.test(t)) return true;
+  if (/https?:\/\//i.test(t) && t.length > 400) return true;
+  const paragraphs = t.split(/\n\s*\n/).filter((p) => p.trim());
+  if (t.length > 900 && paragraphs.length >= 3 && /^build a\b/i.test(t)) return true;
+  if (t.length > 1600) return true;
+  const brief = unwrapUserBrief(String(rawBrief || ""));
+  if (brief.length >= 80) {
+    const a = normalizeGoalCompare(t).slice(0, 280);
+    const b = normalizeGoalCompare(brief).slice(0, 280);
+    const structured =
+      /^Project Type:/im.test(t) && t.length <= 900 && !/https?:\/\//.test(t) && !/study below/i.test(t);
+    if (!structured && a && b && (a === b || a.includes(b.slice(0, 140)) || b.includes(a.slice(0, 140)))) {
+      if (t.length > 400 || brief.length > 400) return true;
+    }
+  }
+  return false;
+}
+
+const GOAL_DISTILL_MAX = 900;
+
+/**
+ * Turn a landing / chat prompt into a Goal tab: purpose, users, in/out of scope.
+ * Never keeps study URLs or the raw multi-paragraph prompt.
+ */
+export function distillBriefToGoalSection(brief?: string | null, extraHint?: string | null): string {
+  const raw = unwrapUserBrief(String(brief || "").trim());
+  if (!raw) return "";
+  const purpose = firstPurposeSentences(raw);
+  if (!purpose || !isUsableProjectGoal(purpose)) return "";
+  const users = labeledLine(
+    raw,
+    /(?:primary users?|users?(?:\s*\/\s*roles?)?|who(?:'s| is) it for)\s*[:—–-]\s*([^\n]+)/i,
+  );
+  const inScope = labeledLine(raw, /in scope[^\n:]*:\s*([^\n]+)/i);
+  const outScope = labeledLine(raw, /out of scope[^\n:]*:\s*([^\n]+)/i);
+  const type = inferProjectTypeFromBrief(`${raw}\n${extraHint || ""}`);
+  const lines = [`Project Type: ${type}`, "", purpose];
+  if (users) lines.push("", `Primary users: ${clipAtWord(users, 180)}`);
+  if (inScope) lines.push(`In scope (v1): ${clipAtWord(inScope, 220)}`);
+  if (outScope) lines.push(`Out of scope: ${clipAtWord(outScope, 180)}`);
+  if (!users && !inScope && !outScope) {
+    lines.push("", "Users, problem, and MVP scope for this workspace.");
+  }
+  return lines.join("\n").trim().slice(0, GOAL_DISTILL_MAX);
+}
+
 /**
  * Pull the real product brief out of a Fast Prototype bootstrap or user note.
  * "continue" / START_CODING slice instructions return empty.
+ * Long essays are reduced to the opening purpose — not stored as §1 verbatim.
  */
 export function extractGoalFromUserNote(note?: string | null): string {
   const raw = String(note || "").trim();
   if (!raw) return "";
-  const brief = raw.match(/User goal \/ brief:\s*"""([\s\S]*?)"""/i);
-  if (brief?.[1]?.trim()) {
-    const inner = brief[1].trim().replace(/\s+/g, " ");
-    if (isUsableProjectGoal(inner)) return inner.slice(0, 2000);
-  }
-  const quoted = raw.match(/"""([\s\S]*?)"""/);
-  if (quoted?.[1]?.trim() && /FAST PROTOTYPE|User goal/i.test(raw)) {
-    const inner = quoted[1].trim().replace(/\s+/g, " ");
-    if (isUsableProjectGoal(inner)) return inner.slice(0, 2000);
+  const inner = unwrapUserBrief(raw);
+  if (inner && inner !== raw) {
+    const purpose = firstPurposeSentences(inner);
+    if (isUsableProjectGoal(purpose)) return purpose.slice(0, 400);
   }
   if (isCodingCommandNote(raw)) return "";
+  const purpose = firstPurposeSentences(raw);
+  if (isUsableProjectGoal(purpose)) return purpose.slice(0, 400);
   const slice = raw.replace(/\s+/g, " ").trim();
-  if (isUsableProjectGoal(slice)) return slice.slice(0, 2000);
+  if (isUsableProjectGoal(slice)) return slice.slice(0, 400);
   return "";
 }
 
@@ -186,10 +300,11 @@ export function isUsableProjectGoal(goal: string): boolean {
   return true;
 }
 
-/** Empty, too short, or orchestration stub (PLAN_READY / START_CODING) — rewrite §1. */
-export function goalSectionNeedsReseed(goal: string): boolean {
+/** Empty, too short, orchestration stub, or raw prompt dump — rewrite §1. */
+export function goalSectionNeedsReseed(goal: string, rawBrief?: string | null): boolean {
   const t = String(goal || "").trim();
   if (!t || t.length < MIN_SEEDED_GOAL_CHARS) return true;
+  if (looksLikeRawUserPrompt(t, rawBrief)) return true;
   return !isUsableProjectGoal(t);
 }
 
@@ -234,26 +349,30 @@ export function seedGoalOfTheAppSection(
   extraFallbacks: string[] = [],
 ): string {
   const existing = pickPlanText(plan?.["1. Goal of the app"]);
-  if (existing.length >= MIN_SEEDED_GOAL_CHARS && isUsableProjectGoal(existing)) return existing;
+  const briefHint = extraFallbacks.filter(Boolean).join("\n");
+  if (
+    existing.length >= MIN_SEEDED_GOAL_CHARS &&
+    isUsableProjectGoal(existing) &&
+    !looksLikeRawUserPrompt(existing, briefHint)
+  ) {
+    return existing;
+  }
   const rescued = extractProductGoalFromSection(existing);
   const inferred = inferGoalFromPlanRecord(plan, extraFallbacks);
   const coreRaw =
-    rescued && isUsableProjectGoal(rescued)
+    rescued && isUsableProjectGoal(rescued) && !looksLikeRawUserPrompt(rescued, briefHint)
       ? rescued
-      : existing.length >= 8 && isUsableProjectGoal(existing)
+      : existing.length >= 8 && isUsableProjectGoal(existing) && !looksLikeRawUserPrompt(existing, briefHint)
         ? existing
-        : inferred;
+        : inferred || existing || briefHint;
   if (!coreRaw) return "";
-  const who = coreRaw
-    .replace(/\bSTART_CODING\b/gi, " ")
-    .replace(/\bPLAN_READY\b/gi, " ")
-    .replace(/\b(Authz|Empty state|Error state|Primary actions|Data entities|Nav links)\s*:[^.\n]*/gi, " ")
-    .replace(/\s+/g, " ")
-    .trim()
-    .slice(0, 280);
+  const distilled = distillBriefToGoalSection(coreRaw, briefHint);
+  if (distilled && isUsableProjectGoal(distilled) && !looksLikeRawUserPrompt(distilled)) {
+    return distilled;
+  }
+  const who = firstPurposeSentences(coreRaw, 280);
   if (!who || !isUsableProjectGoal(who)) return "";
-  const projectType =
-    /\bmobile\b/i.test(who) && !/\bweb app\b/i.test(who) ? "Mobile App" : "Web App";
+  const projectType = inferProjectTypeFromBrief(`${who}\n${briefHint}`);
   return [
     `Project Type: ${projectType}`,
     "",
@@ -263,5 +382,5 @@ export function seedGoalOfTheAppSection(
   ]
     .join("\n")
     .trim()
-    .slice(0, 2000);
+    .slice(0, 900);
 }

@@ -86,6 +86,8 @@ assert.ok(fast.includes('competitor-research.md'));
 assert.ok(fast.includes('THIS TURN = PLAN ONLY'));
 assert.ok(fast.includes('Do NOT emit START_CODING'));
 assert.ok(fast.includes('Always fill §1 Goal'));
+assert.ok(fast.includes('Never paste the raw user prompt'));
+assert.equal(/copy\/expand the user brief/i.test(fast), false);
 assert.ok(fast.includes('Web Search'));
 assert.ok(fast.includes('Do not skip research'));
 assert.equal(/Do not skip or reorder/.test(fast), false);

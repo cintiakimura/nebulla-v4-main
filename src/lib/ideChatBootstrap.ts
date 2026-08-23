@@ -117,8 +117,8 @@ export function buildFastPrototypeBootstrap(
     `industry-standards.md as ASSUMPTION defaults only (roles, security baseline when kids/accounts/payments). Not finished research.\n` +
     `Do NOT invent competitor names. Do NOT write nebula-project/competitor-research.md with guessed products.\n` +
     `Do NOT emit START_CODING, <START_CODING>, or app \`\`\`file:\` blocks (app/, src/, pages/, components/). nebula-project/ files are OK.\n` +
-    `Draft all five Master Plan sections inside <START_MASTERPLAN>…</END_MASTERPLAN> with REAL content (never placeholder "Build Untitled…" or empty cyan shells). Always fill §1 Goal with a real paragraph from the user brief — never "Not specified", "TBD", or empty. Label inferred fields as assumptions; Web Search will overwrite competitors:\n` +
-    `- §1 Goal: purpose, primary users/roles, in/out of scope (copy/expand the user brief).\n` +
+    `Draft all five Master Plan sections inside <START_MASTERPLAN>…</END_MASTERPLAN> with REAL content (never placeholder "Build Untitled…" or empty cyan shells). Always fill §1 Goal with a distilled Goal tab from the user brief — never "Not specified", "TBD", empty, or the raw prompt pasted verbatim. Label inferred fields as assumptions; Web Search will overwrite competitors:\n` +
+    `- §1 Goal: purpose, primary users/roles, in/out of scope. Never paste the raw user prompt, study URLs, or "the study below" into §1.\n` +
     `- §2 Tech and Research: Project Type; competitors = TBD until Web Search; **include Security baseline** when accounts/kids/students/private data apply.\n` +
     `- §3 Features + at least one testable KPI (assumption-ranked; research will correct).\n` +
     `- §4 Pages: every page with route \`/…\` AND fields purpose, primary_actions, data_entities, authz, empty_state, error_state, nav_links (minimum 3–5 pages).\n` +
