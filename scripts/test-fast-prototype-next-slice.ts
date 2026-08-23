@@ -274,6 +274,12 @@ assert.equal(
   true,
   'persisted Foundation + nested routes must not redo Foundation on Continue',
 );
+assert.equal(
+  workspaceFoundationLanded([], { lastSlice: 'Foundation' }),
+  true,
+  'stale empty explorer must not redo Foundation after a slice was persisted',
+);
+assert.equal(workspaceFoundationLanded([]), false);
 assert.match(buildAutopilotSliceInstruction('Secondary'), /SLICE: Secondary/);
 
 assert.equal(userNoteRequestsNextSlice('continue building'), true);
@@ -334,7 +340,8 @@ assert.equal(APPLY_IN_FLIGHT_STALL_MS, 15_000);
     'must not inject a continue-building chat turn',
   );
   assert.match(chat, /foundationLandedOnDisk/);
-  assert.match(chat, /workspaceFoundationLanded\(workspacePaths/);
+  assert.match(chat, /\/api\/source-control\/overview/);
+  assert.match(chat, /stale empty explorer|diskPaths/);
   assert.match(chat, /FOUNDATION_RETRY_ACTIVITY/);
   assert.match(chat, /productRoutesOnDisk: foundationOnDisk/);
   assert.match(chat, /Retry research/);

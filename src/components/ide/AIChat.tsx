@@ -17,6 +17,7 @@ import {
 import { fetchNebulaPublicConfig } from '../../lib/nebulaPublicConfig';
 import { isAbortLikeError, isAbortLikeMessage } from '../../lib/abortLikeError';
 import { fetchJson, readResponseJson } from '../../lib/apiFetch';
+import { isUserAppProductPath } from '../../../lib/nebulaOrchestrationPaths';
 import {
   getBrowserProjectKey,
   getBrowserProjectName,
@@ -1897,8 +1898,24 @@ export function AIChat() {
     if (buildMode && activePath) {
       pushActivity(`Open in editor: ${activePath}`, 'info');
     }
-    if (buildMode && workspacePaths.length > 0) {
-      pushActivity(`Workspace index: ${workspacePaths.length} file(s)`, 'info');
+    let diskPaths = workspacePaths;
+    if (userNoteRequestsNextSlice(rawText) || userForcedCoding) {
+      try {
+        const overview = await fetchJson<{ nebulaFiles?: { relativePath: string }[] }>(
+          withProjectQuery('/api/source-control/overview'),
+          { credentials: 'include', cache: 'no-store' },
+        );
+        const fresh = (overview.nebulaFiles ?? [])
+          .map((f) => String(f.relativePath || '').replace(/\\/g, '/'))
+          .filter((p) => isUserAppProductPath(p));
+        if (fresh.length > 0) diskPaths = fresh;
+        void refreshTree();
+      } catch {
+        /* keep explorer snapshot */
+      }
+    }
+    if (buildMode && diskPaths.length > 0) {
+      pushActivity(`Workspace index: ${diskPaths.length} file(s)`, 'info');
     }
     const ideAppendix = ideContextSnippetForChat(
       activePath,
@@ -1930,7 +1947,7 @@ export function AIChat() {
       pushActivity(line, 'warn');
     };
     const foundationLandedOnDisk = () =>
-      workspaceFoundationLanded(workspacePaths, {
+      workspaceFoundationLanded(diskPaths, {
         lastSlice: lastAutoSliceLabelRef.current,
         projectKey: resolveActiveProjectIds(diskProjectKey).projectKey,
       });

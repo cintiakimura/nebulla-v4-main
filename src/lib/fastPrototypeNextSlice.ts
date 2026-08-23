@@ -406,7 +406,8 @@ export function workspaceFoundationLanded(
   if (countWorkspaceProductRoutes(paths) >= FOUNDATION_PRODUCT_ROUTE_MIN) return true;
   const last =
     String(opts?.lastSlice || '').trim() || readLastAppliedSlice(opts?.projectKey || '');
-  return Boolean(last) && workspaceHasProductAppRoutes(paths);
+  // Persist wins over a stale explorer index (often "1 file" right after apply).
+  return Boolean(last);
 }
 
 /**
