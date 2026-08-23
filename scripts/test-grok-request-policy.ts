@@ -96,9 +96,9 @@ section("Wiring — search tools only on research Responses call");
 
 section("Gate R unchanged");
 {
-  const artifact = fs.readFileSync(path.join(root, "lib/researchArtifact.ts"), "utf8");
+  const stages = fs.readFileSync(path.join(root, "lib/researchStages.ts"), "utf8");
   const server = fs.readFileSync(path.join(root, "server.ts"), "utf8");
-  assert.match(artifact, /RESEARCH_MIN_COMPETITORS = 5/);
+  assert.match(stages, /RESEARCH_MIN_COMPETITORS = 3/);
   assert.match(server, /RESEARCH_INCOMPLETE/);
   assert.match(server, /runResearchStroke/);
 }

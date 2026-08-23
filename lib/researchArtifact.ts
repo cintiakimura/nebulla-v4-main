@@ -6,17 +6,21 @@
 
 import fs from "fs";
 import path from "path";
+import {
+  RESEARCH_MAX_COMPETITORS,
+  RESEARCH_MIN_COMPETITORS,
+} from "./researchStages";
 export {
   RESEARCH_STAGE_BRIEF,
   RESEARCH_STAGE_MERGING,
   RESEARCH_STAGE_SEARCHING,
   RESEARCH_STAGE_WRITING,
   RESEARCH_STOPPED,
+  RESEARCH_MIN_COMPETITORS,
+  RESEARCH_MAX_COMPETITORS,
 } from "./researchStages";
 
 export const RESEARCH_ARTIFACT_REL = "nebula-project/competitor-research.md";
-export const RESEARCH_MIN_COMPETITORS = 5;
-export const RESEARCH_MAX_COMPETITORS = 10;
 
 /** Demo-only. Production default is research ON. */
 export function isResearchSkipEnabled(workspaceRoot?: string): boolean {
@@ -155,7 +159,7 @@ function sliceSection(md: string, heading: RegExp): string {
 
 export function countRankedFeatures(md: string): number {
   const section =
-    sliceSection(md, /##\s*(Feature map|Ranked features|Recurring features)\b/i) ||
+    sliceSection(md, /##\s*(Feature map|Ranked features|Recurring features|Recurring patterns)\b/i) ||
     sliceSection(md, /##\s*Features\b/i);
   if (!section) return 0;
   const bullets = section.split("\n").filter((l) => /^\s*([-*•]|\d+[.)])\s+\S/.test(l)).length;
@@ -266,13 +270,8 @@ export function assessResearchArtifact(
   }
   const rankedFeatureCount = countRankedFeatures(md);
   if (rankedFeatureCount < 3) {
-    reasons.push("ranked recurring features missing or too thin");
+    reasons.push("need at least 3 recurring-feature bullets (short list is enough)");
   }
-  if (!hasUiPatternsSection(md)) reasons.push("UI/UX patterns section missing");
-  if (!hasEvidenceSection(md)) {
-    reasons.push('evidence section missing (need sources or "No supporting studies found for this feature.")');
-  }
-  if (!hasAssumptionsSection(md)) reasons.push("assumptions list missing");
   if (md.trim()) {
     const stored = parseGoalFingerprint(md);
     const candidates = [opts?.goal, ...(opts?.goalCandidates || [])]

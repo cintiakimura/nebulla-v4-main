@@ -73,7 +73,7 @@ export function buildAssumptionStub(opts: {
     "",
     "## Competitors",
     "",
-    "(Web Search will fill 5–10 real product names — do not invent.)",
+    "(Web Search will fill 3–10 real product names — do not invent.)",
     "",
     "## Feature map",
     "",
@@ -245,8 +245,9 @@ export async function runResearchStroke(opts: {
 
     const system = `You are Grok doing ONE research stroke with Web Search for Nebulla.
 Write a compact markdown research file. Real product names only — never invent companies.
+Short bullets are enough — do not write essays or academic citations.
 If a fact is not found, write exactly: No supporting studies found for this feature.
-Do not write essays. Do not emit file fences other than the markdown body.
+Do not emit file fences other than the markdown body.
 Output the full markdown document with these headings exactly:
 # Competitor research
 ## Category
@@ -263,10 +264,10 @@ Goal:
 ${opts.goal.slice(0, 1500)}
 
 Search the web for:
-1) ${RESEARCH_MIN_COMPETITORS}–${RESEARCH_MAX_COMPETITORS} real competitor or analogue products (apps/sites) in this category
-2) ranked recurring features across those products
-3) UI/UX patterns (layout, nav, density, tone) for the likely device
-4) any study/stat for the top features — or the exact no-studies line
+1) at least ${RESEARCH_MIN_COMPETITORS} real competitor or analogue products (apps/sites) in this category (up to ${RESEARCH_MAX_COMPETITORS})
+2) a short ranked / recurring-feature bullet list (3+ bullets)
+3) optional UI/UX notes
+4) optional study/stat — or the exact no-studies line
 
 Assumptions already inferred (confirm or correct in ## Assumptions):
 ${inferAssumptionsFromGoal(opts.goal, opts.projectType)
@@ -280,7 +281,7 @@ Mark each assumption CONFIRMED or CORRECTED after search.`;
       system,
       user,
     });
-    if (!searched.ok) {
+    if (searched.ok === false) {
       const gate = assessResearchArtifact(opts.workspaceRoot, { goal: opts.goal });
       return { ok: false, gate, wrote: true, merged: [], error: searched.error };
     }
@@ -291,7 +292,8 @@ Mark each assumption CONFIRMED or CORRECTED after search.`;
     });
     writeResearchArtifact(opts.workspaceRoot, body);
     let gate = assessResearchArtifact(opts.workspaceRoot, { goal: opts.goal });
-    if (!gate.ok) {
+    // Fast Prototype: one primary Web Search stroke. Second rewrite only when force: true.
+    if (!gate.ok && opts.force) {
       const repaired = await callGrokWebSearch({
         apiKey: opts.apiKey,
         system: `You are rewriting a competitor-research markdown file so it passes a strict parser.

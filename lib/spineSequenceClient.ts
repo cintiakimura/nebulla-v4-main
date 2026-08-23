@@ -171,6 +171,9 @@ export function isUsableProjectGoal(goal: string): boolean {
   if (/\bPurpose:\s*Primary landing\b/i.test(t)) return false;
   if (/^Home\s+'?\/'?/i.test(t) || /\bHome\s+'\/'\s*-/i.test(t)) return false;
   const lower = t.toLowerCase().replace(/[.!?]+$/g, "").trim();
+  if (/\bnot specified\b/i.test(t)) return false;
+  if (/build untitled/i.test(t)) return false;
+  if (/^(tbd|todo|n\/a|none|placeholder)(\s|$)/i.test(lower)) return false;
   if (
     /^(untitled(\s+project)?|new project|test(ing)?|hello|hi|hey|asdf+|xxx+|foo|bar|ok|okay|go|start|continue|build next|next slice)$/i.test(
       lower,
@@ -189,7 +192,7 @@ export function goalSectionNeedsReseed(goal: string): boolean {
 }
 
 export const ASK_FOR_SHORT_GOAL =
-  "Write a short goal for this app (who it is for and what it helps them do). I will not start the UI mockup or Foundation until that exists.";
+  "Write a short usable goal for this app (who it is for and what it helps them do). I will not start research, the UI mockup, or Foundation until §1 is filled.";
 
 /** Empty Master Plan / missing §1 must not skip Grok chat or start research/Go. */
 export function planRecordHasUsableGoal(plan: Record<string, unknown> | null | undefined): boolean {

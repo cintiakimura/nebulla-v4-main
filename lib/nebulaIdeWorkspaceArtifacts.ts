@@ -96,7 +96,7 @@ export function fillMissingMasterPlanSectionsLocal(opts: {
 
   if (missing.includes("2. Tech and Research")) {
     next["2. Tech and Research"] = [
-      `- **Category:** ${name} — research 5–10 real competitors and their dominant UX patterns before coding.`,
+      `- **Category:** ${name} — research 3–10 real competitors and their dominant UX patterns before coding.`,
       "- **Industry UI:** derive palette, density, and nav from competitor research + user discovery (not Nebulla IDE chrome).",
       "- **Stack:** Next.js App Router, TypeScript, Tailwind, shadcn/ui.",
       "- **Integrations:** auth, dashboards, uploads as described in discovery.",

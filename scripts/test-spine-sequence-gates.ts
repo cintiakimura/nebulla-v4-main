@@ -133,6 +133,7 @@ assert.equal(isUsableProjectGoal(""), false);
 assert.equal(isUsableProjectGoal("hi"), false);
 assert.equal(isUsableProjectGoal("test"), false);
 assert.equal(isUsableProjectGoal("tutor kids with ADHD"), true);
+assert.equal(isUsableProjectGoal("Not specified"), false);
 assert.equal(isUsableProjectGoal("continue"), false);
 assert.equal(isUsableProjectGoal("next slice"), false);
 assert.equal(

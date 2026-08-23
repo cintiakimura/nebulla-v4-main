@@ -183,11 +183,71 @@ assert.equal(nextAutopilotSliceLabel('Secondary'), 'Polish');
     autopilotKickoff: true,
     productRouteCount: 2,
   });
+  assert.equal(d.advance, false);
+  assert.equal(d.stopReason, 'failed');
+  assert.match(d.message, /Retry Go for Foundation/i);
+}
+{
+  const d = shouldAutopilotAdvance({
+    codingOk: true,
+    lastSlice: 'Secondary',
+    autoCount: 0,
+    autopilotKickoff: true,
+    productRouteCount: 2,
+    productRoutesOnDisk: true,
+  });
   assert.equal(d.advance, true);
   assert.equal(d.nextLabel, 'Polish');
   assert.equal(d.stopReason, 'next');
   assert.match(d.message, /Starting Polish slice automatically/i);
   assert.equal(/send Continue/i.test(d.message), false);
+}
+{
+  const d = shouldAutopilotAdvance({
+    codingOk: true,
+    lastSlice: 'Primary',
+    autoCount: 0,
+    autopilotKickoff: true,
+    productRouteCount: 0,
+  });
+  assert.equal(d.advance, false);
+  assert.equal(d.stopReason, 'failed');
+  assert.match(d.message, /Retry Go for Foundation/i);
+}
+{
+  const d = shouldAutopilotAdvance({
+    codingOk: true,
+    lastSlice: 'Primary',
+    autoCount: 0,
+    autopilotKickoff: true,
+    productRouteCount: 2,
+  });
+  assert.equal(d.advance, false);
+  assert.equal(d.stopReason, 'failed');
+  assert.match(d.message, /Retry Go for Foundation/i);
+}
+{
+  const d = shouldAutopilotAdvance({
+    codingOk: true,
+    lastSlice: 'Primary',
+    autoCount: 0,
+    autopilotKickoff: true,
+    productRouteCount: 3,
+  });
+  assert.equal(d.advance, true);
+  assert.equal(d.nextLabel, 'Secondary');
+}
+{
+  const d = shouldAutopilotAdvance({
+    codingOk: true,
+    lastSlice: 'Foundation',
+    autoCount: 0,
+    autopilotKickoff: true,
+    productRouteCount: 5,
+    wroteFiles: false,
+  });
+  assert.equal(d.advance, false);
+  assert.equal(d.stopReason, 'failed');
 }
 {
   const d = shouldAutopilotAdvance({
@@ -229,8 +289,8 @@ assert.equal(nextAutopilotSliceLabel('Secondary'), 'Polish');
     blockedCode: 'GO_TIMEOUT',
   });
   assert.match(d.message, /GO_TIMEOUT/);
-  assert.match(d.message, /Primary did not land/);
-  assert.equal(/Foundation did not land/i.test(d.message), false);
+  assert.match(d.message, /Foundation files did not land/);
+  assert.equal(/Primary did not land/i.test(d.message), false);
 }
 assert.match(policyATimeoutMessage('Primary', true), /Primary did not land/);
 assert.equal(/send Continue/i.test(policyATimeoutMessage('Foundation', false)), false);
@@ -315,13 +375,13 @@ assert.equal(
   workspaceFoundationLanded(['app/teacher/dashboard/page.tsx', 'app/parent/dashboard/page.tsx'], {
     lastSlice: 'Foundation',
   }),
-  true,
-  'persisted Foundation + nested routes must not redo Foundation on Continue',
+  false,
+  '2 product routes is not Foundation on disk — last-slice label is not proof',
 );
 assert.equal(
   workspaceFoundationLanded([], { lastSlice: 'Foundation' }),
-  true,
-  'stale empty explorer must not redo Foundation after a slice was persisted',
+  false,
+  'empty explorer + last-slice persist is not disk proof',
 );
 assert.equal(workspaceFoundationLanded([]), false);
 assert.match(buildAutopilotSliceInstruction('Secondary'), /SLICE: Secondary/);
@@ -368,6 +428,7 @@ assert.equal(APPLY_IN_FLIGHT_STALL_MS, 15_000);
 {
   const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
   const chat = fs.readFileSync(path.join(root, 'src/components/ide/AIChat.tsx'), 'utf8');
+  const nextSliceSrc = fs.readFileSync(path.join(root, 'src/lib/fastPrototypeNextSlice.ts'), 'utf8');
   assert.equal(
     /Starting Primary slice automatically/.test(chat),
     false,
@@ -405,6 +466,14 @@ assert.equal(APPLY_IN_FLIGHT_STALL_MS, 15_000);
   assert.match(chat, /stale empty explorer|diskPaths/);
   assert.match(chat, /FOUNDATION_RETRY_ACTIVITY/);
   assert.match(chat, /productRoutesOnDisk: foundationOnDisk/);
+  assert.equal(
+    /\\b\(primary\|secondary\|polish\)\\b/.test(chat),
+    false,
+    'last-slice Primary/Secondary/Polish must not count as Foundation on disk',
+  );
+  assert.match(chat, /FOUNDATION_PRODUCT_ROUTE_MIN/);
+  assert.match(nextSliceSrc, /thisTurnOk \|\| foundationOnDisk/);
+  assert.equal(/lastImpliesFoundationLanded/.test(nextSliceSrc), false);
   assert.match(chat, /Retry research/);
   assert.match(chat, /fetchResearchStatus\(projectName\)/);
   assert.match(

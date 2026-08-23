@@ -83,6 +83,7 @@ import {
   FAST_PROTOTYPE_SAME_SESSION_AUTOPILOT,
   APPLY_IN_FLIGHT_STALL_MS,
   FOUNDATION_APPLY_STALL_MS,
+  FOUNDATION_PRODUCT_ROUTE_MIN,
   getAutopilotSliceCount,
   incrementAutopilotSliceCount,
   looksLikeApplyInFlightStall,
@@ -508,9 +509,9 @@ export function AIChat() {
       autopilotKickoff: true,
       productRouteCount: lastAutoProductRouteCountRef.current,
       productRoutesOnDisk:
-        /\b(primary|secondary|polish)\b/i.test(String(lastAutoSliceLabelRef.current || '')) ||
-        (typeof lastAutoProductRouteCountRef.current === 'number' &&
-          lastAutoProductRouteCountRef.current >= 3),
+        typeof lastAutoProductRouteCountRef.current === 'number' &&
+        lastAutoProductRouteCountRef.current >= FOUNDATION_PRODUCT_ROUTE_MIN,
+      wroteFiles: (lastAutoProductRouteCountRef.current ?? 0) > 0,
     });
     if (!decision.advance || !decision.nextLabel) {
       pushActivity(decision.message, 'success');
@@ -548,7 +549,10 @@ export function AIChat() {
       // Persist the slice we launched — Grok dump / thin apply must not rewrite it to Foundation.
       if (go.ok) {
         lastAutoSliceLabelRef.current = decision.nextLabel;
-        lastAutoProductRouteCountRef.current = go.productRouteCount;
+        lastAutoProductRouteCountRef.current = Math.max(
+          lastAutoProductRouteCountRef.current ?? 0,
+          go.productRouteCount ?? 0,
+        );
         persistLastAppliedSlice(projectKey, decision.nextLabel);
       }
       if (autoSliceAbortRef.current) {
@@ -578,9 +582,9 @@ export function AIChat() {
         autopilotKickoff: true,
         productRouteCount: lastAutoProductRouteCountRef.current,
         productRoutesOnDisk:
-          /\b(primary|secondary|polish)\b/i.test(String(lastAutoSliceLabelRef.current || '')) ||
-          (typeof lastAutoProductRouteCountRef.current === 'number' &&
-            lastAutoProductRouteCountRef.current >= 3),
+          typeof lastAutoProductRouteCountRef.current === 'number' &&
+          lastAutoProductRouteCountRef.current >= FOUNDATION_PRODUCT_ROUTE_MIN,
+        wroteFiles: go.ok && (go.totalWritten ?? go.productRouteCount ?? 0) > 0,
       });
       if (again.advance) {
         pushActivity(again.message, 'info');
@@ -602,11 +606,11 @@ export function AIChat() {
         resetCodingActivity();
         return;
       }
-      pushActivity(`${continueFailureActivityLine(failureClass, msg)} — bypassing and continuing`, 'warn');
-      autoSliceInFlightRef.current = false;
-      window.setTimeout(() => {
-        void runAutoNextSliceRef.current();
-      }, 120);
+      pushActivity(
+        `${continueFailureActivityLine(failureClass, msg)} — autopilot stopped (Retry Go for Foundation if routes are missing)`,
+        'error',
+      );
+      resetCodingActivity();
       return;
     } finally {
       autoSliceInFlightRef.current = false;
@@ -2817,9 +2821,11 @@ export function AIChat() {
           const { projectKey } = resolveActiveProjectIds(diskProjectKey);
           if (coding.ok !== false && wroteFiles) {
             lastAutoSliceLabelRef.current = codingSliceLabel;
-            lastAutoProductRouteCountRef.current = (
-              coding as { productRouteCount?: number }
-            ).productRouteCount;
+            lastAutoProductRouteCountRef.current = Math.max(
+              lastAutoProductRouteCountRef.current ?? 0,
+              (coding as { productRouteCount?: number }).productRouteCount ?? 0,
+              landedRoutes ?? 0,
+            );
             persistLastAppliedSlice(projectKey, codingSliceLabel);
           }
           const autoDecision = shouldAutopilotAdvance({
@@ -2829,6 +2835,7 @@ export function AIChat() {
             autopilotKickoff: true,
             productRouteCount: lastAutoProductRouteCountRef.current ?? landedRoutes,
             productRoutesOnDisk: foundationOnDisk,
+            wroteFiles,
             blockedCode: coding.blockedReason?.code,
           });
           pushActivity(

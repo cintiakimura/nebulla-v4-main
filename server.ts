@@ -105,6 +105,7 @@ import { softenSecurityBlocksForMvpGo } from "./lib/mvpDeliveryGates";
 import { draftSection4AmendmentsForRoutes } from "./lib/mindMapAmendmentPropose";
 import { isMasterPlanReadyForUiMockup } from "./lib/masterPlanCompleteness";
 import {
+  ASK_FOR_SHORT_GOAL,
   inferGoalFromPlanRecord,
   isUsableProjectGoal,
   seedGoalOfTheAppSection,
@@ -4795,11 +4796,12 @@ Rules:
       if (!isUsableProjectGoal(goal)) {
         return res.status(409).json({
           ok: false,
-          error: "Write a short usable goal before research.",
+          error: ASK_FOR_SHORT_GOAL,
           code: "RESEARCH_INCOMPLETE",
         });
       }
       const existingGoal = String(plan["1. Goal of the app"] || "").trim();
+      let persistedGoal = existingGoal;
       if (!existingGoal || existingGoal.length < 48 || !isUsableProjectGoal(existingGoal)) {
         const seeded = seedGoalOfTheAppSection(plan, [goal, convProject]);
         if (seeded) {
@@ -4807,10 +4809,20 @@ Rules:
             const next = { ...plan, "1. Goal of the app": seeded };
             fs.mkdirSync(path.dirname(pp.masterPlanPath), { recursive: true });
             fs.writeFileSync(pp.masterPlanPath, JSON.stringify(next, null, 2), "utf8");
+            persistedGoal = seeded;
           } catch {
-            /* non-fatal — research can still run on inferred goal */
+            persistedGoal = "";
           }
+        } else {
+          persistedGoal = "";
         }
+      }
+      if (!isUsableProjectGoal(persistedGoal)) {
+        return res.status(409).json({
+          ok: false,
+          error: ASK_FOR_SHORT_GOAL,
+          code: "RESEARCH_INCOMPLETE",
+        });
       }
       const result = await runResearchStroke({
         apiKey,
@@ -4956,7 +4968,31 @@ Rules:
         } catch {
           planForGate = {};
         }
+        const existingGoGoal = String(planForGate["1. Goal of the app"] || "").trim();
+        if (!existingGoGoal || !isUsableProjectGoal(existingGoGoal)) {
+          const seededGoGoal = seedGoalOfTheAppSection(planForGate, [note, convProject]);
+          if (seededGoGoal) {
+            try {
+              const next = { ...planForGate, "1. Goal of the app": seededGoGoal };
+              fs.mkdirSync(path.dirname(masterPlanPath), { recursive: true });
+              fs.writeFileSync(masterPlanPath, JSON.stringify(next, null, 2), "utf8");
+              planForGate = next;
+            } catch {
+              /* persist failed — block below if still unusable */
+            }
+          }
+        }
         const goalForResearchEarly = inferGoalFromPlanRecord(planForGate, [note, convProject]);
+        if (
+          !isUsableProjectGoal(goalForResearchEarly) &&
+          !isUsableProjectGoal(String(planForGate["1. Goal of the app"] || ""))
+        ) {
+          return res.status(409).json({
+            ok: false,
+            error: ASK_FOR_SHORT_GOAL,
+            code: "RESEARCH_INCOMPLETE",
+          });
+        }
         const researchGateEarly = assessResearchArtifact(ppGo.workspaceRoot, {
           goal: goalForResearchEarly,
           goalCandidates: [note, convProject],

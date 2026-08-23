@@ -90,11 +90,11 @@ try {
       ].join("\n"),
     };
     const names = parseCompetitorNamesFromPlan(plan);
-    assert.ok(names.length >= 5, names.join(", "));
+    assert.ok(names.length >= 3, names.join(", "));
     assert.ok(names.includes("Khan Academy Kids"));
     const gate = assessResearchArtifact(tmp, { plan });
     assert.equal(gate.ok, true, gate.reasons.join("; "));
-    assert.ok(gate.competitorCount >= 5);
+    assert.ok(gate.competitorCount >= 3);
   }
 
   section("missing artifact → Gate R fail");
@@ -125,7 +125,39 @@ try {
     writeResearchArtifact(tmp, validResearchMd({ competitors: ["Competitor 1", "Example 2", "Acme", "Foo", "Bar"] }));
     const gate = assessResearchArtifact(tmp);
     assert.equal(gate.ok, false);
-    assert.ok(gate.competitorCount < 5);
+    assert.ok(gate.competitorCount < 3);
+  }
+
+  section("2 real names → Gate R fail");
+  {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "research-two-"));
+    writeResearchArtifact(tmp, validResearchMd({ competitors: ["Khan Academy", "Duolingo"] }));
+    const gate = assessResearchArtifact(tmp);
+    assert.equal(gate.ok, false);
+    assert.equal(gate.competitorCount, 2);
+  }
+
+  section("thin but valid: 3 real names + feature bullets → Gate R ok");
+  {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "research-thin-"));
+    writeResearchArtifact(
+      tmp,
+      [
+        "# Competitor research",
+        "## Competitors",
+        "1. Khan Academy — practice",
+        "2. Duolingo — drills",
+        "3. Epic! — kids reading",
+        "## Feature map",
+        "- Timed practice",
+        "- Progress for adults",
+        "- One next action",
+      ].join("\n"),
+    );
+    const gate = assessResearchArtifact(tmp);
+    assert.equal(gate.ok, true, gate.reasons.join("; "));
+    assert.equal(gate.competitorCount, 3);
+    assert.ok(gate.rankedFeatureCount >= 3);
   }
 
   section("valid research → Gate R ok");
@@ -134,7 +166,7 @@ try {
     writeResearchArtifact(tmp, validResearchMd());
     const gate = assessResearchArtifact(tmp);
     assert.equal(gate.ok, true, gate.reasons.join("; "));
-    assert.ok(gate.competitorCount >= 5);
+    assert.ok(gate.competitorCount >= 3);
     assert.ok(gate.competitorCount <= 10);
   }
 
@@ -256,6 +288,7 @@ try {
   const fast = buildFastPrototypeBootstrap("tutor kids with ADHD", "Web App");
   assert.match(fast, /Web Search/);
   assert.match(fast, /Do not skip research/i);
+  assert.match(fast, /never "Not specified"/);
   assert.equal(/skip-with-reason/i.test(fast), false);
   assert.equal(/invent competitor names/i.test(fast), true);
   const bootstrapSrc = fs.readFileSync(path.join(root, "src/lib/ideChatBootstrap.ts"), "utf8");
@@ -287,9 +320,15 @@ try {
   );
   assert.match(server, /parseCompetitorNamesFromPlan|plan: planSnapshot/);
   assert.match(server, /inferGoalFromPlanRecord\(plan, \[qGoal, qName\]\)/);
-  assert.match(researchClient, /competitorCount >= 5/);
+  assert.match(server, /ASK_FOR_SHORT_GOAL/);
+  assert.equal(/non-fatal — research can still run/.test(server), false);
+  assert.match(
+    fs.readFileSync(path.join(root, "lib/nebulaResearchStroke.ts"), "utf8"),
+    /if \(!gate\.ok && opts\.force\)/,
+  );
+  assert.match(researchClient, /competitorCount >= RESEARCH_MIN_COMPETITORS/);
   assert.match(researchClient, /formatResearchStopMessage/);
-  assert.match(researchClient, /skipped \|\| competitorCount >= 5/);
+  assert.match(researchClient, /skipped \|\| competitorCount >= RESEARCH_MIN_COMPETITORS/);
   {
     const goPost = server.slice(server.indexOf('app.post("/api/grok/go-code"'));
     const pollAt = goPost.indexOf('app.post("/api/grok/go-code/poll"');

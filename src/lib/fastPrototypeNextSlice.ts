@@ -186,6 +186,7 @@ export const MAX_AUTOPILOT_SLICES = 3;
 /**
  * Mode B: one prompt → research → mockup → Foundation → auto Primary → Secondary → Polish.
  * User Continue is not required between slices.
+ * Keep true this turn. Flip to false only after a golden Foundation is proven on prod.
  */
 export const FAST_PROTOTYPE_SAME_SESSION_AUTOPILOT = true;
 
@@ -233,18 +234,21 @@ export function shouldAutopilotAdvance(opts: {
   maxAuto?: number;
   /** Product app/ or pages/ routes from this apply — < 3 means this turn did not land a shell. */
   productRouteCount?: number;
-  /** Workspace already has Foundation routes (ignore this-turn 0 on a timed-out Primary). */
+  /** Workspace already has ≥ FOUNDATION_PRODUCT_ROUTE_MIN product routes. Last-slice label is not proof. */
   productRoutesOnDisk?: boolean;
+  /** Apply actually wrote files this turn. */
+  wroteFiles?: boolean;
   /** When Gate R failed, do not tell the user to Send Go. */
   blockedCode?: string;
 }): AutopilotAdvanceDecision {
   const maxAuto = opts.maxAuto ?? MAX_AUTOPILOT_SLICES;
-  const thinThisTurn =
-    typeof opts.productRouteCount === 'number' && opts.productRouteCount < FOUNDATION_PRODUCT_ROUTE_MIN;
-  const lastImpliesFoundationLanded = sliceProgressRank(opts.lastSlice) >= 3;
-  const foundationOnDisk = opts.productRoutesOnDisk === true || lastImpliesFoundationLanded;
-  const foundationMissing = !foundationOnDisk && (thinThisTurn || !opts.codingOk);
-  if (!opts.codingOk || (thinThisTurn && !foundationOnDisk)) {
+  const thisTurnCount = typeof opts.productRouteCount === 'number' ? opts.productRouteCount : 0;
+  const thisTurnOk = thisTurnCount >= FOUNDATION_PRODUCT_ROUTE_MIN;
+  const foundationOnDisk = opts.productRoutesOnDisk === true;
+  const realFoundation = thisTurnOk || foundationOnDisk;
+  const wroteFiles = opts.wroteFiles !== false;
+  const foundationMissing = !realFoundation;
+  if (!opts.codingOk || !wroteFiles || !realFoundation) {
     if (opts.blockedCode === 'RESEARCH_INCOMPLETE') {
       return {
         advance: false,
@@ -488,13 +492,10 @@ export function workspaceHasProductAppRoutes(paths: string[]): boolean {
 /** Mode A: Foundation has landed — same threshold as apply, or we already persisted a slice. */
 export function workspaceFoundationLanded(
   paths: string[],
-  opts?: { lastSlice?: string | null; projectKey?: string },
+  _opts?: { lastSlice?: string | null; projectKey?: string },
 ): boolean {
-  if (countWorkspaceProductRoutes(paths) >= FOUNDATION_PRODUCT_ROUTE_MIN) return true;
-  const last =
-    String(opts?.lastSlice || '').trim() || readLastAppliedSlice(opts?.projectKey || '');
-  // Persist wins over a stale explorer index (often "1 file" right after apply).
-  return Boolean(last);
+  // Last-slice persist is not disk proof — Primary/Secondary labels must not fake Foundation.
+  return countWorkspaceProductRoutes(paths) >= FOUNDATION_PRODUCT_ROUTE_MIN;
 }
 
 /**

@@ -8,6 +8,7 @@ import type { GrokActivityProgressFn } from './ideGrokActivityStatus';
 import { getGrokRequestHeaders } from './grokUserKey';
 import { withProjectBody, withProjectQuery } from './nebulaProjectApi';
 import {
+  RESEARCH_MIN_COMPETITORS,
   RESEARCH_STAGE_MERGING,
   RESEARCH_STAGE_SEARCHING,
   RESEARCH_STAGE_WRITING,
@@ -71,7 +72,7 @@ export async function fetchResearchStatus(goal?: string): Promise<{
       ? st.gate.reasons.filter((r): r is string => typeof r === 'string' && r.trim().length > 0)
       : [];
     return {
-      ok: st.ok === true && (skipped || competitorCount >= 5),
+      ok: st.ok === true && (skipped || competitorCount >= RESEARCH_MIN_COMPETITORS),
       pending: st.pending === true,
       skipped,
       competitorCount,

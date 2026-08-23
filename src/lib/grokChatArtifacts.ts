@@ -154,7 +154,7 @@ export async function persistMasterPlanFromAssistantSource(
   ) {
     parsed[1] = extractProductGoalFromSection(goalBody);
   }
-  if (!(parsed[1] ?? '').trim()) {
+  if (!isUsableProjectGoal((parsed[1] ?? '').trim())) {
     const planLike: Record<string, string> = {};
     for (let i = 1; i <= MASTER_PLAN_SECTION_KEYS.length; i++) {
       const key = MASTER_PLAN_SECTION_KEYS[i - 1];

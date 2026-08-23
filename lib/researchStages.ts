@@ -9,3 +9,7 @@ export const RESEARCH_STAGE_MERGING = "Updating Master Plan from research…";
 export const RESEARCH_STAGE_BRIEF = "Building ui-brief…";
 export const RESEARCH_STOPPED =
   "Stopped: research not complete — Foundation will not start.";
+
+/** Gate R MVP bar — 3 real names + short features. Not essays. */
+export const RESEARCH_MIN_COMPETITORS = 3;
+export const RESEARCH_MAX_COMPETITORS = 10;
