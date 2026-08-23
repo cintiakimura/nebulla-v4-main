@@ -100,8 +100,16 @@ export function parseMasterPlanBlock(block: string): Partial<Record<number, stri
   return merged;
 }
 
+/** True when the text has canonical numbered Master Plan headings (not chat prose). */
+export function hasNumberedMasterPlanHeadings(block: string): boolean {
+  return String(block || "")
+    .split("\n")
+    .some((line) => LINE_HEADING_RE.test(line));
+}
+
 /** Text before ### 2. / 1. Goal heading is the product goal when Grok skipped §1. */
 function parsePreambleBeforeNumberedSections(block: string): string {
+  if (!hasNumberedMasterPlanHeadings(block)) return "";
   const lines = block.split("\n");
   const preamble: string[] = [];
   for (const line of lines) {

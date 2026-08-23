@@ -134,6 +134,12 @@ assert.equal(isUsableProjectGoal("hi"), false);
 assert.equal(isUsableProjectGoal("test"), false);
 assert.equal(isUsableProjectGoal("tutor kids with ADHD"), true);
 assert.equal(isUsableProjectGoal("Not specified"), false);
+assert.equal(
+  isUsableProjectGoal(
+    "UI generation running from the Master Plan §5 tokens and research-grounded brief.",
+  ),
+  false,
+);
 assert.equal(isUsableProjectGoal("continue"), false);
 assert.equal(isUsableProjectGoal("next slice"), false);
 assert.equal(
@@ -246,6 +252,12 @@ assert.match(
     "Master Plan already on disk — continuing research before coding (not yet).",
   );
   assert.equal(String(skipStub[1] || "").trim(), "");
+}
+{
+  const uiStatus = parseMasterPlanBlock(
+    "UI generation running from the Master Plan §5 tokens and research-grounded brief.",
+  );
+  assert.equal(String(uiStatus[1] || "").trim(), "", "untagged UI status must not become §1 Goal");
 }
 assert.equal(isUsableProjectGoal("PLAN_READY"), false);
 assert.equal(

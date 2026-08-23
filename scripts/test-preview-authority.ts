@@ -6,6 +6,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   applyUiGenerationToPreviewShell,
   buildUiGenerationPreviewHtml,
@@ -310,6 +311,12 @@ section("canvas honesty — product preview / coded bridge is showable (not Figm
     previewMetaHasProductRoutes({ previewHonesty: "mockup_waiting", previewMode: "pre_code_mockup" }),
     false,
   );
+  const canvas = fs.readFileSync(
+    path.join(path.dirname(fileURLToPath(import.meta.url)), "../src/components/ide/shell/previewTools/BuildPreviewCanvas.tsx"),
+    "utf8",
+  );
+  assert.match(canvas, /keepMockupRef/);
+  assert.match(canvas, /keepMockupRef\.current = true/);
 }
 
 console.log("\n✓ preview authority tests passed\n");

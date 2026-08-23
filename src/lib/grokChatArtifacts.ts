@@ -124,6 +124,9 @@ export function isOrchestrationOnlyPlanSource(source: string): boolean {
   if (/^(PLAN_READY|START_CODING|ARCHITECTURE)$/i.test(t)) return true;
   if (/<START_MASTERPLAN>/i.test(t)) return false;
   if (/###?\s*\d\.\s*(Goal of the app|Tech and Research|Features and KPIs)/i.test(t)) return false;
+  if (/UI generation running|Architecture draft is ready|UI mockup is generated from researched/i.test(t)) {
+    return true;
+  }
   if (t.length < 400 && /\b(PLAN_READY|START_CODING)\b/i.test(t)) return true;
   if (
     t.length < 400 &&
@@ -141,6 +144,9 @@ export async function persistMasterPlanFromAssistantSource(
 ): Promise<number> {
   if (isOrchestrationOnlyPlanSource(source)) return 0;
   const inner = extractMasterPlanInner(source);
+  const hasPlanShape =
+    Boolean(inner) || sourceHasMasterPlanBlock(source) || /###?\s*\d\.\s*(Goal of the app|Tech and Research|Features and KPIs)/i.test(source);
+  if (!hasPlanShape) return 0;
   let parsed = inner ? parseMasterPlanBlock(inner) : {};
   if (Object.keys(parsed).length === 0) {
     parsed = parseMasterPlanBlock(source);

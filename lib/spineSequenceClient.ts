@@ -173,6 +173,8 @@ export function isUsableProjectGoal(goal: string): boolean {
   const lower = t.toLowerCase().replace(/[.!?]+$/g, "").trim();
   if (/\bnot specified\b/i.test(t)) return false;
   if (/build untitled/i.test(t)) return false;
+  if (/UI generation running from the Master Plan/i.test(t)) return false;
+  if (/^Architecture draft is ready/i.test(t)) return false;
   if (/^(tbd|todo|n\/a|none|placeholder)(\s|$)/i.test(lower)) return false;
   if (
     /^(untitled(\s+project)?|new project|test(ing)?|hello|hi|hey|asdf+|xxx+|foo|bar|ok|okay|go|start|continue|build next|next slice)$/i.test(

@@ -3,7 +3,7 @@
  * Run: npm run test:chat-mode
  */
 import assert from "node:assert/strict";
-import { detectChatMode, describeChatMode } from "../src/lib/chatModeDetector.ts";
+import { detectChatMode, describeChatMode, userNoteRequestsUiGeneration } from "../src/lib/chatModeDetector.ts";
 import {
   detectGuidedInterviewIntent,
   detectInferenceFirstIntent,
@@ -57,6 +57,10 @@ section("complete plan: coding and UI allowed");
 
   const ui = detectChatMode("generate ui from ui-brief", { masterPlanComplete: true });
   assert.equal(ui.mode, "ui");
+  assert.equal(userNoteRequestsUiGeneration("generate ui"), true);
+  assert.equal(userNoteRequestsUiGeneration("please generate UI"), true);
+  assert.equal(userNoteRequestsUiGeneration("continue"), false);
+  assert.equal(userNoteRequestsUiGeneration("continue building"), false);
 }
 
 section("inference intent helpers");

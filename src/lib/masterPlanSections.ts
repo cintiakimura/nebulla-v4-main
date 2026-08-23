@@ -8,6 +8,7 @@ export {
   masterPlanKeyForTabIndex,
   normalizeMasterPlanRecord,
   parseMasterPlanBlock,
+  hasNumberedMasterPlanHeadings,
   masterPlanSectionSeparationRules,
 } from '../../lib/masterPlanSections';
 

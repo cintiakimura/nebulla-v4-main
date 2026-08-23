@@ -31,6 +31,7 @@ export function BuildPreviewCanvas() {
   const [waitStatus, setWaitStatus] = useState('Waiting for mockup');
   const retriedLegacyRef = useRef(false);
   const retriedMockShellRef = useRef(false);
+  const keepMockupRef = useRef(false);
   const [hasSelection] = useState(false);
   const src = withProjectQuery(
     `/api/app-preview/bootstrap?_rev=${rev}${showMockup ? '&surface=mockup' : ''}`,
@@ -58,6 +59,11 @@ export function BuildPreviewCanvas() {
       if (!res.ok) return;
       if (previewMetaHasProductRoutes(data)) {
         setHasVisualPreview(true);
+        if (keepMockupRef.current) {
+          setShowMockup(true);
+          setWaitStatus('UI mockup ready');
+          return;
+        }
         setShowMockup(false);
         setWaitStatus(data.previewStatusLabel?.trim() || 'Live app preview');
         return;
@@ -90,7 +96,7 @@ export function BuildPreviewCanvas() {
             previewHonesty?: string;
             previewMode?: string;
           };
-          setShowMockup(!previewMetaHasProductRoutes(data));
+          setShowMockup(keepMockupRef.current || !previewMetaHasProductRoutes(data));
         } catch {
           setShowMockup(true);
         }
@@ -98,6 +104,7 @@ export function BuildPreviewCanvas() {
       })();
     };
     const onShowLive = () => {
+      keepMockupRef.current = false;
       setShowMockup(false);
       bump();
     };
@@ -151,6 +158,7 @@ export function BuildPreviewCanvas() {
     setFailed(false);
     setHasVisualPreview(false);
     setWaitStatus('Generating UI…');
+    keepMockupRef.current = true;
     try {
       const result = await runUiStudioBetaGeneration({
         projectName: getBrowserProjectName() || undefined,

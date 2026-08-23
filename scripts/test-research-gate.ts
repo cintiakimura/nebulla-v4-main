@@ -390,6 +390,9 @@ try {
   const artifacts = fs.readFileSync(path.join(root, "src/lib/grokChatArtifacts.ts"), "utf8");
   assert.match(artifacts, /export function isOrchestrationOnlyPlanSource/);
   assert.match(artifacts, /if \(isOrchestrationOnlyPlanSource\(source\)\) return 0/);
+  assert.match(artifacts, /if \(!hasPlanShape\) return 0/);
+  assert.match(chat, /userNoteRequestsUiGeneration/);
+  assert.match(chat, /uiPhase: 'manual'/);
   assert.match(chat, /blockedCode: coding\.blockedReason\?\.code/);
   assert.match(
     fs.readFileSync(path.join(root, "lib/nebulaResearchStroke.ts"), "utf8"),

@@ -108,8 +108,10 @@ import { runMasterPlanUiPipeline } from '../../lib/ideArtifactSync';
 import {
   applyUiStudioBetaToAppPreview,
   dispatchStudioShowLiveApp,
+  runUiStudioBetaGeneration,
   triggerUiStudioBetaAfterPlanReady,
 } from '../../lib/uiStudioBetaEngine';
+import { userNoteRequestsUiGeneration } from '../../lib/chatModeDetector';
 import {
   clearDiscoveryClosed,
   clearIdeWorkspaceMetaCache,
@@ -1829,6 +1831,33 @@ export function AIChat() {
     const discoveryCompleteAck = detectOnboardingBuildStart(rawText, prior);
     /** Bare "go" / "start coding" — must launch Foundation even if the model omits START_CODING. */
     const userForcedCoding = isUserExplicitCodingRequest(rawText);
+    if (userNoteRequestsUiGeneration(rawText) && !userForcedCoding && !hasAppStatusPayload) {
+      beginPlanActivity('Generating UI from Master Plan…', chatWorkSteps(), {
+        subhead: 'UI Gen v2 — §1 Goal and Go are not rewritten.',
+        initialLog: 'Generating UI from §5 tokens and ui-brief…',
+      });
+      try {
+        const result = await runUiStudioBetaGeneration({
+          projectName: getBrowserProjectName().trim() || undefined,
+          regenerate: true,
+          uiPhase: 'manual',
+          openPane: false,
+          onProgress: pushActivity,
+        });
+        if (result.ok) {
+          await applyUiStudioBetaToAppPreview(pushActivity);
+          pushActivity('UI mockup ready — App Preview updated. Goal was not rewritten.', 'success');
+        } else {
+          pushActivity(result.error || 'UI generation failed — retry Generate UI.', 'error');
+        }
+      } catch (uiErr) {
+        pushActivity(uiErr instanceof Error ? uiErr.message : 'UI generation failed', 'error');
+      }
+      resetCodingActivity();
+      setSending(false);
+      sendingRef.current = false;
+      return;
+    }
     // Product promise: "nothing more to add" / explicit "go" starts coding — even if still Chat.
     const fastPrototypeTurnEarly =
       codingHint === 'fast-prototype' ||

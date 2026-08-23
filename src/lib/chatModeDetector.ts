@@ -66,6 +66,17 @@ const DEBUG_INTENT_RE =
 const UI_RE =
   /\b(ui studio|nebula ui|ui[-\s]?brief|ui gen(eration)?|v0(\.dev)?|mockup|ui\/ux|generate ui|visual editor|design system for (the )?app)\b/i;
 
+/** Chat "generate ui" — run UI Gen, do not persist the reply as §1 Goal or start Go. */
+export function userNoteRequestsUiGeneration(text?: string | null): boolean {
+  const t = String(text || '').trim();
+  if (!t || t.length > 120) return false;
+  if (/\b(code|coding|foundation|slice|continue building|start_coding)\b/i.test(t)) return false;
+  if (/^(please\s+)?((re)?generate|refresh|run)\s+(the\s+)?(ui|mockup|ui\s+(gen|studio))([\s.!].*)?$/i.test(t)) {
+    return true;
+  }
+  return /^(please\s+)?generate ui\b/i.test(t);
+}
+
 const FILE_RE =
   /\b(open file|load file|show (me )?the file|from github|open github|edit [\w./-]+\.(ts|tsx|js|jsx|md|json|css))\b/i;
 
