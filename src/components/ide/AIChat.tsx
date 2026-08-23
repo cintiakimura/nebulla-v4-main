@@ -2410,6 +2410,7 @@ export function AIChat() {
           );
         }
         }
+        }
       } else if (mpSaved > 0) {
         await syncPlanViewsAfterResearch();
       }
