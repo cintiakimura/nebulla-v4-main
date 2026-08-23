@@ -11,7 +11,13 @@ import { withProjectBody, withProjectQuery, getBrowserProjectName } from './nebu
 import { buildLanguagePromptAppendix } from './i18n/languagePromptAppendix';
 import type { IdeLocaleCode } from './i18n/locales';
 import type { ContentLanguageMode } from './i18n/userLanguagePreferences';
-import { isUsableProjectGoal, seedGoalOfTheAppSection } from './spineSequenceGates';
+import {
+  extractProductGoalFromSection,
+  isUsableProjectGoal,
+  seedGoalOfTheAppSection,
+} from './spineSequenceGates';
+import { peekPendingProjectIdea } from './ideHomeEvents';
+import { readStoredShellGoal } from './ideShellScreens';
 import { matchBugDatabaseSnippets } from './bugDatabaseSnippet';
 
 export const MASTER_PLAN_TAB_NAMES = [...MASTER_PLAN_SECTION_KEYS] as const;
@@ -131,6 +137,7 @@ export function isOrchestrationOnlyPlanSource(source: string): boolean {
 export async function persistMasterPlanFromAssistantSource(
   source: string,
   onProgress?: (message: string) => void,
+  extraGoalFallbacks: string[] = [],
 ): Promise<number> {
   if (isOrchestrationOnlyPlanSource(source)) return 0;
   const inner = extractMasterPlanInner(source);
@@ -145,7 +152,7 @@ export async function persistMasterPlanFromAssistantSource(
     /\bPLAN_READY\b/i.test(goalBody) ||
     !isUsableProjectGoal(goalBody)
   ) {
-    parsed[1] = '';
+    parsed[1] = extractProductGoalFromSection(goalBody);
   }
   if (!(parsed[1] ?? '').trim()) {
     const planLike: Record<string, string> = {};
@@ -154,7 +161,12 @@ export async function persistMasterPlanFromAssistantSource(
       const body = (parsed[i] ?? '').trim();
       if (body) planLike[key] = body;
     }
-    const seeded = seedGoalOfTheAppSection(planLike, [getBrowserProjectName()]);
+    const seeded = seedGoalOfTheAppSection(planLike, [
+      ...extraGoalFallbacks,
+      peekPendingProjectIdea() || '',
+      readStoredShellGoal(),
+      getBrowserProjectName(),
+    ]);
     if (seeded) parsed[1] = seeded;
   }
   onProgress?.('Saving Master Plan tabs…');

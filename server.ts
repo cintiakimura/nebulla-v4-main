@@ -5330,7 +5330,8 @@ ${codeQualityContract}
 
 Master Plan (project-execution-rules — MUST be complete before code):
 - master-plan.json below MUST satisfy the Master Plan contract (page fields in §4, security baseline when auth/data, §5 tokens).
-- If ANY of §2–§5 are still thin, emit \`\`\`file:master-plan.json\`\`\` FIRST with the full JSON object (preserve existing keys, fill from discovery), then still emit the current slice's app files in the SAME response when possible.
+- If **"1. Goal of the app"** is empty, a coding command (continue/go/START_CODING), or a page-contract dump: write a real §1 (purpose, users/roles, in/out of scope) from the user brief / fast-prototype-memory.md into master-plan.json. Never leave §1 blank or set it to "continue".
+- If ANY of §1–§5 are still thin, emit \`\`\`file:master-plan.json\`\`\` FIRST with the full JSON object (preserve existing keys, fill from discovery), then still emit the current slice's app files in the SAME response when possible.
 - §4: full page contracts (route, purpose, primary_actions, data_entities, authz, empty/error, nav). §5: 15–25 lines tokens only.
 - Also keep \`nebula-ui-studio/ui-brief.md\` in sync when §4/§5 change (primary UI input). V0/\`v0-prompt.md\` is optional legacy only.
 

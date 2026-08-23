@@ -15,7 +15,12 @@ import {
 } from "./visualUiEditorWorkspace";
 
 import { MASTER_PLAN_ALL_KEYS, MASTER_PLAN_USER_SECTION_KEYS, normalizeMasterPlanRecord } from "./masterPlanSections";
-import { goalSectionNeedsReseed, seedGoalOfTheAppSection } from "./spineSequenceClient";
+import {
+  extractGoalFromMemoryMarkdown,
+  extractGoalFromUserNote,
+  goalSectionNeedsReseed,
+  seedGoalOfTheAppSection,
+} from "./spineSequenceClient";
 import {
   buildConcreteUiuxSection,
   isGenericUiuxBoilerplate,
@@ -70,7 +75,20 @@ export function fillMissingMasterPlanSectionsLocal(opts: {
   const updated: string[] = [];
 
   const goalNow = String(next["1. Goal of the app"] ?? "").trim();
-  const seededGoal = seedGoalOfTheAppSection(next, [note, name]);
+  let memoryGoal = "";
+  try {
+    const memPath = path.join(opts.workspaceRoot, "nebula-project", "fast-prototype-memory.md");
+    if (fs.existsSync(memPath)) {
+      memoryGoal = extractGoalFromMemoryMarkdown(fs.readFileSync(memPath, "utf8"));
+    }
+  } catch {
+    memoryGoal = "";
+  }
+  const seededGoal = seedGoalOfTheAppSection(next, [
+    extractGoalFromUserNote(note),
+    memoryGoal,
+    name,
+  ]);
   if (seededGoal && goalSectionNeedsReseed(goalNow)) {
     next["1. Goal of the app"] = seededGoal;
     updated.push("1. Goal of the app");

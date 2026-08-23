@@ -66,16 +66,105 @@ export function uiBriefTooShort(length: number): boolean {
   return (length || 0) < UI_BRIEF_MIN_CHARS;
 }
 
+const CODING_COMMAND_GOAL_RE =
+  /^(please\s+)?(continue|go|go\.|go!|build\s+next|next\s+slice|keep going|go ahead)([\s.!]*)$/i;
+
+/** Chat / Go notes that must never become Master Plan §1. */
+export function isCodingCommandNote(note?: string | null): boolean {
+  const t = String(note || "").trim();
+  if (!t) return true;
+  if (CODING_COMMAND_GOAL_RE.test(t)) return true;
+  if (/^START_CODING\b/i.test(t)) return true;
+  if (/^FAST PROTOTYPE (MODE|CONTINUE)\./i.test(t) && !/User goal \/ brief:/i.test(t)) {
+    return true;
+  }
+  if (
+    /\bSLICE:\s*(Foundation|Auth|Data\+API|Primary|Secondary|Polish)\b/i.test(t) &&
+    t.length < 900 &&
+    !/User goal \/ brief:/i.test(t)
+  ) {
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Pull the real product brief out of a Fast Prototype bootstrap or user note.
+ * "continue" / START_CODING slice instructions return empty.
+ */
+export function extractGoalFromUserNote(note?: string | null): string {
+  const raw = String(note || "").trim();
+  if (!raw) return "";
+  const brief = raw.match(/User goal \/ brief:\s*"""([\s\S]*?)"""/i);
+  if (brief?.[1]?.trim()) {
+    const inner = brief[1].trim().replace(/\s+/g, " ");
+    if (isUsableProjectGoal(inner)) return inner.slice(0, 2000);
+  }
+  const quoted = raw.match(/"""([\s\S]*?)"""/);
+  if (quoted?.[1]?.trim() && /FAST PROTOTYPE|User goal/i.test(raw)) {
+    const inner = quoted[1].trim().replace(/\s+/g, " ");
+    if (isUsableProjectGoal(inner)) return inner.slice(0, 2000);
+  }
+  if (isCodingCommandNote(raw)) return "";
+  const slice = raw.replace(/\s+/g, " ").trim();
+  if (isUsableProjectGoal(slice)) return slice.slice(0, 2000);
+  return "";
+}
+
+/** Goal heading in nebula-project/fast-prototype-memory.md (inference-first Step 3.1). */
+export function extractGoalFromMemoryMarkdown(md?: string | null): string {
+  const t = String(md || "").trim();
+  if (!t) return "";
+  const heading = t.match(
+    /(?:^|\n)\s*(?:#{1,3}\s*)?(?:\*\*)?(?:user\s+)?goal(?:\s*\/\s*brief)?(?:\*\*)?\s*[:\-]\s*([\s\S]+?)(?=\n\s*(?:#{1,3}\s|\*\*[A-Za-z]|stage\s*=)|$)/i,
+  );
+  const body = (heading?.[1] || "").replace(/\s+/g, " ").trim();
+  if (isUsableProjectGoal(body)) return body.slice(0, 2000);
+  return "";
+}
+
+/**
+ * Keep purpose/users/scope when Grok dumped §4 page fields into §1.
+ */
+export function extractProductGoalFromSection(raw?: string | null): string {
+  let t = String(raw || "").trim();
+  if (!t) return "";
+  t = t.replace(/\bSTART_CODING\b/gi, " ").replace(/\bPLAN_READY\b/gi, " ");
+  const cut = t.search(
+    /\b(Authz|Empty state|Error state|Primary actions|Data entities|Nav links)\s*:/i,
+  );
+  if (cut >= 24) t = t.slice(0, cut);
+  t = t.replace(/\s+/g, " ").trim();
+  if (isUsableProjectGoal(t)) return t.slice(0, 2000);
+  return "";
+}
+
 /**
  * Phase 1: empty/junk goals must not open Go or UI Gen.
- * “tutor kids with ADHD” is usable; “hi” / “test” / punctuation-only is not.
+ * “tutor kids with ADHD” is usable; “hi” / “test” / “continue” / punctuation-only is not.
  */
 export function isUsableProjectGoal(goal: string): boolean {
-  const t = String(goal || "").trim().replace(/\s+/g, " ");
+  const original = String(goal || "").trim();
+  const t = original.replace(/\s+/g, " ");
   if (t.length < 8) return false;
   if (!/[a-zA-Z]{3,}/.test(t)) return false;
   if (/\bSTART_CODING\b/i.test(t)) return false;
   if (/\bPLAN_READY\b/i.test(t)) return false;
+  if (/^FAST PROTOTYPE (MODE|CONTINUE)\./i.test(t)) return false;
+  if (CODING_COMMAND_GOAL_RE.test(t)) return false;
+  const firstContentLine = original
+    .split(/\n/)
+    .map((l) => l.trim())
+    .find((l) => l && !/^project type:/i.test(l)) || "";
+  if (CODING_COMMAND_GOAL_RE.test(firstContentLine)) return false;
+  if (/users, problem, and mvp scope for this workspace/i.test(t)) {
+    const extra = t
+      .replace(/project type:\s*(web app|mobile app|landing page|other)?/gi, " ")
+      .replace(/users, problem, and mvp scope for this workspace\.?/gi, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+    if (!extra || extra.length < 8 || CODING_COMMAND_GOAL_RE.test(extra)) return false;
+  }
   if (/\b(Authz|Empty state|Error state|Primary actions|Data entities|Nav links)\s*:/i.test(t)) {
     return false;
   }
@@ -83,7 +172,7 @@ export function isUsableProjectGoal(goal: string): boolean {
   if (/^Home\s+'?\/'?/i.test(t) || /\bHome\s+'\/'\s*-/i.test(t)) return false;
   const lower = t.toLowerCase().replace(/[.!?]+$/g, "").trim();
   if (
-    /^(untitled(\s+project)?|new project|test(ing)?|hello|hi|hey|asdf+|xxx+|foo|bar|ok|okay|go|start)$/i.test(
+    /^(untitled(\s+project)?|new project|test(ing)?|hello|hi|hey|asdf+|xxx+|foo|bar|ok|okay|go|start|continue|build next|next slice)$/i.test(
       lower,
     )
   ) {
@@ -116,12 +205,13 @@ export function inferGoalFromPlanRecord(
   plan: Record<string, unknown> | null | undefined,
   extraFallbacks: string[] = [],
 ): string {
+  const fromSection = extractProductGoalFromSection(pickPlanText(plan?.["1. Goal of the app"]));
   const candidates = [
-    pickPlanText(plan?.["1. Goal of the app"]),
-    pickPlanText(plan?.["Goal of the app"]),
-    pickPlanText(plan?.goal),
-    ...extraFallbacks.map((x) => String(x || "").trim()),
-    pickPlanText(plan?.["3. Features and KPIs"]),
+    fromSection,
+    extractProductGoalFromSection(pickPlanText(plan?.["Goal of the app"])),
+    extractGoalFromUserNote(pickPlanText(plan?.goal)),
+    ...extraFallbacks.map((x) => extractGoalFromUserNote(x) || extractProductGoalFromSection(x)),
+    extractProductGoalFromSection(pickPlanText(plan?.["3. Features and KPIs"])),
   ];
   for (const c of candidates) {
     if (!c) continue;
@@ -140,9 +230,14 @@ export function seedGoalOfTheAppSection(
 ): string {
   const existing = pickPlanText(plan?.["1. Goal of the app"]);
   if (existing.length >= MIN_SEEDED_GOAL_CHARS && isUsableProjectGoal(existing)) return existing;
+  const rescued = extractProductGoalFromSection(existing);
   const inferred = inferGoalFromPlanRecord(plan, extraFallbacks);
   const coreRaw =
-    existing.length >= 8 && isUsableProjectGoal(existing) ? existing : inferred;
+    rescued && isUsableProjectGoal(rescued)
+      ? rescued
+      : existing.length >= 8 && isUsableProjectGoal(existing)
+        ? existing
+        : inferred;
   if (!coreRaw) return "";
   const who = coreRaw
     .replace(/\bSTART_CODING\b/gi, " ")
@@ -152,8 +247,10 @@ export function seedGoalOfTheAppSection(
     .trim()
     .slice(0, 280);
   if (!who || !isUsableProjectGoal(who)) return "";
+  const projectType =
+    /\bmobile\b/i.test(who) && !/\bweb app\b/i.test(who) ? "Mobile App" : "Web App";
   return [
-    "Project Type: Web App",
+    `Project Type: ${projectType}`,
     "",
     who,
     "",

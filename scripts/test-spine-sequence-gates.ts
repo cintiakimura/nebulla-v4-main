@@ -15,7 +15,11 @@ import {
   classifyGoPoll,
   goPollActivityMessage,
   goPollBackoffMs,
+  extractGoalFromMemoryMarkdown,
+  extractGoalFromUserNote,
+  extractProductGoalFromSection,
   inferGoalFromPlanRecord,
+  isCodingCommandNote,
   isUsableProjectGoal,
   planRecordHasUsableGoal,
   seedGoalOfTheAppSection,
@@ -129,6 +133,39 @@ assert.equal(isUsableProjectGoal(""), false);
 assert.equal(isUsableProjectGoal("hi"), false);
 assert.equal(isUsableProjectGoal("test"), false);
 assert.equal(isUsableProjectGoal("tutor kids with ADHD"), true);
+assert.equal(isUsableProjectGoal("continue"), false);
+assert.equal(isUsableProjectGoal("next slice"), false);
+assert.equal(
+  isUsableProjectGoal("Project Type: Web App\n\ncontinue\n\nUsers, problem, and MVP scope for this workspace."),
+  false,
+);
+assert.equal(isCodingCommandNote("continue"), true);
+assert.equal(isCodingCommandNote("START_CODING — SLICE: Primary — implement the next"), true);
+assert.equal(
+  extractGoalFromUserNote(
+    'FAST PROTOTYPE MODE. User goal / brief:\n"""\nBuild a mobile education app for children aged 7–10 to practice daily reading.\n"""\n',
+  ),
+  "Build a mobile education app for children aged 7–10 to practice daily reading.",
+);
+assert.equal(extractGoalFromUserNote("continue"), "");
+assert.match(
+  extractProductGoalFromSection(
+    "Daily reading practice for kids 7–10. Teachers assign. Parents view weekly progress.\nPrimary actions: Start lesson\nAuthz: child",
+  ),
+  /Daily reading practice/,
+);
+assert.match(
+  extractGoalFromMemoryMarkdown("# Memory\n\n**Goal:** Kids 7–10 practice daily reading with teacher assign.\n\nstage=plan_drafted\n"),
+  /Kids 7–10 practice daily reading/,
+);
+{
+  const seededContinue = seedGoalOfTheAppSection(
+    { "1. Goal of the app": "" },
+    ["continue", "children aged 710 to practice daily reading"],
+  );
+  assert.match(seededContinue, /daily reading/i);
+  assert.equal(/^\s*Project Type:.*\n\ncontinue\n/i.test(seededContinue), false);
+}
 assert.equal(isUsableProjectGoal("Project Type: Web App START_CODING Users, problem, and MVP scope"), false);
 assert.equal(
   isUsableProjectGoal(
@@ -238,6 +275,16 @@ assert.equal(
 }
 assert.match(chat, /ASK_FOR_SHORT_GOAL|Write a short goal for this app/);
 assert.match(chat, /No usable Master Plan goal yet/);
+assert.match(
+  chat,
+  /const hasPlan = planRecordHasUsableGoal\(plan\);/,
+  "skip Grok chat only when §1 Goal is usable — page contracts are not a goal",
+);
+assert.equal(
+  /planRecordHasUsableGoal\(plan\) \|\| isMasterPlanCompleteForDiscovery/.test(chat),
+  false,
+);
+assert.match(server, /Never leave §1 blank or set it to "continue"/);
 assert.match(chat, /lastResearchError/);
 assert.equal(
   /Foundation coding waiting — finish UI mockup/.test(chat),

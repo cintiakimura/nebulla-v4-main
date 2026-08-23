@@ -147,7 +147,12 @@ import {
   type StartGuidedChatDetail,
 } from '../../lib/ideHomeEvents';
 import { shortNameFromIdea } from '../../lib/projectNameFromIdea';
-import { ASK_FOR_SHORT_GOAL, isUsableProjectGoal, planRecordHasUsableGoal } from '../../lib/spineSequenceGates';
+import {
+  ASK_FOR_SHORT_GOAL,
+  extractGoalFromUserNote,
+  isUsableProjectGoal,
+  planRecordHasUsableGoal,
+} from '../../lib/spineSequenceGates';
 import { ideContextSnippetForChat, useIdeWorkspace } from '@/components/ide/IdeWorkspaceContext';
 import { useIdeCenterTabs } from '@/components/ide/IdeCenterTabsContext';
 import { ChatFilePreview } from '@/components/ide/ChatFilePreview';
@@ -1925,8 +1930,7 @@ export function AIChat() {
         const plan = mpRes.ok
           ? ((await readResponseJson(mpRes)) as Record<string, unknown>)
           : null;
-        const hasPlan =
-          planRecordHasUsableGoal(plan) || isMasterPlanCompleteForDiscovery(plan);
+        const hasPlan = planRecordHasUsableGoal(plan);
         if (hasPlan) {
           skipGrokChat = true;
           pushActivity(
@@ -2040,6 +2044,11 @@ export function AIChat() {
       mpSaved = await persistMasterPlanFromAssistantSource(
         masterPlanSource,
         showWorkActivity ? pushActivity : undefined,
+        [
+          extractGoalFromUserNote(text),
+          peekPendingProjectIdea() || '',
+          getBrowserProjectName(),
+        ],
       );
 
       if (/<NEBULA_UI_STUDIO_PROMPT>/i.test(masterPlanSource)) {

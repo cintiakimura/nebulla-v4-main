@@ -94,7 +94,7 @@ assert.equal(
 );
 
 assert.match(FAST_PROTOTYPE_PRIMARY_SLICE_INSTRUCTION, /SLICE: Primary/);
-assert.match(FAST_PROTOTYPE_PRIMARY_SLICE_INSTRUCTION, /do NOT rewrite it/i);
+assert.match(FAST_PROTOTYPE_PRIMARY_SLICE_INSTRUCTION, /do NOT rewrite (it|them)/i);
 
 assert.equal(nextAutopilotSliceLabel('Foundation'), 'Primary');
 assert.equal(nextAutopilotSliceLabel('Auth'), 'Primary');
