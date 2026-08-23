@@ -23,6 +23,7 @@ import {
 import {
   ensureInteractiveProductPreview,
   inferPreviewScreensFromPaths,
+  previewHtmlNeedsProductHeal,
   PRODUCT_PREVIEW_MARKER,
   PRODUCT_PREVIEW_REL,
 } from "../lib/interactiveProductPreview.ts";
@@ -229,8 +230,15 @@ section("coded app files beat interactive mock — honest bridge");
   assert.equal(ensured.path, PRODUCT_PREVIEW_REL);
   const html = fs.readFileSync(path.join(root, PRODUCT_PREVIEW_REL), "utf8");
   assert.match(html, new RegExp(PRODUCT_PREVIEW_MARKER, "i"));
-  assert.match(html, /Next short session|Start session/);
-  assert.match(html, /Tutor session/);
+  assert.match(html, /Kid Practice Home|Start practice/);
+  assert.match(html, /Reading practice|Start practice/);
+  assert.equal(/Source of truth remains your coded files/i.test(html), false);
+  assert.equal(/Signed in as parent \(mock session\)/i.test(html), false);
+  assert.equal(previewHtmlNeedsProductHeal(html), false);
+  assert.equal(
+    previewHtmlNeedsProductHeal('Source of truth remains your coded files: app/page.tsx'),
+    true,
+  );
   const auth = resolveAppPreviewAuthority(root);
   assert.equal(auth.mode, "interactive_product_preview");
   assert.equal(auth.codedApp, true);

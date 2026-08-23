@@ -2795,7 +2795,7 @@ export function AIChat() {
                 advanceGrokActivity(prev, showWorkActivity ? 6 : 4, {
                   currentAction: 'Coding slice applied — opening live App Preview',
                   log: {
-                    message: 'Coded app owns App Preview (not the UI Studio mockup)',
+                    message: 'App Preview is ready — opening the live practice app',
                     kind: 'info',
                   },
                 }),

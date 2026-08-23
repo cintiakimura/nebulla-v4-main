@@ -378,13 +378,12 @@ export async function triggerUiStudioBetaAfterFilesApplied(options: {
   if (action === 'sync_preview_only') {
     // Do not reclaim live App Preview with mockup HTML after code exists.
     options.onProgress?.(
-      'Coded app owns App Preview — reloading live Preview. UI Studio visual model is separate; switch Studio to “Live app” or Generate UI to refresh the model.',
+      'App Preview is ready — you can use the practice flow now (no Studio refresh needed).',
       'info',
     );
     try {
       dispatchStudioShowLiveApp();
       window.dispatchEvent(new CustomEvent('nebula-open-app-preview'));
-      dispatchOpenUiStudioBeta();
     } catch {
       /* ignore */
     }

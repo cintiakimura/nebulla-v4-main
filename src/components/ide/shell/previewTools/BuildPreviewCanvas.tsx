@@ -80,8 +80,22 @@ export function BuildPreviewCanvas() {
   useEffect(() => {
     void refreshWaitState();
     const onShowMockup = () => {
-      setShowMockup(true);
-      bump();
+      void (async () => {
+        try {
+          const res = await fetch(withProjectQuery('/api/app-preview/meta'), {
+            credentials: 'include',
+            cache: 'no-store',
+          });
+          const data = (await readResponseJson(res)) as {
+            previewHonesty?: string;
+            previewMode?: string;
+          };
+          setShowMockup(!previewMetaHasProductRoutes(data));
+        } catch {
+          setShowMockup(true);
+        }
+        bump();
+      })();
     };
     const onShowLive = () => {
       setShowMockup(false);
@@ -99,7 +113,7 @@ export function BuildPreviewCanvas() {
       const ok = (ev as CustomEvent<{ ok?: boolean }>).detail?.ok === true;
       setEngineBusy(false);
       if (ok) {
-        setShowMockup(true);
+        void refreshWaitState();
         bump();
       }
     };
@@ -147,12 +161,12 @@ export function BuildPreviewCanvas() {
       if (result.ok) {
         await applyUiStudioBetaToAppPreview();
       }
-      setShowMockup(true);
+      await refreshWaitState();
       bump();
     } finally {
       setGenerateBusy(false);
     }
-  }, [bump, generateBusy]);
+  }, [bump, generateBusy, refreshWaitState]);
 
   const statusLine = generateBusy || engineBusy ? 'Generating UI…' : waitStatus;
 

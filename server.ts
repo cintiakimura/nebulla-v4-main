@@ -175,6 +175,7 @@ import { runWorkspaceBuildCheck } from "./lib/workspaceBuildCheck";
 import {
   INTERACTIVE_PREVIEW_GO_BULLETS,
   ensureInteractiveProductPreview,
+  previewHtmlNeedsProductHeal,
   PRODUCT_PREVIEW_REL,
 } from "./lib/interactiveProductPreview";
 import {
@@ -2371,6 +2372,13 @@ No approved UI code yet.
         const entryAbs = path.join(pp.workspaceRoot, authority.entryRel);
         if (fs.existsSync(entryAbs)) {
           html = fs.readFileSync(entryAbs, "utf8");
+        }
+        if (html && previewHtmlNeedsProductHeal(html)) {
+          ensureInteractiveProductPreview(pp.workspaceRoot, {
+            projectName: displayName,
+            productFiles: authority.productFiles,
+          });
+          html = fs.existsSync(entryAbs) ? fs.readFileSync(entryAbs, "utf8") : html;
         }
       }
 

@@ -48,6 +48,7 @@ assert.match(assistantPrompt, /Do not treat UI Studio mockup/);
 
 const serverSrc = fs.readFileSync(path.join(root, 'server.ts'), 'utf8');
 assert.match(serverSrc, /MOCKUP_NON_AUTHORITATIVE_GO_BULLETS/);
+assert.match(serverSrc, /previewHtmlNeedsProductHeal/);
 assert.match(serverSrc, /MOCKUP VS FINAL UI/);
 
 assert.equal(
@@ -112,6 +113,22 @@ assert.equal(
   }),
   'sync_preview_only',
 );
+
+{
+  const engine = fs.readFileSync(path.join(root, 'src/lib/uiStudioBetaEngine.ts'), 'utf8');
+  assert.match(engine, /App Preview is ready/);
+  assert.equal(/switch Studio/.test(engine), false);
+  assert.equal(/dispatchOpenUiStudioBeta\(\)/.test(engine.slice(engine.indexOf('sync_preview_only'))), false);
+  const catalog = fs.readFileSync(path.join(root, 'src/lib/i18n/ideCatalog.ts'), 'utf8');
+  assert.match(catalog, /Sync preview and project map/);
+  assert.equal(/Refresh mind map & open UI Studio/.test(catalog), false);
+  const canvas = fs.readFileSync(
+    path.join(root, 'src/components/ide/shell/previewTools/BuildPreviewCanvas.tsx'),
+    'utf8',
+  );
+  assert.match(canvas, /refreshWaitState/);
+  assert.equal(/setShowMockup\(true\);\s*\n\s*bump\(\);/.test(canvas), false);
+}
 
 const uiLogic = fs.readFileSync(
   path.join(root, 'nebulla-project/ui-generation-logic-v2.md'),

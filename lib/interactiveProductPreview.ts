@@ -30,6 +30,7 @@ export function inferPreviewScreensFromPaths(productFiles: string[]): PreviewScr
   const joined = productFiles.map((p) => p.replace(/\\/g, "/").toLowerCase()).join("\n");
   const screens: PreviewScreenHint[] = [
     { id: "home", label: "Home", kind: "home" },
+    { id: "tutor", label: "Practice", kind: "session" },
   ];
 
   const roles: Array<{ id: string; label: string; re: RegExp }> = [
@@ -43,9 +44,6 @@ export function inferPreviewScreensFromPaths(productFiles: string[]): PreviewScr
     }
   }
 
-  if (/tutor|buddy|session|lesson/i.test(joined)) {
-    screens.push({ id: "tutor", label: "Tutor session", kind: "session" });
-  }
   if (/reward|badge|streak|progress/i.test(joined)) {
     screens.push({ id: "rewards", label: "Rewards", kind: "feature" });
   }
@@ -72,11 +70,6 @@ function buildInteractiveHtml(opts: {
 }): string {
   const name = esc((opts.projectName || "App").slice(0, 80));
   const screensJson = JSON.stringify(opts.screens);
-  const filesSample = opts.productFiles
-    .slice(0, 10)
-    .map((f) => `<li><code>${esc(f)}</code></li>`)
-    .join("\n");
-
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -108,37 +101,27 @@ function buildInteractiveHtml(opts: {
     .row { display:flex; flex-wrap:wrap; gap:8px; margin-top:12px; }
     .toast { margin-top:10px; padding:8px 10px; border-radius:8px; background:#ECFDF5; color:#065F46; font-size:12px; display:none; }
     .toast.show { display:block; }
-    .note { font-size:11px; color:var(--muted); margin-top:16px; }
-    code { font-size:11px; background:#F1F5F9; padding:1px 4px; border-radius:4px; }
     .progress { height:8px; background:#E2E8F0; border-radius:999px; overflow:hidden; margin:10px 0; }
     .progress > i { display:block; height:100%; width:12%; background:var(--accent); }
     input[type=file] { font-size:12px; }
-    .files { font-size:11px; color:var(--muted); }
   </style>
 </head>
 <body>
   <div class="top">
     <div>
-      <span class="badge">Interactive preview · mock data</span>
+      <span class="badge">Practice app</span>
       <div style="font-weight:700;margin-top:4px">${name}</div>
     </div>
-    <div id="roleChip" style="font-size:12px;color:var(--muted)">Role: guest</div>
+    <div id="roleChip" style="font-size:12px;color:var(--muted)">Kid practice</div>
   </div>
   <nav class="tabs" id="tabs" aria-label="Preview screens"></nav>
   <main class="main" id="root"></main>
-  <p class="note" style="padding:0 16px 24px;max-width:520px;margin:0 auto">
-    This is a <strong>working product preview</strong> with mock/local data so you can click the happy path inside Nebulla.
-    It is not the UI Gen mockup and not a full Vite/Next runtime. Source of truth remains your coded files:
-  </p>
-  <ul class="files" style="max-width:520px;margin:0 auto 24px;padding:0 16px 24px">
-${filesSample || "<li><code>(no product files listed)</code></li>"}
-  </ul>
   <script>
 (function () {
   var SCREENS = ${screensJson};
   var PROJECT = ${JSON.stringify((opts.projectName || "App").slice(0, 80))};
   var STORAGE_KEY = "nebulla_product_preview_v1";
-  var state = { screen: "home", role: "guest", uploadName: "", progress: 12, sessionStarted: false, step: 0 };
+  var state = { screen: "home", role: "kid", uploadName: "", progress: 12, sessionStarted: false, step: 0 };
   try {
     var saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || "null");
     if (saved && typeof saved === "object") state = Object.assign(state, saved);
@@ -176,60 +159,39 @@ ${filesSample || "<li><code>(no product files listed)</code></li>"}
   }
 
   function homeHtml() {
-    var hasTutor = SCREENS.some(function (s) { return s.id === "tutor"; });
-    var roles = SCREENS.filter(function (s) { return s.kind === "role"; });
-    var roleRow = roles.length
-      ? '<p style="font-size:12px;margin:16px 0 8px;color:#64748B">Switch role</p><div class="grid">' +
-        roles.map(function (r) {
-          var id = r.id.replace(/^role-/, "");
-          return '<button type="button" class="role" data-role="' + id + '"><strong>' + r.label + '</strong><span style="color:#64748B;font-size:13px">Continue as ' + r.label.toLowerCase() + '</span></button>';
-        }).join("") +
-        '</div>'
-      : "";
-    if (hasTutor) {
-      return (
-        '<div class="card">' +
-          '<h1>Next short session</h1>' +
-          '<p>Calm 2-minute practice for <strong>' + PROJECT + '</strong>. One thing at a time.</p>' +
-          '<div class="progress" aria-hidden="true"><i style="width:' + state.progress + '%"></i></div>' +
-          '<p>Progress ' + state.progress + '%</p>' +
-          '<div class="row"><button type="button" class="cta" id="goTutor">Start session</button></div>' +
-          roleRow +
-          '<div class="toast" id="toast"></div>' +
-        '</div>'
-      );
-    }
-    var roleButtons = roles.length
-      ? roles.map(function (r) {
-          var id = r.id.replace(/^role-/, "");
-          return '<button type="button" class="role" data-role="' + id + '"><strong>' + r.label + '</strong><span style="color:#64748B;font-size:13px">Continue as ' + r.label.toLowerCase() + '</span></button>';
-        }).join("")
-      : '<button type="button" class="cta" id="goHome">Enter the app</button>';
     return (
       '<div class="card">' +
-        '<h1>Welcome</h1>' +
-        '<p>Interactive preview with mock data. Use the primary action to continue the happy path.</p>' +
-        '<div class="grid">' + roleButtons + '</div>' +
+        '<h1>Kid Practice Home</h1>' +
+        '<p>One short lesson. Start when you are ready.</p>' +
+        '<div class="progress" aria-hidden="true"><i style="width:' + state.progress + '%"></i></div>' +
+        '<p>Weekly streak · ' + Math.max(1, Math.floor(state.progress / 4)) + ' days</p>' +
+        '<div class="row">' +
+          '<button type="button" class="cta" id="goTutor">Start practice</button>' +
+          '<button type="button" class="ghost" id="goRewards">See streak</button>' +
+        '</div>' +
         '<div class="toast" id="toast"></div>' +
       '</div>'
     );
   }
 
   function roleHtml(label) {
-    var hasTutor = SCREENS.some(function (s) { return s.id === "tutor"; });
-    var hasUpload = SCREENS.some(function (s) { return s.id === "upload"; });
-    var hasRewards = SCREENS.some(function (s) { return s.id === "rewards"; });
+    var isParent = /parent/i.test(label);
+    var isTeacher = /teacher/i.test(label);
+    var title = isParent ? "Parent progress" : isTeacher ? "Teacher dashboard" : label;
+    var body = isParent
+      ? "Your child completed the last short practice. Next lesson is ready."
+      : isTeacher
+        ? "One student is ready for today’s 5-minute reading practice."
+        : "Continue the happy path.";
     return (
       '<div class="card">' +
-        '<h1>' + label + ' home</h1>' +
-        '<p>Signed in as <strong>' + (state.role || "guest") + '</strong> (mock session).</p>' +
+        '<h1>' + title + '</h1>' +
+        '<p>' + body + '</p>' +
         '<div class="progress" aria-hidden="true"><i style="width:' + state.progress + '%"></i></div>' +
-        '<p>Progress ' + state.progress + '% · mock data only</p>' +
+        '<p>Progress ' + state.progress + '%</p>' +
         '<div class="row">' +
-          (hasTutor ? '<button type="button" class="cta" id="goTutor">Start tutor session</button>' : '') +
-          (hasUpload ? '<button type="button" class="ghost" id="goUpload">Upload lesson</button>' : '') +
-          (hasRewards ? '<button type="button" class="ghost" id="goRewards">View rewards</button>' : '') +
-          (!hasTutor && !hasUpload ? '<button type="button" class="cta" id="goHome">Back home</button>' : '') +
+          '<button type="button" class="cta" id="goTutor">Open practice</button>' +
+          '<button type="button" class="ghost" id="goHome">Kid home</button>' +
         '</div>' +
         '<div class="toast" id="toast"></div>' +
       '</div>'
@@ -248,12 +210,12 @@ ${filesSample || "<li><code>(no product files listed)</code></li>"}
     var done = i >= steps.length - 1;
     return (
       '<div class="card">' +
-        '<h1>Tutor session</h1>' +
+        '<h1>Reading practice</h1>' +
         '<p>' + steps[i] + '</p>' +
         '<div class="progress" aria-hidden="true"><i style="width:' + Math.round(((i + 1) / steps.length) * 100) + '%"></i></div>' +
         '<p>Step ' + (i + 1) + ' of ' + steps.length + '</p>' +
         '<div class="row">' +
-          '<button type="button" class="cta" id="nextStep">' + (done ? "Back home" : "Next") + '</button>' +
+          '<button type="button" class="cta" id="nextStep">' + (done ? "Finish" : "Next") + '</button>' +
           '<button type="button" class="ghost" id="goHome">Home</button>' +
         '</div>' +
         '<div class="toast" id="toast"></div>' +
@@ -396,6 +358,13 @@ ${filesSample || "<li><code>(no product files listed)</code></li>"}
 </body>
 </html>
 `;
+}
+
+/** Old file-dump preview — regenerate so App Preview is a usable product. */
+export function previewHtmlNeedsProductHeal(html: string): boolean {
+  return /Source of truth remains your coded files|Who are you today|Signed in as parent \(mock session\)/i.test(
+    String(html || ""),
+  );
 }
 
 export function hasInteractiveProductPreview(workspaceRoot: string): boolean {

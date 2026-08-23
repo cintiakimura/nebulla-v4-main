@@ -540,7 +540,7 @@ export async function applyGeneratedFiles(
     }
     if (apply.interactivePreview) {
       onProgress?.(
-        `Interactive product preview ready (${apply.interactivePreviewPath || 'public/product-preview/index.html'}) — open App Preview to click the happy path`,
+        `Interactive product preview ready (${apply.interactivePreviewPath || 'public/product-preview/index.html'}) — practice flow is in App Preview`,
         'success',
       );
     }
