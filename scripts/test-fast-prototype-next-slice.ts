@@ -215,7 +215,7 @@ assert.equal(nextAutopilotSliceLabel('Secondary'), 'Polish');
   assert.equal(d.stopReason, 'failed');
   assert.match(d.message, /GO_TIMEOUT/);
   assert.match(d.message, /Primary did not land/);
-  assert.match(d.message, /Foundation is already on disk/);
+  assert.equal(/send Continue/i.test(d.message), false);
   assert.equal(/Retry Go for Foundation — not Continue for Primary/i.test(d.message), false);
 }
 {
@@ -233,6 +233,8 @@ assert.equal(nextAutopilotSliceLabel('Secondary'), 'Polish');
   assert.equal(/Foundation did not land/i.test(d.message), false);
 }
 assert.match(policyATimeoutMessage('Primary', true), /Primary did not land/);
+assert.equal(/send Continue/i.test(policyATimeoutMessage('Foundation', false)), false);
+assert.match(policyATimeoutMessage('Foundation', false), /Foundation files did not land/);
 assert.equal(
   resolveNextContinueSlice({ productRoutesOnDisk: false, lastSlice: 'Primary' }),
   'Foundation',

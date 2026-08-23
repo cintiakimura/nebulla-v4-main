@@ -181,7 +181,7 @@ assert.match(
   assert.equal(research.code, "RESEARCH_INCOMPLETE");
   const key = classifyGoFailure({ httpStatus: 401, error: "Main AI API key is missing" });
   assert.equal(key.code, "KEY_AUTH");
-  const timeout = classifyGoFailure({ error: "Grok Code timed out after 3 minutes. Try Go again with a narrower slice." });
+  const timeout = classifyGoFailure({ error: "Grok Code timed out after 3 minutes. A narrower retry may run automatically." });
   assert.equal(timeout.code, "GO_TIMEOUT");
 }
 

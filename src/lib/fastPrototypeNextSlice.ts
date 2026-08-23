@@ -199,6 +199,21 @@ export const FOUNDATION_RETRY_ACTIVITY =
 export const FOUNDATION_SLICE_INSTRUCTION =
   'START_CODING — implement ONE coherent Foundation slice only (Build → Debug → Next). Prefer app/, src/, components/, pages/ — not master-plan/ui-brief only. File blocks for this slice only — not the full §4 app.';
 
+/** After a 3-minute timeout — smaller shell so Grok Code can finish. */
+export const NARROW_FOUNDATION_SLICE_INSTRUCTION =
+  'START_CODING — SLICE: Foundation — smallest runnable shell only (4–8 files): package.json, app/layout.tsx, app/globals.css, app/page.tsx, one nested app/<route>/page.tsx from the Master Plan. No extra dashboards. File blocks now.';
+
+export function buildNarrowSliceInstruction(slice?: string | null): string {
+  const label = String(slice || 'Foundation').trim() || 'Foundation';
+  if (looksLikeFoundationSlice(label) || looksLikePrePrimaryShellSlice(label)) {
+    return NARROW_FOUNDATION_SLICE_INSTRUCTION;
+  }
+  return (
+    `START_CODING — SLICE: ${label} — 3–6 files only (Build → Debug → Next). ` +
+    `Do NOT rewrite Foundation. Prefer app/, src/, components/, pages/. File blocks now.`
+  );
+}
+
 export type AutopilotAdvanceDecision = {
   advance: boolean;
   nextLabel: AutopilotSliceLabel | null;
@@ -365,6 +380,16 @@ export function policyAFailedMessage(lastSlice?: string | null): string {
 
 /** Timed-out next slice must not tell the user Foundation never landed. */
 export function policyATimeoutMessage(lastSlice?: string | null, foundationOnDisk?: boolean): string {
+  if (FAST_PROTOTYPE_SAME_SESSION_AUTOPILOT) {
+    if (!foundationOnDisk) {
+      return 'Grok Code timed out [GO_TIMEOUT]. Foundation files did not land. You do not need to type Continue.';
+    }
+    const label =
+      !lastSlice || looksLikePrePrimaryShellSlice(lastSlice)
+        ? 'Primary'
+        : String(lastSlice).trim();
+    return `Grok Code timed out [GO_TIMEOUT]. ${label} did not land. You do not need to type Continue.`;
+  }
   if (!foundationOnDisk) {
     return `Grok Code timed out [GO_TIMEOUT]. ${FOUNDATION_RETRY_ACTIVITY}`;
   }

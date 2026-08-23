@@ -26,6 +26,7 @@ import { markFoundationGoInFlight } from './foundationHeavyJob';
 import { setGrokCodingActive } from './nebulaGrokCodingGate';
 import {
   buildAutopilotSliceInstruction,
+  buildNarrowSliceInstruction,
   FOUNDATION_RETRY_ACTIVITY,
   FOUNDATION_SLICE_INSTRUCTION,
   resolveNextContinueSlice,
@@ -56,7 +57,10 @@ const GO_POLL_FETCH_TIMEOUT_MS = 12_000;
 /** Hard max wait for Grok Code generation (matches server GO_CODE_JOB_TIMEOUT_MS). */
 const GO_POLL_MAX_WAIT_MS = 180_000;
 const GO_POLL_TIMEOUT_MESSAGE =
-  'Grok Code timed out after 3 minutes — stopped waiting. Try Go again with a narrower slice.';
+  'Grok Code timed out after 3 minutes — checking for a late result (not asking you to retry).';
+/** After the 3 min UI wait — Grok may still finish; apply if files arrive. */
+const GO_TIMEOUT_GRACE_MS = 90_000;
+const GO_TIMEOUT_GRACE_POLL_MS = 6_000;
 
 /** One poll loop per project — do not join ADHD + children onto the same waiter. */
 const goCodePollInFlightByProject = new Map<string, Promise<GoCodePayload>>();
@@ -837,7 +841,7 @@ async function pollGoCodeUntilDoneInner(
     }
   }
   const timedOut = classifyGoFailure({ error: GO_POLL_TIMEOUT_MESSAGE, code: 'GO_TIMEOUT' });
-  onProgress?.(formatBlockedReasonLine(timedOut), 'error');
+  onProgress?.(GO_POLL_TIMEOUT_MESSAGE, 'warn');
   return { error: formatBlockedReasonLine(timedOut), blockedReason: timedOut, code: timedOut.code };
 }
 
@@ -851,28 +855,46 @@ function goPollLooksTimedOut(p: {
   return false;
 }
 
-/** One poll after GO_TIMEOUT — apply files if they already landed; do not wait another 3 min. */
-async function recoverUnconsumedGoResult(projectName: string): Promise<GoCodePayload | null> {
-  try {
-    const timed = abortAfter(GO_POLL_FETCH_TIMEOUT_MS);
-    let response: Response;
+/** After GO_TIMEOUT — keep polling last-result while the server fetch may still finish. */
+async function recoverUnconsumedGoResult(
+  projectName: string,
+  onProgress?: GrokActivityProgressFn,
+): Promise<GoCodePayload | null> {
+  const deadline = Date.now() + GO_TIMEOUT_GRACE_MS;
+  let attempt = 0;
+  while (Date.now() < deadline) {
     try {
-      response = await fetch(withProjectQuery('/api/grok/go-code/poll'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...getGrokRequestHeaders() },
-        credentials: 'include',
-        signal: timed.signal,
-        body: JSON.stringify(withProjectBody({ projectName })),
-      });
-    } finally {
-      timed.cancel();
+      const timed = abortAfter(GO_POLL_FETCH_TIMEOUT_MS);
+      let response: Response;
+      try {
+        response = await fetch(withProjectQuery('/api/grok/go-code/poll'), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...getGrokRequestHeaders() },
+          credentials: 'include',
+          signal: timed.signal,
+          body: JSON.stringify(withProjectBody({ projectName })),
+        });
+      } finally {
+        timed.cancel();
+      }
+      const poll = await readResponseJson<GoCodePayload>(response);
+      if (poll.choices?.[0]?.message?.content?.trim()) return poll;
+      if (poll.idle && attempt > 0) return null;
+      if (attempt === 0 || attempt % 3 === 0) {
+        onProgress?.(
+          'Grok Code still finishing — applying when files arrive (not asking you to retry)',
+          'info',
+        );
+      }
+    } catch {
+      /* next grace poll */
     }
-    const poll = await readResponseJson<GoCodePayload>(response);
-    if (poll.choices?.[0]?.message?.content?.trim()) return poll;
-    return null;
-  } catch {
-    return null;
+    attempt += 1;
+    const sleepMs = Math.min(GO_TIMEOUT_GRACE_POLL_MS, Math.max(0, deadline - Date.now()));
+    if (sleepMs <= 0) break;
+    await sleep(sleepMs);
   }
+  return null;
 }
 
 async function kickGoCodeJob(options: {
@@ -1157,6 +1179,10 @@ export async function runGoCodeAndApply(options: {
     let lastRunnable: { runnableRoot?: boolean; runnableStatusLine?: string } = {};
     let grokRelaunches = 0;
     const MAX_GROK_RELAUNCHES = 1;
+    let timeoutRelaunches = 0;
+    const MAX_TIMEOUT_RELAUNCHES = 1;
+    let activeNote = userNote;
+    let activeMessages = baseMessages;
 
     for (let pass = 0; pass < GO_CODE_MAX_PASSES; pass++) {
       if (isGoSessionAborted(projectName)) break;
@@ -1164,14 +1190,14 @@ export async function runGoCodeAndApply(options: {
       const continuation = pass > 0;
       const passMessages = continuation
         ? [
-            ...baseMessages,
+            ...activeMessages,
             {
               role: 'user' as const,
               content:
                 'CONTINUATION — master-plan.json is updated. Output the Foundation slice only: layout.tsx, globals.css, root page, minimal routing shell. Do NOT implement every §4 route. Do NOT stop at master-plan.json only.',
             },
           ]
-        : baseMessages;
+        : activeMessages;
 
       if (continuation) {
         onProgress?.(
@@ -1183,7 +1209,7 @@ export async function runGoCodeAndApply(options: {
       let data = await kickGoCodeJob({
         userId,
         projectName,
-        userNote,
+        userNote: activeNote,
         messages: passMessages,
         continuation,
         onProgress,
@@ -1209,10 +1235,22 @@ export async function runGoCodeAndApply(options: {
         }
         if (totalWritten > 0) break;
         if (blocked.code === 'GO_TIMEOUT') {
-          const recovered = await recoverUnconsumedGoResult(projectName);
+          const recovered = await recoverUnconsumedGoResult(projectName, onProgress);
           if (recovered?.choices?.[0]?.message?.content?.trim()) {
             onProgress?.('Recovering unapplied Go Code result from server', 'info');
             data = recovered;
+          } else if (timeoutRelaunches < MAX_TIMEOUT_RELAUNCHES) {
+            timeoutRelaunches += 1;
+            const narrow = buildNarrowSliceInstruction(noteSlice || 'Foundation');
+            activeNote = narrow;
+            activeMessages = [{ role: 'user', content: narrow.slice(0, 2000) }];
+            onProgress?.(
+              'Grok Code timed out — retrying a narrower slice automatically (not asking you to type Continue)',
+              'warn',
+            );
+            await cancelProjectBackgroundJobs();
+            pass -= 1;
+            continue;
           } else {
             onProgress?.(formatBlockedReasonLine(blocked), 'error');
             try {
@@ -1273,10 +1311,22 @@ export async function runGoCodeAndApply(options: {
           data.blockedReason || classifyGoFailure({ code: data.code, codeError: data.codeError, error: data.error });
         if (totalWritten > 0) break;
         if (blocked.code === 'GO_TIMEOUT') {
-          const recovered = await recoverUnconsumedGoResult(projectName);
+          const recovered = await recoverUnconsumedGoResult(projectName, onProgress);
           if (recovered?.choices?.[0]?.message?.content?.trim()) {
             onProgress?.('Recovering unapplied Go Code result from server', 'info');
             data = recovered;
+          } else if (timeoutRelaunches < MAX_TIMEOUT_RELAUNCHES) {
+            timeoutRelaunches += 1;
+            const narrow = buildNarrowSliceInstruction(noteSlice || 'Foundation');
+            activeNote = narrow;
+            activeMessages = [{ role: 'user', content: narrow.slice(0, 2000) }];
+            onProgress?.(
+              'Grok Code timed out — retrying a narrower slice automatically (not asking you to type Continue)',
+              'warn',
+            );
+            await cancelProjectBackgroundJobs();
+            pass -= 1;
+            continue;
           } else {
             onProgress?.(formatBlockedReasonLine(blocked), 'error');
             return {

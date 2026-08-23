@@ -47,7 +47,9 @@ assert.equal(
 assert.match(pipeline, /Code pass 1|GO_CODE_PASS1_LABEL/);
 assert.match(pipeline, /GO_CONSUME_TIMEOUT_MS/, 'consume ack must time out');
 assert.match(pollFn, /GO_POLL_TIMEOUT_MESSAGE/);
-assert.match(pollFn, /onProgress\?\.\(formatBlockedReasonLine\(timedOut\), 'error'\)/);
+assert.match(pollFn, /onProgress\?\.\(GO_POLL_TIMEOUT_MESSAGE, 'warn'\)/);
+assert.match(pipeline, /GO_TIMEOUT_GRACE_MS/);
+assert.match(pipeline, /retrying a narrower slice automatically/);
 const ackFn = pipeline.slice(
   pipeline.indexOf('export function ackConsumedGoCodeResult'),
   pipeline.indexOf('export function hasGrokFileBlocks'),
@@ -273,6 +275,7 @@ assert.match(figma, /controller\.abort\(\), 4000\)/, 'live Figma fetch must time
   const pending = fs.readFileSync(path.join(root, 'lib/nebulaGoCodePending.ts'), 'utf8');
   assert.match(pending, /GO_CODE_JOB_TIMEOUT_MS = 180_000/);
   assert.match(job, /GO_CODE_JOB_TIMEOUT_MS/);
+  assert.match(job, /GO_CODE_FETCH_TIMEOUT_MS = 300_000/);
   assert.equal(/GO_CODE_JOB_TIMEOUT_MS = 600_000/.test(job), false);
   assert.equal(/GO_MAX_POLLS = 90/.test(pipeline), false);
 }
@@ -286,8 +289,12 @@ assert.match(figma, /controller\.abort\(\), 4000\)/, 'live Figma fetch must time
   });
   expireStaleGoCodePending(tmp, { jobActive: true });
   const after = readGoCodePending(tmp);
-  assert.equal(after?.status, 'error');
-  assert.match(String(after?.codeError || ''), /timed out after 3 minutes/i);
+  assert.equal(after?.status, 'running', 'in-flight Grok fetch must not be overwritten with GO_TIMEOUT');
+
+  expireStaleGoCodePending(tmp, { jobActive: false });
+  const orphan = readGoCodePending(tmp);
+  assert.equal(orphan?.status, 'error');
+  assert.match(String(orphan?.codeError || ''), /timed out after 3 minutes/i);
 
   const errTmp = fs.mkdtempSync(path.join(os.tmpdir(), 'go-code-poll-err-'));
   writeGoCodePending(errTmp, {

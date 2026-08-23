@@ -62,7 +62,9 @@ export function scheduleGoCodeJob(opts: GoCodeJobOptions): boolean {
   activeJobs.add(workspaceRoot);
   void (async () => {
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), GO_CODE_JOB_TIMEOUT_MS);
+    // Client UI stops polling at 3 min; let xAI finish so recover can apply late files.
+    const GO_CODE_FETCH_TIMEOUT_MS = 300_000;
+    const timer = setTimeout(() => controller.abort(), GO_CODE_FETCH_TIMEOUT_MS);
     try {
       const codeRes = await fetch("https://api.x.ai/v1/chat/completions", {
         method: "POST",
@@ -231,7 +233,7 @@ export function goCodePendingToPollResponse(
   }
   if (pending.status === "running" || (jobActive && pending.status !== "done")) {
     const elapsed = Date.now() - pending.startedAt;
-    if (elapsed >= GO_CODE_JOB_TIMEOUT_MS) {
+    if (elapsed >= GO_CODE_JOB_TIMEOUT_MS && !jobActive) {
       const blocked = goBlocked("GO_TIMEOUT");
       return pollBlockedPayload(
         {

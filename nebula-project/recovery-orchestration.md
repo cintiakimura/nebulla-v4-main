@@ -260,6 +260,7 @@ Work **one step per Agent turn / PR** after constitution install. Fix the **earl
 | 2026-08-23 | Product finish restored = A. `FAST_PROTOTYPE_SAME_SESSION_AUTOPILOT = false`. One Foundation lands or fails honestly. Continue with empty explorer = Retry Foundation, not Primary. Gate R 409 never looks like Code pass 1. | Production looped Code pass 1 / Continue before Foundation landed; Mode B stays off |
 | 2026-08-23 | Continue after Secondary must stay Secondary (then Polish). Do not reuse leftover `SLICE: Foundation` summary; do not relabel a thin Secondary apply as Foundation; persist the launched slice. | ADHD tutor loop: Secondary apply → “Slice: Foundation” → next Continue recoded Primary forever |
 | 2026-08-23 | Product finish = B. `FAST_PROTOTYPE_SAME_SESSION_AUTOPILOT = true`. One prompt → research → mockup → Foundation → auto Primary → Secondary → Polish. Do not ask the user to type Continue. Failed Gate R / failed apply still stop. Persist launched slice so thin Secondary cannot loop. | User: “why keep asking for continue — this shouldn’t happen” |
+| 2026-08-23 | GO_TIMEOUT: do not abort an in-flight xAI fetch at 3 min; grace-poll last-result; one automatic narrower Foundation retry. Copy must not say “Retry Go / Continue”. Client UI poll still hard-stops at 3 min. | Screenshot: Code pass 1 3m then “Foundation did not land. Retry Go” while mockup still on Preview |
 
 ---
 

@@ -163,7 +163,7 @@ export const GO_CODE_PENDING_MAX_AGE_MS = 5 * 60 * 1000;
 export const GO_CODE_JOB_TIMEOUT_MS = 180_000;
 
 const GO_TIMEOUT_MESSAGE =
-  "Grok Code timed out after 3 minutes. Try Go again with a narrower slice.";
+  "Grok Code timed out after 3 minutes. A narrower retry may run automatically.";
 
 /**
  * Drop or fail abandoned go-code-pending.json so clients stop polling.
@@ -183,6 +183,11 @@ export function expireStaleGoCodePending(
   }
 
   if ((pending.status === "running" || pending.status === "preparing") && age >= GO_CODE_JOB_TIMEOUT_MS) {
+    // In-flight xAI fetch must finish and write last-result — do not overwrite it
+    // with GO_TIMEOUT or recoverUnconsumedGoResult can never apply late files.
+    if (opts?.jobActive && pending.status === "running") {
+      return false;
+    }
     writeGoCodePending(workspaceRoot, {
       ...pending,
       status: "error",

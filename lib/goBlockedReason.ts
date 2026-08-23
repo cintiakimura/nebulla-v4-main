@@ -30,7 +30,7 @@ export const GO_BLOCKED_MESSAGES: Record<GoBlockedCode, string> = {
     "Stopped: ui-brief.md missing, too short, or has no pages. Finish Master Plan §§1–5, then Generate UI.",
   MASTER_PLAN_INCOMPLETE: "Stopped: Master Plan is too thin for Foundation. Finish §§1–5, then try Go again.",
   GO_MODEL_REJECTED: "Stopped: coding model rejected the request (invalid parameters). Retry Go — Foundation did not start.",
-  GO_TIMEOUT: "Stopped: Grok Code timed out after 3 minutes. Try Go again with a narrower slice.",
+  GO_TIMEOUT: "Stopped: Grok Code timed out after 3 minutes. A narrower retry may run automatically.",
   GO_EMPTY_OUTPUT: "Stopped: Grok Code returned no file output. Try Go again.",
   NO_FILE_BLOCKS: "Stopped: Grok Code returned no file blocks. Foundation did not start.",
   APPLY_FAILED: "Stopped: file apply wrote 0 files. Foundation did not land.",
