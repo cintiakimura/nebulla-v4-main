@@ -5,12 +5,17 @@
 
 import type { PageClassification, TemplateDef, V2TemplateId } from "./types";
 
+function withBrandSlots(slots: string[]): string[] {
+  if (slots.includes("slot_logo")) return slots;
+  return ["slot_logo", "slot_product_name", ...slots];
+}
+
 export const TEMPLATE_DEFS: Record<V2TemplateId, TemplateDef> = {
   mobile_home_hero_cards: {
     id: "mobile_home_hero_cards",
     device: "mobile",
     regions: ["top_bar", "hero", "cards", "cta_row", "bottom_tabs"],
-    slots: [
+    slots: withBrandSlots([
       "nav_title",
       "hero_title",
       "hero_subtitle",
@@ -22,14 +27,14 @@ export const TEMPLATE_DEFS: Record<V2TemplateId, TemplateDef> = {
       "card_2_value",
       "card_3_title",
       "card_3_value",
-    ],
+    ]),
     needsPrimaryCta: true,
   },
   mobile_list_actions: {
     id: "mobile_list_actions",
     device: "mobile",
     regions: ["top_bar", "hero", "list", "cta_row", "bottom_tabs"],
-    slots: [
+    slots: withBrandSlots([
       "nav_title",
       "hero_title",
       "hero_subtitle",
@@ -43,14 +48,14 @@ export const TEMPLATE_DEFS: Record<V2TemplateId, TemplateDef> = {
       "item_3_meta",
       "item_4_title",
       "item_4_meta",
-    ],
+    ]),
     needsPrimaryCta: true,
   },
   mobile_dashboard_metrics: {
     id: "mobile_dashboard_metrics",
     device: "mobile",
     regions: ["top_bar", "metrics", "section", "cta_row", "bottom_tabs"],
-    slots: [
+    slots: withBrandSlots([
       "nav_title",
       "hero_title",
       "hero_subtitle",
@@ -63,14 +68,14 @@ export const TEMPLATE_DEFS: Record<V2TemplateId, TemplateDef> = {
       "metric_3_value",
       "section_title",
       "section_body",
-    ],
+    ]),
     needsPrimaryCta: true,
   },
   mobile_settings_groups: {
     id: "mobile_settings_groups",
     device: "mobile",
     regions: ["top_bar", "groups", "bottom_tabs"],
-    slots: [
+    slots: withBrandSlots([
       "nav_title",
       "hero_title",
       "hero_subtitle",
@@ -82,14 +87,14 @@ export const TEMPLATE_DEFS: Record<V2TemplateId, TemplateDef> = {
       "row_3_meta",
       "row_4_title",
       "row_4_meta",
-    ],
+    ]),
     needsPrimaryCta: false,
   },
   mobile_auth_form: {
     id: "mobile_auth_form",
     device: "mobile",
     regions: ["hero", "form", "cta_row"],
-    slots: [
+    slots: withBrandSlots([
       "hero_title",
       "hero_subtitle",
       "field_1_label",
@@ -98,14 +103,14 @@ export const TEMPLATE_DEFS: Record<V2TemplateId, TemplateDef> = {
       "field_2_placeholder",
       "primary_cta",
       "secondary_cta",
-    ],
+    ]),
     needsPrimaryCta: true,
   },
   mobile_detail_sections: {
     id: "mobile_detail_sections",
     device: "mobile",
     regions: ["top_bar", "hero", "sections", "cta_row", "bottom_tabs"],
-    slots: [
+    slots: withBrandSlots([
       "nav_title",
       "hero_title",
       "hero_subtitle",
@@ -116,21 +121,21 @@ export const TEMPLATE_DEFS: Record<V2TemplateId, TemplateDef> = {
       "section_2_body",
       "section_3_title",
       "section_3_body",
-    ],
+    ]),
     needsPrimaryCta: true,
   },
   mobile_empty_state: {
     id: "mobile_empty_state",
     device: "mobile",
     regions: ["top_bar", "empty", "cta_row", "bottom_tabs"],
-    slots: ["nav_title", "hero_title", "hero_subtitle", "primary_cta", "empty_title", "empty_body"],
+    slots: withBrandSlots(["nav_title", "hero_title", "hero_subtitle", "primary_cta", "empty_title", "empty_body"]),
     needsPrimaryCta: true,
   },
   web_dashboard_sidebar: {
     id: "web_dashboard_sidebar",
     device: "web",
     regions: ["sidebar", "header", "metrics", "content"],
-    slots: [
+    slots: withBrandSlots([
       "nav_title",
       "hero_title",
       "hero_subtitle",
@@ -146,14 +151,14 @@ export const TEMPLATE_DEFS: Record<V2TemplateId, TemplateDef> = {
       "side_1",
       "side_2",
       "side_3",
-    ],
+    ]),
     needsPrimaryCta: true,
   },
   web_list_table: {
     id: "web_list_table",
     device: "web",
     regions: ["header", "filters", "list", "cta_row"],
-    slots: [
+    slots: withBrandSlots([
       "nav_title",
       "hero_title",
       "hero_subtitle",
@@ -167,14 +172,14 @@ export const TEMPLATE_DEFS: Record<V2TemplateId, TemplateDef> = {
       "item_3_meta",
       "item_4_title",
       "item_4_meta",
-    ],
+    ]),
     needsPrimaryCta: true,
   },
   web_settings_two_column: {
     id: "web_settings_two_column",
     device: "web",
     regions: ["sidebar", "header", "groups"],
-    slots: [
+    slots: withBrandSlots([
       "nav_title",
       "hero_title",
       "hero_subtitle",
@@ -189,14 +194,14 @@ export const TEMPLATE_DEFS: Record<V2TemplateId, TemplateDef> = {
       "primary_cta",
       "side_1",
       "side_2",
-    ],
+    ]),
     needsPrimaryCta: true,
   },
   web_detail_header_content: {
     id: "web_detail_header_content",
     device: "web",
     regions: ["header", "content", "side"],
-    slots: [
+    slots: withBrandSlots([
       "nav_title",
       "hero_title",
       "hero_subtitle",
@@ -207,14 +212,14 @@ export const TEMPLATE_DEFS: Record<V2TemplateId, TemplateDef> = {
       "section_2_body",
       "section_3_title",
       "section_3_body",
-    ],
+    ]),
     needsPrimaryCta: true,
   },
   web_auth_center_card: {
     id: "web_auth_center_card",
     device: "web",
     regions: ["auth_card"],
-    slots: [
+    slots: withBrandSlots([
       "hero_title",
       "hero_subtitle",
       "field_1_label",
@@ -223,14 +228,14 @@ export const TEMPLATE_DEFS: Record<V2TemplateId, TemplateDef> = {
       "field_2_placeholder",
       "primary_cta",
       "secondary_cta",
-    ],
+    ]),
     needsPrimaryCta: true,
   },
   landing_hero_features_cta: {
     id: "landing_hero_features_cta",
     device: "landing",
     regions: ["hero", "features", "cta_band"],
-    slots: [
+    slots: withBrandSlots([
       "hero_title",
       "hero_subtitle",
       "primary_cta",
@@ -241,14 +246,14 @@ export const TEMPLATE_DEFS: Record<V2TemplateId, TemplateDef> = {
       "card_2_value",
       "card_3_title",
       "card_3_value",
-    ],
+    ]),
     needsPrimaryCta: true,
   },
   landing_pricing_sections: {
     id: "landing_pricing_sections",
     device: "landing",
     regions: ["hero", "pricing", "cta_band"],
-    slots: [
+    slots: withBrandSlots([
       "hero_title",
       "hero_subtitle",
       "primary_cta",
@@ -258,7 +263,7 @@ export const TEMPLATE_DEFS: Record<V2TemplateId, TemplateDef> = {
       "card_2_value",
       "card_3_title",
       "card_3_value",
-    ],
+    ]),
     needsPrimaryCta: true,
   },
 };
@@ -310,10 +315,17 @@ export function selectTemplate(
   }
 
   if (opts?.preferAlternate && opts.previousTemplate && id === opts.previousTemplate) {
-    const alts = Object.keys(TEMPLATE_DEFS).filter(
-      (t) => TEMPLATE_DEFS[t as V2TemplateId].device === device && t !== id,
-    ) as V2TemplateId[];
+    const alts = Object.keys(TEMPLATE_DEFS).filter((t) => {
+      const def = TEMPLATE_DEFS[t as V2TemplateId];
+      if (def.device !== device || t === id) return false;
+      if (page_type !== "empty" && t === "mobile_empty_state") return false;
+      return true;
+    }) as V2TemplateId[];
     if (alts[0]) id = alts[0];
+  }
+
+  if (page_type !== "empty" && id === "mobile_empty_state") {
+    id = device === "mobile" ? "mobile_home_hero_cards" : "web_dashboard_sidebar";
   }
 
   return TEMPLATE_DEFS[id];

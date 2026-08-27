@@ -4,9 +4,15 @@
  */
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { shortNameFromIdea } from '../src/lib/projectNameFromIdea';
+import { inferProductName, logoInitials, looksLikeGoalStubName, shortNameFromIdea } from '../src/lib/projectNameFromIdea';
+import {
+  buildProductIdentity,
+  patchMasterPlanProductName,
+  writeProductIdentity,
+} from '../lib/productIdentity';
 import {
   isMasterPlanCompleteForDiscovery,
   isMasterPlanReadyForUiMockup,
@@ -28,6 +34,52 @@ assert.equal(
   'tutor kids with ADHD',
 );
 assert.ok(shortNameFromIdea('!!!').length > 0);
+
+{
+  const goal =
+    'Build a privacy-first learning companion for kids that helps them practice reading every day.';
+  const name = inferProductName(goal, 'Mobile App');
+  const words = name.split(/\s+/).filter(Boolean);
+  assert.ok(words.length >= 2 && words.length <= 4, `brand should be 2–4 words, got "${name}"`);
+  assert.ok(words.every((w) => /^[A-Z]/.test(w)), `Title Case expected, got "${name}"`);
+  assert.ok(!looksLikeGoalStubName(name, goal), `inferred name leaked the goal: ${name}`);
+  assert.ok(!/privacy-first|companion|^build\b/i.test(name), `stopword leaked into "${name}"`);
+  assert.notEqual(name.toLowerCase(), shortNameFromIdea(goal).toLowerCase());
+  assert.ok(!goal.toLowerCase().startsWith(name.toLowerCase()));
+  const initials = logoInitials(name);
+  assert.equal(initials.length, 2);
+  assert.match(initials, /^[A-Z]{2}$/);
+  const identity = buildProductIdentity(goal, 'Mobile App');
+  assert.equal(identity.logoInitials.length, 2);
+  assert.ok(identity.logoHint);
+
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'nebulla-identity-'));
+  const goalSection = 'Project Type: Mobile App\n\nKids practice reading with a private companion.\n';
+  fs.writeFileSync(
+    path.join(dir, 'master-plan.json'),
+    JSON.stringify(
+      {
+        '1. Goal of the app': goalSection,
+        '5. UI/UX design': '- **Project:** Chopped Brief — mobile education\n- **Mood:** calm',
+      },
+      null,
+      2,
+    ),
+    'utf8',
+  );
+  writeProductIdentity(dir, identity);
+  const plan = JSON.parse(fs.readFileSync(path.join(dir, 'master-plan.json'), 'utf8')) as Record<string, string>;
+  assert.equal(plan['1. Goal of the app'], goalSection);
+  assert.match(plan['5. UI/UX design'], new RegExp(identity.projectName));
+  const renamed = patchMasterPlanProductName(plan, {
+    ...identity,
+    projectName: 'Harbor Path',
+    logoInitials: 'HP',
+  });
+  assert.equal(renamed.plan['1. Goal of the app'], goalSection);
+  assert.match(renamed.plan['5. UI/UX design'], /Harbor Path/);
+  fs.rmSync(dir, { recursive: true, force: true });
+}
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const good = JSON.parse(

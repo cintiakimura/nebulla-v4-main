@@ -1,7 +1,19 @@
 /**
- * Human project label from a goal/brief — skips lead-in verbs and filler.
- * Shared by My Projects Continue and chat "Create a new project:".
- * Authority: nebula-project/recovery-orchestration.md §7.1
+ * Human project label from a goal/brief.
+ * Display names use inferProductName (invented 2–4 word brand).
+ * shortNameFromIdea is kept only for legacy tests / diagnostics — never as the app title.
+ */
+export {
+  inferProductName,
+  logoInitials,
+  logoHintFor,
+  looksLikeGoalStubName,
+  buildProductIdentity,
+} from '../../lib/productIdentity';
+
+/**
+ * @deprecated Do not use as the project / UI title. Prefer inferProductName.
+ * Kept so existing diagnostic tests still cover chopped-brief behavior.
  */
 export function shortNameFromIdea(idea: string): string {
   let t = idea.trim().replace(/\s+/g, ' ');

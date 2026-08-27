@@ -19,6 +19,7 @@ import {
 import { MASTER_PLAN_SECTION_KEYS } from "../../masterPlanSections";
 import { writePreviewModel } from "../../visualUiEditorPreview";
 import { workspaceHasCodedAppUi } from "../../workspaceCodedAppUi";
+import { ensureProductIdentity } from "../../productIdentity";
 import { appendStepLog, writeContextFile } from "../contextIO";
 import {
   clearFalseRegenBudgetIfEmptyMockup,
@@ -48,7 +49,19 @@ import { mapSlots, sanitizeSlotsForPageType } from "./mapSlots";
 import { repairSlots, validateV2Quality } from "./qualityGate";
 import { renderTemplateCode, renderTemplateModel } from "./renderTemplateModel";
 import { getTemplateById, selectTemplate } from "./selectTemplate";
-import type { V2TemplateId } from "./types";
+import type { DesignTokens, V2EditorModel, V2TemplateId } from "./types";
+import {
+  applyTokensToModel,
+  kitTokensFromStructure,
+  lockProductTemplate,
+  looksSingleEmptyHero,
+  modelKeepsChrome,
+  paletteIdFromTokens,
+  readPreviewSkinMode,
+  resolveComposeRung,
+  shouldWriteUiPreview,
+  uiStatusForRung,
+} from "./previewCompose";
 import { compileDesignBrief } from "../resources/compileDesignBrief";
 import { matchResources } from "../resources/matchResources";
 import { refineDesignBriefWithGrok } from "../resources/refineDesignBrief";
@@ -116,6 +129,10 @@ export type RunUiGenerationResult = {
   quality_gate_result?: string;
   figma_fallback_used?: boolean;
   env_guidance?: string;
+  ui_status?: "ready" | "partial";
+  skin_mode?: "kit" | "tokens";
+  palette_id?: string;
+  compose_rung?: 1 | 2 | 3 | 4;
   skipped?: boolean;
 };
 
@@ -555,6 +572,14 @@ export async function runUiGenerationCycleV2(
   const pagesText = section(plan, 4);
   let uiux = section(plan, 5);
 
+  const identity = ensureProductIdentity(workspaceRoot, {
+    goal,
+    projectType: state.project_type || undefined,
+    projectName: state.project_name,
+    persist: true,
+  });
+  state.project_name = identity.projectName;
+
   /** Ensure primary ui-brief exists, then prefer its page contracts + design tokens. */
   let uiBrief = "";
   if (planExists && input.masterPlanPath) {
@@ -833,6 +858,14 @@ export async function runUiGenerationCycleV2(
       `Resource match — mode=${resourceMatch.selection_mode} score=${resourceMatch.score} (using selectTemplate fallback)`,
     );
   }
+  const lockedId = lockProductTemplate(template.id, classification.page_type);
+  if (lockedId !== template.id) {
+    const locked = getTemplateById(lockedId);
+    if (locked) {
+      appendStepLog(state, `Phase B lock — ${template.id} → ${locked.id} (never empty home for §5 dark)`);
+      template = locked;
+    }
+  }
   state.template_id = template.id;
   appendStepLog(state, `Phase B template — ${template.id} regions=${template.regions.join(",")}`);
   state.current_step = 3;
@@ -915,50 +948,60 @@ export async function runUiGenerationCycleV2(
   state.current_step = 4;
   persist(workspaceRoot, state);
 
-  // -------- Phase D — Tokens --------
+  // -------- Phase D — Tokens (skin overlay; never replace the tree) --------
   stage("Applying design tokens");
-  let tokens = buildDesignTokens(uiux, state.palette, classification.density);
-  // Align spacing with compiled Design Brief roles (before preference nudges).
-  tokens.gap = designBrief.spacing_radius.gap;
-  tokens.pad = designBrief.spacing_radius.pad;
-  tokens.radius = designBrief.spacing_radius.radius;
-  tokens.primary = designBrief.color_roles.primary.hex;
-  tokens.bg = designBrief.color_roles.background.hex;
-  tokens.surface = designBrief.color_roles.surface.hex;
-  tokens.text = designBrief.color_roles.on_surface.hex;
-  tokens.mutedText = designBrief.color_roles.muted.hex;
-  tokens.border = designBrief.color_roles.border.hex;
-  if (designBrief.color_roles.accent) tokens.accent = designBrief.color_roles.accent.hex;
-  // Apply offline/catalog spacing rhythm within a bounded window of the brief.
-  tokens = applyPlanToTokens(tokens, structurePlan);
+  const skin = readPreviewSkinMode();
+  const hasOfflineStructure =
+    figma.figma_status === "offline" && Boolean(structurePlan.enforceRegions);
+  const structureMissing = !hasOfflineStructure && figma.figma_status !== "success";
   const hints = input.preferenceHints || {};
-  if (hints.denser) {
-    tokens.gap = Math.max(6, tokens.gap - 4);
-    tokens.pad = Math.max(8, tokens.pad - 4);
-  }
-  if (hints.looser) {
-    tokens.gap = Math.min(28, tokens.gap + 4);
-    tokens.pad = Math.min(28, tokens.pad + 4);
-  }
-  if (hints.moreContrast) {
-    // Nudge text contrast only — never replace Design Brief primary role.
-    tokens.text = designBrief.color_roles.on_surface.hex;
-    tokens.mutedText = designBrief.color_roles.muted.hex;
-    const bgL =
-      parseInt(tokens.bg.replace("#", "").slice(0, 2), 16) / 255;
-    if (bgL > 0.5) {
-      tokens.text = "#0C0A09";
-      tokens.mutedText = "#57534E";
-    } else {
-      tokens.text = "#FAFAF9";
-      tokens.mutedText = "#A1A1AA";
+  const applyPreferenceNudge = (t: DesignTokens) => {
+    if (hints.denser) {
+      t.gap = Math.max(6, t.gap - 4);
+      t.pad = Math.max(8, t.pad - 4);
     }
+    if (hints.looser) {
+      t.gap = Math.min(28, t.gap + 4);
+      t.pad = Math.min(28, t.pad + 4);
+    }
+    if (hints.moreContrast) {
+      const bgL = parseInt(t.bg.replace("#", "").slice(0, 2), 16) / 255;
+      if (bgL > 0.5) {
+        t.text = "#0C0A09";
+        t.mutedText = "#57534E";
+      } else {
+        t.text = "#FAFAF9";
+        t.mutedText = "#A1A1AA";
+      }
+    }
+    return t;
+  };
+  let namedTok = buildDesignTokens(uiux, state.palette, classification.density);
+  namedTok.gap = designBrief.spacing_radius.gap;
+  namedTok.pad = designBrief.spacing_radius.pad;
+  namedTok.radius = designBrief.spacing_radius.radius;
+  namedTok.primary = designBrief.color_roles.primary.hex;
+  namedTok.bg = designBrief.color_roles.background.hex;
+  namedTok.surface = designBrief.color_roles.surface.hex;
+  namedTok.text = designBrief.color_roles.on_surface.hex;
+  namedTok.mutedText = designBrief.color_roles.muted.hex;
+  namedTok.border = designBrief.color_roles.border.hex;
+  if (designBrief.color_roles.accent) namedTok.accent = designBrief.color_roles.accent.hex;
+  namedTok = applyPreferenceNudge(applyPlanToTokens(namedTok, structurePlan));
+  const kitTok = applyPreferenceNudge(
+    applyPlanToTokens(kitTokensFromStructure(classification.density, figma.structure_hints), structurePlan),
+  );
+  let usedKitColors = false;
+  let tokens = namedTok;
+  if (skin === "kit" && hasOfflineStructure) {
+    tokens = kitTok;
+    usedKitColors = true;
   }
   state.design_tokens_json = JSON.stringify(tokens);
   state.design_system_rules_applied = "yes";
   appendStepLog(
     state,
-    `Phase D tokens — bg=${tokens.bg} primary=${tokens.primary} radius=${tokens.radius}`,
+    `Phase D tokens — skin=${skin} kit=${usedKitColors} bg=${tokens.bg} primary=${tokens.primary} radius=${tokens.radius}`,
   );
   state.current_step = 5;
   persist(workspaceRoot, state);
@@ -1026,9 +1069,41 @@ export async function runUiGenerationCycleV2(
   state.current_step = 6;
   persist(workspaceRoot, state);
 
-  // -------- Phase F — Render --------
+  // -------- Phase F — Render (structure first; prompt is copy/style overlay) --------
   stage("Rendering UI");
-  let model = renderTemplateModel({
+  let usedStitchFallback = false;
+  let model: V2EditorModel;
+  let code = "";
+  const restyleIfNamed = (m: V2EditorModel) =>
+    usedKitColors ? m : applyTokensToModel(m, namedTok);
+  const stitchIfEmptyHero = () => {
+    if (classification.page_type === "empty" || classification.page_type === "auth") return;
+    if (!looksSingleEmptyHero(model)) return;
+    usedStitchFallback = true;
+    const stitchId = lockProductTemplate(template.id, classification.page_type);
+    const stitchTpl = getTemplateById(stitchId);
+    if (stitchTpl) template = stitchTpl;
+    slots = ensureSlotsForStructurePlan(
+      slots,
+      structurePlan,
+      classification.page_type,
+      state.project_name,
+      state.priority_features,
+    );
+    slots = sanitizeSlotsForPageType(slots, classification.page_type);
+    model = renderTemplateModel({
+      template,
+      classification,
+      tokens,
+      slots,
+      figmaStatus: figma.figma_status,
+      structureHints: figma.structure_hints,
+    });
+    model = restyleIfNamed(model);
+    code = renderTemplateCode({ template, tokens, slots });
+    appendStepLog(state, `Phase F stitch-minimum — template=${template.id}`);
+  };
+  model = renderTemplateModel({
     template,
     classification,
     tokens,
@@ -1036,7 +1111,9 @@ export async function runUiGenerationCycleV2(
     figmaStatus: figma.figma_status,
     structureHints: figma.structure_hints,
   });
-  let code = renderTemplateCode({ template, tokens, slots });
+  model = restyleIfNamed(model);
+  code = renderTemplateCode({ template, tokens, slots });
+  stitchIfEmptyHero();
   state.model_used = "ui-generation-logic-v2";
   state.quality_rules_applied = "yes";
   state.generated_code = code;
@@ -1072,6 +1149,8 @@ export async function runUiGenerationCycleV2(
     designBrief,
     selectionMode: figma.selection_mode,
     navigationMode: classification.navigation_mode,
+    structureMissing,
+    skinMode: skin,
   });
   state.repair_pass_used = "no";
   const needsRepair =
@@ -1098,7 +1177,9 @@ export async function runUiGenerationCycleV2(
       figmaStatus: figma.figma_status,
       structureHints: figma.structure_hints,
     });
+    model = restyleIfNamed(model);
     code = renderTemplateCode({ template, tokens, slots });
+    stitchIfEmptyHero();
     state.generated_code = code;
     state.editor_model_json = JSON.stringify(model);
     gate = validateV2Quality({
@@ -1111,6 +1192,8 @@ export async function runUiGenerationCycleV2(
       designBrief,
       selectionMode: figma.selection_mode,
       navigationMode: classification.navigation_mode,
+      structureMissing,
+    skinMode: skin,
     });
     if (structureRequired && !regionsOk(model, slots)) {
       gate = {
@@ -1253,16 +1336,33 @@ export async function runUiGenerationCycleV2(
   }
 
   // -------- Phase H — Deliver --------
+  const chromeOk = modelKeepsChrome({
+    pages: mergedPages,
+    meta: {
+      engine: "v2",
+      template_id: template.id,
+      tokens,
+      slots,
+      figma_status: figma.figma_status,
+    },
+  });
+  const composeRung = resolveComposeRung({
+    hasOfflineStructure,
+    skin,
+    usedKitColors,
+    chromeOk,
+    usedStitchFallback,
+  });
+  const uiStatus = uiStatusForRung(composeRung, gate.gate === "pass");
+  const paletteId = paletteIdFromTokens(tokens, skin);
   const deliveredStage =
-    gate.gate === "pass"
+    uiStatus === "ready" && gate.gate === "pass"
       ? resolvedUiPhase === "post_code"
         ? "Final UI — Ready (offline catalog)"
         : resolvedUiPhase === "pre_code"
           ? "Pre-code mockup — Ready in preview"
           : "Ready in preview"
-      : gate.gate === "repair"
-        ? "Needs one more repair — Preview not updated yet"
-        : "Weak quality — try Generate again";
+      : "Preview used fallback";
   stage(deliveredStage);
 
   const editorModel = {
@@ -1273,6 +1373,10 @@ export async function runUiGenerationCycleV2(
       tokens,
       slots,
       figma_status: figma.figma_status,
+      ui_status: uiStatus,
+      skin_mode: skin,
+      palette_id: paletteId,
+      compose_rung: composeRung,
     },
   };
   try {
@@ -1305,7 +1409,8 @@ export async function runUiGenerationCycleV2(
         : "seed";
   let previewWritten: string[] = [];
   let previewApplied = false;
-  if (shouldApplyUiToPreview(gate.gate)) {
+  const writePreview = shouldWriteUiPreview({ gate: gate.gate, uiStatus });
+  if (writePreview) {
     try {
       previewWritten = applyUiGenerationToPreviewShell({
         workspaceRoot,
@@ -1324,17 +1429,20 @@ export async function runUiGenerationCycleV2(
         screens,
       });
       previewApplied = previewWritten.length > 0;
-      appendStepLog(state, `Phase H preview sync — wrote ${previewWritten.join(", ")}`);
+      appendStepLog(
+        state,
+        `Phase H preview sync — wrote ${previewWritten.join(", ")} ui_status=${uiStatus} rung=${composeRung}`,
+      );
     } catch (e) {
       state.generation_warnings.push(
         `preview shell write soft-failed: ${e instanceof Error ? e.message : String(e)}`,
       );
     }
   } else {
-    appendStepLog(state, "Phase H preview sync — skipped (weak gate)");
+    appendStepLog(state, "Phase H preview sync — skipped");
   }
 
-  if (resolvedUiPhase === "post_code" && gate.gate !== "weak") {
+  if (resolvedUiPhase === "post_code" && writePreview) {
     try {
       const cssRel = injectFinalUiCssVars(workspaceRoot, tokens);
       if (cssRel) {
@@ -1361,6 +1469,10 @@ export async function runUiGenerationCycleV2(
         phase: resolvedUiPhase,
         ui_pass: resolvedUiPhase === "post_code" ? "final" : "precode",
         template_id: template.id,
+        ui_status: uiStatus,
+        skin_mode: skin,
+        palette_id: paletteId,
+        compose_rung: composeRung,
         classification,
         tokens,
         slots,
@@ -1411,7 +1523,7 @@ export async function runUiGenerationCycleV2(
         gate_issues: gate.issues,
         regeneration_count: state.regeneration_count,
         how_to_recheck:
-          "Generate UI → open nebulla-project/ui-generation-v2-meta.json → read design_brief_path / resource_match / pattern_mode / figma.figma_status / preview_applied / gate_issues",
+          "Generate UI → open nebulla-project/ui-generation-v2-meta.json → read template_id / skin_mode / palette_id / ui_status / figma.figma_status / preview_applied / gate_issues",
       },
       null,
       2,
@@ -1419,12 +1531,12 @@ export async function runUiGenerationCycleV2(
     "utf8",
   );
 
-  state.preview_delivered = shouldApplyUiToPreview(gate.gate) ? "yes" : "no";
-  state.export_available = gate.gate === "weak" ? "no" : "yes";
+  state.preview_delivered = writePreview && previewApplied ? "yes" : "no";
+  state.export_available = "yes";
   state.output_type = "react_tailwind_page";
-  state.status = gate.gate === "weak" ? "failed" : "generated";
-  state.final_status = gate.gate === "weak" ? "rejected" : "pending";
-  appendStepLog(state, `Phase H deliver — stage=${deliveredStage} status=${state.status}`);
+  state.status = "generated";
+  state.final_status = "pending";
+  appendStepLog(state, `Phase H deliver — stage=${deliveredStage} status=${state.status} ui_status=${uiStatus}`);
   state.current_step = 9;
   persist(workspaceRoot, state);
 
@@ -1445,7 +1557,7 @@ export async function runUiGenerationCycleV2(
       | "manual_refinement"
       | "partial_redesign"
       | "none",
-    final_status: gate.gate === "weak" ? "rejected" : "generated",
+    final_status: "generated",
     user_visible_stage: deliveredStage,
     page_key: state.page_name,
     updated_at: nowIso(),
@@ -1463,15 +1575,13 @@ export async function runUiGenerationCycleV2(
   });
 
   const contextPath = writeContextFile(workspaceRoot, state);
-  const deliverOk = gate.gate !== "weak";
   return {
-    ok: deliverOk,
+    ok: true,
     status: state.status,
     contextPath,
     context: state,
     editorModel,
     generatedCode: code,
-    error: deliverOk ? undefined : "Quality gate: weak — try Generate again",
     regeneration_count: state.regeneration_count,
     max_regenerations: state.max_regenerations,
     user_visible_stage: deliveredStage,
@@ -1481,5 +1591,9 @@ export async function runUiGenerationCycleV2(
     quality_gate_result: gate.gate,
     figma_fallback_used: figma.fallback_used === "yes",
     env_guidance: figma.env_guidance,
+    ui_status: uiStatus,
+    skin_mode: skin,
+    palette_id: paletteId,
+    compose_rung: composeRung,
   };
 }

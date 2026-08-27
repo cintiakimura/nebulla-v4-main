@@ -8,6 +8,7 @@
  */
 import fs from "fs";
 import path from "path";
+import { logoInitials } from "./productIdentity";
 
 export const PRODUCT_APP_ROOT_REL = ".";
 
@@ -300,14 +301,45 @@ function mergePackageScripts(
   }
 }
 
-const NEXT_LAYOUT = `export default function RootLayout({
+const NEXT_LAYOUT = (projectName: string, initials: string) => `export default function RootLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
   return (
     <html lang="en">
-      <body style={{ margin: 0, fontFamily: "system-ui, sans-serif" }}>{children}</body>
+      <body style={{ margin: 0, fontFamily: "system-ui, sans-serif" }}>
+        <header
+          data-nebula-brand
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 10,
+            padding: "12px 16px",
+            borderBottom: "1px solid #E2E8F0",
+          }}
+        >
+          <span
+            aria-hidden
+            style={{
+              width: 36,
+              height: 36,
+              borderRadius: 10,
+              background: "#0F766E",
+              color: "#fff",
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+              fontSize: 12,
+              fontWeight: 700,
+            }}
+          >
+            ${initials}
+          </span>
+          <strong>${projectName}</strong>
+        </header>
+        {children}
+      </body>
     </html>
   );
 }
@@ -459,7 +491,7 @@ export default defineConfig({
       root,
     );
   } else {
-    writeIfMissing(path.join(root, "app", "layout.tsx"), NEXT_LAYOUT, written, root);
+    writeIfMissing(path.join(root, "app", "layout.tsx"), NEXT_LAYOUT(projectName, logoInitials(projectName)), written, root);
     writeIfMissing(path.join(root, "app", "page.tsx"), NEXT_PAGE, written, root);
     writeIfMissing(path.join(root, "next.config.mjs"), NEXT_CONFIG, written, root);
     writeIfMissing(path.join(root, "tsconfig.json"), TSCONFIG, written, root);
@@ -490,6 +522,7 @@ RUNNABLE / DEPLOYABLE ROOT (mandatory when emitting app/ src/ pages/ components/
 - Product app root = **workspace root** (same folder as app/, components/) — not nebulla-project/.
 - If package.json or build scripts are missing, emit them in the SAME response: package.json with private:true and scripts.dev, scripts.build, scripts.start (Next: next dev/build/start; Vite: vite / vite build / vite preview).
 - Foundation must include framework entry: Next → app/layout.tsx + app/page.tsx (+ next.config + tsconfig as needed). Prefer Next app/ routes for multi-page plans (Home/practice/parent). Vite-only src/App.tsx + src/main.tsx is NOT a Foundation when §4 lists multiple screens.
+- Header shows the product name + 2-letter initials mark (32–40px rounded, §5 accent). Never paste the §1 goal as the title. Logo is not a Go gate.
 - Include a short README.md with npm install / npm run dev / npm run build.
 - Orphan feature pages without a runnable root are NOT done — leave something the user can install, build, and deploy.
 `.trim();

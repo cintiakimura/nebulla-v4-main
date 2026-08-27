@@ -5,6 +5,7 @@
  */
 
 import { cleanHumanSubtitle, cleanHumanTitle } from "../buildPreviewEditorModel";
+import { logoInitials, looksLikeGoalStubName } from "../../productIdentity";
 import type { PageClassification, SlotMap, TemplateDef, V2ProductFunction } from "./types";
 
 export type SlotContentInput = {
@@ -21,10 +22,21 @@ export type SlotContentInput = {
   preferenceFeedback?: string;
 };
 
+function isAuthFieldLabel(raw: string): boolean {
+  return /^(email|password|e-?mail)$/i.test(String(raw || "").trim());
+}
+
+function productBrandName(projectName: string): string {
+  const n = String(projectName || "").trim();
+  if (!n || looksLikeGoalStubName(n) || isAuthFieldLabel(n)) return "";
+  return n.slice(0, 36);
+}
+
 function cleanLabel(raw: string, fallback: string, max = 36): string {
   const t = cleanHumanTitle(raw, fallback);
   if (/^(primary|secondary)$/i.test(t)) return fallback;
   if (/^web\s*app$/i.test(t)) return fallback;
+  if (isAuthFieldLabel(t) && !/^sign in$/i.test(fallback)) return fallback;
   return t.slice(0, max) || fallback;
 }
 
@@ -84,7 +96,7 @@ export function sanitizeSlotsForPageType(slots: SlotMap, pageType: string): Slot
   for (const k of Object.keys(next)) {
     if (/^field_\d+_/i.test(k)) delete next[k];
   }
-  // Wrong-field junk that leaked into content labels
+  // Wrong-field junk that leaked into content labels or titles
   for (const [k, v] of Object.entries(next)) {
     if (!v) continue;
     if (
@@ -92,6 +104,13 @@ export function sanitizeSlotsForPageType(slots: SlotMap, pageType: string): Slot
       /^(email|password|e-?mail)$/i.test(String(v).trim())
     ) {
       delete next[k];
+    }
+    if (
+      /^(hero_title|nav_title|slot_product_name)$/i.test(k) &&
+      /^(email|password|e-?mail)$/i.test(String(v).trim())
+    ) {
+      if (k === "slot_product_name") delete next[k];
+      else next[k] = "Home";
     }
   }
   return next;
@@ -120,14 +139,19 @@ export function mapSlots(input: SlotContentInput): SlotMap {
             ? "Home"
             : "Home";
 
-  const title = cleanLabel(
-    isAuth
-      ? input.pageName || "Sign in"
-      : isLanding
-        ? input.projectName || input.pageName || "Welcome"
-        : input.pageName || input.projectName || "Home",
-    titleFallback,
-  );
+  const brand = productBrandName(input.projectName) || (isLanding ? "Welcome" : "Nova Studio");
+  const initials = logoInitials(brand);
+
+  const pageTitleSource = isAuth
+    ? input.pageName || "Sign in"
+    : isLanding
+      ? brand
+      : isAuthFieldLabel(input.pageName) || looksLikeGoalStubName(input.pageName)
+        ? titleFallback
+        : input.pageName || titleFallback;
+
+  const title = cleanLabel(pageTitleSource, titleFallback);
+
   let subtitle = isAuth
     ? cleanHumanSubtitle(
         input.pagePurpose || "Welcome back",
@@ -176,10 +200,18 @@ export function mapSlots(input: SlotContentInput): SlotMap {
 
     switch (key) {
       case "nav_title":
-        slots[key] = title;
+        slots[key] = isLanding ? brand : education || input.classification.page_type === "home"
+          ? "Home"
+          : title;
         break;
       case "hero_title":
-        slots[key] = title;
+        slots[key] = isLanding ? brand : title;
+        break;
+      case "slot_logo":
+        slots[key] = initials;
+        break;
+      case "slot_product_name":
+        slots[key] = brand;
         break;
       case "hero_subtitle":
         slots[key] = subtitle;
@@ -264,6 +296,15 @@ export function mapSlots(input: SlotContentInput): SlotMap {
 
   if (input.preferenceFeedback) {
     void input.preferenceFeedback;
+  }
+
+  slots.slot_logo = initials;
+  slots.slot_product_name = brand;
+  if (isAuthFieldLabel(slots.hero_title || "") || looksLikeGoalStubName(slots.hero_title || "")) {
+    slots.hero_title = titleFallback;
+  }
+  if (isAuthFieldLabel(slots.nav_title || "") || looksLikeGoalStubName(slots.nav_title || "")) {
+    slots.nav_title = isLanding ? brand : "Home";
   }
 
   return sanitizeSlotsForPageType(slots, input.classification.page_type);

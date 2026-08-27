@@ -51,8 +51,33 @@ section('Home mapSlots never binds Email/Password');
   assert.equal(slots.field_1_label, undefined);
   assert.equal(slots.field_2_label, undefined);
   assert.ok(!Object.values(slots).some((v) => /^email$/i.test(String(v || ''))));
+  assert.ok(slots.slot_logo && slots.slot_logo.length === 2);
+  assert.equal(slots.slot_product_name, 'Kids Read');
+  assert.notEqual(slots.hero_title, 'Email');
+  assert.notEqual(slots.slot_product_name, 'Email');
   assert.ok(slots.primary_cta);
   assert.ok(slots.card_1_title || slots.metric_1_title);
+}
+
+section('Kid Home never uses Email as the title');
+{
+  const template = getTemplateById('mobile_home_hero_cards')!;
+  const slots = mapSlots({
+    template,
+    classification: homeClass,
+    pageName: 'Email',
+    pagePurpose: 'Practice reading',
+    projectName: 'Kids Read',
+    primaryActions: ['Start practice'],
+    secondaryActions: [],
+    headings: ['Email'],
+    buttonLabels: [],
+    features: [],
+  });
+  assert.notEqual(String(slots.hero_title || '').toLowerCase(), 'email');
+  assert.notEqual(String(slots.nav_title || '').toLowerCase(), 'email');
+  assert.notEqual(String(slots.slot_product_name || '').toLowerCase(), 'email');
+  assert.equal(slots.slot_logo?.length, 2);
 }
 
 section('sanitize strips leaked auth fields on home');
@@ -286,6 +311,7 @@ section('Golden kids-reading cycle: no Email on Home; gate pass or honest weak')
     quality_gate_result?: string;
     preview_applied?: boolean;
     pattern_mode?: string;
+    ui_status?: string;
     figma?: { figma_status?: string; selection_mode?: string };
   };
   const s = meta.slots || slots || {};
@@ -310,7 +336,9 @@ section('Golden kids-reading cycle: no Email on Home; gate pass or honest weak')
       assert.ok(contentTitles.length >= 2, 'offline Ready needs ≥2 content regions');
       assert.equal(result.previewApplied, true);
     } else {
-      assert.equal(result.previewApplied, false, 'empty shell must not Ready despite offline badge');
+      assert.equal(meta.ui_status, 'partial');
+      assert.equal(result.previewApplied, true, 'fallback still writes preview');
+      assert.notEqual(meta.quality_gate_result, 'pass', 'empty shell must not Ready');
     }
   }
   assert.equal(meta.quality_gate_result, 'pass', `expected pass, got ${meta.quality_gate_result}`);

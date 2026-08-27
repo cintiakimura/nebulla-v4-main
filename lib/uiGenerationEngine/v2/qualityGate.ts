@@ -62,6 +62,10 @@ export function validateV2Quality(input: {
   designBrief?: DesignBrief | null;
   selectionMode?: string;
   navigationMode?: string;
+  /** Offline structure/ missing — fail Ready, still allow fallback preview. */
+  structureMissing?: boolean;
+  /** kit: brief is copy only — do not fail Ready on §5 hex/spacing. */
+  skinMode?: "kit" | "tokens";
 }): QualityGateV2 {
   const issues: string[] = [];
   const {
@@ -74,6 +78,8 @@ export function validateV2Quality(input: {
     designBrief,
     selectionMode,
     navigationMode,
+    structureMissing,
+    skinMode,
   } = input;
 
   if (!model?.pages || !Object.keys(model.pages).length) {
@@ -153,6 +159,10 @@ export function validateV2Quality(input: {
     issues.push("Library hit without Stitch-minimum structure (enforcement fail)");
   }
 
+  if (structureMissing) {
+    issues.push("Stitch-minimum: Missing structure/ — not Ready");
+  }
+
   if (!title || isProseDump(title) || isRouteLike(title)) {
     issues.push("Title slot missing or looks like prose/route dump");
   }
@@ -216,7 +226,7 @@ export function validateV2Quality(input: {
     issues.push("library success claimed without model meta");
   }
 
-  if (designBrief) {
+  if (designBrief && skinMode !== "kit") {
     const primaryHex = designBrief.color_roles.primary.hex.toLowerCase();
     const primaryOnButton = buttons.some(
       (b) => (b.style?.backgroundColor || "").toLowerCase() === primaryHex,
@@ -292,7 +302,8 @@ export function repairSlots(slots: SlotMap, pageType: V2PageType): SlotMap {
     !next[titleKey] ||
     isProseDump(next[titleKey]) ||
     isRouteLike(next[titleKey]) ||
-    /^web\s*app$/i.test(next[titleKey] || "")
+    /^web\s*app$/i.test(next[titleKey] || "") ||
+    /^(email|password|e-?mail)$/i.test(next[titleKey] || "")
   ) {
     next[titleKey] =
       pageType === "settings"

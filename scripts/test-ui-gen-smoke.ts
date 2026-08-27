@@ -158,8 +158,10 @@ section('runUiGenerationCycleV2 without live Figma / without Grok key');
     const html = fs.readFileSync(path.join(tmp, 'index.html'), 'utf8');
     assert.ok(html.includes(title.slice(0, Math.min(12, title.length))) || html.includes(cta));
   } else {
-    // Cycle may still ok=true; Preview withheld until Stitch-minimum pass
-    assert.notEqual(result.previewApplied, true);
+    assert.equal(result.ok, true, 'partial fallback must not 422 Generate');
+    assert.equal(result.ui_status, 'partial');
+    assert.equal(result.previewApplied, true);
+    assert.ok(fs.existsSync(path.join(tmp, 'index.html')), 'index.html written on partial fallback');
   }
 }
 
@@ -350,8 +352,10 @@ section('education preview: phone chrome + progress + tabs');
       tone: 'friendly',
     },
     slots: {
-      nav_title: 'Kid Home',
-      hero_title: 'Kid Home',
+      slot_logo: 'KR',
+      slot_product_name: 'Kids Reading',
+      nav_title: 'Home',
+      hero_title: 'Home',
       hero_subtitle: 'Keep your streak going',
       primary_cta: 'Start practice',
       card_1_title: "Today’s lesson",
@@ -370,6 +374,10 @@ section('education preview: phone chrome + progress + tabs');
       industry: 'education',
     },
   });
+  assert.ok(html.includes('class="logo-mark"'));
+  assert.ok(html.includes('KR'));
+  assert.ok(html.includes('Kids Reading'));
+  assert.ok(!/>Email</.test(html));
   assert.ok(html.includes('shell--phone'));
   assert.ok(html.includes('Start practice'));
   assert.ok(html.includes('Weekly streak') || html.includes('progress'));

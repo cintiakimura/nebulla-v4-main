@@ -40,7 +40,8 @@ import {
 } from '../../lib/ideHomeEvents';
 import { setPendingStartMode } from '../../lib/ideStartMode';
 import { resetProjectFromScratch } from '../../lib/ideProjectReset';
-import { shortNameFromIdea } from '../../lib/projectNameFromIdea';
+import { inferProductName } from '../../lib/projectNameFromIdea';
+import { persistProductIdentityClient } from '../../lib/productIdentityClient';
 import { ChatFilePreview } from './ChatFilePreview';
 import { openGitHubFile, openLocalFile } from '../../lib/fileOperations';
 import type { SmartChatFilePreview } from '../../lib/smartChatHandler';
@@ -330,8 +331,10 @@ export function MyProjectsHome({
         // Platform chip → inference-first; chat asks for the goal if still missing.
         setPendingStartMode('fast_prototype');
         markGuidedStartOnReady();
-        await resetProjectFromScratch(type);
-        await ensureProjectOrReuse(type);
+        const label = inferProductName('', type);
+        await resetProjectFromScratch(label, { projectType: type });
+        await ensureProjectOrReuse(label);
+        void persistProductIdentityClient({ projectName: label, projectType: type });
         // Persist after reset/create so projectKey is current (UI Studio device framing).
         setPendingProjectType(type);
         enterBuild();
@@ -351,13 +354,20 @@ export function MyProjectsHome({
     setStartError('');
     setStartingIdea(true);
     try {
-      const label = idea ? shortNameFromIdea(idea) : ideaType || 'New Project';
+      const label = idea
+        ? inferProductName(idea, ideaType)
+        : inferProductName('', ideaType || '');
       // Prompt optional — missing goal/platform is asked in chat after Continue.
       if (idea) setPendingProjectIdea(idea);
       setPendingStartMode('fast_prototype');
       markGuidedStartOnReady();
-      await resetProjectFromScratch(label);
+      await resetProjectFromScratch(label, { goal: idea, projectType: ideaType });
       await ensureProjectOrReuse(label);
+      void persistProductIdentityClient({
+        projectName: label,
+        goal: idea,
+        projectType: ideaType,
+      });
       // After reset/create so projectKey is current (same order as typed-chip start).
       if (ideaType) setPendingProjectType(ideaType);
       enterBuild();

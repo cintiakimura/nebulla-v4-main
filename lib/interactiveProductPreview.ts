@@ -67,8 +67,10 @@ function buildInteractiveHtml(opts: {
   projectName: string;
   productFiles: string[];
   screens: PreviewScreenHint[];
+  logoInitials?: string;
 }): string {
   const name = esc((opts.projectName || "App").slice(0, 80));
+  const initials = esc((opts.logoInitials || name.replace(/[^a-zA-Z]/g, "").slice(0, 2) || "NP").slice(0, 2).toUpperCase());
   const screensJson = JSON.stringify(opts.screens);
   return `<!DOCTYPE html>
 <html lang="en">
@@ -82,7 +84,7 @@ function buildInteractiveHtml(opts: {
     * { box-sizing: border-box; }
     body { margin:0; font-family: system-ui, -apple-system, Segoe UI, sans-serif; background:var(--bg); color:var(--ink); min-height:100vh; }
     .top { display:flex; flex-wrap:wrap; gap:8px; align-items:center; justify-content:space-between; padding:10px 14px; border-bottom:1px solid var(--line); background:var(--card); position:sticky; top:0; z-index:2; }
-    .badge { font-size:10px; font-weight:700; letter-spacing:.04em; text-transform:uppercase; color:var(--accent); background:var(--accent-soft); padding:4px 8px; border-radius:999px; }
+    .mark { width:36px; height:36px; border-radius:10px; background:var(--accent); color:#fff; display:inline-flex; align-items:center; justify-content:center; font-size:11px; font-weight:700; letter-spacing:.04em; }
     .tabs { display:flex; flex-wrap:wrap; gap:6px; padding:10px 14px; }
     .tab { border:1px solid var(--line); background:var(--card); color:var(--ink); border-radius:999px; padding:6px 12px; font-size:12px; cursor:pointer; }
     .tab[aria-current="true"] { background:var(--accent); border-color:var(--accent); color:#fff; }
@@ -108,9 +110,12 @@ function buildInteractiveHtml(opts: {
 </head>
 <body>
   <div class="top">
-    <div>
-      <span class="badge">Practice app</span>
-      <div style="font-weight:700;margin-top:4px">${name}</div>
+    <div style="display:flex;align-items:center;gap:10px">
+      <span class="mark" aria-hidden="true">${initials}</span>
+      <div>
+        <span class="badge">Practice app</span>
+        <div style="font-weight:700;margin-top:4px">${name}</div>
+      </div>
     </div>
     <div id="roleChip" style="font-size:12px;color:var(--muted)">Kid practice</div>
   </div>
@@ -161,7 +166,7 @@ function buildInteractiveHtml(opts: {
   function homeHtml() {
     return (
       '<div class="card">' +
-        '<h1>Kid Practice Home</h1>' +
+        '<h1>Home</h1>' +
         '<p>One short lesson. Start when you are ready.</p>' +
         '<div class="progress" aria-hidden="true"><i style="width:' + state.progress + '%"></i></div>' +
         '<p>Weekly streak · ' + Math.max(1, Math.floor(state.progress / 4)) + ' days</p>' +
@@ -380,7 +385,7 @@ export function hasInteractiveProductPreview(workspaceRoot: string): boolean {
 
 export function ensureInteractiveProductPreview(
   workspaceRoot: string,
-  options?: { projectName?: string; productFiles?: string[] },
+  options?: { projectName?: string; productFiles?: string[]; logoInitials?: string },
 ): { written: boolean; path: string; screens: PreviewScreenHint[] } {
   const root = path.resolve(workspaceRoot);
   const productFiles = options?.productFiles?.length
@@ -417,10 +422,12 @@ export function ensureInteractiveProductPreview(
   }
 
   const screens = inferPreviewScreensFromPaths(files);
+  const projectName = options?.projectName?.trim() || "App";
   const html = buildInteractiveHtml({
-    projectName: options?.projectName?.trim() || "App",
+    projectName,
     productFiles: files,
     screens,
+    logoInitials: options?.logoInitials,
   });
   const outAbs = path.join(root, PRODUCT_PREVIEW_REL);
   fs.mkdirSync(path.dirname(outAbs), { recursive: true });

@@ -15,6 +15,7 @@ import {
 } from '../../lib/nebulaProjectStore';
 import { createProjectForCurrentSession, fetchSessionUser, type NebulaSessionUser } from '../../lib/nebulaCloud';
 import { fetchNebulaPublicConfig, type NebulaPublicConfig } from '../../lib/nebulaPublicConfig';
+import { persistProductIdentityClient } from '../../lib/productIdentityClient';
 import { resetProjectFromScratch } from '../../lib/ideProjectReset';
 
 function normalizeTab(tab: DashboardTab | 'project-settings'): DashboardTab {
@@ -83,6 +84,7 @@ export function IdeDashboardEmbed({
   const onProjectNameChange = useCallback((name: string) => {
     setProjectNameState(name);
     setBrowserProjectName(name);
+    void persistProductIdentityClient({ projectName: name, userSet: true });
     const key = getBrowserProjectKey();
     if (readGuestIndex().some((e) => e.id === key)) {
       updateGuestIndexMeta(key, name);

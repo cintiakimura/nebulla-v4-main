@@ -7,6 +7,7 @@ import {
   getBrowserProjectName,
   setBrowserProjectName,
 } from '../../lib/nebulaProjectApi';
+import { persistProductIdentityClient } from '../../lib/productIdentityClient';
 import { advancePhaseAtLeast, writeProjectPhase } from '../../lib/ideProjectPhase';
 
 type PlanView = 'plan' | 'mind-map';
@@ -60,6 +61,7 @@ export function IdePlanPage({ onClose }: { onClose: () => void }) {
       if (!trimmed) return;
       const prev = getBrowserProjectName().trim();
       setBrowserProjectName(trimmed);
+      void persistProductIdentityClient({ projectName: trimmed, userSet: true });
       advancePhaseAtLeast('plan');
       writeProjectPhase('plan');
       try {

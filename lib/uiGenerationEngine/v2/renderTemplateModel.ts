@@ -160,21 +160,28 @@ function renderTopBar(
   slots: SlotMap,
 ): string {
   const bar = "region-topbar";
-  addText(nodes, "topbar-brand", "identity", slots.nav_title || slots.hero_title || "Home", tokens, {
+  const product = slots.slot_product_name || slots.nav_title || "App";
+  const initials = (slots.slot_logo || product).replace(/[^a-zA-Z0-9]/g, "").slice(0, 2).toUpperCase() || "NP";
+  addText(nodes, "topbar-logo", "identity", initials, tokens, {
     backgroundColor: tokens.primary,
     color: luma(tokens.primary) < 0.55 ? "#FFFFFF" : "#111111",
+    paddingTop: 8,
+    paddingBottom: 8,
+    paddingLeft: 8,
+    paddingRight: 8,
+  });
+  nodes["topbar-logo"].style.borderRadius = 10;
+  nodes["topbar-logo"].style.width = "36px";
+  nodes["topbar-logo"].style.height = "36px";
+  addText(nodes, "topbar-brand", "identity", product, tokens, {
+    backgroundColor: tokens.surface,
+    color: tokens.text,
     paddingTop: 8,
     paddingBottom: 8,
     paddingLeft: 10,
     paddingRight: 10,
   });
-  addText(nodes, "topbar-title", "nav_bar", slots.nav_title || slots.hero_title || "Home", tokens, {
-    backgroundColor: tokens.surface,
-    color: tokens.text,
-    paddingTop: 10,
-    paddingBottom: 10,
-  });
-  stackContainer(nodes, bar, "top_bar", ["topbar-brand", "topbar-title"], tokens, tokens.surface, {
+  stackContainer(nodes, bar, "top_bar", ["topbar-logo", "topbar-brand"], tokens, tokens.surface, {
     borderWidth: 1,
     marginBottom: tokens.gap,
     pad: 10,
@@ -194,8 +201,8 @@ function renderBottomTabs(
     classification.product_function === "course" || classification.industry === "education";
   const labels = (
     course
-      ? [slots.nav_title || "Home", "Learn", "Practice", "Me"]
-      : [slots.nav_title || "Home", "Learn", "Practice", "Profile"]
+      ? ["Home", "Learn", "Practice", "Me"]
+      : ["Home", "Learn", "Practice", "Profile"]
   ).slice(0, 4);
   const kids: string[] = [];
   labels.forEach((label, i) => {
@@ -223,7 +230,7 @@ function renderSidebar(
 ): string {
   const side = "sidebar";
   const kids = ["side-brand", "side-1", "side-2", "side-3"].filter(Boolean);
-  addText(nodes, "side-brand", "nav_bar", slots.nav_title || "App", tokens, {
+  addText(nodes, "side-brand", "nav_bar", slots.slot_product_name || slots.nav_title || "App", tokens, {
     backgroundColor: tokens.surface,
     color: tokens.text,
   });
@@ -289,8 +296,15 @@ export function renderTemplateModel(input: {
   const { template, classification, tokens, slots, figmaStatus } = input;
   const hintJoined = (input.structureHints || []).join("\n");
   const enforceRegions = /offline-structure:enforce-regions|region:identity/i.test(hintJoined);
+  const productChrome =
+    classification.page_type === "home" ||
+    classification.page_type === "list" ||
+    classification.page_type === "dashboard" ||
+    classification.page_type === "landing";
   const forceCardStack =
-    enforceRegions || /VERTICAL auto-layout|card|content block|list|region:content/i.test(hintJoined);
+    productChrome ||
+    enforceRegions ||
+    /VERTICAL auto-layout|card|content block|list|region:content/i.test(hintJoined);
   const cardCount = forceCardStack || classification.page_type !== "empty" ? 3 : 2;
   const nodes: Record<string, V2Node> = {};
   const root = "root-page";

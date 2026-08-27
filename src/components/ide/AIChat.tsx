@@ -163,7 +163,8 @@ import {
   NEBULA_START_GUIDED_ON_READY_KEY,
   type StartGuidedChatDetail,
 } from '../../lib/ideHomeEvents';
-import { shortNameFromIdea } from '../../lib/projectNameFromIdea';
+import { inferProductName } from '../../lib/projectNameFromIdea';
+import { persistProductIdentityClient } from '../../lib/productIdentityClient';
 import {
   ASK_FOR_SHORT_GOAL,
   extractGoalFromUserNote,
@@ -1777,8 +1778,12 @@ export function AIChat() {
         return;
       }
 
-      const shortName = shortNameFromIdea(projectCreation.description);
+      const shortName = inferProductName(projectCreation.description);
       await createProjectForCurrentSession(shortName);
+      void persistProductIdentityClient({
+        projectName: shortName,
+        goal: projectCreation.description,
+      });
       clearIdeWorkspaceMetaCache();
       setStoredStartMode('fast_prototype', diskProjectKey);
       markDiscoveryClosed(diskProjectKey);
@@ -2566,10 +2571,8 @@ export function AIChat() {
         return next;
       });
           } else {
-            clearUiMockupStageFlags(diskProjectKey);
-            noteProblem(
-              `Stopped: UI mockup did not finish (${mockup.error || 'unknown'}) — Foundation will not start.`,
-            );
+            mockupSkippedOrFailed = true;
+            pushActivity('UI mockup incomplete — coding continues', 'warn');
           }
         } else if (fastPrototypeTurn || willCode) {
           noteProblem(

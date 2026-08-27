@@ -98,6 +98,7 @@ function isJunkIdentity(s: string): boolean {
   const t = s.trim();
   if (!t) return true;
   if (/^web\s*app$/i.test(t)) return true;
+  if (/^(email|password|e-?mail)$/i.test(t)) return true;
   if (/^\/[a-z0-9/_-]+$/i.test(t)) return true;
   if (/^[a-z0-9-]+\/[a-z0-9/_-]+$/i.test(t)) return true;
   return false;

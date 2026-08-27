@@ -7,6 +7,8 @@ import { runAiChatCompletion } from "../aiChatCompletion";
 import type { SlotMap } from "./v2/types";
 
 const SLOT_KEYS = [
+  "slot_logo",
+  "slot_product_name",
   "nav_title",
   "hero_title",
   "hero_subtitle",

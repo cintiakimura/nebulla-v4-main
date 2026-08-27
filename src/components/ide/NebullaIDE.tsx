@@ -21,6 +21,7 @@ import { registerNebulaUiStudioBridge } from '../../lib/nebulaUiStudioEvents';
 import { shouldShowWelcomeOnboarding } from '../../lib/nebulaWelcomeOnboarding';
 import { cloudBlockedBannerMessage } from '../../lib/ideCloudStatus';
 import { installOnboardingRideListeners } from '../../lib/ideOnboardingRide';
+import { persistProductIdentityClient } from '../../lib/productIdentityClient';
 import { UI_SHELL_ONLY } from '../../lib/testingBranch';
 import { IdeShellNavProvider, useIdeShellNav } from '@/components/ide/shell/IdeShellNavContext';
 import { ShellHeader } from '@/components/ide/shell/ShellHeader';
@@ -127,6 +128,10 @@ function NebullaIDEShell() {
           : prev,
       );
       setWorkspaceProjectKey(result.projectKey);
+      void persistProductIdentityClient({
+        projectName: result.projectName,
+        userSet: true,
+      });
     },
     [workspaceCtx?.mode],
   );

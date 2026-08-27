@@ -173,6 +173,10 @@ export type V2EditorModel = {
     tokens: DesignTokens;
     slots: SlotMap;
     figma_status: FigmaStatusV2;
+    ui_status?: "ready" | "partial";
+    skin_mode?: "kit" | "tokens";
+    palette_id?: string;
+    compose_rung?: 1 | 2 | 3 | 4;
   };
 };
 

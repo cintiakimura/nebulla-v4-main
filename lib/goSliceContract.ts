@@ -241,6 +241,9 @@ export function buildCompactGoCodeUserPrompt(opts: {
   uiBriefPageList: string;
   sessionFocus: string;
   continuation?: boolean;
+  productName?: string;
+  logoInitials?: string;
+  logoHint?: string;
 }): string {
   const slice = String(opts.sliceLine || "SLICE: Foundation").trim().slice(0, 80);
   const goal = String(opts.goal || "").replace(/\s+/g, " ").trim().slice(0, 800);
@@ -248,14 +251,31 @@ export function buildCompactGoCodeUserPrompt(opts: {
   const constraints = String(opts.constraints || "").trim().slice(0, 800);
   const briefPages = String(opts.uiBriefPageList || "").trim().slice(0, 800);
   const focus = String(opts.sessionFocus || "").trim().slice(0, 400);
+  const productName = String(opts.productName || "").trim().slice(0, 48);
+  const initials = String(opts.logoInitials || "").trim().slice(0, 4);
+  const hint = String(opts.logoHint || "").trim().slice(0, 40);
   const task = opts.continuation
     ? "CONTINUATION — emit the current slice file blocks now. Do NOT implement every §4 route."
     : "Run the coding pass now. Output ONE coherent slice only (Build → Debug → Next) — not the full app.";
   const quality = productSliceQualityLine(goal);
+  const identity =
+    productName
+      ? [
+          "PRODUCT IDENTITY (header — not a Go gate, no AI image):",
+          `- Name: ${productName}`,
+          initials ? `- Initials mark: ${initials} (32–40px rounded, §5 accent)` : "",
+          hint ? `- Logo hint: ${hint}` : "",
+          "- Never use the §1 goal sentence (or its first N words) as the app title. Kid Home title is not Email.",
+        ]
+          .filter(Boolean)
+          .join("\n")
+      : "";
   return [
     slice,
     `Session focus: ${focus || "(next incomplete slice)"}`,
     "",
+    identity,
+    identity ? "" : "",
     "§1 Goal:",
     goal || "(from Master Plan)",
     "",

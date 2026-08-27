@@ -28,7 +28,8 @@ import {
 import { peekPendingStartMode, setPendingStartMode } from './ideStartMode';
 import { markGuidedEnterBuild } from './guidedFunnel';
 import { resetProjectFromScratch } from './ideProjectReset';
-import { shortNameFromIdea } from './projectNameFromIdea';
+import { inferProductName } from './projectNameFromIdea';
+import { persistProductIdentityClient } from './productIdentityClient';
 import { isUsableProjectGoal } from './spineSequenceGates';
 import { getBrowserProjectName, setBrowserProjectName } from './nebulaProjectApi';
 
@@ -131,8 +132,8 @@ export async function continueFromLandingGoal(
     if (!commitLandingGoalHandoff(trimmed, type)) {
       return { ok: false, error: 'Add a short goal to continue.' };
     }
-    const label = shortNameFromIdea(trimmed);
-    await resetProjectFromScratch(label);
+    const label = inferProductName(trimmed, type);
+    await resetProjectFromScratch(label, { goal: trimmed, projectType: type });
     try {
       await ensureProjectOrReuse(label);
     } catch (e) {
@@ -144,6 +145,11 @@ export async function continueFromLandingGoal(
     } catch {
       setBrowserProjectName(label);
     }
+    void persistProductIdentityClient({
+      projectName: label,
+      goal: trimmed,
+      projectType: type,
+    });
     // Reset clears pending type + legacy prompt; restore like Dashboard after create.
     if (type === 'Web App' || type === 'Mobile App' || type === 'Landing Page') {
       setPendingProjectType(type);

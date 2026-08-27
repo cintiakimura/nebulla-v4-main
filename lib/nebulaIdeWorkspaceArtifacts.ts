@@ -35,6 +35,7 @@ import {
   scheduleWorkspaceAbsR2Sync,
   scheduleWorkspaceRelPathsR2Sync,
 } from "./nebulaWorkspaceStorage";
+import { ensureProductIdentity, patchMasterPlanProductName } from "./productIdentity";
 
 export const MASTER_PLAN_TAB_KEYS = MASTER_PLAN_ALL_KEYS;
 
@@ -78,8 +79,13 @@ export function fillMissingMasterPlanSectionsLocal(opts: {
 
   const routes = discoverWorkspaceRoutes(opts.workspaceRoot);
   const note = (opts.userNote ?? "").trim().slice(0, 2000);
-  const name = opts.projectName.trim() || "Untitled Project";
   const goal = String(plan["1. Goal of the app"] ?? "").trim();
+  const identity = ensureProductIdentity(opts.workspaceRoot, {
+    goal: goal || note,
+    projectName: opts.projectName,
+    persist: true,
+  });
+  const name = identity.projectName || opts.projectName.trim() || "Untitled Project";
   const refHint = summarizeDesignReferencesForPrompt(opts.workspaceRoot, 280);
   const next = { ...plan };
   const updated: string[] = [];
@@ -153,6 +159,12 @@ export function fillMissingMasterPlanSectionsLocal(opts: {
       ...(refHint ? ["", "**Brand references (user-provided):**", refHint] : []),
     ].join("\n");
     updated.push("5. UI/UX design");
+  }
+
+  const patched = patchMasterPlanProductName(next, identity);
+  if (patched.changed) {
+    next["5. UI/UX design"] = patched.plan["5. UI/UX design"];
+    if (!updated.includes("5. UI/UX design")) updated.push("5. UI/UX design");
   }
 
   const uniq = [...new Set(updated)];

@@ -8,6 +8,7 @@ import { getGrokRequestHeaders } from './grokUserKey';
 import { formatGoBlockedByPlanMessage } from './masterPlanStatus';
 import { reportGoApplyTelemetry } from './contractTelemetryClient';
 import { assessFoundationGoExit, assessOversizedGoApply, parseGoSliceLabel, shouldRunGoCodeSecondPass, type GoSliceLabel } from '../../lib/goSliceContract';
+import { PREVIEW_FALLBACK_CHAT_LINE } from '../../lib/uiGenerationEngine/v2/previewCompose';
 import { classifyGoFailure, formatBlockedReasonLine, goBlocked, type GoBlockedReason } from '../../lib/goBlockedReason';
 import { assessApplyRouteDepth } from '../../lib/workspaceCodedAppUi';
 import { UNSOLICITED_BAAS_SKIP_REASON } from '../../lib/mvpStackContract';
@@ -355,6 +356,17 @@ async function afterFilesAppliedArtifacts(
       'Artifact sync timed out/skipped — files already applied; continuing',
       'warn',
     );
+  }
+  try {
+    const st = await fetchJson<{ ui_status?: string }>(withProjectQuery('/api/ui-studio-beta/status'), {
+      credentials: 'include',
+      headers: getGrokRequestHeaders(),
+    });
+    if (st.ui_status === 'partial') {
+      onProgress?.(PREVIEW_FALLBACK_CHAT_LINE, 'info');
+    }
+  } catch {
+    /* preview meta optional */
   }
 }
 

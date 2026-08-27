@@ -262,6 +262,11 @@ export function readUiGenerationV2PublicMeta(workspaceRoot: string): {
   pattern_mode?: "seed" | "figma" | "catalog";
   quality_gate_result?: string;
   preview_applied?: boolean;
+  template_id?: string;
+  ui_status?: "ready" | "partial";
+  skin_mode?: "kit" | "tokens";
+  palette_id?: string;
+  compose_rung?: 1 | 2 | 3 | 4;
   figma_used?: string;
   figma_status?: string;
   figma_error?: string;
@@ -300,6 +305,11 @@ export function readUiGenerationV2PublicMeta(workspaceRoot: string): {
       pattern_mode?: "seed" | "figma" | "catalog";
       quality_gate_result?: string;
       preview_applied?: boolean;
+      template_id?: string;
+      ui_status?: "ready" | "partial";
+      skin_mode?: "kit" | "tokens";
+      palette_id?: string;
+      compose_rung?: 1 | 2 | 3 | 4;
       design_brief_summary?: {
         density?: string;
         personality?: string[];
@@ -340,6 +350,14 @@ export function readUiGenerationV2PublicMeta(workspaceRoot: string): {
           : undefined,
       quality_gate_result: j.quality_gate_result,
       preview_applied: j.preview_applied === true,
+      template_id: typeof j.template_id === "string" ? j.template_id : undefined,
+      ui_status: j.ui_status === "ready" || j.ui_status === "partial" ? j.ui_status : undefined,
+      skin_mode: j.skin_mode === "kit" || j.skin_mode === "tokens" ? j.skin_mode : undefined,
+      palette_id: typeof j.palette_id === "string" ? j.palette_id : undefined,
+      compose_rung:
+        j.compose_rung === 1 || j.compose_rung === 2 || j.compose_rung === 3 || j.compose_rung === 4
+          ? j.compose_rung
+          : undefined,
       figma_used: j.figma?.figma_used,
       figma_status: j.figma?.figma_status,
       figma_error: j.figma?.figma_error,

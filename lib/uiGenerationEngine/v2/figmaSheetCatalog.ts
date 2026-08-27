@@ -13,11 +13,17 @@ export function figmaPlatformRoots(extra: string[] = []): string[] {
   const here = path.dirname(fileURLToPath(import.meta.url));
   const repoRoot = path.resolve(here, "../../..");
   const envRoot = (process.env.FIGMA_LIBRARY_ROOT || "").trim();
+  const isolate = String(process.env.FIGMA_LIBRARY_ISOLATE || "").trim() === "1";
   const out: string[] = [];
   const push = (p: string) => {
     const n = path.resolve(p);
     if (n && !out.includes(n)) out.push(n);
   };
+  // Tests: empty FIGMA_LIBRARY_ROOT + isolate hides committed structure/ without live Figma.
+  if (isolate) {
+    if (envRoot) push(envRoot);
+    return out;
+  }
   for (const e of extra) {
     if (e) push(e);
   }

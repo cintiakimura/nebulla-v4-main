@@ -130,10 +130,13 @@ export function clearUiMockupStageFlags(projectKey?: string): void {
 export type FoundationCodingGateReason = 'mockup_ready' | 'explicit_skip' | 'blocked';
 
 /**
- * Phase 5 Gate B: Foundation coding starts after a persisted mockup, or when
- * mockup is deferred because one is already on disk / product routes exist (Continue).
- * Failed research or a failed first mockup must not start Foundation (policy A).
+ * Phase 5 Gate B: Foundation coding starts after research is complete.
+ * UI generation is non-blocking — a weak/partial mockup must not pause Go.
  */
+export function foundationCodingAllowedAfterResearch(researchOk: boolean): boolean {
+  return researchOk === true;
+}
+
 export async function canStartFoundationCoding(options?: {
   /** True when Stage B could not run or returned failure (skip path). */
   mockupSkippedOrFailed?: boolean;
@@ -160,10 +163,8 @@ export async function canStartFoundationCoding(options?: {
   if (await hasPersistedUiMockup()) {
     return { ok: true, reason: 'mockup_ready' };
   }
-  if (options?.mockupSkippedOrFailed) {
-    return { ok: true, reason: 'explicit_skip' };
-  }
-  return { ok: false, reason: 'blocked' };
+  void options?.mockupSkippedOrFailed;
+  return { ok: true, reason: 'explicit_skip' };
 }
 
 export type UiMockupReadiness = {

@@ -1,6 +1,8 @@
 /**
  * Apply UI Generation v2 output into mockup preview artifacts.
- * Only call when quality gate is pass — never on weak.
+ *
+ * Ready pixels (`shouldApplyUiToPreview`) only on hard pass.
+ * Fallback rungs still write via `shouldWriteUiPreview` (partial) so Go is not blocked.
  *
  * Pre-code: may write index.html as temporary mockup entry.
  * Post-code (product UI source exists): writes only public/nebula-ui-gen-preview.html
@@ -99,7 +101,7 @@ function wantsBottomTabs(templateId: string, classification?: PreviewClassificat
 }
 
 function tabLabels(slots: SlotMap, classification?: PreviewClassificationHint): string[] {
-  const home = slots.nav_title || "Home";
+  const home = "Home";
   const fn = (classification?.product_function || "").toLowerCase();
   const industry = (classification?.industry || "").toLowerCase();
   if (fn === "course" || industry === "education") {
@@ -128,6 +130,10 @@ function buildScreenMarkup(input: {
 }): string {
   const { tokens, slots, templateId } = input;
   const title = esc(slots.hero_title || slots.nav_title || input.projectName || "App");
+  const productName = esc(
+    slots.slot_product_name || input.projectName || slots.nav_title || "App",
+  );
+  const initials = esc((slots.slot_logo || "").trim().slice(0, 2).toUpperCase() || "NP");
   const navTitle = esc(slots.nav_title || slots.hero_title || input.pageKey || "Home");
   const sub = esc(slots.hero_subtitle || "");
   const cta = esc(slots.primary_cta || "Continue");
@@ -227,9 +233,12 @@ function buildScreenMarkup(input: {
     .filter(Boolean)
     .join(" ");
 
-  return `<div class="${shellClass}" data-screen="${esc(input.pageKey)}" data-template="${esc(templateId)}" ${input.active ? "" : 'hidden'}>
+  return `<div class="${shellClass}" data-screen="${esc(input.pageKey)}" data-template="${esc(templateId)}" data-page-title="${navTitle}" ${input.active ? "" : 'hidden'}>
     <header class="topbar">
-      <h1>${navTitle}</h1>
+      <div class="brand">
+        <span class="logo-mark" aria-hidden="true">${initials}</span>
+        <h1>${productName}</h1>
+      </div>
       <span class="badge">${esc(mobile ? "Mobile" : "Web")}</span>
     </header>
     <main class="scroll" style="padding-bottom:${tabs ? "76px" : "var(--pad)"}">
@@ -369,6 +378,13 @@ export function buildUiGenerationPreviewHtml(options: {
       background: var(--surface);
       border-bottom: 1px solid var(--border);
       gap: 8px;
+    }
+    .topbar .brand { display: flex; align-items: center; gap: 10px; min-width: 0; }
+    .topbar .logo-mark {
+      width: 36px; height: 36px; border-radius: 10px; flex-shrink: 0;
+      display: inline-flex; align-items: center; justify-content: center;
+      background: var(--primary); color: #fff;
+      font-size: 11px; font-weight: 700; letter-spacing: .04em;
     }
     .topbar h1 { margin: 0; font-size: 1rem; font-weight: 600; letter-spacing: -0.02em; }
     .topbar .badge {

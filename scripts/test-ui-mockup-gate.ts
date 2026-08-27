@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { canStartUiMockup, readinessBlocksAutoFoundation, statusLooksReadyForSkip } from '../src/lib/uiMockupGate';
+import { canStartUiMockup, foundationCodingAllowedAfterResearch, readinessBlocksAutoFoundation, statusLooksReadyForSkip } from '../src/lib/uiMockupGate';
 import { isMasterPlanReadyForUiMockup } from '../lib/masterPlanCompleteness';
 import {
   filterGrokContentToArchitectureFiles,
@@ -212,7 +212,8 @@ assert.equal(statusLooksReadyForSkip({ final_status: 'accepted' }), false);
   assert.match(engine, /statusLooksReadyForSkip\(existing\)/);
   assert.match(engine, /GENERATE_TIMEOUT_MS = 180_000/);
   assert.equal(/continuing Foundation anyway/.test(engine), false);
-  assert.match(engine, /Foundation will not start/);
+  assert.match(engine, /coding continues/);
+  assert.equal(/Foundation will not start/.test(engine), false);
   assert.equal(
     /final === 'generated' \|\| final === 'refined'/.test(engine),
     false,
@@ -233,6 +234,8 @@ assert.equal(statusLooksReadyForSkip({ final_status: 'accepted' }), false);
   const blockIdx = codingGate.indexOf('if (!researchAllowsGo)');
   const skipReturn = codingGate.indexOf("reason: 'explicit_skip'");
   assert.ok(blockIdx >= 0 && skipReturn > blockIdx);
+  assert.equal(foundationCodingAllowedAfterResearch(true), true);
+  assert.equal(foundationCodingAllowedAfterResearch(false), false);
 }
 
 {

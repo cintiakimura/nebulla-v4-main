@@ -39,6 +39,12 @@ export {
   applyUiGenerationToPreviewShell,
   buildUiGenerationPreviewHtml,
 } from "./applyPreviewShell";
+export {
+  shouldWriteUiPreview,
+  readPreviewSkinMode,
+  applyTokensToModel,
+  PREVIEW_FALLBACK_CHAT_LINE,
+} from "./v2/previewCompose";
 export type { PreviewClassificationHint } from "./applyPreviewShell";
 export { polishSlotsForContentLocale } from "./polishSlotsLocale";
 export {

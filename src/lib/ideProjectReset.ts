@@ -62,7 +62,10 @@ export async function cancelProjectBackgroundJobs(): Promise<ProjectResetResult>
 }
 
 /** Wipe workspace artifacts and cancel all background jobs — fresh discovery start. */
-export async function resetProjectFromScratch(projectName?: string): Promise<ProjectResetResult> {
+export async function resetProjectFromScratch(
+  projectName?: string,
+  opts?: { goal?: string; projectType?: string },
+): Promise<ProjectResetResult> {
   try {
     const result = await fetchJson<ProjectResetResult>(
       withProjectQuery('/api/ide/reset-project-scratch'),
@@ -70,7 +73,13 @@ export async function resetProjectFromScratch(projectName?: string): Promise<Pro
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify(withProjectBody({ projectName: projectName?.trim() || undefined })),
+        body: JSON.stringify(
+          withProjectBody({
+            projectName: projectName?.trim() || undefined,
+            goal: opts?.goal?.trim() || undefined,
+            projectType: opts?.projectType?.trim() || undefined,
+          }),
+        ),
       },
     );
     clearIdeWorkspaceMetaCache();

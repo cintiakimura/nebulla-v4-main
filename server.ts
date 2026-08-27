@@ -147,7 +147,7 @@ import {
   readEnginePreviewModel,
   writeEnginePreviewModel,
   sanitizeEditorModelColors,
-  shouldApplyUiToPreview,
+  shouldWriteUiPreview,
   applyUiGenerationToPreviewShell,
 } from "./lib/uiGenerationEngine";
 import { MOCKUP_NON_AUTHORITATIVE_GO_BULLETS } from "./lib/codingMockupContract";
@@ -236,6 +236,12 @@ import {
   scheduleWorkspaceRelPathsR2Sync,
   scheduleWorkspaceTreeR2Sync,
 } from "./lib/nebulaWorkspaceStorage";
+import {
+  ensureProductIdentity,
+  PRODUCT_IDENTITY_REL,
+  readProductIdentity,
+  writeProductIdentity,
+} from "./lib/productIdentity";
 import {
   emptyPreviewHtmlWithBridge,
   wrapHtmlWithPreviewRuntimeBridge,
@@ -2162,11 +2168,63 @@ No approved UI code yet.
         projectDisplayName: projectName,
       });
       writeBasicUiScaffold(pp.workspaceRoot, projectName || "Untitled Project", { force: true });
+      const goal =
+        typeof body.goal === "string" && body.goal.trim() ? String(body.goal).trim() : "";
+      const projectType =
+        typeof body.projectType === "string" && body.projectType.trim()
+          ? String(body.projectType).trim()
+          : undefined;
+      ensureProductIdentity(pp.workspaceRoot, {
+        goal,
+        projectType,
+        projectName: projectName || convLabel,
+        persist: true,
+      });
       scheduleWorkspaceTreeR2Sync(pp.projectKey, pp.workspaceRoot);
       return res.json({ ok: true, cleared, removed, chatCleared });
     } catch (err: unknown) {
       return res.status(500).json({
         error: err instanceof Error ? err.message : "reset project failed",
+      });
+    }
+  });
+
+  app.post("/api/ide/product-identity", async (req, res) => {
+    try {
+      const pp = projectPathsFor(req);
+      const body = req.body || {};
+      const projectName =
+        typeof body.projectName === "string" && body.projectName.trim()
+          ? String(body.projectName).trim()
+          : "";
+      const goal = typeof body.goal === "string" ? String(body.goal) : "";
+      const projectType =
+        typeof body.projectType === "string" ? String(body.projectType) : undefined;
+      const userSet = body.userSet === true;
+      const identity = ensureProductIdentity(pp.workspaceRoot, {
+        goal,
+        projectType,
+        projectName,
+        userSet,
+        persist: true,
+      });
+      if (typeof body.logoHint === "string" && body.logoHint.trim()) {
+        writeProductIdentity(pp.workspaceRoot, {
+          ...identity,
+          logoHint: String(body.logoHint).trim(),
+          userSet: identity.userSet || userSet,
+        });
+      }
+      scheduleWorkspaceRelPathsR2Sync(pp.projectKey, pp.workspaceRoot, [
+        PRODUCT_IDENTITY_REL,
+        "master-plan.json",
+        "public/nebula-ui-gen-preview.html",
+        "public/product-preview.html",
+      ]);
+      return res.json({ ok: true, identity: readProductIdentity(pp.workspaceRoot) || identity });
+    } catch (err: unknown) {
+      return res.status(500).json({
+        error: err instanceof Error ? err.message : "product identity failed",
       });
     }
   });
@@ -2423,6 +2481,7 @@ No approved UI code yet.
           ensureInteractiveProductPreview(pp.workspaceRoot, {
             projectName: displayName,
             productFiles: authority.productFiles,
+            logoInitials: readProductIdentity(pp.workspaceRoot)?.logoInitials,
           });
           html = fs.existsSync(entryAbs) ? fs.readFileSync(entryAbs, "utf8") : html;
         }
@@ -2879,6 +2938,7 @@ No approved UI code yet.
               ensureInteractiveProductPreview(workspaceRoot, {
                 projectName,
                 productFiles: diskUi.length ? diskUi : writtenSnapshot,
+                logoInitials: readProductIdentity(workspaceRoot)?.logoInitials,
               });
             }
             if (writtenPathsNeedRunnableSkeleton(writtenSnapshot)) {
@@ -4444,6 +4504,11 @@ ${modelJson}`;
         figma_fallback_used: result.figma_fallback_used,
         env_guidance: result.env_guidance,
         skipped: result.skipped === true,
+        ui_status: result.ui_status,
+        skin_mode: result.skin_mode,
+        palette_id: result.palette_id,
+        compose_rung: result.compose_rung,
+        template_id: result.context.template_id,
         resource_match: matchMeta.resource_match,
         design_brief_summary: matchMeta.design_brief_summary,
         figma_pick: {
@@ -4525,6 +4590,7 @@ ${modelJson}`;
         slots?: Record<string, string>;
         pattern_mode?: "seed" | "figma" | "catalog";
         quality_gate_result?: string;
+        ui_status?: "ready" | "partial";
         classification?: {
           device?: string;
           page_type?: string;
@@ -4545,11 +4611,12 @@ ${modelJson}`;
           };
         }>;
       };
-      if (!shouldApplyUiToPreview(meta.quality_gate_result)) {
+      if (!shouldWriteUiPreview({ gate: meta.quality_gate_result, uiStatus: meta.ui_status })) {
         return res.status(422).json({
           ok: false,
-          error: "Quality gate is weak — Preview not overwritten. Try Generate again.",
+          error: "No preview to apply — run Generate UI first.",
           quality_gate_result: meta.quality_gate_result,
+          ui_status: meta.ui_status,
         });
       }
       if (!meta.tokens || !meta.slots || !meta.template_id) {
@@ -4632,6 +4699,11 @@ ${modelJson}`;
         // Do not advertise preview_applied when Studio has nothing loadable (Phase 7.4 honesty).
         preview_applied: has_loadable_model ? meta.preview_applied : false,
         has_loadable_model,
+        template_id: meta.template_id,
+        ui_status: meta.ui_status,
+        skin_mode: meta.skin_mode,
+        palette_id: meta.palette_id,
+        compose_rung: meta.compose_rung,
         figma_used: meta.figma_used,
         figma_status: meta.figma_status,
         figma_error: meta.figma_error,
@@ -4686,6 +4758,11 @@ ${modelJson}`;
         key_diagnostics: meta.key_diagnostics,
         resource_match: meta.resource_match,
         design_brief_summary: meta.design_brief_summary,
+        template_id: meta.template_id,
+        ui_status: meta.ui_status,
+        skin_mode: meta.skin_mode,
+        palette_id: meta.palette_id,
+        compose_rung: meta.compose_rung,
       });
     } catch (e) {
       return res.status(500).json({ error: e instanceof Error ? e.message : "failed" });
@@ -5431,6 +5508,7 @@ Strict rules:
 - No hallucinated packages, APIs, env vars, or paths — create them explicitly in this response if needed.
 - Prefer smallest safe change over clever refactors. No temporary hacks. Explicit error handling on I/O.
 - UI: §2 research patterns + §5 visuals + Project Type — NEVER Nebulla IDE chrome (#080A14 / #00D4D4).
+- Header: product name + 2-letter initials mark (32–40px rounded, §5 accent). Never paste the §1 goal sentence as the app title. No AI logo image. Logo is not a Go gate.
 - Larger generation only if the slice is naturally tiny, the user explicitly asks for a broader pass, or risk is clearly low.
 MOCKUP VS FINAL UI (mandatory):
 ${MOCKUP_NON_AUTHORITATIVE_GO_BULLETS}
@@ -5503,14 +5581,23 @@ ${workflowContext}`;
         .slice(0, 14)
         .map((p) => `- ${p.name} \`${p.route}\``)
         .join("\n");
+      const goalForCode = inferGoalFromPlanRecord(planSnapshot, [note, convProject]);
+      const productIdentity = ensureProductIdentity(ppGo.workspaceRoot, {
+        goal: goalForCode,
+        projectName: convProject,
+        persist: true,
+      });
       const compactUser = buildCompactGoCodeUserPrompt({
         sliceLine,
-        goal: inferGoalFromPlanRecord(planSnapshot, [note, convProject]),
+        goal: goalForCode,
         pagesSection: String(planSnapshot["4. Pages and navigation"] || ""),
         constraints: lockedUserConstraintsFromPlan(planSnapshot),
         uiBriefPageList: briefPages,
         sessionFocus: note || (continuation ? "(foundation shell)" : "(next incomplete slice)"),
         continuation,
+        productName: productIdentity.projectName,
+        logoInitials: productIdentity.logoInitials,
+        logoHint: productIdentity.logoHint,
       });
       const existingLinked = buildLinkedContextAppendix(readLinkedContext(ppGo.workspaceRoot));
       const codeMessages: { role: string; content: string }[] = [

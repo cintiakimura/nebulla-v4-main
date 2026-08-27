@@ -46,6 +46,9 @@ function tmpRoot(): string {
   assert.equal(after.runnable, true, runnableStatusLine(after));
   assert.ok(fs.existsSync(path.join(dir, 'package.json')));
   assert.ok(fs.existsSync(path.join(dir, 'app', 'layout.tsx')));
+  const layout = fs.readFileSync(path.join(dir, 'app', 'layout.tsx'), 'utf8');
+  assert.match(layout, /Tutor ADHD/);
+  assert.match(layout, /TA|data-nebula-brand/);
   assert.ok(fs.existsSync(path.join(dir, 'app', 'page.tsx')));
   assert.ok(fs.existsSync(path.join(dir, 'README.md')));
   const pkg = JSON.parse(fs.readFileSync(path.join(dir, 'package.json'), 'utf8')) as {
