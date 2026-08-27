@@ -91,6 +91,7 @@ import {
   persistLastAppliedSlice,
   parsePersistedSliceLabel,
   policyAStopMessage,
+  PRODUCT_MVP_READY_MESSAGE,
   preferLaterSlice,
   readLastAppliedSlice,
   resetAutopilotSliceCount,
@@ -508,7 +509,7 @@ export function AIChat() {
             'warn',
           );
         }
-        pushActivity('Autopilot complete. No Continue needed.', 'success');
+        pushActivity(PRODUCT_MVP_READY_MESSAGE, 'success');
       }
       resetCodingActivity();
       sendingRef.current = false;
@@ -3352,8 +3353,43 @@ export function AIChat() {
       setSending(false);
       return;
     }
+    const { projectKey: codingPassKey } = resolveActiveProjectIds(diskProjectKey);
+    const foundationLanded = workspaceFoundationLanded(workspacePaths);
+    const nextContinueLabel = foundationLanded
+      ? resolveNextContinueSlice({
+          lastSlice: lastAutoSliceLabelRef.current,
+          projectKey: codingPassKey,
+          productRoutesOnDisk: true,
+          workspacePaths,
+        })
+      : null;
+    if (foundationLanded && !nextContinueLabel) {
+      const stamp = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+      setMessages((p) => {
+        const next = [
+          ...p,
+          {
+            id: `mvp-${Date.now()}`,
+            role: 'assistant' as const,
+            content: PRODUCT_MVP_READY_MESSAGE,
+            timestamp: stamp,
+          },
+        ];
+        messagesRef.current = next;
+        return next;
+      });
+      sendingRef.current = false;
+      setSending(false);
+      return;
+    }
+    const goSliceNote = nextContinueLabel
+      ? buildAutopilotSliceInstruction(nextContinueLabel)
+      : userNote || FOUNDATION_SLICE_INSTRUCTION;
+
     beginCodingActivity('Grok Code — writing files to workspace', goWorkSteps(), {
-      subhead: 'One coherent slice (Build → Debug → Next). Validate before the next slice.',
+      subhead: nextContinueLabel
+        ? `Go — ${nextContinueLabel} slice (not Foundation)`
+        : 'One coherent slice (Build → Debug → Next). Validate before the next slice.',
       initialLog: 'Running Grok Code — apply starts after Code pass 1 returns files',
     });
     setGrokActivity((prev) =>
@@ -3389,7 +3425,7 @@ export function AIChat() {
       const go = await runGoCodeAndApply({
         userId,
         projectName,
-        userNote,
+        userNote: goSliceNote,
         messages: history,
         onProgress: pushActivity,
       });
@@ -3404,7 +3440,7 @@ export function AIChat() {
       }
       const goTs = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
       const chatCompleteLine = go.ok
-        ? `**Finished.** ${go.statusMessage}\n\nValidate this slice (reload Preview / App Status) before asking for the next one.`
+        ? `**Slice applied.** ${go.statusMessage}\n\nThis is not the catalog mockup — reload live Preview. Autopilot continues until MVP ready.`
         : `**Coding could not finish.** ${go.statusMessage}`;
       setMessages((p) => {
         const next = [
@@ -3479,7 +3515,7 @@ export function AIChat() {
         resumeOpenTalkIfWanted();
       }
     }
-  }, [micInputBlocked, sending, serverHasGrokKey, stopVoiceRecognition, refreshWorkspaceMeta, resumeOpenTalkIfWanted, pushActivity, beginCodingActivity, holdCodingFailure, resetCodingActivity, workspacePaths.length]);
+  }, [micInputBlocked, sending, serverHasGrokKey, stopVoiceRecognition, refreshWorkspaceMeta, resumeOpenTalkIfWanted, pushActivity, beginCodingActivity, holdCodingFailure, resetCodingActivity, workspacePaths, diskProjectKey]);
 
   const applyInteractionMode = useCallback(
     async (mode: IdeAssistantInteractionMode, options?: { pendingText?: string }) => {

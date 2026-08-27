@@ -65,16 +65,16 @@ export function formatSlicePromptLine(slice: GoSliceLabel): string {
 /** Keep Go from emitting a generic SaaS shell when the goal is a real product job. */
 export function productSliceQualityLine(goal: string): string {
   const g = String(goal || "");
+  const persist =
+    "MUST: Home is the core user job with a working primary CTA that reads/writes through the app data layer (app/api or lib store). Mock-only UI that dies on refresh is a failed slice. ";
   if (/\b(adhd|kids?|child|student|teacher|tutor|classroom|school|parent|lesson|practice)\b/i.test(g)) {
     return (
+      persist +
       "MUST: child Home with ONE next-lesson CTA; a working practice/session (3+ steps or a timer, then complete); teacher or parent progress. " +
       "MUST NOT: Dashboard + Settings + Who are you today as the product."
     );
   }
-  return (
-    "MUST: Home is the core user job with a working primary CTA (mock data OK). " +
-    "MUST NOT: generic Dashboard + Settings + role picker as the whole app."
-  );
+  return persist + "MUST NOT: generic Dashboard + Settings + role picker as the whole app.";
 }
 
 /** Soft warn when apply looks like a full-app dump for a non-Foundation slice. */
@@ -107,6 +107,31 @@ function workspaceExists(...parts: string[]): boolean {
   return fs.existsSync(path.join(...parts));
 }
 
+/** True when the workspace has app/api, pages/api, or a lib store/db module. */
+export function workspaceHasProductDataLayer(workspaceRoot: string): boolean {
+  const root = workspaceRoot.trim();
+  if (!root) return false;
+  const dirs = [
+    ["app", "api"],
+    ["src", "app", "api"],
+    ["pages", "api"],
+    ["src", "pages", "api"],
+  ];
+  for (const d of dirs) {
+    if (workspaceExists(root, ...d)) return true;
+  }
+  const files = [
+    ["lib", "store.ts"],
+    ["lib", "store.js"],
+    ["lib", "db.ts"],
+    ["lib", "data.ts"],
+    ["src", "lib", "store.ts"],
+    ["src", "lib", "db.ts"],
+    ["src", "lib", "data.ts"],
+  ];
+  return files.some((f) => workspaceExists(root, ...f));
+}
+
 const SLICE_RANK: Record<GoSliceLabel, number> = {
   Foundation: 0,
   Auth: 1,
@@ -116,7 +141,7 @@ const SLICE_RANK: Record<GoSliceLabel, number> = {
   Polish: 5,
 };
 
-/** Heuristic next slice from on-disk app shell (no LLM). Never skip to Secondary on 1–2 stub routes. */
+/** Heuristic next slice from on-disk app shell (no LLM). Never skip Data+API for mock-only screens. */
 export function inferGoSliceFromWorkspace(workspaceRoot: string): GoSliceLabel {
   const root = workspaceRoot.trim();
   if (!root) return "Foundation";
@@ -126,15 +151,10 @@ export function inferGoSliceFromWorkspace(workspaceRoot: string): GoSliceLabel {
   // Vite App/main or mockup index.html is not a Foundation — need app/ or pages/ routes.
   if (routes.length === 0 || depth.thinCodeShell) return "Foundation";
 
+  if (!workspaceHasProductDataLayer(root)) return "Data+API";
+
   const AUTH_ROUTE = /^\/(login|auth|signin|sign-in|signup|register|sign-up)$/i;
   const screens = routes.filter((r) => !AUTH_ROUTE.test(r));
-  const hasAuth =
-    workspaceExists(root, "lib", "auth.ts") ||
-    workspaceExists(root, "src", "lib", "auth.ts") ||
-    workspaceExists(root, "src", "pages", "Login.tsx") ||
-    workspaceExists(root, "app", "login", "page.tsx") ||
-    workspaceExists(root, "app", "auth", "page.tsx");
-  if (!hasAuth) return screens.length <= 1 ? "Foundation" : "Auth";
   // Home + one extra (login does not count) is still Primary, not Secondary.
   if (screens.length < 3) return "Primary";
   return "Secondary";

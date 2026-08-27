@@ -110,6 +110,9 @@ const localSum = buildLocalPreCodingSummary({
 assert.match(localSum, /^SLICE:/);
 assert.match(localSum, /ADHD|tutor|slice/i);
 assert.match(productSliceQualityLine("tutor kids with ADHD"), /MUST NOT: Dashboard/);
+assert.match(productSliceQualityLine("tutor kids with ADHD"), /data layer/);
+assert.match(productSliceQualityLine("invoice portal"), /Mock-only UI/);
+assert.equal(/mock data OK/i.test(productSliceQualityLine("invoice portal")), false);
 assert.match(
   buildCompactGoCodeUserPrompt({
     sliceLine: "SLICE: Primary",
@@ -141,11 +144,17 @@ assert.match(
     "export default function Practice(){return null}\n",
   );
   const next = inferGoSliceFromWorkspace(root);
-  assert.equal(next, "Auth");
+  assert.equal(next, "Data+API");
   fs.mkdirSync(path.join(root, "app", "login"), { recursive: true });
   fs.writeFileSync(
     path.join(root, "app", "login", "page.tsx"),
     "export default function Login(){return null}\n",
+  );
+  assert.equal(inferGoSliceFromWorkspace(root), "Data+API");
+  fs.mkdirSync(path.join(root, "app", "api", "progress"), { recursive: true });
+  fs.writeFileSync(
+    path.join(root, "app", "api", "progress", "route.ts"),
+    "export async function GET(){return Response.json({})}\n",
   );
   assert.equal(inferGoSliceFromWorkspace(root), "Primary");
   assert.equal(clampClaimedSliceToWorkspace("SLICE: Secondary", root), "Primary");

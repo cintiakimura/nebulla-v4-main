@@ -1,6 +1,7 @@
 /**
  * Fast Prototype next-slice helpers (Mode B).
- * One prompt → research → mockup → Foundation → Primary → Secondary → Polish.
+ * One prompt → research → mockup → Foundation → Data+API → Primary → Secondary → Polish.
+ * Mockup is Step 8 only. Coding goal is a clickable product with a data layer, not mock-only UI.
  * Do not ask the user to type Continue between slices.
  */
 
@@ -101,10 +102,10 @@ export function looksLikePrePrimaryShellSlice(sliceLabel?: string | null): boole
   if (/\bprimary\b/i.test(label)) return false;
   if (/\bsecondary\b/i.test(label)) return false;
   if (/\bpolish\b/i.test(label)) return false;
+  if (/\bdata\+?api\b/i.test(label)) return false;
   return (
     looksLikeFoundationSlice(label) ||
     /\bauth\b/i.test(label) ||
-    /\bdata\+?api\b/i.test(label) ||
     /\bshell\b/i.test(label)
   );
 }
@@ -171,20 +172,31 @@ export function healLastAppliedSlice(
   return last;
 }
 
-/** After Foundation/Auth/Data, jump to Primary pages (mock auth is not a hard gate). */
+/**
+ * After Foundation/Auth, Data+API is next (mock auth is not a hard gate).
+ * Do not skip the data layer — Primary must persist through it.
+ */
 export function nextAutopilotSliceLabel(current?: string | null): AutopilotSliceLabel {
   const label = String(current || 'Foundation').trim();
   if (/\bpolish\b/i.test(label)) return 'Polish';
   if (/\bsecondary\b/i.test(label)) return 'Polish';
   if (/\bprimary\b/i.test(label)) return 'Secondary';
-  return 'Primary';
+  if (/\bdata\+?api\b/i.test(label)) return 'Primary';
+  return 'Data+API';
 }
 
-/** Auto Go passes after the kickoff Foundation turn (Primary, Secondary, Polish). */
-export const MAX_AUTOPILOT_SLICES = 3;
+/** Auto Go passes after the kickoff Foundation turn (Data+API, Primary, Secondary, Polish). */
+export const MAX_AUTOPILOT_SLICES = 4;
+
+/** Shown when autopilot / Continue has nothing left — coded MVP, not catalog mockup. */
+export const PRODUCT_MVP_READY_SHORT =
+  'MVP ready. Use live Preview (not the catalog mockup). No Continue needed.';
+
+export const PRODUCT_MVP_READY_MESSAGE =
+  'MVP ready — core job should work in live Preview, not the catalog mockup. Data should persist through the app API. No Continue needed.';
 
 /**
- * Mode B: one prompt → research → mockup → Foundation → auto Primary → Secondary → Polish.
+ * Mode B: one prompt → research → mockup → Foundation → Data+API → Primary → Secondary → Polish.
  * User Continue is not required between slices.
  * Keep true this turn. Flip to false only after a golden Foundation is proven on prod.
  */
@@ -198,7 +210,7 @@ export const FOUNDATION_RETRY_ACTIVITY =
   'Foundation did not land. Retry Go for Foundation — not Continue for Primary.';
 
 export const FOUNDATION_SLICE_INSTRUCTION =
-  'START_CODING — implement ONE coherent Foundation slice only (Build → Debug → Next). Prefer app/, src/, components/, pages/ — not master-plan/ui-brief only. File blocks for this slice only — not the full §4 app.';
+  'START_CODING — implement ONE coherent Foundation slice only (Build → Debug → Next). Prefer app/, src/, components/, pages/ — not master-plan/ui-brief only. Primary controls must not be silent no-ops — wire them to a local module or app/api even if Data+API lands next. File blocks for this slice only — not the full §4 app.';
 
 /** After a 3-minute timeout — smaller shell so Grok Code can finish. */
 export const NARROW_FOUNDATION_SLICE_INSTRUCTION =
@@ -293,7 +305,7 @@ export function shouldAutopilotAdvance(opts: {
       advance: false,
       nextLabel: null,
       stopReason: 'done',
-      message: 'Slices complete — running Final UI restyle. No Continue needed.',
+      message: PRODUCT_MVP_READY_MESSAGE,
     };
   }
   if (opts.autoCount >= maxAuto) {
@@ -301,7 +313,7 @@ export function shouldAutopilotAdvance(opts: {
       advance: false,
       nextLabel: null,
       stopReason: 'cap',
-      message: `Autopilot reached ${maxAuto} follow-up slices — running Final UI restyle. No Continue needed.`,
+      message: `Autopilot reached ${maxAuto} follow-up slices — ${PRODUCT_MVP_READY_SHORT}`,
     };
   }
   const lastSlice = opts.lastSlice;
@@ -343,13 +355,19 @@ export function shouldAutoRunPrimarySliceAfterFoundation(opts: {
 const DO_NOT_REWRITE_FOUNDATION =
   'If Foundation/product routes already exist, do NOT rewrite them — do not re-emit package.json, layout, login, or existing pages unless this slice must change them.';
 
+export const FAST_PROTOTYPE_DATA_API_SLICE_INSTRUCTION =
+  'START_CODING — SLICE: Data+API — implement the data layer only (Build → Debug → Next). ' +
+  `${DO_NOT_REWRITE_FOUNDATION} ` +
+  'Add app/api (or pages/api) plus a workspace store those routes read/write (JSON file or lib module). Screens must fetch that API — mock-only useState that dies on refresh is a failed slice. No Supabase/Firebase. File blocks for this slice only.';
+
 export const FAST_PROTOTYPE_PRIMARY_SLICE_INSTRUCTION =
   'START_CODING — SLICE: Primary — implement the NEXT incomplete primary feature slice only (Build → Debug → Next). ' +
   `${DO_NOT_REWRITE_FOUNDATION} ` +
-  'Core user job from Master Plan: kid Home with one next-lesson CTA + a working practice/session (steps or timer, then complete) — not a Who-are-you role picker as the whole home. Prefer app/, src/, components/, pages/ — not master-plan/ui-brief only. File blocks for this slice only — not the full §4 app.';
+  'Core user job from Master Plan: kid Home with one next-lesson CTA + a working practice/session (steps or timer, then complete) that reads/writes through Data+API — not a Who-are-you role picker as the whole home, not mock-only UI. Prefer app/, src/, components/, pages/ — not master-plan/ui-brief only. File blocks for this slice only — not the full §4 app.';
 
 export function buildAutopilotSliceInstruction(slice: AutopilotSliceLabel): string {
   if (slice === 'Foundation') return FOUNDATION_SLICE_INSTRUCTION;
+  if (slice === 'Data+API') return FAST_PROTOTYPE_DATA_API_SLICE_INSTRUCTION;
   if (slice === 'Primary') return FAST_PROTOTYPE_PRIMARY_SLICE_INSTRUCTION;
   return (
     `START_CODING — SLICE: ${slice} — implement the NEXT incomplete ${slice} slice only (Build → Debug → Next). ` +
@@ -363,7 +381,7 @@ export function buildAutopilotSliceInstruction(slice: AutopilotSliceLabel): stri
 export function policyAStopMessage(lastSlice?: string | null): string {
   const label = String(lastSlice || 'Foundation').trim() || 'Foundation';
   if (looksLikePolishSlice(label)) {
-    return 'Polish applied. Review Preview — or send a new goal.';
+    return PRODUCT_MVP_READY_MESSAGE;
   }
   if (/\bsecondary\b/i.test(label)) {
     return 'Secondary applied — send Continue for Polish.';
@@ -371,7 +389,10 @@ export function policyAStopMessage(lastSlice?: string | null): string {
   if (/\bprimary\b/i.test(label)) {
     return 'Primary applied — send Continue for Secondary.';
   }
-  return 'Foundation applied — send Continue for the next slice.';
+  if (/\bdata\+?api\b/i.test(label)) {
+    return 'Data+API applied — send Continue for Primary.';
+  }
+  return 'Foundation applied — send Continue for Data+API.';
 }
 
 export function policyAFailedMessage(lastSlice?: string | null): string {
@@ -389,7 +410,7 @@ export function policyATimeoutMessage(lastSlice?: string | null, foundationOnDis
     }
     const label =
       !lastSlice || looksLikePrePrimaryShellSlice(lastSlice)
-        ? 'Primary'
+        ? nextAutopilotSliceLabel(lastSlice)
         : String(lastSlice).trim();
     return `Grok Code timed out [GO_TIMEOUT]. ${label} did not land. You do not need to type Continue.`;
   }
@@ -398,7 +419,7 @@ export function policyATimeoutMessage(lastSlice?: string | null, foundationOnDis
   }
   const label =
     !lastSlice || looksLikePrePrimaryShellSlice(lastSlice)
-      ? 'Primary'
+      ? nextAutopilotSliceLabel(lastSlice)
       : String(lastSlice).trim();
   return `Grok Code timed out [GO_TIMEOUT]. ${label} did not land. Send Go to retry ${label} — Foundation is already on disk.`;
 }
@@ -511,6 +532,10 @@ export function userNoteRequestsNextSlice(note?: string | null): boolean {
   if (/\b(continue|keep)\s+(building|implementing)\b/i.test(t)) return true;
   if (/\bnext\s+slice\b/i.test(t)) return true;
   if (/^(continue|continue\.|continue!|build\s+next)$/i.test(t)) return true;
+  if (/\b(finish|complete)\s+(the\s+)?(app|project|development|coding|build|prototype|mvp)\b/i.test(t)) {
+    return true;
+  }
+  if (/\b(can you|please)\s+(finish|complete)\b/i.test(t)) return true;
   return false;
 }
 

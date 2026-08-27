@@ -5553,7 +5553,8 @@ Master Plan (project-execution-rules — MUST be complete before code):
 
 Implementation (ONE SLICE per Go — Build → Debug → Next):
 - Implement only the slice named in "${PRE_CODING_SUMMARY_KEY}" (or infer next incomplete slice: Foundation first if no app shell exists).
-- Foundation for a multi-page plan: \`app/layout.tsx\` + root \`app/page.tsx\` + at least one more \`app/<route>/page.tsx\` from §4, with working primary controls (mock data OK). Do not stop at a single static dashboard. Home must be the core user job (for tutoring/ADHD: child's next short lesson), not Dashboard + Settings + "Who are you today?".
+- Foundation for a multi-page plan: \`app/layout.tsx\` + root \`app/page.tsx\` + at least one more \`app/<route>/page.tsx\` from §4, with working primary controls (not silent no-ops). Do not stop at a single static dashboard. Home must be the core user job (for tutoring/ADHD: child's next short lesson), not Dashboard + Settings + "Who are you today?".
+- Data+API slice: \`app/api\` (or \`pages/api\`) plus a workspace store; screens must read/write through it. Mock-only UI that dies on refresh is a failed slice.
 - Later slices: smallest coherent set (often 3–8 file blocks). Do NOT emit every §4 route in one pass.
 - Include master-plan.json updates IN THE SAME response if needed — never as the only file when app code is due.
 - Honor security baseline (RLS/tenant filters) in Auth/Data slices.

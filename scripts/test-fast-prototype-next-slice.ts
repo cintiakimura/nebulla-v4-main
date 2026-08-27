@@ -57,7 +57,7 @@ assert.equal(
     sliceLabel: 'Foundation',
   }),
   true,
-  'Mode B: Foundation success auto-starts Primary',
+  'Mode B: Foundation success auto-starts next slice',
 );
 
 markFastPrototypePrimaryAutoRun('p1');
@@ -100,14 +100,15 @@ assert.equal(
     sliceLabel: 'Auth',
   }),
   true,
-  'Mode B: Auth/shell still auto-starts Primary',
+  'Mode B: Auth/shell still auto-continues',
 );
 
 assert.match(FAST_PROTOTYPE_PRIMARY_SLICE_INSTRUCTION, /SLICE: Primary/);
 assert.match(FAST_PROTOTYPE_PRIMARY_SLICE_INSTRUCTION, /do NOT rewrite (it|them)/i);
 
-assert.equal(nextAutopilotSliceLabel('Foundation'), 'Primary');
-assert.equal(nextAutopilotSliceLabel('Auth'), 'Primary');
+assert.equal(nextAutopilotSliceLabel('Foundation'), 'Data+API');
+assert.equal(nextAutopilotSliceLabel('Auth'), 'Data+API');
+assert.equal(nextAutopilotSliceLabel('Data+API'), 'Primary');
 assert.equal(nextAutopilotSliceLabel('Primary'), 'Secondary');
 assert.equal(nextAutopilotSliceLabel('Secondary'), 'Polish');
 
@@ -120,10 +121,22 @@ assert.equal(nextAutopilotSliceLabel('Secondary'), 'Polish');
     productRouteCount: 5,
   });
   assert.equal(d.advance, true);
-  assert.equal(d.nextLabel, 'Primary');
+  assert.equal(d.nextLabel, 'Data+API');
   assert.equal(d.stopReason, 'next');
-  assert.match(d.message, /Starting Primary slice automatically/i);
+  assert.match(d.message, /Starting Data\+API slice automatically/i);
   assert.equal(/send Continue/i.test(d.message), false);
+}
+{
+  const d = shouldAutopilotAdvance({
+    codingOk: true,
+    lastSlice: 'Data+API',
+    autoCount: 1,
+    autopilotKickoff: true,
+    productRouteCount: 5,
+  });
+  assert.equal(d.advance, true);
+  assert.equal(d.nextLabel, 'Primary');
+  assert.match(d.message, /Starting Primary slice automatically/i);
 }
 {
   const d = shouldAutopilotAdvance({
@@ -135,7 +148,7 @@ assert.equal(nextAutopilotSliceLabel('Secondary'), 'Polish');
   });
   assert.equal(d.advance, false);
   assert.equal(d.stopReason, 'done');
-  assert.match(d.message, /Final UI restyle/i);
+  assert.match(d.message, /MVP ready/i);
   assert.equal(/send a new goal/i.test(d.message), false);
 }
 {
@@ -160,7 +173,7 @@ assert.equal(nextAutopilotSliceLabel('Secondary'), 'Polish');
   });
   assert.equal(d.advance, false);
   assert.equal(d.stopReason, 'cap');
-  assert.match(d.message, /Final UI restyle/i);
+  assert.match(d.message, /MVP ready/i);
   assert.equal(/send a new goal/i.test(d.message), false);
 }
 {
@@ -320,7 +333,7 @@ assert.equal(
 );
 assert.equal(
   resolveNextContinueSlice({ productRoutesOnDisk: true, lastSlice: 'Foundation' }),
-  'Primary',
+  'Data+API',
 );
 assert.equal(
   resolveNextContinueSlice({ productRoutesOnDisk: true, lastSlice: 'Primary' }),
@@ -363,7 +376,9 @@ assert.match(policyAStopMessage('Secondary'), /Secondary applied — send Contin
   );
 }
 assert.match(policyAFailedMessage('Foundation'), /Retry Go for Foundation/);
-assert.match(policyAStopMessage('Foundation'), /Foundation applied — send Continue/);
+assert.match(policyAStopMessage('Foundation'), /Foundation applied — send Continue for Data\+API/);
+assert.match(policyAStopMessage('Data+API'), /Data\+API applied — send Continue for Primary/);
+assert.match(policyAStopMessage('Polish'), /MVP ready/);
 assert.equal(countWorkspaceProductRoutes(['app/teacher/page.tsx']), 1);
 assert.equal(workspaceFoundationLanded(['app/teacher/page.tsx']), false);
 assert.equal(
@@ -382,8 +397,11 @@ assert.equal(
   assert.equal(countWorkspaceProductRoutes(firstGo), 3);
   assert.equal(workspaceFoundationLanded(firstGo), true);
   assert.equal(
-    resolveNextContinueSlice({ productRoutesOnDisk: workspaceFoundationLanded(firstGo), lastSlice: 'Foundation' }),
-    'Primary',
+    resolveNextContinueSlice({
+      productRoutesOnDisk: workspaceFoundationLanded(firstGo),
+      lastSlice: 'Foundation',
+    }),
+    'Data+API',
   );
 }
 assert.equal(
@@ -405,7 +423,12 @@ assert.equal(userNoteRequestsNextSlice('continue building'), true);
 assert.equal(userNoteRequestsNextSlice('keep building the app'), true);
 assert.equal(userNoteRequestsNextSlice('next slice'), true);
 assert.equal(userNoteRequestsNextSlice('build next'), true);
+assert.equal(userNoteRequestsNextSlice('finish the app'), true);
+assert.equal(userNoteRequestsNextSlice('please finish the development'), true);
+assert.equal(userNoteRequestsNextSlice('complete the project'), true);
 assert.equal(userNoteRequestsNextSlice(FAST_PROTOTYPE_PRIMARY_SLICE_INSTRUCTION), true);
+assert.match(buildAutopilotSliceInstruction('Data+API'), /SLICE: Data\+API/);
+assert.match(buildAutopilotSliceInstruction('Data+API'), /app\/api/);
 assert.equal(userNoteRequestsNextSlice('go'), false);
 assert.equal(userNoteRequestsNextSlice('start coding'), false);
 assert.equal(userNoteRequestsNextSlice(''), false);
@@ -602,6 +625,7 @@ assert.match(
 assert.match(chat, /if \(!FAST_PROTOTYPE_SAME_SESSION_AUTOPILOT\)/);
 assert.match(chat, /policyAStopMessage/);
 assert.match(chat, /finishAutopilotSession/);
+assert.match(chat, /PRODUCT_MVP_READY_MESSAGE/);
 assert.match(chat, /triggerUiStudioBetaAfterFilesApplied/);
 assert.match(chat, /autopilotStopRunsFinalUi/);
 assert.match(chat, /codingOk: coding.ok !== false && wroteFiles/);
