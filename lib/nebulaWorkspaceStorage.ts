@@ -15,6 +15,7 @@
 import fs from "fs";
 import path from "path";
 import {
+  DeleteObjectsCommand,
   GetObjectCommand,
   ListObjectsV2Command,
   PutObjectCommand,
@@ -61,6 +62,16 @@ export function workspaceObjectKey(projectKey: string, relativePath: string): st
   const key = sanitizeProjectKey(projectKey);
   const rel = relativePath.replace(/\\/g, "/").replace(/^\/+/, "");
   return `workspaces/${key}/${rel}`;
+}
+
+/** `data/cloud-projects/{key}/…` — null in tests that use a temp dir. */
+export function projectKeyFromWorkspaceRoot(workspaceRoot: string): string | null {
+  const n = workspaceRoot.replace(/\\/g, "/").replace(/\/+$/, "");
+  const marker = "/data/cloud-projects/";
+  const i = n.lastIndexOf(marker);
+  if (i < 0) return null;
+  const key = n.slice(i + marker.length).split("/")[0]?.trim();
+  return key || null;
 }
 
 let wsClient: S3Client | null = null;
@@ -174,6 +185,98 @@ export function scheduleWorkspaceFileR2Sync(
   })();
 }
 
+export function scheduleWorkspaceAbsR2Sync(
+  workspaceRoot: string,
+  absolutePath: string,
+  content?: string | Buffer,
+): void {
+  const key = projectKeyFromWorkspaceRoot(workspaceRoot);
+  if (!key) return;
+  scheduleWorkspaceFileR2Sync(key, workspaceRoot, absolutePath, content);
+}
+
+export function scheduleWorkspaceRelPathsR2Sync(
+  projectKey: string,
+  workspaceRoot: string,
+  relativePaths: string[],
+): void {
+  for (const rel of relativePaths) {
+    const n = String(rel || "").replace(/\\/g, "/").replace(/^\/+/, "");
+    if (!n || n.includes("..")) continue;
+    const abs = path.join(workspaceRoot, ...n.split("/"));
+    if (!fs.existsSync(abs)) continue;
+    try {
+      if (fs.statSync(abs).isDirectory()) continue;
+    } catch {
+      continue;
+    }
+    scheduleWorkspaceFileR2Sync(projectKey, workspaceRoot, abs);
+  }
+}
+
+const TREE_SKIP_DIR = new Set([
+  "node_modules",
+  ".git",
+  ".next",
+  "dist",
+  "build",
+  "coverage",
+  "out",
+  "nebula-project",
+  "nebulla-project",
+]);
+
+const TREE_MAX_FILES = 400;
+const TREE_MAX_BYTES = 1_500_000;
+
+/**
+ * Product + plan files that must survive a Render deploy.
+ * Skips node_modules / build output / huge version dumps.
+ */
+export function listDurableWorkspaceRelPaths(workspaceRoot: string, max = TREE_MAX_FILES): string[] {
+  const root = workspaceRoot.trim();
+  if (!root || !fs.existsSync(root)) return [];
+  const out: string[] = [];
+
+  const walk = (abs: string, rel: string, depth: number) => {
+    if (out.length >= max || depth > 8) return;
+    let ents: fs.Dirent[];
+    try {
+      ents = fs.readdirSync(abs, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const ent of ents) {
+      if (out.length >= max) return;
+      const name = ent.name;
+      if (name.startsWith(".") && name !== ".env.example") continue;
+      if (ent.isDirectory()) {
+        if (TREE_SKIP_DIR.has(name)) continue;
+        if (rel === "generated-ui" && name === "versions") continue;
+        walk(path.join(abs, name), rel ? `${rel}/${name}` : name, depth + 1);
+        continue;
+      }
+      if (!ent.isFile()) continue;
+      const fullRel = rel ? `${rel}/${name}` : name;
+      try {
+        const st = fs.statSync(path.join(abs, name));
+        if (st.size > TREE_MAX_BYTES) continue;
+      } catch {
+        continue;
+      }
+      out.push(fullRel.replace(/\\/g, "/"));
+    }
+  };
+
+  walk(root, "", 0);
+  return out;
+}
+
+export function scheduleWorkspaceTreeR2Sync(projectKey: string, workspaceRoot: string): void {
+  const rels = listDurableWorkspaceRelPaths(workspaceRoot);
+  scheduleWorkspaceRelPathsR2Sync(projectKey, workspaceRoot, rels);
+}
+
 async function streamToBuffer(body: unknown): Promise<Buffer> {
   if (!body) return Buffer.alloc(0);
   if (Buffer.isBuffer(body)) return body;
@@ -226,7 +329,7 @@ export async function hydrateWorkspaceFromR2(
         if (!fullKey.startsWith(keyPrefix)) continue;
         const rel = fullKey.slice(keyPrefix.length);
         if (!rel || rel.endsWith("/")) continue;
-        if (rel.split("/").includes(".git")) {
+        if (rel.split("/").includes(".git") || rel.split("/").includes("node_modules")) {
           skipped++;
           continue;
         }
@@ -278,5 +381,56 @@ export async function hydrateWorkspaceFromR2Safe(
     console.log(
       `[nebula] workspace R2 hydrate ${projectKey}: downloaded=${r.downloaded} skipped=${r.skipped}`,
     );
+  }
+}
+
+/** Remove durable objects after an explicit user reset (otherwise deploy would restore the wiped app). */
+export async function deleteWorkspacePrefixFromR2(
+  projectKey: string,
+): Promise<{ deleted: number; error?: string }> {
+  const mode = getWorkspaceStorageMode();
+  if (mode === "local") return { deleted: 0 };
+  if (!isWorkspaceR2Configured()) {
+    return { deleted: 0, error: "Workspace R2 not configured" };
+  }
+  const keyPrefix = `workspaces/${sanitizeProjectKey(projectKey)}/`;
+  let deleted = 0;
+  try {
+    const { client, bucket } = getWorkspaceS3();
+    let token: string | undefined;
+    do {
+      const listed = await client.send(
+        new ListObjectsV2Command({
+          Bucket: bucket,
+          Prefix: keyPrefix,
+          ContinuationToken: token,
+        }),
+      );
+      const keys = (listed.Contents || [])
+        .map((o) => o.Key)
+        .filter((k): k is string => Boolean(k));
+      if (keys.length > 0) {
+        await client.send(
+          new DeleteObjectsCommand({
+            Bucket: bucket,
+            Delete: { Objects: keys.map((Key) => ({ Key })), Quiet: true },
+          }),
+        );
+        deleted += keys.length;
+      }
+      token = listed.IsTruncated ? listed.NextContinuationToken : undefined;
+    } while (token);
+    return { deleted };
+  } catch (e) {
+    return { deleted, error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+export async function deleteWorkspacePrefixFromR2Safe(projectKey: string): Promise<void> {
+  const r = await deleteWorkspacePrefixFromR2(projectKey);
+  if (r.error) {
+    console.warn(`[nebula] workspace R2 delete (${projectKey}):`, r.error);
+  } else if (r.deleted > 0) {
+    console.log(`[nebula] workspace R2 delete ${projectKey}: deleted=${r.deleted}`);
   }
 }

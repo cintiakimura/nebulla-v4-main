@@ -1,13 +1,12 @@
 import fs from "fs";
 import path from "path";
 import { execFileSync } from "child_process";
-import { sanitizeProjectKey } from "./nebulaProjectKey";
 import {
   getWorkspaceStorageMode,
-  hydrateWorkspaceFromR2Safe,
-  scheduleWorkspaceFileR2Sync,
+  hydrateWorkspaceFromR2,
 } from "./nebulaWorkspaceStorage";
 import { ensureWorkspaceCreatedMarker } from "./masterPlanStrictPolicy";
+import { sanitizeProjectKey } from "./nebulaProjectKey";
 
 export type CloudProjectPaths = {
   projectKey: string;
@@ -110,19 +109,6 @@ export function ensureCloudProjectWorkspace(
     }
   }
 
-  if (getWorkspaceStorageMode() !== "local") {
-    for (const abs of [
-      masterPlanPath,
-      nebulaUiStudioPath,
-      path.join(workspaceRoot, "project-workflow.md"),
-      path.join(workspaceRoot, "SKILL.md"),
-    ]) {
-      if (fs.existsSync(abs)) {
-        scheduleWorkspaceFileR2Sync(projectKey, workspaceRoot, abs);
-      }
-    }
-  }
-
   return {
     projectKey,
     workspaceRoot,
@@ -132,13 +118,58 @@ export function ensureCloudProjectWorkspace(
   };
 }
 
-/** Sync ensure + R2 hydrate (Phase 4). Prefer this in async route handlers. */
+const hydratedKeys = new Set<string>();
+const hydrateLocks = new Map<string, Promise<void>>();
+
+export function invalidateWorkspaceHydrateCache(projectKey: string): void {
+  hydratedKeys.delete(sanitizeProjectKey(projectKey));
+}
+
+export function resetWorkspaceHydrateCacheForTests(): void {
+  hydratedKeys.clear();
+  hydrateLocks.clear();
+}
+
+/**
+ * Restore the last saved workspace from R2 onto empty/ephemeral disk, then seed
+ * any still-missing templates. Never uploads templates over a saved product tree.
+ */
 export async function ensureCloudProjectWorkspaceDurable(
   repoRoot: string,
   legacyTemplateRoot: string,
   rawProjectKey: string,
 ): Promise<CloudProjectPaths> {
-  const paths = ensureCloudProjectWorkspace(repoRoot, legacyTemplateRoot, rawProjectKey);
-  await hydrateWorkspaceFromR2Safe(paths.projectKey, paths.workspaceRoot);
-  return paths;
+  const projectKey = sanitizeProjectKey(rawProjectKey);
+  const mode = getWorkspaceStorageMode();
+  if (mode === "local") {
+    return ensureCloudProjectWorkspace(repoRoot, legacyTemplateRoot, projectKey);
+  }
+
+  if (hydratedKeys.has(projectKey)) {
+    return ensureCloudProjectWorkspace(repoRoot, legacyTemplateRoot, projectKey);
+  }
+
+  let lock = hydrateLocks.get(projectKey);
+  if (!lock) {
+    lock = (async () => {
+      const workspaceRoot = path.join(repoRoot, "data", "cloud-projects", projectKey);
+      fs.mkdirSync(workspaceRoot, { recursive: true });
+      const r = await hydrateWorkspaceFromR2(projectKey, workspaceRoot);
+      if (r.error) {
+        console.warn(`[nebula] workspace R2 hydrate (${projectKey}):`, r.error);
+      } else {
+        hydratedKeys.add(projectKey);
+        if (r.downloaded > 0) {
+          console.log(
+            `[nebula] workspace R2 hydrate ${projectKey}: downloaded=${r.downloaded} skipped=${r.skipped}`,
+          );
+        }
+      }
+    })().finally(() => {
+      hydrateLocks.delete(projectKey);
+    });
+    hydrateLocks.set(projectKey, lock);
+  }
+  await lock;
+  return ensureCloudProjectWorkspace(repoRoot, legacyTemplateRoot, projectKey);
 }

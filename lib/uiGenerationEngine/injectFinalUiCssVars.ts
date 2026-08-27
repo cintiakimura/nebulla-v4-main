@@ -5,6 +5,7 @@
 import fs from "fs";
 import path from "path";
 import type { DesignTokens } from "./v2/types";
+import { scheduleWorkspaceAbsR2Sync } from "../nebulaWorkspaceStorage";
 
 export const FINAL_UI_CSS_START = "/* nebulla-final-ui-tokens */";
 export const FINAL_UI_CSS_END = "/* /nebulla-final-ui-tokens */";
@@ -64,6 +65,7 @@ export function injectFinalUiIntoProductPreview(
     : html.replace("</style>", `${nextVars}\n</style>`);
   if (patched === html) return false;
   fs.writeFileSync(abs, patched, "utf8");
+  scheduleWorkspaceAbsR2Sync(workspaceRoot, abs);
   return true;
 }
 
@@ -90,6 +92,7 @@ export function injectFinalUiCssVars(
         )
       : `${text.replace(/\s*$/, "")}\n\n${block}`;
     fs.writeFileSync(abs, next.endsWith("\n") ? next : `${next}\n`, "utf8");
+    scheduleWorkspaceAbsR2Sync(workspaceRoot, abs);
     return rel;
   }
   return null;

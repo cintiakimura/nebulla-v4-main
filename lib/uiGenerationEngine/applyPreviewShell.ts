@@ -15,6 +15,7 @@ import {
   UI_GEN_MOCKUP_REL,
   workspaceHasCodedAppUi,
 } from "../workspaceCodedAppUi";
+import { projectKeyFromWorkspaceRoot, scheduleWorkspaceRelPathsR2Sync } from "../nebulaWorkspaceStorage";
 
 function esc(s: string): string {
   return String(s || "")
@@ -517,6 +518,9 @@ export function applyUiGenerationToPreviewShell(options: {
     fs.writeFileSync(idx, html, "utf8");
     written.push("index.html");
   }
+
+  const key = projectKeyFromWorkspaceRoot(workspaceRoot);
+  if (key) scheduleWorkspaceRelPathsR2Sync(key, workspaceRoot, written);
 
   return written;
 }

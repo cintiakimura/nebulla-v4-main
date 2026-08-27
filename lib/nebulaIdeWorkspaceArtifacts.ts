@@ -30,6 +30,11 @@ import {
   UI_GEN_MOCKUP_REL,
   workspaceHasCodedAppUi,
 } from "./workspaceCodedAppUi";
+import {
+  projectKeyFromWorkspaceRoot,
+  scheduleWorkspaceAbsR2Sync,
+  scheduleWorkspaceRelPathsR2Sync,
+} from "./nebulaWorkspaceStorage";
 
 export const MASTER_PLAN_TAB_KEYS = MASTER_PLAN_ALL_KEYS;
 
@@ -516,6 +521,7 @@ export function hydrateAndPersistMasterPlan(
   if (changed) {
     fs.mkdirSync(path.dirname(masterPlanPath), { recursive: true });
     fs.writeFileSync(masterPlanPath, JSON.stringify(plan, null, 2), "utf8");
+    scheduleWorkspaceAbsR2Sync(workspaceRoot, masterPlanPath);
   }
   return plan;
 }
@@ -652,6 +658,9 @@ export function writeBasicUiScaffold(
   const previewCopy = path.join(stylesDir, "nebula-basic-preview.html");
   fs.writeFileSync(previewCopy, html, "utf8");
   written.push("public/nebula-basic-preview.html");
+
+  const key = projectKeyFromWorkspaceRoot(workspaceRoot);
+  if (key) scheduleWorkspaceRelPathsR2Sync(key, workspaceRoot, written);
 
   return written;
 }

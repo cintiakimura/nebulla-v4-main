@@ -4,10 +4,15 @@
  */
 import assert from "node:assert/strict";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { pickPreferredCloudProject } from "../src/lib/nebulaCloud.ts";
 import { ensurePendingIdeaFromShellGoal } from "../src/lib/landingGoalHandoff.ts";
+import {
+  listDurableWorkspaceRelPaths,
+  projectKeyFromWorkspaceRoot,
+} from "../lib/nebulaWorkspaceStorage.ts";
 import {
   NEBULA_PENDING_PROJECT_IDEA_KEY,
   NEBULA_START_GUIDED_ON_READY_KEY,
@@ -103,6 +108,34 @@ section("AIChat / BuildScreen wiring");
   assert.match(chat, /rememberActiveCloudProject/);
   assert.match(chat, /consumeGuidedStartOnReady\(\);/);
   assert.match(chat, /planRecordHasUsableGoal\(plan\)/);
+}
+
+section("durable workspace save/restore (deploy must not start from scratch)");
+{
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "nebulla-durable-"));
+  fs.mkdirSync(path.join(tmp, "app"), { recursive: true });
+  fs.mkdirSync(path.join(tmp, "node_modules", "x"), { recursive: true });
+  fs.writeFileSync(path.join(tmp, "app", "page.tsx"), "export default function Page(){return null}\n");
+  fs.writeFileSync(path.join(tmp, "package.json"), "{\"name\":\"app\"}\n");
+  fs.writeFileSync(path.join(tmp, "node_modules", "x", "index.js"), "1\n");
+  const rels = listDurableWorkspaceRelPaths(tmp);
+  assert.ok(rels.includes("app/page.tsx"));
+  assert.ok(rels.includes("package.json"));
+  assert.equal(rels.some((p) => p.includes("node_modules")), false);
+  fs.rmSync(tmp, { recursive: true, force: true });
+
+  const cloudRoot = "/var/app/data/cloud-projects/cfproj_abc123";
+  assert.equal(projectKeyFromWorkspaceRoot(cloudRoot), "cfproj_abc123");
+  assert.equal(projectKeyFromWorkspaceRoot("/tmp/scratch"), null);
+
+  const server = fs.readFileSync(path.join(root, "server.ts"), "utf8");
+  assert.match(server, /ensureCloudProjectWorkspaceDurable/);
+  assert.match(server, /scheduleWorkspaceRelPathsR2Sync/);
+  assert.match(server, /scheduleWorkspaceTreeR2Sync/);
+  assert.match(server, /deleteWorkspacePrefixFromR2Safe/);
+  const cloud = fs.readFileSync(path.join(root, "lib/nebulaCloudProjectRoot.ts"), "utf8");
+  assert.match(cloud, /hydrateWorkspaceFromR2/);
+  assert.equal(/scheduleWorkspaceFileR2Sync\(projectKey, workspaceRoot, abs\)/.test(cloud), false);
 }
 
 console.log("\n✓ project persist passed\n");

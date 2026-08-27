@@ -224,11 +224,18 @@ import {
   callGrokAdaptUserSvg,
 } from "./lib/nebulaUiStudioGrok";
 import { getNebullaPersistRoot, getNebulaProjectDocsRoot } from "./lib/nebulaWorkspaceRoot";
-import { ensureCloudProjectWorkspace } from "./lib/nebulaCloudProjectRoot";
+import { ensureCloudProjectWorkspace, ensureCloudProjectWorkspaceDurable, invalidateWorkspaceHydrateCache } from "./lib/nebulaCloudProjectRoot";
 import { registerSecurityScanRoutes } from "./lib/securityScan/registerSecurityScanRoutes";
 import { registerCloudflareDnsRoutes } from "./lib/nebulaCloudflareDnsRoutes";
 import { getCloudflareDnsStatus } from "./lib/nebulaCloudflareDns";
 import { getProjectKeyFromRequest, sanitizeProjectKey } from "./lib/nebulaProjectKey";
+import {
+  deleteWorkspacePrefixFromR2Safe,
+  scheduleWorkspaceAbsR2Sync,
+  scheduleWorkspaceFileR2Sync,
+  scheduleWorkspaceRelPathsR2Sync,
+  scheduleWorkspaceTreeR2Sync,
+} from "./lib/nebulaWorkspaceStorage";
 import {
   emptyPreviewHtmlWithBridge,
   wrapHtmlWithPreviewRuntimeBridge,
@@ -479,6 +486,21 @@ async function startServer() {
     res.json({ ok: true, ...getOpsReadiness() });
   });
 
+  /** Restore saved workspace from R2 onto empty disk after deploy/restart. */
+  app.use(async (req, _res, next) => {
+    const p = req.path || "";
+    if (!p.startsWith("/api/")) {
+      next();
+      return;
+    }
+    try {
+      await ensureCloudProjectWorkspaceDurable(REPO_ROOT, NEBULA_PROJECT_ROOT, projectDiskKey(req));
+    } catch (e) {
+      console.warn("[nebula] workspace restore:", e instanceof Error ? e.message : e);
+    }
+    next();
+  });
+
   // Side job only — does not block Generate / workflow / coding
   registerFigmaIngestAdminRoutes(app, process.cwd());
 
@@ -695,6 +717,12 @@ async function startServer() {
 
   const projectPathsFor = (req: express.Request) =>
     ensureCloudProjectWorkspace(REPO_ROOT, NEBULA_PROJECT_ROOT, projectDiskKey(req));
+
+  const persistMasterPlanJson = (workspaceRoot: string, masterPlanPath: string, plan: unknown) => {
+    fs.mkdirSync(path.dirname(masterPlanPath), { recursive: true });
+    fs.writeFileSync(masterPlanPath, JSON.stringify(plan, null, 2), "utf8");
+    scheduleWorkspaceAbsR2Sync(workspaceRoot, masterPlanPath);
+  };
 
   registerSecurityScanRoutes(app, {
     projectPathsFor: (req) => {
@@ -1368,7 +1396,7 @@ No approved UI code yet.
           plan = ensured.plan;
           securityAutoApplied = true;
           fs.mkdirSync(path.dirname(pp.masterPlanPath), { recursive: true });
-          fs.writeFileSync(pp.masterPlanPath, JSON.stringify(ensured.plan, null, 2), "utf8");
+          persistMasterPlanJson(pp.workspaceRoot, pp.masterPlanPath, ensured.plan);
         } else {
           plan = ensured.plan;
         }
@@ -1439,7 +1467,7 @@ No approved UI code yet.
         return res.json({ ok: true, applied: false, reason: "already_present" });
       }
       fs.mkdirSync(path.dirname(pp.masterPlanPath), { recursive: true });
-      fs.writeFileSync(pp.masterPlanPath, JSON.stringify(ensured.plan, null, 2), "utf8");
+      persistMasterPlanJson(pp.workspaceRoot, pp.masterPlanPath, ensured.plan);
       try {
         syncUiArtifactsFromMasterPlan(pp.workspaceRoot, pp.masterPlanPath);
       } catch {
@@ -1484,7 +1512,7 @@ No approved UI code yet.
       const key = "4. Pages and navigation";
       const cur = String(plan[key] ?? "").trim();
       plan[key] = cur ? `${cur}\n\n${draft}` : draft;
-      fs.writeFileSync(pp.masterPlanPath, JSON.stringify(plan, null, 2), "utf8");
+      persistMasterPlanJson(pp.workspaceRoot, pp.masterPlanPath, plan);
       try {
         syncUiArtifactsFromMasterPlan(pp.workspaceRoot, pp.masterPlanPath);
       } catch {
@@ -1547,7 +1575,7 @@ No approved UI code yet.
       }
       (plan as any)[tabName] = nextContent;
 
-      fs.writeFileSync(pp.masterPlanPath, JSON.stringify(plan, null, 2), "utf8");
+      persistMasterPlanJson(pp.workspaceRoot, pp.masterPlanPath, plan);
       const v0Sync = ensureV0PromptSynced(pp);
       res.json({
         success: true,
@@ -1818,7 +1846,7 @@ No approved UI code yet.
   /** Save UTF-8 workspace file (same path rules as source-control product files). */
   app.put("/api/files/content", (req, res) => {
     try {
-      const { workspaceRoot } = projectPathsFor(req);
+      const { workspaceRoot, projectKey } = projectPathsFor(req);
       const relRaw = typeof req.body?.path === "string" ? req.body.path : "";
       const content = typeof req.body?.content === "string" ? req.body.content : undefined;
       const rel = relRaw.replace(/^\.\/+/, "").replace(/\\/g, "/");
@@ -1839,6 +1867,7 @@ No approved UI code yet.
       }
       fs.mkdirSync(path.dirname(target), { recursive: true });
       fs.writeFileSync(target, content.replace(/\r\n/g, "\n"), "utf8");
+      scheduleWorkspaceFileR2Sync(projectKey, workspaceRoot, target, content.replace(/\r\n/g, "\n"));
       res.json({ ok: true });
     } catch (err: unknown) {
       res.status(500).json({ error: err instanceof Error ? err.message : "save failed" });
@@ -2101,7 +2130,7 @@ No approved UI code yet.
   });
 
   /** Reset cloud workspace to template + cancel all pending v0/Go attempts. */
-  app.post("/api/ide/reset-project-scratch", (req, res) => {
+  app.post("/api/ide/reset-project-scratch", async (req, res) => {
     try {
       const pp = projectPathsFor(req);
       const body = req.body || {};
@@ -2125,12 +2154,15 @@ No approved UI code yet.
       if (chatCleared) {
         cleared.push("conversation-log (chat history cleared)");
       }
+      invalidateWorkspaceHydrateCache(pp.projectKey);
+      await deleteWorkspacePrefixFromR2Safe(pp.projectKey);
       const { removed } = resetProjectWorkspaceScratch({
         workspaceRoot: pp.workspaceRoot,
         templateRoot: NEBULA_PROJECT_ROOT,
         projectDisplayName: projectName,
       });
       writeBasicUiScaffold(pp.workspaceRoot, projectName || "Untitled Project", { force: true });
+      scheduleWorkspaceTreeR2Sync(pp.projectKey, pp.workspaceRoot);
       return res.json({ ok: true, cleared, removed, chatCleared });
     } catch (err: unknown) {
       return res.status(500).json({
@@ -2197,7 +2229,7 @@ No approved UI code yet.
           if (merged) {
             planForSec = { ...planForSec, [key]: merged };
             fs.mkdirSync(path.dirname(pp.masterPlanPath), { recursive: true });
-            fs.writeFileSync(pp.masterPlanPath, JSON.stringify(planForSec, null, 2), "utf8");
+            persistMasterPlanJson(pp.workspaceRoot, pp.masterPlanPath, planForSec);
           }
         }
       } catch {
@@ -2666,7 +2698,7 @@ No approved UI code yet.
   });
   app.post("/api/files/apply-generated", (req, res) => {
     try {
-      const { workspaceRoot } = projectPathsFor(req);
+      const { workspaceRoot, projectKey } = projectPathsFor(req);
       let raw = typeof req.body?.content === "string" ? req.body.content : "";
       if (!raw.trim() && typeof req.body?.contentBase64 === "string" && req.body.contentBase64.trim()) {
         try {
@@ -2786,6 +2818,10 @@ No approved UI code yet.
         written.push(b.relativePath);
       }
 
+      if (written.length > 0) {
+        scheduleWorkspaceRelPathsR2Sync(projectKey, workspaceRoot, written);
+      }
+
       const applyDepth = assessApplyRouteDepth(written);
 
       // Honest runnable check is sync fs (package.json + scripts). Do not hardcode false —
@@ -2860,6 +2896,7 @@ No approved UI code yet.
               masterPlanPath: pp.masterPlanPath,
               projectLabel: projectName,
             });
+            scheduleWorkspaceTreeR2Sync(pp.projectKey, pp.workspaceRoot);
           } catch (syncErr) {
             console.warn("[apply-generated] post-apply artifact sync:", syncErr);
           }
@@ -4858,7 +4895,7 @@ Rules:
           try {
             const next = { ...plan, "1. Goal of the app": seeded };
             fs.mkdirSync(path.dirname(pp.masterPlanPath), { recursive: true });
-            fs.writeFileSync(pp.masterPlanPath, JSON.stringify(next, null, 2), "utf8");
+            persistMasterPlanJson(pp.workspaceRoot, pp.masterPlanPath, next);
             persistedGoal = seeded;
           } catch {
             persistedGoal = "";
@@ -5025,7 +5062,7 @@ Rules:
             try {
               const next = { ...planForGate, "1. Goal of the app": seededGoGoal };
               fs.mkdirSync(path.dirname(masterPlanPath), { recursive: true });
-              fs.writeFileSync(masterPlanPath, JSON.stringify(next, null, 2), "utf8");
+              persistMasterPlanJson(ppGo.workspaceRoot, masterPlanPath, next);
               planForGate = next;
             } catch {
               /* persist failed — block below if still unusable */
@@ -5168,7 +5205,7 @@ Rules:
           planSnapshot = { ...planSnapshot, ...ensured.plan };
           try {
             fs.mkdirSync(path.dirname(masterPlanPath), { recursive: true });
-            fs.writeFileSync(masterPlanPath, JSON.stringify(ensured.plan, null, 2), "utf8");
+            persistMasterPlanJson(ppGo.workspaceRoot, masterPlanPath, ensured.plan);
             console.log("[go-code] Applied industry security baseline draft to §2 (MVP continue)");
           } catch {
             /* in-memory plan still used for gate */
@@ -5346,7 +5383,7 @@ Strict rules:
       // Session notes belong only in PRE_CODING_SUMMARY — never pollute §1 Goal
       // (Project Type parsing + v0 one-liner depend on a clean goal).
       plan[PRE_CODING_SUMMARY_KEY] = summary;
-      fs.writeFileSync(masterPlanPath, JSON.stringify(plan, null, 2), "utf8");
+      persistMasterPlanJson(ppGo.workspaceRoot, masterPlanPath, plan);
       uiArts = syncUiArtifactsFromMasterPlan(ppGo.workspaceRoot, masterPlanPath);
       v0Sync = {
         content: uiArts.v0Prompt.content,
@@ -6419,7 +6456,9 @@ async function runGrokB(
       }
     }
 
+    fs.mkdirSync(path.dirname(masterPlanPath), { recursive: true });
     fs.writeFileSync(masterPlanPath, JSON.stringify(plan, null, 2), "utf8");
+    scheduleWorkspaceAbsR2Sync(path.dirname(masterPlanPath), masterPlanPath);
     console.log(
       `[GROK B] Master plan updated from Grok 4 summaries (tabs: ${entries
         .map((e) => e.tabIndex)
