@@ -41,6 +41,7 @@ type Props = {
   liveAvailable?: boolean;
   showingMockup?: boolean;
   onShowLiveApp?: () => void;
+  onShowCatalogMockup?: () => void;
   className?: string;
 };
 
@@ -59,6 +60,7 @@ export function PreviewEditToolbar({
   liveAvailable = false,
   showingMockup = true,
   onShowLiveApp,
+  onShowCatalogMockup,
   className,
 }: Props) {
   const [mode, setMode] = useState<PreviewToolMode>('grab');
@@ -157,9 +159,22 @@ export function PreviewEditToolbar({
       aria-label="Preview edit tools"
     >
       {liveAvailable && !showingMockup ? (
+        <>
         <span className="mr-1 shrink-0 rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-medium text-emerald-300">
           Live app
         </span>
+        {onShowCatalogMockup ? (
+          <button
+            type="button"
+            title="Show the Figma/catalog mockup (this iframe cannot run Next)"
+            aria-label="Catalog mockup"
+            onClick={() => onShowCatalogMockup()}
+            className="btn-secondary-surface ml-1 h-8 shrink-0 rounded-md px-2.5 text-[11px]"
+          >
+            Catalog mockup
+          </button>
+        ) : null}
+        </>
       ) : null}
       {showingMockup ? (
         <>
@@ -336,7 +351,7 @@ export function PreviewEditToolbar({
       {liveAvailable && showingMockup && onShowLiveApp ? (
         <button
           type="button"
-          title="Open the clickable practice app (not this static mockup)"
+          title="Open clickable practice preview when available. Next/Vite cannot run here — Figma/catalog is the mockup."
           aria-label="Use app"
           onClick={() => onShowLiveApp()}
           className="btn-cyan ml-1 h-8 shrink-0 rounded-md px-2.5 text-[11px]"
@@ -389,8 +404,8 @@ export function PreviewEditToolbar({
       </button>
 
       {!hasSelection ? (
-        <span className="ml-auto hidden shrink-0 text-[10px] text-muted-foreground sm:inline">
-          No selection
+        <span className="ml-auto hidden max-w-[220px] shrink-0 truncate text-[10px] text-muted-foreground sm:inline">
+          No selection — grab/font do not edit this canvas yet
         </span>
       ) : (
         <Maximize2 className="ml-auto hidden h-3.5 w-3.5 shrink-0 text-muted-foreground sm:block" aria-hidden />

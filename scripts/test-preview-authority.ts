@@ -19,6 +19,7 @@ import {
   toHttpHeaderSafe,
   workspaceHasCodedAppUi,
   htmlLooksLikeShowablePreview,
+  previewIframeCanRunProduct,
   previewMetaHasProductRoutes,
 } from "../lib/workspaceCodedAppUi.ts";
 import {
@@ -315,8 +316,16 @@ section("canvas honesty — product preview / coded bridge is showable (not Figm
     path.join(path.dirname(fileURLToPath(import.meta.url)), "../src/components/ide/shell/previewTools/BuildPreviewCanvas.tsx"),
     "utf8",
   );
-  assert.match(canvas, /keepMockupRef/);
-  assert.match(canvas, /keepMockupRef\.current = true/);
+  assert.equal(
+    previewIframeCanRunProduct({ previewMode: "post_code_bridge" }),
+    false,
+  );
+  assert.equal(
+    previewIframeCanRunProduct({ previewMode: "interactive_product_preview" }),
+    true,
+  );
+  assert.match(canvas, /previewIframeCanRunProduct/);
+  assert.match(canvas, /Catalog mockup/);
   assert.match(canvas, /onShowLiveApp/);
   assert.match(canvas, /liveAvailable/);
   const toolbar = fs.readFileSync(

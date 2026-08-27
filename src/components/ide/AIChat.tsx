@@ -96,6 +96,8 @@ import {
   resetAutopilotSliceCount,
   resolveNextContinueSlice,
   shouldAutopilotAdvance,
+  autopilotStopRunsFinalUi,
+  type AutopilotAdvanceDecision,
   userNoteRequestsNextSlice,
   workspaceFoundationLanded,
   workspaceHasProductAppRoutes,
@@ -110,6 +112,7 @@ import {
   dispatchStudioShowLiveApp,
   runUiStudioBetaGeneration,
   triggerUiStudioBetaAfterPlanReady,
+  triggerUiStudioBetaAfterFilesApplied,
 } from '../../lib/uiStudioBetaEngine';
 import { userNoteRequestsUiGeneration } from '../../lib/chatModeDetector';
 import { figmaPickActivityLine } from '../../lib/uiGenStatusLabels';
@@ -479,6 +482,40 @@ export function AIChat() {
   }, []);
 
   /** Next Go slice without a user chat message (Plan → mockup → Foundation already ran). */
+  const finishAutopilotSession = useCallback(
+    async (decision: AutopilotAdvanceDecision) => {
+      pushActivity(
+        decision.message,
+        decision.stopReason === 'failed' ? 'error' : 'success',
+      );
+      if (
+        FAST_PROTOTYPE_SAME_SESSION_AUTOPILOT &&
+        autopilotStopRunsFinalUi(decision.stopReason)
+      ) {
+        const { projectName } = resolveActiveProjectIds(diskProjectKey);
+        pushActivity('Final UI — restyle after coding (offline catalog)…', 'info');
+        try {
+          await triggerUiStudioBetaAfterFilesApplied({
+            writtenPaths: ['app/page.tsx', 'app/globals.css'],
+            projectName,
+            onProgress: pushActivity,
+            sliceLabel: 'Polish',
+          });
+        } catch (e) {
+          pushActivity(
+            e instanceof Error ? e.message : 'Final UI miss — keeping coded preview',
+            'warn',
+          );
+        }
+        pushActivity('Autopilot complete. No Continue needed.', 'success');
+      }
+      resetCodingActivity();
+      sendingRef.current = false;
+      setSending(false);
+    },
+    [diskProjectKey, pushActivity, resetCodingActivity],
+  );
+
   const runAutoNextSlice = useCallback(async () => {
     if (!FAST_PROTOTYPE_SAME_SESSION_AUTOPILOT) {
       const { projectKey: stopKey } = resolveActiveProjectIds(diskProjectKey);
@@ -517,10 +554,7 @@ export function AIChat() {
       wroteFiles: (lastAutoProductRouteCountRef.current ?? 0) > 0,
     });
     if (!decision.advance || !decision.nextLabel) {
-      pushActivity(decision.message, 'success');
-      resetCodingActivity();
-      sendingRef.current = false;
-      setSending(false);
+      await finishAutopilotSession(decision);
       return;
     }
 
@@ -597,8 +631,7 @@ export function AIChat() {
         }, 120);
         return;
       }
-      pushActivity(again.message, 'success');
-      resetCodingActivity();
+      await finishAutopilotSession(again);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       const failureClass = classifyContinueFailure({ message: msg });
@@ -620,7 +653,7 @@ export function AIChat() {
       sendingRef.current = false;
       setSending(false);
     }
-  }, [beginCodingActivity, diskProjectKey, pushActivity, resetCodingActivity, setAssistantInteractionMode]);
+  }, [beginCodingActivity, diskProjectKey, finishAutopilotSession, pushActivity, resetCodingActivity, setAssistantInteractionMode]);
 
   runAutoNextSliceRef.current = runAutoNextSlice;
 
@@ -2923,27 +2956,27 @@ export function AIChat() {
             wroteFiles,
             blockedCode: coding.blockedReason?.code,
           });
-          pushActivity(
-            autoDecision.message,
-            autoDecision.advance
-              ? 'info'
-              : autoDecision.stopReason === 'failed'
-                ? 'error'
-                : 'success',
-          );
-          sendingRef.current = false;
-          setSending(false);
           if (autoDecision.advance) {
+            pushActivity(autoDecision.message, 'info');
+            sendingRef.current = false;
+            setSending(false);
             if (codingProblems.length > 0) {
               setGrokActivity((prev) => finishGrokActivityWithProblems(prev, codingProblems));
             }
             scheduleAutopilotHandoff();
-          } else if (codingProblems.length > 0) {
-            codingActivityRef.current = false;
-            setGrokCodingActive(false);
-            setGrokActivity((prev) => finishGrokActivityWithProblems(prev, codingProblems));
+          } else if (autoDecision.stopReason === 'failed') {
+            pushActivity(autoDecision.message, 'error');
+            sendingRef.current = false;
+            setSending(false);
+            if (codingProblems.length > 0) {
+              codingActivityRef.current = false;
+              setGrokCodingActive(false);
+              setGrokActivity((prev) => finishGrokActivityWithProblems(prev, codingProblems));
+            } else {
+              resetCodingActivity();
+            }
           } else {
-            resetCodingActivity();
+            await finishAutopilotSession(autoDecision);
           }
         } else if (hasAppStatusPayload && agentAllowed && assistantSkippedNdmVerify(raw)) {
           setAccessoryHint(t('appStatus.ndmNudge'));

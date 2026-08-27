@@ -9,7 +9,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { runUiGenerationCycleV2 } from "../lib/uiGenerationEngine/index.ts";
 import { readCyclePolicy, writeCyclePolicy } from "../lib/uiGenerationEngine/cyclePolicy.ts";
-import { injectFinalUiCssVars, FINAL_UI_CSS_START } from "../lib/uiGenerationEngine/injectFinalUiCssVars.ts";
+import { injectFinalUiCssVars, injectFinalUiIntoProductPreview, FINAL_UI_CSS_START } from "../lib/uiGenerationEngine/injectFinalUiCssVars.ts";
 import { isFigmaLiveOnGenerate } from "../lib/uiGenerationEngine/v2/figmaReferences.ts";
 import {
   MAX_FINAL_UI_AUTOPILOT_RUNS,
@@ -190,6 +190,36 @@ section("injectFinalUiCssVars is idempotent");
   const css = fs.readFileSync(path.join(tmp, "app", "globals.css"), "utf8");
   assert.equal(css.split(FINAL_UI_CSS_START).length - 1, 1);
   assert.ok(css.includes("#111111"));
+}
+
+section("interactive product preview receives catalog tokens");
+{
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "nebulla-pp-"));
+  fs.mkdirSync(path.join(tmp, "public", "product-preview"), { recursive: true });
+  fs.writeFileSync(
+    path.join(tmp, "public", "product-preview", "index.html"),
+    `<html><head><meta name="nebulla-preview" content="interactive-product-preview"/><style>:root { --bg:#F8FAFC; --accent:#0F766E; }</style></head><body></body></html>`,
+    "utf8",
+  );
+  assert.equal(
+    injectFinalUiIntoProductPreview(tmp, {
+      bg: "#0B1220",
+      surface: "#111827",
+      primary: "#14B8A6",
+      accent: "#5EEAD4",
+      text: "#F8FAFC",
+      mutedText: "#94A3B8",
+      border: "#334155",
+      radius: 14,
+      gap: 12,
+      pad: 16,
+      shadow: "none",
+      tone: "clean",
+    }),
+    true,
+  );
+  const html = fs.readFileSync(path.join(tmp, "public", "product-preview", "index.html"), "utf8");
+  assert.match(html, /--bg:#0B1220/);
 }
 
 section("Cloud-project cwd still resolves platform structure (sheet catalog)");

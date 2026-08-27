@@ -288,32 +288,24 @@ export function shouldAutopilotAdvance(opts: {
       message: 'Autopilot only follows the initial Plan → mockup → Foundation run.',
     };
   }
-  if (opts.autoCount >= maxAuto) {
-    return {
-      advance: false,
-      nextLabel: null,
-      stopReason: 'cap',
-      message: `Autopilot reached ${maxAuto} follow-up slices. Review Preview or send a new goal.`,
-    };
-  }
   if (looksLikePolishSlice(opts.lastSlice)) {
     return {
       advance: false,
       nextLabel: null,
       stopReason: 'done',
-      message: 'MVP ready — review App Preview. Send a new goal or ask for changes.',
+      message: 'Slices complete — running Final UI restyle. No Continue needed.',
+    };
+  }
+  if (opts.autoCount >= maxAuto) {
+    return {
+      advance: false,
+      nextLabel: null,
+      stopReason: 'cap',
+      message: `Autopilot reached ${maxAuto} follow-up slices — running Final UI restyle. No Continue needed.`,
     };
   }
   const lastSlice = opts.lastSlice;
   const nextLabel = nextAutopilotSliceLabel(lastSlice);
-  if (nextLabel === 'Polish' && looksLikePolishSlice(lastSlice)) {
-    return {
-      advance: false,
-      nextLabel: null,
-      stopReason: 'done',
-      message: 'MVP ready — review App Preview. Send a new goal or ask for changes.',
-    };
-  }
   return {
     advance: true,
     nextLabel,
@@ -322,6 +314,13 @@ export function shouldAutopilotAdvance(opts: {
       ? `Starting ${nextLabel} slice automatically…`
       : `Slice had issues — bypassing and starting ${nextLabel} anyway…`,
   };
+}
+
+/** After coding autopilot stops, always restyle — do not wait for a user message. */
+export function autopilotStopRunsFinalUi(
+  reason: AutopilotAdvanceDecision['stopReason'],
+): boolean {
+  return reason === 'done' || reason === 'cap';
 }
 
 /**

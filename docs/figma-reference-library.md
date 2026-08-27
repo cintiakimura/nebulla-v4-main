@@ -10,6 +10,8 @@ Expected CSV: **no header**, columns `category,url,file_key` — or a header wit
 
 **Two UI moments:** Pre-code mockup = cheap placeholder (seed + §5; Figma optional). **Final UI** = one post-apply restyle from the offline sheet catalog after `app/` exists. Code ignores the mockup. Live Figma = ingest only.
 
+The IDE iframe **cannot compile Next/Vite**. Figma/templates show on the **catalog mockup**. **Use app** is clickable practice HTML (or a file-list if that is missing) — not a Figma component compiler. Grab/font on the Build toolbar do not write `app/`.
+
 ## Runtime order (Generate — single path)
 
 1. Classify device + page type + function (`classifyPage`) → **sheet bucket**

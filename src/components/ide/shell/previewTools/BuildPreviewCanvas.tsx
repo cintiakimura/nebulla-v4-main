@@ -7,6 +7,7 @@ import { PreviewEditToolbar, type PreviewToolbarState } from './PreviewEditToolb
 import { PreviewWaitingThrobber } from './PreviewWaitingThrobber';
 import {
   htmlLooksLikeShowablePreview,
+  previewIframeCanRunProduct,
   previewMetaHasProductRoutes,
 } from '@/lib/workspaceCodedAppUi';
 import {
@@ -30,6 +31,7 @@ export function BuildPreviewCanvas() {
   const [hasVisualPreview, setHasVisualPreview] = useState(false);
   const [liveAvailable, setLiveAvailable] = useState(false);
   const [waitStatus, setWaitStatus] = useState('Waiting for mockup');
+  const [previewMode, setPreviewMode] = useState<string | null>(null);
   const retriedLegacyRef = useRef(false);
   const retriedMockShellRef = useRef(false);
   const keepMockupRef = useRef(false);
@@ -58,17 +60,25 @@ export function BuildPreviewCanvas() {
         previewStatusLabel?: string;
       };
       if (!res.ok) return;
+      setPreviewMode(typeof data.previewMode === 'string' ? data.previewMode : null);
       const live = previewMetaHasProductRoutes(data);
+      const iframeRuns = previewIframeCanRunProduct(data);
       setLiveAvailable(live);
       if (live) {
         setHasVisualPreview(true);
-        if (keepMockupRef.current) {
+        if (!iframeRuns) {
           setShowMockup(true);
-          setWaitStatus('UI mockup ready — Use app to click through the practice flow');
+          setWaitStatus(
+            'Catalog mockup (Figma/templates). Next/Vite cannot run in this iframe — Open Code for app/.',
+          );
           return;
         }
-        setShowMockup(false);
-        setWaitStatus(data.previewStatusLabel?.trim() || 'Live app preview');
+        if (keepMockupRef.current) {
+          setShowMockup(true);
+          setWaitStatus('Catalog mockup — Use app for the clickable practice preview');
+          return;
+        }
+        setWaitStatus('Catalog mockup — Use app for the clickable practice preview');
         return;
       }
       if (data.previewMode === 'empty' || data.previewHonesty === 'empty') {
@@ -111,8 +121,9 @@ export function BuildPreviewCanvas() {
     const onShowLive = () => {
       keepMockupRef.current = false;
       setLiveAvailable(true);
-      setShowMockup(false);
-      bump();
+      void refreshWaitState().then(() => {
+        bump();
+      });
     };
     const onBusy = (ev: Event) => {
       const busy = Boolean((ev as CustomEvent<{ busy?: boolean }>).detail?.busy);
@@ -159,9 +170,25 @@ export function BuildPreviewCanvas() {
   useEffect(() => installPreviewRuntimeMessageListener(), []);
 
   const showLiveApp = useCallback(() => {
+    if (!previewIframeCanRunProduct({ previewMode })) {
+      keepMockupRef.current = true;
+      setShowMockup(true);
+      setWaitStatus(
+        'Catalog mockup stays on. This iframe cannot compile Next/Vite — Figma/templates live here, not on Use app.',
+      );
+      bump();
+      return;
+    }
     keepMockupRef.current = false;
     setShowMockup(false);
     setWaitStatus('Live app preview');
+    bump();
+  }, [bump, previewMode]);
+
+  const showCatalogMockup = useCallback(() => {
+    keepMockupRef.current = true;
+    setShowMockup(true);
+    setWaitStatus('Catalog mockup (Figma/templates)');
     bump();
   }, [bump]);
 
@@ -177,7 +204,8 @@ export function BuildPreviewCanvas() {
         projectName: getBrowserProjectName() || undefined,
         regenerate: true,
         openPane: false,
-        uiPhase: 'manual',
+        uiPhase: liveAvailable ? 'post_code' : 'manual',
+        autoTriggered: false,
       });
       if (result.ok) {
         await applyUiStudioBetaToAppPreview(undefined, { preferMockup: true });
@@ -187,7 +215,7 @@ export function BuildPreviewCanvas() {
     } finally {
       setGenerateBusy(false);
     }
-  }, [bump, generateBusy, refreshWaitState]);
+  }, [bump, generateBusy, liveAvailable, refreshWaitState]);
 
   const statusLine = generateBusy || engineBusy ? 'Generating UI…' : waitStatus;
 
@@ -200,6 +228,7 @@ export function BuildPreviewCanvas() {
         showingMockup={showMockup}
         onGenerateUi={() => void onGenerateUi()}
         onShowLiveApp={showLiveApp}
+        onShowCatalogMockup={showCatalogMockup}
         onApplyToAll={(_state: PreviewToolbarState) => {
           /* stub until selection bridge */
         }}

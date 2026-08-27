@@ -42,6 +42,31 @@ ${FINAL_UI_CSS_END}
 `;
 }
 
+const PRODUCT_PREVIEW_REL = "public/product-preview/index.html";
+
+/** Restyle the clickable iframe preview (not Next). Catalog tokens → CSS vars. */
+export function injectFinalUiIntoProductPreview(
+  workspaceRoot: string,
+  tokens: DesignTokens,
+): boolean {
+  const abs = path.join(workspaceRoot, PRODUCT_PREVIEW_REL);
+  if (!fs.existsSync(abs)) return false;
+  let html = "";
+  try {
+    html = fs.readFileSync(abs, "utf8");
+  } catch {
+    return false;
+  }
+  if (!/interactive-product-preview/i.test(html)) return false;
+  const nextVars = `:root { --bg:${tokens.bg}; --card:${tokens.surface}; --ink:${tokens.text}; --muted:${tokens.mutedText}; --line:${tokens.border}; --accent:${tokens.primary}; --accent-soft:${tokens.accent}; --warn:#B45309; --radius:${Math.max(4, tokens.radius)}px; }`;
+  const patched = html.includes(":root {")
+    ? html.replace(/:root\s*\{[^}]*\}/, nextVars)
+    : html.replace("</style>", `${nextVars}\n</style>`);
+  if (patched === html) return false;
+  fs.writeFileSync(abs, patched, "utf8");
+  return true;
+}
+
 /** Returns relative path written, or null if no safe globals file. */
 export function injectFinalUiCssVars(
   workspaceRoot: string,

@@ -135,7 +135,20 @@ assert.equal(nextAutopilotSliceLabel('Secondary'), 'Polish');
   });
   assert.equal(d.advance, false);
   assert.equal(d.stopReason, 'done');
-  assert.match(d.message, /MVP ready/i);
+  assert.match(d.message, /Final UI restyle/i);
+  assert.equal(/send a new goal/i.test(d.message), false);
+}
+{
+  const d = shouldAutopilotAdvance({
+    codingOk: true,
+    lastSlice: 'Polish',
+    autoCount: MAX_AUTOPILOT_SLICES,
+    autopilotKickoff: true,
+    productRouteCount: 6,
+  });
+  assert.equal(d.advance, false);
+  assert.equal(d.stopReason, 'done');
+  assert.match(d.message, /No Continue needed/i);
 }
 {
   const d = shouldAutopilotAdvance({
@@ -147,6 +160,8 @@ assert.equal(nextAutopilotSliceLabel('Secondary'), 'Polish');
   });
   assert.equal(d.advance, false);
   assert.equal(d.stopReason, 'cap');
+  assert.match(d.message, /Final UI restyle/i);
+  assert.equal(/send a new goal/i.test(d.message), false);
 }
 {
   const d = shouldAutopilotAdvance({
@@ -586,6 +601,9 @@ assert.match(
 );
 assert.match(chat, /if \(!FAST_PROTOTYPE_SAME_SESSION_AUTOPILOT\)/);
 assert.match(chat, /policyAStopMessage/);
+assert.match(chat, /finishAutopilotSession/);
+assert.match(chat, /triggerUiStudioBetaAfterFilesApplied/);
+assert.match(chat, /autopilotStopRunsFinalUi/);
 assert.match(chat, /codingOk: coding.ok !== false && wroteFiles/);
 assert.equal(
   /foundationGate = \{ ok: true, reason: 'explicit_skip' \}/.test(chat),

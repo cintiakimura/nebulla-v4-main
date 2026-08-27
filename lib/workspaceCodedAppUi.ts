@@ -41,6 +41,14 @@ export function previewMetaHasProductRoutes(meta: {
   );
 }
 
+/** True when the iframe can show a clickable product (not a file-list bridge). */
+export function previewIframeCanRunProduct(meta: {
+  previewMode?: string | null;
+}): boolean {
+  const m = String(meta.previewMode || "");
+  return m === "interactive_product_preview" || m === "live_app_static";
+}
+
 const SKIP_DIR = new Set([
   "node_modules",
   ".git",

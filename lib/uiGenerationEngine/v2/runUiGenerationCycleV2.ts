@@ -59,7 +59,7 @@ import {
   applyUiGenerationToPreviewShell,
   shouldApplyUiToPreview,
 } from "../applyPreviewShell";
-import { injectFinalUiCssVars } from "../injectFinalUiCssVars";
+import { injectFinalUiCssVars, injectFinalUiIntoProductPreview } from "../injectFinalUiCssVars";
 import { polishSlotsForContentLocale } from "../polishSlotsLocale";
 import { readWorkspaceContentLocale } from "../../contentLocaleWorkspace";
 
@@ -1341,6 +1341,9 @@ export async function runUiGenerationCycleV2(
         appendStepLog(state, `Final UI tokens injected into ${cssRel}`);
       } else {
         appendStepLog(state, "Final UI tokens — preview-model only (no safe globals.css)");
+      }
+      if (injectFinalUiIntoProductPreview(workspaceRoot, tokens)) {
+        appendStepLog(state, "Final UI tokens applied to interactive product preview");
       }
     } catch (e) {
       state.generation_warnings.push(
