@@ -37,6 +37,7 @@ import {
   KNOWN_SHEET_BUCKETS,
   bucketsFromSheetCatalog,
   capProbeKeys,
+  figmaPlatformRoots,
   loadCatalogProfileForKey,
   loadSheetCatalog,
   preferredSheetBucket,
@@ -80,9 +81,13 @@ function resolveLibraryKeys(): string[] {
     .split(",")
     .map((s) => s.trim())
     .filter(Boolean);
-  if (fromEnv.length) return fromEnv;
   const sheet = loadSheetCatalog();
-  if (sheet?.rows.length) return sheet.rows.map((r) => r.file_key);
+  const sheetKeys = sheet?.rows.map((r) => r.file_key) || [];
+  // Sheet is the universe. Env keys are a priority overlay, not the whole database.
+  if (sheetKeys.length) {
+    return [...new Set([...fromEnv.filter((k) => sheetKeys.includes(k)), ...sheetKeys])];
+  }
+  if (fromEnv.length) return fromEnv;
   return [...DEFAULT_SHORTLIST_KEYS];
 }
 
@@ -118,6 +123,11 @@ export function isFigmaLiveOnGenerate(
 ): boolean {
   const v = raw.trim().toLowerCase();
   return v === "1" || v === "true" || v === "yes";
+}
+
+export function isCatalogSelectionMode(mode: string): boolean {
+  const m = mode || "";
+  return m.startsWith("catalog:") || m.includes(":catalog:");
 }
 
 /** Preferred bucket for Stitch-like C.3 (device → page type → sheet category). */
@@ -270,16 +280,17 @@ function loadOfflineFigmaFile(fileKey: string): {
 } | null {
   const key = fileKey.trim();
   if (!key) return null;
-  const roots: { dir: string; source: "structure" | "raw" }[] = [
-    {
-      dir: path.join(process.cwd(), "nebulla-project", "figma-library", "structure", key),
+  const roots: { dir: string; source: "structure" | "raw" }[] = [];
+  for (const root of figmaPlatformRoots()) {
+    roots.push({
+      dir: path.join(root, "nebulla-project", "figma-library", "structure", key),
       source: "structure",
-    },
-    {
-      dir: path.join(process.cwd(), "nebulla-project", "figma-library", "raw", key),
+    });
+    roots.push({
+      dir: path.join(root, "nebulla-project", "figma-library", "raw", key),
       source: "raw",
-    },
-  ];
+    });
+  }
   const seen = new Set<string>();
   for (const { dir, source } of roots) {
     if (seen.has(dir)) continue;

@@ -61,10 +61,19 @@ assert.equal(
 
 assert.equal(
   resolvePostCodeUiAction({
-    writtenPaths: ['app/page.tsx', 'app/layout.tsx'],
+    writtenPaths: ['nebula-project/ui-brief.md'],
     alreadyRanPostCode: false,
   }),
-  'sync_preview_only',
+  'skip_no_ui_paths',
+);
+
+assert.equal(
+  resolvePostCodeUiAction({
+    writtenPaths: ['app/page.tsx', 'app/layout.tsx'],
+    alreadyRanPostCode: false,
+    finalUiCount: 0,
+  }),
+  'run_final_ui',
 );
 
 assert.deepEqual(extractUiRouteKeys(['app/page.tsx', 'app/layout.tsx']), [
@@ -76,6 +85,8 @@ assert.equal(
   resolvePostCodeUiAction({
     writtenPaths: ['app/page.tsx'],
     alreadyRanPostCode: true,
+    finalUiCount: 1,
+    sliceLabel: 'Foundation',
     previouslyCoveredKeys: extractUiRouteKeys(['app/page.tsx']),
   }),
   'sync_preview_only',
@@ -87,10 +98,9 @@ assert.equal(
     alreadyRanPostCode: true,
     force: true,
   }),
-  'regen_post_code',
+  'run_final_ui',
 );
 
-// Primary slice after Foundation: product routes own App Preview (no Studio mockup reclaim)
 assert.equal(
   resolvePostCodeUiAction({
     writtenPaths: [
@@ -100,6 +110,8 @@ assert.equal(
       'app/kid/rewards/page.tsx',
     ],
     alreadyRanPostCode: true,
+    finalUiCount: 1,
+    sliceLabel: 'Primary',
     previouslyCoveredKeys: ['app', 'app/layout'],
   }),
   'sync_preview_only',
@@ -107,9 +119,20 @@ assert.equal(
 
 assert.equal(
   resolvePostCodeUiAction({
-    writtenPaths: ['app/kid/page.tsx'],
+    writtenPaths: ['app/parent/dashboard/page.tsx'],
     alreadyRanPostCode: true,
-    previouslyCoveredKeys: ['app/kid'],
+    finalUiCount: 1,
+    sliceLabel: 'Polish',
+  }),
+  'run_final_ui',
+);
+
+assert.equal(
+  resolvePostCodeUiAction({
+    writtenPaths: ['app/page.tsx'],
+    alreadyRanPostCode: true,
+    finalUiCount: 2,
+    sliceLabel: 'Polish',
   }),
   'sync_preview_only',
 );
@@ -142,7 +165,7 @@ const inference = fs.readFileSync(
   path.join(root, 'nebula-project/inference-first-rules.md'),
   'utf8',
 );
-assert.match(inference, /Post-code UI refresh/);
+assert.match(inference, /Final UI \(post-apply restyle/);
 
 const cycle = fs.readFileSync(
   path.join(root, 'lib/uiGenerationEngine/v2/runUiGenerationCycleV2.ts'),

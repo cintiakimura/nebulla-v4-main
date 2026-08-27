@@ -7,6 +7,7 @@ export {
   CYCLE_POLICY_REL,
   workspaceHasLoadableMockup,
   clearFalseRegenBudgetIfEmptyMockup,
+  withFinalUiPreviewLabel,
 } from "./cyclePolicy";
 export {
   looksLikeUiRelevantPaths,

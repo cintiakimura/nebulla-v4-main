@@ -1497,12 +1497,17 @@ export async function runGoCodeAndApply(options: {
       // Do not await — artifact sync used to freeze chat after files landed.
       // Client must still refresh mind map and open Plan (server hydrate does not dispatch UI events).
       void afterFilesAppliedArtifacts(userNote, projectName, onProgress);
-      void triggerUiStudioBetaAfterFilesApplied({
-        writtenPaths: allWrittenPaths,
-        projectName,
-        onProgress,
-      }).catch((e) => {
-        console.warn('[nebulaGrokCodingPipeline] background post-apply UI:', e);
+      const writtenForFinalUi = allWrittenPaths.slice();
+      const sliceForFinalUi = sliceLabel;
+      queueMicrotask(() => {
+        void triggerUiStudioBetaAfterFilesApplied({
+          writtenPaths: writtenForFinalUi,
+          projectName,
+          onProgress,
+          sliceLabel: sliceForFinalUi,
+        }).catch((e) => {
+          console.warn('[nebulaGrokCodingPipeline] background post-apply UI:', e);
+        });
       });
     }
 
@@ -1579,12 +1584,17 @@ export async function handlePostGrokCodingTurn(options: {
       });
       if (exit.ok) {
         void afterFilesAppliedArtifacts(userNote, projectName, onProgress);
-        void triggerUiStudioBetaAfterFilesApplied({
-          writtenPaths: apply.writtenPaths,
-          projectName,
-          onProgress,
-        }).catch((e) => {
-          console.warn('[nebulaGrokCodingPipeline] background post-apply UI:', e);
+        const writtenForFinalUi = apply.writtenPaths.slice();
+        const sliceForFinalUi = sliceLabel;
+        queueMicrotask(() => {
+          void triggerUiStudioBetaAfterFilesApplied({
+            writtenPaths: writtenForFinalUi,
+            projectName,
+            onProgress,
+            sliceLabel: sliceForFinalUi,
+          }).catch((e) => {
+            console.warn('[nebulaGrokCodingPipeline] background post-apply UI:', e);
+          });
         });
         return {
           ran: true,

@@ -18,9 +18,11 @@ import {
 } from "../../nebulaUiBrief";
 import { MASTER_PLAN_SECTION_KEYS } from "../../masterPlanSections";
 import { writePreviewModel } from "../../visualUiEditorPreview";
+import { workspaceHasCodedAppUi } from "../../workspaceCodedAppUi";
 import { appendStepLog, writeContextFile } from "../contextIO";
 import {
   clearFalseRegenBudgetIfEmptyMockup,
+  readCyclePolicy,
   setUserVisibleStage,
   workspaceHasLoadableMockup,
   writeCyclePolicy,
@@ -41,7 +43,7 @@ import {
   parseStructureLayoutPlan,
   structureRegionsSatisfied,
 } from "./applyStructureHints";
-import { retrieveFigmaReferences } from "./figmaReferences";
+import { isCatalogSelectionMode, retrieveFigmaReferences } from "./figmaReferences";
 import { mapSlots, sanitizeSlotsForPageType } from "./mapSlots";
 import { repairSlots, validateV2Quality } from "./qualityGate";
 import { renderTemplateCode, renderTemplateModel } from "./renderTemplateModel";
@@ -57,6 +59,7 @@ import {
   applyUiGenerationToPreviewShell,
   shouldApplyUiToPreview,
 } from "../applyPreviewShell";
+import { injectFinalUiCssVars } from "../injectFinalUiCssVars";
 import { polishSlotsForContentLocale } from "../polishSlotsLocale";
 import { readWorkspaceContentLocale } from "../../contentLocaleWorkspace";
 
@@ -86,6 +89,8 @@ export type RunUiGenerationInput = {
   writtenPaths?: string[];
   /** pre_code mockup vs post_code refresh after Foundation/Go apply. */
   uiPhase?: UiGenerationPhase;
+  /** Go slice name — Polish may run a second Final UI. */
+  sliceLabel?: string | null;
   /** Structured preference recovery (WP7). */
   preferenceHints?: UiPreferenceHints;
 };
@@ -111,6 +116,7 @@ export type RunUiGenerationResult = {
   quality_gate_result?: string;
   figma_fallback_used?: boolean;
   env_guidance?: string;
+  skipped?: boolean;
 };
 
 type PageDef = { name: string; route: string; body: string };
@@ -486,7 +492,7 @@ export async function runUiGenerationCycleV2(
   );
   stage(
     resolvedUiPhase === "post_code"
-      ? "Post-code UI refresh — classifying page"
+      ? "Final UI — classifying coded screens"
       : resolvedUiPhase === "pre_code"
         ? "Pre-code mockup — classifying page"
         : "Classifying page",
@@ -495,6 +501,48 @@ export async function runUiGenerationCycleV2(
 
   if (!workspaceRoot || !fs.existsSync(workspaceRoot)) {
     return fail(workspaceRoot || process.cwd(), state, "No active project workspace");
+  }
+
+  if (resolvedUiPhase === "post_code") {
+    const productOnDisk = workspaceHasCodedAppUi(workspaceRoot);
+    const productInApply = (input.writtenPaths || []).some((raw) => {
+      const p = raw.replace(/\\/g, "/");
+      if (/^(nebula-project|nebulla-project)\//i.test(p)) return false;
+      return /^(app|src|pages|components)\//i.test(p) && /\.(tsx|jsx|js|css)$/i.test(p);
+    });
+    if (!productOnDisk && !productInApply) {
+      stage("Final UI skipped — no product files");
+      appendStepLog(state, "Final UI skipped — mockup-only / no app routes");
+      persist(workspaceRoot, state);
+      return {
+        ok: true,
+        skipped: true,
+        status: "generated",
+        contextPath: persist(workspaceRoot, state),
+        context: state,
+        user_visible_stage: "Final UI skipped — no product files",
+      };
+    }
+    const prevFinal = readCyclePolicy(workspaceRoot);
+    const ranCount = prevFinal.final_ui_session_count || 0;
+    const polishRefresh = /polish/i.test(String(input.sliceLabel || ""));
+    const skipRepeat =
+      input.autoTriggered &&
+      !input.regenerate &&
+      (ranCount >= 2 || (ranCount >= 1 && !polishRefresh) || Boolean(prevFinal.final_ui_ran_at && !polishRefresh && ranCount >= 1));
+    if (skipRepeat) {
+      stage("Final UI skipped — already ran this session");
+      appendStepLog(state, "Final UI skipped — flag set / session cap");
+      persist(workspaceRoot, state);
+      return {
+        ok: true,
+        skipped: true,
+        status: "generated",
+        contextPath: persist(workspaceRoot, state),
+        context: state,
+        user_visible_stage: "Final UI skipped — already ran this session",
+      };
+    }
   }
 
   const planExists = Boolean(input.masterPlanPath && fs.existsSync(input.masterPlanPath));
@@ -833,7 +881,7 @@ export async function runUiGenerationCycleV2(
   state.reference_source =
     figma.figma_used === "yes"
       ? "figma"
-      : figma.selection_mode.includes(":catalog:")
+      : isCatalogSelectionMode(figma.selection_mode)
         ? "catalog"
         : figma.selection_mode.includes(":brief:")
           ? "brief"
@@ -1208,7 +1256,7 @@ export async function runUiGenerationCycleV2(
   const deliveredStage =
     gate.gate === "pass"
       ? resolvedUiPhase === "post_code"
-        ? "Post-code UI refresh — Ready in preview"
+        ? "Final UI — Ready (offline catalog)"
         : resolvedUiPhase === "pre_code"
           ? "Pre-code mockup — Ready in preview"
           : "Ready in preview"
@@ -1240,8 +1288,7 @@ export async function runUiGenerationCycleV2(
   fs.mkdirSync(outDir, { recursive: true });
   fs.writeFileSync(path.join(outDir, "ui-generation-output.tsx"), code, "utf8");
 
-  const catalogHit =
-    figma.selection_mode.startsWith("catalog:") || figma.selection_mode.includes(":catalog:");
+  const catalogHit = isCatalogSelectionMode(figma.selection_mode);
   const libraryHit =
     figma.figma_status === "success" ||
     figma.figma_status === "offline" ||
@@ -1287,6 +1334,21 @@ export async function runUiGenerationCycleV2(
     appendStepLog(state, "Phase H preview sync — skipped (weak gate)");
   }
 
+  if (resolvedUiPhase === "post_code" && gate.gate !== "weak") {
+    try {
+      const cssRel = injectFinalUiCssVars(workspaceRoot, tokens);
+      if (cssRel) {
+        appendStepLog(state, `Final UI tokens injected into ${cssRel}`);
+      } else {
+        appendStepLog(state, "Final UI tokens — preview-model only (no safe globals.css)");
+      }
+    } catch (e) {
+      state.generation_warnings.push(
+        `Final UI CSS inject soft-failed: ${e instanceof Error ? e.message : String(e)}`,
+      );
+    }
+  }
+
   // Extra cycle memory for tokens/slots/template
   fs.writeFileSync(
     path.join(outDir, "ui-generation-v2-meta.json"),
@@ -1294,6 +1356,7 @@ export async function runUiGenerationCycleV2(
       {
         engine: "v2",
         phase: resolvedUiPhase,
+        ui_pass: resolvedUiPhase === "post_code" ? "final" : "precode",
         template_id: template.id,
         classification,
         tokens,
@@ -1362,7 +1425,14 @@ export async function runUiGenerationCycleV2(
   state.current_step = 9;
   persist(workspaceRoot, state);
 
+  const prevCycle = readCyclePolicy(workspaceRoot);
+  const uiPass = resolvedUiPhase === "post_code" ? "final" : "precode";
+  const finalCount =
+    resolvedUiPhase === "post_code" && gate.gate !== "weak"
+      ? Math.min(2, (prevCycle.final_ui_session_count || 0) + 1)
+      : prevCycle.final_ui_session_count || 0;
   writeCyclePolicy(workspaceRoot, {
+    ...prevCycle,
     auto_triggered: state.auto_triggered === "yes" ? "yes" : "no",
     regeneration_count: state.regeneration_count,
     max_regenerations: state.max_regenerations,
@@ -1377,6 +1447,16 @@ export async function runUiGenerationCycleV2(
     page_key: state.page_name,
     updated_at: nowIso(),
     template_id: template.id,
+    ui_pass: uiPass,
+    final_ui_ran_at:
+      resolvedUiPhase === "post_code" && gate.gate !== "weak"
+        ? nowIso()
+        : prevCycle.final_ui_ran_at || null,
+    final_ui_grounded_paths:
+      resolvedUiPhase === "post_code" && gate.gate !== "weak"
+        ? (state.file_scanned || []).slice(0, 24)
+        : prevCycle.final_ui_grounded_paths || [],
+    final_ui_session_count: finalCount,
   });
 
   const contextPath = writeContextFile(workspaceRoot, state);

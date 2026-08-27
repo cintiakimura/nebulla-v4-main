@@ -112,6 +112,7 @@ import {
   triggerUiStudioBetaAfterPlanReady,
 } from '../../lib/uiStudioBetaEngine';
 import { userNoteRequestsUiGeneration } from '../../lib/chatModeDetector';
+import { figmaPickActivityLine } from '../../lib/uiGenStatusLabels';
 import {
   clearDiscoveryClosed,
   clearIdeWorkspaceMetaCache,
@@ -2462,7 +2463,7 @@ export function AIChat() {
         } else if (readiness.ok) {
           markUiMockupStageStarted(diskProjectKey);
           pushActivity(
-            'Architecture draft ready — generating UI mockup from researched patterns + plan (before coding)',
+            'Architecture draft ready — Pre-code mockup (placeholder; Figma optional if structure exists)',
             'info',
           );
           setAccessoryHint(
@@ -2486,6 +2487,20 @@ export function AIChat() {
           });
           if (mockup.ok) {
             uiMockupStarted = true;
+            const figmaLine = figmaPickActivityLine({
+              figma_status: String(mockup.figma_pick?.figma_status || mockup.context?.figma_status || ''),
+              figma_used: String(mockup.figma_pick?.figma_used || mockup.context?.figma_used || ''),
+              selection_mode: String(mockup.figma_pick?.selection_mode || mockup.context?.selection_mode || ''),
+              file_key: (mockup.figma_pick?.file_key ?? mockup.context?.file_key) as string | null,
+              sheet_category: (mockup.figma_pick?.sheet_category ?? mockup.context?.sheet_category) as
+                | string
+                | null,
+              preferred_bucket: (mockup.figma_pick?.preferred_bucket ??
+                mockup.context?.preferred_bucket) as string | null,
+              pattern_mode: String(mockup.figma_pick?.pattern_mode || mockup.patternMode || ''),
+              ui_pass: 'precode',
+            });
+            pushActivity(figmaLine, 'info');
             const applied = await applyUiStudioBetaToAppPreview(pushActivity);
             if (applied.ok) {
               markUiMockupSucceeded(diskProjectKey);
@@ -2504,7 +2519,7 @@ export function AIChat() {
                   id: `a-mockup-${Date.now()}`,
             role: 'assistant' as const,
                   content:
-                    'Architecture draft is ready. UI mockup is generated from researched patterns + your Master Plan — check UI Studio Beta and App Preview. Coding continues next in slices (foundation first).',
+                    'Architecture draft is ready. Pre-code mockup is a placeholder (offline catalog if present). Coding writes app/. Final UI restyles after files land.',
                   timestamp: new Date().toLocaleTimeString([], {
                     hour: 'numeric',
                     minute: '2-digit',

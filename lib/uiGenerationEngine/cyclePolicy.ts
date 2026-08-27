@@ -26,6 +26,12 @@ export type UiGenCyclePolicy = {
   updated_at: string;
   /** v2 template family used for this cycle (optional). */
   template_id?: string;
+  /** precode mockup vs post-apply Final UI restyle */
+  ui_pass?: "precode" | "final";
+  final_ui_ran_at?: string | null;
+  final_ui_grounded_paths?: string[];
+  /** Autopilot Final UI runs (max 2: Foundation + last slice). */
+  final_ui_session_count?: number;
 };
 
 export const CYCLE_POLICY_REL = path.join("nebulla-project", "ui-generation-cycle.json");
@@ -45,6 +51,10 @@ export function defaultCyclePolicy(partial?: Partial<UiGenCyclePolicy>): UiGenCy
     user_visible_stage: "",
     page_key: "",
     updated_at: new Date().toISOString(),
+    ui_pass: undefined,
+    final_ui_ran_at: null,
+    final_ui_grounded_paths: [],
+    final_ui_session_count: 0,
     ...partial,
   };
 }
@@ -105,6 +115,16 @@ export function clearFalseRegenBudgetIfEmptyMockup(workspaceRoot: string): UiGen
   });
   writeCyclePolicy(workspaceRoot, cleared);
   return cleared;
+}
+
+/** App Preview chrome: coded app plus honest Final UI restyle note. */
+export function withFinalUiPreviewLabel(workspaceRoot: string, statusLabel: string): string {
+  const policy = readCyclePolicy(workspaceRoot);
+  if (policy.ui_pass === "final" && policy.final_ui_ran_at) {
+    if (/Final UI/i.test(statusLabel)) return statusLabel;
+    return `${statusLabel} · Final UI (offline catalog)`;
+  }
+  return statusLabel;
 }
 
 export function setUserVisibleStage(

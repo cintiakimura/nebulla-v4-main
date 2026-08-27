@@ -259,7 +259,7 @@ export function hasUiGenerationV2Ready(workspaceRoot: string): boolean {
 
 /** Honest Figma + gate + resource match fields from the latest v2 meta (Beta status APIs). */
 export function readUiGenerationV2PublicMeta(workspaceRoot: string): {
-  pattern_mode?: "seed" | "figma";
+  pattern_mode?: "seed" | "figma" | "catalog";
   quality_gate_result?: string;
   preview_applied?: boolean;
   figma_used?: string;
@@ -268,6 +268,10 @@ export function readUiGenerationV2PublicMeta(workspaceRoot: string): {
   figma_fallback_used?: boolean;
   env_guidance?: string;
   reference_file_keys_configured?: number;
+  selection_mode?: string;
+  preferred_bucket?: string;
+  sheet_category?: string | null;
+  file_key?: string | null;
   key_diagnostics?: Array<{
     key: string;
     outcome: string;
@@ -293,7 +297,7 @@ export function readUiGenerationV2PublicMeta(workspaceRoot: string): {
   if (!fs.existsSync(metaPath)) return {};
   try {
     const j = JSON.parse(fs.readFileSync(metaPath, "utf8")) as {
-      pattern_mode?: "seed" | "figma";
+      pattern_mode?: "seed" | "figma" | "catalog";
       quality_gate_result?: string;
       preview_applied?: boolean;
       design_brief_summary?: {
@@ -315,6 +319,10 @@ export function readUiGenerationV2PublicMeta(workspaceRoot: string): {
         fallback_used?: string;
         env_guidance?: string;
         reference_file_keys_configured?: number;
+        selection_mode?: string;
+        preferred_bucket?: string;
+        sheet_category?: string | null;
+        file_key?: string | null;
         key_diagnostics?: Array<{
           key: string;
           outcome: string;
@@ -326,7 +334,10 @@ export function readUiGenerationV2PublicMeta(workspaceRoot: string): {
       };
     };
     return {
-      pattern_mode: j.pattern_mode === "figma" ? "figma" : j.pattern_mode === "seed" ? "seed" : undefined,
+      pattern_mode:
+        j.pattern_mode === "figma" || j.pattern_mode === "catalog" || j.pattern_mode === "seed"
+          ? j.pattern_mode
+          : undefined,
       quality_gate_result: j.quality_gate_result,
       preview_applied: j.preview_applied === true,
       figma_used: j.figma?.figma_used,
@@ -335,6 +346,10 @@ export function readUiGenerationV2PublicMeta(workspaceRoot: string): {
       figma_fallback_used: j.figma?.fallback_used === "yes",
       env_guidance: j.figma?.env_guidance,
       reference_file_keys_configured: j.figma?.reference_file_keys_configured,
+      selection_mode: j.figma?.selection_mode,
+      preferred_bucket: j.figma?.preferred_bucket,
+      sheet_category: j.figma?.sheet_category ?? null,
+      file_key: j.figma?.file_key ?? null,
       key_diagnostics: Array.isArray(j.figma?.key_diagnostics) ? j.figma.key_diagnostics : undefined,
       resource_match: j.resource_match
         ? {

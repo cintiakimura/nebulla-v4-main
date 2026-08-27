@@ -68,8 +68,8 @@ The pre-code mockup (UI Studio Beta / App Preview shell) is a **temporary engage
 |-------|------|-----------------|
 | Pre-code mockup (UI Studio Beta / App Preview shell) | Fast draft to orient the user; may be incomplete; **must still meet Stitch-minimum structure** | Templates + local refs + brief — **preview only** |
 | Master Plan / inference / architecture / pages / features | What the product **is** | Plan + execution rules + coding contracts |
+| Post-code Final UI | Restyle after product files exist | Offline sheet catalog + file facts; CSS vars on Nebulla `globals.css`; **does not clone Figma into `app/`** |
 | Foundation / Go coding (`app/`, `src/`, real components) | Real product implementation | Plan + coding rules — **NOT mockup pixels** |
-| Post-code UI | Updated preview after code exists | Prefer coded routes/screens; optional UI Gen re-run grounded on **files + plan**, not “copy the old mockup” |
 
 **Preview authority (runtime):** App Preview bootstrap must distinguish layers. Pre-code may serve the static UI Gen shell (`index.html` and/or `public/nebula-ui-gen-preview.html`) labeled **Pre-code mockup only**. After meaningful product UI source exists under `app/` / `src/` / `pages/` / `components/`, App Preview must **not** present that mockup as the live product — prefer a real app entry/build when available; otherwise an honest post-code bridge. Post-code UI Gen may refresh Studio + the dedicated mockup artifact; it must not permanently own live Preview.
 
@@ -78,10 +78,10 @@ Normative rules:
 2. Coding must **not** implement features by visually cloning the mockup.
 3. Coding follows Master Plan, architecture, page list, features, and project-execution / inference-first logic.
 4. If mockup and plan disagree, **plan wins**.
-5. After successful foundation file apply of UI-relevant paths, run UI generation **one more time** (or refresh preview from coded UI) grounded on plan + file facts — max one automatic post-code pass unless the user clicks Generate again.
+5. After successful foundation apply of UI-relevant paths, run **Final UI once** (offline catalog → Studio preview-model + optional CSS variables). Optionally once more after the last autopilot slice (Polish). Max two autopilot Final UI runs. Do not overwrite coded routes with the mockup tree. Live Figma is ingest-only.
 6. Pre-code mockup still must not be garbage (Stitch-minimum). “Temporary” ≠ “Email on Kid Home.”
 7. Post-code regen still uses local-first references + brief + **file grounding**; meta must record `phase: post_code` (or equivalent).
-8. Status copy must distinguish: **Pre-code mockup** | **Post-code mockup refresh** | **Live app preview** (or post-code bridge when bundler runtime is unavailable in the iframe).
+8. Status copy must distinguish: **Pre-code mockup** | **Final UI (offline catalog)** | **Live app preview** (coded app; CSS vars if `globals.css` is Nebulla-generated).
 
 ---
 
@@ -512,15 +512,15 @@ If gate fails:
 - Ready in preview
 
 Status copy must distinguish:
-- **Pre-code mockup** — first engagement preview before Foundation/Go lands
-- **Post-code mockup refresh** — one automatic Studio/artifact pass after UI-relevant file apply (does not own live Preview)
-- **Live app preview** / **post-code bridge** — product source detected; mockup is not the product surface
+- **Pre-code mockup** — cheap placeholder before coding (seed + §5; offline catalog optional)
+- **Final UI (offline catalog)** — one restyle after product files exist (optional second after Polish)
+- **Live app preview** — coded `app/`; mockup is not the product
 
 ### H.3 Regeneration
 - max 3 (user-driven Generate again)
 - each regeneration may change template only if previous template failed quality
 - after 3, preference recovery question
-- **Post-code automatic refresh** is separate: at most one auto pass per project session after successful UI-relevant apply; does not infinite-loop; user Generate again may still run
+- **Final UI** is separate: once after first Foundation product apply, optionally once after Polish (max two autopilot runs). Does not rewrite `app/` logic. User Generate again still uses the 3-attempt budget.
 
 ---
 

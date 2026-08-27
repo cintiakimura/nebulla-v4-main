@@ -8,6 +8,8 @@ Committed index: `nebulla-project/figma-library/sheet-catalog.json` (also `sheet
 Re-import: `node scripts/import-figma-sheet-catalog.mjs path/to/sheet-export.csv`  
 Expected CSV: **no header**, columns `category,url,file_key` — or a header with `category` / `title` / `design_url|url|link` / `file_key|filekey|key`.
 
+**Two UI moments:** Pre-code mockup = cheap placeholder (seed + §5; Figma optional). **Final UI** = one post-apply restyle from the offline sheet catalog after `app/` exists. Code ignores the mockup. Live Figma = ingest only.
+
 ## Runtime order (Generate — single path)
 
 1. Classify device + page type + function (`classifyPage`) → **sheet bucket**

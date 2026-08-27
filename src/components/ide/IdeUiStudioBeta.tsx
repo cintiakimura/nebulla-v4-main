@@ -897,7 +897,7 @@ export function IdeUiStudioBeta({
       opts?.regenerate
         ? 'Generate again…'
         : opts?.uiPhase === 'post_code'
-          ? 'Post-code UI refresh…'
+          ? 'Final UI — restyle after coding…'
           : opts?.uiPhase === 'pre_code'
             ? 'Pre-code mockup…'
             : opts?.autoTriggered

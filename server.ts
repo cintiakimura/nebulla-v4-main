@@ -143,6 +143,7 @@ import { seedPreviewModelFromMasterPlan } from "./lib/visualUiEditorPreview";
 import {
   runUiGenerationCycle,
   readCyclePolicy,
+  withFinalUiPreviewLabel,
   readEnginePreviewModel,
   writeEnginePreviewModel,
   sanitizeEditorModelColors,
@@ -2325,7 +2326,7 @@ No approved UI code yet.
         hasRealV0: hasReal,
         previewSource: "workspace",
         previewMode: authority.mode,
-        previewStatusLabel: authority.statusLabel,
+        previewStatusLabel: withFinalUiPreviewLabel(pp.workspaceRoot, authority.statusLabel),
         previewHonesty: authority.honesty,
         codedApp: authority.codedApp,
         indexIsMockup: authority.indexIsMockup,
@@ -4251,6 +4252,7 @@ ${modelJson}`;
         guidedImprovement?: boolean;
         writtenPaths?: string[];
         uiPhase?: "pre_code" | "post_code" | "manual";
+        sliceLabel?: string | null;
         preferenceHints?: {
           denser?: boolean;
           looser?: boolean;
@@ -4270,7 +4272,8 @@ ${modelJson}`;
         isGoCodeJobActive(pp.workspaceRoot) ||
         goPending?.status === "running" ||
         goPending?.status === "preparing";
-      if (goBusy) {
+      // Final UI restyle after apply must run while the slice is finishing / next slice starts.
+      if (goBusy && uiPhase !== "post_code") {
         return res.status(409).json({
           ok: false,
           error:
@@ -4278,7 +4281,7 @@ ${modelJson}`;
           code: "FOUNDATION_GO_IN_FLIGHT",
         });
       }
-      if (isResearchJobActive(pp.workspaceRoot)) {
+      if (isResearchJobActive(pp.workspaceRoot) && uiPhase !== "post_code") {
         return res.status(409).json({
           ok: false,
           error: "Research in flight — UI Gen not started in parallel (one heavy job).",
@@ -4334,6 +4337,7 @@ ${modelJson}`;
           ? body.writtenPaths.filter((p): p is string => typeof p === "string")
           : undefined,
         uiPhase,
+        sliceLabel: typeof body.sliceLabel === "string" ? body.sliceLabel : undefined,
         preferenceHints:
           body.preferenceHints && typeof body.preferenceHints === "object"
             ? body.preferenceHints
@@ -4402,8 +4406,18 @@ ${modelJson}`;
         quality_gate_result: result.quality_gate_result,
         figma_fallback_used: result.figma_fallback_used,
         env_guidance: result.env_guidance,
+        skipped: result.skipped === true,
         resource_match: matchMeta.resource_match,
         design_brief_summary: matchMeta.design_brief_summary,
+        figma_pick: {
+          selection_mode: matchMeta.selection_mode,
+          preferred_bucket: matchMeta.preferred_bucket,
+          sheet_category: matchMeta.sheet_category,
+          file_key: matchMeta.file_key,
+          figma_status: matchMeta.figma_status,
+          figma_used: matchMeta.figma_used,
+          pattern_mode: matchMeta.pattern_mode || result.patternMode,
+        },
         context: {
           context_id: result.context.context_id,
           page_name: result.context.page_name,
@@ -4430,6 +4444,10 @@ ${modelJson}`;
           step_log: result.context.step_log,
           resource_match: matchMeta.resource_match,
           design_brief_summary: matchMeta.design_brief_summary,
+          selection_mode: matchMeta.selection_mode,
+          preferred_bucket: matchMeta.preferred_bucket,
+          sheet_category: matchMeta.sheet_category,
+          file_key: matchMeta.file_key,
         },
       });
     } catch (e) {
@@ -4568,6 +4586,10 @@ ${modelJson}`;
         final_status: policy.final_status,
         page_key: policy.page_key,
         updated_at: policy.updated_at,
+        ui_pass: policy.ui_pass,
+        final_ui_ran_at: policy.final_ui_ran_at,
+        final_ui_grounded_paths: policy.final_ui_grounded_paths,
+        final_ui_session_count: policy.final_ui_session_count || 0,
         patternMode: meta.pattern_mode,
         quality_gate_result: meta.quality_gate_result,
         // Do not advertise preview_applied when Studio has nothing loadable (Phase 7.4 honesty).
@@ -4612,6 +4634,9 @@ ${modelJson}`;
         final_status: policy.final_status,
         recovery_path: policy.recovery_path,
         page_key: policy.page_key,
+        ui_pass: policy.ui_pass,
+        final_ui_ran_at: policy.final_ui_ran_at,
+        final_ui_session_count: policy.final_ui_session_count || 0,
         patternMode: meta.pattern_mode,
         quality_gate_result: meta.quality_gate_result,
         preview_applied: has_loadable_model ? meta.preview_applied : false,

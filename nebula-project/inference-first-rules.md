@@ -442,18 +442,10 @@ Then **Validate** before expanding.
 
 ---
 
-### Step 9.3 — Post-code UI refresh (one automatic pass)
-After **successful** Foundation/Go apply of UI-relevant files (`app/`, `src/`, pages/components, etc.), the product runs **one** post-code UI path:
-- Prefer refresh App Preview from coded entry routes when available
-- Also run **one** UI Gen cycle grounded on **plan + generated file facts** (routes, buttons, headings from disk) — not a blind clone of the pre-code mockup
+### Step 9.3 — Final UI (post-apply restyle, offline catalog)
+After **successful** Foundation apply of product UI files, run **Final UI** once (optional second after Polish; max two per autopilot). Ground on disk file facts + plan. Restyle Studio preview-model + optional CSS variables. Do not clone Figma into `app/`. Mockup-only / methodology files do not trigger this. Failure keeps coded Preview.
 
-Rules:
-- Max **one** automatic post-code UI refresh/regen per project session unless the user clicks Generate again (no infinite loop).
-- Do **not** block coding on mockup perfection; do **not** skip post-code refresh when UI-relevant files actually landed.
-- Pre-code mockup (Step 8.3) must not depend on this step; post-code may replace that preview.
-- Coding still ignores mockup pixels — Master Plan / architecture / features win on conflict.
-
-**Output required:** status distinguishes pre-code mockup vs post-code UI refresh; meta records `phase: post_code` when that pass ran
+**Output required:** chat labels **Pre-code mockup** vs **Final UI — restyle after coding**; cycle JSON `ui_pass` / `final_ui_ran_at`; meta `phase: post_code`
 
 ---
 

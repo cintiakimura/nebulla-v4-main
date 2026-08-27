@@ -298,8 +298,8 @@ section('Golden kids-reading cycle: no Email on Home; gate pass or honest weak')
   }
   if (meta.figma?.figma_status === 'offline') {
     assert.ok(
-      (meta.figma.selection_mode || '').startsWith('offline:bucket:'),
-      meta.figma.selection_mode,
+      /offline:(?:sheet:)?bucket:/.test(String(meta.figma.selection_mode || '')),
+      `selection_mode=${meta.figma.selection_mode}`,
     );
     assert.ok(s.hero_title || s.nav_title, 'offline Home needs identity');
     assert.ok(s.primary_cta, 'offline Home needs CTA');

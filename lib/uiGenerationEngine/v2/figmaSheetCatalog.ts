@@ -5,7 +5,27 @@
 
 import fs from "fs";
 import path from "path";
+import { fileURLToPath } from "url";
 import type { PageClassification } from "./types";
+
+/** Platform repo + cwd. Cloud-project Generate must not miss committed structure/sheet. */
+export function figmaPlatformRoots(extra: string[] = []): string[] {
+  const here = path.dirname(fileURLToPath(import.meta.url));
+  const repoRoot = path.resolve(here, "../../..");
+  const envRoot = (process.env.FIGMA_LIBRARY_ROOT || "").trim();
+  const out: string[] = [];
+  const push = (p: string) => {
+    const n = path.resolve(p);
+    if (n && !out.includes(n)) out.push(n);
+  };
+  for (const e of extra) {
+    if (e) push(e);
+  }
+  if (envRoot) push(envRoot);
+  push(process.cwd());
+  push(repoRoot);
+  return out;
+}
 
 export const SHEET_PROBE_CAP = 3;
 
@@ -103,16 +123,19 @@ export function sheetCatalogPath(cwd: string = process.cwd()): string {
   return path.join(cwd, "nebulla-project", "figma-library", "sheet-catalog.json");
 }
 
-export function loadSheetCatalog(cwd: string = process.cwd()): SheetCatalogFile | null {
-  const p = sheetCatalogPath(cwd);
-  if (!fs.existsSync(p)) return null;
-  try {
-    const data = JSON.parse(fs.readFileSync(p, "utf8")) as SheetCatalogFile;
-    if (!data || !Array.isArray(data.rows)) return null;
-    return data;
-  } catch {
-    return null;
+export function loadSheetCatalog(cwd?: string): SheetCatalogFile | null {
+  const roots = cwd ? figmaPlatformRoots([cwd]) : figmaPlatformRoots();
+  for (const root of roots) {
+    const p = sheetCatalogPath(root);
+    if (!fs.existsSync(p)) continue;
+    try {
+      const data = JSON.parse(fs.readFileSync(p, "utf8")) as SheetCatalogFile;
+      if (data && Array.isArray(data.rows) && data.rows.length) return data;
+    } catch {
+      /* next root */
+    }
   }
+  return null;
 }
 
 export function bucketsFromSheetCatalog(
@@ -137,63 +160,56 @@ export function rowForKey(
   return catalog.rows.find((r) => r.file_key === fileKey) || null;
 }
 
-export function hasOfflineStructure(fileKey: string, cwd: string = process.cwd()): boolean {
+export function hasOfflineStructure(fileKey: string, cwd?: string): boolean {
   const key = fileKey.trim();
   if (!key) return false;
-  const p = path.join(cwd, "nebulla-project", "figma-library", "structure", key, "document.json");
-  return fs.existsSync(p);
+  const roots = cwd ? figmaPlatformRoots([cwd]) : figmaPlatformRoots();
+  return roots.some((root) =>
+    fs.existsSync(
+      path.join(root, "nebulla-project", "figma-library", "structure", key, "document.json"),
+    ),
+  );
 }
 
-export function hasCatalogProfileForKey(fileKey: string, cwd: string = process.cwd()): boolean {
-  const dir = path.join(cwd, "nebulla-project", "ui-resource-catalog", "profiles");
-  if (!fs.existsSync(dir)) return false;
-  try {
-    for (const name of fs.readdirSync(dir)) {
-      if (!name.endsWith(".json")) continue;
-      try {
-        const raw = JSON.parse(fs.readFileSync(path.join(dir, name), "utf8")) as {
-          figma_file_key?: string;
-        };
-        if (raw.figma_file_key === fileKey) return true;
-      } catch {
-        /* skip */
-      }
-    }
-  } catch {
-    return false;
-  }
-  return false;
+function profileDirs(cwd?: string): string[] {
+  const roots = cwd ? figmaPlatformRoots([cwd]) : figmaPlatformRoots();
+  return roots.map((root) => path.join(root, "nebulla-project", "ui-resource-catalog", "profiles"));
+}
+
+export function hasCatalogProfileForKey(fileKey: string, cwd?: string): boolean {
+  return Boolean(loadCatalogProfileForKey(fileKey, cwd));
 }
 
 export function loadCatalogProfileForKey(
   fileKey: string,
-  cwd: string = process.cwd(),
+  cwd?: string,
 ): { id: string; tags: string[]; best_for: string[]; categoryHint: string } | null {
-  const dir = path.join(cwd, "nebulla-project", "ui-resource-catalog", "profiles");
-  if (!fs.existsSync(dir)) return null;
-  try {
-    for (const name of fs.readdirSync(dir)) {
-      if (!name.endsWith(".json")) continue;
-      try {
-        const raw = JSON.parse(fs.readFileSync(path.join(dir, name), "utf8")) as {
-          id?: string;
-          figma_file_key?: string;
-          tags?: string[];
-          best_for?: string[];
-        };
-        if (raw.figma_file_key !== fileKey) continue;
-        return {
-          id: String(raw.id || name.replace(/\.json$/, "")),
-          tags: Array.isArray(raw.tags) ? raw.tags : [],
-          best_for: Array.isArray(raw.best_for) ? raw.best_for : [],
-          categoryHint: (raw.tags || []).join(" "),
-        };
-      } catch {
-        /* skip */
+  for (const dir of profileDirs(cwd)) {
+    if (!fs.existsSync(dir)) continue;
+    try {
+      for (const name of fs.readdirSync(dir)) {
+        if (!name.endsWith(".json")) continue;
+        try {
+          const raw = JSON.parse(fs.readFileSync(path.join(dir, name), "utf8")) as {
+            id?: string;
+            figma_file_key?: string;
+            tags?: string[];
+            best_for?: string[];
+          };
+          if (raw.figma_file_key !== fileKey) continue;
+          return {
+            id: String(raw.id || name.replace(/\.json$/, "")),
+            tags: Array.isArray(raw.tags) ? raw.tags : [],
+            best_for: Array.isArray(raw.best_for) ? raw.best_for : [],
+            categoryHint: (raw.tags || []).join(" "),
+          };
+        } catch {
+          /* skip */
+        }
       }
+    } catch {
+      /* next dir */
     }
-  } catch {
-    return null;
   }
   return null;
 }

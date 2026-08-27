@@ -262,6 +262,7 @@ Work **one step per Agent turn / PR** after constitution install. Fix the **earl
 | 2026-08-23 | Product finish = B. `FAST_PROTOTYPE_SAME_SESSION_AUTOPILOT = true`. One prompt → research → mockup → Foundation → auto Primary → Secondary → Polish. Do not ask the user to type Continue. Failed Gate R / failed apply still stop. Persist launched slice so thin Secondary cannot loop. | User: “why keep asking for continue — this shouldn’t happen” |
 | 2026-08-23 | GO_TIMEOUT: do not abort an in-flight xAI fetch at 3 min; grace-poll last-result; one automatic narrower Foundation retry. Copy must not say “Retry Go / Continue”. Client UI poll still hard-stops at 3 min. | Screenshot: Code pass 1 3m then “Foundation did not land. Retry Go” while mockup still on Preview |
 | 2026-08-27 | Sheet catalog is Generate's Figma universe: classify → bucket → cap-3 offline/catalog keys. The 4 structure/ keys are fallback, not the whole DB. Live Figma stays ingest-only (`FIGMA_LIVE_ON_GENERATE` off). | Classification existed but selection only saw 4 hardcoded keys / example CSV |
+| 2026-08-27 | Final UI = one post-apply restyle (Foundation, optional Polish) from offline catalog + CSS vars. Mockup stays cheap. Coded `app/` is not a Figma clone. | After coding, App Preview showed unstyled Grok pages; chat never distinguished pre-code vs Final UI |
 
 ---
 

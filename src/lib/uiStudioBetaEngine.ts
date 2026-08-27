@@ -24,6 +24,7 @@ import {
   resolvePostCodeUiAction,
   type PostCodeUiAction,
 } from './postCodeUiRefresh';
+import { figmaPickActivityLine } from './uiGenStatusLabels';
 
 export { looksLikeUiRelevantPaths, resolvePostCodeUiAction, extractUiRouteKeys };
 export type { PostCodeUiAction };
@@ -47,6 +48,7 @@ export type UiStudioBetaGenerateOptions = {
   writtenPaths?: string[];
   /** Distinguishes pre-code mockup vs post-code refresh vs user Generate. */
   uiPhase?: UiStudioUiPhase;
+  sliceLabel?: string | null;
   onProgress?: GrokActivityProgressFn;
   openPane?: boolean;
 };
@@ -61,8 +63,37 @@ export type UiStudioBetaGenerateResult = {
   user_visible_stage?: string;
   preference_recovery?: boolean;
   preference_recovery_question?: string;
+  patternMode?: string;
+  figma_pick?: {
+    selection_mode?: string;
+    preferred_bucket?: string;
+    sheet_category?: string | null;
+    file_key?: string | null;
+    figma_status?: string;
+    figma_used?: string;
+    pattern_mode?: string;
+  };
+  skipped?: boolean;
   context?: Record<string, unknown>;
 };
+
+function figmaLineFromGenerate(
+  data: UiStudioBetaGenerateResult,
+  uiPass: 'precode' | 'final' = 'precode',
+): string {
+  const ctx = data.context || {};
+  const pick = data.figma_pick || {};
+  return figmaPickActivityLine({
+    ui_pass: uiPass,
+    figma_status: String(pick.figma_status || ctx.figma_status || ''),
+    figma_used: String(pick.figma_used || ctx.figma_used || ''),
+    selection_mode: String(pick.selection_mode || ctx.selection_mode || ''),
+    file_key: (pick.file_key ?? ctx.file_key) as string | null | undefined,
+    sheet_category: (pick.sheet_category ?? ctx.sheet_category) as string | null | undefined,
+    preferred_bucket: (pick.preferred_bucket ?? ctx.preferred_bucket) as string | null | undefined,
+    pattern_mode: String(pick.pattern_mode || data.patternMode || ''),
+  });
+}
 
 let inFlight: Promise<UiStudioBetaGenerateResult> | null = null;
 let lastAutoKey = '';
@@ -132,7 +163,11 @@ export async function runUiStudioBetaGeneration(
     const onProgress = options.onProgress;
     // Phase 5: IF Foundation Go is running → do not start a second silent UI Gen brain.
     // Auto UI Gen waits; an explicit Generate UI after coding must not die on a stale client lock.
-    if (isFoundationGoInFlight(options.projectName) && options.uiPhase !== 'manual') {
+    if (
+      isFoundationGoInFlight(options.projectName) &&
+      options.uiPhase !== 'manual' &&
+      options.uiPhase !== 'post_code'
+    ) {
       onProgress?.(
         'Foundation Go running — UI Gen waiting (one heavy job). Generate UI after the slice finishes.',
         'warn',
@@ -142,7 +177,10 @@ export async function runUiStudioBetaGeneration(
         error: 'Foundation Go in flight — UI Gen not started in parallel',
       };
     }
-    const researchSt = await fetchResearchStatus();
+    const researchSt =
+      options.uiPhase === 'post_code'
+        ? { pending: false as const }
+        : await fetchResearchStatus();
     if (researchSt.pending) {
       onProgress?.('Research in flight — UI Gen waiting (one heavy job).', 'warn');
       return {
@@ -169,7 +207,7 @@ export async function runUiStudioBetaGeneration(
       options.regenerate
         ? 'Generate again — UI Studio Beta engine…'
         : phase === 'post_code'
-          ? 'Post-code UI refresh — regenerating from plan + coded files…'
+          ? 'Final UI — restyle after coding (offline catalog)…'
           : phase === 'pre_code' || (options.autoTriggered && !options.writtenPaths?.length)
             ? 'Pre-code mockup — generating UI Studio Beta (UI Gen v2)…'
             : options.autoTriggered
@@ -189,7 +227,11 @@ export async function runUiStudioBetaGeneration(
         credentials: 'include',
         headers: getGrokRequestHeaders(),
       });
-      if (statusLooksReadyForSkip(existing) && !options.regenerate) {
+      if (
+        statusLooksReadyForSkip(existing) &&
+        !options.regenerate &&
+        options.uiPhase !== 'post_code'
+      ) {
         onProgress?.(existing.user_visible_stage || 'Ready in preview', 'success');
         const applied = await applyUiStudioBetaToAppPreview(onProgress, { preferMockup });
         try {
@@ -229,6 +271,7 @@ export async function runUiStudioBetaGeneration(
                 guidedImprovement: options.guidedImprovement === true,
                 writtenPaths: options.writtenPaths,
                 uiPhase: options.uiPhase,
+                sliceLabel: options.sliceLabel || undefined,
               }),
             ),
           });
@@ -258,6 +301,17 @@ export async function runUiStudioBetaGeneration(
         return data;
       }
       onProgress?.(data.user_visible_stage || 'Ready in preview', 'success');
+      onProgress?.(figmaLineFromGenerate(data, phase === 'post_code' ? 'final' : 'precode'), 'info');
+      if (data.skipped || phase === 'post_code') {
+        try {
+          window.dispatchEvent(new CustomEvent(NEBULA_UI_STUDIO_BETA_COMPLETE, { detail: { ok: true, ...data } }));
+          dispatchStudioShowLiveApp();
+          window.dispatchEvent(new CustomEvent('nebula-reload-app-preview'));
+        } catch {
+          /* ignore */
+        }
+        return { ok: true, ...data };
+      }
       const applied = await applyUiStudioBetaToAppPreview(onProgress, { preferMockup });
       try {
         window.dispatchEvent(new CustomEvent(NEBULA_UI_STUDIO_BETA_COMPLETE, { detail: { ok: true, ...data } }));
@@ -374,30 +428,43 @@ export async function triggerUiStudioBetaAfterFilesApplied(options: {
   writtenPaths: string[];
   projectName?: string;
   onProgress?: GrokActivityProgressFn;
-  /** Force another post-code regen even if one already ran this session. */
   force?: boolean;
+  sliceLabel?: string | null;
 }): Promise<UiStudioBetaGenerateResult | null> {
   const paths = options.writtenPaths || [];
   const projectKey = options.projectName || 'default';
+  let finalUiCount = hasPostCodeUiRefreshRun(projectKey) ? 1 : 0;
+  try {
+    const st = await fetchJson<{ final_ui_session_count?: number }>(
+      withProjectQuery('/api/ui-studio-beta/status'),
+      { credentials: 'include', headers: getGrokRequestHeaders() },
+    );
+    if (typeof st.final_ui_session_count === 'number') {
+      finalUiCount = st.final_ui_session_count;
+    }
+  } catch {
+    /* use session flag */
+  }
   const action = resolvePostCodeUiAction({
     writtenPaths: paths,
-    alreadyRanPostCode: hasPostCodeUiRefreshRun(projectKey),
+    alreadyRanPostCode: finalUiCount > 0,
     previouslyCoveredKeys: getPostCodeCoveredRouteKeys(projectKey),
     force: options.force,
+    finalUiCount,
+    sliceLabel: options.sliceLabel,
   });
 
   if (action === 'skip_no_ui_paths') {
     options.onProgress?.(
-      'Files applied — UI Beta not started (no app/UI shell files in this slice)',
+      'Files applied — Final UI not started (no product app/src/pages/components files)',
       'info',
     );
     return null;
   }
 
   if (action === 'sync_preview_only') {
-    // Do not reclaim live App Preview with mockup HTML after code exists.
     options.onProgress?.(
-      'App Preview is ready — you can use the practice flow now (no Studio refresh needed).',
+      'App Preview is ready — coded app stays live (Final UI already ran or not this slice).',
       'info',
     );
     try {
@@ -409,21 +476,39 @@ export async function triggerUiStudioBetaAfterFilesApplied(options: {
     return null;
   }
 
-  const key = `post_code:${projectKey}:${paths.slice().sort().join('|')}`;
+  const key = `final_ui:${projectKey}:${paths.slice().sort().join('|')}`;
   if (key === lastAutoKey && inFlight) {
     return inFlight;
   }
   lastAutoKey = key;
-  markPostCodeUiRefreshDone(projectKey, paths);
+  options.onProgress?.('Final UI — restyle after coding (offline catalog)…', 'info');
 
-  return runUiStudioBetaGeneration({
+  const result = await runUiStudioBetaGeneration({
     projectName: options.projectName,
     writtenPaths: paths,
     autoTriggered: true,
     uiPhase: 'post_code',
+    sliceLabel: options.sliceLabel,
     openPane: true,
     onProgress: options.onProgress,
   });
+
+  if (result?.ok && !(result as { skipped?: boolean }).skipped) {
+    markPostCodeUiRefreshDone(projectKey, paths);
+  } else if (!result?.ok) {
+    options.onProgress?.(
+      result?.error || 'Final UI miss — keeping coded App Preview',
+      'warn',
+    );
+  }
+
+  try {
+    dispatchStudioShowLiveApp();
+    window.dispatchEvent(new CustomEvent('nebula-open-app-preview'));
+  } catch {
+    /* ignore */
+  }
+  return result;
 }
 
 /**

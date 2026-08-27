@@ -44,6 +44,33 @@ export function patternModeLabel(mode: string): string {
   return '';
 }
 
+/** Chat / activity line — never claim Figma if seed ran; never claim live if offline. */
+export function figmaPickActivityLine(input: {
+  figma_status?: string;
+  figma_used?: string;
+  selection_mode?: string;
+  file_key?: string | null;
+  sheet_category?: string | null;
+  preferred_bucket?: string | null;
+  pattern_mode?: string;
+  ui_pass?: 'precode' | 'final' | string;
+}): string {
+  const head = input.ui_pass === 'final' ? 'Final UI — restyle after coding' : 'Pre-code mockup';
+  const status = input.figma_status || 'none';
+  const bucket = input.preferred_bucket ? ` bucket=${input.preferred_bucket}` : '';
+  const key = input.file_key ? ` key=${input.file_key}` : '';
+  const miss =
+    status === 'weak_matches' ||
+    ((input.figma_used === 'no' || !input.figma_used) &&
+      status !== 'offline' &&
+      status !== 'success' &&
+      status !== 'skipped');
+  if (miss && status !== 'skipped') {
+    return `${head} — seed miss (${status})${bucket}${key}`;
+  }
+  return `${head} — ${status}${bucket}${key}`;
+}
+
 /** Prefer selection_mode when present for precise operator copy. */
 export function referenceDriveLabel(selectionMode: string, figmaStatus: string): string {
   const m = selectionMode || '';

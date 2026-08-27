@@ -1,12 +1,15 @@
 /**
- * Pure helpers for post-code UI refresh after Foundation/Go apply.
- * Kept free of DOM imports so smoke tests can import safely.
- *
- * Policy:
- * - First UI-relevant apply → regen Studio (post_code)
- * - Later applies of the *same* routes → reload live Preview only (mockup must not reclaim entry)
- * - New UI routes in a later slice (e.g. Primary after Foundation) → regen Studio again
+ * Post-code Final UI trigger (offline catalog restyle after product files exist).
+ * Mockup must not reclaim App Preview. Live Figma stays ingest-only.
  */
+
+export const MAX_FINAL_UI_AUTOPILOT_RUNS = 2;
+
+const METHODOLOGY =
+  /^(nebula-project|nebulla-project|nebula-project)\//i;
+
+const PRODUCT_UI =
+  /^(app|src|pages|components)\//i;
 
 const UI_RELEVANT =
   /\.(tsx|jsx|vue|html|css)$|^(app|src|pages|components|public)\//i;
@@ -15,21 +18,29 @@ export function looksLikeUiRelevantPaths(writtenPaths: string[]): boolean {
   return writtenPaths.some((p) => UI_RELEVANT.test(p.replace(/\\/g, '/')));
 }
 
-/** Normalize path separators. */
 export function normalizeUiPath(p: string): string {
   return p.replace(/\\/g, '/').replace(/^\.\//, '');
 }
 
-/**
- * Stable keys for UI routes / shells so Primary pages after Foundation
- * can trigger another Studio refresh without looping on identical re-applies.
- */
+export function isMethodologyPath(p: string): boolean {
+  return METHODOLOGY.test(normalizeUiPath(p));
+}
+
+/** Product UI source — not mockup HTML, not methodology docs. */
+export function looksLikeProductAppFiles(writtenPaths: string[]): boolean {
+  return writtenPaths.some((raw) => {
+    const p = normalizeUiPath(raw);
+    if (isMethodologyPath(p)) return false;
+    if (/\.(md|json)$/i.test(p)) return false;
+    return PRODUCT_UI.test(p) && /\.(tsx|jsx|js|css)$/i.test(p);
+  });
+}
+
 export function extractUiRouteKeys(writtenPaths: string[]): string[] {
   const keys = new Set<string>();
   for (const raw of writtenPaths) {
     const p = normalizeUiPath(raw);
-    if (!UI_RELEVANT.test(p)) continue;
-    // app/page.tsx → app ; app/kid/page.tsx → app/kid ; pages/Home.tsx → pages/Home
+    if (!UI_RELEVANT.test(p) || isMethodologyPath(p)) continue;
     if (/^app\/page\.(tsx|jsx|js)$/i.test(p)) {
       keys.add('app');
       continue;
@@ -64,32 +75,39 @@ export function hasNewUiRoutes(
   return incoming.some((k) => !prev.has(k));
 }
 
-export type PostCodeUiAction = 'regen_post_code' | 'sync_preview_only' | 'skip_no_ui_paths';
-
-function hasProductRoutePaths(writtenPaths: string[]): boolean {
-  return writtenPaths.some((raw) => {
-    const p = raw.replace(/\\/g, '/');
-    return (
-      /^app\/(?:.+\/)?page\.(tsx|jsx|js)$/i.test(p) ||
-      /^(?:src\/)?pages\/.+\.(tsx|jsx|js)$/i.test(p)
-    );
-  });
+export function isLastAutopilotSlice(sliceLabel?: string | null): boolean {
+  return /polish/i.test(String(sliceLabel || ''));
 }
 
+export type PostCodeUiAction =
+  | 'run_final_ui'
+  | 'regen_post_code'
+  | 'sync_preview_only'
+  | 'skip_no_ui_paths';
+
+/**
+ * Final UI: once after first Foundation product apply, once after last autopilot (Polish).
+ * Max two autopilot runs. Mockup-only / methodology → skip.
+ */
 export function resolvePostCodeUiAction(opts: {
   writtenPaths: string[];
   alreadyRanPostCode: boolean;
-  /** Route keys covered by prior post-code Studio refresh this session. */
   previouslyCoveredKeys?: string[];
   force?: boolean;
+  /** Successful Final UI runs this project (cycle JSON). */
+  finalUiCount?: number;
+  sliceLabel?: string | null;
 }): PostCodeUiAction {
-  if (!looksLikeUiRelevantPaths(opts.writtenPaths)) return 'skip_no_ui_paths';
-  if (opts.force) return 'regen_post_code';
-  // Product routes own App Preview — do not reopen UI Studio mockup after Go apply.
-  if (hasProductRoutePaths(opts.writtenPaths)) return 'sync_preview_only';
-  if (!opts.alreadyRanPostCode) return 'regen_post_code';
-  if (hasNewUiRoutes(opts.writtenPaths, opts.previouslyCoveredKeys)) {
-    return 'regen_post_code';
-  }
+  if (!looksLikeProductAppFiles(opts.writtenPaths)) return 'skip_no_ui_paths';
+  if (opts.force) return 'run_final_ui';
+  const count =
+    typeof opts.finalUiCount === 'number'
+      ? opts.finalUiCount
+      : opts.alreadyRanPostCode
+        ? 1
+        : 0;
+  if (count >= MAX_FINAL_UI_AUTOPILOT_RUNS) return 'sync_preview_only';
+  if (count === 0) return 'run_final_ui';
+  if (count === 1 && isLastAutopilotSlice(opts.sliceLabel)) return 'run_final_ui';
   return 'sync_preview_only';
 }

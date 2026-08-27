@@ -194,6 +194,45 @@ section("kids retrieve: not dashboard key; live off");
   }
 }
 
+section("cloud-project cwd still hits platform Figma structure (kids home)");
+{
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "nebulla-sheet-cwd-"));
+  const prev = process.cwd();
+  process.chdir(tmp);
+  delete process.env.FIGMA_REFERENCE_FILE_KEYS;
+  delete process.env.FIGMA_REFERENCE_BUCKETS;
+  delete process.env.FIGMA_LIVE_ON_GENERATE;
+  try {
+    const rec = await retrieveFigmaReferences({
+      classification: {
+        device: "mobile",
+        page_type: "home",
+        product_function: "course",
+        navigation_mode: "bottom_tabs",
+        industry: "education",
+        density: "medium",
+        confidence: "high",
+        notes: "kids education",
+      },
+      templateId: "mobile_home_hero_cards",
+      seedState: {
+        device: "mobile",
+        page_type: "home",
+        function: "course",
+        navigation_type: "tabs",
+        industry_class: "education",
+        visual_tone: "",
+        density: "medium",
+      },
+    });
+    assert.equal(rec.figma_status, "offline", rec.figma_error || rec.selection_mode);
+    assert.notEqual(rec.file_key, DASHBOARD_KEY);
+    assert.ok(rec.selection_mode.includes("sheet:bucket:mobile"), rec.selection_mode);
+  } finally {
+    process.chdir(prev);
+  }
+}
+
 section("missing structure/ does not crash — catalog/seed + honest status");
 {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "nebulla-sheet-miss-"));

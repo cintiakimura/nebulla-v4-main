@@ -420,6 +420,8 @@ try {
   process.env.FIGMA_LIVE_ON_GENERATE = '1';
   process.env.FIGMA_API_KEY = 'figd_test';
   process.env.FIGMA_REFERENCE_MAX_FILES = '2';
+  process.env.FIGMA_REFERENCE_FILE_KEYS = 'MissingKeyAAAAAAAAAAAA';
+  process.env.FIGMA_REFERENCE_BUCKETS = 'mobile=MissingKeyAAAAAAAAAAAA';
   installFetchSpy(async (url) => {
     if (url.includes('api.figma.com')) return new Response('rate limited', { status: 429 });
     throw new Error(`unexpected ${url}`);
