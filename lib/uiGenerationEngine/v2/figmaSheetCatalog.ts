@@ -57,6 +57,12 @@ export type SheetCatalogRow = {
   community_url?: string;
   source: "sheet";
   avoid_for_education?: boolean;
+  /** Inferred IA / product fit — not a live Figma fetch. */
+  ia?: "home_tabs" | "dashboard" | "auth" | "marketing" | "wireframe" | "ds";
+  industry?: "education" | "health" | "finance" | "retail" | "general";
+  audience?: "kids" | "pro" | "general";
+  density?: "spacious" | "medium" | "compact";
+  tone?: "calm" | "playful" | "professional" | "premium";
 };
 
 export type SheetCatalogFile = {
@@ -107,6 +113,56 @@ export function bucketFromSheetCategory(category: string): SheetBucket {
   return "ds";
 }
 
+/** Tag a sheet row from category/title so ranking is not “first mobile”. */
+export function inferSheetRowMeta(category: string, title: string): Pick<
+  SheetCatalogRow,
+  "ia" | "industry" | "audience" | "tone" | "avoid_for_education" | "density"
+> {
+  const blob = `${category} ${title}`.toLowerCase();
+  let ia: SheetCatalogRow["ia"] = "ds";
+  if (/auth|login|sign[\s_-]?in/.test(blob)) ia = "auth";
+  else if (/landing|website|marketing/.test(blob)) ia = "marketing";
+  else if (/dashboard|admin|crm|analytics/.test(blob)) ia = "dashboard";
+  else if (/wireframe|wirefigma/.test(blob)) ia = "wireframe";
+  else if (/mobile|ios|tab/.test(blob)) ia = "home_tabs";
+
+  let industry: SheetCatalogRow["industry"] = "general";
+  if (/educat|kids|learn|school|tutor|child/.test(blob)) industry = "education";
+  else if (/health|clinic|medical|wellness/.test(blob)) industry = "health";
+  else if (/crypto|trading|fintech|bank|financ/.test(blob)) industry = "finance";
+  else if (/shop|store|commerce|retail/.test(blob)) industry = "retail";
+
+  let audience: SheetCatalogRow["audience"] = "general";
+  if (/kids?|child|student/.test(blob)) audience = "kids";
+  else if (/crypto|trading|admin|pro|enterprise/.test(blob)) audience = "pro";
+
+  let tone: SheetCatalogRow["tone"] = "professional";
+  if (/playful|freebie|fun|friendly/.test(blob)) tone = "playful";
+  else if (/calm|soft/.test(blob)) tone = "calm";
+  else if (/premium|luxury/.test(blob)) tone = "premium";
+
+  const avoid_for_education = /crypto|trading|treyd|fintech/.test(blob);
+  const density: SheetCatalogRow["density"] = /lite|spacious|air/.test(blob)
+    ? "spacious"
+    : /compact|dense|admin/.test(blob)
+      ? "compact"
+      : "medium";
+  return { ia, industry, audience, tone, avoid_for_education, density };
+}
+
+export function enrichSheetRow(row: SheetCatalogRow): SheetCatalogRow {
+  const inferred = inferSheetRowMeta(row.category, row.title);
+  return {
+    ...row,
+    ia: row.ia || inferred.ia,
+    industry: row.industry || inferred.industry,
+    audience: row.audience || inferred.audience,
+    tone: row.tone || inferred.tone,
+    density: row.density || inferred.density,
+    avoid_for_education: row.avoid_for_education || inferred.avoid_for_education,
+  };
+}
+
 /** Classification → sheet bucket (never dashboard kit on kids mobile home). */
 export function preferredSheetBucket(classification: PageClassification): SheetBucket {
   if (classification.page_type === "auth") return "auth";
@@ -136,7 +192,9 @@ export function loadSheetCatalog(cwd?: string): SheetCatalogFile | null {
     if (!fs.existsSync(p)) continue;
     try {
       const data = JSON.parse(fs.readFileSync(p, "utf8")) as SheetCatalogFile;
-      if (data && Array.isArray(data.rows) && data.rows.length) return data;
+      if (data && Array.isArray(data.rows) && data.rows.length) {
+        return { ...data, rows: data.rows.map(enrichSheetRow) };
+      }
     } catch {
       /* next root */
     }
@@ -226,14 +284,9 @@ function avoidEducation(row: SheetCatalogRow | null, titleExtra = ""): boolean {
   return /crypto|trading|treyd|fintech/.test(blob);
 }
 
-function educationBoost(row: SheetCatalogRow | null, tags: string[]): boolean {
-  const blob = `${row?.title || ""} ${row?.category || ""} ${tags.join(" ")}`.toLowerCase();
-  return /educat|kids|learn|school|tutor|child/.test(blob);
-}
-
 /**
- * Rank keys in a bucket: structure/ first, then catalog profile, then listed.
- * Education/kids: prefer education-tagged; never crypto/trading kits.
+ * Rank keys in a bucket: product fit (industry/audience/tone), then structure/, then listed.
+ * Never pick crypto/trading for kids education. Structure still preferred when fit is equal.
  */
 export function rankKeysForBucket(input: {
   keys: string[];
@@ -242,22 +295,52 @@ export function rankKeysForBucket(input: {
   cwd?: string;
 }): string[] {
   const cwd = input.cwd ?? process.cwd();
+  const notes = `${input.classification.notes || ""} ${input.classification.industry || ""}`;
   const education =
     input.classification.industry === "education" ||
-    /educat|kids|learn|tutor|child/.test(input.classification.notes || "");
+    /educat|kids|learn|tutor|child/.test(notes);
+  const wantIndustry = (input.classification.industry || "general").toLowerCase();
+  const wantAudience = /kids?|child|student/.test(notes) ? "kids" : education ? "kids" : "general";
+  const wantTone = /adhd|calm|low[- ]stimulus/.test(notes)
+    ? "calm"
+    : /playful|fun|friendly/.test(notes)
+      ? "playful"
+      : "professional";
   const preferred = preferredSheetBucket(input.classification);
+  const wantIa =
+    preferred === "auth"
+      ? "auth"
+      : preferred === "landing"
+        ? "marketing"
+        : preferred === "dashboard"
+          ? "dashboard"
+          : preferred === "mobile"
+            ? "home_tabs"
+            : "ds";
   const scored = input.keys.map((key, idx) => {
-    const row = rowForKey(input.catalog, key);
+    const row = enrichSheetRow(
+      rowForKey(input.catalog, key) || {
+        file_key: key,
+        category: "",
+        bucket: preferred,
+        title: "",
+        source: "sheet",
+      },
+    );
     let rank = 50 + idx;
-    const rowBucket = row?.bucket;
-    const aligned = !rowBucket || rowBucket === preferred || siblingSheetBuckets(preferred).includes(rowBucket);
-    if (aligned && hasOfflineStructure(key, cwd)) rank -= 30;
-    else if (aligned && hasCatalogProfileForKey(key, cwd)) rank -= 15;
+    const rowBucket = row.bucket;
+    const aligned =
+      !rowBucket || rowBucket === preferred || siblingSheetBuckets(preferred).includes(rowBucket);
+    if (aligned && hasOfflineStructure(key, cwd)) rank -= 24;
+    else if (aligned && hasCatalogProfileForKey(key, cwd)) rank -= 12;
     if (rowBucket && rowBucket !== preferred && !siblingSheetBuckets(preferred).includes(rowBucket)) {
       rank += 60;
     }
     if (education && avoidEducation(row)) rank += 80;
-    if (education && educationBoost(row, [])) rank -= 10;
+    if (wantIndustry !== "general" && row.industry === wantIndustry) rank -= 18;
+    if (wantAudience === "kids" && row.audience === "kids") rank -= 12;
+    if (row.tone === wantTone) rank -= 8;
+    if (row.ia === wantIa) rank -= 6;
     if (key === DASHBOARD_FALLBACK_KEY && preferredSheetBucket(input.classification) === "mobile") {
       rank += 200;
     }

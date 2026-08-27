@@ -13,6 +13,7 @@ import {
   capProbeKeys,
   loadSheetCatalog,
   preferredSheetBucket,
+  rankKeysForBucket,
   SHEET_PROBE_CAP,
 } from "../lib/uiGenerationEngine/v2/figmaSheetCatalog.ts";
 import {
@@ -231,6 +232,54 @@ section("cloud-project cwd still hits platform Figma structure (kids home)");
   } finally {
     process.chdir(prev);
   }
+}
+
+section("education ranks kids-tagged mobile ahead of crypto; not first-row");
+{
+  const education: PageClassification = {
+    device: "mobile",
+    page_type: "home",
+    product_function: "course",
+    navigation_mode: "bottom_tabs",
+    industry: "education",
+    density: "medium",
+    confidence: "high",
+    notes: "kids ADHD tutor",
+  };
+  const catalog = {
+    source: "test",
+    rows: [
+      {
+        file_key: "CRYPTOKEY1",
+        category: "Treyd Crypto Trading App UI Kit",
+        bucket: "mobile" as const,
+        title: "Treyd Crypto Trading App UI Kit",
+        source: "sheet" as const,
+      },
+      {
+        file_key: "GENERICMOBILE",
+        category: "Mobile screens",
+        bucket: "mobile" as const,
+        title: "Mobile screens",
+        source: "sheet" as const,
+      },
+      {
+        file_key: "KIDSLEARN1",
+        category: "Mobile screens",
+        bucket: "mobile" as const,
+        title: "Kids Learn school tutor",
+        source: "sheet" as const,
+      },
+    ],
+  };
+  const ranked = rankKeysForBucket({
+    keys: ["CRYPTOKEY1", "GENERICMOBILE", "KIDSLEARN1"],
+    classification: education,
+    catalog,
+    cwd: os.tmpdir(),
+  });
+  assert.equal(ranked[0], "KIDSLEARN1", `expected kids kit first, got ${ranked.join(",")}`);
+  assert.ok(ranked.indexOf("CRYPTOKEY1") > ranked.indexOf("GENERICMOBILE"));
 }
 
 section("missing structure/ does not crash — catalog/seed + honest status");

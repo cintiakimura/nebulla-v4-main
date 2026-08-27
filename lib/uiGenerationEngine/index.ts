@@ -31,6 +31,7 @@ export {
 export { classifyPage } from "./v2/classifyPage";
 export { selectTemplate } from "./v2/selectTemplate";
 export { buildDesignTokens } from "./v2/designTokens";
+export { selectIndustryPalette, parseResearchPalette, patchUiuxPalette } from "./v2/industryPalettes";
 export { mapSlots } from "./v2/mapSlots";
 export { renderTemplateModel } from "./v2/renderTemplateModel";
 export { validateV2Quality } from "./v2/qualityGate";

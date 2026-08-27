@@ -8,6 +8,12 @@ import path from "path";
 import { callGrokWebSearch } from "./grokWebSearch";
 import { readMasterPlanFile, syncUiBriefFromMasterPlan } from "./nebulaIdeWorkspaceArtifacts";
 import { MASTER_PLAN_SECTION_KEYS } from "./masterPlanSections";
+import { buildConcreteUiuxSection } from "./uiuxSectionBuilder";
+import {
+  parseResearchPalette,
+  patchUiuxPalette,
+  researchPaletteToPack,
+} from "./uiGenerationEngine/v2/industryPalettes";
 import {
   RESEARCH_ARTIFACT_REL,
   RESEARCH_MAX_COMPETITORS,
@@ -162,7 +168,23 @@ export function mergeResearchIntoMasterPlan(opts: {
 
   const key5 = MASTER_PLAN_SECTION_KEYS[4];
   const prev5 = String(plan[key5] ?? "").trim();
-  if (prev5.length < 80 && patternSlice.length > 40) {
+  const parsedPalette = parseResearchPalette(patternSlice || md);
+  if (parsedPalette && (parsedPalette.primary || parsedPalette.bg || parsedPalette.family)) {
+    const pack = researchPaletteToPack(parsedPalette);
+    const base =
+      prev5.length > 40
+        ? prev5
+        : buildConcreteUiuxSection({
+            goal: String(plan[MASTER_PLAN_SECTION_KEYS[0]] ?? ""),
+            pages: String(plan[MASTER_PLAN_SECTION_KEYS[3]] ?? ""),
+            tech: String(plan[key2] ?? ""),
+          });
+    const next5 = patchUiuxPalette(base, pack);
+    if (next5 !== prev5) {
+      plan[key5] = next5;
+      updated.push(key5);
+    }
+  } else if (prev5.length < 80 && patternSlice.length > 40) {
     plan[key5] = `${prev5}\n\n${patternSlice}`.trim();
     updated.push(key5);
   }
@@ -266,7 +288,9 @@ ${opts.goal.slice(0, 1500)}
 Search the web for:
 1) at least ${RESEARCH_MIN_COMPETITORS} real competitor or analogue products (apps/sites) in this category (up to ${RESEARCH_MAX_COMPETITORS})
 2) a short ranked / recurring-feature bullet list (3+ bullets)
-3) optional UI/UX notes
+3) UI/UX notes that include ONE palette line matching competitors:
+   Palette: family=<education-calm|education-playful|health|finance|retail|professional|landing-bold> bg=#RRGGBB primary=#RRGGBB accent=#RRGGBB text=#RRGGBB muted=#RRGGBB
+   Pick the family from competitor color tendency — never default teal #0F766E / #0D9488 unless a named competitor actually uses it.
 4) optional study/stat — or the exact no-studies line
 
 Assumptions already inferred (confirm or correct in ## Assumptions):

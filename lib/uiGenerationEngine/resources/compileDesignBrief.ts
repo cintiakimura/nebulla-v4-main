@@ -4,6 +4,10 @@
  */
 
 import { buildDesignTokens, defaultTokens } from "../v2/designTokens";
+import {
+  applyIndustryPaletteIfGeneric,
+  hasLabeledPrimaryHex,
+} from "../v2/industryPalettes";
 import type { PageClassification } from "../v2/types";
 import type { DesignBrief, ResourceDensity } from "./types";
 
@@ -91,7 +95,13 @@ export function compileDesignBrief(input: {
   if (thinBrief) gaps.push("ui-brief.md missing or short — page contracts may be weak");
 
   const classDensity = input.classification.density;
-  const tokens = buildDesignTokens(uiux || briefMd, uiux, classDensity);
+  let tokens = buildDesignTokens(uiux || briefMd, uiux, classDensity);
+  tokens = applyIndustryPaletteIfGeneric(tokens, {
+    industry: input.classification.industry,
+    text: blob,
+    device: input.classification.device,
+    uiuxHasLabeledPrimary: hasLabeledPrimaryHex(uiux),
+  });
   // Prefer token-implied density so overview and spacing_radius never disagree.
   const density = densityFromTokens(tokens.gap, classDensity);
   const spacing =

@@ -26,7 +26,8 @@ const concrete = buildConcreteUiuxSection({
   projectName: "tutor kids with ADHD",
 });
 assert.equal(isGenericUiuxBoilerplate(concrete), false);
-assert.match(concrete, /#0F766E/);
+assert.match(concrete, /#3F6F5B/);
+assert.equal(/#0F766E|#0D9488/.test(concrete), false, "education must not default to kit teal");
 assert.match(concrete, /ADHD|bottom tabs/i);
 
 const brief = buildUiBriefMarkdown({
@@ -37,7 +38,7 @@ const brief = buildUiBriefMarkdown({
   "5. UI/UX design": filler,
 });
 assert.match(brief, /Stitch-minimum chrome/);
-assert.match(brief, /#0F766E|#FFF8F1/);
+assert.match(brief, /#3F6F5B|#FFF8F1/);
 assert.ok(!/mirror leading apps in this space/i.test(brief));
 
 assert.match(buildStitchChromeBriefSection("mobile"), /bottom tabs/i);

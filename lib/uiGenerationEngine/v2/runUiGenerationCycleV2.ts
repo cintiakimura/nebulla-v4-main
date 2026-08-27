@@ -62,6 +62,7 @@ import {
   shouldWriteUiPreview,
   uiStatusForRung,
 } from "./previewCompose";
+import { paletteToTokens, selectIndustryPalette } from "./industryPalettes";
 import { compileDesignBrief } from "../resources/compileDesignBrief";
 import { matchResources } from "../resources/matchResources";
 import { refineDesignBriefWithGrok } from "../resources/refineDesignBrief";
@@ -988,8 +989,20 @@ export async function runUiGenerationCycleV2(
   namedTok.border = designBrief.color_roles.border.hex;
   if (designBrief.color_roles.accent) namedTok.accent = designBrief.color_roles.accent.hex;
   namedTok = applyPreferenceNudge(applyPlanToTokens(namedTok, structurePlan));
+  const industryPack = selectIndustryPalette({
+    industry: classification.industry,
+    text: `${uiux}\n${goal || ""}\n${state.project_name || ""}`,
+    device: classification.device,
+  });
   const kitTok = applyPreferenceNudge(
-    applyPlanToTokens(kitTokensFromStructure(classification.density, figma.structure_hints), structurePlan),
+    applyPlanToTokens(
+      kitTokensFromStructure(
+        classification.density,
+        figma.structure_hints,
+        paletteToTokens(industryPack, classification.density),
+      ),
+      structurePlan,
+    ),
   );
   let usedKitColors = false;
   let tokens = namedTok;
@@ -1354,7 +1367,7 @@ export async function runUiGenerationCycleV2(
     usedStitchFallback,
   });
   const uiStatus = uiStatusForRung(composeRung, gate.gate === "pass");
-  const paletteId = paletteIdFromTokens(tokens, skin);
+  const paletteId = paletteIdFromTokens(tokens, skin, industryPack.id);
   const deliveredStage =
     uiStatus === "ready" && gate.gate === "pass"
       ? resolvedUiPhase === "post_code"

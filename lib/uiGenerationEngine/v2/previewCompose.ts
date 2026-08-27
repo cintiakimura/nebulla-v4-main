@@ -19,7 +19,12 @@ export function readPreviewSkinMode(env: NodeJS.ProcessEnv = process.env): Previ
   return raw === "tokens" ? "tokens" : "kit";
 }
 
-export function paletteIdFromTokens(tokens: DesignTokens, skin: PreviewSkinMode): string {
+export function paletteIdFromTokens(
+  tokens: DesignTokens,
+  skin: PreviewSkinMode,
+  familyId?: string,
+): string {
+  if (familyId) return familyId;
   const hex = (tokens.primary || "").replace("#", "").toUpperCase().slice(0, 6);
   if (skin === "kit") return hex ? `kit-${hex}` : KIT_PALETTE_ID;
   return hex ? `tokens-${hex}` : "tokens-s5";
@@ -28,8 +33,11 @@ export function paletteIdFromTokens(tokens: DesignTokens, skin: PreviewSkinMode)
 export function kitTokensFromStructure(
   density: "spacious" | "medium" | "compact",
   structureHints: string[],
+  colorBase?: DesignTokens,
 ): DesignTokens {
-  const tokens = defaultTokens(density);
+  const tokens = colorBase
+    ? { ...colorBase, gap: defaultTokens(density).gap, pad: defaultTokens(density).pad }
+    : defaultTokens(density);
   for (const h of structureHints) {
     const sp = h.match(/spacing rhythm ≈ (\d+)/i);
     if (sp) {

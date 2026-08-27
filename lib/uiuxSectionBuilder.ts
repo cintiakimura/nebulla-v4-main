@@ -2,6 +2,8 @@
  * Concrete §5 UI/UX + Stitch chrome — replaces "Industry-appropriate… mirror leading apps" filler.
  */
 
+import { formatPaletteLine, selectIndustryPalette } from "./uiGenerationEngine/v2/industryPalettes";
+
 export function isGenericUiuxBoilerplate(text: string): boolean {
   const t = String(text || "");
   if (!t.trim()) return true;
@@ -41,12 +43,18 @@ export function buildConcreteUiuxSection(input: {
   const education = detectEducation(input.goal, input.tech);
   const adhd = /adhd|focus|attention|distract/i.test(`${input.goal}\n${input.tech}`);
   const name = (input.projectName || "App").trim().slice(0, 48);
+  const pack = selectIndustryPalette({
+    industry: education ? "education" : undefined,
+    text: `${input.goal}\n${input.tech}\n${input.pages}`,
+    device,
+  });
+  const paletteLine = formatPaletteLine(pack);
 
   if (device === "mobile" && education) {
     return [
       `- **Project:** ${name} — mobile education (phone-first, touch ~44px)`,
       `- **Mood:** ${adhd ? "Calm, low-stimulus, one-task-at-a-time (ADHD-friendly)" : "Friendly, encouraging, child-safe"} — never Nebulla IDE chrome (#080A14 / #00D4D4)`,
-      "- **Palette:** soft cream/off-white bg `#FFF8F1`, surface `#FFFFFF`, primary teal `#0F766E`, accent coral `#E11D48` (sparingly), text `#1C1917`, muted `#78716C`, success `#15803D`",
+      paletteLine,
       "- **Typography:** large clear sans (titles 22–28px, body 16–18px); high contrast; short labels",
       "- **Density:** spacious; one primary action per screen; avoid dense admin tables on kid screens",
       "- **Radius / motion:** 16px cards; gentle 150–200ms fades; no neon glow or heavy shadows",
@@ -66,7 +74,7 @@ export function buildConcreteUiuxSection(input: {
     return [
       `- **Project:** ${name} — marketing landing`,
       "- **Mood:** clear product story; one hero promise — not Nebulla IDE chrome",
-      "- **Palette:** light bg `#FAFAF9`, primary `#0F766E`, text `#18181B`, muted `#71717A`",
+      paletteLine,
       "- **Typography:** expressive display + readable body; strong hierarchy",
       "- **Density:** airy hero; one CTA group above the fold",
       "- **Header:** 32–40px rounded initials mark + product name + primary CTA; minimal nav links",
@@ -78,7 +86,7 @@ export function buildConcreteUiuxSection(input: {
   return [
     `- **Project:** ${name} — web app workspace`,
     "- **Mood:** clean productivity UI from category norms — not Nebulla IDE chrome (#080A14 / #00D4D4)",
-    "- **Palette:** bg `#F8FAFC`, surface `#FFFFFF`, primary `#0F766E`, text `#0F172A`, muted `#64748B`, border `#E2E8F0`",
+    paletteLine,
     "- **Typography:** clear sans hierarchy; 14–16px body; accessible contrast",
     "- **Density:** medium; scannable cards; consistent 16px gaps",
     "- **Radius / motion:** 12px; subtle transitions",
