@@ -1,0 +1,35 @@
+{
+  "id": "sheet_SWkEhReUYk4Fsjk9Uf3LXn",
+  "kind": "template",
+  "platform": "web",
+  "page_types": [
+    "dashboard"
+  ],
+  "density": "medium",
+  "personality": [
+    "clean",
+    "professional"
+  ],
+  "best_for": [
+    "Glass SaaS dashboard",
+    "dashboard kit from catalog sheet"
+  ],
+  "strengths": [
+    "Sheet-categorized community file for offline/catalog selection"
+  ],
+  "weaknesses": [
+    "No extracted structure/ in this profile — do not treat as a compiled Figma layout"
+  ],
+  "tags": [
+    "dashboard",
+    "glass",
+    "saas",
+    "dashboard"
+  ],
+  "description": "Sheet catalog row: Glass SaaS dashboard. File key SWkEhReUYk4Fsjk9Uf3LXn. Generate may select this key by bucket; live Figma is ingest-only.",
+  "figma_file_key": "SWkEhReUYk4Fsjk9Uf3LXn",
+  "license": "community",
+  "source": "sheet",
+  "version": "1",
+  "industry": []
+}

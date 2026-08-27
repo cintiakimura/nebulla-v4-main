@@ -33,8 +33,19 @@ import type {
   PageClassification,
   V2TemplateId,
 } from "./types";
+import {
+  KNOWN_SHEET_BUCKETS,
+  bucketsFromSheetCatalog,
+  capProbeKeys,
+  loadCatalogProfileForKey,
+  loadSheetCatalog,
+  preferredSheetBucket,
+  rankKeysForBucket,
+  rowForKey,
+  siblingSheetBuckets,
+} from "./figmaSheetCatalog";
 
-const KNOWN_BUCKETS = new Set(["mobile", "landing", "dashboard", "auth", "web"]);
+const KNOWN_BUCKETS = new Set<string>([...KNOWN_SHEET_BUCKETS]);
 
 /** Committed shortlist — used when env keys unset so structure/ still resolves on Render. */
 const DEFAULT_SHORTLIST_KEYS = [
@@ -47,20 +58,7 @@ const DEFAULT_SHORTLIST_KEYS = [
 const DEFAULT_SHORTLIST_BUCKETS =
   "mobile=ZEbJpC67UQyeeynt1UR8gT,landing=P6lA9sHTHVbnmUfoYbV9Ir,dashboard=TgYmEqMwrWFHBxF2kAVOaF,auth=MaFREMBRF3vQ8BhtqA2ZpK";
 
-function resolveLibraryKeys(): string[] {
-  const fromEnv = (process.env.FIGMA_REFERENCE_FILE_KEYS || "")
-    .split(",")
-    .map((s) => s.trim())
-    .filter(Boolean);
-  if (fromEnv.length) return fromEnv;
-  return [...DEFAULT_SHORTLIST_KEYS];
-}
-
-/** Parse `mobile=KEY,landing=KEY2` — unknown buckets ignored. */
-export function parseReferenceBuckets(
-  raw: string = process.env.FIGMA_REFERENCE_BUCKETS || "",
-): Map<string, string[]> {
-  const effective = raw.trim() ? raw : DEFAULT_SHORTLIST_BUCKETS;
+function parseBucketString(effective: string): Map<string, string[]> {
   const map = new Map<string, string[]>();
   for (const part of effective.split(",")) {
     const t = part.trim();
@@ -75,6 +73,27 @@ export function parseReferenceBuckets(
     map.set(bucket, list);
   }
   return map;
+}
+
+function resolveLibraryKeys(): string[] {
+  const fromEnv = (process.env.FIGMA_REFERENCE_FILE_KEYS || "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  if (fromEnv.length) return fromEnv;
+  const sheet = loadSheetCatalog();
+  if (sheet?.rows.length) return sheet.rows.map((r) => r.file_key);
+  return [...DEFAULT_SHORTLIST_KEYS];
+}
+
+/** Parse `mobile=KEY,landing=KEY2` — unknown buckets ignored. */
+export function parseReferenceBuckets(
+  raw: string = process.env.FIGMA_REFERENCE_BUCKETS || "",
+): Map<string, string[]> {
+  if (raw.trim()) return parseBucketString(raw);
+  const fromSheet = bucketsFromSheetCatalog(loadSheetCatalog());
+  if (fromSheet.size) return fromSheet;
+  return parseBucketString(DEFAULT_SHORTLIST_BUCKETS);
 }
 
 function resolveMaxFiles(): number {
@@ -101,14 +120,9 @@ export function isFigmaLiveOnGenerate(
   return v === "1" || v === "true" || v === "yes";
 }
 
-/** Preferred bucket for Stitch-like C.3 (device → page type). */
+/** Preferred bucket for Stitch-like C.3 (device → page type → sheet category). */
 export function preferredBucketForClassification(classification: PageClassification): string | null {
-  if (classification.page_type === "auth") return "auth";
-  if (classification.device === "landing" || classification.page_type === "landing") return "landing";
-  if (classification.device === "mobile") return "mobile";
-  if (classification.page_type === "dashboard") return "dashboard";
-  if (classification.device === "web") return "web";
-  return null;
+  return preferredSheetBucket(classification);
 }
 
 function isLooseClassification(classification: PageClassification): boolean {
@@ -126,11 +140,9 @@ function isLooseClassification(classification: PageClassification): boolean {
   return classification.confidence === "low" || classification.page_type === "other";
 }
 
-/** Sibling tags safe to try when preferred bucket is empty (never mobile↔landing). */
+/** Sibling tags safe to try when preferred bucket is empty (never mobile↔landing/dashboard). */
 function siblingBuckets(preferred: string): string[] {
-  if (preferred === "landing") return ["web"];
-  if (preferred === "web") return ["landing"];
-  return [];
+  return siblingSheetBuckets(preferred);
 }
 
 /**
@@ -147,11 +159,21 @@ export function resolveProbeKeys(
   const preferred = preferredBucketForClassification(classification);
   const hasBuckets = buckets.size > 0;
 
+  const catalog = loadSheetCatalog();
+  const rank = (keys: string[]) =>
+    capProbeKeys(
+      rankKeysForBucket({
+        keys,
+        classification,
+        catalog,
+      }),
+    );
+
   if (hasBuckets && preferred) {
     const tagged = buckets.get(preferred) || [];
     if (tagged.length > 0) {
       return {
-        keys: tagged,
+        keys: rank(tagged),
         selection_mode: `bucket:${preferred}`,
         preferred_bucket: preferred,
       };
@@ -160,7 +182,7 @@ export function resolveProbeKeys(
       const sibKeys = buckets.get(sib) || [];
       if (sibKeys.length > 0) {
         return {
-          keys: sibKeys,
+          keys: rank(sibKeys),
           selection_mode: `bucket_sibling:${preferred}->${sib}`,
           preferred_bucket: preferred,
         };
@@ -169,7 +191,7 @@ export function resolveProbeKeys(
     // Strict page types: never probe untagged CSV (often a mobile-only library).
     if (isLooseClassification(classification) && libraryKeys.length > 0) {
       return {
-        keys: orderKeysForClassification(libraryKeys, classification),
+        keys: rank(orderKeysForClassification(libraryKeys, classification)),
         selection_mode: "untagged_loose",
         preferred_bucket: preferred,
       };
@@ -183,14 +205,14 @@ export function resolveProbeKeys(
 
   if (hasBuckets && !preferred && libraryKeys.length > 0) {
     return {
-      keys: orderKeysForClassification(libraryKeys, classification),
+      keys: rank(orderKeysForClassification(libraryKeys, classification)),
       selection_mode: "untagged_no_prefer",
       preferred_bucket: null,
     };
   }
 
   return {
-    keys: orderKeysForClassification(libraryKeys, classification),
+    keys: rank(orderKeysForClassification(libraryKeys, classification)),
     selection_mode: "csv",
     preferred_bucket: preferred,
   };
@@ -501,6 +523,12 @@ export async function retrieveFigmaReferences(input: {
   const keysConfigured = allConfiguredKeys.length;
   const bucketsConfigured = buckets.size;
   const preferredEarly = preferredBucketForClassification(input.classification);
+  const preferredKeyBucket = preferred ? bucketForKey(preferred, buckets) : undefined;
+  const preferredSafe =
+    Boolean(preferred) &&
+    !(preferredEarly === "mobile" && preferred === "TgYmEqMwrWFHBxF2kAVOaF") &&
+    !(preferredEarly === "auth" && preferredKeyBucket === "dashboard") &&
+    (!preferredKeyBucket || preferredKeyBucket === preferredEarly);
 
   const seeds = rankSeedPatterns({
     ...({} as UiGenContextState),
@@ -547,25 +575,33 @@ export async function retrieveFigmaReferences(input: {
           : "Local-first Generate (live off). Prefer nebulla-project/figma-library/structure/<key>/document.json; refresh via figma:download + figma:extract-structure.";
 
   const probe = resolveProbeKeys(input.classification, libraryKeys, buckets);
-  const probeKeys =
-    preferred && !probe.keys.includes(preferred)
+  const probeKeys = capProbeKeys(
+    preferredSafe && preferred && !probe.keys.includes(preferred)
       ? [preferred, ...probe.keys]
-      : preferred && probe.keys[0] !== preferred
+      : preferredSafe && preferred && probe.keys[0] !== preferred
         ? [preferred, ...probe.keys.filter((k) => k !== preferred)]
-        : probe.keys;
+        : probe.keys,
+  );
   const selectionModeBase =
-    preferred && probeKeys[0] === preferred && !probe.selection_mode.includes("preferred")
+    preferredSafe &&
+    preferred &&
+    probeKeys[0] === preferred &&
+    !probe.selection_mode.includes("preferred")
       ? `preferred+${probe.selection_mode}`
       : probe.selection_mode;
   const preferredBucket = probe.preferred_bucket ?? preferredEarly;
+  const sheet = loadSheetCatalog();
 
-  // Offline may scan configured keys even on bucket_miss (avoid wrong live, still use local).
-  const offlineScanKeys = [
-    ...new Set([
-      ...probeKeys,
-      ...(probeKeys.length === 0 ? allConfiguredKeys : []),
-    ]),
-  ].slice(0, resolveMaxFiles());
+  const pickMeta = (fileKey: string | null | undefined) => {
+    const row = fileKey ? rowForKey(sheet, fileKey) : null;
+    return {
+      sheet_category: row?.category ?? null,
+      file_key: fileKey || null,
+    };
+  };
+
+  // Only scan the chosen bucket's cap-3 list (never the whole sheet).
+  const offlineScanKeys = [...new Set(probeKeys)];
 
   // 1) Offline extracts first (structure/ primary, then raw/)
   for (const fileKey of offlineScanKeys) {
@@ -604,8 +640,9 @@ export async function retrieveFigmaReferences(input: {
           bucket,
         },
       ],
-      selection_mode: `offline:bucket:${bucket}`,
+      selection_mode: `offline:sheet:bucket:${bucket}`,
       preferred_bucket: preferredBucket || bucket,
+      ...pickMeta(fileKey),
       figma_used: "yes",
       figma_status: "offline",
       figma_error: "",
@@ -632,7 +669,46 @@ export async function retrieveFigmaReferences(input: {
     };
   }
 
-  // 2) Published catalog profile (scored / structural) — before thin brief-only
+  // 2) Thin sheet catalog profile for the same 1–3 keys (still offline; no live fetch)
+  for (const fileKey of probeKeys) {
+    const profile = loadCatalogProfileForKey(fileKey);
+    if (!profile) continue;
+    const row = rowForKey(sheet, fileKey);
+    const bucket = row?.bucket || preferredBucket || "mobile";
+    return {
+      reference_file_keys_configured: keysConfigured,
+      env_guidance: envGuidance,
+      key_diagnostics: [{ key: fileKey, outcome: "ok", score: 3, bucket }],
+      selection_mode: `catalog:sheet:bucket:${bucket}`,
+      preferred_bucket: preferredBucket || bucket,
+      ...pickMeta(fileKey),
+      figma_used: "no",
+      figma_status: "skipped",
+      figma_error: `Catalog sheet row (${profile.id}; no structure/ for ${fileKey})`,
+      candidates: [
+        {
+          id: `catalog:sheet:${fileKey}`,
+          reason: `Sheet category "${row?.category || bucket}" key=${fileKey}`,
+        },
+        ...seedCandidates,
+      ],
+      selected_refs: [
+        {
+          id: `catalog:sheet:${fileKey}`,
+          why: `Sheet catalog pick category=${row?.category || "—"} bucket=${bucket} (no extracted structure)`,
+        },
+      ],
+      fallback_used: "yes",
+      structure_hints: [
+        `sheet-catalog:category=${row?.category || ""}`,
+        `sheet-catalog:key=${fileKey}`,
+        `bucket=${bucket}`,
+        ...intelligenceHints,
+      ].slice(0, 16),
+    };
+  }
+
+  // 3) Published catalog profile (scored / structural) — before thin brief-only
   if (hasCatalogStructure) {
     const structural = [
       `catalog_profile=${input.catalogProfileId || "match"}`,
@@ -652,6 +728,7 @@ export async function retrieveFigmaReferences(input: {
       key_diagnostics: [],
       selection_mode: `local:catalog:${selectionModeBase}`,
       preferred_bucket: preferredBucket,
+      ...pickMeta(null),
       figma_used: "no",
       figma_status: "skipped",
       figma_error: `Catalog profile hit (${input.catalogProfileId || "match"}; offline miss for bucket ${preferredBucket || "—"})`,
@@ -684,6 +761,7 @@ export async function retrieveFigmaReferences(input: {
       key_diagnostics: [],
       selection_mode: `local:brief:${selectionModeBase}`,
       preferred_bucket: preferredBucket,
+      ...pickMeta(null),
       figma_used: "no",
       figma_status: "skipped",
       figma_error: `Brief-only guidance (offline miss; no scored catalog structure for bucket ${preferredBucket || "—"})`,
@@ -821,6 +899,7 @@ export async function retrieveFigmaReferences(input: {
           key_diagnostics: keyDiagnostics,
           selection_mode: `live:${selectionModeBase}`,
           preferred_bucket: preferredBucket,
+          ...pickMeta(bestKey || null),
           figma_used: "yes",
           figma_status: "success",
           figma_error: "",
@@ -863,6 +942,7 @@ export async function retrieveFigmaReferences(input: {
         key_diagnostics: keyDiagnostics,
         selection_mode: `local:seed_after_live:${selectionModeBase}`,
         preferred_bucket: preferredBucket,
+        ...pickMeta(null),
         figma_used: "no",
         figma_status: liveStatus,
         figma_error: detail,
@@ -879,6 +959,7 @@ export async function retrieveFigmaReferences(input: {
         key_diagnostics: [],
         selection_mode: `local:seed_after_live_error:${selectionModeBase}`,
         preferred_bucket: preferredBucket,
+        ...pickMeta(null),
         figma_used: "no",
         figma_status: "failed",
         figma_error: `${redactSecrets(msg)} — seed last resort`,
@@ -907,6 +988,7 @@ export async function retrieveFigmaReferences(input: {
     key_diagnostics: [],
     selection_mode: `local:seed:${selectionModeBase}`,
     preferred_bucket: preferredBucket,
+    ...pickMeta(null),
     figma_used: "no",
     // Distinct from catalog `skipped` and from live `success` / offline `offline`
     figma_status: "weak_matches",

@@ -120,7 +120,7 @@ function buildScreenMarkup(input: {
   templateId: string;
   tokens: DesignTokens;
   slots: SlotMap;
-  patternMode?: "seed" | "figma";
+  patternMode?: "seed" | "figma" | "catalog";
   classification?: PreviewClassificationHint;
   pageKey: string;
   active: boolean;
@@ -134,7 +134,9 @@ function buildScreenMarkup(input: {
   const patternNote =
     input.patternMode === "figma"
       ? "Layout from offline / Figma library structure."
-      : "Built-in seed patterns (library miss).";
+      : input.patternMode === "catalog"
+        ? "Layout from sheet catalog profile (no extracted structure)."
+        : "Built-in seed patterns (library miss).";
   const items = collectItems(slots, templateId);
   const mobile = isMobileTemplate(templateId, input.classification);
   const tabs = wantsBottomTabs(templateId, input.classification);
@@ -258,7 +260,7 @@ export function buildUiGenerationPreviewHtml(options: {
   templateId: string;
   tokens: DesignTokens;
   slots: SlotMap;
-  patternMode?: "seed" | "figma";
+  patternMode?: "seed" | "figma" | "catalog";
   classification?: PreviewClassificationHint;
   screens?: PreviewScreenInput[];
 }): string {
@@ -490,7 +492,7 @@ export function applyUiGenerationToPreviewShell(options: {
   templateId: string;
   tokens: DesignTokens;
   slots: SlotMap;
-  patternMode?: "seed" | "figma";
+  patternMode?: "seed" | "figma" | "catalog";
   classification?: PreviewClassificationHint;
   screens?: PreviewScreenInput[];
   /** When true, overwrite index.html even if coded app UI exists (explicit mockup-only). */

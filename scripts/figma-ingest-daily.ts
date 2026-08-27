@@ -18,12 +18,12 @@ import {
   defaultFigmaLibraryRoot,
   filterPendingKeys,
   ingestStatusPath,
-  parseFigmaKeysCsv,
+  loadIngestKeyRows,
   pickBatch,
+  prioritizePendingIngest,
   readStatusFile,
   refreshIngestLock,
   releaseIngestLock,
-  resolveKeysCsvPath,
   rollDayIfNeeded,
   slotsRemainingToday,
   touchStatus,
@@ -211,14 +211,14 @@ export async function runFigmaIngestDaily(
   const token = (opts.token !== undefined ? opts.token : process.env.FIGMA_API_KEY || "").trim();
 
   try {
-    const csvPath = resolveKeysCsvPath(libraryRoot);
-    if (!fs.existsSync(csvPath)) {
+    const rows = loadIngestKeyRows(libraryRoot);
+    if (!rows.length) {
       status = touchStatus(
         createDefaultStatus({}, now0),
         {
           state: "error",
           lastError: "missing_keys_csv",
-          message: "Missing figma-keys.csv and figma-keys.example.csv",
+          message: "Missing sheet-catalog.json and figma-keys.csv / figma-keys.example.csv",
         },
         now0,
       );
@@ -227,10 +227,11 @@ export async function runFigmaIngestDaily(
       return { status, exitCode: 1 };
     }
 
-    const rows = parseFigmaKeysCsv(fs.readFileSync(csvPath, "utf8"));
     const allKeys = rows.map((r) => r.file_key);
     const pending = filterPendingKeys(libraryRoot, allKeys);
     const slots = slotsRemainingToday(status);
+    const activeBucket = (process.env.FIGMA_INGEST_ACTIVE_BUCKET || "").trim().toLowerCase();
+    const orderedPending = prioritizePendingIngest(pending, rows, activeBucket || undefined);
 
     status = touchStatus(
       status,
@@ -298,7 +299,7 @@ export async function runFigmaIngestDaily(
       return { status, exitCode: 0 };
     }
 
-    const batchKeys = pickBatch(pending, slots);
+    const batchKeys = pickBatch(orderedPending, slots);
     const byKey = new Map(rows.map((r) => [r.file_key, r]));
     let first = true;
 

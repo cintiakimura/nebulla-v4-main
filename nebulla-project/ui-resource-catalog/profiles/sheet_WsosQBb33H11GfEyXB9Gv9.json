@@ -1,0 +1,38 @@
+{
+  "id": "sheet_WsosQBb33H11GfEyXB9Gv9",
+  "kind": "template",
+  "platform": "web",
+  "page_types": [
+    "home",
+    "dashboard",
+    "other"
+  ],
+  "density": "medium",
+  "personality": [
+    "clean",
+    "professional"
+  ],
+  "best_for": [
+    "Flowbite Tailwind (Free edition)",
+    "ds kit from catalog sheet"
+  ],
+  "strengths": [
+    "Sheet-categorized community file for offline/catalog selection"
+  ],
+  "weaknesses": [
+    "No extracted structure/ in this profile — do not treat as a compiled Figma layout"
+  ],
+  "tags": [
+    "ds",
+    "flowbite",
+    "tailwind",
+    "free",
+    "edition"
+  ],
+  "description": "Sheet catalog row: Flowbite Tailwind (Free edition). File key WsosQBb33H11GfEyXB9Gv9. Generate may select this key by bucket; live Figma is ingest-only.",
+  "figma_file_key": "WsosQBb33H11GfEyXB9Gv9",
+  "license": "community",
+  "source": "sheet",
+  "version": "1",
+  "industry": []
+}

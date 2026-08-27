@@ -1,0 +1,35 @@
+{
+  "id": "sheet_dqhfrq4zUFD2nY697858Vp",
+  "kind": "template",
+  "platform": "landing",
+  "page_types": [
+    "landing"
+  ],
+  "density": "medium",
+  "personality": [
+    "clean",
+    "professional"
+  ],
+  "best_for": [
+    "Cloudhub – SaaS website",
+    "landing kit from catalog sheet"
+  ],
+  "strengths": [
+    "Sheet-categorized community file for offline/catalog selection"
+  ],
+  "weaknesses": [
+    "No extracted structure/ in this profile — do not treat as a compiled Figma layout"
+  ],
+  "tags": [
+    "landing",
+    "cloudhub",
+    "saas",
+    "website"
+  ],
+  "description": "Sheet catalog row: Cloudhub – SaaS website. File key dqhfrq4zUFD2nY697858Vp. Generate may select this key by bucket; live Figma is ingest-only.",
+  "figma_file_key": "dqhfrq4zUFD2nY697858Vp",
+  "license": "community",
+  "source": "sheet",
+  "version": "1",
+  "industry": []
+}

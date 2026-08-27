@@ -1,0 +1,34 @@
+{
+  "id": "sheet_bWgC4upW5AdbvU7UgxOaN0",
+  "kind": "template",
+  "platform": "mobile",
+  "page_types": [
+    "auth"
+  ],
+  "density": "medium",
+  "personality": [
+    "clean",
+    "professional"
+  ],
+  "best_for": [
+    "Mobile auth",
+    "auth kit from catalog sheet"
+  ],
+  "strengths": [
+    "Sheet-categorized community file for offline/catalog selection"
+  ],
+  "weaknesses": [
+    "No extracted structure/ in this profile — do not treat as a compiled Figma layout"
+  ],
+  "tags": [
+    "auth",
+    "mobile",
+    "auth"
+  ],
+  "description": "Sheet catalog row: Mobile auth. File key bWgC4upW5AdbvU7UgxOaN0. Generate may select this key by bucket; live Figma is ingest-only.",
+  "figma_file_key": "bWgC4upW5AdbvU7UgxOaN0",
+  "license": "community",
+  "source": "sheet",
+  "version": "1",
+  "industry": []
+}

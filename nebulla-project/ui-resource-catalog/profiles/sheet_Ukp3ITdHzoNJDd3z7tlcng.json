@@ -1,0 +1,38 @@
+{
+  "id": "sheet_Ukp3ITdHzoNJDd3z7tlcng",
+  "kind": "template",
+  "platform": "web",
+  "page_types": [
+    "home",
+    "dashboard",
+    "other"
+  ],
+  "density": "medium",
+  "personality": [
+    "clean",
+    "professional"
+  ],
+  "best_for": [
+    "Ant Design (Free version)",
+    "ds kit from catalog sheet"
+  ],
+  "strengths": [
+    "Sheet-categorized community file for offline/catalog selection"
+  ],
+  "weaknesses": [
+    "No extracted structure/ in this profile — do not treat as a compiled Figma layout"
+  ],
+  "tags": [
+    "ds",
+    "ant",
+    "design",
+    "free",
+    "version"
+  ],
+  "description": "Sheet catalog row: Ant Design (Free version). File key Ukp3ITdHzoNJDd3z7tlcng. Generate may select this key by bucket; live Figma is ingest-only.",
+  "figma_file_key": "Ukp3ITdHzoNJDd3z7tlcng",
+  "license": "community",
+  "source": "sheet",
+  "version": "1",
+  "industry": []
+}

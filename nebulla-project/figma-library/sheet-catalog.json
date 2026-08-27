@@ -1,0 +1,576 @@
+{
+  "source": "https://docs.google.com/spreadsheets/d/1PYQPOWzXnRiTn2j29db7fc9mprg2Yrc-KN5ESKfzo0o",
+  "imported_at": "2026-08-27T13:58:52.711Z",
+  "rows": [
+    {
+      "file_key": "cPhxRpyLYJATvVZ0lrQ9VR",
+      "category": "Mobile screens",
+      "bucket": "mobile",
+      "title": "Mobile screens",
+      "design_url": "https://www.figma.com/design/cPhxRpyLYJATvVZ0lrQ9VR/Mobile-UI-kit--Community---Copy-?node-id=194-1561&p=f&t=LRza040thyTiiCoA-0",
+      "community_url": "https://www.figma.com/design/cPhxRpyLYJATvVZ0lrQ9VR/Mobile-UI-kit--Community---Copy-?node-id=194-1561&p=f&t=LRza040thyTiiCoA-0",
+      "source": "sheet",
+      "avoid_for_education": false
+    },
+    {
+      "file_key": "ZEbJpC67UQyeeynt1UR8gT",
+      "category": "Mobile screens",
+      "bucket": "mobile",
+      "title": "Mobile screens",
+      "design_url": "https://www.figma.com/design/ZEbJpC67UQyeeynt1UR8gT/Mobile-UI-kit--Community---Copy-?node-id=194-1561&p=f&t=rAEosCWgq0ApSWo4-0",
+      "community_url": "https://www.figma.com/design/ZEbJpC67UQyeeynt1UR8gT/Mobile-UI-kit--Community---Copy-?node-id=194-1561&p=f&t=rAEosCWgq0ApSWo4-0",
+      "source": "sheet",
+      "avoid_for_education": false
+    },
+    {
+      "file_key": "MvI0ZTMcbKPiX5AsZedfFZ",
+      "category": "Landing / web",
+      "bucket": "landing",
+      "title": "Landing / web",
+      "design_url": "https://www.figma.com/design/MvI0ZTMcbKPiX5AsZedfFZ/Basic-website-kit-by-Figma--Community---Copy-?node-id=0-1&p=f&t=1WbBSI4Tb2MMys83-0",
+      "community_url": "https://www.figma.com/design/MvI0ZTMcbKPiX5AsZedfFZ/Basic-website-kit-by-Figma--Community---Copy-?node-id=0-1&p=f&t=1WbBSI4Tb2MMys83-0",
+      "source": "sheet",
+      "avoid_for_education": false
+    },
+    {
+      "file_key": "TgYmEqMwrWFHBxF2kAVOaF",
+      "category": "Web dashboard",
+      "bucket": "dashboard",
+      "title": "Web dashboard",
+      "design_url": "https://www.figma.com/design/TgYmEqMwrWFHBxF2kAVOaF/Metrix-SaaS-Dashboard-UI-Kit--Community-?t=nUodLXNNvjqvEJ1Y-0",
+      "community_url": "https://www.figma.com/design/TgYmEqMwrWFHBxF2kAVOaF/Metrix-SaaS-Dashboard-UI-Kit--Community-?t=nUodLXNNvjqvEJ1Y-0",
+      "source": "sheet",
+      "avoid_for_education": false
+    },
+    {
+      "file_key": "tqmXjyHAuoM2byJMreptYS",
+      "category": "Web admin",
+      "bucket": "dashboard",
+      "title": "Web admin",
+      "design_url": "https://www.figma.com/design/tqmXjyHAuoM2byJMreptYS/Free-Figma-Tailwind-Admin-Dashboard---TailAdmin--Community-?node-id=810-15248&p=f&t=ALjH8EbCjUncQtL9-0",
+      "community_url": "https://www.figma.com/design/tqmXjyHAuoM2byJMreptYS/Free-Figma-Tailwind-Admin-Dashboard---TailAdmin--Community-?node-id=810-15248&p=f&t=ALjH8EbCjUncQtL9-0",
+      "source": "sheet",
+      "avoid_for_education": false
+    },
+    {
+      "file_key": "OVgxSlOFyp1ONueGbS9dUf",
+      "category": "Web dashboard alt",
+      "bucket": "dashboard",
+      "title": "Web dashboard alt",
+      "design_url": "https://www.figma.com/design/OVgxSlOFyp1ONueGbS9dUf/DashStack---Free-Admin-Dashboard-UI-Kit---Admin---Dashboard-Ui-Kit---Admin-Dashboard--Community-?node-id=0-40222&p=f&t=UzJN3jcAtM8TwZZ9-0",
+      "community_url": "https://www.figma.com/design/OVgxSlOFyp1ONueGbS9dUf/DashStack---Free-Admin-Dashboard-UI-Kit---Admin---Dashboard-Ui-Kit---Admin-Dashboard--Community-?node-id=0-40222&p=f&t=UzJN3jcAtM8TwZZ9-0",
+      "source": "sheet",
+      "avoid_for_education": false
+    },
+    {
+      "file_key": "yJ7VsV0epdP0RYDGL8b48L",
+      "category": "Mobile freebie screens",
+      "bucket": "mobile",
+      "title": "Mobile freebie screens",
+      "design_url": "https://www.figma.com/design/yJ7VsV0epdP0RYDGL8b48L/HaHo--Freebie--Mobile-UI-Kit---Design-System--Community---Copy-?node-id=4668-7848&p=f&t=mEakX5erJfil6bdL-0",
+      "community_url": "https://www.figma.com/design/yJ7VsV0epdP0RYDGL8b48L/HaHo--Freebie--Mobile-UI-Kit---Design-System--Community---Copy-?node-id=4668-7848&p=f&t=mEakX5erJfil6bdL-0",
+      "source": "sheet",
+      "avoid_for_education": false
+    },
+    {
+      "file_key": "zPfWU9e1DgFUTtL2vxvJHb",
+      "category": "Mobile wireframes (broad)",
+      "bucket": "mobile",
+      "title": "Mobile wireframes (broad)",
+      "design_url": "https://www.figma.com/design/zPfWU9e1DgFUTtL2vxvJHb/Mobile-App-Wireframes-UI-Kit--%7C-BRIX-Agency--Community-?node-id=5302-56798&p=f&t=zwCiltFZKUHRw3AS-0",
+      "community_url": "https://www.figma.com/design/zPfWU9e1DgFUTtL2vxvJHb/Mobile-App-Wireframes-UI-Kit--%7C-BRIX-Agency--Community-?node-id=5302-56798&p=f&t=zwCiltFZKUHRw3AS-0",
+      "source": "sheet",
+      "avoid_for_education": false
+    },
+    {
+      "file_key": "YNUlNyBi2tG1WYrB9v8Jt5",
+      "category": "Essential Forms & Controls UI Kit",
+      "bucket": "forms",
+      "title": "Essential Forms & Controls UI Kit",
+      "design_url": "https://www.figma.com/design/YNUlNyBi2tG1WYrB9v8Jt5/Essential-Forms---Controls-UI-Kit--Community---Copy-?node-id=0-1&p=f&t=msB2VnlG1sZq3Tir-0",
+      "community_url": "https://www.figma.com/design/YNUlNyBi2tG1WYrB9v8Jt5/Essential-Forms---Controls-UI-Kit--Community---Copy-?node-id=0-1&p=f&t=msB2VnlG1sZq3Tir-0",
+      "source": "sheet",
+      "avoid_for_education": false
+    },
+    {
+      "file_key": "jpF9ONCq3S6S9xTSykYGNM",
+      "category": "Treyd Crypto Trading App UI Kit",
+      "bucket": "mobile",
+      "title": "Treyd Crypto Trading App UI Kit",
+      "design_url": "https://www.figma.com/design/jpF9ONCq3S6S9xTSykYGNM/Treyd-Crypto-Trading-App-UI-Kit--Community---Copy-?node-id=103-9232&p=f&t=BtR5BizGDjU1Xh4R-0",
+      "community_url": "https://www.figma.com/design/jpF9ONCq3S6S9xTSykYGNM/Treyd-Crypto-Trading-App-UI-Kit--Community---Copy-?node-id=103-9232&p=f&t=BtR5BizGDjU1Xh4R-0",
+      "source": "sheet",
+      "avoid_for_education": true
+    },
+    {
+      "file_key": "REMe6TT3iWXX5CUx4truQZ",
+      "category": "Smart Charts",
+      "bucket": "dashboard",
+      "title": "Smart Charts",
+      "design_url": "https://www.figma.com/design/REMe6TT3iWXX5CUx4truQZ/Smart-Charts--Community-?node-id=1-2&p=f&t=Qdap6JRqeKYlkzzD-0",
+      "community_url": "https://www.figma.com/design/REMe6TT3iWXX5CUx4truQZ/Smart-Charts--Community-?node-id=1-2&p=f&t=Qdap6JRqeKYlkzzD-0",
+      "source": "sheet",
+      "avoid_for_education": false
+    },
+    {
+      "file_key": "MaFREMBRF3vQ8BhtqA2ZpK",
+      "category": "Mobile auth",
+      "bucket": "auth",
+      "title": "Mobile auth",
+      "design_url": "https://www.figma.com/design/MaFREMBRF3vQ8BhtqA2ZpK/App-login--signup--reset-password-UI-Kit--Freebie---Community-?node-id=0-1&p=f&t=VTVJmXHI4yoakTex-0",
+      "community_url": "https://www.figma.com/design/MaFREMBRF3vQ8BhtqA2ZpK/App-login--signup--reset-password-UI-Kit--Freebie---Community-?node-id=0-1&p=f&t=VTVJmXHI4yoakTex-0",
+      "source": "sheet",
+      "avoid_for_education": false
+    },
+    {
+      "file_key": "bWgC4upW5AdbvU7UgxOaN0",
+      "category": "Mobile auth",
+      "bucket": "auth",
+      "title": "Mobile auth",
+      "design_url": "https://www.figma.com/design/bWgC4upW5AdbvU7UgxOaN0/Modern-Free-Auth-UI-Kit--Community-?node-id=8-476&p=f&t=G3Ax8viY2aepnp7i-0",
+      "community_url": "https://www.figma.com/design/bWgC4upW5AdbvU7UgxOaN0/Modern-Free-Auth-UI-Kit--Community-?node-id=8-476&p=f&t=G3Ax8viY2aepnp7i-0",
+      "source": "sheet",
+      "avoid_for_education": false
+    },
+    {
+      "file_key": "4WBrxsgT9mGXvZRB5Jtits",
+      "category": "Login/register pack",
+      "bucket": "auth",
+      "title": "Login/register pack",
+      "design_url": "https://www.figma.com/design/4WBrxsgT9mGXvZRB5Jtits/Free-Login-Register-Screens-UI-Kits--Community-?node-id=512-3239&p=f&t=crj4CAuC5Jt5Baoh-0",
+      "community_url": "https://www.figma.com/design/4WBrxsgT9mGXvZRB5Jtits/Free-Login-Register-Screens-UI-Kits--Community-?node-id=512-3239&p=f&t=crj4CAuC5Jt5Baoh-0",
+      "source": "sheet",
+      "avoid_for_education": false
+    },
+    {
+      "file_key": "grKjRghhdLOnJE39QhKhSv",
+      "category": "Web + mobile auth",
+      "bucket": "auth",
+      "title": "Web + mobile auth",
+      "design_url": "https://www.figma.com/design/grKjRghhdLOnJE39QhKhSv/Authentication-Website-UI-Kit---Oval-Style--Community-?node-id=2-83&p=f&t=soKFWIkZzRriQ0pu-0",
+      "community_url": "https://www.figma.com/design/grKjRghhdLOnJE39QhKhSv/Authentication-Website-UI-Kit---Oval-Style--Community-?node-id=2-83&p=f&t=soKFWIkZzRriQ0pu-0",
+      "source": "sheet",
+      "avoid_for_education": false
+    },
+    {
+      "file_key": "CqIYDAMY5EeuVAwk5TI6Hi",
+      "category": "Onboarding + sign-in",
+      "bucket": "auth",
+      "title": "Onboarding + sign-in",
+      "design_url": "https://www.figma.com/design/CqIYDAMY5EeuVAwk5TI6Hi/Mobile-App-Onboarding-%7C-Appetite-UI--Community-?node-id=10-597&p=f&t=mynTDLfSanGCjxbo-0",
+      "community_url": "https://www.figma.com/design/CqIYDAMY5EeuVAwk5TI6Hi/Mobile-App-Onboarding-%7C-Appetite-UI--Community-?node-id=10-597&p=f&t=mynTDLfSanGCjxbo-0",
+      "source": "sheet",
+      "avoid_for_education": false
+    },
+    {
+      "file_key": "4xFATxq2bTnEUYZ6VoMlaz",
+      "category": "Website wireframes",
+      "bucket": "landing",
+      "title": "Website wireframes",
+      "design_url": "https://www.figma.com/design/4xFATxq2bTnEUYZ6VoMlaz/Website-Wireframes-UI-Kit-%7C-BRIX-Templates--Community-?node-id=0-1&p=f&t=kkVZAqeBmR5IwxiJ-0",
+      "community_url": "https://www.figma.com/design/4xFATxq2bTnEUYZ6VoMlaz/Website-Wireframes-UI-Kit-%7C-BRIX-Templates--Community-?node-id=0-1&p=f&t=kkVZAqeBmR5IwxiJ-0",
+      "source": "sheet",
+      "avoid_for_education": false
+    },
+    {
+      "file_key": "V8eUM3s4UawPNV98ClaiYc",
+      "category": "Web + mobile wireframe DS",
+      "bucket": "wireframe",
+      "title": "Web + mobile wireframe DS",
+      "design_url": "https://www.figma.com/design/V8eUM3s4UawPNV98ClaiYc/Wirefigma-FREE-%7C-Wireframe-Design-System-for-Figma--Community-?node-id=23-0&p=f&t=ThBib1KitsBF3SYi-0",
+      "community_url": "https://www.figma.com/design/V8eUM3s4UawPNV98ClaiYc/Wirefigma-FREE-%7C-Wireframe-Design-System-for-Figma--Community-?node-id=23-0&p=f&t=ThBib1KitsBF3SYi-0",
+      "source": "sheet",
+      "avoid_for_education": false
+    },
+    {
+      "file_key": "LxcU0o0knlEMk4kVc3Jcmh",
+      "category": "Wireframe UI kit",
+      "bucket": "wireframe",
+      "title": "Wireframe UI kit",
+      "design_url": "https://www.figma.com/design/LxcU0o0knlEMk4kVc3Jcmh/Wireframe-UI-Kit--Figma----uxchunks--Community-?node-id=13-2038&p=f&t=gbTIhAp7ALbRwJGg-0",
+      "community_url": "https://www.figma.com/design/LxcU0o0knlEMk4kVc3Jcmh/Wireframe-UI-Kit--Figma----uxchunks--Community-?node-id=13-2038&p=f&t=gbTIhAp7ALbRwJGg-0",
+      "source": "sheet",
+      "avoid_for_education": false
+    },
+    {
+      "file_key": "Fshk7uqx0nm48SMsfYqyfy",
+      "category": "SaaS dashboard free",
+      "bucket": "dashboard",
+      "title": "SaaS dashboard free",
+      "design_url": "https://www.figma.com/design/Fshk7uqx0nm48SMsfYqyfy/SaaS-Dashboard---Free-UI-Kit--Community-?node-id=0-1&p=f&t=CBz65J7sn0RXwyUH-0",
+      "community_url": "https://www.figma.com/design/Fshk7uqx0nm48SMsfYqyfy/SaaS-Dashboard---Free-UI-Kit--Community-?node-id=0-1&p=f&t=CBz65J7sn0RXwyUH-0",
+      "source": "sheet",
+      "avoid_for_education": false
+    },
+    {
+      "file_key": "SWkEhReUYk4Fsjk9Uf3LXn",
+      "category": "Glass SaaS dashboard",
+      "bucket": "dashboard",
+      "title": "Glass SaaS dashboard",
+      "design_url": "https://www.figma.com/design/SWkEhReUYk4Fsjk9Uf3LXn/Glass-SaaS-Dashboard-%E2%80%93-Free-Figma-UI-Kit---Design-System--Community-?node-id=0-1&p=f&t=DSYoePX6H9FHadrr-0",
+      "community_url": "https://www.figma.com/design/SWkEhReUYk4Fsjk9Uf3LXn/Glass-SaaS-Dashboard-%E2%80%93-Free-Figma-UI-Kit---Design-System--Community-?node-id=0-1&p=f&t=DSYoePX6H9FHadrr-0",
+      "source": "sheet",
+      "avoid_for_education": false
+    },
+    {
+      "file_key": "CLeJ35NYPljaA7ZBZFIynY",
+      "category": "iOS kit (hi quality components + demos)",
+      "bucket": "mobile",
+      "title": "iOS kit (hi quality components + demos)",
+      "design_url": "https://www.figma.com/design/CLeJ35NYPljaA7ZBZFIynY/iOS-16-UI-Kit-for-Figma--Community-?node-id=1002-6668&p=f&t=z3Z0wiTJyWJDfIDO-0",
+      "community_url": "https://www.figma.com/design/CLeJ35NYPljaA7ZBZFIynY/iOS-16-UI-Kit-for-Figma--Community-?node-id=1002-6668&p=f&t=z3Z0wiTJyWJDfIDO-0",
+      "source": "sheet",
+      "avoid_for_education": false
+    },
+    {
+      "file_key": "1wBJdkVjDLedn3sQWSQKtL",
+      "category": "Mobile lite screens",
+      "bucket": "mobile",
+      "title": "Mobile lite screens",
+      "design_url": "https://www.figma.com/design/1wBJdkVjDLedn3sQWSQKtL/Free-Mobile-App-UI-Kit-for-Figma-%E2%80%94-Lite-Version--Community-?node-id=1-13&p=f&t=JQz5oX36G9HdopO6-0",
+      "community_url": "https://www.figma.com/design/1wBJdkVjDLedn3sQWSQKtL/Free-Mobile-App-UI-Kit-for-Figma-%E2%80%94-Lite-Version--Community-?node-id=1-13&p=f&t=JQz5oX36G9HdopO6-0",
+      "source": "sheet",
+      "avoid_for_education": false
+    },
+    {
+      "file_key": "33N9h8Z5wn3Ia1TCUUemrl",
+      "category": "Untitled UI (FREE)",
+      "bucket": "ds",
+      "title": "Untitled UI (FREE)",
+      "design_url": "https://www.figma.com/design/33N9h8Z5wn3Ia1TCUUemrl/%E2%9D%96-Untitled-UI-%E2%80%93-FREE-Figma-UI-kit-and-design-system-v2.0--Community-?t=YmeZdFtiFAzcmB6N-0",
+      "community_url": "https://www.figma.com/design/33N9h8Z5wn3Ia1TCUUemrl/%E2%9D%96-Untitled-UI-%E2%80%93-FREE-Figma-UI-kit-and-design-system-v2.0--Community-?t=YmeZdFtiFAzcmB6N-0",
+      "source": "sheet",
+      "avoid_for_education": false
+    },
+    {
+      "file_key": "YZHmPB6ufDPv9AqiRwpoxd",
+      "category": "Plus UI (FREE DS)",
+      "bucket": "ds",
+      "title": "Plus UI (FREE DS)",
+      "design_url": "https://www.figma.com/design/YZHmPB6ufDPv9AqiRwpoxd/Plus-UI----FREE-Figma-UI-Kit-and-Design-System--2026--v2.0--Community-?t=Mu0GR650pMQTJsxt-0",
+      "community_url": "https://www.figma.com/design/YZHmPB6ufDPv9AqiRwpoxd/Plus-UI----FREE-Figma-UI-Kit-and-Design-System--2026--v2.0--Community-?t=Mu0GR650pMQTJsxt-0",
+      "source": "sheet",
+      "avoid_for_education": false
+    },
+    {
+      "file_key": "L6fzDJmTnke43vjJWLSkH0",
+      "category": "Get UI (FREE)",
+      "bucket": "ds",
+      "title": "Get UI (FREE)",
+      "design_url": "https://www.figma.com/design/L6fzDJmTnke43vjJWLSkH0/%E2%9D%96-Get-UI---FREE-Figma-UI-kit-and-design-system---1.0--Community-?t=puKpPfqMRwCixJnN-0",
+      "community_url": "https://www.figma.com/design/L6fzDJmTnke43vjJWLSkH0/%E2%9D%96-Get-UI---FREE-Figma-UI-kit-and-design-system---1.0--Community-?t=puKpPfqMRwCixJnN-0",
+      "source": "sheet",
+      "avoid_for_education": false
+    },
+    {
+      "file_key": "WsosQBb33H11GfEyXB9Gv9",
+      "category": "Flowbite Tailwind (Free edition)",
+      "bucket": "ds",
+      "title": "Flowbite Tailwind (Free edition)",
+      "design_url": "https://www.figma.com/design/WsosQBb33H11GfEyXB9Gv9/Flowbite---Tailwind-CSS-Figma-Design-System--Free-Edition---Community-?node-id=15-858&p=f&t=a1u3tLWuBnSeDS5G-0",
+      "community_url": "https://www.figma.com/design/WsosQBb33H11GfEyXB9Gv9/Flowbite---Tailwind-CSS-Figma-Design-System--Free-Edition---Community-?node-id=15-858&p=f&t=a1u3tLWuBnSeDS5G-0",
+      "source": "sheet",
+      "avoid_for_education": false
+    },
+    {
+      "file_key": "jfo7yAJEtwv3km6VkJ0zYQ",
+      "category": "Material 3 Design Kit",
+      "bucket": "ds",
+      "title": "Material 3 Design Kit",
+      "design_url": "https://www.figma.com/design/jfo7yAJEtwv3km6VkJ0zYQ/Material-3-Design-Kit--Community-?t=9FataUzuAoSYI4aB-0",
+      "community_url": "https://www.figma.com/design/jfo7yAJEtwv3km6VkJ0zYQ/Material-3-Design-Kit--Community-?t=9FataUzuAoSYI4aB-0",
+      "source": "sheet",
+      "avoid_for_education": false
+    },
+    {
+      "file_key": "Ukp3ITdHzoNJDd3z7tlcng",
+      "category": "Ant Design (Free version)",
+      "bucket": "ds",
+      "title": "Ant Design (Free version)",
+      "design_url": "https://www.figma.com/design/Ukp3ITdHzoNJDd3z7tlcng/Ant-Design-System-for-Figma--Free-version---Community-?node-id=12-20919&p=f&t=nPNHTvu9iPeAp470-0",
+      "community_url": "https://www.figma.com/design/Ukp3ITdHzoNJDd3z7tlcng/Ant-Design-System-for-Figma--Free-version---Community-?node-id=12-20919&p=f&t=nPNHTvu9iPeAp470-0",
+      "source": "sheet",
+      "avoid_for_education": false
+    },
+    {
+      "file_key": "0K5zL0g2vY2DdZhsOAkyng",
+      "category": "HeroUI Kit (Community)",
+      "bucket": "ds",
+      "title": "HeroUI Kit (Community)",
+      "design_url": "https://www.figma.com/design/0K5zL0g2vY2DdZhsOAkyng/HeroUI-Figma-Kit--Community---Community-?t=IVGcefxYGHiJqmBZ-0",
+      "community_url": "https://www.figma.com/design/0K5zL0g2vY2DdZhsOAkyng/HeroUI-Figma-Kit--Community---Community-?t=IVGcefxYGHiJqmBZ-0",
+      "source": "sheet",
+      "avoid_for_education": false
+    },
+    {
+      "file_key": "0SePPJ4KDQ5zgxnYQ3ZtDc",
+      "category": "HeroUI Kit V3",
+      "bucket": "ds",
+      "title": "HeroUI Kit V3",
+      "design_url": "https://www.figma.com/design/0SePPJ4KDQ5zgxnYQ3ZtDc/HeroUI-Figma-Kit-V3--Community-?t=dVzAhK5I9CD5HdIO-0",
+      "community_url": "https://www.figma.com/design/0SePPJ4KDQ5zgxnYQ3ZtDc/HeroUI-Figma-Kit-V3--Community-?t=dVzAhK5I9CD5HdIO-0",
+      "source": "sheet",
+      "avoid_for_education": false
+    },
+    {
+      "file_key": "zbJbnMYm07Q5lGzDYw8tbx",
+      "category": "Shadcn UI DS – Free",
+      "bucket": "ds",
+      "title": "Shadcn UI DS – Free",
+      "design_url": "https://www.figma.com/design/zbJbnMYm07Q5lGzDYw8tbx/Shadcn-UI---Design-System---Free--Community-?t=0UjQljAcyj5dxdx0-0",
+      "community_url": "https://www.figma.com/design/zbJbnMYm07Q5lGzDYw8tbx/Shadcn-UI---Design-System---Free--Community-?t=0UjQljAcyj5dxdx0-0",
+      "source": "sheet",
+      "avoid_for_education": false
+    },
+    {
+      "file_key": "clBu02o1f9u5ktq1CCjgXX",
+      "category": "Nolow DS – Shadcn (Free)",
+      "bucket": "ds",
+      "title": "Nolow DS – Shadcn (Free)",
+      "design_url": "https://www.figma.com/design/clBu02o1f9u5ktq1CCjgXX/Nolow-DS---Shadcn-UI-Kit--43-Components--Variables--Free---Community-?t=XtZn562wuxie1trs-0",
+      "community_url": "https://www.figma.com/design/clBu02o1f9u5ktq1CCjgXX/Nolow-DS---Shadcn-UI-Kit--43-Components--Variables--Free---Community-?t=XtZn562wuxie1trs-0",
+      "source": "sheet",
+      "avoid_for_education": false
+    },
+    {
+      "file_key": "iWaeXGWx8Fu4I56eUmMYFA",
+      "category": "shadcn/ui + variables",
+      "bucket": "ds",
+      "title": "shadcn/ui + variables",
+      "design_url": "https://www.figma.com/design/iWaeXGWx8Fu4I56eUmMYFA/shadcn-ui-components-with-variables---Tailwind-classes---Updated-January-2026--Community-?t=btkgs1Vk4cwXQ8qG-0",
+      "community_url": "https://www.figma.com/design/iWaeXGWx8Fu4I56eUmMYFA/shadcn-ui-components-with-variables---Tailwind-classes---Updated-January-2026--Community-?t=btkgs1Vk4cwXQ8qG-0",
+      "source": "sheet",
+      "avoid_for_education": false
+    },
+    {
+      "file_key": "T5AjaF7KsoZTtXHqC3kgsK",
+      "category": "@shadcn/ui Design System",
+      "bucket": "ds",
+      "title": "@shadcn/ui Design System",
+      "design_url": "https://www.figma.com/design/T5AjaF7KsoZTtXHqC3kgsK/-shadcn-ui---Design-System--Community-?node-id=2-287&p=f&t=H4R0j6q0DAyGl9Da-0",
+      "community_url": "https://www.figma.com/design/T5AjaF7KsoZTtXHqC3kgsK/-shadcn-ui---Design-System--Community-?node-id=2-287&p=f&t=H4R0j6q0DAyGl9Da-0",
+      "source": "sheet",
+      "avoid_for_education": false
+    },
+    {
+      "file_key": "xM3OWDhb562vDYgIK0hfop",
+      "category": "shadcn Ultimate UI Kit",
+      "bucket": "ds",
+      "title": "shadcn Ultimate UI Kit",
+      "design_url": "https://www.figma.com/design/xM3OWDhb562vDYgIK0hfop/shadcn-ui--The-Ultimate-UI-Kit-for-Figma--Community-?t=ttNzFznW1BcUgHyK-0",
+      "community_url": "https://www.figma.com/design/xM3OWDhb562vDYgIK0hfop/shadcn-ui--The-Ultimate-UI-Kit-for-Figma--Community-?t=ttNzFznW1BcUgHyK-0",
+      "source": "sheet",
+      "avoid_for_education": false
+    },
+    {
+      "file_key": "ItdbQE988jQIE8ZwkCLXjY",
+      "category": "Foundational UI Library",
+      "bucket": "ds",
+      "title": "Foundational UI Library",
+      "design_url": "https://www.figma.com/design/ItdbQE988jQIE8ZwkCLXjY/Foundational-UI-Library--Community-?node-id=0-1&p=f&t=bpOddbwZnvstU5Yt-0",
+      "community_url": "https://www.figma.com/design/ItdbQE988jQIE8ZwkCLXjY/Foundational-UI-Library--Community-?node-id=0-1&p=f&t=bpOddbwZnvstU5Yt-0",
+      "source": "sheet",
+      "avoid_for_education": false
+    },
+    {
+      "file_key": "3BntoT09ryHp8jtFO7nwsM",
+      "category": "Buttons Mega Builder",
+      "bucket": "ds",
+      "title": "Buttons Mega Builder",
+      "design_url": "https://www.figma.com/design/3BntoT09ryHp8jtFO7nwsM/Buttons-Mega-Builder--Community-?node-id=17-8006&p=f&t=0Dd77xbBoqgq1rkc-0",
+      "community_url": "https://www.figma.com/design/3BntoT09ryHp8jtFO7nwsM/Buttons-Mega-Builder--Community-?node-id=17-8006&p=f&t=0Dd77xbBoqgq1rkc-0",
+      "source": "sheet",
+      "avoid_for_education": false
+    },
+    {
+      "file_key": "k6MvIYJvZRdWOXIzwRjiU6",
+      "category": "iOS 16 UI Kit (components + demos)",
+      "bucket": "mobile",
+      "title": "iOS 16 UI Kit (components + demos)",
+      "design_url": "https://www.figma.com/design/k6MvIYJvZRdWOXIzwRjiU6/iOS-16-UI-Kit-for-Figma--Community-?t=7ycRMyDXcZQrkeRM-0",
+      "community_url": "https://www.figma.com/design/k6MvIYJvZRdWOXIzwRjiU6/iOS-16-UI-Kit-for-Figma--Community-?t=7ycRMyDXcZQrkeRM-0",
+      "source": "sheet",
+      "avoid_for_education": false
+    },
+    {
+      "file_key": "U1gugGVHMcBCrBr91s5cjO",
+      "category": "Wirefigma FREE (wire + components)",
+      "bucket": "wireframe",
+      "title": "Wirefigma FREE (wire + components)",
+      "design_url": "https://www.figma.com/design/U1gugGVHMcBCrBr91s5cjO/Wirefigma-FREE-%7C-Wireframe-Design-System-for-Figma--Community-?t=5GSpoMVDlfSUcqv6-0",
+      "community_url": "https://www.figma.com/design/U1gugGVHMcBCrBr91s5cjO/Wirefigma-FREE-%7C-Wireframe-Design-System-for-Figma--Community-?t=5GSpoMVDlfSUcqv6-0",
+      "source": "sheet",
+      "avoid_for_education": false
+    },
+    {
+      "file_key": "62mTwoQlAFEMTVHwNd4onx",
+      "category": "Wireframe UI Kit – uxchunks",
+      "bucket": "wireframe",
+      "title": "Wireframe UI Kit – uxchunks",
+      "design_url": "https://www.figma.com/design/62mTwoQlAFEMTVHwNd4onx/Wireframe-UI-Kit--Figma----uxchunks--Community-?node-id=13-2038&p=f&t=lo2MlHKyi5T6p4Kj-0",
+      "community_url": "https://www.figma.com/design/62mTwoQlAFEMTVHwNd4onx/Wireframe-UI-Kit--Figma----uxchunks--Community-?node-id=13-2038&p=f&t=lo2MlHKyi5T6p4Kj-0",
+      "source": "sheet",
+      "avoid_for_education": false
+    },
+    {
+      "file_key": "P6lA9sHTHVbnmUfoYbV9Ir",
+      "category": "Whitepace – SaaS landing",
+      "bucket": "landing",
+      "title": "Whitepace – SaaS landing",
+      "design_url": "https://www.figma.com/design/P6lA9sHTHVbnmUfoYbV9Ir/Whitepace---SaaS-Landing-Page--Community-?t=E3oJwyYQDNN810R5-0",
+      "community_url": "https://www.figma.com/design/P6lA9sHTHVbnmUfoYbV9Ir/Whitepace---SaaS-Landing-Page--Community-?t=E3oJwyYQDNN810R5-0",
+      "source": "sheet",
+      "avoid_for_education": false
+    },
+    {
+      "file_key": "UbQrq5WZBqIw945aHbqLX4",
+      "category": "Brainwave.io – SaaS / app landing kit",
+      "bucket": "landing",
+      "title": "Brainwave.io – SaaS / app landing kit",
+      "design_url": "https://www.figma.com/design/UbQrq5WZBqIw945aHbqLX4/Brainwave.io---Landing-Page-UI-Kit---Saas-Landing-Page---Creative-App-Landing-Page--Community-?t=0NbRFi6B3YjH4nU2-0",
+      "community_url": "https://www.figma.com/design/UbQrq5WZBqIw945aHbqLX4/Brainwave.io---Landing-Page-UI-Kit---Saas-Landing-Page---Creative-App-Landing-Page--Community-?t=0NbRFi6B3YjH4nU2-0",
+      "source": "sheet",
+      "avoid_for_education": false
+    },
+    {
+      "file_key": "N0Uc9SUEQUSUy4wNMsGH1C",
+      "category": "B2Base – B2B SaaS / startups (Free)",
+      "bucket": "landing",
+      "title": "B2Base – B2B SaaS / startups (Free)",
+      "design_url": "https://www.figma.com/design/N0Uc9SUEQUSUy4wNMsGH1C/B2Base---SaaS-platforms---Startups-Figma-Template--Free---Community-?t=PXF2pQFxs0wvOTaM-0",
+      "community_url": "https://www.figma.com/design/N0Uc9SUEQUSUy4wNMsGH1C/B2Base---SaaS-platforms---Startups-Figma-Template--Free---Community-?t=PXF2pQFxs0wvOTaM-0",
+      "source": "sheet",
+      "avoid_for_education": false
+    },
+    {
+      "file_key": "4mqzdefxfDX2SYlTqGTU2n",
+      "category": "Saasto – SaaS & app website",
+      "bucket": "landing",
+      "title": "Saasto – SaaS & app website",
+      "design_url": "https://www.figma.com/design/4mqzdefxfDX2SYlTqGTU2n/SaaS---App-Website-I-Saasto--Community-?node-id=181-1481&p=f&t=VTJgvSng72rffbVb-0",
+      "community_url": "https://www.figma.com/design/4mqzdefxfDX2SYlTqGTU2n/SaaS---App-Website-I-Saasto--Community-?node-id=181-1481&p=f&t=VTJgvSng72rffbVb-0",
+      "source": "sheet",
+      "avoid_for_education": false
+    },
+    {
+      "file_key": "dqhfrq4zUFD2nY697858Vp",
+      "category": "Cloudhub – SaaS website",
+      "bucket": "landing",
+      "title": "Cloudhub – SaaS website",
+      "design_url": "https://www.figma.com/design/dqhfrq4zUFD2nY697858Vp/Cloudhub---SAAS-Website-Template--Community-?t=3t7JlJS1nbu4Qjne-0",
+      "community_url": "https://www.figma.com/design/dqhfrq4zUFD2nY697858Vp/Cloudhub---SAAS-Website-Template--Community-?t=3t7JlJS1nbu4Qjne-0",
+      "source": "sheet",
+      "avoid_for_education": false
+    },
+    {
+      "file_key": "YGuEMAVBRhpR51B159hwIg",
+      "category": "Landing Play Lite – sections + templates",
+      "bucket": "landing",
+      "title": "Landing Play Lite – sections + templates",
+      "design_url": "https://www.figma.com/design/YGuEMAVBRhpR51B159hwIg/Landing-Play-Lite-Version---Landing-Page-UI-Kit-for-Figma--Community-?t=5x7eQ8YqLLzULLfi-0",
+      "community_url": "https://www.figma.com/design/YGuEMAVBRhpR51B159hwIg/Landing-Play-Lite-Version---Landing-Page-UI-Kit-for-Figma--Community-?t=5x7eQ8YqLLzULLfi-0",
+      "source": "sheet",
+      "avoid_for_education": false
+    },
+    {
+      "file_key": "WAzHraTgsSqQQbJrTRSKlX",
+      "category": "Startup landing page template",
+      "bucket": "landing",
+      "title": "Startup landing page template",
+      "design_url": "https://www.figma.com/design/WAzHraTgsSqQQbJrTRSKlX/Design-a-Startup-Landing-Page--Community-?t=fflXtEBlSOm3r8lt-0",
+      "community_url": "https://www.figma.com/design/WAzHraTgsSqQQbJrTRSKlX/Design-a-Startup-Landing-Page--Community-?t=fflXtEBlSOm3r8lt-0",
+      "source": "sheet",
+      "avoid_for_education": false
+    },
+    {
+      "file_key": "m8WyQ9XBo9bvMHhk3m60RK",
+      "category": "Filo – SaaS / startup (Framer-oriented)",
+      "bucket": "landing",
+      "title": "Filo – SaaS / startup (Framer-oriented)",
+      "design_url": "https://www.figma.com/design/m8WyQ9XBo9bvMHhk3m60RK/Filo-%E2%80%93-Free-SaaS---Startup-Framer-Website-Template--Community-?node-id=0-1&p=f&t=upOg1sYDqMYr8wIq-0",
+      "community_url": "https://www.figma.com/design/m8WyQ9XBo9bvMHhk3m60RK/Filo-%E2%80%93-Free-SaaS---Startup-Framer-Website-Template--Community-?node-id=0-1&p=f&t=upOg1sYDqMYr8wIq-0",
+      "source": "sheet",
+      "avoid_for_education": false
+    },
+    {
+      "file_key": "DOJzcoTY6pQttUY9dLDZdT",
+      "category": "DashStack – admin dashboard",
+      "bucket": "dashboard",
+      "title": "DashStack – admin dashboard",
+      "design_url": "https://www.figma.com/design/DOJzcoTY6pQttUY9dLDZdT/DashStack---Free-Admin-Dashboard-UI-Kit---Admin---Dashboard-Ui-Kit---Admin-Dashboard--Community---Copy-?node-id=0-40222&p=f&t=qhNftPV4rS8RZyZE-0",
+      "community_url": "https://www.figma.com/design/DOJzcoTY6pQttUY9dLDZdT/DashStack---Free-Admin-Dashboard-UI-Kit---Admin---Dashboard-Ui-Kit---Admin-Dashboard--Community---Copy-?node-id=0-40222&p=f&t=qhNftPV4rS8RZyZE-0",
+      "source": "sheet",
+      "avoid_for_education": false
+    },
+    {
+      "file_key": "YBSMjXDGLXoxuVoakAAydM",
+      "category": "TailAdmin – Tailwind admin",
+      "bucket": "dashboard",
+      "title": "TailAdmin – Tailwind admin",
+      "design_url": "https://www.figma.com/design/YBSMjXDGLXoxuVoakAAydM/Filo-%E2%80%93-Free-SaaS---Startup-Framer-Website-Template--Community-?t=8SsK24b7EoN7oJBt-0",
+      "community_url": "https://www.figma.com/design/YBSMjXDGLXoxuVoakAAydM/Filo-%E2%80%93-Free-SaaS---Startup-Framer-Website-Template--Community-?t=8SsK24b7EoN7oJBt-0",
+      "source": "sheet",
+      "avoid_for_education": false
+    },
+    {
+      "file_key": "l2VY2vjR5wZOa8QP27y8Jn",
+      "category": "Metrix – SaaS e-commerce dashboard",
+      "bucket": "dashboard",
+      "title": "Metrix – SaaS e-commerce dashboard",
+      "design_url": "https://www.figma.com/design/l2VY2vjR5wZOa8QP27y8Jn/Metrix-SaaS-Dashboard-UI-Kit--Community-?m=auto&is-community-duplicate=1&fuid=1662334490189385437",
+      "community_url": "https://www.figma.com/design/l2VY2vjR5wZOa8QP27y8Jn/Metrix-SaaS-Dashboard-UI-Kit--Community-?m=auto&is-community-duplicate=1&fuid=1662334490189385437",
+      "source": "sheet",
+      "avoid_for_education": false
+    },
+    {
+      "file_key": "gqqf7zffiVkOSSrdxIyvFj",
+      "category": "Glass SaaS Dashboard",
+      "bucket": "dashboard",
+      "title": "Glass SaaS Dashboard",
+      "design_url": "https://www.figma.com/design/gqqf7zffiVkOSSrdxIyvFj/Glass-SaaS-Dashboard-%E2%80%93-Free-Figma-UI-Kit---Design-System--Community-?t=38s25Nu8S2OzlcW3-0",
+      "community_url": "https://www.figma.com/design/gqqf7zffiVkOSSrdxIyvFj/Glass-SaaS-Dashboard-%E2%80%93-Free-Figma-UI-Kit---Design-System--Community-?t=38s25Nu8S2OzlcW3-0",
+      "source": "sheet",
+      "avoid_for_education": false
+    },
+    {
+      "file_key": "nvXupvwDpOTbJr9pgA7MSs",
+      "category": "SaaS Dashboard UI Kit (Free)",
+      "bucket": "dashboard",
+      "title": "SaaS Dashboard UI Kit (Free)",
+      "design_url": "https://www.figma.com/design/nvXupvwDpOTbJr9pgA7MSs/SaaS-Dashboard-UI-Kit--Free---Community-",
+      "community_url": "https://www.figma.com/design/nvXupvwDpOTbJr9pgA7MSs/SaaS-Dashboard-UI-Kit--Free---Community-",
+      "source": "sheet",
+      "avoid_for_education": false
+    },
+    {
+      "file_key": "tBlMFplcpGOdP171ZgdmDW",
+      "category": "Fintech SaaS admin dashboard",
+      "bucket": "dashboard",
+      "title": "Fintech SaaS admin dashboard",
+      "design_url": "https://www.figma.com/design/tBlMFplcpGOdP171ZgdmDW/Fintech-SaaS-Admin-Dashboard-UI-Kit--Community-?t=yfaPdGHVXmVVn4iE-0",
+      "community_url": "https://www.figma.com/design/tBlMFplcpGOdP171ZgdmDW/Fintech-SaaS-Admin-Dashboard-UI-Kit--Community-?t=yfaPdGHVXmVVn4iE-0",
+      "source": "sheet",
+      "avoid_for_education": true
+    },
+    {
+      "file_key": "QZ4vlik8qwoR3nmbNgZggk",
+      "category": "CRM dashboard + landing",
+      "bucket": "dashboard",
+      "title": "CRM dashboard + landing",
+      "design_url": "https://www.figma.com/design/QZ4vlik8qwoR3nmbNgZggk/CRM-Dashboard---Landing-page-UI-Kit--Community-?node-id=1029-91074&p=f&t=LiYcn1EZONosFdfl-0",
+      "community_url": "https://www.figma.com/design/QZ4vlik8qwoR3nmbNgZggk/CRM-Dashboard---Landing-page-UI-Kit--Community-?node-id=1029-91074&p=f&t=LiYcn1EZONosFdfl-0",
+      "source": "sheet",
+      "avoid_for_education": false
+    },
+    {
+      "file_key": "Efe6oRto8RL5vQaPkovK4f",
+      "category": "Glow UI – web apps / SaaS (FREE)",
+      "bucket": "ds",
+      "title": "Glow UI – web apps / SaaS (FREE)",
+      "design_url": "https://www.figma.com/design/Efe6oRto8RL5vQaPkovK4f/Glow-UI-%E2%80%94-FREE-UI-kit-and-design-system-for-web-apps-and-SaaS--Community-?t=xojM4JvkrSyJbG5v-0",
+      "community_url": "https://www.figma.com/design/Efe6oRto8RL5vQaPkovK4f/Glow-UI-%E2%80%94-FREE-UI-kit-and-design-system-for-web-apps-and-SaaS--Community-?t=xojM4JvkrSyJbG5v-0",
+      "source": "sheet",
+      "avoid_for_education": false
+    }
+  ]
+}

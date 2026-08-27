@@ -1,0 +1,42 @@
+{
+  "id": "sheet_jpF9ONCq3S6S9xTSykYGNM",
+  "kind": "template",
+  "platform": "mobile",
+  "page_types": [
+    "home",
+    "list",
+    "detail"
+  ],
+  "density": "medium",
+  "personality": [
+    "clean",
+    "professional"
+  ],
+  "best_for": [
+    "Treyd Crypto Trading App UI Kit",
+    "mobile kit from catalog sheet"
+  ],
+  "strengths": [
+    "Sheet-categorized community file for offline/catalog selection"
+  ],
+  "weaknesses": [
+    "No extracted structure/ in this profile — do not treat as a compiled Figma layout"
+  ],
+  "tags": [
+    "mobile",
+    "treyd",
+    "crypto",
+    "trading",
+    "app",
+    "kit",
+    "finance"
+  ],
+  "description": "Sheet catalog row: Treyd Crypto Trading App UI Kit. File key jpF9ONCq3S6S9xTSykYGNM. Generate may select this key by bucket; live Figma is ingest-only.",
+  "figma_file_key": "jpF9ONCq3S6S9xTSykYGNM",
+  "license": "community",
+  "source": "sheet",
+  "version": "1",
+  "industry": [
+    "finance"
+  ]
+}

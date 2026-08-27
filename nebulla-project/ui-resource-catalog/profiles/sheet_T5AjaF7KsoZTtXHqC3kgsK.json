@@ -1,0 +1,37 @@
+{
+  "id": "sheet_T5AjaF7KsoZTtXHqC3kgsK",
+  "kind": "template",
+  "platform": "web",
+  "page_types": [
+    "home",
+    "dashboard",
+    "other"
+  ],
+  "density": "medium",
+  "personality": [
+    "clean",
+    "professional"
+  ],
+  "best_for": [
+    "@shadcn/ui Design System",
+    "ds kit from catalog sheet"
+  ],
+  "strengths": [
+    "Sheet-categorized community file for offline/catalog selection"
+  ],
+  "weaknesses": [
+    "No extracted structure/ in this profile — do not treat as a compiled Figma layout"
+  ],
+  "tags": [
+    "ds",
+    "shadcn",
+    "design",
+    "system"
+  ],
+  "description": "Sheet catalog row: @shadcn/ui Design System. File key T5AjaF7KsoZTtXHqC3kgsK. Generate may select this key by bucket; live Figma is ingest-only.",
+  "figma_file_key": "T5AjaF7KsoZTtXHqC3kgsK",
+  "license": "community",
+  "source": "sheet",
+  "version": "1",
+  "industry": []
+}

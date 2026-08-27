@@ -126,10 +126,14 @@ export type FigmaRecord = {
   env_guidance: string;
   /** Per-key HTTP/structure outcomes for debugging. */
   key_diagnostics: FigmaKeyDiagnostic[];
-  /** C.3 probe mode, e.g. bucket:landing | bucket_miss:dashboard | csv */
+  /** C.3 probe mode, e.g. offline:sheet:bucket:mobile | catalog:sheet:bucket:auth */
   selection_mode: string;
-  /** Preferred FIGMA_REFERENCE_BUCKETS tag for this classification (or null). */
+  /** Preferred sheet/env bucket for this classification (or null). */
   preferred_bucket: string | null;
+  /** Sheet category label for the chosen key (e.g. Mobile screens). */
+  sheet_category?: string | null;
+  /** Chosen Figma file key (sheet/offline/catalog), when any. */
+  file_key?: string | null;
 };
 
 export type V2NodeStyle = {

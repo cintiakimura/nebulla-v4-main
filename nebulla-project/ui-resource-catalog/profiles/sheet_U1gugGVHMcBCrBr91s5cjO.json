@@ -1,0 +1,38 @@
+{
+  "id": "sheet_U1gugGVHMcBCrBr91s5cjO",
+  "kind": "template",
+  "platform": "mobile",
+  "page_types": [
+    "home",
+    "landing",
+    "other"
+  ],
+  "density": "medium",
+  "personality": [
+    "clean",
+    "professional"
+  ],
+  "best_for": [
+    "Wirefigma FREE (wire + components)",
+    "wireframe kit from catalog sheet"
+  ],
+  "strengths": [
+    "Sheet-categorized community file for offline/catalog selection"
+  ],
+  "weaknesses": [
+    "No extracted structure/ in this profile — do not treat as a compiled Figma layout"
+  ],
+  "tags": [
+    "wireframe",
+    "wirefigma",
+    "free",
+    "wire",
+    "components"
+  ],
+  "description": "Sheet catalog row: Wirefigma FREE (wire + components). File key U1gugGVHMcBCrBr91s5cjO. Generate may select this key by bucket; live Figma is ingest-only.",
+  "figma_file_key": "U1gugGVHMcBCrBr91s5cjO",
+  "license": "community",
+  "source": "sheet",
+  "version": "1",
+  "industry": []
+}

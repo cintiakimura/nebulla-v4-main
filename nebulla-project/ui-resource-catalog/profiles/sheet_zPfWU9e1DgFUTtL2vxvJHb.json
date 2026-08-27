@@ -1,0 +1,37 @@
+{
+  "id": "sheet_zPfWU9e1DgFUTtL2vxvJHb",
+  "kind": "template",
+  "platform": "mobile",
+  "page_types": [
+    "home",
+    "list",
+    "detail"
+  ],
+  "density": "medium",
+  "personality": [
+    "clean",
+    "professional"
+  ],
+  "best_for": [
+    "Mobile wireframes (broad)",
+    "mobile kit from catalog sheet"
+  ],
+  "strengths": [
+    "Sheet-categorized community file for offline/catalog selection"
+  ],
+  "weaknesses": [
+    "No extracted structure/ in this profile — do not treat as a compiled Figma layout"
+  ],
+  "tags": [
+    "mobile",
+    "mobile",
+    "wireframes",
+    "broad"
+  ],
+  "description": "Sheet catalog row: Mobile wireframes (broad). File key zPfWU9e1DgFUTtL2vxvJHb. Generate may select this key by bucket; live Figma is ingest-only.",
+  "figma_file_key": "zPfWU9e1DgFUTtL2vxvJHb",
+  "license": "community",
+  "source": "sheet",
+  "version": "1",
+  "industry": []
+}

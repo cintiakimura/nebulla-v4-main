@@ -1,0 +1,35 @@
+{
+  "id": "sheet_OVgxSlOFyp1ONueGbS9dUf",
+  "kind": "template",
+  "platform": "web",
+  "page_types": [
+    "dashboard"
+  ],
+  "density": "medium",
+  "personality": [
+    "clean",
+    "professional"
+  ],
+  "best_for": [
+    "Web dashboard alt",
+    "dashboard kit from catalog sheet"
+  ],
+  "strengths": [
+    "Sheet-categorized community file for offline/catalog selection"
+  ],
+  "weaknesses": [
+    "No extracted structure/ in this profile — do not treat as a compiled Figma layout"
+  ],
+  "tags": [
+    "dashboard",
+    "web",
+    "dashboard",
+    "alt"
+  ],
+  "description": "Sheet catalog row: Web dashboard alt. File key OVgxSlOFyp1ONueGbS9dUf. Generate may select this key by bucket; live Figma is ingest-only.",
+  "figma_file_key": "OVgxSlOFyp1ONueGbS9dUf",
+  "license": "community",
+  "source": "sheet",
+  "version": "1",
+  "industry": []
+}

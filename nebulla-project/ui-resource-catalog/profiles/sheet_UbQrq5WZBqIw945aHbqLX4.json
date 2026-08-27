@@ -1,0 +1,37 @@
+{
+  "id": "sheet_UbQrq5WZBqIw945aHbqLX4",
+  "kind": "template",
+  "platform": "landing",
+  "page_types": [
+    "landing"
+  ],
+  "density": "medium",
+  "personality": [
+    "clean",
+    "professional"
+  ],
+  "best_for": [
+    "Brainwave.io – SaaS / app landing kit",
+    "landing kit from catalog sheet"
+  ],
+  "strengths": [
+    "Sheet-categorized community file for offline/catalog selection"
+  ],
+  "weaknesses": [
+    "No extracted structure/ in this profile — do not treat as a compiled Figma layout"
+  ],
+  "tags": [
+    "landing",
+    "brainwave",
+    "saas",
+    "app",
+    "landing",
+    "kit"
+  ],
+  "description": "Sheet catalog row: Brainwave.io – SaaS / app landing kit. File key UbQrq5WZBqIw945aHbqLX4. Generate may select this key by bucket; live Figma is ingest-only.",
+  "figma_file_key": "UbQrq5WZBqIw945aHbqLX4",
+  "license": "community",
+  "source": "sheet",
+  "version": "1",
+  "industry": []
+}

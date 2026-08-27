@@ -1,0 +1,36 @@
+{
+  "id": "sheet_cPhxRpyLYJATvVZ0lrQ9VR",
+  "kind": "template",
+  "platform": "mobile",
+  "page_types": [
+    "home",
+    "list",
+    "detail"
+  ],
+  "density": "medium",
+  "personality": [
+    "clean",
+    "professional"
+  ],
+  "best_for": [
+    "Mobile screens",
+    "mobile kit from catalog sheet"
+  ],
+  "strengths": [
+    "Sheet-categorized community file for offline/catalog selection"
+  ],
+  "weaknesses": [
+    "No extracted structure/ in this profile — do not treat as a compiled Figma layout"
+  ],
+  "tags": [
+    "mobile",
+    "mobile",
+    "screens"
+  ],
+  "description": "Sheet catalog row: Mobile screens. File key cPhxRpyLYJATvVZ0lrQ9VR. Generate may select this key by bucket; live Figma is ingest-only.",
+  "figma_file_key": "cPhxRpyLYJATvVZ0lrQ9VR",
+  "license": "community",
+  "source": "sheet",
+  "version": "1",
+  "industry": []
+}

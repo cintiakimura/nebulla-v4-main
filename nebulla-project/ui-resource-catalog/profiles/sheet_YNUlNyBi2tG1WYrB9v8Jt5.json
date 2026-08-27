@@ -1,0 +1,36 @@
+{
+  "id": "sheet_YNUlNyBi2tG1WYrB9v8Jt5",
+  "kind": "template",
+  "platform": "mobile",
+  "page_types": [
+    "auth"
+  ],
+  "density": "medium",
+  "personality": [
+    "clean",
+    "professional"
+  ],
+  "best_for": [
+    "Essential Forms & Controls UI Kit",
+    "forms kit from catalog sheet"
+  ],
+  "strengths": [
+    "Sheet-categorized community file for offline/catalog selection"
+  ],
+  "weaknesses": [
+    "No extracted structure/ in this profile — do not treat as a compiled Figma layout"
+  ],
+  "tags": [
+    "forms",
+    "essential",
+    "forms",
+    "controls",
+    "kit"
+  ],
+  "description": "Sheet catalog row: Essential Forms & Controls UI Kit. File key YNUlNyBi2tG1WYrB9v8Jt5. Generate may select this key by bucket; live Figma is ingest-only.",
+  "figma_file_key": "YNUlNyBi2tG1WYrB9v8Jt5",
+  "license": "community",
+  "source": "sheet",
+  "version": "1",
+  "industry": []
+}

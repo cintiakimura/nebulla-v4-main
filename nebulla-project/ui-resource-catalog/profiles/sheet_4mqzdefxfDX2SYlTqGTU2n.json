@@ -1,0 +1,36 @@
+{
+  "id": "sheet_4mqzdefxfDX2SYlTqGTU2n",
+  "kind": "template",
+  "platform": "landing",
+  "page_types": [
+    "landing"
+  ],
+  "density": "medium",
+  "personality": [
+    "clean",
+    "professional"
+  ],
+  "best_for": [
+    "Saasto – SaaS & app website",
+    "landing kit from catalog sheet"
+  ],
+  "strengths": [
+    "Sheet-categorized community file for offline/catalog selection"
+  ],
+  "weaknesses": [
+    "No extracted structure/ in this profile — do not treat as a compiled Figma layout"
+  ],
+  "tags": [
+    "landing",
+    "saasto",
+    "saas",
+    "app",
+    "website"
+  ],
+  "description": "Sheet catalog row: Saasto – SaaS & app website. File key 4mqzdefxfDX2SYlTqGTU2n. Generate may select this key by bucket; live Figma is ingest-only.",
+  "figma_file_key": "4mqzdefxfDX2SYlTqGTU2n",
+  "license": "community",
+  "source": "sheet",
+  "version": "1",
+  "industry": []
+}

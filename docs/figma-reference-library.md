@@ -1,72 +1,78 @@
 # Figma reference library (Nebulla UI Generation)
 
-**Purpose:** Stock a **local** shortlist so Generate UI reads offline/catalog structure — not live Figma by default.
+**Purpose:** Stock a **local** catalog so Generate UI picks by **sheet category/bucket** — not live Figma, and not only 4 hardcoded keys.
 
-**Sheet (catalog):** https://docs.google.com/spreadsheets/d/1PYQPOWzXnRiTn2j29db7fc9mprg2Yrc-KN5ESKfzo0o/edit?usp=sharing  
+**Sheet (full catalog authority):** https://docs.google.com/spreadsheets/d/1PYQPOWzXnRiTn2j29db7fc9mprg2Yrc-KN5ESKfzo0o/edit?usp=sharing
+
+Committed index: `nebulla-project/figma-library/sheet-catalog.json` (also `sheet-catalog.csv`).  
+Re-import: `node scripts/import-figma-sheet-catalog.mjs path/to/sheet-export.csv`  
+Expected CSV: **no header**, columns `category,url,file_key` — or a header with `category` / `title` / `design_url|url|link` / `file_key|filekey|key`.
 
 ## Runtime order (Generate — single path)
 
-1. Offline extracts (`structure/` then `raw/`) for resolved bucket keys  
-2. Scored catalog profile  
-3. Stitch / ui-brief (thinner)  
-4. Seed patterns (last resort)  
-5. Live Figma **only if** `FIGMA_LIVE_ON_GENERATE=1|true` **and** key set **and** offline + catalog miss  
+1. Classify device + page type + function (`classifyPage`) → **sheet bucket**
+2. Load `sheet-catalog.json`, filter that bucket, **cap 3 keys** (prefer `structure/` then catalog profile)
+3. Offline extracts (`structure/` then `raw/`) for those keys only
+4. Thin catalog profile for the same key (still offline; no live download)
+5. Scored seed catalog / Stitch brief
+6. Seed patterns (last resort — only when no category match)
+7. Live Figma **only if** `FIGMA_LIVE_ON_GENERATE=1|true` **and** key set **and** offline + catalog miss
 
-Default: live **off**. Cap: 1 live file (max 2). On 429: stop live probes.
+Default: live **off**. Generate never scans all ~58 files. Cap: 1 live file (max 2). On 429: stop live probes.
 
-## Curated shortlist (owned keys only)
+## Four keys = fallback shortlist + committed `structure/`
 
-| Bucket | FileKey |
-|--------|---------|
-| mobile | `ZEbJpC67UQyeeynt1UR8gT` |
-| landing | `P6lA9sHTHVbnmUfoYbV9Ir` |
-| dashboard | `TgYmEqMwrWFHBxF2kAVOaF` |
-| auth | `MaFREMBRF3vQ8BhtqA2ZpK` |
+| Bucket | FileKey | Role |
+|--------|---------|------|
+| mobile | `ZEbJpC67UQyeeynt1UR8gT` | Committed extract + fallback |
+| landing | `P6lA9sHTHVbnmUfoYbV9Ir` | Committed extract + fallback |
+| dashboard | `TgYmEqMwrWFHBxF2kAVOaF` | Committed extract + fallback |
+| auth | `MaFREMBRF3vQ8BhtqA2ZpK` | Committed extract + fallback |
 
-Committed lean extracts (safe, no secrets):  
-`nebulla-project/figma-library/structure/<fileKey>/document.json`  
+These are a **safety net** when `sheet-catalog.json` is missing — **not** the whole database.
 
-Full downloads (gitignored, optional):  
-`nebulla-project/figma-library/raw/<fileKey>/document.json`  
+Lean extracts: `nebulla-project/figma-library/structure/<fileKey>/document.json`  
+Full downloads (gitignored): `nebulla-project/figma-library/raw/<fileKey>/document.json`
 
-When env vars are unset, Generate falls back to this shortlist + buckets so Render still hits `structure/`.
+## Category → bucket
 
-## Operator path (local + Render)
+Sheet labels map to buckets (`mobile`, `auth`, `landing`, `dashboard`, `forms`, `ds`, `wireframe`). Unmapped labels become `ds` so they stay selectable. Education/kids uses the **mobile** bucket and avoids crypto/trading kits.
+
+## Operator path (ingest = live; Generate = local)
 
 ```bash
-# 1) Optional: refresh full raw from Figma (ingest — live allowed here)
-cp nebulla-project/figma-library/figma-keys.example.csv nebulla-project/figma-library/figma-keys.csv
-# ensure FIGMA_API_KEY in .env
-npm run figma:download
+# Refresh sheet index (optional)
+node scripts/import-figma-sheet-catalog.mjs nebulla-project/figma-library/sheet-source.csv
 
-# 2) Build/refresh lean committed structure (also seeds missing buckets)
+# Daily ingest: max 10 live downloads / UTC day (priority: missing structure in core buckets)
+npm run figma:ingest-daily
+
+# Optional: extract committed structure after a download
 npm run figma:extract-structure -- --seed-missing
-
-# 3) Optional: drafts → review → publish catalog profiles
-npm run figma:profile-drafts
-npm run figma:publish-drafts -- --only=<draft-id>
-
-# 4) Generate UI — expect meta figma_status=offline (or catalog), not seed-by-default
 ```
 
-**Render:** deploy the repo with `structure/` committed (already). Set optional `FIGMA_REFERENCE_*` to override. Do **not** set `FIGMA_LIVE_ON_GENERATE` unless you want rare live probes. `FIGMA_API_KEY` is for ingest jobs only.
+**Render:** deploy with `sheet-catalog.json` + existing `structure/` (4 keys). Do **not** set `FIGMA_LIVE_ON_GENERATE` unless you want rare live probes. `FIGMA_API_KEY` is for ingest jobs only.
 
 Verify after Generate: `nebulla-project/ui-generation-v2-meta.json` →  
-`figma.figma_status`, `figma.selection_mode`, `figma.preferred_bucket`, `pattern_mode`.
+`figma.preferred_bucket`, `figma.sheet_category`, `figma.file_key`, `figma.selection_mode`, `pattern_mode`.
 
 | Status / mode | Meaning |
 |---------------|---------|
-| `offline` / `offline:bucket:…` | Offline library drove layout |
-| `skipped` / `local:catalog:…` | Catalog profile drove structure |
+| `offline` / `offline:sheet:bucket:…` | Offline `structure/` drove layout hints |
+| `skipped` / `catalog:sheet:bucket:…` | Sheet catalog profile (no extract yet) |
+| `skipped` / `local:catalog:…` | Other catalog profile |
 | `skipped` / `local:brief:…` | Brief-only (thin) |
 | `weak_matches` / `local:seed:…` | Seed fallback |
 | `success` / `live:…` | Rare live match |
 
+`pattern_mode`: `figma` if `structure/` used; `catalog` if only a profile; `seed` if no category match. Hints are **not** shipped Figma components.
+
 ## Env
 
 - `FIGMA_API_KEY` — ingest / optional live Generate  
-- `FIGMA_REFERENCE_FILE_KEYS` / `FIGMA_REFERENCE_BUCKETS` — override shortlist  
+- `FIGMA_REFERENCE_FILE_KEYS` / `FIGMA_REFERENCE_BUCKETS` — optional overlay (tests/operators); sheet is default universe  
 - `FIGMA_LIVE_ON_GENERATE` — default off  
-- `FIGMA_REFERENCE_MAX_FILES` — offline scan width; live capped at 2  
+- `FIGMA_REFERENCE_MAX_FILES` — live capped at 2  
+- `FIGMA_INGEST_ACTIVE_BUCKET` — optional ingest priority (e.g. `mobile`)
 
-**Ingest = live allowed. Generate = local-first.**
+**Ingest = live allowed. Generate = local-first. The sheet is the library.**

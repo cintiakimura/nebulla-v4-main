@@ -1,0 +1,37 @@
+{
+  "id": "sheet_1wBJdkVjDLedn3sQWSQKtL",
+  "kind": "template",
+  "platform": "mobile",
+  "page_types": [
+    "home",
+    "list",
+    "detail"
+  ],
+  "density": "medium",
+  "personality": [
+    "clean",
+    "professional"
+  ],
+  "best_for": [
+    "Mobile lite screens",
+    "mobile kit from catalog sheet"
+  ],
+  "strengths": [
+    "Sheet-categorized community file for offline/catalog selection"
+  ],
+  "weaknesses": [
+    "No extracted structure/ in this profile — do not treat as a compiled Figma layout"
+  ],
+  "tags": [
+    "mobile",
+    "mobile",
+    "lite",
+    "screens"
+  ],
+  "description": "Sheet catalog row: Mobile lite screens. File key 1wBJdkVjDLedn3sQWSQKtL. Generate may select this key by bucket; live Figma is ingest-only.",
+  "figma_file_key": "1wBJdkVjDLedn3sQWSQKtL",
+  "license": "community",
+  "source": "sheet",
+  "version": "1",
+  "industry": []
+}

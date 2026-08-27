@@ -10,6 +10,9 @@ import type {
   V2PageType,
   V2ProductFunction,
 } from "./types";
+import { preferredSheetBucket } from "./figmaSheetCatalog";
+
+export { preferredSheetBucket };
 
 export type ClassifyInput = {
   projectType: string;

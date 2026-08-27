@@ -1,0 +1,35 @@
+{
+  "id": "sheet_QZ4vlik8qwoR3nmbNgZggk",
+  "kind": "template",
+  "platform": "web",
+  "page_types": [
+    "dashboard"
+  ],
+  "density": "medium",
+  "personality": [
+    "clean",
+    "professional"
+  ],
+  "best_for": [
+    "CRM dashboard + landing",
+    "dashboard kit from catalog sheet"
+  ],
+  "strengths": [
+    "Sheet-categorized community file for offline/catalog selection"
+  ],
+  "weaknesses": [
+    "No extracted structure/ in this profile — do not treat as a compiled Figma layout"
+  ],
+  "tags": [
+    "dashboard",
+    "crm",
+    "dashboard",
+    "landing"
+  ],
+  "description": "Sheet catalog row: CRM dashboard + landing. File key QZ4vlik8qwoR3nmbNgZggk. Generate may select this key by bucket; live Figma is ingest-only.",
+  "figma_file_key": "QZ4vlik8qwoR3nmbNgZggk",
+  "license": "community",
+  "source": "sheet",
+  "version": "1",
+  "industry": []
+}

@@ -328,7 +328,7 @@ export function IdeUiStudioBeta({
     moreContrast?: boolean;
   }>({});
   const [lastGate, setLastGate] = useState<string>('');
-  const [patternMode, setPatternMode] = useState<'seed' | 'figma' | ''>('');
+  const [patternMode, setPatternMode] = useState<'seed' | 'figma' | 'catalog' | ''>('');
   const [figmaStatus, setFigmaStatus] = useState<string>('');
   const [figmaError, setFigmaError] = useState<string>('');
   const [figmaEnvGuidance, setFigmaEnvGuidance] = useState<string>('');
@@ -575,7 +575,7 @@ export function IdeUiStudioBeta({
         max_regenerations?: number;
         final_status?: string;
         recovery_path?: string;
-        patternMode?: 'seed' | 'figma';
+        patternMode?: 'seed' | 'figma' | 'catalog';
         quality_gate_result?: string;
         preview_applied?: boolean;
         figma_status?: string;
@@ -947,7 +947,7 @@ export function IdeUiStudioBeta({
         max_regenerations?: number;
         user_visible_stage?: string;
         previewApplied?: boolean;
-        patternMode?: 'seed' | 'figma';
+        patternMode?: 'seed' | 'figma' | 'catalog';
         quality_gate_result?: string;
         figma_fallback_used?: boolean;
         env_guidance?: string;
@@ -1928,6 +1928,10 @@ export function IdeUiStudioBeta({
             ) : patternMode === 'figma' ? (
               <span className="hidden rounded-full bg-secondary px-2 py-0.5 text-[10px] text-muted-foreground md:inline">
                 {t('uiStudio.usingFigmaRefs')}
+              </span>
+            ) : patternMode === 'catalog' ? (
+              <span className="hidden rounded-full bg-secondary px-2 py-0.5 text-[10px] text-muted-foreground md:inline">
+                Sheet catalog
               </span>
             ) : null}
             {figmaStatus ? (

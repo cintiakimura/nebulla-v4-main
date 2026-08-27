@@ -1,0 +1,39 @@
+{
+  "id": "sheet_CLeJ35NYPljaA7ZBZFIynY",
+  "kind": "template",
+  "platform": "mobile",
+  "page_types": [
+    "home",
+    "list",
+    "detail"
+  ],
+  "density": "medium",
+  "personality": [
+    "clean",
+    "professional"
+  ],
+  "best_for": [
+    "iOS kit (hi quality components + demos)",
+    "mobile kit from catalog sheet"
+  ],
+  "strengths": [
+    "Sheet-categorized community file for offline/catalog selection"
+  ],
+  "weaknesses": [
+    "No extracted structure/ in this profile — do not treat as a compiled Figma layout"
+  ],
+  "tags": [
+    "mobile",
+    "ios",
+    "kit",
+    "quality",
+    "components",
+    "demos"
+  ],
+  "description": "Sheet catalog row: iOS kit (hi quality components + demos). File key CLeJ35NYPljaA7ZBZFIynY. Generate may select this key by bucket; live Figma is ingest-only.",
+  "figma_file_key": "CLeJ35NYPljaA7ZBZFIynY",
+  "license": "community",
+  "source": "sheet",
+  "version": "1",
+  "industry": []
+}

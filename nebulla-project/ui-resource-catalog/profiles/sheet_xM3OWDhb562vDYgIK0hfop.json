@@ -1,0 +1,37 @@
+{
+  "id": "sheet_xM3OWDhb562vDYgIK0hfop",
+  "kind": "template",
+  "platform": "web",
+  "page_types": [
+    "home",
+    "dashboard",
+    "other"
+  ],
+  "density": "medium",
+  "personality": [
+    "clean",
+    "professional"
+  ],
+  "best_for": [
+    "shadcn Ultimate UI Kit",
+    "ds kit from catalog sheet"
+  ],
+  "strengths": [
+    "Sheet-categorized community file for offline/catalog selection"
+  ],
+  "weaknesses": [
+    "No extracted structure/ in this profile — do not treat as a compiled Figma layout"
+  ],
+  "tags": [
+    "ds",
+    "shadcn",
+    "ultimate",
+    "kit"
+  ],
+  "description": "Sheet catalog row: shadcn Ultimate UI Kit. File key xM3OWDhb562vDYgIK0hfop. Generate may select this key by bucket; live Figma is ingest-only.",
+  "figma_file_key": "xM3OWDhb562vDYgIK0hfop",
+  "license": "community",
+  "source": "sheet",
+  "version": "1",
+  "industry": []
+}

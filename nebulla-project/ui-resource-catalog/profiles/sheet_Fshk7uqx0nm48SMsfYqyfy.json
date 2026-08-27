@@ -1,0 +1,35 @@
+{
+  "id": "sheet_Fshk7uqx0nm48SMsfYqyfy",
+  "kind": "template",
+  "platform": "web",
+  "page_types": [
+    "dashboard"
+  ],
+  "density": "medium",
+  "personality": [
+    "clean",
+    "professional"
+  ],
+  "best_for": [
+    "SaaS dashboard free",
+    "dashboard kit from catalog sheet"
+  ],
+  "strengths": [
+    "Sheet-categorized community file for offline/catalog selection"
+  ],
+  "weaknesses": [
+    "No extracted structure/ in this profile — do not treat as a compiled Figma layout"
+  ],
+  "tags": [
+    "dashboard",
+    "saas",
+    "dashboard",
+    "free"
+  ],
+  "description": "Sheet catalog row: SaaS dashboard free. File key Fshk7uqx0nm48SMsfYqyfy. Generate may select this key by bucket; live Figma is ingest-only.",
+  "figma_file_key": "Fshk7uqx0nm48SMsfYqyfy",
+  "license": "community",
+  "source": "sheet",
+  "version": "1",
+  "industry": []
+}

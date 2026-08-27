@@ -107,7 +107,7 @@ export type RunUiGenerationResult = {
   previewApplied?: boolean;
   previewWritten?: string[];
   /** Seed vs figma pattern mode for UI chrome. */
-  patternMode?: "seed" | "figma";
+  patternMode?: "seed" | "figma" | "catalog";
   quality_gate_result?: string;
   figma_fallback_used?: boolean;
   env_guidance?: string;
@@ -1240,15 +1240,22 @@ export async function runUiGenerationCycleV2(
   fs.mkdirSync(outDir, { recursive: true });
   fs.writeFileSync(path.join(outDir, "ui-generation-output.tsx"), code, "utf8");
 
+  const catalogHit =
+    figma.selection_mode.startsWith("catalog:") || figma.selection_mode.includes(":catalog:");
   const libraryHit =
     figma.figma_status === "success" ||
     figma.figma_status === "offline" ||
-    figma.selection_mode.includes(":catalog:");
+    catalogHit;
   const structureAppliedToSlots =
     libraryHit &&
     regionsOk(model, slots) &&
-    (structurePlan.enforceRegions || figma.selection_mode.includes(":catalog:"));
-  const patternMode: "seed" | "figma" = structureAppliedToSlots ? "figma" : "seed";
+    (structurePlan.enforceRegions || catalogHit);
+  const patternMode: "seed" | "figma" | "catalog" =
+    figma.figma_status === "offline" || figma.figma_status === "success"
+      ? "figma"
+      : catalogHit
+        ? "catalog"
+        : "seed";
   let previewWritten: string[] = [];
   let previewApplied = false;
   if (shouldApplyUiToPreview(gate.gate)) {
@@ -1327,6 +1334,8 @@ export async function runUiGenerationCycleV2(
           env_guidance: figma.env_guidance,
           selection_mode: figma.selection_mode,
           preferred_bucket: figma.preferred_bucket,
+          sheet_category: figma.sheet_category ?? null,
+          file_key: figma.file_key ?? null,
           key_diagnostics: figma.key_diagnostics.slice(0, 8),
           selected_refs: figma.selected_refs,
           candidates: figma.candidates.slice(0, 6),

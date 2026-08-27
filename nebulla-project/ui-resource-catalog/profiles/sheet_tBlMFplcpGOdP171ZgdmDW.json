@@ -1,0 +1,39 @@
+{
+  "id": "sheet_tBlMFplcpGOdP171ZgdmDW",
+  "kind": "template",
+  "platform": "web",
+  "page_types": [
+    "dashboard"
+  ],
+  "density": "medium",
+  "personality": [
+    "clean",
+    "professional"
+  ],
+  "best_for": [
+    "Fintech SaaS admin dashboard",
+    "dashboard kit from catalog sheet"
+  ],
+  "strengths": [
+    "Sheet-categorized community file for offline/catalog selection"
+  ],
+  "weaknesses": [
+    "No extracted structure/ in this profile — do not treat as a compiled Figma layout"
+  ],
+  "tags": [
+    "dashboard",
+    "fintech",
+    "saas",
+    "admin",
+    "dashboard",
+    "finance"
+  ],
+  "description": "Sheet catalog row: Fintech SaaS admin dashboard. File key tBlMFplcpGOdP171ZgdmDW. Generate may select this key by bucket; live Figma is ingest-only.",
+  "figma_file_key": "tBlMFplcpGOdP171ZgdmDW",
+  "license": "community",
+  "source": "sheet",
+  "version": "1",
+  "industry": [
+    "finance"
+  ]
+}

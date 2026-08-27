@@ -1,0 +1,37 @@
+{
+  "id": "sheet_jfo7yAJEtwv3km6VkJ0zYQ",
+  "kind": "template",
+  "platform": "web",
+  "page_types": [
+    "home",
+    "dashboard",
+    "other"
+  ],
+  "density": "medium",
+  "personality": [
+    "clean",
+    "professional"
+  ],
+  "best_for": [
+    "Material 3 Design Kit",
+    "ds kit from catalog sheet"
+  ],
+  "strengths": [
+    "Sheet-categorized community file for offline/catalog selection"
+  ],
+  "weaknesses": [
+    "No extracted structure/ in this profile — do not treat as a compiled Figma layout"
+  ],
+  "tags": [
+    "ds",
+    "material",
+    "design",
+    "kit"
+  ],
+  "description": "Sheet catalog row: Material 3 Design Kit. File key jfo7yAJEtwv3km6VkJ0zYQ. Generate may select this key by bucket; live Figma is ingest-only.",
+  "figma_file_key": "jfo7yAJEtwv3km6VkJ0zYQ",
+  "license": "community",
+  "source": "sheet",
+  "version": "1",
+  "industry": []
+}

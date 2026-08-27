@@ -161,6 +161,25 @@ export function pickBatch(pendingKeys: string[], slots: number): string[] {
   return pendingKeys.slice(0, slots);
 }
 
+/** Operator ingest order: active bucket missing structure → core buckets → rest of sheet. */
+export function prioritizePendingIngest(
+  pendingKeys: string[],
+  rows: Array<{ file_key: string; bucket: string }>,
+  activeBucket?: string,
+): string[] {
+  const byKey = new Map(rows.map((r) => [r.file_key, r]));
+  const core = new Set(["auth", "mobile", "dashboard", "landing"]);
+  const rank = (k: string) => {
+    const b = (byKey.get(k)?.bucket || "").toLowerCase();
+    if (activeBucket && b === activeBucket) return 0;
+    if (core.has(b)) return 1;
+    return 2;
+  };
+  return [...pendingKeys].sort(
+    (a, b) => rank(a) - rank(b) || pendingKeys.indexOf(a) - pendingKeys.indexOf(b),
+  );
+}
+
 export function readStatusFile(statusFile: string, now: Date = new Date()): FigmaIngestStatus {
   if (!fs.existsSync(statusFile)) return createDefaultStatus({}, now);
   try {
@@ -202,6 +221,40 @@ export function isPlausibleFigmaFileKey(fileKey: string): boolean {
   if (/your[_-]?owned|your[_-]?key|placeholder|xxxx/i.test(k)) return false;
   if (k.includes("…") || k.includes("...")) return false;
   return true;
+}
+
+export function parseSheetCatalogJson(
+  text: string,
+): Array<{ bucket: string; link: string; file_key: string }> {
+  const data = JSON.parse(text) as {
+    rows?: Array<{ file_key?: string; bucket?: string; design_url?: string; community_url?: string }>;
+  };
+  const rows: Array<{ bucket: string; link: string; file_key: string }> = [];
+  for (const r of data.rows || []) {
+    const file_key = String(r.file_key || "").trim();
+    if (!isPlausibleFigmaFileKey(file_key)) continue;
+    rows.push({
+      bucket: String(r.bucket || ""),
+      link: String(r.design_url || r.community_url || ""),
+      file_key,
+    });
+  }
+  return rows;
+}
+
+export function loadIngestKeyRows(libraryRoot: string): Array<{ bucket: string; link: string; file_key: string }> {
+  const sheet = path.join(libraryRoot, "sheet-catalog.json");
+  if (fs.existsSync(sheet)) {
+    try {
+      const rows = parseSheetCatalogJson(fs.readFileSync(sheet, "utf8"));
+      if (rows.length) return rows;
+    } catch {
+      /* fall through to CSV */
+    }
+  }
+  const csvPath = resolveKeysCsvPath(libraryRoot);
+  if (!fs.existsSync(csvPath)) return [];
+  return parseFigmaKeysCsv(fs.readFileSync(csvPath, "utf8"));
 }
 
 export function parseFigmaKeysCsv(text: string): Array<{ bucket: string; link: string; file_key: string }> {

@@ -1,0 +1,37 @@
+{
+  "id": "sheet_V8eUM3s4UawPNV98ClaiYc",
+  "kind": "template",
+  "platform": "mobile",
+  "page_types": [
+    "home",
+    "landing",
+    "other"
+  ],
+  "density": "medium",
+  "personality": [
+    "clean",
+    "professional"
+  ],
+  "best_for": [
+    "Web + mobile wireframe DS",
+    "wireframe kit from catalog sheet"
+  ],
+  "strengths": [
+    "Sheet-categorized community file for offline/catalog selection"
+  ],
+  "weaknesses": [
+    "No extracted structure/ in this profile — do not treat as a compiled Figma layout"
+  ],
+  "tags": [
+    "wireframe",
+    "web",
+    "mobile",
+    "wireframe"
+  ],
+  "description": "Sheet catalog row: Web + mobile wireframe DS. File key V8eUM3s4UawPNV98ClaiYc. Generate may select this key by bucket; live Figma is ingest-only.",
+  "figma_file_key": "V8eUM3s4UawPNV98ClaiYc",
+  "license": "community",
+  "source": "sheet",
+  "version": "1",
+  "industry": []
+}

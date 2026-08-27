@@ -1,0 +1,37 @@
+{
+  "id": "sheet_clBu02o1f9u5ktq1CCjgXX",
+  "kind": "template",
+  "platform": "web",
+  "page_types": [
+    "home",
+    "dashboard",
+    "other"
+  ],
+  "density": "medium",
+  "personality": [
+    "clean",
+    "professional"
+  ],
+  "best_for": [
+    "Nolow DS – Shadcn (Free)",
+    "ds kit from catalog sheet"
+  ],
+  "strengths": [
+    "Sheet-categorized community file for offline/catalog selection"
+  ],
+  "weaknesses": [
+    "No extracted structure/ in this profile — do not treat as a compiled Figma layout"
+  ],
+  "tags": [
+    "ds",
+    "nolow",
+    "shadcn",
+    "free"
+  ],
+  "description": "Sheet catalog row: Nolow DS – Shadcn (Free). File key clBu02o1f9u5ktq1CCjgXX. Generate may select this key by bucket; live Figma is ingest-only.",
+  "figma_file_key": "clBu02o1f9u5ktq1CCjgXX",
+  "license": "community",
+  "source": "sheet",
+  "version": "1",
+  "industry": []
+}

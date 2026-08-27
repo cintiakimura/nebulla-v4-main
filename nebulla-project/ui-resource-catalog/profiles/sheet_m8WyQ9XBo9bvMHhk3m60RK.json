@@ -1,0 +1,37 @@
+{
+  "id": "sheet_m8WyQ9XBo9bvMHhk3m60RK",
+  "kind": "template",
+  "platform": "landing",
+  "page_types": [
+    "landing"
+  ],
+  "density": "medium",
+  "personality": [
+    "clean",
+    "professional"
+  ],
+  "best_for": [
+    "Filo – SaaS / startup (Framer-oriented)",
+    "landing kit from catalog sheet"
+  ],
+  "strengths": [
+    "Sheet-categorized community file for offline/catalog selection"
+  ],
+  "weaknesses": [
+    "No extracted structure/ in this profile — do not treat as a compiled Figma layout"
+  ],
+  "tags": [
+    "landing",
+    "filo",
+    "saas",
+    "startup",
+    "framer",
+    "oriented"
+  ],
+  "description": "Sheet catalog row: Filo – SaaS / startup (Framer-oriented). File key m8WyQ9XBo9bvMHhk3m60RK. Generate may select this key by bucket; live Figma is ingest-only.",
+  "figma_file_key": "m8WyQ9XBo9bvMHhk3m60RK",
+  "license": "community",
+  "source": "sheet",
+  "version": "1",
+  "industry": []
+}

@@ -1,0 +1,37 @@
+{
+  "id": "sheet_62mTwoQlAFEMTVHwNd4onx",
+  "kind": "template",
+  "platform": "mobile",
+  "page_types": [
+    "home",
+    "landing",
+    "other"
+  ],
+  "density": "medium",
+  "personality": [
+    "clean",
+    "professional"
+  ],
+  "best_for": [
+    "Wireframe UI Kit – uxchunks",
+    "wireframe kit from catalog sheet"
+  ],
+  "strengths": [
+    "Sheet-categorized community file for offline/catalog selection"
+  ],
+  "weaknesses": [
+    "No extracted structure/ in this profile — do not treat as a compiled Figma layout"
+  ],
+  "tags": [
+    "wireframe",
+    "wireframe",
+    "kit",
+    "uxchunks"
+  ],
+  "description": "Sheet catalog row: Wireframe UI Kit – uxchunks. File key 62mTwoQlAFEMTVHwNd4onx. Generate may select this key by bucket; live Figma is ingest-only.",
+  "figma_file_key": "62mTwoQlAFEMTVHwNd4onx",
+  "license": "community",
+  "source": "sheet",
+  "version": "1",
+  "industry": []
+}

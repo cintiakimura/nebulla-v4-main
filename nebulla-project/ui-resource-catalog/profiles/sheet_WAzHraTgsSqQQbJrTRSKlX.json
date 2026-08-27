@@ -1,0 +1,36 @@
+{
+  "id": "sheet_WAzHraTgsSqQQbJrTRSKlX",
+  "kind": "template",
+  "platform": "landing",
+  "page_types": [
+    "landing"
+  ],
+  "density": "medium",
+  "personality": [
+    "clean",
+    "professional"
+  ],
+  "best_for": [
+    "Startup landing page template",
+    "landing kit from catalog sheet"
+  ],
+  "strengths": [
+    "Sheet-categorized community file for offline/catalog selection"
+  ],
+  "weaknesses": [
+    "No extracted structure/ in this profile — do not treat as a compiled Figma layout"
+  ],
+  "tags": [
+    "landing",
+    "startup",
+    "landing",
+    "page",
+    "template"
+  ],
+  "description": "Sheet catalog row: Startup landing page template. File key WAzHraTgsSqQQbJrTRSKlX. Generate may select this key by bucket; live Figma is ingest-only.",
+  "figma_file_key": "WAzHraTgsSqQQbJrTRSKlX",
+  "license": "community",
+  "source": "sheet",
+  "version": "1",
+  "industry": []
+}

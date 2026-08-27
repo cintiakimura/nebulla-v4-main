@@ -1,0 +1,35 @@
+{
+  "id": "sheet_DOJzcoTY6pQttUY9dLDZdT",
+  "kind": "template",
+  "platform": "web",
+  "page_types": [
+    "dashboard"
+  ],
+  "density": "medium",
+  "personality": [
+    "clean",
+    "professional"
+  ],
+  "best_for": [
+    "DashStack – admin dashboard",
+    "dashboard kit from catalog sheet"
+  ],
+  "strengths": [
+    "Sheet-categorized community file for offline/catalog selection"
+  ],
+  "weaknesses": [
+    "No extracted structure/ in this profile — do not treat as a compiled Figma layout"
+  ],
+  "tags": [
+    "dashboard",
+    "dashstack",
+    "admin",
+    "dashboard"
+  ],
+  "description": "Sheet catalog row: DashStack – admin dashboard. File key DOJzcoTY6pQttUY9dLDZdT. Generate may select this key by bucket; live Figma is ingest-only.",
+  "figma_file_key": "DOJzcoTY6pQttUY9dLDZdT",
+  "license": "community",
+  "source": "sheet",
+  "version": "1",
+  "industry": []
+}

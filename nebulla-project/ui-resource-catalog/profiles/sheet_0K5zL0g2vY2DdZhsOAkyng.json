@@ -1,0 +1,37 @@
+{
+  "id": "sheet_0K5zL0g2vY2DdZhsOAkyng",
+  "kind": "template",
+  "platform": "web",
+  "page_types": [
+    "home",
+    "dashboard",
+    "other"
+  ],
+  "density": "medium",
+  "personality": [
+    "clean",
+    "professional"
+  ],
+  "best_for": [
+    "HeroUI Kit (Community)",
+    "ds kit from catalog sheet"
+  ],
+  "strengths": [
+    "Sheet-categorized community file for offline/catalog selection"
+  ],
+  "weaknesses": [
+    "No extracted structure/ in this profile — do not treat as a compiled Figma layout"
+  ],
+  "tags": [
+    "ds",
+    "heroui",
+    "kit",
+    "community"
+  ],
+  "description": "Sheet catalog row: HeroUI Kit (Community). File key 0K5zL0g2vY2DdZhsOAkyng. Generate may select this key by bucket; live Figma is ingest-only.",
+  "figma_file_key": "0K5zL0g2vY2DdZhsOAkyng",
+  "license": "community",
+  "source": "sheet",
+  "version": "1",
+  "industry": []
+}

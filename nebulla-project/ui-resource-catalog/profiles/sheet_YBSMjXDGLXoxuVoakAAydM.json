@@ -1,0 +1,35 @@
+{
+  "id": "sheet_YBSMjXDGLXoxuVoakAAydM",
+  "kind": "template",
+  "platform": "web",
+  "page_types": [
+    "dashboard"
+  ],
+  "density": "medium",
+  "personality": [
+    "clean",
+    "professional"
+  ],
+  "best_for": [
+    "TailAdmin – Tailwind admin",
+    "dashboard kit from catalog sheet"
+  ],
+  "strengths": [
+    "Sheet-categorized community file for offline/catalog selection"
+  ],
+  "weaknesses": [
+    "No extracted structure/ in this profile — do not treat as a compiled Figma layout"
+  ],
+  "tags": [
+    "dashboard",
+    "tailadmin",
+    "tailwind",
+    "admin"
+  ],
+  "description": "Sheet catalog row: TailAdmin – Tailwind admin. File key YBSMjXDGLXoxuVoakAAydM. Generate may select this key by bucket; live Figma is ingest-only.",
+  "figma_file_key": "YBSMjXDGLXoxuVoakAAydM",
+  "license": "community",
+  "source": "sheet",
+  "version": "1",
+  "industry": []
+}

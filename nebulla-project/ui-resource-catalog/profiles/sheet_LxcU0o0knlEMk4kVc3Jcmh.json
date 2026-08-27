@@ -1,0 +1,36 @@
+{
+  "id": "sheet_LxcU0o0knlEMk4kVc3Jcmh",
+  "kind": "template",
+  "platform": "mobile",
+  "page_types": [
+    "home",
+    "landing",
+    "other"
+  ],
+  "density": "medium",
+  "personality": [
+    "clean",
+    "professional"
+  ],
+  "best_for": [
+    "Wireframe UI kit",
+    "wireframe kit from catalog sheet"
+  ],
+  "strengths": [
+    "Sheet-categorized community file for offline/catalog selection"
+  ],
+  "weaknesses": [
+    "No extracted structure/ in this profile — do not treat as a compiled Figma layout"
+  ],
+  "tags": [
+    "wireframe",
+    "wireframe",
+    "kit"
+  ],
+  "description": "Sheet catalog row: Wireframe UI kit. File key LxcU0o0knlEMk4kVc3Jcmh. Generate may select this key by bucket; live Figma is ingest-only.",
+  "figma_file_key": "LxcU0o0knlEMk4kVc3Jcmh",
+  "license": "community",
+  "source": "sheet",
+  "version": "1",
+  "industry": []
+}

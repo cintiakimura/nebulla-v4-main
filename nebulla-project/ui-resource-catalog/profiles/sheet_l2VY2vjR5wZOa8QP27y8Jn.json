@@ -1,0 +1,36 @@
+{
+  "id": "sheet_l2VY2vjR5wZOa8QP27y8Jn",
+  "kind": "template",
+  "platform": "web",
+  "page_types": [
+    "dashboard"
+  ],
+  "density": "medium",
+  "personality": [
+    "clean",
+    "professional"
+  ],
+  "best_for": [
+    "Metrix – SaaS e-commerce dashboard",
+    "dashboard kit from catalog sheet"
+  ],
+  "strengths": [
+    "Sheet-categorized community file for offline/catalog selection"
+  ],
+  "weaknesses": [
+    "No extracted structure/ in this profile — do not treat as a compiled Figma layout"
+  ],
+  "tags": [
+    "dashboard",
+    "metrix",
+    "saas",
+    "commerce",
+    "dashboard"
+  ],
+  "description": "Sheet catalog row: Metrix – SaaS e-commerce dashboard. File key l2VY2vjR5wZOa8QP27y8Jn. Generate may select this key by bucket; live Figma is ingest-only.",
+  "figma_file_key": "l2VY2vjR5wZOa8QP27y8Jn",
+  "license": "community",
+  "source": "sheet",
+  "version": "1",
+  "industry": []
+}

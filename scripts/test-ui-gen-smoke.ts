@@ -116,8 +116,8 @@ section('runUiGenerationCycleV2 without live Figma / without Grok key');
   // With buckets cleared: seed or catalog-assisted seed. Offline raw may still
   // produce figma if FIGMA keys leak back in — both are valid layered outcomes.
   assert.ok(
-    result.patternMode === 'seed' || result.patternMode === 'figma',
-    `patternMode seed|figma, got ${result.patternMode}`,
+    result.patternMode === 'seed' || result.patternMode === 'figma' || result.patternMode === 'catalog',
+    `patternMode seed|figma|catalog, got ${result.patternMode}`,
   );
   assert.ok(
     ['pass', 'repair', 'weak'].includes(result.quality_gate_result || ''),

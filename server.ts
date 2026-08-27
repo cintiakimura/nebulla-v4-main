@@ -4468,7 +4468,7 @@ ${modelJson}`;
           tone: string;
         };
         slots?: Record<string, string>;
-        pattern_mode?: "seed" | "figma";
+        pattern_mode?: "seed" | "figma" | "catalog";
         quality_gate_result?: string;
         classification?: {
           device?: string;
@@ -4517,7 +4517,12 @@ ${modelJson}`;
         templateId: meta.template_id,
         tokens: meta.tokens,
         slots: meta.slots,
-        patternMode: meta.pattern_mode === "figma" ? "figma" : "seed",
+        patternMode:
+          meta.pattern_mode === "figma"
+            ? "figma"
+            : meta.pattern_mode === "catalog"
+              ? "catalog"
+              : "seed",
         classification: meta.classification,
         screens,
         // Post-code: never reclaim live index.html as mockup-only product surface.

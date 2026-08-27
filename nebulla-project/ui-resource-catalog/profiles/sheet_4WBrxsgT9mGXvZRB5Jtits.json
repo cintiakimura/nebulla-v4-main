@@ -1,0 +1,35 @@
+{
+  "id": "sheet_4WBrxsgT9mGXvZRB5Jtits",
+  "kind": "template",
+  "platform": "mobile",
+  "page_types": [
+    "auth"
+  ],
+  "density": "medium",
+  "personality": [
+    "clean",
+    "professional"
+  ],
+  "best_for": [
+    "Login/register pack",
+    "auth kit from catalog sheet"
+  ],
+  "strengths": [
+    "Sheet-categorized community file for offline/catalog selection"
+  ],
+  "weaknesses": [
+    "No extracted structure/ in this profile — do not treat as a compiled Figma layout"
+  ],
+  "tags": [
+    "auth",
+    "login",
+    "register",
+    "pack"
+  ],
+  "description": "Sheet catalog row: Login/register pack. File key 4WBrxsgT9mGXvZRB5Jtits. Generate may select this key by bucket; live Figma is ingest-only.",
+  "figma_file_key": "4WBrxsgT9mGXvZRB5Jtits",
+  "license": "community",
+  "source": "sheet",
+  "version": "1",
+  "industry": []
+}

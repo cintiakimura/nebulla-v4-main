@@ -199,7 +199,7 @@ try {
     });
     assert.equal(rec.figma_status, 'offline');
     assert.equal(rec.figma_used, 'yes');
-    assert.ok(rec.selection_mode.startsWith('offline:bucket:'), rec.selection_mode);
+    assert.ok(rec.selection_mode.startsWith('offline:'), rec.selection_mode);
     assert.equal(fetchCalls.length, 0);
   }
 
@@ -362,7 +362,7 @@ try {
     });
     assert.equal(rec.figma_status, 'offline', rec.figma_error || rec.selection_mode);
     assert.equal(rec.figma_used, 'yes');
-    assert.ok(rec.selection_mode.startsWith('offline:bucket:'), rec.selection_mode);
+    assert.ok(rec.selection_mode.startsWith('offline:'), rec.selection_mode);
     assert.equal(fetchCalls.length, 0);
     const template = getTemplateById('mobile_home_hero_cards')!;
     const plan = parseStructureLayoutPlan(rec.structure_hints, 'home', template.id);

@@ -1,0 +1,34 @@
+{
+  "id": "sheet_4xFATxq2bTnEUYZ6VoMlaz",
+  "kind": "template",
+  "platform": "landing",
+  "page_types": [
+    "landing"
+  ],
+  "density": "medium",
+  "personality": [
+    "clean",
+    "professional"
+  ],
+  "best_for": [
+    "Website wireframes",
+    "landing kit from catalog sheet"
+  ],
+  "strengths": [
+    "Sheet-categorized community file for offline/catalog selection"
+  ],
+  "weaknesses": [
+    "No extracted structure/ in this profile — do not treat as a compiled Figma layout"
+  ],
+  "tags": [
+    "landing",
+    "website",
+    "wireframes"
+  ],
+  "description": "Sheet catalog row: Website wireframes. File key 4xFATxq2bTnEUYZ6VoMlaz. Generate may select this key by bucket; live Figma is ingest-only.",
+  "figma_file_key": "4xFATxq2bTnEUYZ6VoMlaz",
+  "license": "community",
+  "source": "sheet",
+  "version": "1",
+  "industry": []
+}

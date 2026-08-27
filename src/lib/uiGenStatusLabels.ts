@@ -40,6 +40,7 @@ export function figmaStatusIsSoftFallback(status: string): boolean {
 export function patternModeLabel(mode: string): string {
   if (mode === 'seed') return 'Built-in patterns (seed fallback)';
   if (mode === 'figma') return 'Offline / Figma library';
+  if (mode === 'catalog') return 'Sheet catalog profile';
   return '';
 }
 
@@ -48,7 +49,7 @@ export function referenceDriveLabel(selectionMode: string, figmaStatus: string):
   const m = selectionMode || '';
   if (m.startsWith('offline:') || figmaStatus === 'offline') return 'Offline library hit';
   if (m.startsWith('live:') || figmaStatus === 'success') return 'Live Figma hit';
-  if (m.includes(':catalog:')) return 'Catalog profile hit';
+  if (m.startsWith('catalog:') || m.includes(':catalog:')) return 'Catalog profile hit';
   if (m.includes(':brief:')) return 'Brief-only guidance';
   if (m.includes(':seed:') || figmaStatus === 'weak_matches') return 'Seed fallback';
   return figmaStatusLabel(figmaStatus);
