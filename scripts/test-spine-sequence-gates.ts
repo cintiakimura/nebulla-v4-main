@@ -317,6 +317,8 @@ assert.equal(
 }
 assert.match(chat, /ASK_FOR_SHORT_GOAL|Write a short goal for this app/);
 assert.match(chat, /No usable Master Plan goal yet/);
+assert.match(chat, /drafting from your prompt \(the linked page is optional\)/);
+assert.match(chat, /buildFastPrototypeContinueBootstrap\(text\)/);
 assert.match(
   chat,
   /const hasPlan = planRecordHasUsableGoal\(plan\);/,

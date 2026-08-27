@@ -8,13 +8,13 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
-  LINK_CONTEXT_LOAD_FAIL,
   LINKED_CONTEXT_MAX_CHARS,
   LINKED_CONTEXT_REL,
   buildLinkedContextAppendix,
   captureLinkedContextFromUserMessage,
   extractHttpUrls,
   extractReadableText,
+  formatLinkedContextMissStatus,
   hostMatchesAllowlist,
   isBlockedHostname,
   isBlockedUrl,
@@ -92,8 +92,32 @@ section("blocked host / private IP → soft fail, no file");
     fetchImpl: mockFetch("secret"),
   });
   assert.equal(r.wrote, false);
-  assert.equal(r.status, LINK_CONTEXT_LOAD_FAIL);
+  assert.match(r.status, /host not on allowlist/i);
   assert.equal(fs.existsSync(path.join(tmp, LINKED_CONTEXT_REL)), false);
+}
+
+section("explicit prompt goal + blocked host → use prompt, do not scare");
+{
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "link-goal-"));
+  const userText = [
+    "FAST PROTOTYPE MODE. User goal / brief:",
+    '"""',
+    "Build a privacy-first learning companion for children with adaptive micro-learning.",
+    "https://example.com/study/cognitive-load",
+    '"""',
+  ].join("\n");
+  const r = await captureLinkedContextFromUserMessage({
+    workspaceRoot: tmp,
+    userText,
+    fetchImpl: mockFetch("secret"),
+  });
+  assert.equal(r.wrote, false);
+  assert.match(r.status, /Using your written goal/i);
+  assert.equal(/continuing without it/i.test(r.status), false);
+  assert.match(
+    formatLinkedContextMissStatus(userText, ["host not allowed"]),
+    /allowlist/i,
+  );
 }
 
 section("truncation respects max length");

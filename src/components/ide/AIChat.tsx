@@ -2065,9 +2065,12 @@ export function AIChat() {
           );
         } else if (skipGrokChat) {
           skipGrokChat = false;
+          const fromPrompt = extractGoalFromUserNote(text);
           pushActivity(
-            'No usable Master Plan goal yet — drafting the plan first (not skipping Grok chat)',
-            'warn',
+            fromPrompt
+              ? 'No saved Master Plan on disk yet — drafting from your prompt (the linked page is optional)'
+              : 'No usable Master Plan goal yet — drafting the plan first (not skipping Grok chat)',
+            fromPrompt ? 'info' : 'warn',
           );
         }
       } catch {
@@ -2155,10 +2158,10 @@ export function AIChat() {
           }
         }
         if (linkedContextStatus) {
-          pushActivity(
-            linkedContextStatus,
-            /could not load linked page/i.test(linkedContextStatus) ? 'warn' : 'info',
-          );
+          const soft =
+            /using your written goal/i.test(linkedContextStatus) ||
+            /linked page skipped/i.test(linkedContextStatus);
+          pushActivity(linkedContextStatus, soft ? 'info' : /could not load linked page/i.test(linkedContextStatus) ? 'warn' : 'info');
         }
         // Phase 7.0: a successful chat turn clears sticky key/auth rejection.
         clearMainAiAuthRejected(diskProjectKey);
@@ -2215,7 +2218,7 @@ export function AIChat() {
         setAccessoryHint('Continuing Fast Prototype — requesting full Master Plan + ui-brief…');
         window.setTimeout(() => setAccessoryHint(null), 6000);
         window.setTimeout(() => {
-          void sendChatRef.current(buildFastPrototypeContinueBootstrap());
+          void sendChatRef.current(buildFastPrototypeContinueBootstrap(text));
         }, 80);
         resetCodingActivity();
         setSending(false);

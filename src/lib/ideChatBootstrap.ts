@@ -1,6 +1,7 @@
 import type { ConversationLogEntryDTO } from './conversationLogClient';
 import type { NebulaProjectType } from './ideHomeEvents';
 import { sanitizeAssistantChatText } from '../../lib/assistantChatSanitize';
+import { extractGoalFromUserNote } from '../../lib/spineSequenceClient';
 
 /** Hidden user turn — Grok replies with the first onboarding question only (project-execution-rules §4). */
 export const IDE_CHAT_DISCOVERY_BOOTSTRAP =
@@ -24,10 +25,20 @@ export const FAST_PROTOTYPE_BOOTSTRAP_PREFIX = 'FAST PROTOTYPE MODE.';
 /** One automatic follow-up when the first Fast Prototype reply omitted Master Plan tags. */
 export const FAST_PROTOTYPE_CONTINUE_PREFIX = 'FAST PROTOTYPE CONTINUE.';
 
-export function buildFastPrototypeContinueBootstrap(): string {
+export function buildFastPrototypeContinueBootstrap(userGoalOrBootstrap?: string): string {
+  const brief = String(userGoalOrBootstrap || "").trim();
+  const quoted = (brief.match(/User goal \/ brief:\s*"""([\s\S]*?)"""/i)?.[1] || "").trim();
+  const clipped = (
+    extractGoalFromUserNote(brief) ||
+    quoted.replace(/https?:\/\/\S+/gi, " ").replace(/\s+/g, " ").trim()
+  ).slice(0, 4000);
+  const goalBlock = clipped
+    ? `User goal / brief:\n"""\n${clipped}\n"""\n\n`
+    : "";
   return (
     `${FAST_PROTOTYPE_CONTINUE_PREFIX} Your previous reply did NOT include <START_MASTERPLAN> tags. ` +
     `This is a HARD retry — do NOT ask questions; do NOT apologize; do NOT interview.\n` +
+    goalBlock +
     `Immediately output in this order:\n` +
     `1) <START_MASTERPLAN>…</END_MASTERPLAN> with ALL five sections (real content; label assumptions).\n` +
     `   §1 goal/users/scope · §2 Project Type + labeled assumption defaults + Security baseline if accounts/kids/private data · ` +

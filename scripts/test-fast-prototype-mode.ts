@@ -99,8 +99,12 @@ assert.ok(fast.includes('Foundation Go'));
 assert.ok(isHiddenBootstrapUserMessage(fast));
 assert.ok(isHiddenBootstrapUserMessage(buildDiscoveryBootstrap('Web App')));
 
-const cont = buildFastPrototypeContinueBootstrap();
+const cont = buildFastPrototypeContinueBootstrap(
+  'FAST PROTOTYPE MODE. User goal / brief:\n"""\nKids reading tutor with practice and parent progress.\nhttps://example.com/study\n"""\n',
+);
 assert.ok(isHiddenBootstrapUserMessage(cont));
 assert.ok(cont.includes('START_MASTERPLAN'));
+assert.match(cont, /Kids reading tutor/i);
+assert.equal(/https?:\/\//.test(cont), false);
 
 console.log('test-fast-prototype-mode: ok');

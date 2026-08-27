@@ -359,6 +359,33 @@ export function lastUserMessageContent(
   return "";
 }
 
+function userTextHasWrittenGoal(userText: string): boolean {
+  const raw = String(userText || "");
+  const tagged = raw.match(/User goal \/ brief:\s*"""([\s\S]*?)"""/i)?.[1];
+  const inner = (tagged || raw).replace(/https?:\/\/\S+/gi, " ").replace(/\s+/g, " ").trim();
+  if (inner.length < 24) return false;
+  if (!/[a-zA-Z]{3,}/.test(inner)) return false;
+  if (/^FAST PROTOTYPE (MODE|CONTINUE)\./i.test(inner) && inner.length < 80) return false;
+  return true;
+}
+
+/** Honest miss — never imply the product goal was lost when the prompt already states it. */
+export function formatLinkedContextMissStatus(userText: string, failReasons: string[]): string {
+  const hasGoal = userTextHasWrittenGoal(userText);
+  const reasons = [...new Set(failReasons.map((r) => String(r || "").trim()).filter(Boolean))];
+  const hostDenied = reasons.some((r) => /host not allowed/i.test(r));
+  if (hasGoal) {
+    if (hostDenied) {
+      return "Linked page skipped (not on GitHub allowlist). Using your written goal — the URL is optional.";
+    }
+    return "Could not load linked page. Using your written goal — continuing.";
+  }
+  if (hostDenied) {
+    return "Could not load linked page (host not on allowlist). Paste the spec in the prompt, or use a github.com / raw.githubusercontent.com URL.";
+  }
+  return LINK_CONTEXT_LOAD_FAIL;
+}
+
 export async function captureLinkedContextFromUserMessage(opts: {
   workspaceRoot: string;
   userText: string;
@@ -368,6 +395,7 @@ export async function captureLinkedContextFromUserMessage(opts: {
   skipped: boolean;
   status: string;
   urls: string[];
+  failReasons?: string[];
 }> {
   const selected = selectUrlsToFetch(extractHttpUrls(opts.userText)).slice(0, LINK_FETCH_MAX_URLS);
   if (selected.length === 0) {
@@ -376,9 +404,13 @@ export async function captureLinkedContextFromUserMessage(opts: {
 
   const sections: string[] = [];
   const hosts: string[] = [];
+  const failReasons: string[] = [];
   for (const url of selected) {
     const got = await fetchLinkedPage(url, opts.fetchImpl);
-    if (!got.ok) continue;
+    if (!got.ok) {
+      failReasons.push(got.error);
+      continue;
+    }
     sections.push(formatLinkedContextSection(url, got.text));
     try {
       hosts.push(new URL(got.url || url).hostname);
@@ -391,8 +423,9 @@ export async function captureLinkedContextFromUserMessage(opts: {
     return {
       wrote: false,
       skipped: false,
-      status: LINK_CONTEXT_LOAD_FAIL,
+      status: formatLinkedContextMissStatus(opts.userText, failReasons),
       urls: selected,
+      failReasons,
     };
   }
 
