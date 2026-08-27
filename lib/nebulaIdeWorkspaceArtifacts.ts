@@ -25,6 +25,11 @@ import {
   buildConcreteUiuxSection,
   isGenericUiuxBoilerplate,
 } from "./uiuxSectionBuilder";
+import {
+  isNebulaUiGenMockupHtml,
+  UI_GEN_MOCKUP_REL,
+  workspaceHasCodedAppUi,
+} from "./workspaceCodedAppUi";
 
 export const MASTER_PLAN_TAB_KEYS = MASTER_PLAN_ALL_KEYS;
 
@@ -628,11 +633,15 @@ export function writeBasicUiScaffold(
 
   const idx = path.join(workspaceRoot, "index.html");
   const existing = fs.existsSync(idx) ? fs.readFileSync(idx, "utf8") : "";
+  const coded = workspaceHasCodedAppUi(workspaceRoot);
+  const existingIsMockup = existing ? isNebulaUiGenMockupHtml(existing) : false;
   const shouldWrite =
-    Boolean(opts?.force) ||
-    !fs.existsSync(idx) ||
-    fs.statSync(idx).size < 200 ||
-    isLegacyNebulaBasicPreviewHtml(existing);
+    !coded &&
+    !existingIsMockup &&
+    (Boolean(opts?.force) ||
+      !fs.existsSync(idx) ||
+      fs.statSync(idx).size < 200 ||
+      isLegacyNebulaBasicPreviewHtml(existing));
   if (shouldWrite) {
     fs.writeFileSync(idx, html, "utf8");
     written.push("index.html");
@@ -648,9 +657,17 @@ export function writeBasicUiScaffold(
 }
 
 export function ensurePreviewIndexHtml(workspaceRoot: string, projectName: string): boolean {
+  if (workspaceHasCodedAppUi(workspaceRoot)) return false;
+  const mockupAbs = path.join(workspaceRoot, UI_GEN_MOCKUP_REL);
+  try {
+    if (fs.existsSync(mockupAbs) && fs.statSync(mockupAbs).size > 80) return false;
+  } catch {
+    /* fall through */
+  }
   const idx = path.join(workspaceRoot, "index.html");
   if (fs.existsSync(idx) && fs.statSync(idx).size > 200) {
     const existing = fs.readFileSync(idx, "utf8");
+    if (isNebulaUiGenMockupHtml(existing)) return false;
     if (!isLegacyNebulaBasicPreviewHtml(existing)) return false;
   }
   writeBasicUiScaffold(workspaceRoot, projectName, { force: true });

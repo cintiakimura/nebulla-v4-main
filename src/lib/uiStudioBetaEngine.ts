@@ -305,7 +305,11 @@ export async function runUiStudioBetaGeneration(
       if (data.skipped || phase === 'post_code') {
         try {
           window.dispatchEvent(new CustomEvent(NEBULA_UI_STUDIO_BETA_COMPLETE, { detail: { ok: true, ...data } }));
-          dispatchStudioShowLiveApp();
+          if (preferMockup) {
+            dispatchPreviewShowMockup(true);
+          } else {
+            dispatchStudioShowLiveApp();
+          }
           window.dispatchEvent(new CustomEvent('nebula-reload-app-preview'));
         } catch {
           /* ignore */

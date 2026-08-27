@@ -65,8 +65,9 @@ const SKIP_DIR = new Set([
   "nebulla-version-history",
 ]);
 
-const UI_FILE_RE = /\.(tsx|jsx|vue)$/i;
+const UI_FILE_RE = /\.(tsx|jsx|js|vue)$/i;
 const IGNORE_FILE_RE = /\.(test|spec|stories|d)\.[tj]sx?$/i;
+const SKIP_JS_NAME_RE = /\.(config|setup)\.[cm]?js$/i;
 
 export type AppPreviewMode =
   | "pre_code_mockup"
@@ -116,7 +117,7 @@ export function listProductUiFiles(workspaceRoot: string, max = 40): string[] {
         continue;
       }
       if (!ent.isFile()) continue;
-      if (!UI_FILE_RE.test(name) || IGNORE_FILE_RE.test(name)) continue;
+      if (!UI_FILE_RE.test(name) || IGNORE_FILE_RE.test(name) || SKIP_JS_NAME_RE.test(name)) continue;
       const fullRel = rel ? `${rel}/${name}` : name;
       const top = fullRel.split("/")[0] || "";
       if (!["app", "src", "pages", "components"].includes(top)) continue;
@@ -142,6 +143,33 @@ export function listProductUiFiles(workspaceRoot: string, max = 40): string[] {
 /** True when any product UI source exists (used so mockup does not reclaim index.html). */
 export function workspaceHasCodedAppUi(workspaceRoot: string): boolean {
   return listProductUiFiles(workspaceRoot, 8).length >= 1;
+}
+
+/** Code tab should open a product route, not the preview-shell index.html. */
+export function preferredProductEditorPath(paths: string[]): string | null {
+  const list = (paths || [])
+    .map((p) => String(p || "").replace(/\\/g, "/").replace(/^\.\//, ""))
+    .filter(Boolean);
+  const ranked = [
+    /^app\/page\.(tsx|jsx|js)$/i,
+    /^src\/app\/page\.(tsx|jsx|js)$/i,
+    /^app\/.+\/page\.(tsx|jsx|js)$/i,
+    /^src\/app\/.+\/page\.(tsx|jsx|js)$/i,
+    /^pages\/index\.(tsx|jsx|js)$/i,
+    /^src\/pages\/.+\.(tsx|jsx|js)$/i,
+  ];
+  for (const re of ranked) {
+    const hit = list.find((p) => re.test(p));
+    if (hit) return hit;
+  }
+  return (
+    list.find(
+      (p) =>
+        p !== "index.html" &&
+        p !== "public/index.html" &&
+        !/(^|\/)nebula-basic-preview\.html$/i.test(p),
+    ) || null
+  );
 }
 
 function normalizeProductPath(raw: string): string {
@@ -378,7 +406,7 @@ export function resolveAppPreviewAuthority(workspaceRoot: string): AppPreviewAut
     return withHonesty(
       {
         mode: "pre_code_mockup",
-        statusLabel: "Mockup waiting - not live app",
+        statusLabel: "Catalog mockup - not the live app",
         codedApp: false,
         indexIsMockup: true,
         entryRel: mockupRel,
@@ -408,7 +436,7 @@ export function resolveAppPreviewAuthority(workspaceRoot: string): AppPreviewAut
     return withHonesty(
       {
         mode: "pre_code_mockup",
-        statusLabel: "Mockup waiting - not live app",
+        statusLabel: "Catalog mockup - not the live app",
         codedApp: false,
         indexIsMockup: indexIsMockup || Boolean(mockupRel),
         entryRel: mockupRel || "index.html",

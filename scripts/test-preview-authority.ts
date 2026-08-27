@@ -15,6 +15,7 @@ import {
   buildCodedAppPreviewBridgeHtml,
   inferRoutesFromProductFiles,
   isNebulaUiGenMockupHtml,
+  preferredProductEditorPath,
   resolveAppPreviewAuthority,
   toHttpHeaderSafe,
   workspaceHasCodedAppUi,
@@ -22,6 +23,10 @@ import {
   previewIframeCanRunProduct,
   previewMetaHasProductRoutes,
 } from "../lib/workspaceCodedAppUi.ts";
+import {
+  ensurePreviewIndexHtml,
+  writeBasicUiScaffold,
+} from "../lib/nebulaIdeWorkspaceArtifacts.ts";
 import {
   ensureInteractiveProductPreview,
   inferPreviewScreensFromPaths,
@@ -342,6 +347,33 @@ section("canvas honesty — product preview / coded bridge is showable (not Figm
   assert.match(engine, /dispatchPreviewShowMockup\(true\)/);
   assert.match(engine, /else if \(data\.mockupOnlyArtifact\)/);
   assert.match(engine, /dispatchStudioShowLiveApp\(\)/);
+  assert.match(canvas, /hasMockup/);
+  assert.match(engine, /if \(preferMockup\)/);
+}
+
+section("Generate UI must not overwrite coded app with workspace-routes index");
+{
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "nebulla-scaffold-coded-"));
+  fs.mkdirSync(path.join(root, "app"), { recursive: true });
+  fs.writeFileSync(
+    path.join(root, "app", "page.tsx"),
+    "export default function Page(){ return <main>Home</main>; }\n",
+  );
+  fs.writeFileSync(path.join(root, "index.html"), "<!doctype html><html><body>keep</body></html>");
+  const written = writeBasicUiScaffold(root, "Kids app", { force: true });
+  assert.equal(written.includes("index.html"), false);
+  assert.equal(fs.readFileSync(path.join(root, "index.html"), "utf8").includes("keep"), true);
+  assert.equal(ensurePreviewIndexHtml(root, "Kids app"), false);
+  fs.rmSync(root, { recursive: true, force: true });
+}
+
+section("preferredProductEditorPath skips preview index.html");
+{
+  assert.equal(
+    preferredProductEditorPath(["index.html", "app/page.tsx", "app/layout.tsx"]),
+    "app/page.tsx",
+  );
+  assert.equal(preferredProductEditorPath(["index.html"]), null);
 }
 
 console.log("\n✓ preview authority tests passed\n");

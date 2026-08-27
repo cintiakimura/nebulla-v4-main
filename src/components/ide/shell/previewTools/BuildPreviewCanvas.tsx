@@ -63,22 +63,26 @@ export function BuildPreviewCanvas() {
       setPreviewMode(typeof data.previewMode === 'string' ? data.previewMode : null);
       const live = previewMetaHasProductRoutes(data);
       const iframeRuns = previewIframeCanRunProduct(data);
+      const hasMockup = Boolean(String(data.mockupRel || '').trim());
       setLiveAvailable(live);
       if (live) {
         setHasVisualPreview(true);
-        if (!iframeRuns) {
+        if (!iframeRuns || keepMockupRef.current) {
           setShowMockup(true);
           setWaitStatus(
-            'Catalog mockup (Figma/templates). Next/Vite cannot run in this iframe — Open Code for app/.',
+            iframeRuns
+              ? 'Catalog mockup — Use app for the clickable practice preview'
+              : 'Catalog mockup (Figma/templates). Next/Vite cannot run in this iframe — Open Code for app/.',
           );
           return;
         }
-        if (keepMockupRef.current) {
-          setShowMockup(true);
-          setWaitStatus('Catalog mockup — Use app for the clickable practice preview');
-          return;
-        }
         setWaitStatus('Catalog mockup — Use app for the clickable practice preview');
+        return;
+      }
+      if (hasMockup) {
+        setHasVisualPreview(true);
+        setShowMockup(true);
+        setWaitStatus('Catalog mockup - not the live app');
         return;
       }
       if (data.previewMode === 'empty' || data.previewHonesty === 'empty') {

@@ -16,6 +16,7 @@ import {
   withProjectQuery,
 } from '../../lib/nebulaProjectApi';
 import { isUserAppProductPath } from '../../../lib/nebulaOrchestrationPaths';
+import { preferredProductEditorPath } from '../../../lib/workspaceCodedAppUi';
 import {
   buildIdeSwarmFocusFromEditor,
   IDE_SWARM_FOCUS_SNIPPET_MAX,
@@ -149,7 +150,7 @@ export function IdeWorkspaceProvider({ children }: { children: ReactNode }) {
     setAssistantInteractionModeState(readStoredInteractionMode(diskProjectKey));
   }, [diskProjectKey]);
 
-  const refreshTree = useCallback(async () => {
+  const refreshTree = useCallback(async (): Promise<string[]> => {
     setOverviewLoading(true);
     setOverviewError(null);
     try {
@@ -170,10 +171,12 @@ export function IdeWorkspaceProvider({ children }: { children: ReactNode }) {
       setActivePath((cur) => (cur && !isUserAppProductPath(cur) ? null : cur));
       const b = data.git?.branch?.trim();
       setGitBranch(b && b !== 'unknown' && b !== '?' ? b : null);
+      return paths;
     } catch (e) {
       setOverviewError(e instanceof Error ? e.message : String(e));
       setWorkspacePaths([]);
       setGitBranch(null);
+      return [];
     } finally {
       setOverviewLoading(false);
       setDiskProjectKey(getBrowserProjectKey());
@@ -193,24 +196,8 @@ export function IdeWorkspaceProvider({ children }: { children: ReactNode }) {
     setActivePath((cur) => (cur && !isUserAppProductPath(cur) ? null : cur));
   }, [diskProjectKey]);
 
-  useEffect(() => {
-    const onRefresh = () => void refreshTree();
-    window.addEventListener('nebula-files-applied', onRefresh);
-    window.addEventListener('nebula-workspace-context-synced', onRefresh);
-    return () => {
-      window.removeEventListener('nebula-files-applied', onRefresh);
-      window.removeEventListener('nebula-workspace-context-synced', onRefresh);
-    };
-  }, [refreshTree]);
-
-  useEffect(() => {
-    const payload = buildIdeSwarmFocusFromEditor(
-      activePath,
-      activeTab?.content ?? '',
-      Boolean(activeTab?.loading),
-    );
-    syncWindowSwarmFocusFromPayload(payload);
-  }, [activePath, activeTab]);
+  const activePathRef = useRef(activePath);
+  activePathRef.current = activePath;
 
   const openFile = useCallback(async (relPath: string) => {
     const normalized = relPath.replace(/\\/g, '/');
@@ -255,6 +242,36 @@ export function IdeWorkspaceProvider({ children }: { children: ReactNode }) {
       );
     }
   }, []);
+
+  useEffect(() => {
+    const onRefresh = () => {
+      void refreshTree().then((paths) => {
+        const cur = activePathRef.current;
+        const previewShell =
+          !cur ||
+          cur === 'index.html' ||
+          cur === 'public/index.html';
+        if (!previewShell) return;
+        const prefer = preferredProductEditorPath(paths);
+        if (prefer && prefer !== cur) void openFile(prefer);
+      });
+    };
+    window.addEventListener('nebula-files-applied', onRefresh);
+    window.addEventListener('nebula-workspace-context-synced', onRefresh);
+    return () => {
+      window.removeEventListener('nebula-files-applied', onRefresh);
+      window.removeEventListener('nebula-workspace-context-synced', onRefresh);
+    };
+  }, [refreshTree, openFile]);
+
+  useEffect(() => {
+    const payload = buildIdeSwarmFocusFromEditor(
+      activePath,
+      activeTab?.content ?? '',
+      Boolean(activeTab?.loading),
+    );
+    syncWindowSwarmFocusFromPayload(payload);
+  }, [activePath, activeTab]);
 
   const updateActiveContent = useCallback(
     (text: string) => {
