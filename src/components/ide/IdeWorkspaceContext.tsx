@@ -55,7 +55,7 @@ type IdeWorkspaceValue = {
   gitBranch: string | null;
   overviewLoading: boolean;
   overviewError: string | null;
-  refreshTree: () => Promise<void>;
+  refreshTree: () => Promise<string[]>;
   tabs: EditorTab[];
   activePath: string | null;
   chatModel: IdeChatModelId;

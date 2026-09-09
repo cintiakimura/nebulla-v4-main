@@ -407,7 +407,7 @@ export async function captureLinkedContextFromUserMessage(opts: {
   const failReasons: string[] = [];
   for (const url of selected) {
     const got = await fetchLinkedPage(url, opts.fetchImpl);
-    if (!got.ok) {
+    if (got.ok === false) {
       failReasons.push(got.error);
       continue;
     }
