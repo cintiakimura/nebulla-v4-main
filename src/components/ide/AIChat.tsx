@@ -130,6 +130,7 @@ import {
 import {
   assessUiMockupReadiness,
   canStartFoundationCoding,
+  codingSkeletonAllowsFoundation,
   clearUiMockupStageFlags,
   hasPersistedUiMockup,
   markUiMockupStageStarted,
@@ -2423,7 +2424,7 @@ export function AIChat() {
       if (agentAllowed && (fastPrototypeTurn || willCode || mpSaved > 0)) {
         if (wantsNextSlice && foundationAlreadyLanded) {
           const st = await fetchResearchStatus(projectName);
-          if (!st.ok) {
+          if (!st.ok && !(await codingSkeletonAllowsFoundation())) {
             lastResearchError = formatResearchStopMessage(st.reasons);
             codingProblems.push(lastResearchError);
             pushActivity(lastResearchError, 'error');
@@ -2450,6 +2451,7 @@ export function AIChat() {
           lastResearchError = RESEARCH_STOPPED;
         }
         if (!research.ok) {
+          if (!(await codingSkeletonAllowsFoundation())) {
           const stopMsg = formatResearchStopMessage(research.gate?.reasons);
           lastResearchError = lastResearchError || stopMsg;
           codingProblems.push(lastResearchError);
@@ -2467,6 +2469,10 @@ export function AIChat() {
           codingActivityRef.current = false;
           setGrokCodingActive(false);
           setGrokActivity((prev) => finishGrokActivityWithProblems(prev, codingProblems));
+          } else {
+            lastResearchError = null;
+            pushActivity(RESEARCH_STAGE_BRIEF, 'info');
+          }
         } else {
           pushActivity(RESEARCH_STAGE_BRIEF, 'info');
           lastResearchError = null;
@@ -2648,7 +2654,7 @@ export function AIChat() {
 
         if (willCode && foundationGate.ok) {
           const st = await fetchResearchStatus(projectName);
-          if (!st.ok) {
+          if (!st.ok && !(await codingSkeletonAllowsFoundation())) {
             const stopMsg = formatResearchStopMessage(st.reasons);
             lastResearchError = stopMsg;
             noteProblem(stopMsg);
@@ -3344,7 +3350,7 @@ export function AIChat() {
     const userId = session?.uid?.trim() || 'anonymous';
     const projectName = getBrowserProjectName().trim() || 'Untitled project';
     const researchSt = await fetchResearchStatus(projectName);
-    if (!researchSt.ok) {
+    if (!researchSt.ok && !(await codingSkeletonAllowsFoundation())) {
       const stopMsg = formatResearchStopMessage(researchSt.reasons);
       setSendError(stopMsg);
       setAccessoryHint('Retry research — Foundation will not start until Gate R is complete.');

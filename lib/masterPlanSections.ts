@@ -16,6 +16,9 @@ export const MASTER_PLAN_INTERNAL_KEY = "6. Environment Setup";
 /** Written by Go / go-code before Grok Code runs — shown in Master Plan UI. */
 export const PRE_CODING_SUMMARY_KEY = "Pre-coding summary (Grok)";
 
+/** Structured coding contract on the same master-plan.json — not a new file family. */
+export const CODING_SKELETON_KEY = "Coding skeleton";
+
 /** User-facing tabs (Master Plan UI) — section 6 is internal/env. */
 export const MASTER_PLAN_USER_SECTION_KEYS = [...MASTER_PLAN_SECTION_KEYS] as const;
 

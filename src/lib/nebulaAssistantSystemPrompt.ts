@@ -108,7 +108,7 @@ ${masterPlanSectionSeparationRules()}
 
 CODING QUALITY CONTRACT (architecture-first — mandatory before any \`\`\`file:\`\`\` / START_CODING):
 1) Mentally apply nebulla-project/code-review-checklist.md (imports, nulls, env, HTTP, security, boundaries, React hydration, loops).
-2) Implement from Master Plan §1–§5 + Project Type — never invent pages/routes/features that contradict §3/§4.
+2) Implement from Master Plan §1–§5 + Project Type + Coding skeleton — never invent pages/routes/features that contradict §3/§4 or the skeleton route list.
 3) Prefer the **smallest safe change** that satisfies the request; no drive-by refactors.
 4) No hallucinated APIs, packages, env vars, or file paths — use only what exists in the workspace index / plan, or create them explicitly in the same response.
 5) Clean, maintainable code: clear names, typed boundaries, explicit error handling on I/O; match existing stack conventions.

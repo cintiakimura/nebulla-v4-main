@@ -211,6 +211,7 @@ export function buildLocalPreCodingSummary(opts: {
     focus && !isBareGoNote(focus) ? `- Session focus: ${focus}` : `- Session focus: next incomplete ${slice} work from Master Plan`,
     "- Files: app/, src/, components/, lib/ for this slice — prefer real screens over master-plan.json-only",
     `- Quality: ${productSliceQualityLine(name)}`,
+    "- Coding skeleton on the plan: implement only listed routes + layout. Mockup is not the spec.",
     "- Validate: routes render, no Nebulla IDE chrome (#080A14 / #00D4D4), auth fields only on Login",
     "- Risks: hosted BaaS clients; oversized multi-route dump",
   ];
@@ -307,6 +308,8 @@ export function buildCompactGoCodeUserPrompt(opts: {
     briefPages || "(none parsed)",
     "",
     quality,
+    "",
+    "Obey Master Plan Coding skeleton if present — only those routes this slice. No extra admin/analytics/settings unless skeleton is web_dashboard. Mockup is not the spec.",
     "",
     task,
     "File blocks only: ```file:relative/path``` — no chat prose.",

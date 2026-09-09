@@ -137,6 +137,21 @@ export function foundationCodingAllowedAfterResearch(researchOk: boolean): boole
   return researchOk === true;
 }
 
+/** Plan Coding skeleton present — Foundation/Go may start even if research is empty. */
+export async function codingSkeletonAllowsFoundation(): Promise<boolean> {
+  try {
+    const st = await fetch(withProjectQuery('/api/master-plan/status'), {
+      credentials: 'include',
+      cache: 'no-store',
+    });
+    if (!st.ok) return false;
+    const body = (await readResponseJson(st)) as { codingSkeletonOk?: boolean };
+    return body.codingSkeletonOk === true;
+  } catch {
+    return false;
+  }
+}
+
 export async function canStartFoundationCoding(options?: {
   /** True when Stage B could not run or returned failure (skip path). */
   mockupSkippedOrFailed?: boolean;
@@ -151,8 +166,12 @@ export async function canStartFoundationCoding(options?: {
       const body = (await readResponseJson(st)) as {
         researchOk?: boolean;
         researchSkipped?: boolean;
+        codingSkeletonOk?: boolean;
       };
       researchAllowsGo = body.researchSkipped === true || body.researchOk === true;
+      if (!researchAllowsGo && body.codingSkeletonOk === true) {
+        researchAllowsGo = true;
+      }
     }
   } catch {
     researchAllowsGo = false;

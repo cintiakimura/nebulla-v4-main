@@ -423,6 +423,8 @@ Record `stage=ui_mockup` in `fast-prototype-memory.md` (or product stage flag).
 - layout
 - base design tokens if needed
 
+Use the plan `Coding skeleton` (routes + entities). Empty competitor research must not block Foundation when that object exists.
+
 Use incremental development.  
 Do not implement all features in one pass.  
 Record `stage=coding`.

@@ -210,7 +210,7 @@ export const FOUNDATION_RETRY_ACTIVITY =
   'Foundation did not land. Retry Go for Foundation — not Continue for Primary.';
 
 export const FOUNDATION_SLICE_INSTRUCTION =
-  'START_CODING — implement ONE coherent Foundation slice only (Build → Debug → Next). Prefer app/, src/, components/, pages/ — not master-plan/ui-brief only. Primary controls must not be silent no-ops — wire them to a local module or app/api even if Data+API lands next. File blocks for this slice only — not the full §4 app.';
+  'START_CODING — implement ONE coherent Foundation slice only (Build → Debug → Next). Prefer app/, src/, components/, pages/ — not master-plan/ui-brief only. Create router + Coding-skeleton routes only, one mock store per entity, mock auth only if auth is not none. Primary controls must not be silent no-ops. Do not claim Preview or the product is finished. File blocks for this slice only — not the full §4 app.';
 
 /** After a 3-minute timeout — smaller shell so Grok Code can finish. */
 export const NARROW_FOUNDATION_SLICE_INSTRUCTION =
@@ -363,7 +363,7 @@ export const FAST_PROTOTYPE_DATA_API_SLICE_INSTRUCTION =
 export const FAST_PROTOTYPE_PRIMARY_SLICE_INSTRUCTION =
   'START_CODING — SLICE: Primary — implement the NEXT incomplete primary feature slice only (Build → Debug → Next). ' +
   `${DO_NOT_REWRITE_FOUNDATION} ` +
-  'Core user job from Master Plan: kid Home with one next-lesson CTA + a working practice/session (steps or timer, then complete) that reads/writes through Data+API — not a Who-are-you role picker as the whole home, not mock-only UI. Prefer app/, src/, components/, pages/ — not master-plan/ui-brief only. File blocks for this slice only — not the full §4 app.';
+  'Core user job from Master Plan / Coding skeleton first verb (e.g. practice): kid Home with one next-lesson CTA + a working practice/session (steps or timer, then complete) that reads/writes through Data+API — not a Who-are-you role picker as the whole home, not mock-only UI. Prefer listed skeleton routes only. File blocks for this slice only — not the full §4 app.';
 
 export function buildAutopilotSliceInstruction(slice: AutopilotSliceLabel): string {
   if (slice === 'Foundation') return FOUNDATION_SLICE_INSTRUCTION;

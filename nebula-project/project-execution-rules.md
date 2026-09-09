@@ -193,6 +193,13 @@ JSON keys MUST match `lib/masterPlanSections.ts` (canonical `"2. Tech and Resear
 
 **Each Go / START_CODING:** one coherent slice only; smallest safe file set; no full §4 dump.
 
+**Coding skeleton (on master-plan.json `Coding skeleton`, not a new file):**
+- Classify closed shape: `mobile_home` | `web_dashboard` | `landing` | `marketplace` plus `auth: none|mock`, roles, entities, verbs, routes.
+- Persist that object on the plan. If §4 is empty, fill routes from the skeleton. Do not wait on competitor research.
+- Foundation / Go may start when the object exists even if `competitor-research.md` is empty.
+- Implement only listed routes + shared layout. No extra `/dashboard` `/settings` `/analytics` unless skeleton is `web_dashboard`.
+- Foundation = router + those routes + one mock store per entity + mock auth only if `auth !== none`. Main verb = Primary. Do not claim product-ready after Foundation.
+
 **On bug / failure:**
 1. Match `full-bug-database.md` when useful.
 2. NDM: Verify → Analyze → Trace → Fix → Validate (`debugging-method.md`).

@@ -1127,6 +1127,15 @@ async function blockGoIfResearchIncomplete(
 ): Promise<GoBlockedReason | null> {
   const research = await fetchResearchStatus(projectName);
   if (research.ok) return null;
+  try {
+    const st = await fetchJson<{ codingSkeletonOk?: boolean }>(
+      withProjectQuery('/api/master-plan/status'),
+      { credentials: 'include', cache: 'no-store', headers: getGrokRequestHeaders() },
+    );
+    if (st.codingSkeletonOk === true) return null;
+  } catch {
+    /* fall through to research stop */
+  }
   const stop = formatResearchStopMessage(research.reasons);
   onProgress?.(stop, 'error');
   return goBlocked('RESEARCH_INCOMPLETE', stop);

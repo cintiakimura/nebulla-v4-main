@@ -207,6 +207,14 @@ import { isV0StartJobActive, isV0StartStale, scheduleV0CreateChatJob, v0StartEla
 import { NEBULA_V0_KEY_SETUP_HINT, resolveV0ApiKey, resolveV0ApiKeyFromRequest, V0_ENV_VAR } from "./lib/nebulaV0Resolver";
 import { PRE_CODING_SUMMARY_KEY } from "./lib/masterPlanSections";
 import {
+  classifyCodingSkeleton,
+  ensureCodingSkeletonOnPlan,
+  filterBlocksOutsideCodingSkeleton,
+  formatCodingSkeletonForGo,
+  isCodingSkeletonReady,
+  readCodingSkeletonFromPlan,
+} from "./lib/codingSkeleton";
+import {
   goCodePendingToPollResponse,
   isGoCodeJobActive,
   scheduleGoCodeJob,
@@ -1431,6 +1439,9 @@ No approved UI code yet.
         goalCandidates: [section1, qName],
         plan: plan as Record<string, unknown>,
       });
+      const skeletonOnPlan =
+        readCodingSkeletonFromPlan(plan as Record<string, unknown>) ||
+        classifyCodingSkeleton(goalForResearch, null, plan as Record<string, unknown>);
       res.json({
         mode: completeness.mode,
         ok: completeness.ok,
@@ -1444,6 +1455,7 @@ No approved UI code yet.
         researchCompetitorCount: researchGate.competitorCount,
         researchReasons: researchGate.reasons,
         researchSkipped: researchGate.skipped,
+        codingSkeletonOk: isCodingSkeletonReady(skeletonOnPlan),
         securityAutoApplied,
         securityProposal: securityProposal
           ? {
@@ -1580,6 +1592,11 @@ No approved UI code yet.
         nextContent = distillBriefToGoalSection(nextContent) || nextContent;
       }
       (plan as any)[tabName] = nextContent;
+
+      const ensuredUpdate = ensureCodingSkeletonOnPlan(plan as Record<string, unknown>, {
+        goal: String((plan as Record<string, unknown>)["1. Goal of the app"] || ""),
+      });
+      plan = ensuredUpdate.plan;
 
       persistMasterPlanJson(pp.workspaceRoot, pp.masterPlanPath, plan);
       const v0Sync = ensureV0PromptSynced(pp);
@@ -2856,8 +2873,19 @@ No approved UI code yet.
         typeof req.body?.userNote === "string" ? String(req.body.userNote) : "";
       const baasPlanNote = `${planBlob}\n${userNoteGate}`;
       const baasFilter = filterUnsolicitedBaaSBlocks(blocks, baasPlanNote);
-      const blocksToWrite = baasFilter.kept;
+      let planJson: Record<string, unknown> = {};
+      try {
+        planJson = planBlob ? (JSON.parse(planBlob) as Record<string, unknown>) : {};
+      } catch {
+        planJson = {};
+      }
+      const skeletonClamp = filterBlocksOutsideCodingSkeleton(
+        baasFilter.kept,
+        readCodingSkeletonFromPlan(planJson),
+      );
+      const blocksToWrite = skeletonClamp.kept;
       for (const p of baasFilter.skipped) skipped.push(p);
+      for (const p of skeletonClamp.skipped) skipped.push(p);
 
       for (const b of blocksToWrite) {
         if (seen.has(b.relativePath)) continue;
@@ -5163,6 +5191,18 @@ Rules:
           plan: planForGate,
         });
         if (!researchGateEarly.ok) {
+          const ensuredSkeleton = ensureCodingSkeletonOnPlan(planForGate, {
+            goal: goalForResearchEarly,
+          });
+          if (isCodingSkeletonReady(ensuredSkeleton.skeleton)) {
+            try {
+              persistMasterPlanJson(ppGo.workspaceRoot, masterPlanPath, ensuredSkeleton.plan);
+              planForGate = ensuredSkeleton.plan as Record<string, string>;
+            } catch {
+              /* continue with in-memory contract */
+              planForGate = ensuredSkeleton.plan as Record<string, string>;
+            }
+          } else {
           const blocked = goBlocked("RESEARCH_INCOMPLETE", [
             goBlocked("RESEARCH_INCOMPLETE").message,
             ...researchGateEarly.reasons.slice(0, 3),
@@ -5174,6 +5214,7 @@ Rules:
             blockedReason: blocked,
             reasons: researchGateEarly.reasons,
           });
+          }
         }
       }
 
@@ -5459,6 +5500,9 @@ Strict rules:
 
       // Session notes belong only in PRE_CODING_SUMMARY — never pollute §1 Goal
       // (Project Type parsing + v0 one-liner depend on a clean goal).
+      const goalForSkeleton = inferGoalFromPlanRecord(plan, [note, convProject]);
+      const ensuredPlan = ensureCodingSkeletonOnPlan(plan, { goal: goalForSkeleton });
+      plan = ensuredPlan.plan;
       plan[PRE_CODING_SUMMARY_KEY] = summary;
       persistMasterPlanJson(ppGo.workspaceRoot, masterPlanPath, plan);
       uiArts = syncUiArtifactsFromMasterPlan(ppGo.workspaceRoot, masterPlanPath);
@@ -5553,7 +5597,8 @@ Master Plan (project-execution-rules — MUST be complete before code):
 
 Implementation (ONE SLICE per Go — Build → Debug → Next):
 - Implement only the slice named in "${PRE_CODING_SUMMARY_KEY}" (or infer next incomplete slice: Foundation first if no app shell exists).
-- Foundation for a multi-page plan: \`app/layout.tsx\` + root \`app/page.tsx\` + at least one more \`app/<route>/page.tsx\` from §4, with working primary controls (not silent no-ops). Do not stop at a single static dashboard. Home must be the core user job (for tutoring/ADHD: child's next short lesson), not Dashboard + Settings + "Who are you today?".
+- Foundation for a multi-page plan: \`app/layout.tsx\` + root \`app/page.tsx\` + at least one more \`app/<route>/page.tsx\` from the Coding skeleton (or §4), with working primary controls (not silent no-ops). One mock store per entity. Do not stop at a single static dashboard. Home must be the core user job (for tutoring/ADHD: child's next short lesson), not Dashboard + Settings + "Who are you today?".
+- Coding skeleton: implement only listed routes + shared layout. No extra /dashboard /settings /analytics unless skeleton is web_dashboard. Mockup is not the spec. Do not claim Preview or the product is finished after Foundation.
 - Data+API slice: \`app/api\` (or \`pages/api\`) plus a workspace store; screens must read/write through it. Mock-only UI that dies on refresh is a failed slice.
 - Later slices: smallest coherent set (often 3–8 file blocks). Do NOT emit every §4 route in one pass.
 - Include master-plan.json updates IN THE SAME response if needed — never as the only file when app code is due.
@@ -5588,11 +5633,17 @@ ${workflowContext}`;
         projectName: convProject,
         persist: true,
       });
+      const skeletonForGo = readCodingSkeletonFromPlan(planSnapshot);
       const compactUser = buildCompactGoCodeUserPrompt({
         sliceLine,
         goal: goalForCode,
         pagesSection: String(planSnapshot["4. Pages and navigation"] || ""),
-        constraints: lockedUserConstraintsFromPlan(planSnapshot),
+        constraints: [
+          lockedUserConstraintsFromPlan(planSnapshot),
+          skeletonForGo ? formatCodingSkeletonForGo(skeletonForGo) : "",
+        ]
+          .filter(Boolean)
+          .join("\n\n"),
         uiBriefPageList: briefPages,
         sessionFocus: note || (continuation ? "(foundation shell)" : "(next incomplete slice)"),
         continuation,
