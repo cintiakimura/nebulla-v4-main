@@ -7,7 +7,6 @@ import { PreviewEditToolbar, type PreviewToolbarState } from './PreviewEditToolb
 import { PreviewWaitingThrobber } from './PreviewWaitingThrobber';
 import {
   htmlLooksLikeShowablePreview,
-  previewIframeCanRunProduct,
   previewMetaHasProductRoutes,
 } from '@/lib/workspaceCodedAppUi';
 import {
@@ -17,6 +16,7 @@ import {
   NEBULA_UI_STUDIO_BETA_COMPLETE,
   runUiStudioBetaGeneration,
 } from '../../../../lib/uiStudioBetaEngine';
+import { sanitizeUserFacingCopy } from '../../../../../lib/assistantChatSanitize';
 
 /**
  * Preview column for Build: toolbar fixed above canvas, no outer “Preview” frame.
@@ -30,14 +30,14 @@ export function BuildPreviewCanvas() {
   const [engineBusy, setEngineBusy] = useState(false);
   const [hasVisualPreview, setHasVisualPreview] = useState(false);
   const [liveAvailable, setLiveAvailable] = useState(false);
-  const [waitStatus, setWaitStatus] = useState('Waiting for mockup');
+  const [waitStatus, setWaitStatus] = useState('Waiting for preview');
   const [previewMode, setPreviewMode] = useState<string | null>(null);
   const retriedLegacyRef = useRef(false);
   const retriedMockShellRef = useRef(false);
   const keepMockupRef = useRef(false);
   const [hasSelection] = useState(false);
   const src = withProjectQuery(
-    `/api/app-preview/bootstrap?_rev=${rev}${showMockup ? '&surface=mockup' : ''}`,
+    `/api/app-preview/bootstrap?_rev=${rev}${showMockup && !liveAvailable ? '&surface=mockup' : ''}`,
   );
   const waiting = !hasVisualPreview || generateBusy || engineBusy;
 
@@ -62,27 +62,21 @@ export function BuildPreviewCanvas() {
       if (!res.ok) return;
       setPreviewMode(typeof data.previewMode === 'string' ? data.previewMode : null);
       const live = previewMetaHasProductRoutes(data);
-      const iframeRuns = previewIframeCanRunProduct(data);
       const hasMockup = Boolean(String(data.mockupRel || '').trim());
       setLiveAvailable(live);
       if (live) {
+        keepMockupRef.current = false;
         setHasVisualPreview(true);
-        if (!iframeRuns || keepMockupRef.current) {
-          setShowMockup(true);
-          setWaitStatus(
-            iframeRuns
-              ? 'Catalog mockup — Use app for the clickable practice preview'
-              : 'Catalog mockup (Figma/templates). Next/Vite cannot run in this iframe — Open Code for app/.',
-          );
-          return;
-        }
-        setWaitStatus('Catalog mockup — Use app for the clickable practice preview');
+        setShowMockup(false);
+        setWaitStatus(
+          sanitizeUserFacingCopy(data.previewStatusLabel || 'App Preview is the coded app'),
+        );
         return;
       }
       if (hasMockup) {
         setHasVisualPreview(true);
         setShowMockup(true);
-        setWaitStatus('Catalog mockup - not the live app');
+        setWaitStatus('placeholder mockup');
         return;
       }
       if (data.previewMode === 'empty' || data.previewHonesty === 'empty') {
@@ -91,8 +85,8 @@ export function BuildPreviewCanvas() {
       if (data.previewStatusLabel?.trim() && data.previewHonesty !== 'real_routes') {
         setWaitStatus(
           data.previewHonesty === 'mockup_waiting'
-            ? 'Waiting for mockup'
-            : data.previewStatusLabel.trim(),
+            ? 'Waiting for preview'
+            : sanitizeUserFacingCopy(data.previewStatusLabel.trim()),
         );
       }
     } catch {
@@ -104,7 +98,6 @@ export function BuildPreviewCanvas() {
     void refreshWaitState();
     const onShowMockup = (ev: Event) => {
       const force = Boolean((ev as CustomEvent<{ force?: boolean }>).detail?.force);
-      if (force) keepMockupRef.current = true;
       void (async () => {
         try {
           const res = await fetch(withProjectQuery('/api/app-preview/meta'), {
@@ -115,9 +108,16 @@ export function BuildPreviewCanvas() {
             previewHonesty?: string;
             previewMode?: string;
           };
-          setShowMockup(keepMockupRef.current || force || !previewMetaHasProductRoutes(data));
+          const live = previewMetaHasProductRoutes(data);
+          if (live) {
+            keepMockupRef.current = false;
+            setShowMockup(false);
+          } else {
+            if (force) keepMockupRef.current = true;
+            setShowMockup(keepMockupRef.current || force || true);
+          }
         } catch {
-          setShowMockup(true);
+          setShowMockup(!liveAvailable);
         }
         bump();
       })();
@@ -174,27 +174,25 @@ export function BuildPreviewCanvas() {
   useEffect(() => installPreviewRuntimeMessageListener(), []);
 
   const showLiveApp = useCallback(() => {
-    if (!previewIframeCanRunProduct({ previewMode })) {
-      keepMockupRef.current = true;
-      setShowMockup(true);
-      setWaitStatus(
-        'Catalog mockup stays on. This iframe cannot compile Next/Vite — Figma/templates live here, not on Use app.',
-      );
+    keepMockupRef.current = false;
+    setShowMockup(false);
+    setWaitStatus('App Preview is the coded app');
+    bump();
+  }, [bump]);
+
+  const showCatalogMockup = useCallback(() => {
+    if (liveAvailable) {
+      keepMockupRef.current = false;
+      setShowMockup(false);
+      setWaitStatus('App Preview is the coded app');
       bump();
       return;
     }
-    keepMockupRef.current = false;
-    setShowMockup(false);
-    setWaitStatus('Live app preview');
-    bump();
-  }, [bump, previewMode]);
-
-  const showCatalogMockup = useCallback(() => {
     keepMockupRef.current = true;
     setShowMockup(true);
-    setWaitStatus('Catalog mockup (Figma/templates)');
+    setWaitStatus('placeholder mockup');
     bump();
-  }, [bump]);
+  }, [bump, liveAvailable]);
 
   const onGenerateUi = useCallback(async () => {
     if (generateBusy) return;
@@ -202,7 +200,7 @@ export function BuildPreviewCanvas() {
     setFailed(false);
     setHasVisualPreview(false);
     setWaitStatus('Generating UI…');
-    keepMockupRef.current = true;
+    keepMockupRef.current = !liveAvailable;
     try {
       const result = await runUiStudioBetaGeneration({
         projectName: getBrowserProjectName() || undefined,
@@ -212,7 +210,7 @@ export function BuildPreviewCanvas() {
         autoTriggered: false,
       });
       if (result.ok) {
-        await applyUiStudioBetaToAppPreview(undefined, { preferMockup: true });
+        await applyUiStudioBetaToAppPreview(undefined, { preferMockup: !liveAvailable });
       }
       await refreshWaitState();
       bump();

@@ -122,7 +122,7 @@ export function withFinalUiPreviewLabel(workspaceRoot: string, statusLabel: stri
   const policy = readCyclePolicy(workspaceRoot);
   if (policy.ui_pass === "final" && policy.final_ui_ran_at) {
     if (/Final UI/i.test(statusLabel)) return statusLabel;
-    return `${statusLabel} · Final UI (offline catalog)`;
+    return statusLabel;
   }
   return statusLabel;
 }

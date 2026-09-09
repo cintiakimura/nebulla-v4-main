@@ -166,12 +166,12 @@ export function PreviewEditToolbar({
         {onShowCatalogMockup ? (
           <button
             type="button"
-            title="Show the Figma/catalog mockup (this iframe cannot run Next)"
-            aria-label="Catalog mockup"
+            title="Show the layout draft (backstage). Product routes stay in App Preview."
+            aria-label="Layout draft"
             onClick={() => onShowCatalogMockup()}
             className="btn-secondary-surface ml-1 h-8 shrink-0 rounded-md px-2.5 text-[11px]"
           >
-            Catalog mockup
+            Layout draft
           </button>
         ) : null}
         </>
@@ -351,7 +351,7 @@ export function PreviewEditToolbar({
       {liveAvailable && showingMockup && onShowLiveApp ? (
         <button
           type="button"
-          title="Open clickable practice preview when available. Next/Vite cannot run here — Figma/catalog is the mockup."
+          title="Show the coded app in App Preview."
           aria-label="Use app"
           onClick={() => onShowLiveApp()}
           className="btn-cyan ml-1 h-8 shrink-0 rounded-md px-2.5 text-[11px]"

@@ -873,7 +873,7 @@ export async function runUiGenerationCycleV2(
   persist(workspaceRoot, state);
 
   // -------- Phase C — Figma --------
-  stage("Fetching Figma references");
+  stage("Fetching layout references");
   const catalogHints = [
     ...(resourceMatch.profile?.strengths || []),
     ...(resourceMatch.profile?.best_for || []).map((b) => `best_for:${b}`),
@@ -1371,7 +1371,7 @@ export async function runUiGenerationCycleV2(
   const deliveredStage =
     uiStatus === "ready" && gate.gate === "pass"
       ? resolvedUiPhase === "post_code"
-        ? "Final UI — Ready (offline catalog)"
+        ? "Final UI — layout draft ready"
         : resolvedUiPhase === "pre_code"
           ? "Pre-code mockup — Ready in preview"
           : "Ready in preview"

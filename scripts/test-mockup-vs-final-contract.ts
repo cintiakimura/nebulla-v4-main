@@ -73,7 +73,7 @@ assert.equal(
     alreadyRanPostCode: false,
     finalUiCount: 0,
   }),
-  'run_final_ui',
+  'sync_preview_only',
 );
 
 assert.deepEqual(extractUiRouteKeys(['app/page.tsx', 'app/layout.tsx']), [
@@ -124,7 +124,7 @@ assert.equal(
     finalUiCount: 1,
     sliceLabel: 'Polish',
   }),
-  'run_final_ui',
+  'sync_preview_only',
 );
 
 assert.equal(

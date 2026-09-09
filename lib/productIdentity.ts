@@ -17,7 +17,7 @@ export type ProductIdentity = {
   userSet?: boolean;
 };
 
-type ProductDomain = "education" | "tasks" | "landing" | "general";
+type ProductDomain = "education" | "tasks" | "landing" | "commerce" | "general";
 
 const STOPWORDS = new Set([
   "a",
@@ -70,6 +70,7 @@ const STEMS: Record<ProductDomain, readonly string[]> = {
   education: ["Lumen", "Quill", "Beacon", "Sparrow", "Nest"],
   tasks: ["Forge", "Pulse", "Harbor", "North", "Relay"],
   landing: ["Harbor", "Vista", "North", "Peak", "Bloom"],
+  commerce: ["Crumb", "Oven", "Loaf", "Hearth", "Grain"],
   general: ["Nova", "Aether", "Helio", "Kite", "Mesa"],
 };
 
@@ -77,6 +78,7 @@ const DESCRIPTORS: Record<ProductDomain, readonly string[]> = {
   education: ["Learn", "Path", "Tutor"],
   tasks: ["Flow", "Desk", "Focus"],
   landing: ["Studio", "Site"],
+  commerce: ["Bakery", "Market", "Shop"],
   general: ["Studio", "Hub"],
 };
 
@@ -84,6 +86,7 @@ const HINTS: Record<ProductDomain, string> = {
   education: "book + spark",
   tasks: "check + spark",
   landing: "mark + wave",
+  commerce: "loaf + spark",
   general: "mark + spark",
 };
 
@@ -116,6 +119,13 @@ function detectDomain(goal: string, projectType?: string): ProductDomain {
   const blob = `${goal}\n${projectType || ""}`.toLowerCase();
   if (/\blanding\b|\bmarketing\b|\bwaitlist\b/.test(blob) && !/\bmobile\b|\bexpo\b/.test(blob)) {
     return "landing";
+  }
+  if (
+    /baker|bakery|bread|pastry|cafe|café|restaurant|pickup order|\bshop\b|\bstore\b|checkout/.test(
+      blob,
+    )
+  ) {
+    return "commerce";
   }
   if (
     /learn|lesson|tutor|read|reading|kid|kids|child|children|school|homework|teacher|student|educat|adhd|classroom/.test(
@@ -217,16 +227,32 @@ export function looksLikeGoalStubName(name: string, goal?: string): boolean {
   return false;
 }
 
+/** Drop last workspace brand when this goal is a different product. */
+export function identityFitsGoal(name: string, goal: string, projectType?: string): boolean {
+  const domain = detectDomain(goal, projectType);
+  const n = String(name || "").toLowerCase();
+  if (!n) return false;
+  if (domain !== "education" && /\b(tutor|learn|path|sparrow|quill|lumen|beacon)\b/.test(n)) {
+    return false;
+  }
+  if (domain === "commerce" && /\b(tutor|sparrow|learn|path)\b/.test(n)) return false;
+  return true;
+}
+
 export function buildProductIdentity(
   goal: string,
   projectType?: string,
   existingName?: string,
   userSet?: boolean,
 ): ProductIdentity {
+  const existingOk =
+    Boolean(existingName?.trim()) &&
+    !looksLikeGoalStubName(existingName, goal) &&
+    identityFitsGoal(existingName, goal, projectType);
   const keep =
     userSet && existingName?.trim()
       ? existingName.trim()
-      : existingName?.trim() && !looksLikeGoalStubName(existingName, goal)
+      : existingOk
         ? existingName.trim()
         : inferProductName(goal, projectType);
   const name = toTitleCase(keep);

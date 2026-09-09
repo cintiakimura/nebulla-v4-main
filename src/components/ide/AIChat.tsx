@@ -60,7 +60,7 @@ import {
   persistMasterPlanFromAssistantSource,
   isOrchestrationOnlyPlanSource,
 } from '../../lib/grokChatArtifacts';
-import { sanitizeAssistantChatText } from '../../../lib/assistantChatSanitize';
+import { sanitizeAssistantChatText, sanitizeUserFacingCopy } from '../../../lib/assistantChatSanitize';
 import { dispatchOpenUiStudio, dispatchStartUiUxWorkflow } from '../../lib/nebulaUiStudioEvents';
 import {
   abortGoCodeWait,
@@ -474,10 +474,11 @@ export function AIChat() {
 
   const pushActivity = useCallback<GrokActivityProgressFn>((message, kind = 'info', options) => {
     if (!codingActivityRef.current) return;
+    const safe = sanitizeUserFacingCopy(message);
     setGrokActivity((prev) =>
       options?.currentOnly
-        ? updateGrokActivityCurrent(prev, message)
-        : commitGrokActivityStatus(prev, message, kind),
+        ? updateGrokActivityCurrent(prev, safe)
+        : commitGrokActivityStatus(prev, safe, kind),
     );
     // Wait ticks stay on the compact status line only — never rewrite the last chat row
     // (that left “Syncing project artifacts…” stuck after files were already applied).
@@ -496,7 +497,7 @@ export function AIChat() {
         autopilotStopRunsFinalUi(decision.stopReason)
       ) {
         const { projectName } = resolveActiveProjectIds(diskProjectKey);
-        pushActivity('Final UI — restyle after coding (offline catalog)…', 'info');
+        pushActivity('Keeping coded App Preview — skipping catalog remount…', 'info');
         try {
           await triggerUiStudioBetaAfterFilesApplied({
             writtenPaths: ['app/page.tsx', 'app/globals.css'],
@@ -2511,7 +2512,7 @@ export function AIChat() {
         } else if (readiness.ok) {
           markUiMockupStageStarted(diskProjectKey);
           pushActivity(
-            'Architecture draft ready — Pre-code mockup (placeholder; Figma optional if structure exists)',
+            'Architecture draft ready — Pre-code mockup (placeholder)',
             'info',
           );
           setAccessoryHint(
@@ -2567,7 +2568,7 @@ export function AIChat() {
                   id: `a-mockup-${Date.now()}`,
             role: 'assistant' as const,
                   content:
-                    'Architecture draft is ready. Pre-code mockup is a placeholder (offline catalog if present). Coding writes app/. Final UI restyles after files land.',
+                    'Architecture draft is ready. Pre-code mockup is a placeholder. Coding writes app/. App Preview follows the coded routes after apply.',
                   timestamp: new Date().toLocaleTimeString([], {
                     hour: 'numeric',
                     minute: '2-digit',

@@ -207,7 +207,7 @@ export async function runUiStudioBetaGeneration(
       options.regenerate
         ? 'Generate again — UI Studio Beta engine…'
         : phase === 'post_code'
-          ? 'Final UI — restyle after coding (offline catalog)…'
+          ? 'Final UI — restyle after coding (layout draft)…'
           : phase === 'pre_code' || (options.autoTriggered && !options.writtenPaths?.length)
             ? 'Pre-code mockup — generating UI Studio Beta (UI Gen v2)…'
             : options.autoTriggered
@@ -485,7 +485,7 @@ export async function triggerUiStudioBetaAfterFilesApplied(options: {
     return inFlight;
   }
   lastAutoKey = key;
-  options.onProgress?.('Final UI — restyle after coding (offline catalog)…', 'info');
+  options.onProgress?.('Final UI — restyle after coding (layout draft)…', 'info');
 
   const result = await runUiStudioBetaGeneration({
     projectName: options.projectName,

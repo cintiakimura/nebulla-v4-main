@@ -316,7 +316,7 @@ export function resolveAppPreviewAuthority(workspaceRoot: string): AppPreviewAut
     return withHonesty(
       {
         mode: "live_app_static",
-        statusLabel: "Live app preview",
+        statusLabel: "App Preview is the coded app",
         codedApp: true,
         indexIsMockup: false,
         entryRel: built,
@@ -332,7 +332,7 @@ export function resolveAppPreviewAuthority(workspaceRoot: string): AppPreviewAut
     return withHonesty(
       {
         mode: "interactive_product_preview",
-        statusLabel: "Interactive preview (mock data)",
+        statusLabel: "App Preview is the coded app",
         codedApp: true,
         indexIsMockup: false,
         entryRel: PRODUCT_PREVIEW_REL,
@@ -355,7 +355,7 @@ export function resolveAppPreviewAuthority(workspaceRoot: string): AppPreviewAut
       return withHonesty(
         {
           mode: needsBundler ? "post_code_bridge" : "live_app_static",
-          statusLabel: needsBundler ? "Code exists - open Code" : "Live app preview",
+          statusLabel: "App Preview is the coded app",
           codedApp: true,
           indexIsMockup: false,
           entryRel: needsBundler ? null : "index.html",
@@ -371,7 +371,7 @@ export function resolveAppPreviewAuthority(workspaceRoot: string): AppPreviewAut
     return withHonesty(
       {
         mode: "post_code_bridge",
-        statusLabel: "Code exists - open Code",
+        statusLabel: "App Preview is the coded app",
         codedApp: true,
         indexIsMockup,
         entryRel: null,
@@ -406,7 +406,7 @@ export function resolveAppPreviewAuthority(workspaceRoot: string): AppPreviewAut
     return withHonesty(
       {
         mode: "pre_code_mockup",
-        statusLabel: "Catalog mockup - not the live app",
+        statusLabel: "placeholder mockup",
         codedApp: false,
         indexIsMockup: true,
         entryRel: mockupRel,
@@ -421,7 +421,7 @@ export function resolveAppPreviewAuthority(workspaceRoot: string): AppPreviewAut
     return withHonesty(
       {
         mode: "live_app_static",
-        statusLabel: "Live app preview",
+        statusLabel: "App Preview is the coded app",
         codedApp: false,
         indexIsMockup: false,
         entryRel: "index.html",
@@ -436,7 +436,7 @@ export function resolveAppPreviewAuthority(workspaceRoot: string): AppPreviewAut
     return withHonesty(
       {
         mode: "pre_code_mockup",
-        statusLabel: "Catalog mockup - not the live app",
+        statusLabel: "placeholder mockup",
         codedApp: false,
         indexIsMockup: indexIsMockup || Boolean(mockupRel),
         entryRel: mockupRel || "index.html",

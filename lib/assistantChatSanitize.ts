@@ -68,6 +68,35 @@ export function stripCodeAndCssDumps(text: string): string {
   return t;
 }
 
+/** Figma community/file keys (typically 22 alphanumerics). */
+export const USER_FACING_FILE_KEY_RE = /\b[A-Za-z0-9]{20,32}\b/g;
+
+export function decodeHtmlEntities(raw: string): string {
+  return String(raw || "")
+    .replace(/&apos;|&#39;|&#x27;/gi, "'")
+    .replace(/&quot;|&#34;|&#x22;/gi, '"')
+    .replace(/&nbsp;|&#160;/gi, " ")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&amp;/gi, "&");
+}
+
+/**
+ * Strip pipeline internals from chat, status, Preview chrome, and captions.
+ * Figma ingest still uses keys internally — never print them on the glass.
+ */
+export function sanitizeUserFacingCopy(raw: string): string {
+  let t = decodeHtmlEntities(String(raw || ""));
+  t = t.replace(/\bbucket\s*=\s*\S+/gi, "");
+  t = t.replace(/\b(?:file[_-]?key|key)\s*=\s*[A-Za-z0-9_-]{8,}\b/gi, "");
+  t = t.replace(/\bfigma\b/gi, "layout");
+  t = t.replace(/offline\s+catalog/gi, "layout draft");
+  t = t.replace(/library\s+structure/gi, "layout draft");
+  t = t.replace(/sheet\s+catalog(?:\s+profile)?/gi, "layout draft");
+  t = t.replace(USER_FACING_FILE_KEY_RE, "");
+  return t.replace(/[ \t]{2,}/g, " ").replace(/\s+([,.;:!?])/g, "$1").trim();
+}
+
 export type SanitizeChatOptions = {
   /** Short fallback when everything was stripped as artifacts. */
   fallback?: string;
@@ -92,6 +121,7 @@ export function sanitizeAssistantChatText(
 
   let text = stripOrchestrationTags(raw || "");
   text = stripCodeAndCssDumps(text);
+  text = sanitizeUserFacingCopy(text);
   text = text.replace(/\n{3,}/g, "\n\n").trim();
 
   if (!text) return fallback;

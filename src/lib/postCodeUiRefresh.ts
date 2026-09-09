@@ -86,8 +86,8 @@ export type PostCodeUiAction =
   | 'skip_no_ui_paths';
 
 /**
- * Final UI: once after first Foundation product apply, once after last autopilot (Polish).
- * Max two autopilot runs. Mockup-only / methodology → skip.
+ * After product routes exist, catalog remount is forbidden.
+ * Manual Generate (force) may still run Final UI; autopilot skips it so Preview stays the coded app.
  */
 export function resolvePostCodeUiAction(opts: {
   writtenPaths: string[];
@@ -100,14 +100,5 @@ export function resolvePostCodeUiAction(opts: {
 }): PostCodeUiAction {
   if (!looksLikeProductAppFiles(opts.writtenPaths)) return 'skip_no_ui_paths';
   if (opts.force) return 'run_final_ui';
-  const count =
-    typeof opts.finalUiCount === 'number'
-      ? opts.finalUiCount
-      : opts.alreadyRanPostCode
-        ? 1
-        : 0;
-  if (count >= MAX_FINAL_UI_AUTOPILOT_RUNS) return 'sync_preview_only';
-  if (count === 0) return 'run_final_ui';
-  if (count === 1 && isLastAutopilotSlice(opts.sliceLabel)) return 'run_final_ui';
   return 'sync_preview_only';
 }

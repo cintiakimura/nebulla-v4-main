@@ -185,6 +185,7 @@ import { runWorkspaceBuildCheck } from "./lib/workspaceBuildCheck";
 import {
   INTERACTIVE_PREVIEW_GO_BULLETS,
   ensureInteractiveProductPreview,
+  hasInteractiveProductPreview,
   previewHtmlNeedsProductHeal,
   PRODUCT_PREVIEW_REL,
 } from "./lib/interactiveProductPreview";
@@ -2473,12 +2474,28 @@ No approved UI code yet.
 
       // Coded app/src pages: serve those routes or an honest bridge — never the role-picker mock.
 
-      const authority = resolveAppPreviewAuthority(pp.workspaceRoot);
+      let authority = resolveAppPreviewAuthority(pp.workspaceRoot);
+      if (
+        authority.honesty === "real_routes" &&
+        authority.codedApp &&
+        !hasInteractiveProductPreview(pp.workspaceRoot)
+      ) {
+        ensureInteractiveProductPreview(pp.workspaceRoot, {
+          projectName: displayName,
+          productFiles: authority.productFiles,
+          logoInitials: readProductIdentity(pp.workspaceRoot)?.logoInitials,
+        });
+        authority = resolveAppPreviewAuthority(pp.workspaceRoot);
+      }
       let html = "";
       const surface = String(q.surface || "").toLowerCase();
       const preferMockup = surface === "mockup" || surface === "ui-gen";
+      const catalogMayOwnIframe =
+        preferMockup &&
+        authority.honesty !== "real_routes" &&
+        !authority.codedApp;
 
-      if (preferMockup && authority.mockupRel) {
+      if (catalogMayOwnIframe && authority.mockupRel) {
         const mockAbs = path.join(pp.workspaceRoot, authority.mockupRel);
         if (fs.existsSync(mockAbs)) {
           html = fs.readFileSync(mockAbs, "utf8");

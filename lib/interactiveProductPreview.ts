@@ -7,6 +7,7 @@
  */
 import fs from "fs";
 import path from "path";
+import { decodeHtmlEntities } from "./assistantChatSanitize";
 
 export const PRODUCT_PREVIEW_REL = "public/product-preview/index.html";
 export const PRODUCT_PREVIEW_MARKER = "interactive-product-preview";
@@ -18,20 +19,91 @@ export type PreviewScreenHint = {
 };
 
 function esc(s: string): string {
-  return String(s || "")
+  return decodeHtmlEntities(String(s || ""))
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
 }
 
+function titleFromSlug(slug: string): string {
+  const map: Record<string, string> = {
+    order: "Order",
+    baker: "Baker",
+    confirmation: "Confirmation",
+    login: "Sign in",
+    auth: "Sign in",
+    teacher: "Teacher",
+    parent: "Parent",
+    kid: "Kid",
+    tutor: "Practice",
+  };
+  const key = slug.toLowerCase();
+  if (map[key]) return map[key];
+  return key
+    .split(/[-_]/)
+    .filter(Boolean)
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(" ") || "Screen";
+}
+
+function kindFromRoute(route: string): PreviewScreenHint["kind"] {
+  const s = route.toLowerCase();
+  if (s === "/") return "home";
+  if (/teacher|parent|kid/.test(s)) return "role";
+  if (/upload/.test(s)) return "upload";
+  if (/tutor|practice|lesson/.test(s)) return "session";
+  return "feature";
+}
+
+function routesFromProductFiles(productFiles: string[]): string[] {
+  const routes = new Set<string>();
+  for (const raw of productFiles) {
+    const p = raw.replace(/\\/g, "/");
+    if (/^(app|src\/app)\/page\.(tsx|jsx)$/i.test(p)) {
+      routes.add("/");
+      continue;
+    }
+    const m =
+      p.match(/^(?:app|src\/app)\/(.+)\/page\.(tsx|jsx)$/i) ||
+      p.match(/^(?:pages|src\/pages)\/(.+)\.(tsx|jsx)$/i);
+    if (m) {
+      const slug = m[1].replace(/\/index$/i, "");
+      if (!/^(api|_)/i.test(slug)) routes.add(`/${slug}`);
+    }
+  }
+  return [...routes].sort((a, b) => (a === "/" ? -1 : b === "/" ? 1 : a.localeCompare(b)));
+}
+
 /** Infer clickable screens from product file paths (app/, pages/, components/). */
 export function inferPreviewScreensFromPaths(productFiles: string[]): PreviewScreenHint[] {
-  const joined = productFiles.map((p) => p.replace(/\\/g, "/").toLowerCase()).join("\n");
-  const screens: PreviewScreenHint[] = [
-    { id: "home", label: "Home", kind: "home" },
-    { id: "tutor", label: "Practice", kind: "session" },
-  ];
+  const paths = productFiles.map((p) => p.replace(/\\/g, "/"));
+  const joined = paths.join("\n").toLowerCase();
+  const routes = routesFromProductFiles(paths);
+  const screens: PreviewScreenHint[] = [];
+
+  if (routes.length) {
+    for (const route of routes) {
+      if (route === "/") {
+        screens.push({ id: "home", label: "Home", kind: "home" });
+        continue;
+      }
+      const slug = route.replace(/^\//, "").split("/").pop() || route;
+      const id = route.replace(/^\//, "").replace(/\//g, "-") || "screen";
+      const kind = kindFromRoute(route);
+      screens.push({
+        id: kind === "role" ? `role-${slug}` : id,
+        label: titleFromSlug(slug),
+        kind,
+      });
+    }
+  } else {
+    screens.push({ id: "home", label: "Home", kind: "home" });
+  }
+
+  if (/tutor|practice|lesson|learn/i.test(joined) && !screens.some((s) => s.id === "tutor")) {
+    screens.push({ id: "tutor", label: "Practice", kind: "session" });
+  }
 
   const roles: Array<{ id: string; label: string; re: RegExp }> = [
     { id: "teacher", label: "Teacher", re: /teacher|educator|instructor/ },
@@ -39,22 +111,24 @@ export function inferPreviewScreensFromPaths(productFiles: string[]): PreviewScr
     { id: "kid", label: "Kid", re: /\/kid\/|child|student|learner/ },
   ];
   for (const r of roles) {
-    if (r.re.test(joined)) {
+    if (r.re.test(joined) && !screens.some((s) => s.id === `role-${r.id}`)) {
       screens.push({ id: `role-${r.id}`, label: r.label, kind: "role" });
     }
   }
 
-  if (/reward|badge|streak|progress/i.test(joined)) {
+  if (/reward|badge|streak|progress/i.test(joined) && !screens.some((s) => s.id === "rewards")) {
     screens.push({ id: "rewards", label: "Rewards", kind: "feature" });
   }
-  if (/upload|photo|capture|camera|image/i.test(joined)) {
+  if (/upload|photo|capture|camera|image/i.test(joined) && !screens.some((s) => s.id === "upload")) {
     screens.push({ id: "upload", label: "Upload", kind: "upload" });
   }
-  if (/login|auth|signin/i.test(joined) && !screens.some((s) => s.id.startsWith("role-"))) {
+  if (
+    /login|auth|signin/i.test(joined) &&
+    !screens.some((s) => s.id.startsWith("role-") || s.id === "login")
+  ) {
     screens.push({ id: "login", label: "Sign in", kind: "feature" });
   }
 
-  // Dedupe by id
   const seen = new Set<string>();
   return screens.filter((s) => {
     if (seen.has(s.id)) return false;
@@ -72,6 +146,12 @@ function buildInteractiveHtml(opts: {
   const name = esc((opts.projectName || "App").slice(0, 80));
   const initials = esc((opts.logoInitials || name.replace(/[^a-zA-Z]/g, "").slice(0, 2) || "NP").slice(0, 2).toUpperCase());
   const screensJson = JSON.stringify(opts.screens);
+  const shop = opts.screens.some((s) =>
+    /order|baker|confirmation|bread/i.test(`${s.id} ${s.label}`),
+  );
+  const education = opts.screens.some((s) =>
+    /tutor|practice|teacher|kid|parent/i.test(`${s.id} ${s.label}`),
+  );
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -113,17 +193,18 @@ function buildInteractiveHtml(opts: {
     <div style="display:flex;align-items:center;gap:10px">
       <span class="mark" aria-hidden="true">${initials}</span>
       <div>
-        <span class="badge">Practice app</span>
+        <span class="badge">${shop ? "App preview" : education ? "Practice app" : "App preview"}</span>
         <div style="font-weight:700;margin-top:4px">${name}</div>
       </div>
     </div>
-    <div id="roleChip" style="font-size:12px;color:var(--muted)">Kid practice</div>
+    <div id="roleChip" style="font-size:12px;color:var(--muted)">${shop ? "Preview" : education ? "Kid practice" : "Preview"}</div>
   </div>
   <nav class="tabs" id="tabs" aria-label="Preview screens"></nav>
   <main class="main" id="root"></main>
   <script>
 (function () {
   var SCREENS = ${screensJson};
+  var SHOP = ${shop ? "true" : "false"};
   var PROJECT = ${JSON.stringify((opts.projectName || "App").slice(0, 80))};
   var STORAGE_KEY = "nebulla_product_preview_v1";
   var state = { screen: "home", role: "kid", uploadName: "", progress: 12, sessionStarted: false, step: 0 };
@@ -164,6 +245,23 @@ function buildInteractiveHtml(opts: {
   }
 
   function homeHtml() {
+    if (SHOP) {
+      return (
+        '<div class="card">' +
+          '<h1>Today\\'s breads</h1>' +
+          '<p>Browse today\\'s loaves and place a pickup order.</p>' +
+          '<div class="grid">' +
+            '<div class="role"><strong>Country loaf</strong> Still warm. Pickup this afternoon.</div>' +
+            '<div class="role"><strong>Sourdough</strong> Limited bake — two left.</div>' +
+          '</div>' +
+          '<div class="row">' +
+            '<button type="button" class="cta" id="goOrder">Place pickup order</button>' +
+            '<button type="button" class="ghost" id="goBaker">Baker queue</button>' +
+          '</div>' +
+          '<div class="toast" id="toast"></div>' +
+        '</div>'
+      );
+    }
     return (
       '<div class="card">' +
         '<h1>Home</h1>' +
@@ -254,6 +352,26 @@ function buildInteractiveHtml(opts: {
   }
 
   function featureHtml(label) {
+    if (SHOP && /order/i.test(label)) {
+      return (
+        '<div class="card">' +
+          '<h1>Pickup order</h1>' +
+          '<p>Choose a loaf and a pickup window. Mock order stays in this preview.</p>' +
+          '<div class="row"><button type="button" class="cta" id="primaryAct">Place order</button></div>' +
+          '<div class="toast" id="toast"></div>' +
+        '</div>'
+      );
+    }
+    if (SHOP && /baker/i.test(label)) {
+      return (
+        '<div class="card">' +
+          '<h1>Baker queue</h1>' +
+          '<p>Orders waiting. Mark the next one ready for pickup.</p>' +
+          '<div class="row"><button type="button" class="cta" id="primaryAct">Mark ready</button></div>' +
+          '<div class="toast" id="toast"></div>' +
+        '</div>'
+      );
+    }
     return (
       '<div class="card">' +
         '<h1>' + label + '</h1>' +
@@ -266,7 +384,7 @@ function buildInteractiveHtml(opts: {
 
   function paint() {
     renderTabs();
-    document.getElementById("roleChip").textContent = "Role: " + (state.role || "guest");
+    document.getElementById("roleChip").textContent = SHOP ? "Preview" : "Role: " + (state.role || "guest");
     var root = document.getElementById("root");
     var screen = SCREENS.find(function (s) { return s.id === state.screen; }) || SCREENS[0];
     if (!screen || screen.id === "home") root.innerHTML = homeHtml();
@@ -312,6 +430,20 @@ function buildInteractiveHtml(opts: {
     if (goRewards) goRewards.onclick = function () { state.screen = "rewards"; persist(); paint(); };
     var goHome = document.getElementById("goHome");
     if (goHome) goHome.onclick = function () { state.screen = "home"; persist(); paint(); };
+    var goOrder = document.getElementById("goOrder");
+    if (goOrder) goOrder.onclick = function () {
+      var next = SCREENS.find(function (s) { return /order/i.test(s.id + s.label); });
+      state.screen = next ? next.id : "home";
+      persist();
+      paint();
+    };
+    var goBaker = document.getElementById("goBaker");
+    if (goBaker) goBaker.onclick = function () {
+      var next = SCREENS.find(function (s) { return /baker/i.test(s.id + s.label); });
+      state.screen = next ? next.id : "home";
+      persist();
+      paint();
+    };
     var startSession = document.getElementById("startSession");
     if (startSession) startSession.onclick = function () {
       state.sessionStarted = true;

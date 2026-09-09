@@ -12,6 +12,7 @@ import {
   buildProductIdentity,
   patchMasterPlanProductName,
   writeProductIdentity,
+  identityFitsGoal,
 } from '../lib/productIdentity';
 import {
   isMasterPlanCompleteForDiscovery,
@@ -79,6 +80,16 @@ assert.ok(shortNameFromIdea('!!!').length > 0);
   assert.equal(renamed.plan['1. Goal of the app'], goalSection);
   assert.match(renamed.plan['5. UI/UX design'], /Harbor Path/);
   fs.rmSync(dir, { recursive: true, force: true });
+}
+
+{
+  const bakery =
+    'A web app for a neighborhood bakery. Customers browse today’s breads and place a pickup order. The baker sees the list of orders and marks them ready.';
+  const fresh = buildProductIdentity(bakery, 'Web App');
+  assert.equal(/\b(tutor|sparrow)\b/i.test(fresh.projectName), false);
+  const stale = buildProductIdentity(bakery, 'Web App', 'Sparrow Tutor');
+  assert.equal(/\b(tutor|sparrow)\b/i.test(stale.projectName), false);
+  assert.equal(identityFitsGoal('Sparrow Tutor', bakery, 'Web App'), false);
 }
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));

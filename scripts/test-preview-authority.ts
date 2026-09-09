@@ -34,6 +34,7 @@ import {
   PRODUCT_PREVIEW_MARKER,
   PRODUCT_PREVIEW_REL,
 } from "../lib/interactiveProductPreview.ts";
+import { sanitizeUserFacingCopy } from "../lib/assistantChatSanitize.ts";
 
 const tokens = {
   bg: "#FAFAF9",
@@ -76,7 +77,7 @@ section("workspaceHasCodedAppUi true with src/pages");
   const auth = resolveAppPreviewAuthority(root);
   assert.equal(auth.mode, "post_code_bridge");
   assert.equal(auth.codedApp, true);
-  assert.match(auth.statusLabel, /Code exists|Post-code|product/i);
+  assert.match(auth.statusLabel, /coded app|Code exists|Post-code|product/i);
   fs.rmSync(root, { recursive: true, force: true });
 }
 
@@ -251,7 +252,7 @@ section("coded app files beat interactive mock — honest bridge");
   assert.equal(auth.mode, "interactive_product_preview");
   assert.equal(auth.codedApp, true);
   assert.equal(auth.entryRel, PRODUCT_PREVIEW_REL);
-  assert.match(auth.statusLabel, /Interactive preview/i);
+  assert.match(auth.statusLabel, /coded app|Interactive preview/i);
   const bridge = buildCodedAppPreviewBridgeHtml({
     projectName: "Tutor Demo",
     productFiles: auth.productFiles,
@@ -330,8 +331,8 @@ section("canvas honesty — product preview / coded bridge is showable (not Figm
     previewIframeCanRunProduct({ previewMode: "interactive_product_preview" }),
     true,
   );
-  assert.match(canvas, /previewIframeCanRunProduct/);
-  assert.match(canvas, /Catalog mockup/);
+  assert.match(canvas, /previewMetaHasProductRoutes/);
+  assert.match(canvas, /placeholder mockup|coded app/);
   assert.match(canvas, /onShowLiveApp/);
   assert.match(canvas, /liveAvailable/);
   const toolbar = fs.readFileSync(
@@ -375,6 +376,71 @@ section("preferredProductEditorPath skips preview index.html");
     "app/page.tsx",
   );
   assert.equal(preferredProductEditorPath(["index.html"]), null);
+}
+
+section("Foundation bakery routes own Preview — not catalog");
+{
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "nebulla-preview-bakery-"));
+  for (const rel of ["app", "app/order", "app/baker", "app/confirmation"]) {
+    fs.mkdirSync(path.join(root, rel), { recursive: true });
+  }
+  fs.writeFileSync(path.join(root, "app/page.tsx"), "export default function Home(){ return <main>Breads</main>; }\n");
+  fs.writeFileSync(path.join(root, "app/order/page.tsx"), "export default function Order(){ return <main>Order</main>; }\n");
+  fs.writeFileSync(path.join(root, "app/baker/page.tsx"), "export default function Baker(){ return <main>Baker</main>; }\n");
+  fs.writeFileSync(
+    path.join(root, "app/confirmation/page.tsx"),
+    "export default function Confirmation(){ return <main>Thanks</main>; }\n",
+  );
+  const mockup = buildUiGenerationPreviewHtml({
+    projectName: "Sparrow Tutor",
+    templateId: "mobile_list_actions",
+    tokens,
+    slots: { hero_title: "Today&apos;s Fresh Breads", primary_cta: "Focus" },
+    patternMode: "figma",
+  });
+  fs.mkdirSync(path.join(root, "public"), { recursive: true });
+  fs.writeFileSync(path.join(root, "public/nebula-ui-gen-preview.html"), mockup, "utf8");
+  fs.writeFileSync(path.join(root, "index.html"), mockup, "utf8");
+
+  const files = [
+    "app/page.tsx",
+    "app/order/page.tsx",
+    "app/baker/page.tsx",
+    "app/confirmation/page.tsx",
+  ];
+  const screens = inferPreviewScreensFromPaths(files);
+  assert.ok(screens.some((s) => /order/i.test(s.id + s.label)));
+  assert.ok(screens.some((s) => /baker/i.test(s.id + s.label)));
+  assert.equal(screens.some((s) => s.id === "tutor"), false);
+
+  ensureInteractiveProductPreview(root, {
+    projectName: "Crumb Bakery",
+    productFiles: files,
+  });
+  const auth = resolveAppPreviewAuthority(root);
+  assert.notEqual(auth.mode, "pre_code_mockup");
+  assert.equal(auth.mode, "interactive_product_preview");
+  assert.equal(previewIframeCanRunProduct({ previewMode: auth.mode }), true);
+  assert.equal(previewMetaHasProductRoutes({ previewHonesty: auth.honesty, previewMode: auth.mode }), true);
+  const html = fs.readFileSync(path.join(root, PRODUCT_PREVIEW_REL), "utf8");
+  assert.match(html, /Today's breads|Place pickup order/i);
+  assert.equal(/Sparrow Tutor/i.test(html), false);
+  assert.equal(/\bFigma\b/i.test(html), false);
+  assert.equal(/ZEbJpC67UQyeeynt1UR8gT/.test(html), false);
+  assert.match(mockup, /Today's Fresh Breads/);
+  assert.equal(/offline \/ Figma library structure/i.test(mockup), false);
+  fs.rmSync(root, { recursive: true, force: true });
+}
+
+section("user-facing logs never print Figma keys");
+{
+  const leaked =
+    "Final UI after coding bucket=mobile key=ZEbJpC67UQyeeynt1UR8gT Figma offline catalog";
+  const clean = sanitizeUserFacingCopy(leaked);
+  assert.equal(/\bfigma\b/i.test(clean), false);
+  assert.equal(/bucket=/.test(clean), false);
+  assert.equal(/ZEbJpC67UQyeeynt1UR8gT/.test(clean), false);
+  assert.equal(/offline catalog/i.test(clean), false);
 }
 
 console.log("\n✓ preview authority tests passed\n");

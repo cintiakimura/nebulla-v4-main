@@ -18,9 +18,10 @@ import {
   workspaceHasCodedAppUi,
 } from "../workspaceCodedAppUi";
 import { projectKeyFromWorkspaceRoot, scheduleWorkspaceRelPathsR2Sync } from "../nebulaWorkspaceStorage";
+import { decodeHtmlEntities } from "../assistantChatSanitize";
 
 function esc(s: string): string {
-  return String(s || "")
+  return decodeHtmlEntities(String(s || ""))
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
@@ -138,12 +139,7 @@ function buildScreenMarkup(input: {
   const sub = esc(slots.hero_subtitle || "");
   const cta = esc(slots.primary_cta || "Continue");
   const cta2 = esc(slots.secondary_cta || "");
-  const patternNote =
-    input.patternMode === "figma"
-      ? "Layout from offline / Figma library structure."
-      : input.patternMode === "catalog"
-        ? "Layout from sheet catalog profile (no extracted structure)."
-        : "Built-in seed patterns (library miss).";
+  const patternNote = "Layout draft.";
   const items = collectItems(slots, templateId);
   const mobile = isMobileTemplate(templateId, input.classification);
   const tabs = wantsBottomTabs(templateId, input.classification);

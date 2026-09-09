@@ -5,23 +5,23 @@
 export function figmaStatusLabel(status: string): string {
   switch (status) {
     case 'offline':
-      return 'Offline library';
+      return 'Layout draft';
     case 'success':
-      return 'Figma: live matched';
+      return 'Layout references matched';
     case 'weak_matches':
       return 'Patterns: seed fallback';
     case 'missing_key':
-      return 'Patterns: catalog + brief';
+      return 'Patterns: layout draft + brief';
     case 'unauthorized':
-      return 'Patterns: seed fallback (Figma auth)';
+      return 'Patterns: seed fallback';
     case 'rate_limited':
-      return 'Patterns: seed fallback (Figma busy)';
+      return 'Patterns: seed fallback';
     case 'failed':
-      return 'Patterns: seed fallback (Figma skip)';
+      return 'Patterns: seed fallback';
     case 'skipped':
-      return 'Patterns: catalog / brief';
+      return 'Patterns: layout draft / brief';
     default:
-      return status ? `Figma: ${status}` : '';
+      return status ? `Layout: ${status}` : '';
   }
 }
 
@@ -39,8 +39,8 @@ export function figmaStatusIsSoftFallback(status: string): boolean {
 
 export function patternModeLabel(mode: string): string {
   if (mode === 'seed') return 'Built-in patterns (seed fallback)';
-  if (mode === 'figma') return 'Offline / Figma library';
-  if (mode === 'catalog') return 'Sheet catalog profile';
+  if (mode === 'figma') return 'Layout draft';
+  if (mode === 'catalog') return 'Layout draft';
   return '';
 }
 
@@ -57,8 +57,6 @@ export function figmaPickActivityLine(input: {
 }): string {
   const head = input.ui_pass === 'final' ? 'Final UI — restyle after coding' : 'Pre-code mockup';
   const status = input.figma_status || 'none';
-  const bucket = input.preferred_bucket ? ` bucket=${input.preferred_bucket}` : '';
-  const key = input.file_key ? ` key=${input.file_key}` : '';
   const miss =
     status === 'weak_matches' ||
     ((input.figma_used === 'no' || !input.figma_used) &&
@@ -66,17 +64,17 @@ export function figmaPickActivityLine(input: {
       status !== 'success' &&
       status !== 'skipped');
   if (miss && status !== 'skipped') {
-    return `${head} — seed miss (${status})${bucket}${key}`;
+    return `${head} — seed miss`;
   }
-  return `${head} — ${status}${bucket}${key}`;
+  return `${head} — layout draft`;
 }
 
 /** Prefer selection_mode when present for precise operator copy. */
 export function referenceDriveLabel(selectionMode: string, figmaStatus: string): string {
   const m = selectionMode || '';
-  if (m.startsWith('offline:') || figmaStatus === 'offline') return 'Offline library hit';
-  if (m.startsWith('live:') || figmaStatus === 'success') return 'Live Figma hit';
-  if (m.startsWith('catalog:') || m.includes(':catalog:')) return 'Catalog profile hit';
+  if (m.startsWith('offline:') || figmaStatus === 'offline') return 'Layout draft hit';
+  if (m.startsWith('live:') || figmaStatus === 'success') return 'Layout references hit';
+  if (m.startsWith('catalog:') || m.includes(':catalog:')) return 'Layout draft hit';
   if (m.includes(':brief:')) return 'Brief-only guidance';
   if (m.includes(':seed:') || figmaStatus === 'weak_matches') return 'Seed fallback';
   return figmaStatusLabel(figmaStatus);

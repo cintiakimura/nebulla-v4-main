@@ -46,6 +46,7 @@ import {
   gateLabel,
   weakGateUserMessage,
 } from '../../lib/uiGenStatusLabels';
+import { sanitizeUserFacingCopy } from '../../../lib/assistantChatSanitize';
 import { clearUiMockupStageFlags } from '../../lib/uiMockupGate';
 import { isLoadableStudioModel } from '../../../lib/uiMockupArtifactHonesty';
 import { NEBULA_STUDIO_SHOW_LIVE_APP, NEBULA_UI_STUDIO_BETA_BUSY } from '../../lib/uiStudioBetaEngine';
@@ -188,7 +189,7 @@ function buildWaitingModel(stageHint?: string): EditorModel {
             type: 'text',
             text:
               stageHint?.trim() ||
-              'Press Generate UI when Master Plan + ui-brief are ready (inference-first runs this before coding). This canvas is a static UI Gen mockup — not the live coded Expo/React app. Regenerate if chrome looks generic; Figma is optional (local catalog by default).',
+              'Press Generate UI when Master Plan + ui-brief are ready (inference-first runs this before coding). This canvas is a static layout draft — not the live coded Expo/React app. Regenerate if chrome looks generic.',
             style: {
               ...defaultStyle(),
               backgroundColor: '#FAFAF9',
@@ -1339,7 +1340,7 @@ export function IdeUiStudioBeta({
             ? t('uiStudio.gateWeakPreview')
             : hasV0ApiKey
               ? 'Save needs a first v0 UI generation — wait for auto v0, or Resume in chat.'
-              : 'Generate UI first (built-in patterns or Figma), or add V0_API_KEY for the legacy v0 path.',
+              : 'Generate UI first (built-in patterns), or add V0_API_KEY for the legacy v0 path.',
         true,
       );
       setApplyConfirmOpen(false);
@@ -1931,7 +1932,7 @@ export function IdeUiStudioBeta({
               </span>
             ) : patternMode === 'catalog' ? (
               <span className="hidden rounded-full bg-secondary px-2 py-0.5 text-[10px] text-muted-foreground md:inline">
-                Sheet catalog
+                Layout draft
               </span>
             ) : null}
             {figmaStatus ? (
@@ -1944,10 +1945,10 @@ export function IdeUiStudioBeta({
                       ? 'bg-amber-500/15 text-amber-100'
                       : 'bg-muted/40 text-muted-foreground',
                 )}
-                title={
+                title={sanitizeUserFacingCopy(
                   [figmaError, figmaEnvGuidance].filter(Boolean).join(' — ') ||
-                  figmaStatusLabel(figmaStatus)
-                }
+                    figmaStatusLabel(figmaStatus),
+                )}
               >
                 {figmaStatusLabel(figmaStatus)}
               </span>
@@ -2111,7 +2112,7 @@ export function IdeUiStudioBeta({
         (figmaEnvGuidance || figmaError) ? (
           <div
             className="border-t border-border/60 px-2 py-1 text-[10px] leading-snug text-muted-foreground sm:px-3"
-            title={[figmaError, figmaEnvGuidance].filter(Boolean).join('\n')}
+            title={sanitizeUserFacingCopy([figmaError, figmaEnvGuidance].filter(Boolean).join('\n'))}
           >
             <span
               className={cn(
@@ -2123,10 +2124,12 @@ export function IdeUiStudioBeta({
             </span>
             {' — '}
             <span className="line-clamp-2">
-              {figmaStatusIsSoftFallback(figmaStatus)
-                ? figmaError ||
-                  'Using catalog + Stitch Design Brief or seed patterns (live Figma not required on Generate).'
-                : [figmaError, figmaEnvGuidance].filter(Boolean).join(' — ')}
+              {sanitizeUserFacingCopy(
+                figmaStatusIsSoftFallback(figmaStatus)
+                  ? figmaError ||
+                      'Using layout draft + Stitch Design Brief or seed patterns.'
+                  : [figmaError, figmaEnvGuidance].filter(Boolean).join(' — '),
+              )}
             </span>
           </div>
         ) : null}
