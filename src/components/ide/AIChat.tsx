@@ -115,7 +115,7 @@ import {
   triggerUiStudioBetaAfterPlanReady,
   triggerUiStudioBetaAfterFilesApplied,
 } from '../../lib/uiStudioBetaEngine';
-import { userNoteRequestsUiGeneration } from '../../lib/chatModeDetector';
+import { userNoteRequestsCompetitorResearch, userNoteRequestsUiGeneration } from '../../lib/chatModeDetector';
 import { figmaPickActivityLine } from '../../lib/uiGenStatusLabels';
 import {
   clearDiscoveryClosed,
@@ -1988,19 +1988,19 @@ export function AIChat() {
     }
     if (onboardingBuildStart) {
       beginPlanActivity('Saving Master Plan…', chatWorkSteps(), {
-        subhead: 'Discovery complete — plan and research next. Coding waits.',
+        subhead: 'Discovery complete — classify the job and draft the plan. Coding waits.',
         initialLog: `Discovery complete — "${rawText.trim()}"`,
       });
       pushActivity('Saving Master Plan…', 'info');
     } else if (fastPrototypeTurn) {
-      beginPlanActivity('Fast Prototype — drafting the plan', chatWorkSteps(), {
-        subhead: 'Researching competitors… Coding waits until Gate R and mockup allow Go.',
-        initialLog: 'Fast Prototype — plan and research (not coding yet)',
+      beginPlanActivity('Fast Prototype — classifying the job', chatWorkSteps(), {
+        subhead: 'Classify coding skeleton → draft plan → Foundation. No competitor search.',
+        initialLog: 'Fast Prototype — classify and plan (not researching competitors)',
       });
-      pushActivity('Researching competitors…', 'info');
+      pushActivity('Classifying the job from your goal…', 'info');
     } else if (buildMode) {
-      beginPlanActivity('Preparing plan and research…', chatWorkSteps(), {
-        subhead: 'Master Plan → research → mockup. Coding starts only if Go is allowed.',
+      beginPlanActivity('Preparing the plan…', chatWorkSteps(), {
+        subhead: 'Master Plan from the coding skeleton. Coding starts when Go is allowed.',
         initialLog: `Build mode — "${rawText.slice(0, 80)}${rawText.length > 80 ? '…' : ''}"`,
       });
       pushActivity(`Project: ${getBrowserProjectName().trim() || 'Untitled project'}`, 'info');
@@ -2101,7 +2101,7 @@ export function AIChat() {
           pushActivity(
             nextSliceSkip
               ? 'Master Plan already on disk — skipping Grok chat; next slice only (not recoding Foundation)'
-              : 'Master Plan already on disk — skipping Grok chat, continuing research / mockup / Foundation',
+              : 'Master Plan already on disk — skipping Grok chat, continuing classify / plan / Foundation',
             'info',
           );
         } else if (skipGrokChat) {
@@ -2148,12 +2148,12 @@ export function AIChat() {
             userNoteRequestsNextSlice(text) && foundationLandedOnDisk();
           assistantContent = nextSliceOnly
             ? 'Master Plan already on disk — coding the next incomplete slice (not Foundation).'
-            : 'Master Plan already on disk — continuing research before coding (not yet).';
+            : 'Master Plan already on disk — continuing the plan, then Foundation.';
           planningPhase = 'PLAN_READY';
           pushActivity(
             nextSliceOnly
               ? 'Master Plan on disk — skipping Grok chat; next slice only (not recoding Foundation)'
-              : 'Master Plan on disk — skipping Grok chat; research next (not coding yet)',
+              : 'Master Plan on disk — skipping Grok chat; classify / plan next (not coding yet)',
             'info',
           );
         }
@@ -2187,11 +2187,11 @@ export function AIChat() {
               pushActivity(
                 isAbortLikeError(grokErr)
                   ? 'Grok chat interrupted — continuing from saved Master Plan'
-                  : 'Grok chat timed out after 90s — Master Plan is saved; continuing research / mockup / Foundation (not waiting on chat).',
+                  : 'Grok chat timed out after 90s — Master Plan is saved; continuing classify / plan / Foundation (not waiting on chat).',
                 'warn',
               );
               assistantContent =
-                'Grok chat timed out; Master Plan is saved — continuing research before coding.';
+                'Grok chat timed out; Master Plan is saved — continuing the plan, then Foundation.';
               planningPhase = 'PLAN_READY';
             } else {
               throw grokErr;
@@ -2323,14 +2323,14 @@ export function AIChat() {
           setGrokActivity((prev) =>
             advanceGrokActivity(prev, 3, {
               currentAction: willCode
-                ? 'Mind map + ui-brief from researched Master Plan…'
+                ? 'Mind map + ui-brief from Master Plan…'
                 : 'Syncing mind map + ui-brief from Master Plan…',
               stepDetail: {
                 index: 2,
                 detail:
                   mpSaved > 0
-                    ? `Saved ${mpSaved} Master Plan section(s). Building mind map + ui-brief after research…`
-                    : 'Building mind map + ui-brief after research…',
+                    ? `Saved ${mpSaved} Master Plan section(s). Building mind map + ui-brief…`
+                    : 'Building mind map + ui-brief…',
               },
               log: {
                 message: 'Syncing mind map + ui-brief (after Web Search, not before)',
@@ -2447,6 +2447,7 @@ export function AIChat() {
           projectName,
           goal: projectName,
           onProgress: pushActivity,
+          requested: userNoteRequestsCompetitorResearch(text),
         });
         if (!research.ok && research.softAbort) {
           lastResearchError = RESEARCH_STOPPED;
@@ -3351,7 +3352,11 @@ export function AIChat() {
     const userId = session?.uid?.trim() || 'anonymous';
     const projectName = getBrowserProjectName().trim() || 'Untitled project';
     const researchSt = await fetchResearchStatus(projectName);
-    if (!researchSt.ok && !(await codingSkeletonAllowsFoundation())) {
+    if (
+      userNoteRequestsCompetitorResearch(text) &&
+      !researchSt.ok &&
+      !(await codingSkeletonAllowsFoundation())
+    ) {
       const stopMsg = formatResearchStopMessage(researchSt.reasons);
       setSendError(stopMsg);
       setAccessoryHint('Retry research — Foundation will not start until Gate R is complete.');

@@ -105,8 +105,13 @@ export async function ensureResearchBeforeUiAndGo(options: {
   projectName?: string;
   goal?: string;
   onProgress?: GrokActivityProgressFn;
+  /** Default path skips Web Search. Set true only when the user asked to research competitors. */
+  requested?: boolean;
 }): Promise<ResearchStrokeResult> {
   const onProgress = options.onProgress;
+  if (!options.requested) {
+    return { ok: true, reused: true, gate: { ok: true, competitorCount: 0, reasons: [] } };
+  }
   if (isFoundationGoInFlight(options.projectName)) {
     onProgress?.('Foundation Go running — research waits (one heavy job).', 'warn');
     return { ok: false, error: 'Foundation Go in flight' };

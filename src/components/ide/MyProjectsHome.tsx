@@ -487,7 +487,7 @@ export function MyProjectsHome({
             {isDashboard
               ? 'Describe what you want to build, pick a type, then Start — opens Build for that workspace.'
               : isPlaceholderWorkspace
-                ? 'This workspace is still an empty Untitled shell. Add a prompt (optional platform), then Continue — research → Master Plan → UI mockup → code. Anything missing is asked in chat. Free plan reuses this project slot and renames it.'
+                ? 'This workspace is still an empty Untitled shell. Add a prompt (optional platform), then Continue — classify the job → Master Plan → code. Anything missing is asked in chat. Free plan reuses this project slot and renames it.'
                 : hasExistingWork
                   ? 'Create a separate project when you are ready. Your current workspace stays in the explorer and Code tab.'
                   : 'Describe what you want to build. Missing details are asked in chat.'}
@@ -503,7 +503,7 @@ export function MyProjectsHome({
             id="nebula-project-idea-tip"
             className="px-4 pt-1 text-[10px] italic leading-snug text-muted-foreground"
           >
-            Pro tip: Add industry + who it’s for (education / kids & teachers, e-commerce / small shops…) for better research and speed.
+            Pro tip: Add industry + who it’s for (education / kids & teachers, e-commerce / small shops…) so the classifier picks the right routes.
           </p>
           <textarea
             id="nebula-project-idea"

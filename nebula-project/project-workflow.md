@@ -15,7 +15,7 @@
 - One agent; one sequence; chat vs short prompt only changes intake, not pipeline order after goal is usable
 - Numbered actions only; every IF has ELSE + Go to Step N
 - No inventing competitors / studies / vendors
-- Research: direct → method analogues → labeled baseline
+- Research: **opt-in only** (user says “research competitors” / “compare similar products”). Default = classify coding skeleton + inferred defaults; do not invent names
 - Security / industry: never block critical path; MVP mid-run; offer after Step 13; add only if user accepts
 - UI Gen v2 primary; auto-V0 not spine; mockup temporary; plan wins over mockup pixels
 - This file is conductor; other docs are rooms opened by step number
@@ -56,18 +56,17 @@
 - **Open room (only if needed):** `nebula-project/inference-first-rules.md` Step 3.2
 - **Must not:** Block for low confidence; invent niche taxonomy
 
-### Step 3 — Research (with fallbacks)
-1. Research direct competitors (target ≥3).
-2. IF directs < 3 → method/logic analogues (`analogue:`).
-3. IF still thin → labeled category baseline (`baseline:`).
-4. Write feature map, UI patterns, evidence or exact `No supporting studies found for this feature.`
-- **Input:** Goal + classification
-- **Output:** `nebula-project/competitor-research.md` and/or Master Plan §2 research block
-- **Done when:** ≥1 of directs / analogues / baseline; no invented names
+### Step 3 — Classify coding skeleton (default; research opt-in)
+1. Classify the job with `lib/codingSkeleton.ts` (shape, roles, entities, verbs, routes, auth).
+2. Industry defaults from the classifier only (kids → kid+teacher; bakery → menu+order+baker). **No live search.**
+3. Persist the skeleton on `master-plan.json`. §2 competitors = `none (inferred defaults)` unless the user asked to research.
+4. **IF** user said “research competitors” / “compare similar products” → then run Web Search and write `competitor-research.md`. ELSE skip.
+- **Input:** Normalized goal + project type
+- **Output:** Coding skeleton on the plan; optional research file only if requested
+- **Done when:** Skeleton classifiable from the goal
 - **IF OK:** Go to Step 4
-- **IF PARTIAL/MISSING/TIMEOUT:** Baseline + continue → Go to Step 4
-- **Open room (only if needed):** `recovery-lab/proposed/policies-and-steps.md` §3 Research
-- **Must not:** Invent competitors/studies; halt spine for thin research
+- **IF PARTIAL/MISSING/TIMEOUT:** Label assumptions → Go to Step 4
+- **Must not:** Call Web Search automatically; invent named competitors; halt Go for empty research.md
 
 ### Step 4 — Gap-fill assumptions
 1. Infer roles, MVP pages, stack default, nav, MVP auth (mock/local OK).

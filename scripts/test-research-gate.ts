@@ -248,22 +248,24 @@ try {
     delete process.env.NEBULLA_SKIP_RESEARCH;
   }
 
-  section("client gates: researchOk false blocks mockup and auto-foundation");
-  assert.equal(
-    canStartUiMockup({
-      masterPlan: {
-        "1. Goal of the app": "Tutor kids with ADHD using short practice sessions",
-        "2. Tech stack and research": "Web App",
-        "3. Features and success metrics": "Timer + dashboard",
-        "4. Pages and navigation": "/home /practice /teacher",
-        "5. UI/UX design": "Calm tokens",
-      },
-      uiBriefLength: 200,
-      uiBriefPageCount: 3,
-      researchOk: false,
-    }),
-    false,
-  );
+  section("client gates: researchOk false does not block default path");
+  {
+    const good = JSON.parse(
+      fs.readFileSync(
+        path.join(root, "nebula-project/fixtures/master-plan/good-crud-auth.json"),
+        "utf8",
+      ),
+    ) as Record<string, unknown>;
+    assert.equal(
+      canStartUiMockup({
+        masterPlan: good,
+        uiBriefLength: 200,
+        uiBriefPageCount: 3,
+        researchOk: false,
+      }),
+      true,
+    );
+  }
   assert.equal(
     readinessBlocksAutoFoundation({
       ok: false,
@@ -273,7 +275,7 @@ try {
       researchOk: false,
       reasons: ["research not complete"],
     }),
-    true,
+    false,
   );
 
   section("Go stop copy");
@@ -284,11 +286,12 @@ try {
     RESEARCH_STOPPED,
   );
 
-  section("Fast Prototype default path does not skip research");
+  section("Fast Prototype default path does not run Web Search");
   const fast = buildFastPrototypeBootstrap("tutor kids with ADHD", "Web App");
-  assert.match(fast, /Web Search/);
-  assert.match(fast, /Do not skip research/i);
+  assert.equal(/Web Search/i.test(fast), false);
+  assert.equal(/Do not skip research/i.test(fast), false);
   assert.match(fast, /never "Not specified"/);
+  assert.match(fast, /coding skeleton|inferred defaults/i);
   assert.equal(/skip-with-reason/i.test(fast), false);
   assert.equal(/invent competitor names/i.test(fast), true);
   const bootstrapSrc = fs.readFileSync(path.join(root, "src/lib/ideChatBootstrap.ts"), "utf8");
@@ -303,8 +306,12 @@ try {
   assert.match(grokSearch, /\/v1\/responses/);
   assert.match(grokSearch, /web_search/);
   assert.match(chat, /ensureResearchBeforeUiAndGo/);
+  assert.match(chat, /requested: userNoteRequestsCompetitorResearch/);
+  assert.equal(/Researching competitors/.test(chat), false);
+  assert.match(chat, /Classifying the job from your goal/);
   assert.match(chat, /research\.softAbort/);
   const researchClient = fs.readFileSync(path.join(root, "src/lib/nebulaResearchClient.ts"), "utf8");
+  assert.match(researchClient, /if \(!options\.requested\)/);
   assert.match(researchClient, /softAbort:/);
   assert.match(researchClient, /isAbortLikeError/);
   assert.match(researchClient, /stillPending/);

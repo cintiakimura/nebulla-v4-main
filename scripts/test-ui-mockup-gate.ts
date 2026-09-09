@@ -92,7 +92,7 @@ assert.equal(
     researchOk: false,
     inferenceFirst: true,
   }),
-  false,
+  true,
 );
 assert.equal(
   readinessBlocksAutoFoundation({
@@ -103,7 +103,7 @@ assert.equal(
     researchOk: false,
     reasons: ['research not complete (need ≥5 real competitors + rankings)'],
   }),
-  true,
+  false,
 );
 
 assert.equal(isArchitectureArtifactPath('nebula-ui-studio/ui-brief.md'), true);
@@ -234,8 +234,8 @@ assert.equal(statusLooksReadyForSkip({ final_status: 'accepted' }), false);
   const blockIdx = codingGate.indexOf('if (!researchAllowsGo)');
   const skipReturn = codingGate.indexOf("reason: 'explicit_skip'");
   assert.ok(blockIdx >= 0 && skipReturn > blockIdx);
-  assert.equal(foundationCodingAllowedAfterResearch(true), true);
-  assert.equal(foundationCodingAllowedAfterResearch(false), false);
+assert.equal(foundationCodingAllowedAfterResearch(true), true);
+assert.equal(foundationCodingAllowedAfterResearch(false), true);
 }
 
 {

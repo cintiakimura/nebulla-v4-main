@@ -17,17 +17,17 @@ Inference-first is the **default standard path**. Brainstorm / full architecture
 
 From a clear user goal:
 
-1. **Categorize** the app  
-2. **Research** industry standards and competitors  
-3. **Draft** architecture  
-4. **Build** first prototype  
-5. **Refine** only after the user sees the draft  
+1. **Categorize** the app (coding skeleton from the goal)  
+2. **Draft** architecture from that contract (inferred defaults — no live search)  
+3. **Build** Foundation  
+4. **Refine** only after the user sees the draft  
+5. **Research competitors** only if the user later asks  
 
 Ask a question only when a step is blocked.  
 Never interrogate by default.  
 Never invent competitors, studies, or statistics.
 
-**Runtime (Recovery §11):** Phase 3 research is a **product Web Search stroke** that writes `nebula-project/competitor-research.md`. Chat may pre-fill labeled assumptions; it must **not** skip research or invent competitor names. Gate R requires 5–10 real names plus rankings, UI/UX patterns, evidence, and assumptions-vs-confirmed. Demo-only skip: `NEBULLA_SKIP_RESEARCH=1` (default **OFF**).
+**Runtime:** Default path does **not** run Web Search or require `competitor-research.md`. Gate R is unused unless the user says “research competitors” / “compare similar products.” Then one research stroke may write that file. Do not invent names.
 
 ---
 
@@ -92,12 +92,12 @@ Pure debug and pure file-open remain outside this script (existing Coding / Debu
 Rank user brief above competitor research. Do not re-interview a dense brief.
 
 1. **Rank-1 sources:** the user’s goal text, uploads, and explicit URLs/links in the message.
-2. **Rank-2 sources:** `nebula-project/competitor-research.md` (Gate R) and industry defaults.
+2. **Rank-2 sources:** coding-skeleton classifier defaults. Optional `competitor-research.md` only if the user asked.
 3. **Extract in one pass** when the brief already specifies roles, main flows, privacy/safety, AI tone, gamification, or research links — write them into the Master Plan / working memory. **Do not** ask discovery questions for those slots.
 4. **Ask at most ONE** clarifying question only when a blocking gap remains (e.g. web vs mobile vs landing cannot be inferred).
-5. **Research stroke:** prioritize user-cited sources (e.g. a PMC/study URL) when present; then competitors. Competitors refine features/UI; they **must not** override user privacy, tone, or role constraints. Gate R still requires a valid `competitor-research.md` before Foundation Go.
+5. **Research stroke:** skip on the default path. If the user asked to research competitors, prefer user-cited URLs first; do not invent names; do not override user privacy, tone, or roles.
 6. **Figma live success is not required** to comprehend the app or to start Foundation after gates pass.
-7. **If blocked:** name the concrete gate (research incomplete / security / ui-brief / …). Do not spin on vague “syncing.”
+7. **If blocked:** name the concrete gate (unusable goal / skeleton / ui-brief / …). Do not spin on vague “syncing.” Do not block Foundation on empty research.md.
 
 ---
 
@@ -198,8 +198,8 @@ Must include:
 
 ---
 
-### Step 5.1 — Find competitors
-**Find** minimum 5 and maximum 10 **real** competitors or close category products.
+### Step 5.1 — Find competitors (opt-in)
+Skip this room on the default path. **Find** minimum 5 and maximum 10 **real** competitors only when the user asked to research.
 
 Rules:
 - real products only
@@ -519,7 +519,7 @@ Do not restart the whole flow.
 **Verify** all of the following:
 
 1. category file exists  
-2. competitor research has **5–10 real names** (Gate R; honest shortfall is not done)  
+2. coding skeleton classifiable from the goal (competitor research only if the user asked)  
 3. feature map exists  
 4. evidence section exists  
 5. all 5 Master Plan sections exist with correct headers  

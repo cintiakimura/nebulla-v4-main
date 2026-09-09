@@ -113,7 +113,12 @@ import {
   seedGoalOfTheAppSection,
   uiBriefUsable,
 } from "./lib/spineSequenceGates";
-import { assessResearchArtifact, RESEARCH_STOPPED } from "./lib/researchArtifact";
+import {
+  assessResearchArtifact,
+  discardStaleResearchIfGoalChanged,
+  RESEARCH_STOPPED,
+  stripStaleResearchFromPlan,
+} from "./lib/researchArtifact";
 import { isResearchJobActive, runResearchStroke } from "./lib/nebulaResearchStroke";
 import { grokChatCompletionsExtras } from "./lib/grokRequestPolicy";
 import {
@@ -734,8 +739,20 @@ async function startServer() {
     ensureCloudProjectWorkspace(REPO_ROOT, NEBULA_PROJECT_ROOT, projectDiskKey(req));
 
   const persistMasterPlanJson = (workspaceRoot: string, masterPlanPath: string, plan: unknown) => {
+    let next = plan;
+    if (next && typeof next === "object") {
+      const rec = { ...(next as Record<string, unknown>) };
+      const goal = String(rec["1. Goal of the app"] || "");
+      try {
+        discardStaleResearchIfGoalChanged(workspaceRoot, goal);
+      } catch {
+        /* ignore */
+      }
+      const gate = assessResearchArtifact(workspaceRoot, { goal, plan: rec });
+      next = gate.ok ? rec : stripStaleResearchFromPlan(rec);
+    }
     fs.mkdirSync(path.dirname(masterPlanPath), { recursive: true });
-    fs.writeFileSync(masterPlanPath, JSON.stringify(plan, null, 2), "utf8");
+    fs.writeFileSync(masterPlanPath, JSON.stringify(next, null, 2), "utf8");
     scheduleWorkspaceAbsR2Sync(workspaceRoot, masterPlanPath);
   };
 
@@ -5207,32 +5224,18 @@ Rules:
           goalCandidates: [note, convProject],
           plan: planForGate,
         });
-        if (!researchGateEarly.ok) {
-          const ensuredSkeleton = ensureCodingSkeletonOnPlan(planForGate, {
-            goal: goalForResearchEarly,
-          });
-          if (isCodingSkeletonReady(ensuredSkeleton.skeleton)) {
-            try {
-              persistMasterPlanJson(ppGo.workspaceRoot, masterPlanPath, ensuredSkeleton.plan);
-              planForGate = ensuredSkeleton.plan as Record<string, string>;
-            } catch {
-              /* continue with in-memory contract */
-              planForGate = ensuredSkeleton.plan as Record<string, string>;
-            }
-          } else {
-          const blocked = goBlocked("RESEARCH_INCOMPLETE", [
-            goBlocked("RESEARCH_INCOMPLETE").message,
-            ...researchGateEarly.reasons.slice(0, 3),
-          ].filter(Boolean).join(" "));
-          return res.status(409).json({
-            ok: false,
-            error: blocked.message,
-            code: blocked.code,
-            blockedReason: blocked,
-            reasons: researchGateEarly.reasons,
-          });
+        const ensuredSkeleton = ensureCodingSkeletonOnPlan(planForGate, {
+          goal: goalForResearchEarly,
+        });
+        if (isCodingSkeletonReady(ensuredSkeleton.skeleton)) {
+          try {
+            persistMasterPlanJson(ppGo.workspaceRoot, masterPlanPath, ensuredSkeleton.plan);
+            planForGate = ensuredSkeleton.plan as Record<string, string>;
+          } catch {
+            planForGate = ensuredSkeleton.plan as Record<string, string>;
           }
         }
+        void researchGateEarly;
       }
 
       if (existingGo?.status === "preparing") {

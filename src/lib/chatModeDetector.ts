@@ -67,6 +67,15 @@ const UI_RE =
   /\b(ui studio|nebula ui|ui[-\s]?brief|ui gen(eration)?|v0(\.dev)?|mockup|ui\/ux|generate ui|visual editor|design system for (the )?app)\b/i;
 
 /** Chat "generate ui" — run UI Gen, do not persist the reply as §1 Goal or start Go. */
+/** Opt-in only. Default Fast Prototype / New Project does not run competitor Web Search. */
+export function userNoteRequestsCompetitorResearch(text?: string | null): boolean {
+  const t = String(text || '').trim();
+  if (!t) return false;
+  return /\b(research competitors|compare similar (apps?|products?)|competitor research|look up competitors|search (for )?competitors)\b/i.test(
+    t,
+  );
+}
+
 export function userNoteRequestsUiGeneration(text?: string | null): boolean {
   const t = String(text || '').trim();
   if (!t || t.length > 120) return false;

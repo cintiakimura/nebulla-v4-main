@@ -34,10 +34,6 @@ import {
   userNoteRequestsNextSlice,
 } from './fastPrototypeNextSlice';
 import {
-  fetchResearchStatus,
-  formatResearchStopMessage,
-} from './nebulaResearchClient';
-import {
   isApplyTransportFailure,
   shouldSkipGoCodeSecondPassAfterApply,
 } from './applyTransportFailure';
@@ -1120,25 +1116,12 @@ async function kickGoCodeJob(options: {
   }
 }
 
-/** Gate R — never mark Go in-flight or POST go-code until research is ok (or demo skip). */
+/** Kept for call-order; default path does not block Go on research.md. */
 async function blockGoIfResearchIncomplete(
-  projectName: string,
-  onProgress?: GrokActivityProgressFn,
+  _projectName: string,
+  _onProgress?: GrokActivityProgressFn,
 ): Promise<GoBlockedReason | null> {
-  const research = await fetchResearchStatus(projectName);
-  if (research.ok) return null;
-  try {
-    const st = await fetchJson<{ codingSkeletonOk?: boolean }>(
-      withProjectQuery('/api/master-plan/status'),
-      { credentials: 'include', cache: 'no-store', headers: getGrokRequestHeaders() },
-    );
-    if (st.codingSkeletonOk === true) return null;
-  } catch {
-    /* fall through to research stop */
-  }
-  const stop = formatResearchStopMessage(research.reasons);
-  onProgress?.(stop, 'error');
-  return goBlocked('RESEARCH_INCOMPLETE', stop);
+  return null;
 }
 
 export async function runGoCodeAndApply(options: {

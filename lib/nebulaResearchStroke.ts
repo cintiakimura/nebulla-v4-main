@@ -130,7 +130,8 @@ export function mergeResearchIntoMasterPlan(opts: {
 }): { updated: string[] } {
   const md = readResearchArtifact(opts.workspaceRoot);
   const gate = assessResearchArtifact(opts.workspaceRoot);
-  if (!md.trim() || (!gate.ok && !gate.skipped)) return { updated: [] };
+  if (!md.trim() || !gate.ok || gate.skipped) return { updated: [] };
+  if (gate.reasons.some((r) => /stale/i.test(r))) return { updated: [] };
 
   const plan = readMasterPlanFile(opts.masterPlanPath);
   const names = gate.competitors.length ? gate.competitors : parseCompetitorNames(md);

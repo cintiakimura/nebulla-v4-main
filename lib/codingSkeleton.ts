@@ -40,7 +40,8 @@ const KIDS_RE =
   /\b(kids?|child|children|student|learner|teacher|tutor|classroom|school|parent|adhd|reading|lesson|practice)\b/i;
 const LANDING_RE =
   /\b(landing|one[- ]?pager|brochure|portfolio|photography|photographer|marketing site)\b/i;
-const MARKET_RE = /\b(marketplace|e-?commerce|shop|storefront|\bcart\b|catalog)\b/i;
+const MARKET_RE =
+  /\b(marketplace|e-?commerce|shop|storefront|\bcart\b|catalog|baker|bakery|bread|pastry|pickup order)\b/i;
 const DASH_RE = /\b(saas|analytics|admin|dashboard|crm|metrics|backoffice|internal tool)\b/i;
 
 const EXTRA_ADMIN_RE = /^\/(settings|analytics|dashboard|admin)(\/|$)/i;
@@ -103,15 +104,30 @@ export function readCodingSkeletonFromPlan(plan: Record<string, unknown> | null 
   return null;
 }
 
+/** Drop last project's roles/routes when this goal is a different job. */
+export function skeletonFitsCurrentGoal(c: CodingSkeleton | null | undefined, goal: string): boolean {
+  if (!c) return false;
+  const g = String(goal || "");
+  if (!g.trim()) return true;
+  const kids = KIDS_RE.test(g);
+  const market = MARKET_RE.test(g);
+  const roles = c.roles.join(" ").toLowerCase();
+  if (market && !kids && /teacher|kid|student|tutor|learner/.test(roles)) return false;
+  if (kids && c.skeleton === "web_dashboard") return false;
+  if (market && /baker|bakery|bread/.test(g) && c.skeleton !== "marketplace") return false;
+  return true;
+}
+
 export function classifyCodingSkeleton(
   goal: string,
   projectType?: string | null,
   masterPlan?: Record<string, unknown> | null,
 ): CodingSkeleton {
-  const existing = readCodingSkeletonFromPlan(masterPlan || undefined);
   const text = [goal, projectType, section(masterPlan, "1. Goal of the app"), section(masterPlan, "3. Features and KPIs")]
     .filter(Boolean)
     .join("\n");
+  const existingRaw = readCodingSkeletonFromPlan(masterPlan || undefined);
+  const existing = skeletonFitsCurrentGoal(existingRaw, text) ? existingRaw : null;
   const typeHint = String(projectType || "").toLowerCase();
 
   const kids = KIDS_RE.test(text);
@@ -166,14 +182,15 @@ export function ensureCodingSkeletonOnPlan(
   plan: Record<string, unknown>,
   opts?: { goal?: string; projectType?: string },
 ): { plan: Record<string, unknown>; skeleton: CodingSkeleton } {
-  const existing = readCodingSkeletonFromPlan(plan);
   const goal = String(opts?.goal || section(plan, "1. Goal of the app") || "").trim();
-  const skeleton = existing || classifyCodingSkeleton(goal, opts?.projectType, plan);
+  const existing = readCodingSkeletonFromPlan(plan);
+  const reuse = existing && skeletonFitsCurrentGoal(existing, goal);
+  const skeleton = reuse ? existing : classifyCodingSkeleton(goal, opts?.projectType, plan);
   const ready = isCodingSkeletonReady(skeleton);
   if (!ready) {
     return { plan, skeleton };
   }
-  if (existing && String(plan[CODING_SKELETON_KEY] || "").trim()) {
+  if (reuse && String(plan[CODING_SKELETON_KEY] || "").trim()) {
     return { plan, skeleton: existing };
   }
   return { plan: mergeCodingSkeletonOntoPlan(plan, skeleton), skeleton };
@@ -291,6 +308,28 @@ function buildDefaults(skeleton: CodingSkeletonKind, text: string, kids: boolean
     };
   }
   if (skeleton === "marketplace") {
+    if (/\b(baker|bakery|bread|pastry|pickup order)\b/i.test(text)) {
+      return {
+        skeleton,
+        project_type: "marketplace",
+        roles: ["customer", "baker"],
+        entities: [
+          { name: "Bread", fields: ["name", "available"], owner_role: "baker" },
+          { name: "Order", fields: ["items", "status"], owner_role: "customer" },
+        ],
+        verbs: ["browse", "order", "mark_ready"],
+        routes: [
+          { path: "/", purpose: "Today's breads", entity: "Bread" },
+          { path: "/order", purpose: "Place pickup order", entity: "Order" },
+          { path: "/confirmation", purpose: "Order confirmation", entity: "Order" },
+          { path: "/baker", purpose: "Order queue", entity: "Order" },
+        ],
+        auth: "none",
+        out_of_scope: [...DEFAULT_OUT_OF_SCOPE],
+        source: "classified",
+        skeleton_note: "Bakery: menu + order + baker. No competitor names.",
+      };
+    }
     return {
       skeleton,
       project_type: "marketplace",

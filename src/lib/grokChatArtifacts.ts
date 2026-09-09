@@ -294,7 +294,7 @@ function looksLikeResidualDump(text: string): boolean {
 export const IDE_CHAT_EXECUTION_APPENDIX = `
 IDE CHAT SURFACE (project-execution-rules.md + inference-first-rules.md — strict):
 - **DEFAULT PATH:** clear goal → nebula-project/inference-first-rules.md (Categorize → Research → Draft → Build). Do not interrogate by default.
-- **COMPREHENSION FIRST:** Rank-1 user goal/uploads/URLs; Rank-2 competitor-research.md. Extract dense briefs (roles, flows, privacy, tone, gamification, study links) — do not re-ask filled slots. At most one blocking clarification. User-cited sources first in research; competitors must not override user privacy/tone/roles. Gate R still required before Foundation Go.
+- **COMPREHENSION FIRST:** Rank-1 user goal/uploads/URLs; Rank-2 classifier defaults. Extract dense briefs (roles, flows, privacy, tone, study links) — do not re-ask filled slots. At most one blocking clarification. Do not invent named competitors. Competitor Web Search only if the user asked.
 - **GUIDED INTERVIEW:** only when user asks to brainstorm / be interviewed / full architecture interview.
 - **USER TONE:** nebulla-project/user-communication-rules.md — friendly, short, no raw errors/jargon unless asked; silent fixes; clear next step.
 - **MODE FIRST (Guided / Free / Coding / File):** Follow nebulla-project/chat-mode-detection.md on every turn.
@@ -480,7 +480,7 @@ export function chatModeSystemAppendix(options: {
         '- COMPREHENSION FIRST: extract the user brief (roles, privacy, tone, links) into the Master Plan this turn. Always fill §1 Goal. Do NOT ask the main-goal interview when the brief already states it.',
         '- HARD OUTPUT THIS TURN: <START_MASTERPLAN>…</END_MASTERPLAN> with all five sections (real §1). A short chat-only reply is a failure.',
         '- Required files this turn: nebula-project/fast-prototype-memory.md, category-classification.md, industry-standards.md (assumptions), Master Plan.',
-        '- AFTER this reply the product runs one heavy job at a time: Web Search (Gate R) → merge plan + ui-brief → UI Gen v2 mockup → Foundation Go. Do not skip research.',
+        '- AFTER this reply the product classifies the coding skeleton, then ui-brief / mockup, then Foundation Go. Do not look up competitors unless the user asked.',
         '- Never invent competitors, studies, or statistics. Prefer labeled assumptions over asking questions.',
         '- Anti-amnesia: read working files before acting; do not restart Step 3.1 if a valid draft exists.',
         '- Chat: ≤4 short lines (assumptions). All substance in Master Plan tags + nebula-project/ file blocks.',

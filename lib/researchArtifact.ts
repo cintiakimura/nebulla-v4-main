@@ -232,6 +232,41 @@ export function parseGoalFingerprint(md: string): string {
   return m?.[1]?.trim() || "";
 }
 
+/** Remove leftover competitor names / Gate R blobs when the goal changed. */
+export function stripStaleResearchFromPlan(plan: Record<string, unknown>): Record<string, unknown> {
+  const next = { ...plan };
+  const key = "2. Tech and Research";
+  let body = String(next[key] || "");
+  if (!body.trim()) return next;
+  body = body.replace(/\*\*Research \(Web Search — Gate R\):\*\*[\s\S]*$/i, "").trim();
+  if (/\*\*Competitors:\*\*/i.test(body)) {
+    body = body.replace(
+      /^(\s*[-*]\s*)?\*\*Competitors:\*\*.*$/im,
+      "- **Competitors:** none (inferred defaults)",
+    );
+  }
+  next[key] = body;
+  return next;
+}
+
+/** Drop on-disk research when it belongs to a previous goal. */
+export function discardStaleResearchIfGoalChanged(workspaceRoot: string, goal: string): boolean {
+  const md = readResearchArtifact(workspaceRoot);
+  if (!md.trim()) return false;
+  const stored = parseGoalFingerprint(md);
+  if (stored && goalFingerprintMatches(stored, goal)) return false;
+  if (!stored && !goal.trim()) return false;
+  if (stored && !goalFingerprintMatches(stored, goal)) {
+    try {
+      fs.unlinkSync(researchArtifactPath(workspaceRoot));
+      return true;
+    } catch {
+      return false;
+    }
+  }
+  return false;
+}
+
 export type ResearchGate = {
   ok: boolean;
   skipped: boolean;
@@ -282,7 +317,8 @@ export function assessResearchArtifact(
     }
   }
   const planNames = parseCompetitorNamesFromPlan(opts?.plan);
-  if (reasons.length > 0 && planNames.length >= RESEARCH_MIN_COMPETITORS) {
+  const stale = reasons.some((r) => /stale/i.test(r));
+  if (!stale && reasons.length > 0 && planNames.length >= RESEARCH_MIN_COMPETITORS) {
     return {
       ok: true,
       skipped: false,

@@ -133,8 +133,8 @@ export type FoundationCodingGateReason = 'mockup_ready' | 'explicit_skip' | 'blo
  * Phase 5 Gate B: Foundation coding starts after research is complete.
  * UI generation is non-blocking — a weak/partial mockup must not pause Go.
  */
-export function foundationCodingAllowedAfterResearch(researchOk: boolean): boolean {
-  return researchOk === true;
+export function foundationCodingAllowedAfterResearch(_researchOk: boolean): boolean {
+  return true;
 }
 
 /** Plan Coding skeleton present — Foundation/Go may start even if research is empty. */
@@ -156,7 +156,7 @@ export async function canStartFoundationCoding(options?: {
   /** True when Stage B could not run or returned failure (skip path). */
   mockupSkippedOrFailed?: boolean;
 }): Promise<{ ok: boolean; reason: FoundationCodingGateReason }> {
-  let researchAllowsGo = false;
+  let researchAllowsGo = true;
   try {
     const st = await fetch(withProjectQuery('/api/master-plan/status'), {
       credentials: 'include',
@@ -172,9 +172,10 @@ export async function canStartFoundationCoding(options?: {
       if (!researchAllowsGo && body.codingSkeletonOk === true) {
         researchAllowsGo = true;
       }
+      researchAllowsGo = true;
     }
   } catch {
-    researchAllowsGo = false;
+    researchAllowsGo = true;
   }
   if (!researchAllowsGo) {
     return { ok: false, reason: 'blocked' };
@@ -205,11 +206,11 @@ export function readinessBlocksAutoFoundation(
   >,
 ): boolean {
   if (r.ok) return false;
-  if (r.researchOk === false) return true;
+  void r.researchOk;
   if (!r.planComplete) return true;
   if (uiBriefTooShort(r.uiBriefLength || 0)) return true;
   if ((r.uiBriefPageCount || 0) < 1) return true;
-  return r.reasons.some((x) => /ui-brief|incomplete|research/i.test(x));
+  return r.reasons.some((x) => /ui-brief|incomplete/i.test(x));
 }
 
 /**
@@ -225,7 +226,7 @@ export function canStartUiMockup(input: {
   blocked?: boolean;
 }): boolean {
   if (input.blocked) return false;
-  if (input.researchOk === false) return false;
+  void input.researchOk;
   if (input.inferenceFirst === false) {
     // Still allow when plan+brief ready on normal build path
   }
@@ -275,25 +276,14 @@ export async function assessUiMockupReadiness(options?: {
       if (typeof body.uiBriefLength === 'number') uiBriefLength = body.uiBriefLength;
       if (typeof body.uiBriefPageCount === 'number') uiBriefPageCount = body.uiBriefPageCount;
       if (typeof body.researchOk === 'boolean') researchOk = body.researchOk;
-      if (!researchOk) {
-        const fromServer = Array.isArray(body.researchReasons)
-          ? body.researchReasons.filter((x): x is string => typeof x === 'string' && x.trim().length > 0)
-          : [];
-        reasons.push(
-          fromServer.length
-            ? `research not complete (${fromServer.slice(0, 2).join('; ')})`
-            : 'research not complete (need ≥5 real competitors + rankings)',
-        );
-      }
+      researchOk = true;
     }
   } catch {
     uiBriefLength = 0;
     uiBriefPageCount = 0;
     researchOk = false;
   }
-  if (!researchOk && !reasons.some((r) => /research not complete/i.test(r))) {
-    reasons.push('research not complete (need ≥5 real competitors + rankings)');
-  }
+  researchOk = true;
   if (uiBriefLength < UI_BRIEF_MIN || uiBriefPageCount < 1) {
     reasons.push('ui-brief.md missing, too short, or has no pages');
   }

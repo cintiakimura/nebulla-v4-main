@@ -17,6 +17,7 @@ import {
   primaryVerbFromSkeleton,
   readCodingSkeletonFromPlan,
   shouldSkipApplyPathForSkeleton,
+  skeletonFitsCurrentGoal,
 } from "../lib/codingSkeleton.ts";
 import { CODING_SKELETON_KEY, PRE_CODING_SUMMARY_KEY } from "../lib/masterPlanSections.ts";
 
@@ -114,6 +115,23 @@ const GOLDEN =
 }
 
 {
+  const bakery =
+    "A web app for a neighborhood bakery. Customers browse today’s breads and place a pickup order. The baker sees the list of orders and marks them ready.";
+  const shop = classifyCodingSkeleton(bakery, "Web App");
+  assert.equal(shop.skeleton, "marketplace");
+  assert.ok(shop.routes.some((r) => r.path === "/order"));
+  assert.ok(shop.routes.some((r) => r.path === "/baker"));
+  assert.equal(isCodingSkeletonReady(shop), true);
+  const kids = classifyCodingSkeleton(GOLDEN);
+  assert.equal(skeletonFitsCurrentGoal(kids, bakery), false);
+  const reused = ensureCodingSkeletonOnPlan(
+    mergeCodingSkeletonOntoPlan({ "1. Goal of the app": bakery }, kids),
+    { goal: bakery },
+  );
+  assert.equal(reused.skeleton.skeleton, "marketplace");
+}
+
+{
   const root = path.dirname(fileURLToPath(import.meta.url));
   const repo = path.join(root, "..");
   assert.equal(fs.existsSync(path.join(repo, "nebula-project", "coding-skeleton.json")), false);
@@ -125,7 +143,7 @@ const GOLDEN =
   const chat = fs.readFileSync(path.join(repo, "src/components/ide/AIChat.tsx"), "utf8");
   assert.match(chat, /codingSkeletonAllowsFoundation/);
   const pipeline = fs.readFileSync(path.join(repo, "src/lib/nebulaGrokCodingPipeline.ts"), "utf8");
-  assert.match(pipeline, /codingSkeletonOk === true/);
+  assert.match(pipeline, /blockGoIfResearchIncomplete/);
   const exec = fs.readFileSync(path.join(repo, "nebula-project/project-execution-rules.md"), "utf8");
   assert.match(exec, /Coding skeleton/);
 }

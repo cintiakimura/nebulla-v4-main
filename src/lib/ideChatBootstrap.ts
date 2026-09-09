@@ -47,9 +47,9 @@ export function buildFastPrototypeContinueBootstrap(userGoalOrBootstrap?: string
     `2) \`\`\`file:nebula-project/fast-prototype-memory.md\` … \`\`\`\n` +
     `3) \`\`\`file:nebula-project/category-classification.md\` … \`\`\`\n` +
     `4) \`\`\`file:nebula-project/industry-standards.md\` … \`\`\` (assumption defaults only).\n` +
-    `Do NOT invent competitor names. Do NOT write a fake competitor-research.md. Do NOT emit START_CODING or app file blocks.\n` +
-    `Product runs Web Search next, then ui-brief, then UI mockup, then Foundation Go (one job at a time).\n` +
-    `Do NOT skip research. Chat: at most 4 short lines listing assumptions.`
+    `Do NOT invent competitor names. Do NOT write competitor-research.md. Do NOT emit START_CODING or app file blocks.\n` +
+    `Product classifies the coding skeleton, then ui-brief / mockup, then Foundation Go. Do not look up competitors unless the user asked.\n` +
+    `Chat: at most 4 short lines listing assumptions.`
   );
 }
 
@@ -126,18 +126,18 @@ export function buildFastPrototypeBootstrap(
     `Write nebula-project/fast-prototype-memory.md (mode, timestamp, goal).\n` +
     `Categorize → nebula-project/category-classification.md (if confidence low: ONE question and stop).\n` +
     `industry-standards.md as ASSUMPTION defaults only (roles, security baseline when kids/accounts/payments). Not finished research.\n` +
-    `Do NOT invent competitor names. Do NOT write nebula-project/competitor-research.md with guessed products.\n` +
+    `Do NOT invent competitor names. Do NOT write nebula-project/competitor-research.md.\n` +
     `Do NOT emit START_CODING, <START_CODING>, or app \`\`\`file:\` blocks (app/, src/, pages/, components/). nebula-project/ files are OK.\n` +
-    `Draft all five Master Plan sections inside <START_MASTERPLAN>…</END_MASTERPLAN> with REAL content (never placeholder "Build Untitled…" or empty cyan shells). Always fill §1 Goal with a distilled Goal tab from the user brief — never "Not specified", "TBD", empty, or the raw prompt pasted verbatim. Label inferred fields as assumptions; Web Search will overwrite competitors:\n` +
+    `Draft all five Master Plan sections inside <START_MASTERPLAN>…</END_MASTERPLAN> with REAL content (never placeholder "Build Untitled…" or empty cyan shells). Always fill §1 Goal with a distilled Goal tab from the user brief — never "Not specified", "TBD", empty, or the raw prompt pasted verbatim. Label inferred fields as assumptions. Competitors = none (inferred defaults) unless the user asked to research:\n` +
     `- §1 Goal: purpose, primary users/roles, in/out of scope. Never paste the raw user prompt, study URLs, or "the study below" into §1.\n` +
-    `- §2 Tech and Research: Project Type; competitors = TBD until Web Search; **include Security baseline** when accounts/kids/students/private data apply.\n` +
-    `- §3 Features + at least one testable KPI (assumption-ranked; research will correct).\n` +
+    `- §2 Tech and Research: Project Type; competitors = none (inferred defaults); **include Security baseline** when accounts/kids/students/private data apply.\n` +
+    `- §3 Features + at least one testable KPI (assumption-ranked from the classifier).\n` +
     `- §4 Pages: every page with route \`/…\` AND fields purpose, primary_actions, data_entities, authz, empty_state, error_state, nav_links (minimum 3–5 pages).\n` +
     `- §5 UI tokens: mood, hex palette, typography, density, radius, motion, components, nav (15–25 lines).\n` +
     `List assumptions + stage=plan_drafted in fast-prototype-memory.md.\n` +
     `Do NOT claim ui-brief is complete this turn.\n` +
-    `AFTER this reply the product runs one heavy job at a time: Web Search (Gate R) → merge plan + ui-brief → UI Gen v2 mockup → Foundation Go. Do not skip research.\n` +
-    `End with ≤4 lines: category, assumptions, main pages, that Web Search comes next.`
+    `AFTER this reply the product classifies the coding skeleton, then ui-brief / UI Gen v2 mockup, then Foundation Go. Do not look up competitors unless the user asked.\n` +
+    `End with ≤4 lines: category, assumptions, main pages.`
   );
 }
 

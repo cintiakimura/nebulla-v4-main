@@ -528,8 +528,8 @@ assert.equal(APPLY_IN_FLIGHT_STALL_MS, 15_000);
   assert.match(chat, /persistLastAppliedSlice/);
   assert.match(
     chat,
-    /skipping Grok chat; research next \(not coding yet\)/,
-    'retry / go must skip Grok chat but must not claim coding started before Gate R',
+    /skipping Grok chat; classify \/ plan next \(not coding yet\)/,
+    'retry / go must skip Grok chat but must not claim coding started before classify / plan',
   );
   assert.match(
     chat,
@@ -586,7 +586,7 @@ assert.equal(APPLY_IN_FLIGHT_STALL_MS, 15_000);
     false,
     'Continue must not assume product routes exist',
   );
-  assert.match(pipeline, /fetchResearchStatus/);
+  assert.match(pipeline, /blockGoIfResearchIncomplete/);
   assert.match(pipeline, /FOUNDATION_RETRY_ACTIVITY/);
   assert.match(pipeline, /goBlocked\('NO_FILE_BLOCKS'\)/);
   assert.match(pipeline, /goBlocked\('APPLY_FAILED'\)/);
