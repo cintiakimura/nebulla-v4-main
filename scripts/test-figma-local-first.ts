@@ -273,9 +273,26 @@ try {
   installFetchSpy();
   {
     const rec = await retrieveFigmaReferences({
-      classification: mobileClass,
-      templateId: 'mobile_home_hero_cards',
-      seedState,
+      classification: {
+        device: 'web',
+        page_type: 'list',
+        product_function: 'ecommerce',
+        navigation_mode: 'top_nav',
+        industry: 'retail',
+        density: 'medium',
+        confidence: 'high',
+        notes: 'browse catalog',
+      },
+      templateId: 'web_list_table',
+      seedState: {
+        device: 'web',
+        page_type: 'list',
+        function: 'ecommerce',
+        navigation_type: 'top',
+        industry_class: 'retail',
+        visual_tone: '',
+        density: 'medium',
+      },
     });
     assert.notEqual(rec.figma_status, 'success');
     assert.notEqual(rec.figma_status, 'offline');
@@ -428,13 +445,35 @@ try {
   });
   {
     const rec = await retrieveFigmaReferences({
-      classification: mobileClass,
-      templateId: 'mobile_home_hero_cards',
-      seedState,
+      classification: {
+        device: 'web',
+        page_type: 'list',
+        product_function: 'ecommerce',
+        navigation_mode: 'top_nav',
+        industry: 'retail',
+        density: 'medium',
+        confidence: 'high',
+        notes: 'browse catalog',
+      },
+      templateId: 'web_list_table',
+      seedState: {
+        device: 'web',
+        page_type: 'list',
+        function: 'ecommerce',
+        navigation_type: 'top',
+        industry_class: 'retail',
+        visual_tone: '',
+        density: 'medium',
+      },
     });
-    assert.equal(rec.figma_status, 'rate_limited');
+    assert.notEqual(rec.figma_status, 'success');
+    assert.notEqual(rec.figma_status, 'offline');
     assert.equal(rec.figma_used, 'no');
-    assert.equal(fetchCalls.filter((u) => u.includes('/v1/files/')).length, 1);
+    assert.equal(
+      fetchCalls.filter((u) => u.includes('/v1/files/')).length,
+      0,
+      'index miss must not live-fetch',
+    );
   }
 
   console.log('\nAll figma local-first tests passed.\n');

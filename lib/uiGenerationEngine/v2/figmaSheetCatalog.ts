@@ -177,7 +177,7 @@ export function preferredSheetBucket(classification: PageClassification): SheetB
     return "dashboard";
   }
   if (classification.device === "mobile") return "mobile";
-  if (classification.device === "web") return "dashboard";
+  if (classification.device === "web") return "web";
   return "mobile";
 }
 
@@ -278,15 +278,8 @@ export function loadCatalogProfileForKey(
   return null;
 }
 
-function avoidEducation(row: SheetCatalogRow | null, titleExtra = ""): boolean {
-  if (row?.avoid_for_education) return true;
-  const blob = `${row?.title || ""} ${row?.category || ""} ${titleExtra}`.toLowerCase();
-  return /crypto|trading|treyd|fintech/.test(blob);
-}
-
 /**
- * Rank keys in a bucket: product fit (industry/audience/tone), then structure/, then listed.
- * Never pick crypto/trading for kids education. Structure still preferred when fit is equal.
+ * Rank leftover env-bucket keys by structure richness only — never industry or list order.
  */
 export function rankKeysForBucket(input: {
   keys: string[];
@@ -295,58 +288,16 @@ export function rankKeysForBucket(input: {
   cwd?: string;
 }): string[] {
   const cwd = input.cwd ?? process.cwd();
-  const notes = `${input.classification.notes || ""} ${input.classification.industry || ""}`;
-  const education =
-    input.classification.industry === "education" ||
-    /educat|kids|learn|tutor|child/.test(notes);
-  const wantIndustry = (input.classification.industry || "general").toLowerCase();
-  const wantAudience = /kids?|child|student/.test(notes) ? "kids" : education ? "kids" : "general";
-  const wantTone = /adhd|calm|low[- ]stimulus/.test(notes)
-    ? "calm"
-    : /playful|fun|friendly/.test(notes)
-      ? "playful"
-      : "professional";
-  const preferred = preferredSheetBucket(input.classification);
-  const wantIa =
-    preferred === "auth"
-      ? "auth"
-      : preferred === "landing"
-        ? "marketing"
-        : preferred === "dashboard"
-          ? "dashboard"
-          : preferred === "mobile"
-            ? "home_tabs"
-            : "ds";
-  const scored = input.keys.map((key, idx) => {
-    const row = enrichSheetRow(
-      rowForKey(input.catalog, key) || {
-        file_key: key,
-        category: "",
-        bucket: preferred,
-        title: "",
-        source: "sheet",
-      },
-    );
-    let rank = 50 + idx;
-    const rowBucket = row.bucket;
-    const aligned =
-      !rowBucket || rowBucket === preferred || siblingSheetBuckets(preferred).includes(rowBucket);
-    if (aligned && hasOfflineStructure(key, cwd)) rank -= 24;
-    else if (aligned && hasCatalogProfileForKey(key, cwd)) rank -= 12;
-    if (rowBucket && rowBucket !== preferred && !siblingSheetBuckets(preferred).includes(rowBucket)) {
-      rank += 60;
-    }
-    if (education && avoidEducation(row)) rank += 80;
-    if (wantIndustry !== "general" && row.industry === wantIndustry) rank -= 18;
-    if (wantAudience === "kids" && row.audience === "kids") rank -= 12;
-    if (row.tone === wantTone) rank -= 8;
-    if (row.ia === wantIa) rank -= 6;
+  const scored = input.keys.map((key) => {
+    let score = 0;
+    if (hasOfflineStructure(key, cwd)) score += 24;
+    else if (hasCatalogProfileForKey(key, cwd)) score += 8;
     if (key === DASHBOARD_FALLBACK_KEY && preferredSheetBucket(input.classification) === "mobile") {
-      rank += 200;
+      score -= 200;
     }
-    return { key, rank, idx };
+    return { key, score };
   });
-  scored.sort((a, b) => a.rank - b.rank || a.idx - b.idx);
+  scored.sort((a, b) => b.score - a.score || a.key.localeCompare(b.key));
   return scored.map((s) => s.key);
 }
 

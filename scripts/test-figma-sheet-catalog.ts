@@ -191,7 +191,7 @@ section("kids retrieve: not dashboard key; live off");
     rec.figma_status,
   );
   if (rec.figma_status === "offline") {
-    assert.ok(rec.selection_mode.includes("sheet:bucket:mobile"), rec.selection_mode);
+    assert.ok(rec.selection_mode.includes("job:home_task"), rec.selection_mode);
   }
 }
 
@@ -228,13 +228,13 @@ section("cloud-project cwd still hits platform Figma structure (kids home)");
     });
     assert.equal(rec.figma_status, "offline", rec.figma_error || rec.selection_mode);
     assert.notEqual(rec.file_key, DASHBOARD_KEY);
-    assert.ok(rec.selection_mode.includes("sheet:bucket:mobile"), rec.selection_mode);
+    assert.ok(rec.selection_mode.includes("job:home_task"), rec.selection_mode);
   } finally {
     process.chdir(prev);
   }
 }
 
-section("education ranks kids-tagged mobile ahead of crypto; not first-row");
+section("industry/title does not rank keys (palette-only)");
 {
   const education: PageClassification = {
     device: "mobile",
@@ -246,40 +246,13 @@ section("education ranks kids-tagged mobile ahead of crypto; not first-row");
     confidence: "high",
     notes: "kids ADHD tutor",
   };
-  const catalog = {
-    source: "test",
-    rows: [
-      {
-        file_key: "CRYPTOKEY1",
-        category: "Treyd Crypto Trading App UI Kit",
-        bucket: "mobile" as const,
-        title: "Treyd Crypto Trading App UI Kit",
-        source: "sheet" as const,
-      },
-      {
-        file_key: "GENERICMOBILE",
-        category: "Mobile screens",
-        bucket: "mobile" as const,
-        title: "Mobile screens",
-        source: "sheet" as const,
-      },
-      {
-        file_key: "KIDSLEARN1",
-        category: "Mobile screens",
-        bucket: "mobile" as const,
-        title: "Kids Learn school tutor",
-        source: "sheet" as const,
-      },
-    ],
-  };
   const ranked = rankKeysForBucket({
     keys: ["CRYPTOKEY1", "GENERICMOBILE", "KIDSLEARN1"],
     classification: education,
-    catalog,
+    catalog: { source: "test", rows: [] },
     cwd: os.tmpdir(),
   });
-  assert.equal(ranked[0], "KIDSLEARN1", `expected kids kit first, got ${ranked.join(",")}`);
-  assert.ok(ranked.indexOf("CRYPTOKEY1") > ranked.indexOf("GENERICMOBILE"));
+  assert.notEqual(ranked[0], "KIDSLEARN1", "kids title must not win file pick");
 }
 
 section("missing structure/ does not crash — catalog/seed + honest status");
@@ -293,22 +266,22 @@ section("missing structure/ does not crash — catalog/seed + honest status");
   try {
     const rec = await retrieveFigmaReferences({
       classification: {
-        device: "mobile",
-        page_type: "home",
-        product_function: "general",
-        navigation_mode: "bottom_tabs",
-        industry: "general",
+        device: "web",
+        page_type: "list",
+        product_function: "ecommerce",
+        navigation_mode: "top_nav",
+        industry: "retail",
         density: "medium",
         confidence: "high",
-        notes: "",
+        notes: "browse catalog",
       },
-      templateId: "mobile_home_hero_cards",
+      templateId: "web_list_table",
       seedState: {
-        device: "mobile",
-        page_type: "home",
-        function: "general",
-        navigation_type: "tabs",
-        industry_class: "general",
+        device: "web",
+        page_type: "list",
+        function: "ecommerce",
+        navigation_type: "top",
+        industry_class: "retail",
         visual_tone: "",
         density: "medium",
       },

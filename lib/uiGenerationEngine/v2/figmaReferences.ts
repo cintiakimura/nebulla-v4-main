@@ -41,10 +41,14 @@ import {
   loadCatalogProfileForKey,
   loadSheetCatalog,
   preferredSheetBucket,
-  rankKeysForBucket,
   rowForKey,
-  siblingSheetBuckets,
 } from "./figmaSheetCatalog";
+import {
+  jobToLegacyBucket,
+  layoutDeviceFromClassification,
+  layoutJobFromClassification,
+  pickLayoutForJob,
+} from "./layoutCatalogIndex";
 
 const KNOWN_BUCKETS = new Set<string>([...KNOWN_SHEET_BUCKETS]);
 
@@ -135,112 +139,37 @@ export function preferredBucketForClassification(classification: PageClassificat
   return preferredSheetBucket(classification);
 }
 
-function isLooseClassification(classification: PageClassification): boolean {
-  const preferred = preferredBucketForClassification(classification);
-  // Never treat landing/dashboard/auth/mobile as "loose" — that would probe untagged
-  // CSV (often a mobile-only library) and defeat C.3 bucket isolation.
-  if (
-    preferred === "landing" ||
-    preferred === "dashboard" ||
-    preferred === "auth" ||
-    preferred === "mobile"
-  ) {
-    return false;
-  }
-  return classification.confidence === "low" || classification.page_type === "other";
-}
-
-/** Sibling tags safe to try when preferred bucket is empty (never mobile↔landing/dashboard). */
-function siblingBuckets(preferred: string): string[] {
-  return siblingSheetBuckets(preferred);
-}
-
 /**
- * Build ordered probe keys.
- * - Buckets set + preferred has keys → only those (avoid wrong mobile on landing/dashboard).
- * - Buckets set + preferred empty → try safe siblings, then untagged CSV only if classification is loose; else [].
- * - No buckets → CSV with light mobile prefer (and mobile deprioritized for landing/dashboard).
+ * Probe keys by screen job + device (catalog-index). Never first-fit a bucket or industry.
+ * No job match → empty keys (coded layout + palette only).
  */
 export function resolveProbeKeys(
   classification: PageClassification,
-  libraryKeys: string[] = resolveLibraryKeys(),
-  buckets: Map<string, string[]> = parseReferenceBuckets(),
+  libraryKeys: string[] = [],
+  _buckets?: Map<string, string[]>,
 ): { keys: string[]; selection_mode: string; preferred_bucket: string | null } {
-  const preferred = preferredBucketForClassification(classification);
-  const hasBuckets = buckets.size > 0;
+  const job = layoutJobFromClassification(classification);
+  const device = layoutDeviceFromClassification(classification);
+  const preferred = jobToLegacyBucket(job) || preferredBucketForClassification(classification);
 
-  const catalog = loadSheetCatalog();
-  const rank = (keys: string[]) =>
-    capProbeKeys(
-      rankKeysForBucket({
-        keys,
-        classification,
-        catalog,
-      }),
-    );
-
-  if (hasBuckets && preferred) {
-    const tagged = buckets.get(preferred) || [];
-    if (tagged.length > 0) {
-      return {
-        keys: rank(tagged),
-        selection_mode: `bucket:${preferred}`,
-        preferred_bucket: preferred,
-      };
-    }
-    for (const sib of siblingBuckets(preferred)) {
-      const sibKeys = buckets.get(sib) || [];
-      if (sibKeys.length > 0) {
-        return {
-          keys: rank(sibKeys),
-          selection_mode: `bucket_sibling:${preferred}->${sib}`,
-          preferred_bucket: preferred,
-        };
-      }
-    }
-    // Strict page types: never probe untagged CSV (often a mobile-only library).
-    if (isLooseClassification(classification) && libraryKeys.length > 0) {
-      return {
-        keys: rank(orderKeysForClassification(libraryKeys, classification)),
-        selection_mode: "untagged_loose",
-        preferred_bucket: preferred,
-      };
-    }
+  const picked = pickLayoutForJob({
+    job,
+    device,
+    allowKeys: libraryKeys.length ? libraryKeys : undefined,
+  });
+  if (picked.keys.length) {
     return {
-      keys: [],
-      selection_mode: `bucket_miss:${preferred}`,
+      keys: capProbeKeys(picked.keys),
+      selection_mode: `job:${job}`,
       preferred_bucket: preferred,
     };
   }
 
-  if (hasBuckets && !preferred && libraryKeys.length > 0) {
-    return {
-      keys: rank(orderKeysForClassification(libraryKeys, classification)),
-      selection_mode: "untagged_no_prefer",
-      preferred_bucket: null,
-    };
-  }
-
   return {
-    keys: rank(orderKeysForClassification(libraryKeys, classification)),
-    selection_mode: "csv",
+    keys: [],
+    selection_mode: `job_miss:${job}`,
     preferred_bucket: preferred,
   };
-}
-
-/** Prefer known mobile key on mobile; deprioritize it for landing/dashboard/auth/web. */
-function orderKeysForClassification(keys: string[], classification: PageClassification): string[] {
-  if (keys.length <= 1) return keys;
-  const mobilePreferred = "ZEbJpC67UQyeeynt1UR8gT";
-  if (!keys.includes(mobilePreferred)) return keys;
-  const preferred = preferredBucketForClassification(classification);
-  if (preferred && preferred !== "mobile") {
-    return [...keys.filter((k) => k !== mobilePreferred), mobilePreferred];
-  }
-  if (classification.device === "mobile") {
-    return [mobilePreferred, ...keys.filter((k) => k !== mobilePreferred)];
-  }
-  return keys;
 }
 
 type FigmaNode = {
@@ -585,13 +514,11 @@ export async function retrieveFigmaReferences(input: {
           ? "FIGMA_LIVE_ON_GENERATE enabled — live probe only if offline + catalog miss. Prefer committed structure/ + catalog profiles on Render."
           : "Local-first Generate (live off). Prefer nebulla-project/figma-library/structure/<key>/document.json; refresh via figma:download + figma:extract-structure.";
 
-  const probe = resolveProbeKeys(input.classification, libraryKeys, buckets);
+  const probe = resolveProbeKeys(input.classification);
   const probeKeys = capProbeKeys(
-    preferredSafe && preferred && !probe.keys.includes(preferred)
-      ? [preferred, ...probe.keys]
-      : preferredSafe && preferred && probe.keys[0] !== preferred
-        ? [preferred, ...probe.keys.filter((k) => k !== preferred)]
-        : probe.keys,
+    preferredSafe && preferred && probe.keys.includes(preferred) && probe.keys[0] !== preferred
+      ? [preferred, ...probe.keys.filter((k) => k !== preferred)]
+      : probe.keys,
   );
   const selectionModeBase =
     preferredSafe &&
@@ -651,7 +578,7 @@ export async function retrieveFigmaReferences(input: {
           bucket,
         },
       ],
-      selection_mode: `offline:sheet:bucket:${bucket}`,
+      selection_mode: `offline:job:${layoutJobFromClassification(input.classification)}`,
       preferred_bucket: preferredBucket || bucket,
       ...pickMeta(fileKey),
       figma_used: "yes",

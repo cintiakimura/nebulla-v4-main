@@ -1,0 +1,90 @@
+{
+  "version": 2,
+  "jobs": [
+    "home_task",
+    "catalog_grid",
+    "detail",
+    "form_checkout",
+    "list_manage",
+    "auth",
+    "landing_hero"
+  ],
+  "by_job": {
+    "home_task": ["ZEbJpC67UQyeeynt1UR8gT"],
+    "catalog_grid": [],
+    "detail": [],
+    "form_checkout": [],
+    "list_manage": ["TgYmEqMwrWFHBxF2kAVOaF"],
+    "auth": ["MaFREMBRF3vQ8BhtqA2ZpK"],
+    "landing_hero": ["P6lA9sHTHVbnmUfoYbV9Ir"]
+  },
+  "aliases": {
+    "mobile": "home_task",
+    "dashboard": "list_manage",
+    "landing": "landing_hero",
+    "auth": "auth",
+    "forms": "form_checkout"
+  },
+  "structures": [
+    {
+      "file_key": "MaFREMBRF3vQ8BhtqA2ZpK",
+      "device": "mobile",
+      "jobs": ["auth"],
+      "not_for": [
+        "home_task",
+        "catalog_grid",
+        "detail",
+        "form_checkout",
+        "list_manage",
+        "landing_hero"
+      ],
+      "richness": 6,
+      "notes": "Login fields only. Not a home or catalog."
+    },
+    {
+      "file_key": "TgYmEqMwrWFHBxF2kAVOaF",
+      "device": "web",
+      "jobs": ["list_manage"],
+      "not_for": [
+        "catalog_grid",
+        "home_task",
+        "auth",
+        "landing_hero",
+        "detail",
+        "form_checkout"
+      ],
+      "richness": 10,
+      "notes": "SaaS metrics + sidebar. Metric cards are not a product catalog."
+    },
+    {
+      "file_key": "P6lA9sHTHVbnmUfoYbV9Ir",
+      "device": "web",
+      "jobs": ["landing_hero"],
+      "not_for": [
+        "home_task",
+        "catalog_grid",
+        "detail",
+        "form_checkout",
+        "list_manage",
+        "auth"
+      ],
+      "richness": 7,
+      "notes": "Marketing hero + feature cards. Not an app home."
+    },
+    {
+      "file_key": "ZEbJpC67UQyeeynt1UR8gT",
+      "device": "mobile",
+      "jobs": ["home_task"],
+      "not_for": [
+        "auth",
+        "catalog_grid",
+        "detail",
+        "form_checkout",
+        "list_manage",
+        "landing_hero"
+      ],
+      "richness": 22,
+      "notes": "Phone home / feed. Sign-up frames exist but not_for auth. Feed is not a product grid."
+    }
+  ]
+}

@@ -23,9 +23,21 @@ function looksLikeNebullaGlobals(text: string): boolean {
   return /@tailwind|tailwindcss|:root\s*\{/.test(text);
 }
 
-function tokenBlock(tokens: DesignTokens): string {
-  return `${FINAL_UI_CSS_START}
+export type TokenInjectExtras = {
+  headingFont?: string;
+  jobHint?: string;
+};
+
+function tokenBlock(tokens: DesignTokens, extras?: TokenInjectExtras): string {
+  const heading = extras?.headingFont || "Inter, system-ui, sans-serif";
+  const jobLine = extras?.jobHint ? `\n/* screen-job: ${extras.jobHint} */` : "";
+  return `${FINAL_UI_CSS_START}${jobLine}
 :root {
+  --bg: ${tokens.bg};
+  --surface: ${tokens.surface};
+  --primary: ${tokens.primary};
+  --text: ${tokens.text};
+  --muted: ${tokens.mutedText};
   --nebulla-bg: ${tokens.bg};
   --nebulla-surface: ${tokens.surface};
   --nebulla-primary: ${tokens.primary};
@@ -34,6 +46,7 @@ function tokenBlock(tokens: DesignTokens): string {
   --nebulla-muted: ${tokens.mutedText};
   --nebulla-border: ${tokens.border};
   --nebulla-radius: ${Math.max(4, tokens.radius)}px;
+  --nebulla-font-heading: ${heading};
 }
 body {
   background: var(--nebulla-bg, inherit);
@@ -73,6 +86,7 @@ export function injectFinalUiIntoProductPreview(
 export function injectFinalUiCssVars(
   workspaceRoot: string,
   tokens: DesignTokens,
+  extras?: TokenInjectExtras,
 ): string | null {
   for (const rel of CANDIDATES) {
     const abs = path.join(workspaceRoot, rel);
@@ -84,7 +98,7 @@ export function injectFinalUiCssVars(
       continue;
     }
     if (!looksLikeNebullaGlobals(text)) continue;
-    const block = tokenBlock(tokens);
+    const block = tokenBlock(tokens, extras);
     const next = text.includes(FINAL_UI_CSS_START)
       ? text.replace(
           /\/\* nebulla-final-ui-tokens \*\/[\s\S]*?\/\* \/nebulla-final-ui-tokens \*\//,

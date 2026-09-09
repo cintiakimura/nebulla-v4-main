@@ -82,23 +82,27 @@ export function isLastAutopilotSlice(sliceLabel?: string | null): boolean {
 export type PostCodeUiAction =
   | 'run_final_ui'
   | 'regen_post_code'
+  | 'style_tokens_only'
   | 'sync_preview_only'
   | 'skip_no_ui_paths';
 
 /**
- * After product routes exist, catalog remount is forbidden.
- * Manual Generate (force) may still run Final UI; autopilot skips it so Preview stays the coded app.
+ * After product routes exist: one token/style pass in place.
+ * Autopilot never remounts a catalog document tree. Manual Generate may still run Final UI.
  */
 export function resolvePostCodeUiAction(opts: {
   writtenPaths: string[];
   alreadyRanPostCode: boolean;
   previouslyCoveredKeys?: string[];
   force?: boolean;
-  /** Successful Final UI runs this project (cycle JSON). */
+  /** Successful Final UI / style passes this project (cycle JSON). */
   finalUiCount?: number;
   sliceLabel?: string | null;
 }): PostCodeUiAction {
   if (!looksLikeProductAppFiles(opts.writtenPaths)) return 'skip_no_ui_paths';
   if (opts.force) return 'run_final_ui';
+  if (!opts.alreadyRanPostCode && !(opts.finalUiCount && opts.finalUiCount > 0)) {
+    return 'style_tokens_only';
+  }
   return 'sync_preview_only';
 }

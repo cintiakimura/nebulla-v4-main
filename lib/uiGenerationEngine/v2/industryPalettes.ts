@@ -136,7 +136,9 @@ export function selectIndustryPalette(input: {
   }
   if (industry === "health" || /health|clinic|medical|wellness/.test(text)) return PACKS.health;
   if (industry === "finance" || /financ|bank|fintech|trading/.test(text)) return PACKS.finance;
-  if (industry === "retail" || /retail|shop|store|commerce/.test(text)) return PACKS.retail;
+  if (industry === "retail" || /retail|shop|store|commerce|baker|bakery|bread|pastry|cafe/.test(text)) {
+    return PACKS.retail;
+  }
   if (device === "landing" || /landing|marketing|waitlist/.test(text)) return PACKS["landing-bold"];
   return PACKS.professional;
 }

@@ -466,6 +466,28 @@ export async function triggerUiStudioBetaAfterFilesApplied(options: {
     return null;
   }
 
+  if (action === 'style_tokens_only') {
+    options.onProgress?.('Styling the screens on the coded app', 'info');
+    try {
+      await fetch(withProjectQuery('/api/coded-app/style-pass'), {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json', ...getGrokRequestHeaders() },
+        body: JSON.stringify(withProjectBody({})),
+      });
+    } catch {
+      /* keep coded Preview */
+    }
+    markPostCodeUiRefreshDone(projectKey, paths);
+    try {
+      dispatchStudioShowLiveApp();
+      window.dispatchEvent(new CustomEvent('nebula-open-app-preview'));
+    } catch {
+      /* ignore */
+    }
+    return { ok: true, skipped: true };
+  }
+
   if (action === 'sync_preview_only') {
     options.onProgress?.(
       'App Preview is ready — coded app stays live (Final UI already ran or not this slice).',

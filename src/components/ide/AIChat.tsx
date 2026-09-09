@@ -2510,6 +2510,9 @@ export function AIChat() {
             'Product routes already on disk — mockup deferred — coding next slice',
             'info',
           );
+        } else if (readiness.ok && (fastPrototypeTurn || willCode)) {
+          mockupSkippedOrFailed = true;
+          pushActivity('Screens will be styled after the app is coded', 'info');
         } else if (readiness.ok) {
           markUiMockupStageStarted(diskProjectKey);
           pushActivity(

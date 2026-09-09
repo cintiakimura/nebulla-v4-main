@@ -244,21 +244,22 @@ section('Figma C.3 buckets: hit / miss / csv (never wrong mobile on landing)');
   });
   assert.equal(preferredBucketForClassification(landingClass), 'landing');
 
-  const buckets = parseReferenceBuckets(
-    'mobile=MOBILEKEY111,landing=LANDINGKEY222,dashboard=DASHKEY333',
-  );
-  const hit = resolveProbeKeys(landingClass, ['MOBILEKEY111', 'LANDINGKEY222'], buckets);
-  assert.equal(hit.selection_mode, 'bucket:landing');
-  assert.deepEqual(hit.keys, ['LANDINGKEY222']);
+  const landingKey = 'P6lA9sHTHVbnmUfoYbV9Ir';
+  const mobileKey = 'ZEbJpC67UQyeeynt1UR8gT';
+  const dashKey = 'TgYmEqMwrWFHBxF2kAVOaF';
+  const hit = resolveProbeKeys(landingClass);
+  assert.equal(hit.selection_mode, 'job:landing_hero');
+  assert.deepEqual(hit.keys, [landingKey]);
+  assert.equal(hit.keys.includes(mobileKey), false);
+  assert.equal(hit.keys.includes(dashKey), false);
 
-  const missBuckets = parseReferenceBuckets('mobile=MOBILEKEY111');
-  const miss = resolveProbeKeys(landingClass, ['MOBILEKEY111', 'OTHERKEY'], missBuckets);
-  assert.equal(miss.selection_mode, 'bucket_miss:landing');
-  assert.equal(miss.keys.length, 0, 'strict landing must not probe mobile CSV when buckets exist');
+  const miss = resolveProbeKeys(landingClass, [mobileKey, 'MOBILEKEY111']);
+  assert.equal(miss.selection_mode, 'job_miss:landing_hero');
+  assert.equal(miss.keys.length, 0, 'landing job must not probe mobile when index landing is filtered out');
 
-  const noBuckets = resolveProbeKeys(landingClass, ['MOBILEKEY111', 'ZEbJpC67UQyeeynt1UR8gT'], new Map());
-  assert.equal(noBuckets.selection_mode, 'csv');
-  assert.notEqual(noBuckets.keys[0], 'ZEbJpC67UQyeeynt1UR8gT', 'known mobile key deprioritized for landing');
+  const noBuckets = resolveProbeKeys(landingClass, ['MOBILEKEY111', mobileKey]);
+  assert.equal(noBuckets.selection_mode, 'job_miss:landing_hero');
+  assert.equal(noBuckets.keys.includes(mobileKey), false);
 
   const dashClass = classifyPage({
     projectType: 'Web App',
@@ -272,7 +273,7 @@ section('Figma C.3 buckets: hit / miss / csv (never wrong mobile on landing)');
   });
   assert.equal(preferredBucketForClassification(dashClass), 'dashboard');
   const dashMiss = resolveProbeKeys(dashClass, ['MOBILEKEY111'], parseReferenceBuckets('mobile=MOBILEKEY111'));
-  assert.equal(dashMiss.selection_mode, 'bucket_miss:dashboard');
+  assert.equal(dashMiss.selection_mode, 'job_miss:list_manage');
 }
 
 section('selectTemplate: landing / marketing prefer landing family');

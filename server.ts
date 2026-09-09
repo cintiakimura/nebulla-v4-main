@@ -187,6 +187,7 @@ import {
   writtenPathsNeedRunnableSkeleton,
 } from "./lib/runnableAppSkeleton";
 import { runWorkspaceBuildCheck } from "./lib/workspaceBuildCheck";
+import { applyProductPalettePass } from "./lib/productPalettePass";
 import {
   INTERACTIVE_PREVIEW_GO_BULLETS,
   ensureInteractiveProductPreview,
@@ -3002,6 +3003,10 @@ No approved UI code yet.
                 productFiles: diskUi.length ? diskUi : writtenSnapshot,
                 logoInitials: readProductIdentity(workspaceRoot)?.logoInitials,
               });
+              applyProductPalettePass({
+                workspaceRoot,
+                masterPlanPath: pp.masterPlanPath,
+              });
             }
             if (writtenPathsNeedRunnableSkeleton(writtenSnapshot)) {
               ensureRunnableSkeleton(workspaceRoot, { projectName });
@@ -3026,6 +3031,20 @@ No approved UI code yet.
       }
     } catch (err: any) {
       res.status(500).json({ error: err?.message || "Failed to apply generated files" });
+    }
+  });
+
+  /** Tokens + type only on the coded app. Never remounts a catalog tree. */
+  app.post("/api/coded-app/style-pass", (req, res) => {
+    try {
+      const pp = projectPathsFor(req);
+      const result = applyProductPalettePass({
+        workspaceRoot: pp.workspaceRoot,
+        masterPlanPath: pp.masterPlanPath,
+      });
+      res.json({ ok: true, ...result });
+    } catch (err: any) {
+      res.status(500).json({ ok: false, error: err?.message || "Style pass failed" });
     }
   });
 

@@ -31,9 +31,12 @@ const mobileHome: PageClassification = {
   });
   const health = selectIndustryPalette({ industry: "health", text: "clinic wellness", device: "mobile" });
   const finance = selectIndustryPalette({ industry: "finance", text: "fintech wallet", device: "web" });
+  const bakery = selectIndustryPalette({ text: "Neighborhood bakery browse breads pickup", device: "web" });
   assert.equal(edu.id, "education-calm");
   assert.equal(health.id, "health");
   assert.equal(finance.id, "finance");
+  assert.equal(bakery.id, "retail");
+  assert.notEqual(bakery.primary, edu.primary);
   assert.notEqual(edu.primary, health.primary);
   assert.notEqual(edu.primary, finance.primary);
   assert.notEqual(edu.primary.toLowerCase(), "#0f766e");

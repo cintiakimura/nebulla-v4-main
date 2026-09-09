@@ -73,7 +73,7 @@ assert.equal(
     alreadyRanPostCode: false,
     finalUiCount: 0,
   }),
-  'sync_preview_only',
+  'style_tokens_only',
 );
 
 assert.deepEqual(extractUiRouteKeys(['app/page.tsx', 'app/layout.tsx']), [
@@ -139,6 +139,8 @@ assert.equal(
 
 {
   const engine = fs.readFileSync(path.join(root, 'src/lib/uiStudioBetaEngine.ts'), 'utf8');
+  assert.match(engine, /style_tokens_only/);
+  assert.match(engine, /Styling the screens on the coded app/);
   assert.match(engine, /App Preview is ready/);
   assert.equal(/switch Studio/.test(engine), false);
   assert.equal(/dispatchOpenUiStudioBeta\(\)/.test(engine.slice(engine.indexOf('sync_preview_only'))), false);

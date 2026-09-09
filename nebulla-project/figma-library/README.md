@@ -1,3 +1,36 @@
+# Layout catalog (index is law)
+
+`catalog-index.json` is the only layout menu. Folder names (`mobile`, `dashboard`) and old bucket tags do not pick files. Industry / mood writes **palette only** (color + type). It never selects a structure.
+
+Closed jobs:
+
+| Job | Meaning |
+|-----|---------|
+| `home_task` | Next action / start (kids practice home) |
+| `catalog_grid` | Browse products / menu |
+| `detail` | One item |
+| `form_checkout` | Order / checkout form |
+| `list_manage` | Baker / teacher queue, SaaS metrics |
+| `auth` | Login / sign-up |
+| `landing_hero` | Marketing hero |
+
+If `by_job[job]` is empty, keep the **coded** page and apply palette. Do not fall back to the first dashboard.
+
+**Do not dual-tag** unless that extract really has the region. A metrics card row is not `catalog_grid`. A social Feed is not a product grid.
+
+### Add a key later (no live Generate)
+
+1. Ingest / extract into `structure/<file_key>/document.json` (owned key only — never invent keys).
+2. Add one row to `catalog-index.json`: `file_key`, `device`, `jobs[]`, `not_for[]`, optional `notes`.
+3. Add the key to `by_job` for those jobs only.
+4. Do not create industry folders (`education/`, `bakery/`).
+
+`FIGMA_LIVE_ON_GENERATE` stays **off**. Catalog never replaces Preview; Preview is `app/` / `src/`.
+
+If a bakery Home is empty after a run, tighten Foundation `app/page.tsx` (bread cards + CTA). The index cannot invent a menu you never stored.
+
+---
+
 # Figma library ingest (offline)
 
 **Generate UI:** local-first — `structure/<fileKey>/document.json` (committed) → `raw/` (optional full download) → catalog → brief → seed. Live only with `FIGMA_LIVE_ON_GENERATE=1` (default **off**).
