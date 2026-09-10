@@ -2508,10 +2508,8 @@ No approved UI code yet.
       let html = "";
       const surface = String(q.surface || "").toLowerCase();
       const preferMockup = surface === "mockup" || surface === "ui-gen";
-      const catalogMayOwnIframe =
-        preferMockup &&
-        authority.honesty !== "real_routes" &&
-        !authority.codedApp;
+      // Explicit Layout draft tab only. Default bootstrap stays the coded app.
+      const catalogMayOwnIframe = preferMockup && Boolean(authority.mockupRel);
 
       if (catalogMayOwnIframe && authority.mockupRel) {
         const mockAbs = path.join(pp.workspaceRoot, authority.mockupRel);

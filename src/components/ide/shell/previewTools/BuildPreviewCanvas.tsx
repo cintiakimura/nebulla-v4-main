@@ -18,6 +18,11 @@ import {
 } from '../../../../lib/uiStudioBetaEngine';
 import { sanitizeUserFacingCopy } from '../../../../../lib/assistantChatSanitize';
 
+export function buildPreviewBootstrapPath(opts: { rev: number; showDraft: boolean }): string {
+  const q = `/api/app-preview/bootstrap?_rev=${opts.rev}`;
+  return opts.showDraft ? `${q}&surface=mockup` : q;
+}
+
 /**
  * Preview column for Build: toolbar fixed above canvas, no outer “Preview” frame.
  * New tool surface — does not modify legacy preview modules.
@@ -30,16 +35,19 @@ export function BuildPreviewCanvas() {
   const [engineBusy, setEngineBusy] = useState(false);
   const [hasVisualPreview, setHasVisualPreview] = useState(false);
   const [liveAvailable, setLiveAvailable] = useState(false);
+  const [hasMockup, setHasMockup] = useState(false);
+  const [liveLoadFailed, setLiveLoadFailed] = useState(false);
   const [waitStatus, setWaitStatus] = useState('Waiting for preview');
   const [previewMode, setPreviewMode] = useState<string | null>(null);
   const retriedLegacyRef = useRef(false);
   const retriedMockShellRef = useRef(false);
   const keepMockupRef = useRef(false);
+  const userPickedDraftRef = useRef(false);
   const [hasSelection] = useState(false);
-  const src = withProjectQuery(
-    `/api/app-preview/bootstrap?_rev=${rev}${showMockup && !liveAvailable ? '&surface=mockup' : ''}`,
-  );
-  const waiting = !hasVisualPreview || generateBusy || engineBusy;
+  const showDraft = showMockup && (hasMockup || userPickedDraftRef.current);
+  const src = withProjectQuery(buildPreviewBootstrapPath({ rev, showDraft }));
+  const blockingWait = generateBusy || engineBusy;
+  const waiting = blockingWait || (!hasVisualPreview && !liveAvailable && !showDraft);
 
   const bump = useCallback(() => {
     setFailed(false);
@@ -62,20 +70,24 @@ export function BuildPreviewCanvas() {
       if (!res.ok) return;
       setPreviewMode(typeof data.previewMode === 'string' ? data.previewMode : null);
       const live = previewMetaHasProductRoutes(data);
-      const hasMockup = Boolean(String(data.mockupRel || '').trim());
+      const mockupOnDisk = Boolean(String(data.mockupRel || '').trim());
       setLiveAvailable(live);
+      setHasMockup(mockupOnDisk);
       if (live) {
-        keepMockupRef.current = false;
         setHasVisualPreview(true);
-        setShowMockup(false);
+        setLiveLoadFailed(false);
+        if (!userPickedDraftRef.current) {
+          keepMockupRef.current = false;
+          setShowMockup(false);
+        }
         setWaitStatus(
           sanitizeUserFacingCopy(data.previewStatusLabel || 'App Preview is the coded app'),
         );
         return;
       }
-      if (hasMockup) {
+      if (mockupOnDisk) {
         setHasVisualPreview(true);
-        setShowMockup(true);
+        if (!userPickedDraftRef.current) setShowMockup(true);
         setWaitStatus('placeholder mockup');
         return;
       }
@@ -109,10 +121,10 @@ export function BuildPreviewCanvas() {
             previewMode?: string;
           };
           const live = previewMetaHasProductRoutes(data);
-          if (live) {
+          if (live && !userPickedDraftRef.current) {
             keepMockupRef.current = false;
             setShowMockup(false);
-          } else {
+          } else if (!live) {
             if (force) keepMockupRef.current = true;
             setShowMockup(keepMockupRef.current || force || true);
           }
@@ -124,6 +136,8 @@ export function BuildPreviewCanvas() {
     };
     const onShowLive = () => {
       keepMockupRef.current = false;
+      userPickedDraftRef.current = false;
+      setShowMockup(false);
       setLiveAvailable(true);
       void refreshWaitState().then(() => {
         bump();
@@ -175,24 +189,20 @@ export function BuildPreviewCanvas() {
 
   const showLiveApp = useCallback(() => {
     keepMockupRef.current = false;
+    userPickedDraftRef.current = false;
     setShowMockup(false);
-    setWaitStatus('App Preview is the coded app');
-    bump();
-  }, [bump]);
-
-  const showCatalogMockup = useCallback(() => {
-    if (liveAvailable) {
-      keepMockupRef.current = false;
-      setShowMockup(false);
-      setWaitStatus('App Preview is the coded app');
-      bump();
-      return;
-    }
-    keepMockupRef.current = true;
-    setShowMockup(true);
-    setWaitStatus('placeholder mockup');
+    setLiveLoadFailed(false);
+    setWaitStatus(liveAvailable ? 'App Preview is the coded app' : 'App is not running yet');
     bump();
   }, [bump, liveAvailable]);
+
+  const showCatalogMockup = useCallback(() => {
+    userPickedDraftRef.current = true;
+    keepMockupRef.current = true;
+    setShowMockup(true);
+    setWaitStatus(hasMockup ? 'Layout draft' : 'No layout draft yet');
+    bump();
+  }, [bump, hasMockup]);
 
   const onGenerateUi = useCallback(async () => {
     if (generateBusy) return;
@@ -227,6 +237,7 @@ export function BuildPreviewCanvas() {
         hasSelection={hasSelection}
         generateBusy={generateBusy || engineBusy}
         liveAvailable={liveAvailable}
+        hasMockup={hasMockup}
         showingMockup={showMockup}
         onGenerateUi={() => void onGenerateUi()}
         onShowLiveApp={showLiveApp}
@@ -249,14 +260,36 @@ export function BuildPreviewCanvas() {
         }}
       />
 
-      <div className="relative min-h-0 flex-1 overflow-hidden">
+      <div className="relative z-0 min-h-0 flex-1 overflow-hidden">
+        {!showMockup && (!liveAvailable || liveLoadFailed || failed) && !blockingWait ? (
+          <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 bg-background px-6">
+            <p className="text-center text-[12px] text-muted-foreground">App is not running yet</p>
+            <button
+              type="button"
+              className="btn-secondary-surface h-8 rounded-md px-3 text-[11px]"
+              onClick={() => {
+                setFailed(false);
+                setLiveLoadFailed(false);
+                bump();
+              }}
+            >
+              Retry
+            </button>
+          </div>
+        ) : null}
+        {showMockup && !hasMockup && !blockingWait ? (
+          <div className="absolute inset-0 z-10 flex items-center justify-center bg-background px-6">
+            <p className="text-center text-[12px] text-muted-foreground">No layout draft yet</p>
+          </div>
+        ) : null}
         {waiting ? <PreviewWaitingThrobber status={failed ? "Couldn't load preview" : statusLine} /> : null}
         <iframe
-          title="App preview"
+          title={showMockup ? 'Layout draft' : 'Live app'}
           src={src}
           className={waiting ? 'pointer-events-none h-full w-full border-0 bg-transparent opacity-0' : 'h-full w-full border-0 bg-transparent'}
           onError={() => {
             setFailed(true);
+            if (!showMockup) setLiveLoadFailed(true);
             setHasVisualPreview(false);
           }}
           onLoad={(e) => {
@@ -273,9 +306,14 @@ export function BuildPreviewCanvas() {
               }
               const visual = htmlLooksLikeShowablePreview(html);
               setHasVisualPreview(visual);
-              if (visual) setFailed(false);
+              if (visual) {
+                setFailed(false);
+                setLiveLoadFailed(false);
+              } else if (!showMockup) {
+                setLiveLoadFailed(true);
+              }
             } catch {
-              /* cross-origin — keep current wait state */
+              if (!showMockup && liveAvailable) setHasVisualPreview(true);
             }
           }}
         />

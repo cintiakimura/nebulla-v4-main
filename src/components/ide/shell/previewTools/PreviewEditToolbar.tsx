@@ -42,6 +42,8 @@ type Props = {
   showingMockup?: boolean;
   onShowLiveApp?: () => void;
   onShowCatalogMockup?: () => void;
+  /** Studio/model HTML exists for the Layout draft tab. */
+  hasMockup?: boolean;
   className?: string;
 };
 
@@ -61,6 +63,7 @@ export function PreviewEditToolbar({
   showingMockup = true,
   onShowLiveApp,
   onShowCatalogMockup,
+  hasMockup = false,
   className,
 }: Props) {
   const [mode, setMode] = useState<PreviewToolMode>('grab');
@@ -158,23 +161,45 @@ export function PreviewEditToolbar({
       role="toolbar"
       aria-label="Preview edit tools"
     >
-      {liveAvailable && !showingMockup ? (
-        <>
-        <span className="mr-1 shrink-0 rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-medium text-emerald-300">
-          Live app
-        </span>
-        {onShowCatalogMockup ? (
+      {liveAvailable || hasMockup || onShowLiveApp || onShowCatalogMockup ? (
+        <div
+          role="tablist"
+          aria-label="Preview surface"
+          className="relative z-30 mr-1 flex shrink-0 items-center gap-0.5 rounded-md border border-border p-0.5"
+        >
           <button
             type="button"
-            title="Show the layout draft (backstage). Product routes stay in App Preview."
+            role="tab"
+            aria-selected={!showingMockup}
+            aria-label="Live app"
+            title="Coded app routes"
+            onClick={() => onShowLiveApp?.()}
+            className={cn(
+              'h-7 shrink-0 rounded px-2.5 text-[11px]',
+              !showingMockup
+                ? 'bg-emerald-500/20 font-medium text-emerald-200'
+                : 'text-muted-foreground hover:text-foreground',
+            )}
+          >
+            Live app
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={showingMockup}
             aria-label="Layout draft"
-            onClick={() => onShowCatalogMockup()}
-            className="btn-secondary-surface ml-1 h-8 shrink-0 rounded-md px-2.5 text-[11px]"
+            title="Optional layout draft"
+            onClick={() => onShowCatalogMockup?.()}
+            className={cn(
+              'h-7 shrink-0 rounded px-2.5 text-[11px]',
+              showingMockup
+                ? 'bg-secondary font-medium text-foreground'
+                : 'text-muted-foreground hover:text-foreground',
+            )}
           >
             Layout draft
           </button>
-        ) : null}
-        </>
+        </div>
       ) : null}
       {showingMockup ? (
         <>
