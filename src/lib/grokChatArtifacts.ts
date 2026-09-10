@@ -8,6 +8,8 @@ import {
 } from './masterPlanSections';
 import { fetchJson } from './apiFetch';
 import { withProjectBody, withProjectQuery, getBrowserProjectName } from './nebulaProjectApi';
+import { productNameFromPlan } from '../../lib/productIdentity';
+import { promoteWorkspaceChipFromProductName } from './productIdentityClient';
 import { buildLanguagePromptAppendix } from './i18n/languagePromptAppendix';
 import type { IdeLocaleCode } from './i18n/locales';
 import type { ContentLanguageMode } from './i18n/userLanguagePreferences';
@@ -186,16 +188,20 @@ export async function persistMasterPlanFromAssistantSource(
   }
   onProgress?.('Saving Master Plan tabs…');
   let saved = 0;
+  let productNameFromSave = '';
   for (let tabIndex = 1; tabIndex <= MASTER_PLAN_SECTION_KEYS.length; tabIndex++) {
     const content = (parsed[tabIndex] ?? '').trim();
     if (!content) continue;
     try {
-      await fetchJson(withProjectQuery('/api/master-plan/update'), {
+      const res = await fetchJson<{ productName?: string }>(withProjectQuery('/api/master-plan/update'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
         body: JSON.stringify(withProjectBody({ tabIndex, content })),
       });
+      if (typeof res.productName === 'string' && res.productName.trim()) {
+        productNameFromSave = res.productName.trim();
+      }
       saved++;
     } catch (e) {
       console.warn('[grokChatArtifacts] master plan tab save failed:', tabIndex, e);
@@ -203,6 +209,11 @@ export async function persistMasterPlanFromAssistantSource(
   }
   if (saved > 0) {
     onProgress?.(`Saved ${saved} Master Plan tab(s)`);
+    const fromPlan = productNameFromPlan({
+      '1. Goal of the app': parsed[1] || '',
+      '5. UI/UX design': parsed[5] || '',
+    });
+    void promoteWorkspaceChipFromProductName(productNameFromSave || fromPlan);
     try {
       window.dispatchEvent(new CustomEvent('nebula-master-plan-updated'));
     } catch {

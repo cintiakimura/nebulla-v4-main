@@ -107,7 +107,10 @@ function titleCaseWord(w: string): string {
 }
 
 function toTitleCase(name: string): string {
-  return name
+  const raw = String(name || "").replace(/\s+/g, " ").trim();
+  if (/^loaflocal$/i.test(raw)) return "LoafLocal";
+  if (/^grain\s+bakery$/i.test(raw)) return "Grain Bakery";
+  return raw
     .split(/\s+/)
     .filter(Boolean)
     .map(titleCaseWord)
@@ -119,11 +122,32 @@ export function extractNamedBrand(goal: string): string | null {
   const g = String(goal || "");
   if (/\bgrain\s+bakery\b/i.test(g)) return "Grain Bakery";
   if (/\bloaflocal\b/i.test(g)) return "LoafLocal";
-  const labeled = g.match(/\*\*Product name:\*\*\s*([^\n*]+)/i)?.[1]?.trim();
+  const labeled = g.match(/(?:\*\*)?Product name(?:\*\*)?:\s*([^\n*]+)/i)?.[1]?.trim();
   if (labeled && !looksLikeGoalStubName(labeled, g) && labeled.split(/\s+/).length <= 4) {
     return toTitleCase(labeled);
   }
   return null;
+}
+
+/** Chip / workspace label leftovers — replace when §1 has a real product name. */
+export function isWorkspaceLabelStub(name: string): boolean {
+  const n = String(name || "").replace(/\s+/g, " ").trim();
+  if (!n) return true;
+  if (/^Project type /i.test(n)) return true;
+  if (/^(untitled project|untitled|new project)$/i.test(n)) return true;
+  return looksLikeGoalStubName(n);
+}
+
+/** Prefer labeled / named brand from Master Plan §1 (and §5 product line). */
+export function productNameFromPlan(plan: Record<string, unknown> | null | undefined): string {
+  const rec = plan && typeof plan === "object" ? plan : {};
+  const goal = String(rec["1. Goal of the app"] || rec.goal || "").trim();
+  const ux = String(rec["5. UI/UX design"] || "").trim();
+  const named = extractNamedBrand(`${goal}\n${ux}`);
+  if (named) return named;
+  if (!goal) return "";
+  const inferred = inferProductName(goal);
+  return looksLikeGoalStubName(inferred, goal) ? "" : inferred;
 }
 
 function detectDomain(goal: string, projectType?: string): ProductDomain {
@@ -220,7 +244,7 @@ export function looksLikeGoalStubName(name: string, goal?: string): boolean {
   if (/^(new project|untitled project|untitled|web app|mobile app|landing page)$/i.test(n)) {
     return true;
   }
-  if (/\bproject type\b/i.test(n) || /\b(mobile|web) app primary\b/i.test(n)) {
+  if (/^Project type /i.test(n) || /\bproject type\b/i.test(n) || /\b(mobile|web) app primary\b/i.test(n)) {
     return true;
   }
   if (/^(build|create|make|design|scaffold)\b/i.test(n)) return true;

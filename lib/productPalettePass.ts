@@ -11,7 +11,7 @@ import {
   injectFinalUiIntoProductPreview,
 } from "./uiGenerationEngine/injectFinalUiCssVars";
 import {
-  formatPaletteLine,
+  collapseWinningPalette,
   paletteToTokens,
   selectIndustryPalette,
 } from "./uiGenerationEngine/v2/industryPalettes";
@@ -114,7 +114,7 @@ export function writeProductPaletteTokens(input: {
   return rec;
 }
 
-function stripEducationCalmFromBriefs(workspaceRoot: string, packLine: string): string[] {
+function collapsePalettesOnDisk(workspaceRoot: string, goal: string): string[] {
   const rels = [
     "nebula-ui-studio/ui-brief.md",
     "nebulla-project/ui-brief.md",
@@ -126,11 +126,7 @@ function stripEducationCalmFromBriefs(workspaceRoot: string, packLine: string): 
     if (!fs.existsSync(abs)) continue;
     try {
       const prev = fs.readFileSync(abs, "utf8");
-      if (!/education-calm|#3[Ff]6[Ff]5[Bb]/.test(prev)) continue;
-      const next = prev
-        .replace(/family\s*=\s*education-calm/gi, "family=retail")
-        .replace(/#3[Ff]6[Ff]5[Bb]/g, "#8B4513")
-        .replace(/^.*\*\*Palette:\*\*.*$/im, packLine);
+      const next = collapseWinningPalette(prev, goal);
       if (next !== prev) {
         fs.writeFileSync(abs, next, "utf8");
         touched.push(rel);
@@ -149,11 +145,8 @@ function stripEducationCalmFromBriefs(workspaceRoot: string, packLine: string): 
     try {
       const raw = JSON.parse(fs.readFileSync(abs, "utf8")) as Record<string, unknown>;
       const section = String(raw["5. UI/UX design"] || "");
-      if (!/education-calm|#3[Ff]6[Ff]5[Bb]/.test(section)) continue;
-      const next = section
-        .replace(/family\s*=\s*education-calm/gi, "family=retail")
-        .replace(/#3[Ff]6[Ff]5[Bb]/g, "#8B4513")
-        .replace(/^.*\*\*Palette:\*\*.*$/im, packLine);
+      if (!section.trim()) continue;
+      const next = collapseWinningPalette(section, goal);
       if (next !== section) {
         raw["5. UI/UX design"] = next;
         fs.writeFileSync(abs, JSON.stringify(raw, null, 2), "utf8");
@@ -258,9 +251,6 @@ export function applyProductPalettePass(input: {
     rec.tokens.primary,
   );
   if (layoutRel && !applied.includes(layoutRel)) applied.push(layoutRel);
-  if (isBakeryGoal(goal, input.projectType)) {
-    const pack = selectIndustryPalette({ text: goal });
-    applied.push(...stripEducationCalmFromBriefs(input.workspaceRoot, formatPaletteLine(pack)));
-  }
+  applied.push(...collapsePalettesOnDisk(input.workspaceRoot, goal));
   return { ok: applied.length > 0, applied, packId: rec.packId, productName: identity.projectName };
 }

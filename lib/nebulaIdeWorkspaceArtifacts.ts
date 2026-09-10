@@ -35,7 +35,8 @@ import {
   scheduleWorkspaceAbsR2Sync,
   scheduleWorkspaceRelPathsR2Sync,
 } from "./nebulaWorkspaceStorage";
-import { ensureProductIdentity, patchMasterPlanProductName } from "./productIdentity";
+import { ensureProductIdentity, patchMasterPlanProductName, productNameFromPlan } from "./productIdentity";
+import { collapseWinningPalette } from "./uiGenerationEngine/v2/industryPalettes";
 
 export const MASTER_PLAN_TAB_KEYS = MASTER_PLAN_ALL_KEYS;
 
@@ -481,6 +482,39 @@ export function hydrateMasterPlanDerivedSections(
   return { plan: out, changed };
 }
 
+/** Persist §1 product name and keep a single winning Palette line on §5. */
+export function applyPlanIdentityAndWinningPalette(
+  workspaceRoot: string,
+  plan: Record<string, string>,
+): { plan: Record<string, string>; changed: boolean; productName: string } {
+  const next = { ...plan };
+  let changed = false;
+  const goal = String(next["1. Goal of the app"] || "").trim();
+  const fromPlan = productNameFromPlan(next);
+  const identity =
+    goal || fromPlan
+      ? ensureProductIdentity(workspaceRoot, {
+          goal,
+          projectName: fromPlan || undefined,
+          persist: Boolean(workspaceRoot),
+        })
+      : null;
+  if (identity) {
+    const patched = patchMasterPlanProductName(next, identity);
+    Object.assign(next, patched.plan);
+    if (patched.changed) changed = true;
+  }
+  const section = String(next["5. UI/UX design"] || "");
+  if (section.trim()) {
+    const collapsed = collapseWinningPalette(section, goal);
+    if (collapsed !== section) {
+      next["5. UI/UX design"] = collapsed;
+      changed = true;
+    }
+  }
+  return { plan: next, changed, productName: identity?.projectName || fromPlan || "" };
+}
+
 /** Hydrate Master Plan §4/§5 if needed, then write nebula-ui-studio/v0-prompt.md (legacy distill). */
 export function syncV0PromptFromMasterPlan(
   workspaceRoot: string,
@@ -530,7 +564,9 @@ export function hydrateAndPersistMasterPlan(
   let plan = readMasterPlanFile(masterPlanPath);
   const { plan: hydrated, changed } = hydrateMasterPlanDerivedSections(workspaceRoot, plan);
   plan = hydrated;
-  if (changed) {
+  const identityPass = applyPlanIdentityAndWinningPalette(workspaceRoot, plan);
+  plan = identityPass.plan;
+  if (changed || identityPass.changed) {
     fs.mkdirSync(path.dirname(masterPlanPath), { recursive: true });
     fs.writeFileSync(masterPlanPath, JSON.stringify(plan, null, 2), "utf8");
     scheduleWorkspaceAbsR2Sync(workspaceRoot, masterPlanPath);

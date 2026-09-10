@@ -81,6 +81,7 @@ import {
   ensurePreviewIndexHtml,
   isLegacyNebulaBasicPreviewHtml,
   fillMissingMasterPlanSectionsLocal,
+  applyPlanIdentityAndWinningPalette,
   hydrateAndPersistMasterPlan,
   readMasterPlanFile,
   syncMindMapFromMasterPlan,
@@ -751,6 +752,12 @@ async function startServer() {
       }
       const gate = assessResearchArtifact(workspaceRoot, { goal, plan: rec });
       next = gate.ok ? rec : stripStaleResearchFromPlan(rec);
+      const asStrings: Record<string, string> = {};
+      for (const [k, v] of Object.entries(next as Record<string, unknown>)) {
+        if (typeof v === "string") asStrings[k] = v;
+      }
+      const identityPass = applyPlanIdentityAndWinningPalette(workspaceRoot, asStrings);
+      next = { ...(next as Record<string, unknown>), ...identityPass.plan };
     }
     fs.mkdirSync(path.dirname(masterPlanPath), { recursive: true });
     fs.writeFileSync(masterPlanPath, JSON.stringify(next, null, 2), "utf8");
@@ -1618,10 +1625,13 @@ No approved UI code yet.
       plan = ensuredUpdate.plan;
 
       persistMasterPlanJson(pp.workspaceRoot, pp.masterPlanPath, plan);
+      const savedPlan = readMasterPlanFile(pp.masterPlanPath);
+      const identityPass = applyPlanIdentityAndWinningPalette(pp.workspaceRoot, savedPlan);
       const v0Sync = ensureV0PromptSynced(pp);
       res.json({
         success: true,
         tabName,
+        productName: identityPass.productName,
         uiBriefSynced: v0Sync.uiBriefSynced,
         uiBriefLength: v0Sync.uiBrief.length,
         v0PromptSynced: v0Sync.synced,
@@ -2221,6 +2231,22 @@ No approved UI code yet.
     } catch (err: unknown) {
       return res.status(500).json({
         error: err instanceof Error ? err.message : "reset project failed",
+      });
+    }
+  });
+
+  app.get("/api/ide/product-identity", (req, res) => {
+    try {
+      const pp = projectPathsFor(req);
+      const plan = hydrateAndPersistMasterPlan(pp.workspaceRoot, pp.masterPlanPath);
+      const identityPass = applyPlanIdentityAndWinningPalette(pp.workspaceRoot, plan);
+      return res.json({
+        ok: true,
+        identity: readProductIdentity(pp.workspaceRoot) || { projectName: identityPass.productName },
+      });
+    } catch (err: unknown) {
+      return res.status(500).json({
+        error: err instanceof Error ? err.message : "product identity failed",
       });
     }
   });

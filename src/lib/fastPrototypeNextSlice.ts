@@ -188,12 +188,10 @@ export function nextAutopilotSliceLabel(current?: string | null): AutopilotSlice
 /** Auto Go passes after the kickoff Foundation turn (Data+API, Primary, Secondary, Polish). */
 export const MAX_AUTOPILOT_SLICES = 4;
 
-/** Shown when autopilot / Continue has nothing left — never while Preview is still a placeholder. */
-export const PRODUCT_MVP_READY_SHORT =
-  'Coding finished this session. Check App Preview — it should be the coded app, not a placeholder mockup.';
+/** Shown when autopilot / Continue has nothing left. */
+export const PRODUCT_MVP_READY_SHORT = 'App is ready on Live.';
 
-export const PRODUCT_MVP_READY_MESSAGE =
-  'Coding slices finished. App Preview should show the coded routes (Home is the job). Placeholder mockup is backstage. No Continue needed.';
+export const PRODUCT_MVP_READY_MESSAGE = 'App is ready on Live.';
 
 /**
  * Mode B: one prompt → research → mockup → Foundation → Data+API → Primary → Secondary → Polish.

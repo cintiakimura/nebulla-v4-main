@@ -5,6 +5,7 @@
 import assert from "node:assert/strict";
 import { compileDesignBrief } from "../lib/uiGenerationEngine/resources/compileDesignBrief.ts";
 import {
+  collapseWinningPalette,
   parseResearchPalette,
   patchUiuxPalette,
   researchPaletteToPack,
@@ -77,6 +78,19 @@ const mobileHome: PageClassification = {
   });
   assert.notEqual(eduBrief.color_roles.primary.hex, healthBrief.color_roles.primary.hex);
   assert.notEqual(eduBrief.color_roles.primary.hex.toLowerCase(), "#0f766e");
+}
+
+{
+  const dual = [
+    "- **Palette:** family=education-calm bg `#FFF8F1`, primary `#3F6F5B`",
+    "- **Palette:** family=retail bg `#FDF6E3`, primary `#8B4513`",
+    "- **Palette:** family=professional bg `#F5F5F4`, primary `#44403C`",
+  ].join("\n");
+  const one = collapseWinningPalette(dual, "LoafLocal bakery pickup orders");
+  const paletteHits = one.match(/\*\*Palette:\*\*/g) || [];
+  assert.equal(paletteHits.length, 1);
+  assert.match(one, /#FDF6E3|#8B4513/i);
+  assert.equal(/education-calm|family=professional/i.test(one), false);
 }
 
 console.log("test-industry-palettes: ok");

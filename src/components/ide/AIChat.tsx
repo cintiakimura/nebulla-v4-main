@@ -2930,9 +2930,9 @@ export function AIChat() {
             if (showWorkActivity) {
               setGrokActivity((prev) =>
                 advanceGrokActivity(prev, showWorkActivity ? 6 : 4, {
-                  currentAction: 'Coding slice applied — opening live App Preview',
+                  currentAction: 'App is ready on Live.',
                   log: {
-                    message: 'App Preview is ready — opening the live practice app',
+                    message: 'App is ready on Live.',
                     kind: 'info',
                   },
                 }),
@@ -2944,7 +2944,7 @@ export function AIChat() {
             } catch {
               /* ignore */
             }
-            pushActivity('Coding slice done — opening live App Preview (not the UI Studio mockup)', 'success');
+            pushActivity('App is ready on Live.', 'success');
           }
 
           const codingSliceLabel =

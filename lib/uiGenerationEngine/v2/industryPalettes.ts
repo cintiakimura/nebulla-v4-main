@@ -262,13 +262,106 @@ export function formatPaletteLine(pack: IndustryPalette): string {
   return `- **Palette:** family=${pack.id} bg \`${pack.bg}\`, surface \`${pack.surface}\`, primary \`${pack.primary}\`, accent \`${pack.accent}\`, text \`${pack.text}\`, muted \`${pack.mutedText}\``;
 }
 
-/** Replace the Palette bullet in §5; append if missing. */
+function isPaletteBullet(line: string): boolean {
+  const t = String(line || "").trim();
+  if (!t) return false;
+  if (/\*\*Palette:\*\*/i.test(t)) return true;
+  if (/family\s*=\s*[a-z0-9-]+/i.test(t) && /palette|bg\s|primary\s|#/i.test(t)) return true;
+  return false;
+}
+
+function scorePaletteLine(line: string, goal: string): number {
+  const t = String(line || "");
+  const blob = `${goal}`.toLowerCase();
+  const bakeryish = /baker|bakery|bread|pastry|cafe|café|shop|store|food|grain bakery|loaflocal/i.test(
+    blob,
+  );
+  let s = 0;
+  if (/#FDF6E3/i.test(t) || /#8B4513/i.test(t)) s += 10;
+  if (/family\s*=\s*retail/i.test(t)) s += 6;
+  if (bakeryish && (/#FDF6E3/i.test(t) || /#8B4513/i.test(t) || /family\s*=\s*retail/i.test(t))) {
+    s += 4;
+  }
+  if (/family\s*=\s*education-calm/i.test(t)) s -= 8;
+  if (/family\s*=\s*education-playful/i.test(t)) s -= 6;
+  if (/family\s*=\s*professional/i.test(t)) s -= 5;
+  if (/#4F46E5|#3F6F5B|#0F766E|#0D9488/i.test(t)) s -= 6;
+  return s;
+}
+
+/**
+ * Keep one Palette line. Bakery/shop/food prefers cream + saddle hex over
+ * education-calm / professional / indigo leftovers.
+ */
+export function collapseWinningPalette(section: string, goal = ""): string {
+  const src = String(section || "");
+  const lines = src.split("\n");
+  const idx: number[] = [];
+  for (let i = 0; i < lines.length; i++) {
+    if (isPaletteBullet(lines[i])) idx.push(i);
+  }
+  const bakeryish = /baker|bakery|bread|pastry|cafe|café|shop|store|food|grain bakery|loaflocal/i.test(
+    goal,
+  );
+  const hexHint = /#FDF6E3|#8B4513/i.test(src);
+  const pack = selectIndustryPalette({
+    text: bakeryish || hexHint ? `${goal} bakery retail` : goal,
+  });
+  let winner = formatPaletteLine(pack);
+  if (idx.length) {
+    let best = idx[0];
+    let bestScore = scorePaletteLine(lines[best], goal);
+    for (const i of idx) {
+      const sc = scorePaletteLine(lines[i], goal);
+      if (sc > bestScore) {
+        bestScore = sc;
+        best = i;
+      }
+    }
+    if (bakeryish && (/#FDF6E3/i.test(lines[best]) || /#8B4513/i.test(lines[best]))) {
+      winner = formatPaletteLine(PACKS.retail);
+    } else if (bestScore >= 6 && /\*\*Palette:\*\*/i.test(lines[best])) {
+      const family = lines[best].match(/family\s*=\s*([a-z0-9-]+)/i)?.[1];
+      if (family === "retail" || /#FDF6E3|#8B4513/i.test(lines[best])) {
+        winner = formatPaletteLine(PACKS.retail);
+      } else if (family && family in PACKS) {
+        winner = formatPaletteLine(PACKS[family as IndustryPaletteId]);
+      }
+    }
+  }
+  if (!idx.length) {
+    return src.trim() ? `${src.replace(/\s+$/, "")}\n${winner}` : winner;
+  }
+  const keep = idx[0];
+  const drop = new Set(idx);
+  const out: string[] = [];
+  for (let i = 0; i < lines.length; i++) {
+    if (drop.has(i)) {
+      if (i === keep) out.push(winner);
+      continue;
+    }
+    out.push(lines[i]);
+  }
+  return out.join("\n");
+}
+
+/** Replace every Palette bullet in §5; append if missing. */
 export function patchUiuxPalette(section: string, pack: IndustryPalette): string {
   const line = formatPaletteLine(pack);
-  const src = String(section || "").trim();
-  if (!src) return line;
-  if (/\*\*Palette:\*\*/i.test(src)) {
-    return src.replace(/^.*\*\*Palette:\*\*.*$/im, line);
-  }
-  return `${src}\n${line}`;
+  const src = String(section || "");
+  if (!src.trim()) return line;
+  const lines = src.split("\n");
+  const idx = lines
+    .map((l, i) => (isPaletteBullet(l) ? i : -1))
+    .filter((i) => i >= 0);
+  if (!idx.length) return `${src.replace(/\s+$/, "")}\n${line}`;
+  const keep = idx[0];
+  const drop = new Set(idx);
+  return lines
+    .map((l, i) => {
+      if (!drop.has(i)) return l;
+      return i === keep ? line : null;
+    })
+    .filter((l): l is string => l !== null)
+    .join("\n");
 }

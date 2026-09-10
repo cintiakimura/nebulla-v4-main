@@ -148,7 +148,7 @@ assert.equal(nextAutopilotSliceLabel('Secondary'), 'Polish');
   });
   assert.equal(d.advance, false);
   assert.equal(d.stopReason, 'done');
-  assert.match(d.message, /Coding (slices )?finished|coded routes|App Preview/i);
+  assert.match(d.message, /App is ready on Live/i);
   assert.equal(/send a new goal/i.test(d.message), false);
 }
 {
@@ -161,7 +161,7 @@ assert.equal(nextAutopilotSliceLabel('Secondary'), 'Polish');
   });
   assert.equal(d.advance, false);
   assert.equal(d.stopReason, 'done');
-  assert.match(d.message, /No Continue needed/i);
+  assert.match(d.message, /App is ready on Live/i);
 }
 {
   const d = shouldAutopilotAdvance({
@@ -173,7 +173,7 @@ assert.equal(nextAutopilotSliceLabel('Secondary'), 'Polish');
   });
   assert.equal(d.advance, false);
   assert.equal(d.stopReason, 'cap');
-  assert.match(d.message, /Coding (slices )?finished|coded routes|App Preview/i);
+  assert.match(d.message, /App is ready on Live/i);
   assert.equal(/send a new goal/i.test(d.message), false);
 }
 {
@@ -378,7 +378,7 @@ assert.match(policyAStopMessage('Secondary'), /Secondary applied — send Contin
 assert.match(policyAFailedMessage('Foundation'), /Retry Go for Foundation/);
 assert.match(policyAStopMessage('Foundation'), /Foundation applied — send Continue for Data\+API/);
 assert.match(policyAStopMessage('Data+API'), /Data\+API applied — send Continue for Primary/);
-assert.match(policyAStopMessage('Polish'), /Coding slices finished|App Preview/);
+assert.match(policyAStopMessage('Polish'), /App is ready on Live/);
 assert.equal(countWorkspaceProductRoutes(['app/teacher/page.tsx']), 1);
 assert.equal(workspaceFoundationLanded(['app/teacher/page.tsx']), false);
 assert.equal(

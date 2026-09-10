@@ -21,7 +21,12 @@ import { registerNebulaUiStudioBridge } from '../../lib/nebulaUiStudioEvents';
 import { shouldShowWelcomeOnboarding } from '../../lib/nebulaWelcomeOnboarding';
 import { cloudBlockedBannerMessage } from '../../lib/ideCloudStatus';
 import { installOnboardingRideListeners } from '../../lib/ideOnboardingRide';
-import { persistProductIdentityClient } from '../../lib/productIdentityClient';
+import {
+  fetchProductIdentityClient,
+  persistProductIdentityClient,
+  promoteWorkspaceChipFromProductName,
+} from '../../lib/productIdentityClient';
+import { isWorkspaceLabelStub } from '../../lib/projectNameFromIdea';
 import { UI_SHELL_ONLY } from '../../lib/testingBranch';
 import { IdeShellNavProvider, useIdeShellNav } from '@/components/ide/shell/IdeShellNavContext';
 import { ShellHeader } from '@/components/ide/shell/ShellHeader';
@@ -184,6 +189,24 @@ function NebullaIDEShell() {
       window.removeEventListener('nebula-files-applied', onWorkspaceSync);
     };
   }, []);
+
+  useEffect(() => {
+    if (!workspaceCtx) return;
+    const promoteIfStub = async () => {
+      const label = workspaceCtx.projectName || getBrowserProjectName();
+      if (label && !isWorkspaceLabelStub(label)) return;
+      const identity = await fetchProductIdentityClient();
+      const name = identity?.projectName?.trim();
+      if (!name) return;
+      await promoteWorkspaceChipFromProductName(name);
+    };
+    void promoteIfStub();
+    const onPlan = () => {
+      void promoteIfStub();
+    };
+    window.addEventListener('nebula-master-plan-updated', onPlan);
+    return () => window.removeEventListener('nebula-master-plan-updated', onPlan);
+  }, [workspaceCtx]);
 
   useEffect(() => {
     const openAiKeys = () => {

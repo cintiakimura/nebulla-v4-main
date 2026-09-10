@@ -455,8 +455,8 @@ export async function runPostCodingWorkspaceSync(options?: {
       }
       onProgress?.(
         sync.timedOut || sync.softFailed
-          ? 'Workspace sync skipped/soft — UI Studio Beta next'
-          : 'Workspace sync complete — UI Studio Beta next',
+          ? 'Workspace sync skipped/soft — App is ready on Live.'
+          : 'App is ready on Live.',
         sync.timedOut || sync.softFailed ? 'warn' : 'success',
       );
     } catch {

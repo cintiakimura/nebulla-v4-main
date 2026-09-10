@@ -14,6 +14,7 @@ import {
   inferUiDevice,
   isGenericUiuxBoilerplate,
 } from "./uiuxSectionBuilder";
+import { collapseWinningPalette } from "./uiGenerationEngine/v2/industryPalettes";
 
 export const UI_BRIEF_REL = "nebula-ui-studio/ui-brief.md";
 
@@ -103,7 +104,7 @@ export function buildUiBriefMarkdown(
         : "Target device: **web app** (desktop + responsive; app shell / sidebar or top nav per §5).";
 
   const device = inferUiDevice(goal, pages, tech);
-  const concreteTokens =
+  const rawTokens =
     !uiux || isGenericUiuxBoilerplate(uiux)
       ? buildConcreteUiuxSection({
           goal,
@@ -112,6 +113,7 @@ export function buildUiBriefMarkdown(
           projectName: oneLiner.slice(0, 48),
         })
       : uiux;
+  const concreteTokens = collapseWinningPalette(rawTokens, goal);
 
   const parts = [
     "# Nebula UI Brief (primary)",

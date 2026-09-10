@@ -8,7 +8,14 @@ import os from "node:os";
 import path from "path";
 import { fileURLToPath } from "url";
 import { applyProductPalettePass } from "../lib/productPalettePass.ts";
-import { looksLikeGoalStubName, inferProductName } from "../lib/productIdentity.ts";
+import {
+  looksLikeGoalStubName,
+  inferProductName,
+  isWorkspaceLabelStub,
+  productNameFromPlan,
+} from "../lib/productIdentity.ts";
+import { applyPlanIdentityAndWinningPalette } from "../lib/nebulaIdeWorkspaceArtifacts.ts";
+import { writeUiBriefMarkdown } from "../lib/nebulaUiBrief.ts";
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -19,7 +26,17 @@ function section(name: string) {
 section("stub names and Grain Bakery brand");
 {
   assert.equal(looksLikeGoalStubName("Project type Mobile App primary"), true);
+  assert.equal(isWorkspaceLabelStub("Project type Mobile App primary"), true);
+  assert.equal(isWorkspaceLabelStub("Untitled Project"), true);
+  assert.equal(isWorkspaceLabelStub("LoafLocal"), false);
   assert.equal(inferProductName("Grain Bakery — neighborhood breads and pickup orders"), "Grain Bakery");
+  assert.equal(
+    productNameFromPlan({
+      "1. Goal of the app":
+        "**Product name:** LoafLocal\nNeighborhood bakery marketplace. Project type: mobile app.",
+    }),
+    "LoafLocal",
+  );
 }
 
 section("style pass writes globals + preview without a draft file");
@@ -72,7 +89,46 @@ section("style pass writes globals + preview without a draft file");
   assert.equal(fs.existsSync(path.join(tmp, "public/nebula-ui-gen-preview.html")), false);
   const brief = fs.readFileSync(path.join(tmp, "nebula-ui-studio/ui-brief.md"), "utf8");
   assert.equal(/education-calm/i.test(brief), false);
+  assert.equal((brief.match(/\*\*Palette:\*\*/g) || []).length, 1);
   fs.rmSync(tmp, { recursive: true, force: true });
+}
+
+section("plan save keeps one palette and persists LoafLocal");
+{
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "nebulla-plan-identity-"));
+  const plan = {
+    "1. Goal of the app":
+      "**Product name:** LoafLocal\nBakery marketplace for neighborhood breads and pickup.",
+    "5. UI/UX design": [
+      "- **Palette:** family=education-calm bg `#FFF8F1`, primary `#3F6F5B`",
+      "- **Palette:** family=retail bg `#FDF6E3`, surface `#FFFFFF`, primary `#8B4513`, accent `#D2691E`",
+    ].join("\n"),
+  };
+  const pass = applyPlanIdentityAndWinningPalette(tmp, plan);
+  assert.equal(pass.productName, "LoafLocal");
+  assert.equal((pass.plan["5. UI/UX design"].match(/\*\*Palette:\*\*/g) || []).length, 1);
+  assert.match(pass.plan["5. UI/UX design"], /#FDF6E3|#8B4513/i);
+  assert.equal(/education-calm/i.test(pass.plan["5. UI/UX design"]), false);
+  const ident = JSON.parse(
+    fs.readFileSync(path.join(tmp, "nebulla-ide/product-identity.json"), "utf8"),
+  ) as { projectName: string };
+  assert.equal(ident.projectName, "LoafLocal");
+  const brief = writeUiBriefMarkdown(tmp, pass.plan);
+  assert.equal((brief.content.match(/\*\*Palette:\*\*/g) || []).length, 1);
+  assert.equal(/education-calm/i.test(brief.content), false);
+  fs.rmSync(tmp, { recursive: true, force: true });
+}
+
+section("activity log is quiet after slices");
+{
+  const chat = fs.readFileSync(path.join(REPO, "src/components/ide/AIChat.tsx"), "utf8");
+  const sync = fs.readFileSync(path.join(REPO, "src/lib/ideArtifactSync.ts"), "utf8");
+  const slice = fs.readFileSync(path.join(REPO, "src/lib/fastPrototypeNextSlice.ts"), "utf8");
+  assert.match(chat, /App is ready on Live\./);
+  assert.equal(/UI Studio Beta next/i.test(sync), false);
+  assert.equal(/placeholder mockup/i.test(slice), false);
+  assert.equal(/live practice app/i.test(chat), false);
+  assert.match(slice, /PRODUCT_MVP_READY_MESSAGE = 'App is ready on Live\.'/);
 }
 
 section("Generate UI after routes is a style pass, not a draft remount");

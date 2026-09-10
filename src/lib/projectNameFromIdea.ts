@@ -8,6 +8,8 @@ export {
   logoInitials,
   logoHintFor,
   looksLikeGoalStubName,
+  isWorkspaceLabelStub,
+  productNameFromPlan,
   buildProductIdentity,
 } from '../../lib/productIdentity';
 
