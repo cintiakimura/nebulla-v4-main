@@ -208,19 +208,37 @@ export function BuildPreviewCanvas() {
     if (generateBusy) return;
     setGenerateBusy(true);
     setFailed(false);
-    setHasVisualPreview(false);
-    setWaitStatus('Generating UI…');
     keepMockupRef.current = !liveAvailable;
+    userPickedDraftRef.current = false;
+    setShowMockup(false);
+    setWaitStatus(liveAvailable ? 'Styling the coded app…' : 'Generating UI…');
+    if (!liveAvailable) setHasVisualPreview(false);
     try {
+      if (liveAvailable) {
+        await fetch(withProjectQuery('/api/coded-app/style-pass'), {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({}),
+        });
+        try {
+          window.dispatchEvent(new CustomEvent('nebula-studio-show-live-app'));
+        } catch {
+          /* ignore */
+        }
+        await refreshWaitState();
+        bump();
+        return;
+      }
       const result = await runUiStudioBetaGeneration({
         projectName: getBrowserProjectName() || undefined,
         regenerate: true,
         openPane: false,
-        uiPhase: liveAvailable ? 'post_code' : 'manual',
+        uiPhase: 'manual',
         autoTriggered: false,
       });
       if (result.ok) {
-        await applyUiStudioBetaToAppPreview(undefined, { preferMockup: !liveAvailable });
+        await applyUiStudioBetaToAppPreview(undefined, { preferMockup: true });
       }
       await refreshWaitState();
       bump();

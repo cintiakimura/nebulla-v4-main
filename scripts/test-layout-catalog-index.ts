@@ -146,8 +146,12 @@ section("palette isolated from prior education project");
     jobHint: "catalog_grid",
   });
   assert.equal(pass.packId, "retail");
+  assert.equal(bakery.tokens.primary.toUpperCase(), "#8B4513");
   const css = fs.readFileSync(path.join(tmp, "app/globals.css"), "utf8");
   assert.match(css, /--primary:/);
+  assert.match(css, /#8B4513/);
+  assert.match(css, /#FDF6E3/);
+  assert.equal(/#3F6F5B/i.test(css), false);
   assert.match(css, /--nebulla-font-heading:/);
   assert.match(css, /screen-job: catalog_grid/);
   fs.rmSync(tmp, { recursive: true, force: true });

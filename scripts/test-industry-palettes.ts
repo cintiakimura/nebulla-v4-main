@@ -36,7 +36,13 @@ const mobileHome: PageClassification = {
   assert.equal(health.id, "health");
   assert.equal(finance.id, "finance");
   assert.equal(bakery.id, "retail");
+  assert.equal(bakery.primary.toUpperCase(), "#8B4513");
   assert.notEqual(bakery.primary, edu.primary);
+  const both = selectIndustryPalette({
+    text: "Grain Bakery neighborhood breads family=education-calm kids",
+  });
+  assert.equal(both.id, "retail");
+  assert.equal(both.primary.toUpperCase(), "#8B4513");
   assert.notEqual(edu.primary, health.primary);
   assert.notEqual(edu.primary, finance.primary);
   assert.notEqual(edu.primary.toLowerCase(), "#0f766e");

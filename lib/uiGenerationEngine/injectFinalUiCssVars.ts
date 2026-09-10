@@ -82,12 +82,44 @@ export function injectFinalUiIntoProductPreview(
   return true;
 }
 
+function ensureGlobalsFile(workspaceRoot: string): string | null {
+  const appDir = path.join(workspaceRoot, "app");
+  const srcAppDir = path.join(workspaceRoot, "src", "app");
+  const rel = fs.existsSync(appDir)
+    ? "app/globals.css"
+    : fs.existsSync(srcAppDir)
+      ? "src/app/globals.css"
+      : null;
+  if (!rel) return null;
+  const abs = path.join(workspaceRoot, rel);
+  if (!fs.existsSync(abs)) {
+    fs.mkdirSync(path.dirname(abs), { recursive: true });
+    fs.writeFileSync(abs, "@tailwind base;\n@tailwind components;\n@tailwind utilities;\n", "utf8");
+  }
+  const layoutRel = rel.startsWith("src/") ? "src/app/layout.tsx" : "app/layout.tsx";
+  const layoutAbs = path.join(workspaceRoot, layoutRel);
+  if (fs.existsSync(layoutAbs)) {
+    try {
+      let layout = fs.readFileSync(layoutAbs, "utf8");
+      if (!/globals\.css/.test(layout)) {
+        layout = `import "./globals.css";\n${layout}`;
+        fs.writeFileSync(layoutAbs, layout, "utf8");
+        scheduleWorkspaceAbsR2Sync(workspaceRoot, layoutAbs);
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+  return rel;
+}
+
 /** Returns relative path written, or null if no safe globals file. */
 export function injectFinalUiCssVars(
   workspaceRoot: string,
   tokens: DesignTokens,
   extras?: TokenInjectExtras,
 ): string | null {
+  ensureGlobalsFile(workspaceRoot);
   for (const rel of CANDIDATES) {
     const abs = path.join(workspaceRoot, rel);
     if (!fs.existsSync(abs)) continue;

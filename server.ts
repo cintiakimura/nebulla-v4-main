@@ -4442,6 +4442,24 @@ ${modelJson}`;
         uiPhaseRaw === "pre_code" || uiPhaseRaw === "post_code" || uiPhaseRaw === "manual"
           ? uiPhaseRaw
           : undefined;
+      if (workspaceHasCodedAppUi(pp.workspaceRoot) && uiPhase !== "pre_code") {
+        const styled = applyProductPalettePass({
+          workspaceRoot: pp.workspaceRoot,
+          masterPlanPath: pp.masterPlanPath,
+        });
+        return res.json({
+          ok: true,
+          skipped: true,
+          coded_style_pass: true,
+          status: "ready",
+          user_visible_stage: "Styled the coded app",
+          quality_gate_result: "pass",
+          previewApplied: styled.ok,
+          applied: styled.applied,
+          palette_id: styled.packId,
+          productName: styled.productName,
+        });
+      }
       // Phase 5: IF Foundation Go is preparing/running → do not start a second heavy UI Gen brain.
       const goPending = readGoCodePending(pp.workspaceRoot);
       const goBusy =

@@ -76,13 +76,13 @@ const PACKS: Record<IndustryPaletteId, IndustryPalette> = {
   },
   retail: {
     id: "retail",
-    bg: "#FFF7ED",
+    bg: "#FDF6E3",
     surface: "#FFFFFF",
-    primary: "#9A3412",
-    accent: "#BE185D",
-    text: "#1C1917",
-    mutedText: "#78716C",
-    border: "#FED7AA",
+    primary: "#8B4513",
+    accent: "#D2691E",
+    text: "#3E2723",
+    mutedText: "#6D4C41",
+    border: "#E8D5C4",
     tone: "playful",
   },
   professional: {
@@ -131,14 +131,17 @@ export function selectIndustryPalette(input: {
   const tone = inferIndustryTone(text);
   const device = (input.device || "").toLowerCase();
 
+  if (
+    industry === "retail" ||
+    /retail|shop|store|commerce|baker|bakery|bread|pastry|cafe|grain bakery|loaflocal/.test(text)
+  ) {
+    return PACKS.retail;
+  }
   if (industry === "education" || /educat|learn|tutor|school|kids?|child/.test(text)) {
     return PACKS[tone === "playful" && !/adhd|calm|low[- ]stimulus/.test(text) ? "education-playful" : "education-calm"];
   }
   if (industry === "health" || /health|clinic|medical|wellness/.test(text)) return PACKS.health;
   if (industry === "finance" || /financ|bank|fintech|trading/.test(text)) return PACKS.finance;
-  if (industry === "retail" || /retail|shop|store|commerce|baker|bakery|bread|pastry|cafe/.test(text)) {
-    return PACKS.retail;
-  }
   if (device === "landing" || /landing|marketing|waitlist/.test(text)) return PACKS["landing-bold"];
   return PACKS.professional;
 }

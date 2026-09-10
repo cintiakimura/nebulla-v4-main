@@ -10,11 +10,25 @@ import {
   injectFinalUiCssVars,
   injectFinalUiIntoProductPreview,
 } from "./uiGenerationEngine/injectFinalUiCssVars";
-import { paletteToTokens, selectIndustryPalette } from "./uiGenerationEngine/v2/industryPalettes";
+import {
+  formatPaletteLine,
+  paletteToTokens,
+  selectIndustryPalette,
+} from "./uiGenerationEngine/v2/industryPalettes";
 import type { DesignTokens } from "./uiGenerationEngine/v2/types";
 import type { LayoutJob } from "./uiGenerationEngine/v2/layoutCatalogIndex";
+import {
+  applyBrandToPreviewHtml,
+  ensureProductIdentity,
+  looksLikeGoalStubName,
+} from "./productIdentity";
+import { listProductUiFiles } from "./workspaceCodedAppUi";
+import { ensureInteractiveProductPreview } from "./interactiveProductPreview";
 
 export const PRODUCT_PALETTE_REL = "nebulla-ide/product-palette.json";
+
+const BAKERY_RE = /baker|bakery|bread|pastry|cafe|grain bakery|loaflocal/i;
+const EDUCATION_CALM_PRIMARY = "#3f6f5b";
 
 export type ProductPaletteRecord = {
   goalFingerprint: string;
@@ -54,6 +68,10 @@ export function readGoalFromWorkspace(workspaceRoot: string, masterPlanPath?: st
   return "";
 }
 
+function isBakeryGoal(goal: string, projectType?: string): boolean {
+  return BAKERY_RE.test(`${goal} ${projectType || ""}`);
+}
+
 export function writeProductPaletteTokens(input: {
   workspaceRoot: string;
   goal: string;
@@ -61,19 +79,30 @@ export function writeProductPaletteTokens(input: {
 }): ProductPaletteRecord {
   const fp = goalFingerprint(input.goal);
   const storeAbs = path.join(input.workspaceRoot, PRODUCT_PALETTE_REL);
-  if (fs.existsSync(storeAbs)) {
-    try {
-      const prev = JSON.parse(fs.readFileSync(storeAbs, "utf8")) as ProductPaletteRecord;
-      if (prev.goalFingerprint === fp && prev.tokens?.primary) return prev;
-    } catch {
-      /* rewrite */
-    }
-  }
   const pack = selectIndustryPalette({
     text: `${input.goal} ${input.projectType || ""}`,
     device: /landing/i.test(input.projectType || "") ? "landing" : undefined,
   });
   const tokens = paletteToTokens(pack, "medium");
+  if (fs.existsSync(storeAbs)) {
+    try {
+      const prev = JSON.parse(fs.readFileSync(storeAbs, "utf8")) as ProductPaletteRecord;
+      const staleEduOnBakery =
+        isBakeryGoal(input.goal, input.projectType) &&
+        (String(prev.packId || "").startsWith("education") ||
+          (prev.tokens?.primary || "").toLowerCase() === EDUCATION_CALM_PRIMARY);
+      if (
+        prev.goalFingerprint === fp &&
+        prev.tokens?.primary &&
+        !staleEduOnBakery &&
+        prev.packId === pack.id
+      ) {
+        return prev;
+      }
+    } catch {
+      /* rewrite */
+    }
+  }
   const rec: ProductPaletteRecord = {
     goalFingerprint: fp,
     packId: pack.id,
@@ -85,19 +114,107 @@ export function writeProductPaletteTokens(input: {
   return rec;
 }
 
+function stripEducationCalmFromBriefs(workspaceRoot: string, packLine: string): string[] {
+  const rels = [
+    "nebula-ui-studio/ui-brief.md",
+    "nebulla-project/ui-brief.md",
+    "nebula-project/ui-brief.md",
+  ];
+  const touched: string[] = [];
+  for (const rel of rels) {
+    const abs = path.join(workspaceRoot, rel);
+    if (!fs.existsSync(abs)) continue;
+    try {
+      const prev = fs.readFileSync(abs, "utf8");
+      if (!/education-calm|#3[Ff]6[Ff]5[Bb]/.test(prev)) continue;
+      const next = prev
+        .replace(/family\s*=\s*education-calm/gi, "family=retail")
+        .replace(/#3[Ff]6[Ff]5[Bb]/g, "#8B4513")
+        .replace(/^.*\*\*Palette:\*\*.*$/im, packLine);
+      if (next !== prev) {
+        fs.writeFileSync(abs, next, "utf8");
+        touched.push(rel);
+      }
+    } catch {
+      /* skip */
+    }
+  }
+  const plans = [
+    path.join(workspaceRoot, "nebulla-ide", "master-plan.json"),
+    path.join(workspaceRoot, "nebula-project", "master-plan.json"),
+    path.join(workspaceRoot, "master-plan.json"),
+  ];
+  for (const abs of plans) {
+    if (!fs.existsSync(abs)) continue;
+    try {
+      const raw = JSON.parse(fs.readFileSync(abs, "utf8")) as Record<string, unknown>;
+      const section = String(raw["5. UI/UX design"] || "");
+      if (!/education-calm|#3[Ff]6[Ff]5[Bb]/.test(section)) continue;
+      const next = section
+        .replace(/family\s*=\s*education-calm/gi, "family=retail")
+        .replace(/#3[Ff]6[Ff]5[Bb]/g, "#8B4513")
+        .replace(/^.*\*\*Palette:\*\*.*$/im, packLine);
+      if (next !== section) {
+        raw["5. UI/UX design"] = next;
+        fs.writeFileSync(abs, JSON.stringify(raw, null, 2), "utf8");
+        touched.push(path.relative(workspaceRoot, abs));
+      }
+    } catch {
+      /* skip */
+    }
+  }
+  return touched;
+}
+
+function applyBrandToCodedLayout(
+  workspaceRoot: string,
+  productName: string,
+  initials: string,
+  primary: string,
+): string | null {
+  const rels = ["app/layout.tsx", "src/app/layout.tsx"];
+  for (const rel of rels) {
+    const abs = path.join(workspaceRoot, rel);
+    if (!fs.existsSync(abs)) continue;
+    try {
+      let text = fs.readFileSync(abs, "utf8");
+      const prev = text;
+      text = text.replace(/<strong>([\s\S]*?)<\/strong>/, `<strong>${productName}</strong>`);
+      text = text.replace(/<title>([\s\S]*?)<\/title>/i, `<title>${productName}</title>`);
+      text = text.replace(/background:\s*["']#[0-9A-Fa-f]{3,8}["']/, `background: "${primary}"`);
+      if (looksLikeGoalStubName(productName) === false) {
+        text = text.replace(/Project type[^<"'`]{0,48}/gi, productName);
+      }
+      if (text !== prev) {
+        fs.writeFileSync(abs, text, "utf8");
+        return rel;
+      }
+      return rel;
+    } catch {
+      /* next */
+    }
+  }
+  return null;
+}
+
 export function applyProductPalettePass(input: {
   workspaceRoot: string;
   goal?: string;
   masterPlanPath?: string;
   projectType?: string;
   jobHint?: LayoutJob | null;
-}): { ok: boolean; applied: string[]; packId: string } {
+}): { ok: boolean; applied: string[]; packId: string; productName: string } {
   const goal =
     (input.goal || "").trim() || readGoalFromWorkspace(input.workspaceRoot, input.masterPlanPath);
   const rec = writeProductPaletteTokens({
     workspaceRoot: input.workspaceRoot,
     goal,
     projectType: input.projectType,
+  });
+  const identity = ensureProductIdentity(input.workspaceRoot, {
+    goal,
+    projectType: input.projectType,
+    persist: true,
   });
   const applied: string[] = [];
   const cssRel = injectFinalUiCssVars(input.workspaceRoot, rec.tokens, {
@@ -108,5 +225,42 @@ export function applyProductPalettePass(input: {
   if (injectFinalUiIntoProductPreview(input.workspaceRoot, rec.tokens)) {
     applied.push("public/product-preview/index.html");
   }
-  return { ok: true, applied, packId: rec.packId };
+  const previewAbs = path.join(input.workspaceRoot, "public/product-preview/index.html");
+  if (fs.existsSync(previewAbs)) {
+    try {
+      const prev = fs.readFileSync(previewAbs, "utf8");
+      const branded = applyBrandToPreviewHtml(prev, identity);
+      if (branded !== prev) {
+        fs.writeFileSync(previewAbs, branded, "utf8");
+        if (!applied.includes("public/product-preview/index.html")) {
+          applied.push("public/product-preview/index.html");
+        }
+      }
+    } catch {
+      /* ignore */
+    }
+  } else {
+    const files = listProductUiFiles(input.workspaceRoot, 24);
+    if (files.length) {
+      ensureInteractiveProductPreview(input.workspaceRoot, {
+        projectName: identity.projectName,
+        productFiles: files,
+        logoInitials: identity.logoInitials,
+      });
+      injectFinalUiIntoProductPreview(input.workspaceRoot, rec.tokens);
+      applied.push("public/product-preview/index.html");
+    }
+  }
+  const layoutRel = applyBrandToCodedLayout(
+    input.workspaceRoot,
+    identity.projectName,
+    identity.logoInitials,
+    rec.tokens.primary,
+  );
+  if (layoutRel && !applied.includes(layoutRel)) applied.push(layoutRel);
+  if (isBakeryGoal(goal, input.projectType)) {
+    const pack = selectIndustryPalette({ text: goal });
+    applied.push(...stripEducationCalmFromBriefs(input.workspaceRoot, formatPaletteLine(pack)));
+  }
+  return { ok: applied.length > 0, applied, packId: rec.packId, productName: identity.projectName };
 }

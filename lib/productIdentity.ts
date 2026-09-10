@@ -115,6 +115,17 @@ function toTitleCase(name: string): string {
     .trim();
 }
 
+export function extractNamedBrand(goal: string): string | null {
+  const g = String(goal || "");
+  if (/\bgrain\s+bakery\b/i.test(g)) return "Grain Bakery";
+  if (/\bloaflocal\b/i.test(g)) return "LoafLocal";
+  const labeled = g.match(/\*\*Product name:\*\*\s*([^\n*]+)/i)?.[1]?.trim();
+  if (labeled && !looksLikeGoalStubName(labeled, g) && labeled.split(/\s+/).length <= 4) {
+    return toTitleCase(labeled);
+  }
+  return null;
+}
+
 function detectDomain(goal: string, projectType?: string): ProductDomain {
   const blob = `${goal}\n${projectType || ""}`.toLowerCase();
   if (/\blanding\b|\bmarketing\b|\bwaitlist\b/.test(blob) && !/\bmobile\b|\bexpo\b/.test(blob)) {
@@ -153,6 +164,8 @@ function optionalAudienceWord(goal: string, domain: ProductDomain, desc: string)
 export function inferProductName(goal: string, projectType?: string): string {
   const g = String(goal || "").replace(/\s+/g, " ").trim();
   const type = String(projectType || "").trim();
+  const named = extractNamedBrand(g);
+  if (named) return named;
   const domain = detectDomain(g, type);
   const key = `${g}|${type}`.toLowerCase();
   const h = stableHash(key || domain);
@@ -205,6 +218,9 @@ export function looksLikeGoalStubName(name: string, goal?: string): boolean {
   if (!n) return true;
   const lc = n.toLowerCase();
   if (/^(new project|untitled project|untitled|web app|mobile app|landing page)$/i.test(n)) {
+    return true;
+  }
+  if (/\bproject type\b/i.test(n) || /\b(mobile|web) app primary\b/i.test(n)) {
     return true;
   }
   if (/^(build|create|make|design|scaffold)\b/i.test(n)) return true;
@@ -344,6 +360,14 @@ export function applyBrandToPreviewHtml(html: string, identity: ProductIdentity)
       `$1${name}$3`,
     );
   }
+  out = out.replace(/<title>[^<]*<\/title>/i, `<title>${name} — Interactive preview</title>`);
+  out = out.replace(
+    /(<div style="font-weight:700;margin-top:4px">)([\s\S]*?)(<\/div>)/i,
+    `$1${name}$3`,
+  );
+  if (/class="mark"/.test(out)) {
+    out = out.replace(/(<span class="mark"[^>]*>)([\s\S]*?)(<\/span>)/i, `$1${initials}$3`);
+  }
   return out;
 }
 
@@ -369,6 +393,7 @@ function patchKnownPreviewFiles(workspaceRoot: string, identity: ProductIdentity
   const rels = [
     "public/nebula-ui-gen-preview.html",
     "public/product-preview.html",
+    "public/product-preview/index.html",
     "index.html",
   ];
   for (const rel of rels) {
