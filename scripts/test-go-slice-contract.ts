@@ -116,6 +116,17 @@ assert.equal(/mock data OK/i.test(productSliceQualityLine("invoice portal")), fa
 assert.match(productSliceQualityLine("Motodrop moto delivery pickup dropoff"), /pickup \+ dropoff/);
 assert.match(
   buildCompactGoCodeUserPrompt({
+    sliceLine: "SLICE: Foundation",
+    goal: "Spoke & Co neighborhood bike shop",
+    pagesSection: "### Home `/`\n### Book `/book`\n",
+    constraints: "CODING_SKELETON: marketplace",
+    uiBriefPageList: "- Home `/`",
+    sessionFocus: "Foundation",
+  }),
+  /FOUNDATION MIN UI/,
+);
+assert.match(
+  buildCompactGoCodeUserPrompt({
     sliceLine: "SLICE: Primary",
     goal: "tutor kids with ADHD — short practice for students and teachers",
     pagesSection: "### Practice `/practice`\n",

@@ -72,7 +72,7 @@ export async function promoteWorkspaceChipFromProductName(name: string): Promise
   const trimmed = String(name || '').trim();
   if (!trimmed || looksLikeGoalStubName(trimmed) || isWorkspaceLabelStub(trimmed)) return null;
   const current = getBrowserProjectName().trim();
-  if (current && !isWorkspaceLabelStub(current)) {
+  if (current && current.toLowerCase() === trimmed.toLowerCase()) {
     return current;
   }
   const mode = getWorkspaceModePreference() || 'guest';

@@ -323,6 +323,7 @@ export function applyProductPalettePass(input: {
       projectName: identity.projectName,
       logoInitials: identity.logoInitials,
     });
+    injectFinalUiIntoProductPreview(input.workspaceRoot, rec.tokens);
   }
   applied.push(...collapsePalettesOnDisk(input.workspaceRoot, goal));
   return { ok: applied.length > 0, applied, packId: rec.packId, productName: identity.projectName };

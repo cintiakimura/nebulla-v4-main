@@ -154,16 +154,11 @@ export function isWorkspaceLabelStub(name: string): boolean {
   return looksLikeGoalStubName(n);
 }
 
-/** Prefer labeled / named brand from Master Plan §1 (and §5 product line). */
+/** Prefer labeled / named brand from Master Plan §1 only — do not invent here. */
 export function productNameFromPlan(plan: Record<string, unknown> | null | undefined): string {
   const rec = plan && typeof plan === "object" ? plan : {};
   const goal = String(rec["1. Goal of the app"] || rec.goal || "").trim();
-  const ux = String(rec["5. UI/UX design"] || "").trim();
-  const named = extractNamedBrand(`${goal}\n${ux}`);
-  if (named) return named;
-  if (!goal) return "";
-  const inferred = inferProductName(goal);
-  return looksLikeGoalStubName(inferred, goal) ? "" : inferred;
+  return extractNamedBrand(goal) || "";
 }
 
 export function detectProductDomain(goal: string, projectType?: string): ProductDomain {
@@ -207,7 +202,7 @@ export function inferProductName(goal: string, projectType?: string): string {
   const named = extractNamedBrand(g);
   if (named) return named;
   const domain = detectProductDomain(g, type);
-  const key = `${g}|${type}`.toLowerCase();
+  const key = (g || type).toLowerCase();
   const h = stableHash(key || domain);
   const stems = STEMS[domain].filter((s) => s !== "Sparrow" || /\bsparrow\b/i.test(g));
   const descs = DESCRIPTORS[domain];
@@ -293,6 +288,16 @@ export function looksLikeInventedChipName(name: string): boolean {
   );
 }
 
+function inventedChipDomain(name: string): ProductDomain | null {
+  if (!looksLikeInventedChipName(name)) return null;
+  const stem = String(name || "").trim().split(/\s+/)[0] || "";
+  if (!stem) return null;
+  for (const domain of Object.keys(STEMS) as ProductDomain[]) {
+    if (STEMS[domain].some((s) => s.toLowerCase() === stem.toLowerCase())) return domain;
+  }
+  return null;
+}
+
 /** Drop last workspace brand when this goal is a different product. */
 export function identityFitsGoal(name: string, goal: string, projectType?: string): boolean {
   const domain = detectProductDomain(goal, projectType);
@@ -300,17 +305,15 @@ export function identityFitsGoal(name: string, goal: string, projectType?: strin
   if (!n) return false;
   const named = extractNamedBrand(goal);
   if (named && n !== named.toLowerCase()) return false;
-  if (looksLikeInventedChipName(name) && named) return false;
-  if (looksLikeInventedChipName(name) && detectProductDomain(goal, projectType) !== "general") {
+  const inv = inventedChipDomain(name);
+  if (inv) {
+    if (named) return n === named.toLowerCase();
+    if (inv === domain) return true;
+    if (inv === "general" && domain === "general") return true;
     return false;
   }
-  if (named && n !== named.toLowerCase() && looksLikeEducationKitDefaultName(name, goal)) {
-    return false;
-  }
-  if (domain !== "education" && /\b(tutor|learn|path|sparrow|quill|lumen|beacon)\b/.test(n)) {
-    return false;
-  }
-  if (domain === "commerce" && /\b(tutor|sparrow|learn|path|kite studio|nova studio)\b/.test(n)) {
+  if (looksLikeEducationKitDefaultName(name, goal)) return false;
+  if (domain !== "education" && /\b(tutor|sparrow)\b/.test(n) && !/\bsparrow\b/i.test(goal)) {
     return false;
   }
   return true;
@@ -440,20 +443,33 @@ export function applyBrandToPreviewHtml(html: string, identity: ProductIdentity)
 }
 
 function writeMasterPlanIfPresent(workspaceRoot: string, identity: ProductIdentity): void {
-  const mp = path.join(workspaceRoot, "master-plan.json");
-  if (!fs.existsSync(mp)) return;
-  try {
-    const raw = JSON.parse(fs.readFileSync(mp, "utf8")) as Record<string, unknown>;
-    const plan: Record<string, string> = {};
-    for (const [k, v] of Object.entries(raw)) {
-      if (typeof v === "string") plan[k] = v;
+  const paths = [
+    path.join(workspaceRoot, "nebulla-ide", "master-plan.json"),
+    path.join(workspaceRoot, "master-plan.json"),
+  ];
+  for (const mp of paths) {
+    if (!fs.existsSync(mp)) continue;
+    try {
+      const raw = JSON.parse(fs.readFileSync(mp, "utf8")) as Record<string, unknown>;
+      const plan: Record<string, string> = {};
+      for (const [k, v] of Object.entries(raw)) {
+        if (typeof v === "string") plan[k] = v;
+      }
+      let changed = false;
+      const { plan: next, changed: uxChanged } = patchMasterPlanProductName(plan, identity);
+      Object.assign(plan, next);
+      if (uxChanged) changed = true;
+      const goal = String(plan["1. Goal of the app"] || "");
+      if (goal.trim() && !extractNamedBrand(goal) && identity.projectName.trim()) {
+        plan["1. Goal of the app"] = `**Product name:** ${identity.projectName}\n${goal}`.trim();
+        changed = true;
+      }
+      if (!changed) continue;
+      const merged = { ...raw, ...plan };
+      fs.writeFileSync(mp, `${JSON.stringify(merged, null, 2)}\n`, "utf8");
+    } catch {
+      /* ignore */
     }
-    const { plan: next, changed } = patchMasterPlanProductName(plan, identity);
-    if (!changed) return;
-    const merged = { ...raw, "5. UI/UX design": next["5. UI/UX design"] };
-    fs.writeFileSync(mp, `${JSON.stringify(merged, null, 2)}\n`, "utf8");
-  } catch {
-    /* ignore */
   }
 }
 
@@ -518,12 +534,16 @@ export function ensureProductIdentity(
   const goal = opts?.goal || "";
   const type = opts?.projectType;
   const named = extractNamedBrand(goal);
+  const existingFits =
+    Boolean(existing?.projectName) &&
+    !looksLikeGoalStubName(existing.projectName, goal) &&
+    identityFitsGoal(existing.projectName, goal, type);
   if (
     existing?.userSet &&
     existing.projectName &&
     opts?.userSet !== true &&
     opts?.force !== true &&
-    identityFitsGoal(existing.projectName, goal, type)
+    existingFits
   ) {
     return existing;
   }
@@ -532,10 +552,12 @@ export function ensureProductIdentity(
     if (opts.persist !== false && workspaceRoot) return writeProductIdentity(workspaceRoot, built);
     return built;
   }
+  const offered = opts?.projectName?.trim() || "";
+  const offeredFits = Boolean(offered) && identityFitsGoal(offered, goal, type);
   const candidate =
     named ||
-    opts?.projectName?.trim() ||
-    (existing && identityFitsGoal(existing.projectName, goal, type) ? existing.projectName : "") ||
+    (existingFits ? existing!.projectName : "") ||
+    (offeredFits ? offered : "") ||
     "";
   const built = buildProductIdentity(
     goal,

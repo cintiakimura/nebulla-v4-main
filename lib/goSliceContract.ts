@@ -7,6 +7,7 @@ import fs from "fs";
 import path from "path";
 import { assessApplyRouteDepth, isStaticHtmlProductApply, listProductUiFiles } from "./workspaceCodedAppUi";
 import { goBlocked, type GoBlockedReason } from "./goBlockedReason";
+import { FOUNDATION_MIN_UI_CHECKLIST } from "./codingSkeleton";
 
 export const GO_SLICE_LABELS = [
   "Foundation",
@@ -276,12 +277,13 @@ export function buildCompactGoCodeUserPrompt(opts: {
   const slice = String(opts.sliceLine || "SLICE: Foundation").trim().slice(0, 80);
   const goal = String(opts.goal || "").replace(/\s+/g, " ").trim().slice(0, 800);
   const pages = String(opts.pagesSection || "").trim().slice(0, 1600);
-  const constraints = String(opts.constraints || "").trim().slice(0, 800);
+  const constraints = String(opts.constraints || "").trim().slice(0, 2200);
   const briefPages = String(opts.uiBriefPageList || "").trim().slice(0, 800);
   const focus = String(opts.sessionFocus || "").trim().slice(0, 400);
   const productName = String(opts.productName || "").trim().slice(0, 48);
   const initials = String(opts.logoInitials || "").trim().slice(0, 4);
   const hint = String(opts.logoHint || "").trim().slice(0, 40);
+  const isFoundation = /SLICE:\s*Foundation/i.test(slice);
   const task = opts.continuation
     ? "CONTINUATION — emit the current slice file blocks now. Do NOT implement every §4 route."
     : "Run the coding pass now. Output ONE coherent slice only (Build → Debug → Next) — not the full app.";
@@ -310,6 +312,7 @@ export function buildCompactGoCodeUserPrompt(opts: {
     "§4 Pages excerpt:",
     pages || "(from Master Plan §4)",
     constraints ? `\n${constraints}` : "",
+    isFoundation ? `\n${FOUNDATION_MIN_UI_CHECKLIST}` : "",
     "",
     "ui-brief pages:",
     briefPages || "(none parsed)",
@@ -323,7 +326,7 @@ export function buildCompactGoCodeUserPrompt(opts: {
   ]
     .filter((line) => line !== "")
     .join("\n")
-    .slice(0, 4500);
+    .slice(0, 6500);
 }
 
 const PRODUCT_PREFIX = /^(app|src|pages|components)\//i;

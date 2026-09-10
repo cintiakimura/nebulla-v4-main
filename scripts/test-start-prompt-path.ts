@@ -70,14 +70,15 @@ assert.ok(shortNameFromIdea('!!!').length > 0);
   );
   writeProductIdentity(dir, identity);
   const plan = JSON.parse(fs.readFileSync(path.join(dir, 'master-plan.json'), 'utf8')) as Record<string, string>;
-  assert.equal(plan['1. Goal of the app'], goalSection);
+  assert.match(plan['1. Goal of the app'], new RegExp(identity.projectName));
+  assert.match(plan['1. Goal of the app'], /Kids practice reading/);
   assert.match(plan['5. UI/UX design'], new RegExp(identity.projectName));
   const renamed = patchMasterPlanProductName(plan, {
     ...identity,
     projectName: 'Harbor Path',
     logoInitials: 'HP',
   });
-  assert.equal(renamed.plan['1. Goal of the app'], goalSection);
+  assert.match(renamed.plan['1. Goal of the app'], /Kids practice reading/);
   assert.match(renamed.plan['5. UI/UX design'], /Harbor Path/);
   fs.rmSync(dir, { recursive: true, force: true });
 }

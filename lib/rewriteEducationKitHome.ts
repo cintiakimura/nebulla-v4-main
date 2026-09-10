@@ -5,7 +5,7 @@
 
 import fs from "fs";
 import path from "path";
-import { extractNamedBrand, inferProductName, productNameFromPlan } from "./productIdentity";
+import { extractNamedBrand, inferProductName, productNameFromPlan, readProductIdentity, detectProductDomain } from "./productIdentity";
 
 const KIT_HOME_RE =
   /short lesson|Start practice|See streak|Weekly streak|Role:\s*(parent|kid|teacher)|Practice app/i;
@@ -15,16 +15,29 @@ const EDUCATION_GOAL_RE =
 
 const BIKE_RE = /\b(bike|bicycle|cycle|mechanic|spoke|e-?bike|tune-?up)\b/i;
 
+const GENERIC_CONTINUE_HOME_RE =
+  /Interactive screen with mock data|Home for this product|Primary action works locally|Open a screen to continue/i;
+
 export function looksLikeEducationKitHomeCopy(src: string): boolean {
   return KIT_HOME_RE.test(String(src || ""));
 }
 
+/** Generic Foundation shell: title + one line + Continue (not a job list). */
+export function looksLikeGenericContinueHome(src: string): boolean {
+  const s = String(src || "");
+  if (GENERIC_CONTINUE_HOME_RE.test(s)) return true;
+  const fewItems = (s.match(/<li[\s>]/g) || []).length < 2;
+  const continueOnly = />\s*Continue\s*</i.test(s) && !/<input|<textarea|type=["']file["']/i.test(s);
+  return fewItems && continueOnly;
+}
+
 export function isEducationProductGoal(goal: string): boolean {
   const g = String(goal || "");
-  if (BIKE_RE.test(g) || /baker|bakery|loaflocal|shop|store|marketplace/i.test(g)) {
+  if (BIKE_RE.test(g) || /baker|bakery|loaflocal|shop|store|marketplace|moto|motodrop|courier|delivery/i.test(g)) {
     return false;
   }
-  return EDUCATION_GOAL_RE.test(g);
+  if (EDUCATION_GOAL_RE.test(g)) return true;
+  return detectProductDomain(g) === "education";
 }
 
 function routesFromSection4(pages: string): { path: string; label: string }[] {
@@ -49,7 +62,7 @@ function routesFromSection4(pages: string): { path: string; label: string }[] {
   return [...found.entries()].map(([path, label]) => ({ path, label }));
 }
 
-function homeJsx(opts: {
+export function buildNonEducationHomePage(opts: {
   productName: string;
   goal: string;
   routes: { path: string; label: string }[];
@@ -57,9 +70,16 @@ function homeJsx(opts: {
   const name = opts.productName.replace(/`/g, "");
   const bike = BIKE_RE.test(opts.goal) || /spoke/i.test(name);
   const bakery = /baker|bakery|bread|loaflocal|grain/i.test(`${opts.goal} ${name}`);
+  const delivery = /\b(moto|motodrop|courier|delivery|dropoff)\b/i.test(`${opts.goal} ${name}`);
   const book =
     opts.routes.find((r) => /book|slot|appoint/i.test(`${r.path} ${r.label}`))?.path ||
     (bike ? "/book" : "");
+  const request =
+    opts.routes.find((r) => /request/i.test(`${r.path} ${r.label}`))?.path ||
+    (delivery ? "/request" : "");
+  const order =
+    opts.routes.find((r) => /order|pickup|cart/i.test(`${r.path} ${r.label}`))?.path ||
+    (bakery ? "/order" : "");
   const items = bike
     ? [
         ["City commuter", "Ready now — pickup today"],
@@ -71,27 +91,48 @@ function homeJsx(opts: {
           ["Country loaf", "Still warm — pickup this afternoon"],
           ["Sourdough", "Limited bake"],
         ]
-      : [
-          ["Ready today", "Open a listing and book"],
-          ["Pickup", "Reserve a slot"],
-        ];
-  const ctaHref = book || opts.routes.find((r) => r.path !== "/")?.path || "/";
-  const cta = bike ? "Book slot" : bakery ? "Place pickup order" : "Continue";
+      : delivery
+        ? [
+            ["Harbor to Midtown", "Waiting for a rider"],
+            ["Depot to North side", "Ready to accept"],
+          ]
+        : [
+            ["Ready today", "Available now"],
+            ["Next up", "Booked this afternoon"],
+          ];
+  const ctaHref =
+    book || request || order || opts.routes.find((r) => r.path !== "/")?.path || "/";
+  const cta = bike
+    ? "Book slot"
+    : bakery
+      ? "Place pickup order"
+      : delivery
+        ? "New request"
+        : opts.routes.find((r) => r.path !== "/")?.label || "Open";
+  const title = bike
+    ? "Ready bikes"
+    : bakery
+      ? "Today's loaves"
+      : delivery
+        ? "Open requests"
+        : name;
   const lead = bike
     ? "Ready bikes on the floor. Book a pickup or service slot."
     : bakery
       ? "Today's breads. Place a pickup order."
-      : `${name} — the job starts here.`;
+      : delivery
+        ? "Open requests. Set pickup and dropoff, then accept."
+        : `${name} — pick an item and continue.`;
   const list = items
     .map(
-      ([title, sub]) =>
-        `        <li><strong>${title}</strong><span>${sub}</span></li>`,
+      ([titleLine, sub]) =>
+        `        <li><strong>${titleLine}</strong><span>${sub}</span></li>`,
     )
     .join("\n");
   return `export default function Home() {
   return (
     <main>
-      <h1>${name}</h1>
+      <h1>${title}</h1>
       <p>${lead}</p>
       <ul>
 ${list}
@@ -101,6 +142,14 @@ ${list}
   );
 }
 `;
+}
+
+function homeJsx(opts: {
+  productName: string;
+  goal: string;
+  routes: { path: string; label: string }[];
+}): string {
+  return buildNonEducationHomePage(opts);
 }
 
 function stripEducationRole(layout: string): string {
@@ -123,6 +172,7 @@ export function rewriteEducationKitHomeIfNeeded(input: {
 
   const pages = String(input.plan?.["4. Pages and navigation"] || "");
   const productName =
+    readProductIdentity(input.workspaceRoot)?.projectName ||
     productNameFromPlan(input.plan) ||
     extractNamedBrand(goal) ||
     inferProductName(goal) ||
@@ -136,7 +186,11 @@ export function rewriteEducationKitHomeIfNeeded(input: {
     if (!fs.existsSync(abs)) continue;
     try {
       const prev = fs.readFileSync(abs, "utf8");
-      if (!looksLikeEducationKitHomeCopy(prev) && !/role.*parent|Start practice/i.test(prev)) {
+      if (
+        !looksLikeEducationKitHomeCopy(prev) &&
+        !looksLikeGenericContinueHome(prev) &&
+        !/role.*parent|Start practice/i.test(prev)
+      ) {
         continue;
       }
       const next = homeJsx({ productName, goal, routes });

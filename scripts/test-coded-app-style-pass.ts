@@ -16,6 +16,8 @@ import {
   productNameFromPlan,
   identityFitsGoal,
   buildProductIdentity,
+  ensureProductIdentity,
+  readProductIdentity,
 } from "../lib/productIdentity.ts";
 import { applyPlanIdentityAndWinningPalette } from "../lib/nebulaIdeWorkspaceArtifacts.ts";
 import { writeUiBriefMarkdown } from "../lib/nebulaUiBrief.ts";
@@ -42,6 +44,11 @@ section("stub names and Grain Bakery brand");
   );
   assert.equal(inferProductName("Quill Path learning companion for daily reading"), "Quill Path");
   assert.equal(inferProductName("Spoke & Co neighborhood bike shop"), "Spoke & Co");
+  const eduGoal = "Kids practice reading every day with a private companion.";
+  assert.equal(inferProductName(eduGoal, "Mobile App"), inferProductName(eduGoal, "Web App"));
+  assert.equal(inferProductName(eduGoal, "Mobile App"), inferProductName(eduGoal));
+  assert.equal(identityFitsGoal("Lumen Learn", eduGoal), true);
+  assert.equal(identityFitsGoal("Kite Studio", eduGoal), false);
   assert.equal(
     inferProductName("**Product name:** Motodrop\nMoto delivery — pickup and dropoff."),
     "Motodrop",
@@ -49,6 +56,49 @@ section("stub names and Grain Bakery brand");
   assert.equal(looksLikeEducationKitDefaultName("Sparrow Tutor", "Quill Path learning companion"), true);
   assert.equal(looksLikeEducationKitDefaultName("Sparrow Tutor", "Sparrow Tutor kids app"), false);
   assert.equal(looksLikeGoalStubName("Practice app", "Quill Path"), true);
+}
+
+section("invent once — chip, title, header, Live share product-identity.json");
+{
+  const goal = "Kids practice reading every day with a private companion.";
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "nebulla-one-name-"));
+  fs.mkdirSync(path.join(tmp, "app"), { recursive: true });
+  fs.mkdirSync(path.join(tmp, "nebulla-ide"), { recursive: true });
+  const first = ensureProductIdentity(tmp, { goal, projectType: "Mobile App", persist: true });
+  const again = ensureProductIdentity(tmp, {
+    goal,
+    projectType: "Web App",
+    projectName: first.projectName === "Quill Path" ? "Lumen Learn" : "Quill Path",
+    persist: true,
+  });
+  assert.equal(again.projectName, first.projectName);
+  assert.equal(readProductIdentity(tmp)?.projectName, first.projectName);
+  fs.writeFileSync(
+    path.join(tmp, "app/layout.tsx"),
+    `export default function RootLayout({ children }) {
+  return (
+    <html><body>
+      <title>Other Name</title>
+      <header data-nebula-brand><strong>Other Name</strong></header>
+      {children}
+    </body></html>
+  );
+}
+`,
+  );
+  fs.writeFileSync(
+    path.join(tmp, "app/page.tsx"),
+    "export default function Home(){ return <main>Start practice</main>; }\n",
+  );
+  const pass = applyProductPalettePass({ workspaceRoot: tmp, goal });
+  assert.equal(pass.productName, first.projectName);
+  const layout = fs.readFileSync(path.join(tmp, "app/layout.tsx"), "utf8");
+  assert.match(layout, new RegExp(`<title>${first.projectName}</title>`));
+  assert.match(layout, new RegExp(`<strong>${first.projectName}</strong>`));
+  assert.equal(/Lumen Learn/.test(layout) && /Quill Path/.test(layout), false);
+  const home = fs.readFileSync(path.join(tmp, "app/page.tsx"), "utf8");
+  assert.match(home, /Start practice/);
+  fs.rmSync(tmp, { recursive: true, force: true });
 }
 
 section("style pass writes globals + preview without a draft file");
@@ -219,14 +269,62 @@ section("Spoke & Co Home is bikes, not the tutor card");
   });
   assert.equal(pass.productName, "Spoke & Co");
   const home = fs.readFileSync(path.join(tmp, "app/page.tsx"), "utf8");
-  assert.match(home, /bike|Book slot|Ready/i);
-  assert.equal(/short lesson|Start practice|Weekly streak|See streak|Role:\s*parent/i.test(home), false);
+  assert.match(home, /Ready bikes/);
+  assert.match(home, /City commuter|Trail hardtail/i);
+  assert.match(home, /Book slot/);
+  assert.equal(/short lesson|Start practice|Weekly streak|See streak|Role:\s*parent|Interactive screen/i.test(home), false);
   const layout = fs.readFileSync(path.join(tmp, "app/layout.tsx"), "utf8");
   assert.equal(/Role:\s*parent/i.test(layout), false);
   const chat = fs.readFileSync(path.join(REPO, "src/components/ide/AIChat.tsx"), "utf8");
   assert.equal(/Next slice starts automatically/i.test(chat), false);
   assert.equal(/send Continue for Data\+API/i.test(chat), false);
   assert.equal(/Autopilot continues until MVP ready/i.test(chat), false);
+  fs.rmSync(tmp, { recursive: true, force: true });
+}
+
+section("generic Continue Home rewrites to job list (Spoke)");
+{
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "nebulla-spoke-continue-"));
+  fs.mkdirSync(path.join(tmp, "app"), { recursive: true });
+  fs.writeFileSync(
+    path.join(tmp, "app/page.tsx"),
+    `export default function Home() {
+  return (
+    <main>
+      <h1>Spoke & Co</h1>
+      <p>Interactive screen with mock data. Primary action works locally.</p>
+      <button>Continue</button>
+    </main>
+  );
+}
+`,
+  );
+  fs.writeFileSync(
+    path.join(tmp, "app/layout.tsx"),
+    `export default function RootLayout({ children }) {
+  return <html><body><header><strong>Spoke & Co</strong></header>{children}</body></html>;
+}
+`,
+  );
+  fs.mkdirSync(path.join(tmp, "nebulla-ide"), { recursive: true });
+  fs.writeFileSync(
+    path.join(tmp, "nebulla-ide/master-plan.json"),
+    JSON.stringify({
+      "1. Goal of the app": "**Product name:** Spoke & Co\nNeighborhood bike shop — ready bikes and book a slot.",
+      "4. Pages and navigation": "### Home `/`\n### Book `/book`\n### Mechanic `/mechanic`",
+    }),
+    "utf8",
+  );
+  applyProductPalettePass({
+    workspaceRoot: tmp,
+    goal: "Spoke & Co neighborhood bike shop ready bikes and book a slot",
+    masterPlanPath: path.join(tmp, "nebulla-ide/master-plan.json"),
+  });
+  const home = fs.readFileSync(path.join(tmp, "app/page.tsx"), "utf8");
+  assert.match(home, /Ready bikes/);
+  assert.match(home, /<li>/);
+  assert.equal(/Interactive screen with mock data|>Continue</i.test(home), false);
+  assert.equal(/Weekly streak|Start practice/i.test(home), false);
   fs.rmSync(tmp, { recursive: true, force: true });
 }
 
@@ -279,6 +377,10 @@ section("Motodrop chip beats Kite Studio; Request has pickup + dropoff");
   assert.match(request, /name=["']dropoff["']/);
   assert.match(request, /Accept request/);
   assert.equal(/Interactive screen with mock data/i.test(request), false);
+  const motoHome = fs.readFileSync(path.join(tmp, "app/page.tsx"), "utf8");
+  assert.match(motoHome, /Open requests|Harbor to Midtown/);
+  assert.equal(/Start practice|Weekly streak|breads\.json/i.test(motoHome), false);
+  assert.equal(fs.existsSync(path.join(tmp, "data/breads.json")), false);
   const identity = JSON.parse(fs.readFileSync(path.join(tmp, "nebulla-ide/product-identity.json"), "utf8"));
   assert.equal(identity.projectName, "Motodrop");
   fs.rmSync(tmp, { recursive: true, force: true });

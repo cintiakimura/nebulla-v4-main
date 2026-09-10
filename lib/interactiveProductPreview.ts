@@ -310,12 +310,21 @@ function buildInteractiveHtml(opts: {
       );
     }
     if (!EDUCATION) {
+      var ctaId = DELIVERY ? "goRequest" : (SHOP ? "goOrder" : "primaryAct");
+      var ctaLabel = DELIVERY ? "New request" : (BIKE ? "Book slot" : (SHOP ? "Place pickup order" : "Open"));
+      var heading = DELIVERY ? "Open requests" : (BIKE ? "Ready bikes" : (SHOP ? "Today\\'s loaves" : "Ready today"));
+      var itemA = DELIVERY ? ["Harbor to Midtown", "Waiting for a rider"] : (BIKE ? ["City commuter", "Ready now"] : ["First listing", "Available now"]);
+      var itemB = DELIVERY ? ["Depot to North side", "Ready to accept"] : (BIKE ? ["Trail hardtail", "Tuned this morning"] : ["Second listing", "This afternoon"]);
       return (
         '<div class="card">' +
-          '<h1>' + PROJECT + '</h1>' +
-          '<p>Home for this product. Open a screen to continue.</p>' +
+          '<h1>' + heading + '</h1>' +
+          '<p>' + (DELIVERY ? "Set pickup and dropoff, then accept." : "Pick an item and continue.") + '</p>' +
+          '<div class="grid">' +
+            '<div class="role"><strong>' + itemA[0] + '</strong> ' + itemA[1] + '</div>' +
+            '<div class="role"><strong>' + itemB[0] + '</strong> ' + itemB[1] + '</div>' +
+          '</div>' +
           '<div class="row">' +
-            '<button type="button" class="cta" id="primaryAct">Continue</button>' +
+            '<button type="button" class="cta" id="' + ctaId + '">' + ctaLabel + '</button>' +
           '</div>' +
           '<div class="toast" id="toast"></div>' +
         '</div>'
@@ -427,12 +436,37 @@ function buildInteractiveHtml(opts: {
         '</div>'
       );
     }
+    if (/book|order|upload/i.test(label) && !EDUCATION) {
+      var fieldA = /upload/i.test(label) ? "file" : "text";
+      if (fieldA === "file") {
+        return uploadHtml();
+      }
+      return (
+        '<div class="card">' +
+          '<h1>' + label + '</h1>' +
+          '<form id="actionForm">' +
+            '<label for="fieldA">Name</label>' +
+            '<input id="fieldA" name="name" type="text" required />' +
+            '<label for="fieldB">When</label>' +
+            '<input id="fieldB" name="when" type="text" required />' +
+            '<div class="row" style="margin-top:12px"><button type="submit" class="cta">Submit</button></div>' +
+          '</form>' +
+          '<div class="toast" id="toast"></div>' +
+        '</div>'
+      );
+    }
     if (SHOP && /order/i.test(label)) {
       return (
         '<div class="card">' +
           '<h1>Pickup order</h1>' +
-          '<p>Choose a loaf and a pickup window. Mock order stays in this preview.</p>' +
-          '<div class="row"><button type="button" class="cta" id="primaryAct">Place order</button></div>' +
+          '<p>Choose a loaf and a pickup window.</p>' +
+          '<form id="actionForm">' +
+            '<label for="loaf">Loaf</label>' +
+            '<input id="loaf" name="loaf" type="text" required />' +
+            '<label for="window">Pickup window</label>' +
+            '<input id="window" name="window" type="text" required />' +
+            '<div class="row" style="margin-top:12px"><button type="submit" class="cta">Place order</button></div>' +
+          '</form>' +
           '<div class="toast" id="toast"></div>' +
         '</div>'
       );
@@ -442,6 +476,10 @@ function buildInteractiveHtml(opts: {
         '<div class="card">' +
           '<h1>Baker queue</h1>' +
           '<p>Orders waiting. Mark the next one ready for pickup.</p>' +
+          '<div class="grid">' +
+            '<div class="role"><strong>Country loaf</strong> Waiting</div>' +
+            '<div class="role"><strong>Sourdough</strong> In oven</div>' +
+          '</div>' +
           '<div class="row"><button type="button" class="cta" id="primaryAct">Mark ready</button></div>' +
           '<div class="toast" id="toast"></div>' +
         '</div>'
@@ -450,8 +488,11 @@ function buildInteractiveHtml(opts: {
     return (
       '<div class="card">' +
         '<h1>' + label + '</h1>' +
-        '<p>Interactive screen with mock data. Primary action works locally.</p>' +
-        '<div class="row"><button type="button" class="cta" id="primaryAct">Continue</button></div>' +
+        '<div class="grid">' +
+          '<div class="role"><strong>First item</strong> Ready now</div>' +
+          '<div class="role"><strong>Second item</strong> This afternoon</div>' +
+        '</div>' +
+        '<div class="row"><button type="button" class="cta" id="primaryAct">Open</button></div>' +
         '<div class="toast" id="toast"></div>' +
       '</div>'
     );
@@ -523,6 +564,14 @@ function buildInteractiveHtml(opts: {
     if (requestForm) requestForm.onsubmit = function (ev) {
       ev.preventDefault();
       toast(t, "Request accepted");
+      state.screen = "home";
+      persist();
+      paint();
+    };
+    var actionForm = document.getElementById("actionForm");
+    if (actionForm) actionForm.onsubmit = function (ev) {
+      ev.preventDefault();
+      toast(t, "Saved");
       state.screen = "home";
       persist();
       paint();

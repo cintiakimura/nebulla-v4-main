@@ -42,6 +42,10 @@ const GOLDEN =
   );
   assert.ok(kids.out_of_scope.includes("supabase"));
   assert.match(formatCodingSkeletonForGo(kids), /MUST NOT: \/dashboard/);
+  assert.match(formatCodingSkeletonForGo(kids), /FOUNDATION MIN UI/);
+  assert.match(formatCodingSkeletonForGo(kids), /1\. Header:/);
+  assert.match(formatCodingSkeletonForGo(kids), /5\. Action screen/);
+  assert.ok(kids.routes.some((r) => r.path === "/teacher" || r.path === "/progress"));
   assert.equal(isCodingSkeletonReady(kids), true);
 }
 

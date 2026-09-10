@@ -5,7 +5,12 @@
 import fs from "fs";
 import path from "path";
 import { extractNamedRoutesFromPagesText, seedPagesFromGoal } from "./nebulaUiBrief";
-import { extractNamedBrand, inferProductName, productNameFromPlan } from "./productIdentity";
+import { extractNamedBrand, inferProductName, productNameFromPlan, readProductIdentity } from "./productIdentity";
+import {
+  buildNonEducationHomePage,
+  isEducationProductGoal,
+  looksLikeGenericContinueHome,
+} from "./rewriteEducationKitHome";
 
 const GENERIC_STUB_RE =
   /Interactive screen with mock data|Primary action works locally|Continue<\/button>/i;
@@ -86,12 +91,15 @@ export function rewriteJobScreensIfNeeded(input: {
   const named = extractNamedRoutesFromPagesText(pages);
   const routes = named.length > 0 ? named : seedPagesFromGoal(goal);
   const productName =
+    readProductIdentity(input.workspaceRoot)?.projectName ||
     productNameFromPlan(input.plan) ||
     extractNamedBrand(goal) ||
     inferProductName(goal) ||
     "App";
   const rewritten: string[] = [];
   const delivery = isDeliveryGoal(goal);
+  const education = isEducationProductGoal(goal);
+  const routeObjs = routes.map((r) => ({ path: r.route, label: r.name }));
 
   const pageRels = ["app/page.tsx", "src/app/page.tsx"];
   for (const rel of pageRels) {
@@ -99,9 +107,16 @@ export function rewriteJobScreensIfNeeded(input: {
     if (!fs.existsSync(abs)) continue;
     try {
       const prev = fs.readFileSync(abs, "utf8");
-      if (!looksStubOrLeftover(prev) && !delivery) continue;
-      if (delivery && (looksStubOrLeftover(prev) || /Ready bikes|Today'?s breads|short lesson/i.test(prev))) {
-        if (writeRel(input.workspaceRoot, rel, deliveryHomeJsx(productName))) rewritten.push(rel);
+      if (education) continue;
+      if (
+        looksLikeGenericContinueHome(prev) ||
+        looksStubOrLeftover(prev) ||
+        (delivery && /Ready bikes|Today'?s breads|short lesson/i.test(prev))
+      ) {
+        const next = delivery
+          ? deliveryHomeJsx(productName)
+          : buildNonEducationHomePage({ productName, goal, routes: routeObjs });
+        if (writeRel(input.workspaceRoot, rel, next)) rewritten.push(rel);
       }
     } catch {
       /* skip */

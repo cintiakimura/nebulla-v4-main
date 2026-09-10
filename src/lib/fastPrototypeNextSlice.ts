@@ -207,7 +207,7 @@ export const FOUNDATION_RETRY_ACTIVITY =
   'Foundation did not land. Retry Go for Foundation — not Continue for Primary.';
 
 export const FOUNDATION_SLICE_INSTRUCTION =
-  'START_CODING — implement ONE coherent Foundation slice only (Build → Debug → Next). Prefer app/, src/, components/, pages/ — not master-plan/ui-brief only. Create router + Coding-skeleton routes only, one mock store per entity, mock auth only if auth is not none. Header and <title> must use Master Plan §1 Product name (never Sparrow Tutor or Practice app unless §1 is already named Sparrow). Routes from §4 only — no Rewards tab unless §4 lists Rewards. Primary controls must not be silent no-ops. Do not claim Preview or the product is finished. File blocks for this slice only — not the full §4 app.';
+  'START_CODING — implement ONE coherent Foundation slice only (Build → Debug → Next). Prefer app/, src/, components/, pages/ — not master-plan/ui-brief only. Create router + Coding-skeleton routes only, one mock store per entity, mock auth only if auth is not none. Header and <title> must use Master Plan §1 Product name (never Sparrow Tutor or Practice app unless §1 is already named Sparrow). Routes from §4 only — no Rewards tab unless §4 lists Rewards. Primary controls must not be silent no-ops. Obey FOUNDATION MIN UI in the Coding skeleton (job Home with ≥2 items + CTA; not Interactive screen / Start practice unless education). Do not start Data+API. Do not claim Preview or the product is finished. File blocks for this slice only — not the full §4 app.';
 
 /** After a 3-minute timeout — smaller shell so Grok Code can finish. */
 export const NARROW_FOUNDATION_SLICE_INSTRUCTION =
