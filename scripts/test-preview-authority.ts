@@ -335,6 +335,15 @@ section("canvas honesty — product preview / coded bridge is showable (not Figm
   assert.match(canvas, /placeholder mockup|coded app/);
   assert.match(canvas, /onShowLiveApp/);
   assert.match(canvas, /liveAvailable/);
+  assert.match(canvas, /retriedDeniedRef|Preview access denied/);
+  const bootstrap = fs.readFileSync(
+    path.join(path.dirname(fileURLToPath(import.meta.url)), "../server.ts"),
+    "utf8",
+  );
+  const bootFn = bootstrap.slice(bootstrap.indexOf('app.get("/api/app-preview/bootstrap"'));
+  assert.match(bootFn, /issuePreviewGrantCookieMerging/);
+  assert.equal(/userOwnsWorkspaceDiskKey/.test(bootFn.slice(0, 900)), false);
+  assert.equal(/Preview access denied for this workspace/.test(bootFn.slice(0, 900)), false);
   const toolbar = fs.readFileSync(
     path.join(path.dirname(fileURLToPath(import.meta.url)), "../src/components/ide/shell/previewTools/PreviewEditToolbar.tsx"),
     "utf8",

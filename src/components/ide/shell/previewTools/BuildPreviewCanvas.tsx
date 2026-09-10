@@ -40,6 +40,7 @@ export function BuildPreviewCanvas() {
   const [waitStatus, setWaitStatus] = useState('Waiting for preview');
   const [previewMode, setPreviewMode] = useState<string | null>(null);
   const retriedLegacyRef = useRef(false);
+  const retriedDeniedRef = useRef(false);
   const retriedMockShellRef = useRef(false);
   const keepMockupRef = useRef(false);
   const userPickedDraftRef = useRef(false);
@@ -288,7 +289,8 @@ export function BuildPreviewCanvas() {
               onClick={() => {
                 setFailed(false);
                 setLiveLoadFailed(false);
-                bump();
+                retriedDeniedRef.current = false;
+                void refreshWaitState().then(() => bump());
               }}
             >
               Retry
@@ -314,6 +316,14 @@ export function BuildPreviewCanvas() {
             try {
               const doc = e.currentTarget.contentDocument;
               const html = doc?.documentElement?.outerHTML || '';
+              if (
+                !retriedDeniedRef.current &&
+                /Preview access denied|Sign in required for this workspace preview/i.test(html)
+              ) {
+                retriedDeniedRef.current = true;
+                void refreshWaitState().then(() => bump());
+                return;
+              }
               if (
                 !retriedLegacyRef.current &&
                 /V0 credits unavailable|basic UI preview/i.test(html)

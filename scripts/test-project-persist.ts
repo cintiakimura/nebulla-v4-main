@@ -8,6 +8,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { pickPreferredCloudProject } from "../src/lib/nebulaCloud.ts";
+import { resolveWorkspaceKeyPreferringRequest } from "../lib/nebulaProjectKey.ts";
 import { ensurePendingIdeaFromShellGoal } from "../src/lib/landingGoalHandoff.ts";
 import {
   listDurableWorkspaceRelPaths,
@@ -136,6 +137,34 @@ section("durable workspace save/restore (deploy must not start from scratch)");
   const cloud = fs.readFileSync(path.join(root, "lib/nebulaCloudProjectRoot.ts"), "utf8");
   assert.match(cloud, /hydrateWorkspaceFromR2/);
   assert.equal(/scheduleWorkspaceFileR2Sync\(projectKey, workspaceRoot, abs\)/.test(cloud), false);
+}
+
+section("projectName is a label; request projectKey wins");
+{
+  assert.equal(
+    resolveWorkspaceKeyPreferringRequest({
+      projectKey: "cfproj_oldbakeryfiles",
+      projectName: "LoafLocal",
+    }),
+    "cfproj_oldbakeryfiles",
+  );
+  assert.equal(
+    resolveWorkspaceKeyPreferringRequest({
+      projectKey: "default",
+      projectName: "LoafLocal",
+      ownedWorkspaceIdForName: null,
+      latestOwnedWorkspaceId: "cfproj_sessionone",
+    }),
+    "cfproj_sessionone",
+  );
+  const resolveSrc = fs.readFileSync(path.join(root, "renderStack.ts"), "utf8");
+  const fn = resolveSrc.slice(resolveSrc.indexOf("export async function resolveNebulaProjectDiskKey"));
+  assert.equal(/provisionWorkspaceForNewProject\(projectName\)/.test(fn.slice(0, 1800)), false);
+  const projectsGet = resolveSrc.slice(resolveSrc.indexOf('app.get("/api/projects"'));
+  assert.match(projectsGet, /status\(200\).*projects: \[\]/);
+  assert.match(projectsGet, /GET \/api\/projects:/);
+  const cloudClient = fs.readFileSync(path.join(root, "src/lib/nebulaCloud.ts"), "utf8");
+  assert.match(cloudClient, /Your workspace was not reset/);
 }
 
 console.log("\n✓ project persist passed\n");

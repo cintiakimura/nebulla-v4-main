@@ -16,3 +16,22 @@ export function getProjectKeyFromRequest(req: Request): string {
   const fromBody = typeof b === "string" ? b.trim() : "";
   return sanitizeProjectKey(fromHeader || fromQuery || fromBody || "default");
 }
+
+/**
+ * Chip / `projectName` is a label only. Disk + preview always follow the request
+ * workspace key when the client sent one (including after rename to LoafLocal).
+ */
+export function resolveWorkspaceKeyPreferringRequest(opts: {
+  projectKey?: string;
+  projectName?: string;
+  ownedWorkspaceIdForName?: string | null;
+  latestOwnedWorkspaceId?: string | null;
+}): string {
+  const requested = sanitizeProjectKey(opts.projectKey || "");
+  if (requested && requested !== "default") return requested;
+  const byName = sanitizeProjectKey(opts.ownedWorkspaceIdForName || "");
+  if (byName && byName !== "default") return byName;
+  const latest = sanitizeProjectKey(opts.latestOwnedWorkspaceId || "");
+  if (latest && latest !== "default") return latest;
+  return requested || "default";
+}

@@ -33,7 +33,6 @@ import {
 import {
   canReadAppPreview,
   issuePreviewGrantCookieMerging,
-  isSyntheticWorkspaceKey,
 } from "./lib/appPreviewAuthz";
 import { createApiRateLimitGate } from "./lib/rateLimit";
 import { getOpsReadiness, logOpsReadinessAtBoot } from "./lib/opsReadiness";
@@ -2498,16 +2497,8 @@ No approved UI code yet.
   app.get("/api/app-preview/bootstrap", async (req, res) => {
     try {
       const pp = projectPathsFor(req);
-      const uid = readNebulaSessionUserId(req);
-      if (isSyntheticWorkspaceKey(pp.projectKey)) {
-        if (!uid) {
-          return res.status(401).type("text/plain").send("Sign in required for this workspace preview");
-        }
-        const owns = await userOwnsWorkspaceDiskKey(uid, pp.projectKey);
-        if (!owns) {
-          return res.status(403).type("text/plain").send("Preview access denied for this workspace");
-        }
-      }
+      // Same session that can open /app (guest or signed-in). Chip name ≠ workspace id.
+      // Do not require v0 eligibility, Layout draft, or DB ownership of cfproj_*.
       issuePreviewGrantCookieMerging(req, res, pp.projectKey);
 
       const q = req.query as Record<string, unknown>;

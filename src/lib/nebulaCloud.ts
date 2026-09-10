@@ -234,7 +234,12 @@ export async function listCloudProjectsDetailed(): Promise<ListCloudProjectsResu
     if (!res.ok) {
       return { ok: false, projects: [], error: 'failed' };
     }
-    const data = await readResponseJson<{ projects: CloudProjectRow[] }>(res);
+    const data = await readResponseJson<{ projects?: CloudProjectRow[]; error?: string; ok?: boolean }>(
+      res,
+    );
+    if (data.ok === false || (data.error && !(data.projects && data.projects.length))) {
+      return { ok: false, projects: [], error: 'failed' };
+    }
     return { ok: true, projects: data.projects || [] };
   } catch {
     return { ok: false, projects: [], error: 'failed' };
@@ -588,7 +593,28 @@ export async function ensureCloudWorkspaceReady(): Promise<WorkspaceReadyResult>
     return { status: 'needs_login', config };
   }
 
-  let projects = await listCloudProjects();
+  const listed = await listCloudProjectsDetailed();
+  if (!listed.ok) {
+    const name = getBrowserProjectName().trim();
+    const key = getBrowserProjectKey();
+    if (key && key !== 'default') {
+      return {
+        status: 'ready',
+        user,
+        projectName: name || key,
+        projectKey: key,
+        mode: 'cloud',
+      };
+    }
+    return {
+      status: 'error',
+      message:
+        listed.error === 'unavailable'
+          ? 'Could not list projects (database unavailable). Your workspace was not reset.'
+          : 'Could not list projects. Your workspace was not reset.',
+    };
+  }
+  let projects = listed.projects;
   if (projects.length === 0) {
     const created = await createAndSelectCloudProject('Untitled Project');
     if (!created) {

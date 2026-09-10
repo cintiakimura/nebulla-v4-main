@@ -4,7 +4,11 @@
  */
 
 import type { Express, Request, Response } from "express";
-import { getProjectKeyFromRequest, sanitizeProjectKey } from "./lib/nebulaProjectKey";
+import {
+  getProjectKeyFromRequest,
+  resolveWorkspaceKeyPreferringRequest,
+  sanitizeProjectKey,
+} from "./lib/nebulaProjectKey";
 import { registerNebulaPgPool, registerPlatformQueryable } from "./lib/nebulaPgPool";
 import { getMonthlyUsageSnapshot } from "./lib/token-usage";
 import {
@@ -797,11 +801,11 @@ function provisionWorkspaceForNewProject(projectName: string): { id: string; nam
 }
 
 /**
- * Disk + API scope key: authenticated users resolve from DB (`workspace_id` for that project name);
- * anonymous uses `projectKey` from the request.
+ * Disk + API scope key: request `projectKey` wins. `projectName` is a label
+ * (LoafLocal after Phase 2) and must never mint a new cfproj_* folder.
  */
 export async function resolveNebulaProjectDiskKey(req: Request): Promise<string> {
-  const fallback = sanitizeProjectKey(getProjectKeyFromRequest(req as Request));
+  const requested = sanitizeProjectKey(getProjectKeyFromRequest(req as Request));
   const uid = readSession(req);
   const q = req.query as Record<string, unknown>;
   const body = (req.body || {}) as { projectName?: unknown };
@@ -811,30 +815,41 @@ export async function resolveNebulaProjectDiskKey(req: Request): Promise<string>
     (typeof headerPn === "string" && headerPn.trim()) ||
     (typeof body?.projectName === "string" && body.projectName.trim()) ||
     "";
+
+  if (requested && requested !== "default") {
+    return resolveWorkspaceKeyPreferringRequest({ projectKey: requested, projectName });
+  }
+
   const dbHandle = getPlatformDbOrNull();
-  if (!uid || !projectName || !dbHandle || !dbReady) return fallback;
+  if (!uid || !dbHandle || !dbReady) {
+    return resolveWorkspaceKeyPreferringRequest({ projectKey: requested, projectName });
+  }
   try {
-    const r = await dbHandle.query(
-      `SELECT workspace_id FROM public.nebula_projects WHERE user_id = $1::uuid AND name = $2`,
-      [uid, projectName]
-    );
-    let wid = r.rows[0]?.workspace_id as string | undefined;
-    if (!wid) {
-      const rw = provisionWorkspaceForNewProject(projectName);
-      wid = rw.id;
-      await dbHandle.query(
-        `UPDATE public.nebula_projects SET workspace_id = $1, updated_at = NOW()
-         WHERE user_id = $2::uuid AND name = $3 AND (workspace_id IS NULL OR workspace_id = '')`,
-        [wid, uid, projectName]
+    let ownedForName: string | null = null;
+    if (projectName) {
+      const r = await dbHandle.query(
+        `SELECT workspace_id FROM public.nebula_projects WHERE user_id = $1::uuid AND name = $2`,
+        [uid, projectName],
       );
-      void provisionAndPersistD1ForProject(dbHandle, uid, projectName, wid).catch((e) => {
-        console.warn("[nebula] D1 on disk-key resolve:", e);
-      });
+      const wid = r.rows[0]?.workspace_id as string | undefined;
+      if (wid && String(wid).trim()) ownedForName = String(wid).trim();
     }
-    return wid ? sanitizeProjectKey(wid) : fallback;
+    const latest = await dbHandle.query(
+      `SELECT workspace_id FROM public.nebula_projects
+       WHERE user_id = $1::uuid AND workspace_id IS NOT NULL AND TRIM(workspace_id) <> ''
+       ORDER BY updated_at DESC LIMIT 1`,
+      [uid],
+    );
+    const latestWid = latest.rows[0]?.workspace_id as string | undefined;
+    return resolveWorkspaceKeyPreferringRequest({
+      projectKey: requested,
+      projectName,
+      ownedWorkspaceIdForName: ownedForName,
+      latestOwnedWorkspaceId: latestWid ? String(latestWid).trim() : null,
+    });
   } catch (e) {
     console.warn("[nebula] resolveNebulaProjectDiskKey:", e);
-    return fallback;
+    return resolveWorkspaceKeyPreferringRequest({ projectKey: requested, projectName });
   }
 }
 
@@ -1770,25 +1785,44 @@ export async function mountRenderStack(app: Express) {
     const oneName = typeof req.query.name === "string" ? req.query.name.trim() : "";
     try {
       const db = requireDbPool();
-      if (oneName) {
-        const r = await db.query(
-          `SELECT name, pages, edges, workspace_id, d1_database_id, d1_database_name, updated_at FROM public.nebula_projects WHERE user_id = $1::uuid AND name = $2`,
-          [uid, oneName]
-        );
-        const rows = r.rows as ProjectListRow[];
+      const loadRows = async (nameFilter: string): Promise<ProjectListRow[]> => {
+        const fullSql = nameFilter
+          ? `SELECT name, pages, edges, workspace_id, d1_database_id, d1_database_name, updated_at FROM public.nebula_projects WHERE user_id = $1::uuid AND name = $2`
+          : `SELECT name, pages, edges, workspace_id, d1_database_id, d1_database_name, updated_at FROM public.nebula_projects WHERE user_id = $1::uuid ORDER BY updated_at DESC`;
+        try {
+          const r = nameFilter
+            ? await db.query(fullSql, [uid, nameFilter])
+            : await db.query(fullSql, [uid]);
+          return r.rows as ProjectListRow[];
+        } catch (colErr) {
+          if (pgErrorCode(colErr) !== "42703") throw colErr;
+          const leanSql = nameFilter
+            ? `SELECT name, pages, edges, workspace_id, updated_at FROM public.nebula_projects WHERE user_id = $1::uuid AND name = $2`
+            : `SELECT name, pages, edges, workspace_id, updated_at FROM public.nebula_projects WHERE user_id = $1::uuid ORDER BY updated_at DESC`;
+          const r = nameFilter
+            ? await db.query(leanSql, [uid, nameFilter])
+            : await db.query(leanSql, [uid]);
+          return (r.rows as ProjectListRow[]).map((row) => ({
+            ...row,
+            d1_database_id: row.d1_database_id ?? null,
+            d1_database_name: row.d1_database_name ?? null,
+          }));
+        }
+      };
+      const rows = await loadRows(oneName);
+      try {
         await backfillMissingWorkspaceIds(uid, rows);
-        return res.json({ projects: rows, project: rows[0] || null });
+      } catch (bf) {
+        console.error("[nebula] GET /api/projects backfill:", bf instanceof Error ? bf.stack : bf);
       }
-      const r = await db.query(
-        `SELECT name, pages, edges, workspace_id, d1_database_id, d1_database_name, updated_at FROM public.nebula_projects WHERE user_id = $1::uuid ORDER BY updated_at DESC`,
-        [uid]
-      );
-      const rows = r.rows as ProjectListRow[];
-      await backfillMissingWorkspaceIds(uid, rows);
-      res.json({ projects: rows });
+      if (oneName) {
+        return res.json({ ok: true, projects: rows, project: rows[0] || null });
+      }
+      return res.json({ ok: true, projects: rows });
     } catch (e) {
-      console.error("[nebula] GET /api/projects:", e);
-      res.status(500).json({ error: "Failed to list projects" });
+      const message = e instanceof Error ? e.message : "Failed to list projects";
+      console.error("[nebula] GET /api/projects:", e instanceof Error ? e.stack : e);
+      return res.status(200).json({ ok: false, projects: [], error: message });
     }
   });
 
@@ -1846,6 +1880,14 @@ export async function mountRenderStack(app: Express) {
         }
       }
       let workspaceId = existing.rows[0]?.workspace_id as string | undefined;
+      if ((!workspaceId || !String(workspaceId).trim()) && renamingFrom) {
+        const prevRow = await db.query(
+          `SELECT workspace_id, pages, edges FROM public.nebula_projects WHERE user_id = $1::uuid AND name = $2`,
+          [uid, renamingFrom],
+        );
+        const prevWid = prevRow.rows[0]?.workspace_id as string | undefined;
+        if (prevWid && String(prevWid).trim()) workspaceId = String(prevWid).trim();
+      }
       if (!workspaceId || !String(workspaceId).trim()) {
         const rw = provisionWorkspaceForNewProject(trimmed);
         workspaceId = rw.id;
