@@ -88,6 +88,10 @@ import {
   unlockVisualEditorFromWorkspaceCoding,
   writeBasicUiScaffold,
 } from "./lib/nebulaIdeWorkspaceArtifacts";
+import {
+  applyNewProductBriefToWorkspace,
+  writeReplacedMasterPlan,
+} from "./lib/replaceProductWorkspace";
 import { parsePagesFromUiBrief, readUiBriefMarkdown } from "./lib/nebulaUiBrief";
 import { resolveMasterPlanStrictMode } from "./lib/masterPlanStrictPolicy";
 import { isUserAppProductPath } from "./lib/nebulaOrchestrationPaths";
@@ -1639,6 +1643,84 @@ No approved UI code yet.
     } catch (error) {
       console.error("Error updating master plan:", error);
       res.status(500).json({ error: "Failed to update master plan" });
+    }
+  });
+
+  app.post("/api/master-plan/replace", (req, res) => {
+    const sections = req.body?.sections;
+    if (!sections || typeof sections !== "object") {
+      return res.status(400).json({ error: "sections required" });
+    }
+    try {
+      const pp = projectPathsFor(req);
+      const parsed: Partial<Record<number, string>> = {};
+      for (let i = 1; i <= 6; i++) {
+        const rec = sections as Record<string, unknown>;
+        parsed[i] = String(rec[i] ?? rec[String(i)] ?? "");
+      }
+      if (parsed[1] && looksLikeRawUserPrompt(String(parsed[1]))) {
+        parsed[1] = distillBriefToGoalSection(String(parsed[1])) || parsed[1];
+      }
+      writeReplacedMasterPlan({
+        workspaceRoot: pp.workspaceRoot,
+        masterPlanPath: pp.masterPlanPath,
+        sections: parsed,
+      });
+      let plan = readMasterPlanFile(pp.masterPlanPath);
+      const ensuredUpdate = ensureCodingSkeletonOnPlan(plan as Record<string, unknown>, {
+        goal: String(plan["1. Goal of the app"] || ""),
+      });
+      persistMasterPlanJson(pp.workspaceRoot, pp.masterPlanPath, ensuredUpdate.plan);
+      const identityPass = applyPlanIdentityAndWinningPalette(
+        pp.workspaceRoot,
+        readMasterPlanFile(pp.masterPlanPath),
+      );
+      const v0Sync = ensureV0PromptSynced(pp);
+      res.json({
+        success: true,
+        replaced: true,
+        productName: identityPass.productName,
+        uiBriefSynced: v0Sync.uiBriefSynced,
+        uiBriefLength: v0Sync.uiBrief.length,
+        v0PromptSynced: v0Sync.synced,
+        v0PromptLength: v0Sync.content.length,
+      });
+    } catch (error) {
+      console.error("Error replacing master plan:", error);
+      res.status(500).json({ error: "Failed to replace master plan" });
+    }
+  });
+
+  app.post("/api/ide/replace-product-brief", (req, res) => {
+    try {
+      const pp = projectPathsFor(req);
+      const body = req.body || {};
+      const goal = typeof body.goal === "string" ? String(body.goal).trim() : "";
+      if (!goal) return res.status(400).json({ error: "goal required" });
+      const uid = readNebulaSessionUserId(req) || "anonymous";
+      const convLabel =
+        (typeof body.projectName === "string" && body.projectName.trim()) || "Untitled Project";
+      const chatScope = { userId: uid, projectKey: pp.projectKey, projectLabel: convLabel };
+      let chatCleared = clearConversationLog(chatScope);
+      chatCleared =
+        clearConversationLog({ ...chatScope, projectLabel: "Untitled Project" }) || chatCleared;
+      chatCleared =
+        clearConversationLog({ ...chatScope, projectLabel: "Untitled project" }) || chatCleared;
+      const result = applyNewProductBriefToWorkspace({
+        workspaceRoot: pp.workspaceRoot,
+        masterPlanPath: pp.masterPlanPath,
+        incomingGoal: goal,
+      });
+      persistMasterPlanJson(
+        pp.workspaceRoot,
+        pp.masterPlanPath,
+        readMasterPlanFile(pp.masterPlanPath),
+      );
+      return res.json({ ok: true, chatCleared, ...result });
+    } catch (err: unknown) {
+      return res.status(500).json({
+        error: err instanceof Error ? err.message : "replace product brief failed",
+      });
     }
   });
 

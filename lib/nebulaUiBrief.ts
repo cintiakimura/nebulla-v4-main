@@ -15,6 +15,7 @@ import {
   isGenericUiuxBoilerplate,
 } from "./uiuxSectionBuilder";
 import { collapseWinningPalette } from "./uiGenerationEngine/v2/industryPalettes";
+import { leftoverRoutesConflictWithGoal } from "./productGoalFingerprint";
 
 export const UI_BRIEF_REL = "nebula-ui-studio/ui-brief.md";
 
@@ -275,6 +276,13 @@ export function extractNamedRoutesFromPagesText(text: string): { name: string; r
 /** Safe defaults so Gate A can auto-build a brief when §4 has no routes yet. */
 export function seedPagesFromGoal(goal: string): { name: string; route: string }[] {
   const g = String(goal || "");
+  if (/\b(bike|bicycle|mechanic|spoke)\b/i.test(g)) {
+    return [
+      { name: "Home", route: "/" },
+      { name: "Book", route: "/book" },
+      { name: "Mechanic", route: "/mechanic" },
+    ];
+  }
   if (/\b(adhd|kids?|child|student|teacher|tutor|classroom|school|parent)\b/i.test(g)) {
     return [
       { name: "Home", route: "/" },
@@ -329,6 +337,9 @@ export function pagesForPlanFromGoalAndDisk(
     (p) => p.route !== "/" && p.route !== "/dashboard" && p.route !== "/settings",
   );
   const nested = (diskRoutes || []).filter((r) => r && r !== "/");
+  if (leftoverRoutesConflictWithGoal(goal, diskRoutes)) {
+    return fromGoal;
+  }
   if (diskRoutesLookLikeGenericShell(diskRoutes) && goalHasProductPages) {
     return fromGoal;
   }
@@ -379,7 +390,9 @@ export function pagesTextHasParseableRoutes(text: string): boolean {
 /** If §4 has no parseable routes, emit ### contracts so Gate A / UI Gen can proceed. */
 export function resolvePagesMarkdown(pagesSection: string, goal: string): string {
   const pages = String(pagesSection || "").trim();
-  if (pagesTextHasParseableRoutes(pages)) return pages;
+  if (pagesTextHasParseableRoutes(pages) && !leftoverRoutesConflictWithGoal(goal, extractNamedRoutesFromPagesText(pages).map((p) => p.route))) {
+    return pages;
+  }
   const extracted = extractNamedRoutesFromPagesText(pages);
   const seeded = extracted.length > 0 ? extracted : seedPagesFromGoal(goal);
   return formatPageContractsMarkdown(seeded, goal);

@@ -9,6 +9,7 @@ import {
 import { fetchJson } from './apiFetch';
 import { withProjectBody, withProjectQuery, getBrowserProjectName } from './nebulaProjectApi';
 import { productNameFromPlan } from '../../lib/productIdentity';
+import { isReplacementProductBrief } from '../../lib/productGoalFingerprint';
 import { promoteWorkspaceChipFromProductName } from './productIdentityClient';
 import { buildLanguagePromptAppendix } from './i18n/languagePromptAppendix';
 import type { IdeLocaleCode } from './i18n/locales';
@@ -189,6 +190,38 @@ export async function persistMasterPlanFromAssistantSource(
   onProgress?.('Saving Master Plan tabs…');
   let saved = 0;
   let productNameFromSave = '';
+  let existingGoal = '';
+  try {
+    const existing = await fetchJson<Record<string, string>>(withProjectQuery('/api/master-plan/read'), {
+      credentials: 'include',
+      cache: 'no-store',
+    });
+    existingGoal = String(existing?.['1. Goal of the app'] || '');
+  } catch {
+    existingGoal = '';
+  }
+  const nextGoal = (parsed[1] ?? '').trim();
+  const replaceAll = Boolean(nextGoal) && isReplacementProductBrief(nextGoal, existingGoal);
+  if (replaceAll) {
+    const sections: Record<number, string> = {};
+    for (let i = 1; i <= MASTER_PLAN_SECTION_KEYS.length; i++) {
+      sections[i] = (parsed[i] ?? '').trim();
+    }
+    try {
+      const res = await fetchJson<{ productName?: string }>(withProjectQuery('/api/master-plan/replace'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(withProjectBody({ sections })),
+      });
+      if (typeof res.productName === 'string' && res.productName.trim()) {
+        productNameFromSave = res.productName.trim();
+      }
+      saved = Object.values(sections).filter(Boolean).length || 1;
+    } catch (e) {
+      console.warn('[grokChatArtifacts] master plan replace failed:', e);
+    }
+  } else {
   for (let tabIndex = 1; tabIndex <= MASTER_PLAN_SECTION_KEYS.length; tabIndex++) {
     const content = (parsed[tabIndex] ?? '').trim();
     if (!content) continue;
@@ -206,6 +239,7 @@ export async function persistMasterPlanFromAssistantSource(
     } catch (e) {
       console.warn('[grokChatArtifacts] master plan tab save failed:', tabIndex, e);
     }
+  }
   }
   if (saved > 0) {
     onProgress?.(`Saved ${saved} Master Plan tab(s)`);

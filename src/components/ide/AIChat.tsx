@@ -166,6 +166,7 @@ import {
   type StartGuidedChatDetail,
 } from '../../lib/ideHomeEvents';
 import { inferProductName } from '../../lib/projectNameFromIdea';
+import { isReplacementProductBrief, looksLikeStandaloneProductBrief } from '../../../lib/productGoalFingerprint';
 import { persistProductIdentityClient } from '../../lib/productIdentityClient';
 import {
   ASK_FOR_SHORT_GOAL,
@@ -2040,7 +2041,7 @@ export function AIChat() {
       },
     );
 
-    const historyForApi = [...prior, { ...userMsg, content: text }]
+    let historyForApi = [...prior, { ...userMsg, content: text }]
       .filter((m) => m.variant !== 'status')
       .map((m) => ({
       role: m.role,
@@ -2075,15 +2076,41 @@ export function AIChat() {
       !onboardingBuildStart &&
       !hasAppStatusPayload &&
       (userForcedCoding || isFastPrototypeContinue || fastPrototypeTurn || buildMode);
-    if (maySkipChatIfPlanExists) {
-      try {
-        const mpRes = await fetch(withProjectQuery('/api/master-plan/read'), {
+    if (maySkipChatIfPlanExists || looksLikeStandaloneProductBrief(text)) {
+    try {
+      const mpRes = await fetch(withProjectQuery('/api/master-plan/read'), {
+        credentials: 'include',
+        cache: 'no-store',
+      });
+      const plan = mpRes.ok
+        ? ((await readResponseJson(mpRes)) as Record<string, unknown>)
+        : null;
+      const incomingGoal = extractGoalFromUserNote(text);
+      const diskGoal = String(plan?.['1. Goal of the app'] || '');
+      const replacingProduct =
+        Boolean(incomingGoal) &&
+        looksLikeStandaloneProductBrief(text) &&
+        !userNoteRequestsNextSlice(rawText) &&
+        isReplacementProductBrief(incomingGoal, diskGoal);
+      if (replacingProduct) {
+        await fetchJson(withProjectQuery('/api/ide/replace-product-brief'), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
           credentials: 'include',
-          cache: 'no-store',
+          body: JSON.stringify(
+            withProjectBody({
+              goal: incomingGoal,
+              projectName: getBrowserProjectName().trim() || 'Untitled Project',
+            }),
+          ),
         });
-        const plan = mpRes.ok
-          ? ((await readResponseJson(mpRes)) as Record<string, unknown>)
-          : null;
+        lastAutoSliceLabelRef.current = null;
+        messagesRef.current = [userMsg];
+        setMessages([userMsg]);
+        historyForApi = [{ role: 'user', content: text }];
+        skipGrokChat = false;
+        pushActivity('New product brief — previous plan and leftover routes cleared', 'info');
+      } else if (maySkipChatIfPlanExists) {
         const hasPlan = planRecordHasUsableGoal(plan);
         if (hasPlan) {
           planSliceFromDisk = parsePersistedSliceLabel(
@@ -2114,9 +2141,10 @@ export function AIChat() {
             fromPrompt ? 'info' : 'warn',
           );
         }
-      } catch {
-        if (!fastPrototypeTurn && !buildMode) skipGrokChat = false;
       }
+    } catch {
+      if (!fastPrototypeTurn && !buildMode) skipGrokChat = false;
+    }
     }
 
     try {

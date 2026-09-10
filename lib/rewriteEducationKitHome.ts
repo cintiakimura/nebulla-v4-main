@@ -155,8 +155,28 @@ export function rewriteEducationKitHomeIfNeeded(input: {
     if (!fs.existsSync(abs)) continue;
     try {
       const prev = fs.readFileSync(abs, "utf8");
-      if (!/Role:\s*(parent|kid|teacher)|Practice app|Start practice/i.test(prev)) continue;
+      if (
+        !/Role:\s*(parent|kid|teacher)|Practice app|Start practice|href=["']\/(practice|session|helper)["']|\b(Helper|Practice|Session)\b/i.test(
+          prev,
+        )
+      ) {
+        continue;
+      }
       const next = stripEducationRole(prev);
+      const leftoverNav = /href=["']\/(practice|session|helper)["']|\b(Helper|Practice|Session)\b/i.test(next);
+      if (leftoverNav && routes.length > 0) {
+        const links = routes
+          .map((r) => `<a href="${r.path}">${r.label}</a>`)
+          .join("\n          ");
+        const withNav = /<nav[\s\S]*?<\/nav>/.test(next)
+          ? next.replace(/<nav[\s\S]*?<\/nav>/, `<nav>\n          ${links}\n        </nav>`)
+          : next;
+        if (withNav !== prev) {
+          fs.writeFileSync(abs, withNav, "utf8");
+          rewritten.push(rel);
+          continue;
+        }
+      }
       if (next !== prev) {
         fs.writeFileSync(abs, next, "utf8");
         rewritten.push(rel);

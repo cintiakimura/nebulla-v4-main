@@ -36,6 +36,7 @@ import {
   scheduleWorkspaceRelPathsR2Sync,
 } from "./nebulaWorkspaceStorage";
 import { ensureProductIdentity, patchMasterPlanProductName, productNameFromPlan } from "./productIdentity";
+import { leftoverPlanConflictsWithGoal } from "./productGoalFingerprint";
 import { collapseWinningPalette } from "./uiGenerationEngine/v2/industryPalettes";
 
 export const MASTER_PLAN_TAB_KEYS = MASTER_PLAN_ALL_KEYS;
@@ -103,7 +104,12 @@ export function fillMissingMasterPlanSectionsLocal(opts: {
   }
   const seededGoal = seedGoalOfTheAppSection(next, [
     extractGoalFromUserNote(note),
-    memoryGoal,
+    memoryGoal && !leftoverPlanConflictsWithGoal({
+      "1. Goal of the app": extractGoalFromUserNote(note) || goalNow,
+      "2. Tech and Research": memoryGoal,
+    })
+      ? memoryGoal
+      : "",
     name,
   ]);
   if (seededGoal && goalSectionNeedsReseed(goalNow, note)) {
@@ -446,9 +452,19 @@ export function hydrateMasterPlanDerivedSections(
     changed = true;
   }
 
-  const pagesSection = String(out["4. Pages and navigation"] ?? "").trim();
   const goal = String(out["1. Goal of the app"] ?? "").trim();
-  if (!pagesTextHasParseableRoutes(pagesSection)) {
+  if (leftoverPlanConflictsWithGoal(out)) {
+    out["2. Tech and Research"] = "";
+    out["3. Features and KPIs"] = "";
+    out["4. Pages and navigation"] = "";
+    out["5. UI/UX design"] = "";
+    changed = true;
+  }
+  const pagesNow = String(out["4. Pages and navigation"] ?? "").trim();
+  if (
+    !pagesTextHasParseableRoutes(pagesNow) ||
+    leftoverPlanConflictsWithGoal({ ...out, "4. Pages and navigation": pagesNow })
+  ) {
     const routes = discoverWorkspaceRoutes(workspaceRoot);
     const seeded = pagesForPlanFromGoalAndDisk(goal, routes);
     out["4. Pages and navigation"] = formatPageContractsMarkdown(seeded, goal);
@@ -458,7 +474,13 @@ export function hydrateMasterPlanDerivedSections(
   const uiSection = String(out["5. UI/UX design"] ?? "").trim();
   if (!uiSection || isGenericUiuxBoilerplate(uiSection)) {
     const prompt = !uiSection ? extractNebulaUiStudioPrompt(workspaceRoot) : "";
-    if (prompt && !isGenericUiuxBoilerplate(prompt)) {
+    const promptConflicts =
+      Boolean(prompt) &&
+      leftoverPlanConflictsWithGoal({
+        "1. Goal of the app": goal,
+        "5. UI/UX design": prompt,
+      });
+    if (prompt && !isGenericUiuxBoilerplate(prompt) && !promptConflicts) {
       out["5. UI/UX design"] = prompt;
       changed = true;
     } else {

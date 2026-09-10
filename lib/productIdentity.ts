@@ -17,7 +17,7 @@ export type ProductIdentity = {
   userSet?: boolean;
 };
 
-type ProductDomain = "education" | "tasks" | "landing" | "commerce" | "general";
+export type ProductDomain = "education" | "tasks" | "landing" | "commerce" | "general";
 
 const STOPWORDS = new Set([
   "a",
@@ -164,7 +164,7 @@ export function productNameFromPlan(plan: Record<string, unknown> | null | undef
   return looksLikeGoalStubName(inferred, goal) ? "" : inferred;
 }
 
-function detectDomain(goal: string, projectType?: string): ProductDomain {
+export function detectProductDomain(goal: string, projectType?: string): ProductDomain {
   const blob = `${goal}\n${projectType || ""}`.toLowerCase();
   if (/\blanding\b|\bmarketing\b|\bwaitlist\b/.test(blob) && !/\bmobile\b|\bexpo\b/.test(blob)) {
     return "landing";
@@ -204,7 +204,7 @@ export function inferProductName(goal: string, projectType?: string): string {
   const type = String(projectType || "").trim();
   const named = extractNamedBrand(g);
   if (named) return named;
-  const domain = detectDomain(g, type);
+  const domain = detectProductDomain(g, type);
   const key = `${g}|${type}`.toLowerCase();
   const h = stableHash(key || domain);
   const stems = STEMS[domain].filter((s) => s !== "Sparrow" || /\bsparrow\b/i.test(g));
@@ -237,7 +237,7 @@ export function logoInitials(name: string): string {
 }
 
 export function logoHintFor(goal: string, projectType?: string): string {
-  return HINTS[detectDomain(goal, projectType)];
+  return HINTS[detectProductDomain(goal, projectType)];
 }
 
 function strippedGoalLead(goal: string): string {
@@ -284,7 +284,7 @@ export function looksLikeGoalStubName(name: string, goal?: string): boolean {
 
 /** Drop last workspace brand when this goal is a different product. */
 export function identityFitsGoal(name: string, goal: string, projectType?: string): boolean {
-  const domain = detectDomain(goal, projectType);
+  const domain = detectProductDomain(goal, projectType);
   const n = String(name || "").toLowerCase();
   if (!n) return false;
   const named = extractNamedBrand(goal);
