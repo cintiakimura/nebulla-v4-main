@@ -132,6 +132,19 @@ const GOLDEN =
 }
 
 {
+  const motoGoal = "**Product name:** Motodrop\nMoto delivery: pickup and dropoff, accept request.";
+  const moto = classifyCodingSkeleton(motoGoal, "Web App");
+  assert.equal(moto.skeleton, "marketplace");
+  assert.ok(moto.routes.some((r) => r.path === "/request"));
+  assert.ok(moto.entities.some((e) => e.name === "Request"));
+  const bakerySkel = classifyCodingSkeleton(
+    "A web app for a neighborhood bakery. Customers browse today’s breads and place a pickup order.",
+    "Web App",
+  );
+  assert.equal(skeletonFitsCurrentGoal(bakerySkel, motoGoal), false);
+}
+
+{
   const root = path.dirname(fileURLToPath(import.meta.url));
   const repo = path.join(root, "..");
   assert.equal(fs.existsSync(path.join(repo, "nebula-project", "coding-skeleton.json")), false);

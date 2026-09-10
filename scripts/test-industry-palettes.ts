@@ -48,6 +48,8 @@ const mobileHome: PageClassification = {
   assert.notEqual(edu.primary, finance.primary);
   assert.notEqual(edu.primary.toLowerCase(), "#0f766e");
   assert.notEqual(edu.primary.toLowerCase(), "#0d9488");
+  const moto = selectIndustryPalette({ text: "Motodrop moto delivery pickup dropoff", device: "web" });
+  assert.equal(moto.id, "professional");
 }
 
 {

@@ -11,6 +11,11 @@ const SCRATCH_REMOVE_DIRS = [
   "src",
   "pages",
   "components",
+  "lib",
+  "data",
+  "hooks",
+  "stores",
+  "utils",
   "public",
   "generated-ui",
   "nebula-ui-studio/v0-original",
@@ -31,6 +36,7 @@ const SCRATCH_REMOVE_FILES = [
   "next.config.ts",
   "vite.config.ts",
   "index.html",
+  "nebulla-ide/product-identity.json",
 ];
 
 function copyIfMissing(src: string, dest: string) {

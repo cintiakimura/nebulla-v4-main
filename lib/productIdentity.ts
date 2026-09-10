@@ -112,6 +112,7 @@ function toTitleCase(name: string): string {
   if (/^grain\s+bakery$/i.test(raw)) return "Grain Bakery";
   if (/^quill\s+path$/i.test(raw)) return "Quill Path";
   if (/^spoke\s*&\s*co$/i.test(raw) || /^spoke\s+and\s+co$/i.test(raw)) return "Spoke & Co";
+  if (/^motodrop$/i.test(raw)) return "Motodrop";
   return raw
     .split(/\s+/)
     .filter(Boolean)
@@ -126,6 +127,7 @@ export function extractNamedBrand(goal: string): string | null {
   if (/\bloaflocal\b/i.test(g)) return "LoafLocal";
   if (/\bquill\s+path\b/i.test(g)) return "Quill Path";
   if (/\bspoke\s*&\s*co\b/i.test(g) || /\bspoke\s+and\s+co\b/i.test(g)) return "Spoke & Co";
+  if (/\bmotodrop\b/i.test(g)) return "Motodrop";
   const labeled = g.match(/(?:\*\*)?Product name(?:\*\*)?:\s*([^\n*]+)/i)?.[1]?.trim();
   if (labeled && !looksLikeGoalStubName(labeled, g) && labeled.split(/\s+/).length <= 4) {
     return toTitleCase(labeled);
@@ -170,7 +172,7 @@ export function detectProductDomain(goal: string, projectType?: string): Product
     return "landing";
   }
   if (
-    /baker|bakery|bread|pastry|cafe|café|restaurant|pickup order|\bshop\b|\bstore\b|checkout|bike|bicycle|mechanic|spoke/.test(
+    /baker|bakery|bread|pastry|cafe|café|restaurant|pickup order|\bshop\b|\bstore\b|checkout|bike|bicycle|mechanic|spoke|moto|motodrop|courier|delivery|dropoff/.test(
       blob,
     )
   ) {
@@ -282,19 +284,35 @@ export function looksLikeGoalStubName(name: string, goal?: string): boolean {
   return false;
 }
 
+/** Invented chip from an empty/general brief (Kite Studio, Nova Hub, …). */
+export function looksLikeInventedChipName(name: string): boolean {
+  const n = String(name || "").replace(/\s+/g, " ").trim();
+  if (!n) return false;
+  return /^(Lumen|Quill|Beacon|Sparrow|Nest|Forge|Pulse|Harbor|North|Relay|Vista|Peak|Bloom|Crumb|Oven|Loaf|Hearth|Grain|Nova|Aether|Helio|Kite|Mesa)\s+(Learn|Path|Tutor|Kids|Flow|Desk|Focus|Studio|Site|Bakery|Market|Shop|Hub)\b/i.test(
+    n,
+  );
+}
+
 /** Drop last workspace brand when this goal is a different product. */
 export function identityFitsGoal(name: string, goal: string, projectType?: string): boolean {
   const domain = detectProductDomain(goal, projectType);
   const n = String(name || "").toLowerCase();
   if (!n) return false;
   const named = extractNamedBrand(goal);
+  if (named && n !== named.toLowerCase()) return false;
+  if (looksLikeInventedChipName(name) && named) return false;
+  if (looksLikeInventedChipName(name) && detectProductDomain(goal, projectType) !== "general") {
+    return false;
+  }
   if (named && n !== named.toLowerCase() && looksLikeEducationKitDefaultName(name, goal)) {
     return false;
   }
   if (domain !== "education" && /\b(tutor|learn|path|sparrow|quill|lumen|beacon)\b/.test(n)) {
     return false;
   }
-  if (domain === "commerce" && /\b(tutor|sparrow|learn|path)\b/.test(n)) return false;
+  if (domain === "commerce" && /\b(tutor|sparrow|learn|path|kite studio|nova studio)\b/.test(n)) {
+    return false;
+  }
   return true;
 }
 
@@ -304,22 +322,29 @@ export function buildProductIdentity(
   existingName?: string,
   userSet?: boolean,
 ): ProductIdentity {
+  const named = extractNamedBrand(goal);
+  let keepUserSet = Boolean(userSet);
+  let prior = existingName?.trim() || "";
+  if (named && prior.toLowerCase() !== named.toLowerCase()) {
+    keepUserSet = false;
+    prior = named;
+  }
   const existingOk =
-    Boolean(existingName?.trim()) &&
-    !looksLikeGoalStubName(existingName, goal) &&
-    identityFitsGoal(existingName, goal, projectType);
+    Boolean(prior) &&
+    !looksLikeGoalStubName(prior, goal) &&
+    identityFitsGoal(prior, goal, projectType);
   const keep =
-    userSet && existingName?.trim()
-      ? existingName.trim()
+    keepUserSet && prior
+      ? prior
       : existingOk
-        ? existingName.trim()
+        ? prior
         : inferProductName(goal, projectType);
   const name = toTitleCase(keep);
   return {
     projectName: name,
     logoInitials: logoInitials(name),
     logoHint: logoHintFor(goal, projectType),
-    userSet: Boolean(userSet),
+    userSet: keepUserSet,
   };
 }
 
@@ -485,12 +510,21 @@ export function ensureProductIdentity(
     projectName?: string;
     userSet?: boolean;
     persist?: boolean;
+    /** New Project / new goal — ignore leftover userSet chip. */
+    force?: boolean;
   },
 ): ProductIdentity {
   const existing = readProductIdentity(workspaceRoot);
   const goal = opts?.goal || "";
   const type = opts?.projectType;
-  if (existing?.userSet && existing.projectName && opts?.userSet !== true) {
+  const named = extractNamedBrand(goal);
+  if (
+    existing?.userSet &&
+    existing.projectName &&
+    opts?.userSet !== true &&
+    opts?.force !== true &&
+    identityFitsGoal(existing.projectName, goal, type)
+  ) {
     return existing;
   }
   if (opts?.userSet && opts.projectName?.trim()) {
@@ -498,17 +532,28 @@ export function ensureProductIdentity(
     if (opts.persist !== false && workspaceRoot) return writeProductIdentity(workspaceRoot, built);
     return built;
   }
-  const candidate = opts?.projectName?.trim() || existing?.projectName || "";
-  const built = buildProductIdentity(goal, type, candidate, existing?.userSet);
+  const candidate =
+    named ||
+    opts?.projectName?.trim() ||
+    (existing && identityFitsGoal(existing.projectName, goal, type) ? existing.projectName : "") ||
+    "";
+  const built = buildProductIdentity(
+    goal,
+    type,
+    candidate,
+    opts?.force ? false : existing?.userSet,
+  );
   const needsWrite =
+    opts?.force === true ||
     !existing ||
     looksLikeGoalStubName(existing.projectName, goal) ||
+    !identityFitsGoal(existing.projectName, goal, type) ||
     existing.projectName !== built.projectName ||
     existing.logoInitials !== built.logoInitials;
   if (needsWrite && opts?.persist !== false && workspaceRoot) {
     return writeProductIdentity(workspaceRoot, {
       ...built,
-      userSet: existing?.userSet || Boolean(opts?.userSet),
+      userSet: opts?.force ? false : existing?.userSet || Boolean(opts?.userSet),
     });
   }
   return existing && !needsWrite ? existing : built;

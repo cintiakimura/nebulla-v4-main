@@ -74,6 +74,13 @@ export function productSliceQualityLine(goal: string): string {
       "MUST NOT: Dashboard + Settings + Who are you today as the product."
     );
   }
+  if (/\b(moto|motodrop|courier|delivery|dropoff)\b/i.test(g)) {
+    return (
+      persist +
+      "MUST: Home lists open requests; Request screen has pickup + dropoff address fields and Accept request. " +
+      "MUST NOT: leftover breads.json, bakery-*, bikeStore, lessonStore, or generic Interactive screen with mock data."
+    );
+  }
   return persist + "MUST NOT: generic Dashboard + Settings + role picker as the whole app.";
 }
 

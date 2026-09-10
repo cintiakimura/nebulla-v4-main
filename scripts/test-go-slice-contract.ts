@@ -113,6 +113,7 @@ assert.match(productSliceQualityLine("tutor kids with ADHD"), /MUST NOT: Dashboa
 assert.match(productSliceQualityLine("tutor kids with ADHD"), /data layer/);
 assert.match(productSliceQualityLine("invoice portal"), /Mock-only UI/);
 assert.equal(/mock data OK/i.test(productSliceQualityLine("invoice portal")), false);
+assert.match(productSliceQualityLine("Motodrop moto delivery pickup dropoff"), /pickup \+ dropoff/);
 assert.match(
   buildCompactGoCodeUserPrompt({
     sliceLine: "SLICE: Primary",

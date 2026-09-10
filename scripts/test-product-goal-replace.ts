@@ -146,6 +146,32 @@ section("new brief clears leftover /practice and memory files");
   fs.rmSync(tmp, { recursive: true, force: true });
 }
 
+section("New Project wipes breads.json; Motodrop request is not a stub");
+{
+  const moto =
+    "**Product name:** Motodrop\nMoto delivery — pickup, dropoff, accept request.";
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "nebulla-wipe-moto-"));
+  fs.mkdirSync(path.join(tmp, "data"), { recursive: true });
+  fs.mkdirSync(path.join(tmp, "lib"), { recursive: true });
+  fs.mkdirSync(path.join(tmp, "nebulla-ide"), { recursive: true });
+  fs.mkdirSync(path.join(tmp, "nebula-project"), { recursive: true });
+  fs.writeFileSync(path.join(tmp, "data/breads.json"), "{\"loaves\":[]}\n");
+  fs.writeFileSync(path.join(tmp, "lib/bikeStore.ts"), "export const bikes = [];\n");
+  fs.writeFileSync(path.join(tmp, "lib/lessonStore.ts"), "export const lessons = [];\n");
+  fs.writeFileSync(path.join(tmp, "nebula-project/project-execution-rules.md"), "# keep\n");
+  applyNewProductBriefToWorkspace({
+    workspaceRoot: tmp,
+    masterPlanPath: path.join(tmp, "nebulla-ide/master-plan.json"),
+    incomingGoal: moto,
+  });
+  assert.equal(fs.existsSync(path.join(tmp, "data/breads.json")), false);
+  assert.equal(fs.existsSync(path.join(tmp, "lib/bikeStore.ts")), false);
+  assert.equal(fs.existsSync(path.join(tmp, "nebula-project/project-execution-rules.md")), true);
+  const identity = JSON.parse(fs.readFileSync(path.join(tmp, "nebulla-ide/product-identity.json"), "utf8"));
+  assert.equal(identity.projectName, "Motodrop");
+  fs.rmSync(tmp, { recursive: true, force: true });
+}
+
 section("AIChat + persist replace leftover plan instead of skip-Grok merge");
 {
   const chat = fs.readFileSync(path.join(REPO, "src/components/ide/AIChat.tsx"), "utf8");

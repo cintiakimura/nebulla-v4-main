@@ -26,6 +26,7 @@ import {
 import { listProductUiFiles } from "./workspaceCodedAppUi";
 import { ensureInteractiveProductPreview } from "./interactiveProductPreview";
 import { rewriteEducationKitHomeIfNeeded } from "./rewriteEducationKitHome";
+import { rewriteJobScreensIfNeeded } from "./rewriteJobScreens";
 
 export const PRODUCT_PALETTE_REL = "nebulla-ide/product-palette.json";
 
@@ -274,28 +275,22 @@ export function applyProductPalettePass(input: {
     applied.push("public/product-preview/index.html");
   }
   const previewAbs = path.join(input.workspaceRoot, "public/product-preview/index.html");
-  if (fs.existsSync(previewAbs)) {
+  const files = listProductUiFiles(input.workspaceRoot, 24);
+  if (files.length || fs.existsSync(previewAbs)) {
+    ensureInteractiveProductPreview(input.workspaceRoot, {
+      projectName: identity.projectName,
+      productFiles: files,
+      logoInitials: identity.logoInitials,
+    });
+    injectFinalUiIntoProductPreview(input.workspaceRoot, rec.tokens);
     try {
       const prev = fs.readFileSync(previewAbs, "utf8");
       const branded = applyBrandToPreviewHtml(prev, identity);
-      if (branded !== prev) {
-        fs.writeFileSync(previewAbs, branded, "utf8");
-        if (!applied.includes("public/product-preview/index.html")) {
-          applied.push("public/product-preview/index.html");
-        }
-      }
+      if (branded !== prev) fs.writeFileSync(previewAbs, branded, "utf8");
     } catch {
       /* ignore */
     }
-  } else {
-    const files = listProductUiFiles(input.workspaceRoot, 24);
-    if (files.length) {
-      ensureInteractiveProductPreview(input.workspaceRoot, {
-        projectName: identity.projectName,
-        productFiles: files,
-        logoInitials: identity.logoInitials,
-      });
-      injectFinalUiIntoProductPreview(input.workspaceRoot, rec.tokens);
+    if (!applied.includes("public/product-preview/index.html")) {
       applied.push("public/product-preview/index.html");
     }
   }
@@ -314,6 +309,20 @@ export function applyProductPalettePass(input: {
   });
   for (const rel of kitHome.rewritten) {
     if (!applied.includes(rel)) applied.push(rel);
+  }
+  const jobScreens = rewriteJobScreensIfNeeded({
+    workspaceRoot: input.workspaceRoot,
+    goal,
+    plan: readPlanFromWorkspace(input.workspaceRoot, input.masterPlanPath),
+  });
+  for (const rel of jobScreens.rewritten) {
+    if (!applied.includes(rel)) applied.push(rel);
+  }
+  if (jobScreens.rewritten.length) {
+    ensureInteractiveProductPreview(input.workspaceRoot, {
+      projectName: identity.projectName,
+      logoInitials: identity.logoInitials,
+    });
   }
   applied.push(...collapsePalettesOnDisk(input.workspaceRoot, goal));
   return { ok: applied.length > 0, applied, packId: rec.packId, productName: identity.projectName };

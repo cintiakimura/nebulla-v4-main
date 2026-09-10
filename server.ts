@@ -2306,6 +2306,7 @@ No approved UI code yet.
         projectType,
         projectName: projectName || convLabel,
         persist: true,
+        force: true,
       });
       scheduleWorkspaceTreeR2Sync(pp.projectKey, pp.workspaceRoot);
       return res.json({ ok: true, cleared, removed, chatCleared });

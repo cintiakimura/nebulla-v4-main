@@ -14,6 +14,8 @@ import {
   inferProductName,
   isWorkspaceLabelStub,
   productNameFromPlan,
+  identityFitsGoal,
+  buildProductIdentity,
 } from "../lib/productIdentity.ts";
 import { applyPlanIdentityAndWinningPalette } from "../lib/nebulaIdeWorkspaceArtifacts.ts";
 import { writeUiBriefMarkdown } from "../lib/nebulaUiBrief.ts";
@@ -40,6 +42,10 @@ section("stub names and Grain Bakery brand");
   );
   assert.equal(inferProductName("Quill Path learning companion for daily reading"), "Quill Path");
   assert.equal(inferProductName("Spoke & Co neighborhood bike shop"), "Spoke & Co");
+  assert.equal(
+    inferProductName("**Product name:** Motodrop\nMoto delivery — pickup and dropoff."),
+    "Motodrop",
+  );
   assert.equal(looksLikeEducationKitDefaultName("Sparrow Tutor", "Quill Path learning companion"), true);
   assert.equal(looksLikeEducationKitDefaultName("Sparrow Tutor", "Sparrow Tutor kids app"), false);
   assert.equal(looksLikeGoalStubName("Practice app", "Quill Path"), true);
@@ -221,6 +227,60 @@ section("Spoke & Co Home is bikes, not the tutor card");
   assert.equal(/Next slice starts automatically/i.test(chat), false);
   assert.equal(/send Continue for Data\+API/i.test(chat), false);
   assert.equal(/Autopilot continues until MVP ready/i.test(chat), false);
+  fs.rmSync(tmp, { recursive: true, force: true });
+}
+
+section("Motodrop chip beats Kite Studio; Request has pickup + dropoff");
+{
+  const motoGoal =
+    "**Product name:** Motodrop\nMoto delivery: pickup, dropoff, accept request.";
+  assert.equal(identityFitsGoal("Kite Studio", motoGoal), false);
+  assert.equal(buildProductIdentity(motoGoal, "Web App", "Kite Studio", true).projectName, "Motodrop");
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "nebulla-motodrop-"));
+  fs.mkdirSync(path.join(tmp, "app", "request"), { recursive: true });
+  fs.mkdirSync(path.join(tmp, "nebulla-ide"), { recursive: true });
+  fs.writeFileSync(
+    path.join(tmp, "nebulla-ide/product-identity.json"),
+    JSON.stringify({ projectName: "Kite Studio", logoInitials: "KS", userSet: true }),
+    "utf8",
+  );
+  fs.writeFileSync(
+    path.join(tmp, "app/page.tsx"),
+    `export default function Home(){ return <main><p>Interactive screen with mock data</p><button>Continue</button></main>; }\n`,
+  );
+  fs.writeFileSync(
+    path.join(tmp, "app/request/page.tsx"),
+    `export default function Request(){ return <main><p>Interactive screen with mock data</p><button>Continue</button></main>; }\n`,
+  );
+  fs.writeFileSync(
+    path.join(tmp, "app/layout.tsx"),
+    `export default function RootLayout({ children }) {
+  return (<html><body><header data-nebula-brand><strong>Kite Studio</strong></header>{children}</body></html>);
+}
+`,
+  );
+  fs.writeFileSync(
+    path.join(tmp, "nebulla-ide/master-plan.json"),
+    JSON.stringify({
+      "1. Goal of the app": motoGoal,
+      "4. Pages and navigation": "### Home `/`\n### Request `/request`",
+      "5. UI/UX design": "- **Palette:** family=education-calm bg `#FFF8F1` primary `#3F6F5B`\n- **Palette:** family=professional primary `#44403C`",
+    }),
+    "utf8",
+  );
+  const pass = applyProductPalettePass({
+    workspaceRoot: tmp,
+    goal: motoGoal,
+    masterPlanPath: path.join(tmp, "nebulla-ide/master-plan.json"),
+  });
+  assert.equal(pass.productName, "Motodrop");
+  const request = fs.readFileSync(path.join(tmp, "app/request/page.tsx"), "utf8");
+  assert.match(request, /name=["']pickup["']/);
+  assert.match(request, /name=["']dropoff["']/);
+  assert.match(request, /Accept request/);
+  assert.equal(/Interactive screen with mock data/i.test(request), false);
+  const identity = JSON.parse(fs.readFileSync(path.join(tmp, "nebulla-ide/product-identity.json"), "utf8"));
+  assert.equal(identity.projectName, "Motodrop");
   fs.rmSync(tmp, { recursive: true, force: true });
 }
 

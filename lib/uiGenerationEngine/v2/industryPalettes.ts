@@ -135,8 +135,12 @@ export function selectIndustryPalette(input: {
     industry === "retail" ||
     /retail|shop|store|commerce|baker|bakery|bread|pastry|cafe|grain bakery|loaflocal/.test(text)
   ) {
+    if (/moto|motodrop|courier|delivery|dropoff/.test(text) && !/baker|bread|pastry/.test(text)) {
+      return PACKS.professional;
+    }
     return PACKS.retail;
   }
+  if (/moto|motodrop|courier|\bdelivery\b|dropoff/.test(text)) return PACKS.professional;
   if (industry === "education" || /educat|learn|tutor|school|kids?|child/.test(text)) {
     return PACKS[tone === "playful" && !/adhd|calm|low[- ]stimulus/.test(text) ? "education-playful" : "education-calm"];
   }

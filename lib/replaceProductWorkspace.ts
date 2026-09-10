@@ -31,6 +31,54 @@ const MEMORY_RELS = [
 
 const APP_ROOTS = ["app", "src/app"];
 
+const PRODUCT_CODE_DIRS = ["lib", "data", "hooks", "stores", "utils", "components", "src/lib", "src/components"];
+
+const LEFTOVER_PRODUCT_FILE_RE =
+  /breads\.json$|bakery-|bikeStore|lessonStore|tutorStore|loafLocal|quillPath/i;
+
+export function wipePreviousProductCode(workspaceRoot: string): { removed: string[] } {
+  const removed: string[] = [];
+  for (const rel of PRODUCT_CODE_DIRS) {
+    const full = path.join(workspaceRoot, rel);
+    if (!fs.existsSync(full)) continue;
+    try {
+      fs.rmSync(full, { recursive: true, force: true });
+      removed.push(rel);
+    } catch {
+      /* ignore */
+    }
+  }
+  const walk = (dir: string) => {
+    if (!fs.existsSync(dir)) return;
+    let ents: fs.Dirent[];
+    try {
+      ents = fs.readdirSync(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const ent of ents) {
+      if (ent.name.startsWith(".")) continue;
+      const full = path.join(dir, ent.name);
+      const rel = path.relative(workspaceRoot, full).replace(/\\/g, "/");
+      if (/^nebula-project(\/|$)/i.test(rel) || /^nebulla-ide(\/|$)/i.test(rel)) continue;
+      if (ent.isDirectory()) {
+        walk(full);
+        continue;
+      }
+      if (LEFTOVER_PRODUCT_FILE_RE.test(rel) || LEFTOVER_PRODUCT_FILE_RE.test(ent.name)) {
+        try {
+          fs.unlinkSync(full);
+          removed.push(rel);
+        } catch {
+          /* ignore */
+        }
+      }
+    }
+  };
+  walk(workspaceRoot);
+  return { removed };
+}
+
 function normalizeRoute(route: string): string {
   const s = String(route || "").trim();
   if (!s || s === "/") return "/";
@@ -201,8 +249,10 @@ export function applyNewProductBriefToWorkspace(opts: {
   ensureProductIdentity(opts.workspaceRoot, {
     goal,
     persist: true,
+    force: true,
   });
 
+  const wiped = wipePreviousProductCode(opts.workspaceRoot);
   const { removed } = pruneAppRoutesNotInSection4({
     workspaceRoot: opts.workspaceRoot,
     section4: "",
@@ -216,7 +266,7 @@ export function applyNewProductBriefToWorkspace(opts: {
 
   return {
     clearedTabs: [...MASTER_PLAN_SECTION_KEYS],
-    removedRoutes: removed,
+    removedRoutes: [...wiped.removed, ...removed],
     navRewritten: rewritten,
   };
 }
@@ -236,6 +286,7 @@ export function writeReplacedMasterPlan(opts: {
   fs.mkdirSync(path.dirname(opts.masterPlanPath), { recursive: true });
   fs.writeFileSync(opts.masterPlanPath, JSON.stringify(plan, null, 2), "utf8");
   const goal = plan["1. Goal of the app"];
+  wipePreviousProductCode(opts.workspaceRoot);
   pruneAppRoutesNotInSection4({
     workspaceRoot: opts.workspaceRoot,
     section4: plan["4. Pages and navigation"],

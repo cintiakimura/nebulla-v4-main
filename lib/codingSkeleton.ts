@@ -41,7 +41,7 @@ const KIDS_RE =
 const LANDING_RE =
   /\b(landing|one[- ]?pager|brochure|portfolio|photography|photographer|marketing site)\b/i;
 const MARKET_RE =
-  /\b(marketplace|e-?commerce|shop|storefront|\bcart\b|catalog|baker|bakery|bread|pastry|pickup order|bike|bicycle|mechanic|spoke)\b/i;
+  /\b(marketplace|e-?commerce|shop|storefront|\bcart\b|catalog|baker|bakery|bread|pastry|pickup order|bike|bicycle|mechanic|spoke|moto|motodrop|courier|delivery|dropoff)\b/i;
 const DASH_RE = /\b(saas|analytics|admin|dashboard|crm|metrics|backoffice|internal tool)\b/i;
 
 const EXTRA_ADMIN_RE = /^\/(settings|analytics|dashboard|admin)(\/|$)/i;
@@ -115,6 +115,13 @@ export function skeletonFitsCurrentGoal(c: CodingSkeleton | null | undefined, go
   if (market && !kids && /teacher|kid|student|tutor|learner/.test(roles)) return false;
   if (kids && c.skeleton === "web_dashboard") return false;
   if (market && /baker|bakery|bread/.test(g) && c.skeleton !== "marketplace") return false;
+  const blob = JSON.stringify(c).toLowerCase();
+  if (/moto|motodrop|courier|delivery|dropoff/.test(g) && /bread|baker|lesson|bike|spoke|practice/.test(blob)) {
+    return false;
+  }
+  if (/moto|motodrop|courier|delivery|dropoff/.test(g) && !/request|pickup|dropoff|rider/.test(blob)) {
+    return false;
+  }
   return true;
 }
 
@@ -217,11 +224,21 @@ export function primaryVerbFromSkeleton(c: CodingSkeleton | null | undefined): s
   return String(c?.verbs?.[0] || "practice").trim() || "practice";
 }
 
+/** Previous product stores must not apply onto a different job. */
+export function isForeignLeftoverProductPath(rel: string, skeleton: CodingSkeleton): boolean {
+  const p = rel.replace(/\\/g, "/");
+  const blob = JSON.stringify(skeleton).toLowerCase();
+  const delivery = /request|pickup|dropoff|rider|motodrop/.test(blob);
+  if (!delivery) return false;
+  return /breads\.json|bakery-|bikeStore|lessonStore|tutorStore|loaf/i.test(p);
+}
+
 /** Shared scaffold + listed routes stay; extra admin pages drop unless web_dashboard. */
 export function shouldSkipApplyPathForSkeleton(relPath: string, skeleton: CodingSkeleton | null): boolean {
   if (!skeleton) return false;
   const rel = String(relPath || "").replace(/\\/g, "/").replace(/^\.\//, "");
   if (!rel) return true;
+  if (isForeignLeftoverProductPath(rel, skeleton)) return true;
   if (isAlwaysAllowedApplyPath(rel)) return false;
   const route = routeFromProductFile(rel);
   if (!route) return false;
@@ -308,6 +325,25 @@ function buildDefaults(skeleton: CodingSkeletonKind, text: string, kids: boolean
     };
   }
   if (skeleton === "marketplace") {
+    if (/\b(moto|motodrop|courier|delivery|dropoff)\b/i.test(text)) {
+      return {
+        skeleton,
+        project_type: "marketplace",
+        roles: ["sender", "rider"],
+        entities: [
+          { name: "Request", fields: ["pickup", "dropoff", "status"], owner_role: "sender" },
+        ],
+        verbs: ["request", "accept"],
+        routes: [
+          { path: "/", purpose: "Open delivery requests", entity: "Request" },
+          { path: "/request", purpose: "Pickup and dropoff — accept request", entity: "Request" },
+        ],
+        auth: "none",
+        out_of_scope: [...DEFAULT_OUT_OF_SCOPE],
+        source: "classified",
+        skeleton_note: "Moto delivery: request with pickup + dropoff. No leftover bakery/bike/tutor stores.",
+      };
+    }
     if (/\b(baker|bakery|bread|pastry|pickup order)\b/i.test(text)) {
       return {
         skeleton,

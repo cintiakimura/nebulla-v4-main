@@ -22,6 +22,7 @@ export const EDUCATION_LEFTOVER_SLUGS = new Set([
 ]);
 
 export const BIKE_SHOP_SLUGS = new Set(["book", "mechanic", "catalog", "cart"]);
+export const BAKERY_LEFTOVER_SLUGS = new Set(["order", "baker", "confirmation"]);
 
 function routeSlug(route: string): string {
   const s = String(route || "").trim();
@@ -33,10 +34,15 @@ function routeSlug(route: string): string {
 export function leftoverRoutesConflictWithGoal(goal: string, routes: string[]): boolean {
   const domain = detectProductDomain(goal);
   const slugs = (routes || []).map(routeSlug).filter(Boolean);
+  const g = String(goal || "").toLowerCase();
+  const delivery = /moto|motodrop|courier|delivery|dropoff/.test(g);
   if (domain !== "education" && slugs.some((s) => EDUCATION_LEFTOVER_SLUGS.has(s))) {
     return true;
   }
   if (domain === "education" && slugs.some((s) => BIKE_SHOP_SLUGS.has(s))) {
+    return true;
+  }
+  if (delivery && slugs.some((s) => BAKERY_LEFTOVER_SLUGS.has(s) || BIKE_SHOP_SLUGS.has(s))) {
     return true;
   }
   return false;

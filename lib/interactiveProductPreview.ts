@@ -28,6 +28,8 @@ function esc(s: string): string {
 
 function titleFromSlug(slug: string): string {
   const map: Record<string, string> = {
+    request: "Request",
+    requests: "Request",
     order: "Order",
     baker: "Baker",
     confirmation: "Confirmation",
@@ -157,6 +159,9 @@ function buildInteractiveHtml(opts: {
     !shop &&
     opts.screens.some((s) => /tutor|practice|teacher|kid|parent/i.test(`${s.id} ${s.label}`));
   const bike = /bike|spoke|mechanic/i.test(`${opts.projectName} ${opts.screens.map((s) => s.id).join(" ")}`);
+  const delivery =
+    /moto|motodrop|courier|delivery|dropoff/i.test(opts.projectName) ||
+    opts.screens.some((s) => /request|dropoff|pickup/i.test(`${s.id} ${s.label}`));
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -177,6 +182,8 @@ function buildInteractiveHtml(opts: {
     .card { background:var(--card); border:1px solid var(--line); border-radius:16px; padding:16px; margin-bottom:12px; }
     h1 { font-size:1.35rem; margin:0 0 8px; }
     h2 { font-size:1.05rem; margin:0 0 8px; }
+    label { display:block; margin:10px 0 4px; font-size:13px; font-weight:600; }
+    input[type="text"] { width:100%; padding:10px 12px; border:1px solid var(--line); border-radius:10px; font-size:15px; }
     p { margin:0 0 10px; color:var(--muted); line-height:1.45; font-size:14px; }
     .grid { display:grid; gap:10px; }
     .role { text-align:left; border:1px solid var(--line); border-radius:14px; padding:14px; background:#fff; cursor:pointer; width:100%; }
@@ -211,6 +218,7 @@ function buildInteractiveHtml(opts: {
   var SCREENS = ${screensJson};
   var SHOP = ${shop ? "true" : "false"};
   var BIKE = ${bike ? "true" : "false"};
+  var DELIVERY = ${delivery ? "true" : "false"};
   var EDUCATION = ${education ? "true" : "false"};
   var PROJECT = ${JSON.stringify((opts.projectName || "App").slice(0, 80))};
   var STORAGE_KEY = "nebulla_product_preview_v1";
@@ -252,6 +260,22 @@ function buildInteractiveHtml(opts: {
   }
 
   function homeHtml() {
+    if (DELIVERY) {
+      return (
+        '<div class="card">' +
+          '<h1>' + PROJECT + '</h1>' +
+          '<p>Open requests. Set pickup and dropoff, then accept.</p>' +
+          '<div class="grid">' +
+            '<div class="role"><strong>Harbor to Midtown</strong> Waiting for a rider.</div>' +
+            '<div class="role"><strong>Depot to North side</strong> Ready to accept.</div>' +
+          '</div>' +
+          '<div class="row">' +
+            '<button type="button" class="cta" id="goRequest">New request</button>' +
+          '</div>' +
+          '<div class="toast" id="toast"></div>' +
+        '</div>'
+      );
+    }
     if (BIKE) {
       return (
         '<div class="card">' +
@@ -387,6 +411,22 @@ function buildInteractiveHtml(opts: {
   }
 
   function featureHtml(label) {
+    if (DELIVERY && /request/i.test(label)) {
+      return (
+        '<div class="card">' +
+          '<h1>Request</h1>' +
+          '<p>Enter pickup and dropoff, then accept.</p>' +
+          '<form id="requestForm">' +
+            '<label for="pickup">Pickup</label>' +
+            '<input id="pickup" name="pickup" type="text" autocomplete="street-address" required />' +
+            '<label for="dropoff">Dropoff</label>' +
+            '<input id="dropoff" name="dropoff" type="text" autocomplete="street-address" required />' +
+            '<div class="row" style="margin-top:12px"><button type="submit" class="cta">Accept request</button></div>' +
+          '</form>' +
+          '<div class="toast" id="toast"></div>' +
+        '</div>'
+      );
+    }
     if (SHOP && /order/i.test(label)) {
       return (
         '<div class="card">' +
@@ -469,6 +509,21 @@ function buildInteractiveHtml(opts: {
     if (goOrder) goOrder.onclick = function () {
       var next = SCREENS.find(function (s) { return /order/i.test(s.id + s.label); });
       state.screen = next ? next.id : "home";
+      persist();
+      paint();
+    };
+    var goRequest = document.getElementById("goRequest");
+    if (goRequest) goRequest.onclick = function () {
+      var next = SCREENS.find(function (s) { return /request/i.test(s.id + s.label); });
+      state.screen = next ? next.id : "request";
+      persist();
+      paint();
+    };
+    var requestForm = document.getElementById("requestForm");
+    if (requestForm) requestForm.onsubmit = function (ev) {
+      ev.preventDefault();
+      toast(t, "Request accepted");
+      state.screen = "home";
       persist();
       paint();
     };
