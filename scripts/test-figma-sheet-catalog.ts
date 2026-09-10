@@ -280,7 +280,7 @@ section("missing structure/ does not crash — catalog/seed + honest status");
         device: "web",
         page_type: "list",
         function: "ecommerce",
-        navigation_type: "top",
+        navigation_type: "topnav",
         industry_class: "retail",
         visual_tone: "",
         density: "medium",

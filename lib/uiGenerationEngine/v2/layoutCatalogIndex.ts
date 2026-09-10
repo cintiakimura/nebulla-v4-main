@@ -158,7 +158,7 @@ export function jobFromRoutePurpose(pathName: string, purpose = ""): LayoutJob |
 export function layoutJobFromClassification(c: PageClassification): LayoutJob {
   if (c.page_type === "auth") return "auth";
   if (c.device === "landing" || c.page_type === "landing") return "landing_hero";
-  if (c.page_type === "form" || c.page_type === "checkout") return "form_checkout";
+  if (c.page_type === "checkout") return "form_checkout";
   if (c.page_type === "dashboard" || c.product_function === "saas_admin") return "list_manage";
   const notes = `${c.notes || ""} ${c.product_function || ""}`;
   if (c.page_type === "list") {
@@ -167,7 +167,7 @@ export function layoutJobFromClassification(c: PageClassification): LayoutJob {
   }
   if (/browse|catalog|menu|bread|shop|marketplace/.test(notes)) return "catalog_grid";
   if (/practice|lesson|start|next/.test(notes) || c.product_function === "course") return "home_task";
-  if (c.device === "mobile" && (c.page_type === "home" || c.page_type === "list")) return "home_task";
+  if (c.device === "mobile" && c.page_type === "home") return "home_task";
   if (c.device === "web" && c.page_type === "home") return "catalog_grid";
   if (c.page_type === "home") return "home_task";
   return "home_task";

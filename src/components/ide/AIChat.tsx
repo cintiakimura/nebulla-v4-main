@@ -3384,7 +3384,7 @@ export function AIChat() {
     const projectName = getBrowserProjectName().trim() || 'Untitled project';
     const researchSt = await fetchResearchStatus(projectName);
     if (
-      userNoteRequestsCompetitorResearch(text) &&
+      userNoteRequestsCompetitorResearch(userNote) &&
       !researchSt.ok &&
       !(await codingSkeletonAllowsFoundation())
     ) {
