@@ -67,7 +67,7 @@ export function formatSlicePromptLine(slice: GoSliceLabel): string {
 export function productSliceQualityLine(goal: string): string {
   const g = String(goal || "");
   const persist =
-    "MUST: Home is the core user job with a working primary CTA that reads/writes through the app data layer (app/api or lib store). Mock-only UI that dies on refresh is a failed slice. ";
+    "MUST: Home is the core user job with a working primary CTA that reads/writes the data layer lib/mockStore.ts (localStorage). Empty /api stubs for later are a failed slice. Mock-only UI that dies on refresh is a failed slice. No Data+API slice. ";
   if (/\b(adhd|kids?|child|student|teacher|tutor|classroom|school|parent|lesson|practice)\b/i.test(g)) {
     return (
       persist +
@@ -129,10 +129,12 @@ export function workspaceHasProductDataLayer(workspaceRoot: string): boolean {
     if (workspaceExists(root, ...d)) return true;
   }
   const files = [
+    ["lib", "mockStore.ts"],
     ["lib", "store.ts"],
     ["lib", "store.js"],
     ["lib", "db.ts"],
     ["lib", "data.ts"],
+    ["src", "lib", "mockStore.ts"],
     ["src", "lib", "store.ts"],
     ["src", "lib", "db.ts"],
     ["src", "lib", "data.ts"],
@@ -149,23 +151,15 @@ const SLICE_RANK: Record<GoSliceLabel, number> = {
   Polish: 5,
 };
 
-/** Heuristic next slice from on-disk app shell (no LLM). Never skip Data+API for mock-only screens. */
+/** Heuristic next slice from on-disk app shell (no LLM). First Go is Foundation+Primary — never queue Data+API. */
 export function inferGoSliceFromWorkspace(workspaceRoot: string): GoSliceLabel {
   const root = workspaceRoot.trim();
   if (!root) return "Foundation";
   const productFiles = listProductUiFiles(root, 40);
   const depth = assessApplyRouteDepth(productFiles);
   const routes = depth.productRoutes;
-  // Vite App/main or mockup index.html is not a Foundation — need app/ or pages/ routes.
   if (routes.length === 0 || depth.thinCodeShell) return "Foundation";
-
-  if (!workspaceHasProductDataLayer(root)) return "Data+API";
-
-  const AUTH_ROUTE = /^\/(login|auth|signin|sign-in|signup|register|sign-up)$/i;
-  const screens = routes.filter((r) => !AUTH_ROUTE.test(r));
-  // Home + one extra (login does not count) is still Primary, not Secondary.
-  if (screens.length < 3) return "Primary";
-  return "Secondary";
+  return "Primary";
 }
 
 /** LLM/summary must not skip ahead of what disk actually supports. */
@@ -285,8 +279,8 @@ export function buildCompactGoCodeUserPrompt(opts: {
   const hint = String(opts.logoHint || "").trim().slice(0, 40);
   const isFoundation = /SLICE:\s*Foundation/i.test(slice);
   const task = opts.continuation
-    ? "CONTINUATION — emit the current slice file blocks now. Do NOT implement every §4 route."
-    : "Run the coding pass now. Output ONE coherent slice only (Build → Debug → Next) — not the full app.";
+    ? "CONTINUATION — emit Foundation+Primary file blocks now (screens + lib/mockStore.ts)."
+    : "Run the coding pass now. Output Foundation AND Primary in this Go (screens + working mockStore verb) — not Data+API, not Polish.";
   const quality = productSliceQualityLine(goal);
   const identity =
     productName

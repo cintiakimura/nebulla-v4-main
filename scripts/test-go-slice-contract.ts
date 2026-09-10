@@ -156,13 +156,13 @@ assert.match(
     "export default function Practice(){return null}\n",
   );
   const next = inferGoSliceFromWorkspace(root);
-  assert.equal(next, "Data+API");
+  assert.equal(next, "Primary");
   fs.mkdirSync(path.join(root, "app", "login"), { recursive: true });
   fs.writeFileSync(
     path.join(root, "app", "login", "page.tsx"),
     "export default function Login(){return null}\n",
   );
-  assert.equal(inferGoSliceFromWorkspace(root), "Data+API");
+  assert.equal(inferGoSliceFromWorkspace(root), "Primary");
   fs.mkdirSync(path.join(root, "app", "api", "progress"), { recursive: true });
   fs.writeFileSync(
     path.join(root, "app", "api", "progress", "route.ts"),

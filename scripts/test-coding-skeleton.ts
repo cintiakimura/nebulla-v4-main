@@ -45,6 +45,7 @@ const GOLDEN =
   assert.match(formatCodingSkeletonForGo(kids), /FOUNDATION MIN UI/);
   assert.match(formatCodingSkeletonForGo(kids), /1\. Header:/);
   assert.match(formatCodingSkeletonForGo(kids), /5\. Action screen/);
+  assert.match(formatCodingSkeletonForGo(kids), /Foundation\+Primary/);
   assert.ok(kids.routes.some((r) => r.path === "/teacher" || r.path === "/progress"));
   assert.equal(isCodingSkeletonReady(kids), true);
 }

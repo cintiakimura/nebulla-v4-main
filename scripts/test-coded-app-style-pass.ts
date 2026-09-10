@@ -101,6 +101,47 @@ section("invent once — chip, title, header, Live share product-identity.json")
   fs.rmSync(tmp, { recursive: true, force: true });
 }
 
+section("education Home keeps practice; Teacher route + mock progress");
+{
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "nebulla-edu-verb-"));
+  fs.mkdirSync(path.join(tmp, "app"), { recursive: true });
+  fs.writeFileSync(
+    path.join(tmp, "app/page.tsx"),
+    "export default function Home(){ return <main>Start practice</main>; }\n",
+  );
+  fs.writeFileSync(
+    path.join(tmp, "app/layout.tsx"),
+    `export default function RootLayout({ children }) {
+  return <html><body><header><strong>Quill Path</strong></header>{children}</body></html>;
+}
+`,
+  );
+  fs.mkdirSync(path.join(tmp, "nebulla-ide"), { recursive: true });
+  fs.writeFileSync(
+    path.join(tmp, "nebulla-ide/master-plan.json"),
+    JSON.stringify({
+      "1. Goal of the app":
+        "**Product name:** Quill Path\nKids reading practice for students and teachers.",
+      "4. Pages and navigation": "### Home `/`\n### Practice `/practice`\n### Teacher `/teacher`",
+    }),
+    "utf8",
+  );
+  applyProductPalettePass({
+    workspaceRoot: tmp,
+    goal: "Kids reading practice for students and teachers",
+    masterPlanPath: path.join(tmp, "nebulla-ide/master-plan.json"),
+  });
+  const home = fs.readFileSync(path.join(tmp, "app/page.tsx"), "utf8");
+  assert.match(home, /Start practice/);
+  assert.match(home, /startPractice/);
+  const teacher = fs.readFileSync(path.join(tmp, "app/teacher/page.tsx"), "utf8");
+  assert.match(teacher, /readMockState|progress/i);
+  const store = fs.readFileSync(path.join(tmp, "lib/mockStore.ts"), "utf8");
+  assert.match(store, /export function startPractice/);
+  assert.match(store, /progress/);
+  fs.rmSync(tmp, { recursive: true, force: true });
+}
+
 section("style pass writes globals + preview without a draft file");
 {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "nebulla-style-pass-"));
@@ -270,8 +311,10 @@ section("Spoke & Co Home is bikes, not the tutor card");
   assert.equal(pass.productName, "Spoke & Co");
   const home = fs.readFileSync(path.join(tmp, "app/page.tsx"), "utf8");
   assert.match(home, /Ready bikes/);
-  assert.match(home, /City commuter|Trail hardtail/i);
   assert.match(home, /Book slot/);
+  const store = fs.readFileSync(path.join(tmp, "lib/mockStore.ts"), "utf8");
+  assert.match(store, /City commuter|Trail hardtail/i);
+  assert.match(store, /export function addBooking/);
   assert.equal(/short lesson|Start practice|Weekly streak|See streak|Role:\s*parent|Interactive screen/i.test(home), false);
   const layout = fs.readFileSync(path.join(tmp, "app/layout.tsx"), "utf8");
   assert.equal(/Role:\s*parent/i.test(layout), false);
@@ -322,7 +365,7 @@ section("generic Continue Home rewrites to job list (Spoke)");
   });
   const home = fs.readFileSync(path.join(tmp, "app/page.tsx"), "utf8");
   assert.match(home, /Ready bikes/);
-  assert.match(home, /<li>/);
+  assert.match(home, /<li/);
   assert.equal(/Interactive screen with mock data|>Continue</i.test(home), false);
   assert.equal(/Weekly streak|Start practice/i.test(home), false);
   fs.rmSync(tmp, { recursive: true, force: true });
@@ -377,8 +420,12 @@ section("Motodrop chip beats Kite Studio; Request has pickup + dropoff");
   assert.match(request, /name=["']dropoff["']/);
   assert.match(request, /Accept request/);
   assert.equal(/Interactive screen with mock data/i.test(request), false);
+  assert.match(request, /addRequest|acceptRequest/);
+  const store = fs.readFileSync(path.join(tmp, "lib/mockStore.ts"), "utf8");
+  assert.match(store, /export function addRequest/);
+  assert.match(store, /export function acceptRequest/);
   const motoHome = fs.readFileSync(path.join(tmp, "app/page.tsx"), "utf8");
-  assert.match(motoHome, /Open requests|Harbor to Midtown/);
+  assert.match(motoHome, /Open requests/);
   assert.equal(/Start practice|Weekly streak|breads\.json/i.test(motoHome), false);
   assert.equal(fs.existsSync(path.join(tmp, "data/breads.json")), false);
   const identity = JSON.parse(fs.readFileSync(path.join(tmp, "nebulla-ide/product-identity.json"), "utf8"));
@@ -396,6 +443,9 @@ section("activity log is quiet after slices");
   assert.equal(/placeholder mockup/i.test(slice), false);
   assert.equal(/live practice app/i.test(chat), false);
   assert.match(slice, /PRODUCT_MVP_READY_MESSAGE = 'App is ready on Live\.'/);
+  assert.equal(/Continue — launching/.test(chat), false);
+  assert.equal(/Send Continue for the next slice/.test(chat), false);
+  assert.match(slice, /Foundation\+Primary/);
 }
 
 section("Generate UI after routes is a style pass, not a draft remount");

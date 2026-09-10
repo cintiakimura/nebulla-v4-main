@@ -1534,7 +1534,7 @@ export function AIChat() {
       const { projectName } = resolveActiveProjectIds(diskProjectKey);
       abortGoCodeWait(projectName);
       pushActivity(
-        'Coding complete. Send Continue for the next slice — not started automatically.',
+        PRODUCT_MVP_READY_MESSAGE,
         'success',
       );
       resetCodingActivity();
@@ -2123,12 +2123,8 @@ export function AIChat() {
             );
           }
           skipGrokChat = true;
-          const nextSliceSkip =
-            userNoteRequestsNextSlice(text) && foundationLandedOnDisk();
           pushActivity(
-            nextSliceSkip
-              ? 'Master Plan already on disk — skipping Grok chat; next slice only (not recoding Foundation)'
-              : 'Master Plan already on disk — skipping Grok chat, continuing classify / plan / Foundation',
+            'Master Plan already on disk — skipping Grok chat, continuing classify / plan / Foundation+Primary',
             'info',
           );
         } else if (skipGrokChat) {
@@ -2172,16 +2168,12 @@ export function AIChat() {
         let skippedGrokChat = false;
         if (skipGrokChat) {
           skippedGrokChat = true;
-          const nextSliceOnly =
-            userNoteRequestsNextSlice(text) && foundationLandedOnDisk();
-          assistantContent = nextSliceOnly
-            ? 'Master Plan already on disk — coding the next incomplete slice (not Foundation).'
-            : 'Master Plan already on disk — continuing the plan, then Foundation.';
+          assistantContent = foundationLandedOnDisk()
+            ? PRODUCT_MVP_READY_MESSAGE
+            : 'Master Plan already on disk — continuing the plan, then Foundation+Primary.';
           planningPhase = 'PLAN_READY';
           pushActivity(
-            nextSliceOnly
-              ? 'Master Plan on disk — skipping Grok chat; next slice only (not recoding Foundation)'
-              : 'Master Plan on disk — skipping Grok chat; classify / plan next (not coding yet)',
+            'Master Plan on disk — skipping Grok chat; classify / plan next (not coding yet)',
             'info',
           );
         }
@@ -2452,24 +2444,9 @@ export function AIChat() {
       const wantsNextSlice = userNoteRequestsNextSlice(text);
       if (agentAllowed && (fastPrototypeTurn || willCode || mpSaved > 0)) {
         if (wantsNextSlice && foundationAlreadyLanded) {
-          const st = await fetchResearchStatus(projectName);
-          if (!st.ok && !(await codingSkeletonAllowsFoundation())) {
-            lastResearchError = formatResearchStopMessage(st.reasons);
-            codingProblems.push(lastResearchError);
-            pushActivity(lastResearchError, 'error');
-            setAccessoryHint('Retry research — Foundation will not start until Gate R is complete.');
-            window.setTimeout(() => setAccessoryHint(null), 8000);
-            willCode = false;
-            codingActivityRef.current = false;
-            setGrokCodingActive(false);
-            setGrokActivity((prev) => finishGrokActivityWithProblems(prev, codingProblems));
-          } else {
-            mockupSkippedOrFailed = true;
-            pushActivity(
-              'Research + mockup already done — coding the next slice (not Foundation).',
-              'info',
-            );
-          }
+          mockupSkippedOrFailed = true;
+          willCode = false;
+          pushActivity(PRODUCT_MVP_READY_MESSAGE, 'success');
         } else {
         const research = await ensureResearchBeforeUiAndGo({
           projectName,
@@ -2535,7 +2512,7 @@ export function AIChat() {
         ) {
           mockupSkippedOrFailed = true;
           pushActivity(
-            'Product routes already on disk — mockup deferred — coding next slice',
+            'Product routes already on disk — mockup deferred — coding Foundation+Primary',
             'info',
           );
         } else if (readiness.ok && (fastPrototypeTurn || willCode)) {
@@ -2731,41 +2708,19 @@ export function AIChat() {
           userForcedCoding ||
           assistantCodingPromise;
         if (
-          FAST_PROTOTYPE_SAME_SESSION_AUTOPILOT &&
-          foundationAlreadyLanded &&
-          !wantsNextSlice &&
-          !onboardingBuildStart
-        ) {
-          wantsNextSlice = true;
-        }
-        if (
           !coding.ran &&
           agentAllowed &&
           foundationGate.ok &&
           forceGoPipeline &&
           foundationAlreadyLanded &&
-          !wantsNextSlice &&
           !onboardingBuildStart
         ) {
           pushActivity(PRODUCT_MVP_READY_MESSAGE, 'success');
           resetCodingActivity();
         } else if (!coding.ran && agentAllowed && foundationGate.ok && forceGoPipeline) {
-          // After Foundation exists, "continue building" must request the NEXT slice — not Foundation again.
-          // Empty explorer (no app/ routes) stays Foundation even if the user said continue/finish.
           const foundationLanded = foundationLandedOnDisk();
-          const nextSliceGo = foundationLanded && wantsNextSlice;
-          const { projectKey: continueProjectKey } = resolveActiveProjectIds(diskProjectKey);
-          const nextContinueLabel = nextSliceGo
-            ? resolveNextContinueSlice({
-                lastSlice: lastAutoSliceLabelRef.current,
-                projectKey: continueProjectKey,
-                productRoutesOnDisk: foundationLanded,
-                workspacePaths: diskPaths,
-                planSlice: planSliceFromDisk,
-              })
-            : null;
-          if (nextSliceGo && !nextContinueLabel) {
-            pushActivity(policyAStopMessage('Polish'), 'success');
+          if (foundationLanded) {
+            pushActivity(PRODUCT_MVP_READY_MESSAGE, 'success');
             resetCodingActivity();
             sendingRef.current = false;
             setSending(false);
@@ -2776,21 +2731,15 @@ export function AIChat() {
           pushActivity(
             onboardingBuildStart
               ? 'Nothing more to add — launching Go Code pipeline'
-              : nextContinueLabel
-                ? `Continue — launching ${nextContinueLabel} slice (not Foundation)`
-                : wantsNextSlice && !foundationLanded
-                  ? 'Retry Foundation (Go) — not Continue for Primary'
-                  : userForcedCoding
-                    ? 'User asked to code — launching Go Code pipeline'
-                    : fastPrototypeTurn
-                      ? 'Fast Prototype — launching Go Code pipeline'
-                      : 'START_CODING — launching Go Code pipeline',
+              : userForcedCoding
+                ? 'User asked to code — launching Go Code pipeline'
+                : fastPrototypeTurn
+                  ? 'Fast Prototype — launching Foundation+Primary'
+                  : 'START_CODING — launching Foundation+Primary',
             wantsNextSlice && !foundationLanded ? 'warn' : 'info',
           );
-          launchedGoSlice = nextContinueLabel;
-          const goSliceInstruction = nextContinueLabel
-            ? buildAutopilotSliceInstruction(nextContinueLabel)
-            : FOUNDATION_SLICE_INSTRUCTION;
+          launchedGoSlice = 'Foundation';
+          const goSliceInstruction = FOUNDATION_SLICE_INSTRUCTION;
           const goMessages = [
             {
               role: 'user' as const,
@@ -2798,11 +2747,9 @@ export function AIChat() {
             },
           ];
           beginCodingActivity('Grok Code — writing files to workspace', goWorkSteps(), {
-            subhead: nextContinueLabel
-              ? `Go — ${nextContinueLabel} slice`
-              : wantsNextSlice && !foundationLanded
+            subhead: wantsNextSlice && !foundationLanded
                 ? FOUNDATION_RETRY_ACTIVITY
-                : 'Foundation coding slice',
+                : 'Foundation+Primary',
             initialLog: 'Running Grok Code — apply starts after Code pass 1 returns files',
           });
           setInferenceFirstStage('coding', diskProjectKey);
@@ -3301,12 +3248,12 @@ export function AIChat() {
             id: `go-block-${Date.now()}`,
             role: 'assistant' as const,
             content:
-              'Coding writes files to your workspace — that needs **Agent** mode.\n\nSwitch to Agent to start the next slice?',
+              'Coding writes files to your workspace — that needs **Agent** mode.\n\nSwitch to Agent to start Foundation+Primary?',
             timestamp: stamp,
             showSwitchToAgentCta: true,
             pendingAgentText: userNote
               ? `START_CODING — ${userNote}`
-              : 'START_CODING — implement next slice',
+              : 'START_CODING — Foundation+Primary',
           },
         ];
         messagesRef.current = next;
@@ -3315,23 +3262,22 @@ export function AIChat() {
       return;
     }
 
-    // Soft discourage: validate last slice / clear App Status before next slice
     if (!opts?.force) {
       const snap = getAppRuntimeSnapshot();
       const errorCount = snap.issues.filter((i) => i.severity === 'error' || i.severity === 'warn').length;
       if (snap.pendingValidation || errorCount > 0) {
         const stamp = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
         const why = snap.pendingValidation
-          ? 'Validate the last slice first — reload Preview and wait for App Status to clear.'
-          : 'App Status still shows issues — Fix with Agent or clear them before the next slice.';
-        setAccessoryHint(`${why} Reply “continue” to build the next slice anyway.`);
+          ? 'Validate the last apply first — reload Preview and wait for App Status to clear.'
+          : 'App Status still shows issues — Fix with Agent or clear them before retrying Go.';
+        setAccessoryHint(why);
         setMessages((p) => {
           const next = [
             ...p,
             {
               id: `go-soft-${Date.now()}`,
               role: 'assistant' as const,
-              content: `${why}\n\nReply **continue** (or **build next**) when you want the next slice anyway.`,
+              content: why,
               timestamp: stamp,
             },
           ];
@@ -3363,7 +3309,7 @@ export function AIChat() {
     const userMsg: Message = {
       id: `go-${Date.now()}`,
       role: 'user',
-      content: userNote ? `START_CODING — ${userNote}` : 'START_CODING — implement next slice',
+      content: userNote ? `START_CODING — ${userNote}` : 'START_CODING — Foundation+Primary',
       timestamp: ts,
     };
     setMessages((p) => {
@@ -3425,14 +3371,10 @@ export function AIChat() {
       setSending(false);
       return;
     }
-    const goSliceNote = nextContinueLabel
-      ? buildAutopilotSliceInstruction(nextContinueLabel)
-      : userNote || FOUNDATION_SLICE_INSTRUCTION;
+    const goSliceNote = userNote || FOUNDATION_SLICE_INSTRUCTION;
 
     beginCodingActivity('Grok Code — writing files to workspace', goWorkSteps(), {
-      subhead: nextContinueLabel
-        ? `Go — ${nextContinueLabel} slice (not Foundation)`
-        : 'One coherent slice (Build → Debug → Next). Validate before the next slice.',
+      subhead: 'Foundation+Primary',
       initialLog: 'Running Grok Code — apply starts after Code pass 1 returns files',
     });
     setGrokActivity((prev) =>

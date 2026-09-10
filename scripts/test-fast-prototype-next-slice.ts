@@ -57,7 +57,7 @@ assert.equal(
     sliceLabel: 'Foundation',
   }),
   false,
-  'Foundation + Live only — next slices wait for Continue',
+  'Foundation+Primary is one Go — nothing queued',
 );
 
 markFastPrototypePrimaryAutoRun('p1');
@@ -103,14 +103,14 @@ assert.equal(
   'Auth/shell does not auto-continue',
 );
 
-assert.match(FAST_PROTOTYPE_PRIMARY_SLICE_INSTRUCTION, /SLICE: Primary/);
-assert.match(FAST_PROTOTYPE_PRIMARY_SLICE_INSTRUCTION, /do NOT rewrite (it|them)/i);
+assert.match(FAST_PROTOTYPE_PRIMARY_SLICE_INSTRUCTION, /Foundation\+Primary/);
+assert.match(FAST_PROTOTYPE_PRIMARY_SLICE_INSTRUCTION, /mockStore/);
 
-assert.equal(nextAutopilotSliceLabel('Foundation'), 'Data+API');
-assert.equal(nextAutopilotSliceLabel('Auth'), 'Data+API');
-assert.equal(nextAutopilotSliceLabel('Data+API'), 'Primary');
-assert.equal(nextAutopilotSliceLabel('Primary'), 'Secondary');
-assert.equal(nextAutopilotSliceLabel('Secondary'), 'Polish');
+assert.equal(nextAutopilotSliceLabel('Foundation'), null);
+assert.equal(nextAutopilotSliceLabel('Auth'), null);
+assert.equal(nextAutopilotSliceLabel('Data+API'), null);
+assert.equal(nextAutopilotSliceLabel('Primary'), null);
+assert.equal(nextAutopilotSliceLabel('Secondary'), null);
 
 {
   const d = shouldAutopilotAdvance({
@@ -211,7 +211,7 @@ assert.equal(nextAutopilotSliceLabel('Secondary'), 'Polish');
   });
   assert.equal(d.advance, false);
   assert.equal(d.stopReason, 'failed');
-  assert.match(d.message, /Retry Go for Foundation/i);
+  assert.match(d.message, /Retry Go/i);
 }
 {
   const d = shouldAutopilotAdvance({
@@ -236,7 +236,7 @@ assert.equal(nextAutopilotSliceLabel('Secondary'), 'Polish');
   });
   assert.equal(d.advance, false);
   assert.equal(d.stopReason, 'failed');
-  assert.match(d.message, /Retry Go for Foundation/i);
+  assert.match(d.message, /Retry Go/i);
 }
 {
   const d = shouldAutopilotAdvance({
@@ -248,7 +248,7 @@ assert.equal(nextAutopilotSliceLabel('Secondary'), 'Polish');
   });
   assert.equal(d.advance, false);
   assert.equal(d.stopReason, 'failed');
-  assert.match(d.message, /Retry Go for Foundation/i);
+  assert.match(d.message, /Retry Go/i);
 }
 {
   const d = shouldAutopilotAdvance({
@@ -299,7 +299,7 @@ assert.equal(nextAutopilotSliceLabel('Secondary'), 'Polish');
   assert.equal(d.advance, false);
   assert.equal(d.stopReason, 'failed');
   assert.match(d.message, /GO_TIMEOUT/);
-  assert.match(d.message, /Primary did not land/);
+  assert.match(d.message, /Foundation\+Primary did not finish|did not land/);
 }
 {
   const d = shouldAutopilotAdvance({
@@ -312,11 +312,11 @@ assert.equal(nextAutopilotSliceLabel('Secondary'), 'Polish');
     blockedCode: 'GO_TIMEOUT',
   });
   assert.match(d.message, /GO_TIMEOUT/);
-  assert.match(d.message, /Foundation did not land/);
-  assert.equal(/Primary did not land/i.test(d.message), false);
+  assert.match(d.message, /Foundation/);
+  assert.equal(/Send Continue/i.test(d.message), false);
 }
-assert.match(policyATimeoutMessage('Primary', true), /Primary did not land/);
-assert.match(policyATimeoutMessage('Foundation', false), /Foundation did not land/);
+assert.match(policyATimeoutMessage('Primary', true), /Foundation\+Primary did not finish/);
+assert.match(policyATimeoutMessage('Foundation', false), /Foundation/);
 assert.equal(
   resolveNextContinueSlice({ productRoutesOnDisk: false, lastSlice: 'Primary' }),
   'Foundation',
@@ -327,15 +327,15 @@ assert.equal(
 );
 assert.equal(
   resolveNextContinueSlice({ productRoutesOnDisk: true, lastSlice: 'Foundation' }),
-  'Data+API',
+  null,
 );
 assert.equal(
   resolveNextContinueSlice({ productRoutesOnDisk: true, lastSlice: 'Primary' }),
-  'Secondary',
+  null,
 );
 assert.equal(
   resolveNextContinueSlice({ productRoutesOnDisk: true, lastSlice: 'Secondary' }),
-  'Polish',
+  null,
 );
 assert.match(policyAStopMessage('Secondary'), /App is ready on Live/);
 {
@@ -356,8 +356,8 @@ assert.match(policyAStopMessage('Secondary'), /App is ready on Live/);
       lastSlice: 'Foundation',
       workspacePaths: afterPrimary,
     }),
-    'Secondary',
-    'poisoned Foundation persist after kid/home must Continue Secondary, not Primary',
+    null,
+    'after Foundation+Primary there is no pending slice',
   );
   assert.equal(
     resolveNextContinueSlice({
@@ -365,11 +365,10 @@ assert.match(policyAStopMessage('Secondary'), /App is ready on Live/);
       lastSlice: 'Foundation',
       planSlice: 'Secondary',
     }),
-    'Polish',
-    'Master Plan SLICE: Secondary must beat a stale Foundation persist',
+    null,
   );
 }
-assert.match(policyAFailedMessage('Foundation'), /Retry Go for Foundation/);
+assert.match(policyAFailedMessage('Foundation'), /Retry Go/);
 assert.match(policyAStopMessage('Foundation'), /App is ready on Live/);
 assert.match(policyAStopMessage('Data+API'), /App is ready on Live/);
 assert.match(policyAStopMessage('Polish'), /App is ready on Live/);
@@ -395,7 +394,7 @@ assert.equal(
       productRoutesOnDisk: workspaceFoundationLanded(firstGo),
       lastSlice: 'Foundation',
     }),
-    'Data+API',
+    null,
   );
 }
 assert.equal(
@@ -411,7 +410,7 @@ assert.equal(
   'empty explorer + last-slice persist is not disk proof',
 );
 assert.equal(workspaceFoundationLanded([]), false);
-assert.match(buildAutopilotSliceInstruction('Secondary'), /SLICE: Secondary/);
+assert.match(buildAutopilotSliceInstruction('Secondary'), /Foundation\+Primary/);
 
 assert.equal(userNoteRequestsNextSlice('continue building'), true);
 assert.equal(userNoteRequestsNextSlice('keep building the app'), true);
@@ -420,9 +419,9 @@ assert.equal(userNoteRequestsNextSlice('build next'), true);
 assert.equal(userNoteRequestsNextSlice('finish the app'), true);
 assert.equal(userNoteRequestsNextSlice('please finish the development'), true);
 assert.equal(userNoteRequestsNextSlice('complete the project'), true);
-assert.equal(userNoteRequestsNextSlice(FAST_PROTOTYPE_PRIMARY_SLICE_INSTRUCTION), true);
-assert.match(buildAutopilotSliceInstruction('Data+API'), /SLICE: Data\+API/);
-assert.match(buildAutopilotSliceInstruction('Data+API'), /app\/api/);
+assert.equal(userNoteRequestsNextSlice(FAST_PROTOTYPE_PRIMARY_SLICE_INSTRUCTION), false);
+assert.match(buildAutopilotSliceInstruction('Data+API'), /Foundation\+Primary|mockStore/);
+assert.equal(/app\/api/.test(buildAutopilotSliceInstruction('Data+API')), false);
 assert.equal(userNoteRequestsNextSlice('go'), false);
 assert.equal(userNoteRequestsNextSlice('start coding'), false);
 assert.equal(userNoteRequestsNextSlice(''), false);
@@ -515,9 +514,11 @@ assert.equal(APPLY_IN_FLIGHT_STALL_MS, 15_000);
   );
   assert.match(
     chat,
-    /Research \+ mockup already done — coding the next slice/,
-    'Continue must not re-run Web Search / UI Gen',
+    /wantsNextSlice && foundationAlreadyLanded/,
+    'Continue after Live is ready — no second Go',
   );
+  assert.equal(/Research \+ mockup already done — coding the next slice/.test(chat), false);
+  assert.equal(/Continue — launching/.test(chat), false);
   assert.match(chat, /resolveNextContinueSlice/);
   assert.match(chat, /persistLastAppliedSlice/);
   assert.match(
@@ -560,7 +561,7 @@ assert.equal(APPLY_IN_FLIGHT_STALL_MS, 15_000);
   assert.match(
     pipeline,
     /userNoteRequestsNextSlice\(userNote\)/,
-    'explicit Continue may request Primary, not rewrite Foundation',
+    'explicit Continue after routes is ready — not a Data+API job',
   );
   assert.equal(
     /productRoutes\.length < 3 && sliceLabel && \/secondary\|polish/.test(pipeline),
@@ -573,8 +574,8 @@ assert.equal(APPLY_IN_FLIGHT_STALL_MS, 15_000);
     /App is ready on Live/,
     'Foundation on disk stays quiet — no Continue CTA',
   );
-  assert.match(chat, /planSlice: planSliceFromDisk/);
-  assert.match(chat, /workspacePaths: diskPaths/);
+  assert.match(chat, /workspacePaths,/);
+  assert.equal(/Continue — launching/.test(chat), false);
   assert.equal(
     /productRoutesOnDisk:\s*true/.test(pipeline),
     false,
@@ -614,7 +615,7 @@ assert.equal(FAST_PROTOTYPE_SAME_SESSION_AUTOPILOT, false);
 assert.match(
   fs.readFileSync(path.join(root, 'src/lib/fastPrototypeNextSlice.ts'), 'utf8'),
   /FAST_PROTOTYPE_SAME_SESSION_AUTOPILOT = false/,
-  'Foundation + style-pass only — further slices wait for Continue',
+  'Foundation+Primary is one Go — no queued slices',
 );
 assert.match(chat, /if \(!FAST_PROTOTYPE_SAME_SESSION_AUTOPILOT\)/);
 assert.match(chat, /policyAStopMessage/);
@@ -638,7 +639,7 @@ assert.equal(/continuing Foundation anyway/.test(chat), false);
   assert.match(stallBlock, /APPLY_IN_FLIGHT_STALL_MS/);
   assert.match(stallBlock, /checking disk \(not stopping coding\)/);
   assert.match(stallBlock, /abortApplyWait\(projectName\)/);
-  assert.match(stallBlock, /Coding complete/);
+  assert.match(stallBlock, /PRODUCT_MVP_READY_MESSAGE/);
   assert.equal(
     /Still writing files/.test(stallBlock),
     false,

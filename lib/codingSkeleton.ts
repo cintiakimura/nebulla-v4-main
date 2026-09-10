@@ -217,19 +217,20 @@ export function formatCodingSkeletonForGo(c: CodingSkeleton): string {
       ? "Settings/dashboard allowed for this skeleton."
       : "MUST NOT: /dashboard /settings /analytics /admin unless listed above.",
     FOUNDATION_MIN_UI_CHECKLIST,
-    "Do not claim the product or Preview is finished after Foundation. Do not start Data+API this slice.",
+    "This Go is Foundation+Primary. The goal verb must persist in lib/mockStore.ts (localStorage). No empty /api stubs. Do not start a Data+API or Polish slice. After this Go the app is ready on Live.",
   ].join("\n");
 }
 
 /**
  * Numbered Foundation checklist — Grok Code must emit this UI on Live (not a generic shell).
  */
-export const FOUNDATION_MIN_UI_CHECKLIST = `FOUNDATION MIN UI (visible on Live this slice — not Data+API):
+export const FOUNDATION_MIN_UI_CHECKLIST = `FOUNDATION MIN UI (visible on Live this Go — Foundation+Primary, not Data+API):
 1. Header: product identity name only (same string as chip / <title> / Live).
 2. Nav: only §4 routes (3–5 links). No leftover Practice/Session/Helper on a shop.
 3. Home (non-education): job title (Ready bikes / Today's loaves / Open requests); ≥2 mock items with name + status/price; one primary CTA to the main action route. Forbidden: "One short lesson", "Weekly streak", "Start practice", "Interactive screen with mock data".
 4. Home (education only): lesson + streak + Start practice OK; add Teacher route if the goal mentions teachers.
-5. Action screen (book / request / order / upload): ≥2 labeled fields or a file control; Submit/Accept updates local mock state. Not a single Continue on an empty card.`;
+5. Action screen (book / request / order / upload): ≥2 labeled fields or a file control; Submit/Accept updates lib/mockStore.ts. Not a single Continue on an empty card.
+6. Primary verb works without refresh: shop book/order updates the list; delivery pickup+dropoff then Accept updates status; education Start practice writes progress for Teacher.`;
 
 export function primaryVerbFromSkeleton(c: CodingSkeleton | null | undefined): string {
   return String(c?.verbs?.[0] || "practice").trim() || "practice";

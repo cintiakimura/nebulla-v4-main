@@ -26,11 +26,10 @@ import { dispatchStudioShowLiveApp, triggerUiStudioBetaAfterFilesApplied } from 
 import { markFoundationGoInFlight } from './foundationHeavyJob';
 import { setGrokCodingActive } from './nebulaGrokCodingGate';
 import {
-  buildAutopilotSliceInstruction,
   buildNarrowSliceInstruction,
   FOUNDATION_RETRY_ACTIVITY,
   FOUNDATION_SLICE_INSTRUCTION,
-  resolveNextContinueSlice,
+  PRODUCT_MVP_READY_MESSAGE,
   userNoteRequestsNextSlice,
 } from './fastPrototypeNextSlice';
 import {
@@ -1652,24 +1651,20 @@ export async function handlePostGrokCodingTurn(options: {
   }
 
   const nextSlice = userNoteRequestsNextSlice(userNote);
-  const nextLabel = nextSlice
-    ? resolveNextContinueSlice({
-        projectKey: projectName,
-        productRoutesOnDisk,
-      })
-    : null;
-  const instruction = nextLabel
-    ? buildAutopilotSliceInstruction(nextLabel)
-    : (userNote || FOUNDATION_SLICE_INSTRUCTION).slice(0, 2000);
+  if (nextSlice && productRoutesOnDisk) {
+    onProgress?.(PRODUCT_MVP_READY_MESSAGE, 'success');
+    return {
+      ran: true,
+      ok: true,
+      statusMessage: PRODUCT_MVP_READY_MESSAGE,
+      sliceLabel: 'Primary',
+    };
+  }
   if (nextSlice && !productRoutesOnDisk) {
     onProgress?.(FOUNDATION_RETRY_ACTIVITY, 'warn');
   }
-  onProgress?.(
-    nextSlice && productRoutesOnDisk && nextLabel
-      ? `START_CODING detected — launching Go Code for ${nextLabel}`
-      : 'START_CODING detected — launching Go Code pipeline',
-    'info',
-  );
+  const instruction = (userNote || FOUNDATION_SLICE_INSTRUCTION).slice(0, 2000);
+  onProgress?.('START_CODING detected — launching Foundation+Primary', 'info');
   const go = await runGoCodeAndApply({
     userId,
     projectName,

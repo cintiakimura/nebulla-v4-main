@@ -1,8 +1,7 @@
 /**
- * Fast Prototype next-slice helpers (Mode B).
- * One prompt → research → mockup → Foundation → Data+API → Primary → Secondary → Polish.
- * Mockup is Step 8 only. Coding goal is a clickable product with a data layer, not mock-only UI.
- * Do not ask the user to type Continue between slices.
+ * Fast Prototype coding contract (Mode B).
+ * One goal → classify/plan → one Go (Foundation+Primary) → App is ready on Live.
+ * Primary = the goal verb works via lib/mockStore.ts. No Data+API job. No Continue.
  */
 
 import { RESEARCH_STOPPED } from '../../lib/researchStages';
@@ -172,21 +171,13 @@ export function healLastAppliedSlice(
   return last;
 }
 
-/**
- * After Foundation/Auth, Data+API is next (mock auth is not a hard gate).
- * Do not skip the data layer — Primary must persist through it.
- */
-export function nextAutopilotSliceLabel(current?: string | null): AutopilotSliceLabel {
-  const label = String(current || 'Foundation').trim();
-  if (/\bpolish\b/i.test(label)) return 'Polish';
-  if (/\bsecondary\b/i.test(label)) return 'Polish';
-  if (/\bprimary\b/i.test(label)) return 'Secondary';
-  if (/\bdata\+?api\b/i.test(label)) return 'Primary';
-  return 'Data+API';
+/** After Foundation+Primary there is no queued slice. */
+export function nextAutopilotSliceLabel(_current?: string | null): AutopilotSliceLabel | null {
+  return null;
 }
 
-/** Auto Go passes after the kickoff Foundation turn (Data+API, Primary, Secondary, Polish). */
-export const MAX_AUTOPILOT_SLICES = 4;
+/** Auto follow-up slices are closed. Foundation+Primary is one Go. */
+export const MAX_AUTOPILOT_SLICES = 0;
 
 /** Shown when autopilot / Continue has nothing left. */
 export const PRODUCT_MVP_READY_SHORT = 'App is ready on Live.';
@@ -202,12 +193,12 @@ export const FAST_PROTOTYPE_SAME_SESSION_AUTOPILOT = false;
 /** Nested app/pages routes (or product screens) required before Foundation is “on disk”. */
 export const FOUNDATION_PRODUCT_ROUTE_MIN = 3;
 
-/** Continue with empty explorer — retry Foundation, not Primary. */
+/** Empty explorer — retry the same Foundation+Primary Go. */
 export const FOUNDATION_RETRY_ACTIVITY =
-  'Foundation did not land. Retry Go for Foundation — not Continue for Primary.';
+  'Foundation did not land. Retry Go for Foundation+Primary — you do not need to type Continue.';
 
 export const FOUNDATION_SLICE_INSTRUCTION =
-  'START_CODING — implement ONE coherent Foundation slice only (Build → Debug → Next). Prefer app/, src/, components/, pages/ — not master-plan/ui-brief only. Create router + Coding-skeleton routes only, one mock store per entity, mock auth only if auth is not none. Header and <title> must use Master Plan §1 Product name (never Sparrow Tutor or Practice app unless §1 is already named Sparrow). Routes from §4 only — no Rewards tab unless §4 lists Rewards. Primary controls must not be silent no-ops. Obey FOUNDATION MIN UI in the Coding skeleton (job Home with ≥2 items + CTA; not Interactive screen / Start practice unless education). Do not start Data+API. Do not claim Preview or the product is finished. File blocks for this slice only — not the full §4 app.';
+  'START_CODING — SLICE: Foundation+Primary in ONE Go. Router + §4 routes + lib/mockStore.ts. The goal verb must work with mock localStorage (no empty /api/* , no Data+API slice, no Polish). Shop: book/order updates the Home list; mechanic can mark ready. Delivery: pickup+dropoff submit appears on Home; Accept updates status. Education: Start practice writes progress on Teacher. Header = §1 identity name. Nav = §4 only. Job Home (list + CTA), not Interactive screen / Start practice unless education. File blocks now — then the app is ready on Live.';
 
 /** After a 3-minute timeout — smaller shell so Grok Code can finish. */
 export const NARROW_FOUNDATION_SLICE_INSTRUCTION =
@@ -315,6 +306,14 @@ export function shouldAutopilotAdvance(opts: {
   }
   const lastSlice = opts.lastSlice;
   const nextLabel = nextAutopilotSliceLabel(lastSlice);
+  if (!nextLabel) {
+    return {
+      advance: false,
+      nextLabel: null,
+      stopReason: 'session_complete',
+      message: PRODUCT_MVP_READY_MESSAGE,
+    };
+  }
   return {
     advance: true,
     nextLabel,
@@ -336,42 +335,25 @@ export function autopilotStopRunsFinalUi(
  * True when Fast Prototype should kick Step 9.2 (primary feature) once after shell/auth.
  * Kept for existing tests; autopilot chain uses shouldAutopilotAdvance.
  */
-export function shouldAutoRunPrimarySliceAfterFoundation(opts: {
+export function shouldAutoRunPrimarySliceAfterFoundation(_opts: {
   fastPrototypeTurn: boolean;
   codingOk: boolean;
   projectKey: string;
   sliceLabel?: string | null;
   force?: boolean;
 }): boolean {
-  if (!FAST_PROTOTYPE_SAME_SESSION_AUTOPILOT) return false;
-  if (!opts.fastPrototypeTurn || !opts.codingOk) return false;
-  if (!opts.force && hasFastPrototypePrimaryAutoRun(opts.projectKey)) return false;
-  return looksLikePrePrimaryShellSlice(opts.sliceLabel);
+  return false;
 }
 
-const DO_NOT_REWRITE_FOUNDATION =
-  'If Foundation/product routes already exist, do NOT rewrite them — do not re-emit package.json, layout, login, or existing pages unless this slice must change them.';
-
 export const FAST_PROTOTYPE_DATA_API_SLICE_INSTRUCTION =
-  'START_CODING — SLICE: Data+API — implement the data layer only (Build → Debug → Next). ' +
-  `${DO_NOT_REWRITE_FOUNDATION} ` +
-  'Add app/api (or pages/api) plus a workspace store those routes read/write (JSON file or lib module). Screens must fetch that API — mock-only useState that dies on refresh is a failed slice. No Supabase/Firebase. File blocks for this slice only.';
+  'Do not start SLICE: Data+API. Persist the verb in lib/mockStore.ts during Foundation+Primary.';
 
 export const FAST_PROTOTYPE_PRIMARY_SLICE_INSTRUCTION =
-  'START_CODING — SLICE: Primary — implement the NEXT incomplete primary feature slice only (Build → Debug → Next). ' +
-  `${DO_NOT_REWRITE_FOUNDATION} ` +
-  'Core user job from Master Plan / Coding skeleton first verb (e.g. practice): kid Home with one next-lesson CTA + a working practice/session (steps or timer, then complete) that reads/writes through Data+API — not a Who-are-you role picker as the whole home, not mock-only UI. Prefer listed skeleton routes only. File blocks for this slice only — not the full §4 app.';
+  'Primary is part of Foundation+Primary (first Go). Implement the first skeleton verb via lib/mockStore.ts. Keep existing routes unless they lack the verb. Do not start Data+API.';
 
 export function buildAutopilotSliceInstruction(slice: AutopilotSliceLabel): string {
-  if (slice === 'Foundation') return FOUNDATION_SLICE_INSTRUCTION;
-  if (slice === 'Data+API') return FAST_PROTOTYPE_DATA_API_SLICE_INSTRUCTION;
-  if (slice === 'Primary') return FAST_PROTOTYPE_PRIMARY_SLICE_INSTRUCTION;
-  return (
-    `START_CODING — SLICE: ${slice} — implement the NEXT incomplete ${slice} slice only (Build → Debug → Next). ` +
-    `${DO_NOT_REWRITE_FOUNDATION} Prefer Master Plan pages/features not yet complete ` +
-    `(teacher dashboard, parent progress, child hub, rewards). Prefer app/, src/, components/, pages/. ` +
-    `File blocks for this slice only — not the full §4 app.`
-  );
+  if (slice === 'Foundation' || slice === 'Primary' || slice === 'Auth') return FOUNDATION_SLICE_INSTRUCTION;
+  return FOUNDATION_SLICE_INSTRUCTION;
 }
 
 /** Policy A copy after a slice lands — Continue must name the next slice, not always Foundation. */
@@ -383,34 +365,18 @@ export function policyAFailedMessage(lastSlice?: string | null): string {
   if (!lastSlice || looksLikePrePrimaryShellSlice(lastSlice)) {
     return FOUNDATION_RETRY_ACTIVITY;
   }
-  return `${String(lastSlice).trim()} did not land. Retry Go for this slice — not Continue for the next.`;
+  return `${String(lastSlice).trim()} did not land. Retry Go — you do not need to type Continue.`;
 }
 
-/** Timed-out next slice must not tell the user Foundation never landed. */
-export function policyATimeoutMessage(lastSlice?: string | null, foundationOnDisk?: boolean): string {
-  if (FAST_PROTOTYPE_SAME_SESSION_AUTOPILOT) {
-    if (!foundationOnDisk) {
-      return 'Grok Code timed out [GO_TIMEOUT]. Foundation files did not land. You do not need to type Continue.';
-    }
-    const label =
-      !lastSlice || looksLikePrePrimaryShellSlice(lastSlice)
-        ? nextAutopilotSliceLabel(lastSlice)
-        : String(lastSlice).trim();
-    return `Grok Code timed out [GO_TIMEOUT]. ${label} did not land. You do not need to type Continue.`;
-  }
+export function policyATimeoutMessage(_lastSlice?: string | null, foundationOnDisk?: boolean): string {
   if (!foundationOnDisk) {
     return `Grok Code timed out [GO_TIMEOUT]. ${FOUNDATION_RETRY_ACTIVITY}`;
   }
-  const label =
-    !lastSlice || looksLikePrePrimaryShellSlice(lastSlice)
-      ? nextAutopilotSliceLabel(lastSlice)
-      : String(lastSlice).trim();
-  return `Grok Code timed out [GO_TIMEOUT]. ${label} did not land. Send Go to retry ${label} — Foundation is already on disk.`;
+  return 'Grok Code timed out [GO_TIMEOUT]. Foundation+Primary did not finish. Retry Go — you do not need to type Continue.';
 }
 
 /**
- * Continue after Foundation/Primary/… — never Foundation again when product routes exist.
- * Returns null when Polish already landed (nothing left to Continue).
+ * After Foundation+Primary there is nothing to Continue.
  */
 export function resolveNextContinueSlice(opts: {
   lastSlice?: string | null;
@@ -420,13 +386,7 @@ export function resolveNextContinueSlice(opts: {
   planSlice?: string | null;
 }): AutopilotSliceLabel | null {
   if (!opts.productRoutesOnDisk) return 'Foundation';
-  const combined = preferLaterSlice(
-    opts.lastSlice,
-    preferLaterSlice(readLastAppliedSlice(opts.projectKey || ''), opts.planSlice),
-  );
-  const last = healLastAppliedSlice(combined, opts.workspacePaths) || 'Foundation';
-  if (looksLikePolishSlice(last)) return null;
-  return nextAutopilotSliceLabel(last);
+  return null;
 }
 
 function normalizeWorkspacePath(raw: string): string {
