@@ -25,6 +25,7 @@ import {
 } from "./productIdentity";
 import { listProductUiFiles } from "./workspaceCodedAppUi";
 import { ensureInteractiveProductPreview } from "./interactiveProductPreview";
+import { rewriteEducationKitHomeIfNeeded } from "./rewriteEducationKitHome";
 
 export const PRODUCT_PALETTE_REL = "nebulla-ide/product-palette.json";
 
@@ -67,6 +68,28 @@ export function readGoalFromWorkspace(workspaceRoot: string, masterPlanPath?: st
     }
   }
   return "";
+}
+
+function readPlanFromWorkspace(
+  workspaceRoot: string,
+  masterPlanPath?: string,
+): Record<string, unknown> {
+  const candidates = [
+    masterPlanPath,
+    path.join(workspaceRoot, "nebulla-ide", "master-plan.json"),
+    path.join(workspaceRoot, "nebula-project", "master-plan.json"),
+    path.join(workspaceRoot, "master-plan.json"),
+  ].filter(Boolean) as string[];
+  for (const p of candidates) {
+    if (!fs.existsSync(p)) continue;
+    try {
+      const plan = JSON.parse(fs.readFileSync(p, "utf8")) as Record<string, unknown>;
+      if (plan && typeof plan === "object") return plan;
+    } catch {
+      /* next */
+    }
+  }
+  return {};
 }
 
 function isBakeryGoal(goal: string, projectType?: string): boolean {
@@ -284,6 +307,14 @@ export function applyProductPalettePass(input: {
     goal,
   );
   if (layoutRel && !applied.includes(layoutRel)) applied.push(layoutRel);
+  const kitHome = rewriteEducationKitHomeIfNeeded({
+    workspaceRoot: input.workspaceRoot,
+    goal,
+    plan: readPlanFromWorkspace(input.workspaceRoot, input.masterPlanPath),
+  });
+  for (const rel of kitHome.rewritten) {
+    if (!applied.includes(rel)) applied.push(rel);
+  }
   applied.push(...collapsePalettesOnDisk(input.workspaceRoot, goal));
   return { ok: applied.length > 0, applied, packId: rec.packId, productName: identity.projectName };
 }

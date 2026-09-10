@@ -89,6 +89,7 @@ export function inferPreviewScreensFromPaths(productFiles: string[]): PreviewScr
         continue;
       }
       const slug = route.replace(/^\//, "").split("/").pop() || route;
+      if (slug.length < 2) continue;
       const id = route.replace(/^\//, "").replace(/\//g, "-") || "screen";
       const kind = kindFromRoute(route);
       screens.push({
@@ -150,11 +151,12 @@ function buildInteractiveHtml(opts: {
   const initials = esc((opts.logoInitials || name.replace(/[^a-zA-Z]/g, "").slice(0, 2) || "NP").slice(0, 2).toUpperCase());
   const screensJson = JSON.stringify(opts.screens);
   const shop = opts.screens.some((s) =>
-    /order|baker|confirmation|bread/i.test(`${s.id} ${s.label}`),
-  );
-  const education = opts.screens.some((s) =>
-    /tutor|practice|teacher|kid|parent/i.test(`${s.id} ${s.label}`),
-  );
+    /order|baker|confirmation|bread|bike|book|mechanic|spoke/i.test(`${s.id} ${s.label}`),
+  ) || /spoke|bike|baker|loaf/i.test(opts.projectName);
+  const education =
+    !shop &&
+    opts.screens.some((s) => /tutor|practice|teacher|kid|parent/i.test(`${s.id} ${s.label}`));
+  const bike = /bike|spoke|mechanic/i.test(`${opts.projectName} ${opts.screens.map((s) => s.id).join(" ")}`);
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -200,7 +202,7 @@ function buildInteractiveHtml(opts: {
         <div style="font-weight:700;margin-top:4px">${name}</div>
       </div>
     </div>
-    <div id="roleChip" style="font-size:12px;color:var(--muted)">${shop ? "Preview" : education ? "Kid practice" : "Preview"}</div>
+    <div id="roleChip" style="font-size:12px;color:var(--muted)">Preview</div>
   </div>
   <nav class="tabs" id="tabs" aria-label="Preview screens"></nav>
   <main class="main" id="root"></main>
@@ -208,9 +210,11 @@ function buildInteractiveHtml(opts: {
 (function () {
   var SCREENS = ${screensJson};
   var SHOP = ${shop ? "true" : "false"};
+  var BIKE = ${bike ? "true" : "false"};
+  var EDUCATION = ${education ? "true" : "false"};
   var PROJECT = ${JSON.stringify((opts.projectName || "App").slice(0, 80))};
   var STORAGE_KEY = "nebulla_product_preview_v1";
-  var state = { screen: "home", role: "kid", uploadName: "", progress: 12, sessionStarted: false, step: 0 };
+  var state = { screen: "home", role: EDUCATION ? "guest" : "guest", uploadName: "", progress: 12, sessionStarted: false, step: 0 };
   try {
     var saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || "null");
     if (saved && typeof saved === "object") state = Object.assign(state, saved);
@@ -248,6 +252,22 @@ function buildInteractiveHtml(opts: {
   }
 
   function homeHtml() {
+    if (BIKE) {
+      return (
+        '<div class="card">' +
+          '<h1>Ready bikes</h1>' +
+          '<p>Bikes on the floor. Book a pickup or service slot.</p>' +
+          '<div class="grid">' +
+            '<div class="role"><strong>City commuter</strong> Ready now.</div>' +
+            '<div class="role"><strong>Trail hardtail</strong> Tuned this morning.</div>' +
+          '</div>' +
+          '<div class="row">' +
+            '<button type="button" class="cta" id="goOrder">Book slot</button>' +
+          '</div>' +
+          '<div class="toast" id="toast"></div>' +
+        '</div>'
+      );
+    }
     if (SHOP) {
       return (
         '<div class="card">' +
@@ -260,6 +280,18 @@ function buildInteractiveHtml(opts: {
           '<div class="row">' +
             '<button type="button" class="cta" id="goOrder">Place pickup order</button>' +
             '<button type="button" class="ghost" id="goBaker">Baker queue</button>' +
+          '</div>' +
+          '<div class="toast" id="toast"></div>' +
+        '</div>'
+      );
+    }
+    if (!EDUCATION) {
+      return (
+        '<div class="card">' +
+          '<h1>' + PROJECT + '</h1>' +
+          '<p>Home for this product. Open a screen to continue.</p>' +
+          '<div class="row">' +
+            '<button type="button" class="cta" id="primaryAct">Continue</button>' +
           '</div>' +
           '<div class="toast" id="toast"></div>' +
         '</div>'
@@ -387,7 +419,7 @@ function buildInteractiveHtml(opts: {
 
   function paint() {
     renderTabs();
-    document.getElementById("roleChip").textContent = SHOP ? "Preview" : "Role: " + (state.role || "guest");
+    document.getElementById("roleChip").textContent = EDUCATION ? "Preview" : "Preview";
     var root = document.getElementById("root");
     var screen = SCREENS.find(function (s) { return s.id === state.screen; }) || SCREENS[0];
     if (!screen || screen.id === "home") root.innerHTML = homeHtml();

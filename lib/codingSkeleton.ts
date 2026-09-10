@@ -41,7 +41,7 @@ const KIDS_RE =
 const LANDING_RE =
   /\b(landing|one[- ]?pager|brochure|portfolio|photography|photographer|marketing site)\b/i;
 const MARKET_RE =
-  /\b(marketplace|e-?commerce|shop|storefront|\bcart\b|catalog|baker|bakery|bread|pastry|pickup order)\b/i;
+  /\b(marketplace|e-?commerce|shop|storefront|\bcart\b|catalog|baker|bakery|bread|pastry|pickup order|bike|bicycle|mechanic|spoke)\b/i;
 const DASH_RE = /\b(saas|analytics|admin|dashboard|crm|metrics|backoffice|internal tool)\b/i;
 
 const EXTRA_ADMIN_RE = /^\/(settings|analytics|dashboard|admin)(\/|$)/i;

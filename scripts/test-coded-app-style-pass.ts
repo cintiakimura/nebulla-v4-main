@@ -39,6 +39,7 @@ section("stub names and Grain Bakery brand");
     "LoafLocal",
   );
   assert.equal(inferProductName("Quill Path learning companion for daily reading"), "Quill Path");
+  assert.equal(inferProductName("Spoke & Co neighborhood bike shop"), "Spoke & Co");
   assert.equal(looksLikeEducationKitDefaultName("Sparrow Tutor", "Quill Path learning companion"), true);
   assert.equal(looksLikeEducationKitDefaultName("Sparrow Tutor", "Sparrow Tutor kids app"), false);
   assert.equal(looksLikeGoalStubName("Practice app", "Quill Path"), true);
@@ -167,6 +168,59 @@ export default function RootLayout({ children }) {
   assert.equal(/tutor/i.test(bakeryName), false);
   const slice = fs.readFileSync(path.join(REPO, "src/lib/fastPrototypeNextSlice.ts"), "utf8");
   assert.match(slice, /FAST_PROTOTYPE_SAME_SESSION_AUTOPILOT = false/);
+  fs.rmSync(tmp, { recursive: true, force: true });
+}
+
+section("Spoke & Co Home is bikes, not the tutor card");
+{
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "nebulla-spoke-"));
+  fs.mkdirSync(path.join(tmp, "app"), { recursive: true });
+  fs.writeFileSync(
+    path.join(tmp, "app/page.tsx"),
+    `export default function Home() {
+  return (
+    <main>
+      <p>One short lesson. Start when you are ready.</p>
+      <p>Weekly streak</p>
+      <button>Start practice</button>
+      <button>See streak</button>
+      <span>Role: parent</span>
+    </main>
+  );
+}
+`,
+  );
+  fs.writeFileSync(
+    path.join(tmp, "app/layout.tsx"),
+    `export default function RootLayout({ children }) {
+  return <html><body><header><strong>Spoke & Co</strong><span>Role: parent</span></header>{children}</body></html>;
+}
+`,
+  );
+  fs.mkdirSync(path.join(tmp, "nebulla-ide"), { recursive: true });
+  fs.writeFileSync(
+    path.join(tmp, "nebulla-ide/master-plan.json"),
+    JSON.stringify({
+      "1. Goal of the app": "**Product name:** Spoke & Co\nNeighborhood bike shop — ready bikes and book a slot.",
+      "4. Pages and navigation": "### Home `/`\n### Book `/book`\n### Mechanic `/mechanic`",
+    }),
+    "utf8",
+  );
+  const pass = applyProductPalettePass({
+    workspaceRoot: tmp,
+    goal: "Spoke & Co neighborhood bike shop ready bikes and book a slot",
+    masterPlanPath: path.join(tmp, "nebulla-ide/master-plan.json"),
+  });
+  assert.equal(pass.productName, "Spoke & Co");
+  const home = fs.readFileSync(path.join(tmp, "app/page.tsx"), "utf8");
+  assert.match(home, /bike|Book slot|Ready/i);
+  assert.equal(/short lesson|Start practice|Weekly streak|See streak|Role:\s*parent/i.test(home), false);
+  const layout = fs.readFileSync(path.join(tmp, "app/layout.tsx"), "utf8");
+  assert.equal(/Role:\s*parent/i.test(layout), false);
+  const chat = fs.readFileSync(path.join(REPO, "src/components/ide/AIChat.tsx"), "utf8");
+  assert.equal(/Next slice starts automatically/i.test(chat), false);
+  assert.equal(/send Continue for Data\+API/i.test(chat), false);
+  assert.equal(/Autopilot continues until MVP ready/i.test(chat), false);
   fs.rmSync(tmp, { recursive: true, force: true });
 }
 

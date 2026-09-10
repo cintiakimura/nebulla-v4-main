@@ -1268,7 +1268,7 @@ export function AIChat() {
         {
           ...last,
           statusKind: 'success' as const,
-          content: 'Files are on disk. Next slice starts automatically…',
+          content: 'App is ready on Live.',
         },
       ];
       messagesRef.current = next;
@@ -2651,7 +2651,7 @@ export function AIChat() {
           if (FAST_PROTOTYPE_SAME_SESSION_AUTOPILOT) {
             wantsNextSlice = true;
           } else {
-            pushActivity('Foundation already on disk — send Continue for the next slice.', 'success');
+            pushActivity(PRODUCT_MVP_READY_MESSAGE, 'success');
             willCode = false;
             resetCodingActivity();
           }
@@ -2719,7 +2719,7 @@ export function AIChat() {
           !wantsNextSlice &&
           !onboardingBuildStart
         ) {
-          pushActivity('Foundation already on disk — send Continue for the next slice.', 'success');
+          pushActivity(PRODUCT_MVP_READY_MESSAGE, 'success');
           resetCodingActivity();
         } else if (!coding.ran && agentAllowed && foundationGate.ok && forceGoPipeline) {
           // After Foundation exists, "continue building" must request the NEXT slice — not Foundation again.
@@ -3446,16 +3446,12 @@ export function AIChat() {
       });
       if (go.ok) {
         window.dispatchEvent(new CustomEvent('nebula-master-plan-updated'));
-        setAccessoryHint(
-          go.sliceLabel
-            ? `Slice ${go.sliceLabel} applied — reload Preview to validate before the next slice.`
-            : 'Reload Preview to validate this slice before the next slice.',
-        );
+        setAccessoryHint(PRODUCT_MVP_READY_MESSAGE);
         window.setTimeout(() => setAccessoryHint(null), 10000);
       }
       const goTs = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
       const chatCompleteLine = go.ok
-        ? `**Slice applied.** ${go.statusMessage}\n\nThis is not the catalog mockup — reload live Preview. Autopilot continues until MVP ready.`
+        ? PRODUCT_MVP_READY_MESSAGE
         : `**Coding could not finish.** ${go.statusMessage}`;
       setMessages((p) => {
         const next = [

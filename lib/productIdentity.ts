@@ -111,6 +111,7 @@ function toTitleCase(name: string): string {
   if (/^loaflocal$/i.test(raw)) return "LoafLocal";
   if (/^grain\s+bakery$/i.test(raw)) return "Grain Bakery";
   if (/^quill\s+path$/i.test(raw)) return "Quill Path";
+  if (/^spoke\s*&\s*co$/i.test(raw) || /^spoke\s+and\s+co$/i.test(raw)) return "Spoke & Co";
   return raw
     .split(/\s+/)
     .filter(Boolean)
@@ -124,6 +125,7 @@ export function extractNamedBrand(goal: string): string | null {
   if (/\bgrain\s+bakery\b/i.test(g)) return "Grain Bakery";
   if (/\bloaflocal\b/i.test(g)) return "LoafLocal";
   if (/\bquill\s+path\b/i.test(g)) return "Quill Path";
+  if (/\bspoke\s*&\s*co\b/i.test(g) || /\bspoke\s+and\s+co\b/i.test(g)) return "Spoke & Co";
   const labeled = g.match(/(?:\*\*)?Product name(?:\*\*)?:\s*([^\n*]+)/i)?.[1]?.trim();
   if (labeled && !looksLikeGoalStubName(labeled, g) && labeled.split(/\s+/).length <= 4) {
     return toTitleCase(labeled);
@@ -168,7 +170,7 @@ function detectDomain(goal: string, projectType?: string): ProductDomain {
     return "landing";
   }
   if (
-    /baker|bakery|bread|pastry|cafe|café|restaurant|pickup order|\bshop\b|\bstore\b|checkout/.test(
+    /baker|bakery|bread|pastry|cafe|café|restaurant|pickup order|\bshop\b|\bstore\b|checkout|bike|bicycle|mechanic|spoke/.test(
       blob,
     )
   ) {

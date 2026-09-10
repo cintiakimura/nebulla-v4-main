@@ -123,7 +123,7 @@ assert.equal(nextAutopilotSliceLabel('Secondary'), 'Polish');
   assert.equal(d.advance, false);
   assert.equal(d.nextLabel, null);
   assert.equal(d.stopReason, 'session_complete');
-  assert.match(d.message, /Foundation applied — send Continue for Data\+API/i);
+  assert.match(d.message, /App is ready on Live/i);
 }
 {
   const d = shouldAutopilotAdvance({
@@ -135,7 +135,7 @@ assert.equal(nextAutopilotSliceLabel('Secondary'), 'Polish');
   });
   assert.equal(d.advance, false);
   assert.equal(d.stopReason, 'session_complete');
-  assert.match(d.message, /Data\+API applied — send Continue for Primary/i);
+  assert.match(d.message, /App is ready on Live/i);
 }
 {
   const d = shouldAutopilotAdvance({
@@ -172,7 +172,7 @@ assert.equal(nextAutopilotSliceLabel('Secondary'), 'Polish');
   });
   assert.equal(d.advance, false);
   assert.equal(d.stopReason, 'session_complete');
-  assert.match(d.message, /send Continue for Secondary/i);
+  assert.match(d.message, /App is ready on Live/i);
 }
 {
   const d = shouldAutopilotAdvance({
@@ -224,7 +224,7 @@ assert.equal(nextAutopilotSliceLabel('Secondary'), 'Polish');
   });
   assert.equal(d.advance, false);
   assert.equal(d.stopReason, 'session_complete');
-  assert.match(d.message, /send Continue for Polish/i);
+  assert.match(d.message, /App is ready on Live/i);
 }
 {
   const d = shouldAutopilotAdvance({
@@ -260,7 +260,7 @@ assert.equal(nextAutopilotSliceLabel('Secondary'), 'Polish');
   });
   assert.equal(d.advance, false);
   assert.equal(d.stopReason, 'session_complete');
-  assert.match(d.message, /send Continue for Secondary/i);
+  assert.match(d.message, /App is ready on Live/i);
 }
 {
   const d = shouldAutopilotAdvance({
@@ -337,7 +337,7 @@ assert.equal(
   resolveNextContinueSlice({ productRoutesOnDisk: true, lastSlice: 'Secondary' }),
   'Polish',
 );
-assert.match(policyAStopMessage('Secondary'), /Secondary applied — send Continue for Polish/);
+assert.match(policyAStopMessage('Secondary'), /App is ready on Live/);
 {
   const afterPrimary = [
     'app/page.tsx',
@@ -370,8 +370,8 @@ assert.match(policyAStopMessage('Secondary'), /Secondary applied — send Contin
   );
 }
 assert.match(policyAFailedMessage('Foundation'), /Retry Go for Foundation/);
-assert.match(policyAStopMessage('Foundation'), /Foundation applied — send Continue for Data\+API/);
-assert.match(policyAStopMessage('Data+API'), /Data\+API applied — send Continue for Primary/);
+assert.match(policyAStopMessage('Foundation'), /App is ready on Live/);
+assert.match(policyAStopMessage('Data+API'), /App is ready on Live/);
 assert.match(policyAStopMessage('Polish'), /App is ready on Live/);
 assert.equal(countWorkspaceProductRoutes(['app/teacher/page.tsx']), 1);
 assert.equal(workspaceFoundationLanded(['app/teacher/page.tsx']), false);
@@ -570,8 +570,8 @@ assert.equal(APPLY_IN_FLIGHT_STALL_MS, 15_000);
   assert.match(chat, /launchedGoSlice/);
   assert.match(
     chat,
-    /Foundation already on disk — send Continue for the next slice/,
-    'Foundation on disk waits for the user — no auto Data+API',
+    /App is ready on Live/,
+    'Foundation on disk stays quiet — no Continue CTA',
   );
   assert.match(chat, /planSlice: planSliceFromDisk/);
   assert.match(chat, /workspacePaths: diskPaths/);

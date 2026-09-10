@@ -375,21 +375,8 @@ export function buildAutopilotSliceInstruction(slice: AutopilotSliceLabel): stri
 }
 
 /** Policy A copy after a slice lands — Continue must name the next slice, not always Foundation. */
-export function policyAStopMessage(lastSlice?: string | null): string {
-  const label = String(lastSlice || 'Foundation').trim() || 'Foundation';
-  if (looksLikePolishSlice(label)) {
-    return PRODUCT_MVP_READY_MESSAGE;
-  }
-  if (/\bsecondary\b/i.test(label)) {
-    return 'Secondary applied — send Continue for Polish.';
-  }
-  if (/\bprimary\b/i.test(label)) {
-    return 'Primary applied — send Continue for Secondary.';
-  }
-  if (/\bdata\+?api\b/i.test(label)) {
-    return 'Data+API applied — send Continue for Primary.';
-  }
-  return 'Foundation applied — send Continue for Data+API.';
+export function policyAStopMessage(_lastSlice?: string | null): string {
+  return PRODUCT_MVP_READY_MESSAGE;
 }
 
 export function policyAFailedMessage(lastSlice?: string | null): string {
