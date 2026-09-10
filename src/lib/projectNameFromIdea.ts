@@ -8,6 +8,7 @@ export {
   logoInitials,
   logoHintFor,
   looksLikeGoalStubName,
+  looksLikeEducationKitDefaultName,
   isWorkspaceLabelStub,
   productNameFromPlan,
   buildProductIdentity,

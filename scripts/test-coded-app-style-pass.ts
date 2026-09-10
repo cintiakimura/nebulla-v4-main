@@ -10,6 +10,7 @@ import { fileURLToPath } from "url";
 import { applyProductPalettePass } from "../lib/productPalettePass.ts";
 import {
   looksLikeGoalStubName,
+  looksLikeEducationKitDefaultName,
   inferProductName,
   isWorkspaceLabelStub,
   productNameFromPlan,
@@ -37,6 +38,10 @@ section("stub names and Grain Bakery brand");
     }),
     "LoafLocal",
   );
+  assert.equal(inferProductName("Quill Path learning companion for daily reading"), "Quill Path");
+  assert.equal(looksLikeEducationKitDefaultName("Sparrow Tutor", "Quill Path learning companion"), true);
+  assert.equal(looksLikeEducationKitDefaultName("Sparrow Tutor", "Sparrow Tutor kids app"), false);
+  assert.equal(looksLikeGoalStubName("Practice app", "Quill Path"), true);
 }
 
 section("style pass writes globals + preview without a draft file");
@@ -116,6 +121,52 @@ section("plan save keeps one palette and persists LoafLocal");
   const brief = writeUiBriefMarkdown(tmp, pass.plan);
   assert.equal((brief.content.match(/\*\*Palette:\*\*/g) || []).length, 1);
   assert.equal(/education-calm/i.test(brief.content), false);
+  fs.rmSync(tmp, { recursive: true, force: true });
+}
+
+section("Quill Path replaces Sparrow Tutor / Practice app on Live");
+{
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "nebulla-quill-"));
+  fs.mkdirSync(path.join(tmp, "app"), { recursive: true });
+  fs.writeFileSync(
+    path.join(tmp, "app/page.tsx"),
+    "export default function Home(){ return <main>Read</main>; }\n",
+  );
+  fs.writeFileSync(
+    path.join(tmp, "app/layout.tsx"),
+    `export const metadata = { title: "Sparrow Tutor" };
+export default function RootLayout({ children }) {
+  return (
+    <html><body>
+      <header><strong>Practice app</strong></header>
+      {children}
+    </body></html>
+  );
+}
+`,
+  );
+  fs.mkdirSync(path.join(tmp, "nebulla-ide"), { recursive: true });
+  fs.writeFileSync(
+    path.join(tmp, "nebulla-ide/master-plan.json"),
+    JSON.stringify({
+      "1. Goal of the app": "**Product name:** Quill Path\nA learning companion for daily reading.",
+    }),
+    "utf8",
+  );
+  const pass = applyProductPalettePass({
+    workspaceRoot: tmp,
+    goal: "Quill Path learning companion for daily reading",
+  });
+  assert.equal(pass.productName, "Quill Path");
+  const layout = fs.readFileSync(path.join(tmp, "app/layout.tsx"), "utf8");
+  assert.match(layout, /Quill Path/);
+  assert.equal(/Sparrow Tutor/i.test(layout), false);
+  assert.equal(/Practice app/i.test(layout), false);
+  const bakeryName = inferProductName("LoafLocal bakery pickup orders");
+  assert.equal(bakeryName, "LoafLocal");
+  assert.equal(/tutor/i.test(bakeryName), false);
+  const slice = fs.readFileSync(path.join(REPO, "src/lib/fastPrototypeNextSlice.ts"), "utf8");
+  assert.match(slice, /FAST_PROTOTYPE_SAME_SESSION_AUTOPILOT = false/);
   fs.rmSync(tmp, { recursive: true, force: true });
 }
 

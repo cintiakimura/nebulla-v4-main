@@ -110,6 +110,7 @@ function toTitleCase(name: string): string {
   const raw = String(name || "").replace(/\s+/g, " ").trim();
   if (/^loaflocal$/i.test(raw)) return "LoafLocal";
   if (/^grain\s+bakery$/i.test(raw)) return "Grain Bakery";
+  if (/^quill\s+path$/i.test(raw)) return "Quill Path";
   return raw
     .split(/\s+/)
     .filter(Boolean)
@@ -122,11 +123,22 @@ export function extractNamedBrand(goal: string): string | null {
   const g = String(goal || "");
   if (/\bgrain\s+bakery\b/i.test(g)) return "Grain Bakery";
   if (/\bloaflocal\b/i.test(g)) return "LoafLocal";
+  if (/\bquill\s+path\b/i.test(g)) return "Quill Path";
   const labeled = g.match(/(?:\*\*)?Product name(?:\*\*)?:\s*([^\n*]+)/i)?.[1]?.trim();
   if (labeled && !looksLikeGoalStubName(labeled, g) && labeled.split(/\s+/).length <= 4) {
     return toTitleCase(labeled);
   }
   return null;
+}
+
+/** Education kit leftovers — never keep when §1 already named a different product. */
+export function looksLikeEducationKitDefaultName(name: string, goal?: string): boolean {
+  const n = String(name || "").replace(/\s+/g, " ").trim();
+  const g = String(goal || "");
+  if (!n) return false;
+  if (/^practice app$/i.test(n)) return true;
+  if (/\bsparrow(\s+tutor)?\b/i.test(n) && !/\bsparrow\b/i.test(g)) return true;
+  return false;
 }
 
 /** Chip / workspace label leftovers — replace when §1 has a real product name. */
@@ -193,7 +205,7 @@ export function inferProductName(goal: string, projectType?: string): string {
   const domain = detectDomain(g, type);
   const key = `${g}|${type}`.toLowerCase();
   const h = stableHash(key || domain);
-  const stems = STEMS[domain];
+  const stems = STEMS[domain].filter((s) => s !== "Sparrow" || /\bsparrow\b/i.test(g));
   const descs = DESCRIPTORS[domain];
   const stem = stems[h % stems.length];
   const desc = descs[(h >>> 4) % descs.length];
@@ -247,6 +259,7 @@ export function looksLikeGoalStubName(name: string, goal?: string): boolean {
   if (/^Project type /i.test(n) || /\bproject type\b/i.test(n) || /\b(mobile|web) app primary\b/i.test(n)) {
     return true;
   }
+  if (looksLikeEducationKitDefaultName(n, goal)) return true;
   if (/^(build|create|make|design|scaffold)\b/i.test(n)) return true;
   if (/\b(privacy-first|companion)\b/i.test(n)) return true;
   const words = lc.split(/\s+/).filter(Boolean);
@@ -272,6 +285,10 @@ export function identityFitsGoal(name: string, goal: string, projectType?: strin
   const domain = detectDomain(goal, projectType);
   const n = String(name || "").toLowerCase();
   if (!n) return false;
+  const named = extractNamedBrand(goal);
+  if (named && n !== named.toLowerCase() && looksLikeEducationKitDefaultName(name, goal)) {
+    return false;
+  }
   if (domain !== "education" && /\b(tutor|learn|path|sparrow|quill|lumen|beacon)\b/.test(n)) {
     return false;
   }

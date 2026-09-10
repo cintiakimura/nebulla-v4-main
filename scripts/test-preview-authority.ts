@@ -222,7 +222,7 @@ section("coded app files beat interactive mock — honest bridge");
   ]);
   assert.ok(screens.some((s) => s.id === "role-kid"));
   assert.ok(screens.some((s) => s.id === "role-teacher"));
-  assert.ok(screens.some((s) => s.id === "tutor"));
+  assert.equal(screens.some((s) => s.id === "tutor"), false);
   assert.ok(screens.some((s) => s.id === "upload"));
 
   const ensured = ensureInteractiveProductPreview(root, {

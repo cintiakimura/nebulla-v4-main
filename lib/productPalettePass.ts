@@ -20,6 +20,7 @@ import type { LayoutJob } from "./uiGenerationEngine/v2/layoutCatalogIndex";
 import {
   applyBrandToPreviewHtml,
   ensureProductIdentity,
+  looksLikeEducationKitDefaultName,
   looksLikeGoalStubName,
 } from "./productIdentity";
 import { listProductUiFiles } from "./workspaceCodedAppUi";
@@ -159,19 +160,49 @@ function collapsePalettesOnDisk(workspaceRoot: string, goal: string): string[] {
   return touched;
 }
 
+const KIT_LIVE_TITLE_RE = /Sparrow Tutor|Practice app/gi;
+
+function rewriteKitProductTitles(text: string, productName: string, goal?: string): string {
+  let out = String(text || "");
+  if (!productName.trim() || looksLikeGoalStubName(productName, goal)) return out;
+  out = out.replace(KIT_LIVE_TITLE_RE, productName);
+  out = out.replace(/<title>([\s\S]*?)<\/title>/gi, (full, inner: string) => {
+    if (looksLikeEducationKitDefaultName(String(inner), goal) || KIT_LIVE_TITLE_RE.test(String(inner))) {
+      return `<title>${productName}</title>`;
+    }
+    return full;
+  });
+  out = out.replace(
+    /(title:\s*["'`])([^"'`]+)(["'`])/g,
+    (full, a: string, title: string, c: string) =>
+      looksLikeEducationKitDefaultName(title, goal) || /sparrow tutor|practice app/i.test(title)
+        ? `${a}${productName}${c}`
+        : full,
+  );
+  out = out.replace(/<strong>([\s\S]*?)<\/strong>/, (full, inner: string) =>
+    looksLikeEducationKitDefaultName(String(inner), goal) || /sparrow tutor|practice app/i.test(String(inner))
+      ? `<strong>${productName}</strong>`
+      : full,
+  );
+  return out;
+}
+
 function applyBrandToCodedLayout(
   workspaceRoot: string,
   productName: string,
   initials: string,
   primary: string,
+  goal?: string,
 ): string | null {
-  const rels = ["app/layout.tsx", "src/app/layout.tsx"];
+  const rels = ["app/layout.tsx", "src/app/layout.tsx", "app/page.tsx", "src/app/page.tsx"];
+  let first: string | null = null;
   for (const rel of rels) {
     const abs = path.join(workspaceRoot, rel);
     if (!fs.existsSync(abs)) continue;
     try {
       let text = fs.readFileSync(abs, "utf8");
       const prev = text;
+      text = rewriteKitProductTitles(text, productName, goal);
       text = text.replace(/<strong>([\s\S]*?)<\/strong>/, `<strong>${productName}</strong>`);
       text = text.replace(/<title>([\s\S]*?)<\/title>/i, `<title>${productName}</title>`);
       text = text.replace(/background:\s*["']#[0-9A-Fa-f]{3,8}["']/, `background: "${primary}"`);
@@ -180,14 +211,15 @@ function applyBrandToCodedLayout(
       }
       if (text !== prev) {
         fs.writeFileSync(abs, text, "utf8");
-        return rel;
+        if (!first) first = rel;
+      } else if (!first) {
+        first = rel;
       }
-      return rel;
     } catch {
       /* next */
     }
   }
-  return null;
+  return first;
 }
 
 export function applyProductPalettePass(input: {
@@ -249,6 +281,7 @@ export function applyProductPalettePass(input: {
     identity.projectName,
     identity.logoInitials,
     rec.tokens.primary,
+    goal,
   );
   if (layoutRel && !applied.includes(layoutRel)) applied.push(layoutRel);
   applied.push(...collapsePalettesOnDisk(input.workspaceRoot, goal));

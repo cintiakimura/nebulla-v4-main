@@ -101,7 +101,10 @@ export function inferPreviewScreensFromPaths(productFiles: string[]): PreviewScr
     screens.push({ id: "home", label: "Home", kind: "home" });
   }
 
-  if (/tutor|practice|lesson|learn/i.test(joined) && !screens.some((s) => s.id === "tutor")) {
+  if (
+    /\/(practice|tutor|session)\b/i.test(joined) &&
+    !screens.some((s) => s.id === "tutor" || s.id === "practice")
+  ) {
     screens.push({ id: "tutor", label: "Practice", kind: "session" });
   }
 
@@ -116,7 +119,7 @@ export function inferPreviewScreensFromPaths(productFiles: string[]): PreviewScr
     }
   }
 
-  if (/reward|badge|streak|progress/i.test(joined) && !screens.some((s) => s.id === "rewards")) {
+  if (/\/rewards?\b/i.test(joined) && !screens.some((s) => s.id === "rewards")) {
     screens.push({ id: "rewards", label: "Rewards", kind: "feature" });
   }
   if (/upload|photo|capture|camera|image/i.test(joined) && !screens.some((s) => s.id === "upload")) {
@@ -193,7 +196,7 @@ function buildInteractiveHtml(opts: {
     <div style="display:flex;align-items:center;gap:10px">
       <span class="mark" aria-hidden="true">${initials}</span>
       <div>
-        <span class="badge">${shop ? "App preview" : education ? "Practice app" : "App preview"}</span>
+        <span class="badge">App preview</span>
         <div style="font-weight:700;margin-top:4px">${name}</div>
       </div>
     </div>

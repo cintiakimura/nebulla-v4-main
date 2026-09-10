@@ -194,11 +194,10 @@ export const PRODUCT_MVP_READY_SHORT = 'App is ready on Live.';
 export const PRODUCT_MVP_READY_MESSAGE = 'App is ready on Live.';
 
 /**
- * Mode B: one prompt → research → mockup → Foundation → Data+API → Primary → Secondary → Polish.
- * User Continue is not required between slices.
- * Keep true this turn. Flip to false only after a golden Foundation is proven on prod.
+ * Foundation + style-pass + Live only. Data+API / Primary / Secondary / Polish
+ * run when the user asks (Continue), not automatically.
  */
-export const FAST_PROTOTYPE_SAME_SESSION_AUTOPILOT = true;
+export const FAST_PROTOTYPE_SAME_SESSION_AUTOPILOT = false;
 
 /** Nested app/pages routes (or product screens) required before Foundation is “on disk”. */
 export const FOUNDATION_PRODUCT_ROUTE_MIN = 3;
@@ -208,7 +207,7 @@ export const FOUNDATION_RETRY_ACTIVITY =
   'Foundation did not land. Retry Go for Foundation — not Continue for Primary.';
 
 export const FOUNDATION_SLICE_INSTRUCTION =
-  'START_CODING — implement ONE coherent Foundation slice only (Build → Debug → Next). Prefer app/, src/, components/, pages/ — not master-plan/ui-brief only. Create router + Coding-skeleton routes only, one mock store per entity, mock auth only if auth is not none. Primary controls must not be silent no-ops. Do not claim Preview or the product is finished. File blocks for this slice only — not the full §4 app.';
+  'START_CODING — implement ONE coherent Foundation slice only (Build → Debug → Next). Prefer app/, src/, components/, pages/ — not master-plan/ui-brief only. Create router + Coding-skeleton routes only, one mock store per entity, mock auth only if auth is not none. Header and <title> must use Master Plan §1 Product name (never Sparrow Tutor or Practice app unless §1 is already named Sparrow). Routes from §4 only — no Rewards tab unless §4 lists Rewards. Primary controls must not be silent no-ops. Do not claim Preview or the product is finished. File blocks for this slice only — not the full §4 app.';
 
 /** After a 3-minute timeout — smaller shell so Grok Code can finish. */
 export const NARROW_FOUNDATION_SLICE_INSTRUCTION =
