@@ -141,6 +141,10 @@ const GOLDEN =
   const moto = classifyCodingSkeleton(motoGoal, "Web App");
   assert.equal(moto.skeleton, "marketplace");
   assert.ok(moto.routes.some((r) => r.path === "/request"));
+  assert.ok(moto.routes.some((r) => r.path === "/track"));
+  assert.ok(moto.routes.some((r) => r.path === "/driver"));
+  assert.ok(moto.routes.some((r) => r.path === "/account"));
+  assert.equal(moto.routes.some((r) => r.path === "/wallet"), false);
   assert.ok(moto.entities.some((e) => e.name === "Request"));
   const bakerySkel = classifyCodingSkeleton(
     "A web app for a neighborhood bakery. Customers browse today’s breads and place a pickup order.",

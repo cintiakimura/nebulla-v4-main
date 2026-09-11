@@ -143,7 +143,6 @@ import {
   ensureResearchBeforeUiAndGo,
   fetchResearchStatus,
   formatResearchStopMessage,
-  RESEARCH_STAGE_BRIEF,
   RESEARCH_STOPPED,
 } from '../../lib/nebulaResearchClient';
 import { createProjectForCurrentSession } from '../../lib/nebulaCloud';
@@ -168,7 +167,7 @@ import {
 } from '../../lib/ideHomeEvents';
 import { inferProductName } from '../../lib/projectNameFromIdea';
 import { isReplacementProductBrief, looksLikeStandaloneProductBrief } from '../../../lib/productGoalFingerprint';
-import { persistProductIdentityClient } from '../../lib/productIdentityClient';
+import { persistProductIdentityClient, promoteWorkspaceChipFromProductName } from '../../lib/productIdentityClient';
 import {
   ASK_FOR_SHORT_GOAL,
   extractGoalFromUserNote,
@@ -2119,7 +2118,7 @@ export function AIChat() {
         !userNoteRequestsNextSlice(rawText) &&
         isReplacementProductBrief(incomingGoal, diskGoal);
       if (replacingProduct) {
-        await fetchJson(withProjectQuery('/api/ide/replace-product-brief'), {
+        const replaced = await fetchJson<{ projectName?: string }>(withProjectQuery('/api/ide/replace-product-brief'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           credentials: 'include',
@@ -2130,6 +2129,15 @@ export function AIChat() {
             }),
           ),
         });
+        const nextBrand = String(replaced?.projectName || inferProductName(incomingGoal)).trim();
+        if (nextBrand) {
+          void promoteWorkspaceChipFromProductName(nextBrand);
+          void persistProductIdentityClient({
+            projectName: nextBrand,
+            goal: incomingGoal,
+            userSet: false,
+          });
+        }
         lastAutoSliceLabelRef.current = null;
         apiAskSentRef.current = false;
         messagesRef.current = [userMsg];
@@ -2475,17 +2483,18 @@ export function AIChat() {
           willCode = false;
           pushActivity(PRODUCT_MVP_READY_MESSAGE, 'success');
         } else {
+        const wantsResearch = userNoteRequestsCompetitorResearch(text);
         const research = await ensureResearchBeforeUiAndGo({
           projectName,
           goal: projectName,
-          onProgress: pushActivity,
+          onProgress: wantsResearch ? pushActivity : undefined,
           requested: userNoteRequestsCompetitorResearch(text),
         });
-        if (!research.ok && research.softAbort) {
+        if (!research.ok && research.softAbort && wantsResearch) {
           lastResearchError = RESEARCH_STOPPED;
         }
         if (!research.ok) {
-          if (!(await codingSkeletonAllowsFoundation())) {
+          if (wantsResearch && !(await codingSkeletonAllowsFoundation())) {
           const stopMsg = formatResearchStopMessage(research.gate?.reasons);
           lastResearchError = lastResearchError || stopMsg;
           codingProblems.push(lastResearchError);
@@ -2505,10 +2514,8 @@ export function AIChat() {
           setGrokActivity((prev) => finishGrokActivityWithProblems(prev, codingProblems));
           } else {
             lastResearchError = null;
-            pushActivity(RESEARCH_STAGE_BRIEF, 'info');
           }
         } else {
-          pushActivity(RESEARCH_STAGE_BRIEF, 'info');
           lastResearchError = null;
         }
         if (!lastResearchError) {

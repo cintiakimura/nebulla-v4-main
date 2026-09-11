@@ -19,7 +19,15 @@ import {
   EDUCATION_LEFTOVER_SLUGS,
   leftoverRoutesConflictWithGoal,
 } from "./productGoalFingerprint";
-import { ensureProductIdentity } from "./productIdentity";
+import { ensureProductIdentity, extractNamedBrand, inferProductName } from "./productIdentity";
+
+function extractNamedBrandLine(goal: string, brand: string): string {
+  const g = String(goal || "").trim();
+  if (!g) return `**Product name:** ${brand}`;
+  if (extractNamedBrand(g)) return g;
+  return `**Product name:** ${brand}\n${g}`;
+}
+import { buildJobBriefMarkdown, JOB_BRIEF_REL } from "./engineerInterview";
 import { distillBriefToGoalSection } from "./spineSequenceClient";
 
 const MEMORY_RELS = [
@@ -170,6 +178,7 @@ export function rewriteLayoutNavFromSection4(opts: {
   workspaceRoot: string;
   section4?: string;
   goal: string;
+  productName?: string;
 }): { rewritten: string[] } {
   const pages = extractNamedRoutesFromPagesText(opts.section4 || "");
   const list = pages.length > 0 ? pages : seedPagesFromGoal(opts.goal);
@@ -178,26 +187,35 @@ export function rewriteLayoutNavFromSection4(opts: {
     .join("\n          ");
   const nav = `<nav>\n          ${links}\n        </nav>`;
   const leftoverHref =
-    /href=["']\/(practice|session|helper|lessons|lesson|streak|quiz|progress|teacher)["']/i;
-  const leftoverLabel = /\b(Helper|Practice|Session|CogniMicro)\b/;
+    /href=["']\/(practice|session|helper|lessons|lesson|streak|quiz|progress|teacher|wallet|catalog|order)["']/i;
+  const leftoverLabel = /\b(Helper|Practice|Session|CogniMicro|Wallet|Crumb|Grain Bakery|Jobs)\b/;
   const rewritten: string[] = [];
   for (const rel of ["app/layout.tsx", "src/app/layout.tsx"]) {
     const abs = path.join(opts.workspaceRoot, rel);
     if (!fs.existsSync(abs)) continue;
     try {
       const prev = fs.readFileSync(abs, "utf8");
-      if (!leftoverHref.test(prev) && !leftoverLabel.test(prev)) continue;
+      const alwaysRewriteNav = /<nav[\s\S]*?<\/nav>/.test(prev);
+      if (!alwaysRewriteNav && !leftoverHref.test(prev) && !leftoverLabel.test(prev)) continue;
       let next = prev;
       if (/<nav[\s\S]*?<\/nav>/.test(next)) {
         next = next.replace(/<nav[\s\S]*?<\/nav>/, nav);
       }
-      next = next
-        .replace(/href=["']\/practice["']/gi, 'href="/book"')
-        .replace(/href=["']\/session["']/gi, 'href="/mechanic"')
-        .replace(/href=["']\/helper["']/gi, 'href="/"')
-        .replace(/>\s*Practice\s*</g, ">Book<")
-        .replace(/>\s*Helper\s*</g, ">Home<")
-        .replace(/>\s*Session\s*</g, ">Mechanic<");
+      const delivery = /\b(moto|motodrop|courier|delivery|dropoff|parcel)\b/i.test(opts.goal);
+      if (!delivery) {
+        next = next
+          .replace(/href=["']\/practice["']/gi, 'href="/book"')
+          .replace(/href=["']\/session["']/gi, 'href="/mechanic"')
+          .replace(/href=["']\/helper["']/gi, 'href="/"')
+          .replace(/>\s*Practice\s*</g, ">Book<")
+          .replace(/>\s*Helper\s*</g, ">Home<")
+          .replace(/>\s*Session\s*</g, ">Mechanic<");
+      }
+      const brand = String(opts.productName || "").trim();
+      if (brand) {
+        next = next.replace(/<strong>[\s\S]*?<\/strong>/, `<strong>${brand}</strong>`);
+        next = next.replace(/<title>[\s\S]*?<\/title>/i, `<title>${brand}</title>`);
+      }
       if (next !== prev) {
         fs.writeFileSync(abs, next, "utf8");
         rewritten.push(rel);
@@ -231,12 +249,20 @@ export function applyNewProductBriefToWorkspace(opts: {
   workspaceRoot: string;
   masterPlanPath: string;
   incomingGoal: string;
-}): { clearedTabs: string[]; removedRoutes: string[]; navRewritten: string[] } {
+}): {
+  clearedTabs: string[];
+  removedRoutes: string[];
+  navRewritten: string[];
+  projectName: string;
+} {
   const goal =
     distillBriefToGoalSection(opts.incomingGoal, opts.incomingGoal) ||
     String(opts.incomingGoal || "").trim();
+  const brand = inferProductName(goal);
   const plan = emptyUserMasterPlan();
-  if (goal) plan["1. Goal of the app"] = goal;
+  if (goal) {
+    plan["1. Goal of the app"] = extractNamedBrandLine(goal, brand);
+  }
   fs.mkdirSync(path.dirname(opts.masterPlanPath), { recursive: true });
   fs.writeFileSync(opts.masterPlanPath, JSON.stringify(plan, null, 2), "utf8");
 
@@ -245,9 +271,23 @@ export function applyNewProductBriefToWorkspace(opts: {
   }
   unlinkIfExists(path.join(opts.workspaceRoot, "nebula-ui-studio", "ui-brief.md"));
   unlinkIfExists(path.join(opts.workspaceRoot, "nebula-ui-studio", "v0-prompt.md"));
+  unlinkIfExists(path.join(opts.workspaceRoot, "nebulla-ide", "product-identity.json"));
+  unlinkIfExists(path.join(opts.workspaceRoot, JOB_BRIEF_REL));
+  unlinkIfExists(path.join(opts.workspaceRoot, "nebulla-project", "job-brief.md"));
 
-  ensureProductIdentity(opts.workspaceRoot, {
-    goal,
+  const briefAbs = path.join(opts.workspaceRoot, JOB_BRIEF_REL);
+  fs.mkdirSync(path.dirname(briefAbs), { recursive: true });
+  fs.writeFileSync(
+    briefAbs,
+    buildJobBriefMarkdown({
+      goal: plan["1. Goal of the app"] || goal,
+      pages: formatPageContractsMarkdown(seedPagesFromGoal(goal), goal),
+    }),
+    "utf8",
+  );
+
+  const identity = ensureProductIdentity(opts.workspaceRoot, {
+    goal: plan["1. Goal of the app"] || goal,
     persist: true,
     force: true,
   });
@@ -262,12 +302,14 @@ export function applyNewProductBriefToWorkspace(opts: {
     workspaceRoot: opts.workspaceRoot,
     section4: formatPageContractsMarkdown(seedPagesFromGoal(goal), goal),
     goal,
+    productName: identity.projectName,
   });
 
   return {
     clearedTabs: [...MASTER_PLAN_SECTION_KEYS],
     removedRoutes: [...wiped.removed, ...removed],
     navRewritten: rewritten,
+    projectName: identity.projectName,
   };
 }
 

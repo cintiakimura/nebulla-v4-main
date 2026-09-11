@@ -53,6 +53,12 @@ section("stub names and Grain Bakery brand");
     inferProductName("**Product name:** Motodrop\nMoto delivery — pickup and dropoff."),
     "Motodrop",
   );
+  const courierGoal = "city moto parcel courier (Uber loop, package not passenger)";
+  assert.equal(identityFitsGoal("Grain Bakery", courierGoal), false);
+  assert.equal(identityFitsGoal("Crumb Market", courierGoal), false);
+  const courierName = inferProductName(courierGoal);
+  assert.equal(/grain bakery|crumb market/i.test(courierName), false);
+  assert.match(courierName, /Moto Parcel|City Courier|Moto Courier|Parcel/);
   assert.equal(looksLikeEducationKitDefaultName("Sparrow Tutor", "Quill Path learning companion"), true);
   assert.equal(looksLikeEducationKitDefaultName("Sparrow Tutor", "Sparrow Tutor kids app"), false);
   assert.equal(looksLikeGoalStubName("Practice app", "Quill Path"), true);
@@ -422,8 +428,11 @@ section("Motodrop chip beats Kite Studio; Request has pickup + dropoff");
   assert.equal(/Interactive screen with mock data/i.test(request), false);
   assert.match(request, /addRequest|acceptRequest/);
   assert.equal(fs.existsSync(path.join(tmp, "app/track/page.tsx")), true);
-  assert.equal(fs.existsSync(path.join(tmp, "app/pay/page.tsx")), true);
-  assert.match(fs.readFileSync(path.join(tmp, "app/pay/page.tsx"), "utf8"), /Save card|4242/);
+  assert.equal(fs.existsSync(path.join(tmp, "app/driver/page.tsx")), true);
+  assert.equal(fs.existsSync(path.join(tmp, "app/account/page.tsx")), true);
+  assert.equal(fs.existsSync(path.join(tmp, "app/pay/page.tsx")), false);
+  assert.equal(fs.existsSync(path.join(tmp, "app/wallet/page.tsx")), false);
+  assert.match(fs.readFileSync(path.join(tmp, "app/account/page.tsx"), "utf8"), /Save card|4242/);
   assert.equal(fs.existsSync(path.join(tmp, "nebula-project/job-brief.md")), true);
   const store = fs.readFileSync(path.join(tmp, "lib/mockStore.ts"), "utf8");
   assert.match(store, /export function addRequest/);

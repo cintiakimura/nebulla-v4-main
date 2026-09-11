@@ -17,7 +17,7 @@ export type ProductIdentity = {
   userSet?: boolean;
 };
 
-export type ProductDomain = "education" | "tasks" | "landing" | "commerce" | "general";
+export type ProductDomain = "education" | "tasks" | "landing" | "commerce" | "delivery" | "general";
 
 const STOPWORDS = new Set([
   "a",
@@ -71,6 +71,7 @@ const STEMS: Record<ProductDomain, readonly string[]> = {
   tasks: ["Forge", "Pulse", "Harbor", "North", "Relay"],
   landing: ["Harbor", "Vista", "North", "Peak", "Bloom"],
   commerce: ["Crumb", "Oven", "Loaf", "Hearth", "Grain"],
+  delivery: ["Harbor", "Relay", "Mesa", "North", "Pulse"],
   general: ["Nova", "Aether", "Helio", "Kite", "Mesa"],
 };
 
@@ -79,6 +80,7 @@ const DESCRIPTORS: Record<ProductDomain, readonly string[]> = {
   tasks: ["Flow", "Desk", "Focus"],
   landing: ["Studio", "Site"],
   commerce: ["Bakery", "Market", "Shop"],
+  delivery: ["Courier", "Drop", "Run"],
   general: ["Studio", "Hub"],
 };
 
@@ -87,6 +89,7 @@ const HINTS: Record<ProductDomain, string> = {
   tasks: "check + spark",
   landing: "mark + wave",
   commerce: "loaf + spark",
+  delivery: "pin + spark",
   general: "mark + spark",
 };
 
@@ -161,13 +164,28 @@ export function productNameFromPlan(plan: Record<string, unknown> | null | undef
   return extractNamedBrand(goal) || "";
 }
 
+export function looksLikeShopKitBrand(name: string): boolean {
+  const n = String(name || "").replace(/\s+/g, " ").trim();
+  if (!n) return false;
+  if (/^(grain bakery|crumb market|loaflocal|hearth (bakery|market|shop)|oven (bakery|market|shop))$/i.test(n)) {
+    return true;
+  }
+  return /^(crumb|oven|loaf|hearth|grain)\s+(bakery|market|shop)\b/i.test(n);
+}
+
 export function detectProductDomain(goal: string, projectType?: string): ProductDomain {
   const blob = `${goal}\n${projectType || ""}`.toLowerCase();
   if (/\blanding\b|\bmarketing\b|\bwaitlist\b/.test(blob) && !/\bmobile\b|\bexpo\b/.test(blob)) {
     return "landing";
   }
   if (
-    /baker|bakery|bread|pastry|cafe|café|restaurant|pickup order|\bshop\b|\bstore\b|checkout|bike|bicycle|mechanic|spoke|moto|motodrop|courier|delivery|dropoff/.test(
+    /\b(moto|motodrop|courier|delivery|dropoff|parcel)\b/.test(blob) &&
+    !/\b(baker|bakery|bread|pastry)\b/.test(blob)
+  ) {
+    return "delivery";
+  }
+  if (
+    /baker|bakery|bread|pastry|cafe|café|restaurant|pickup order|\bshop\b|\bstore\b|checkout|bike|bicycle|mechanic|spoke/.test(
       blob,
     )
   ) {
@@ -196,12 +214,42 @@ function optionalAudienceWord(goal: string, domain: ProductDomain, desc: string)
  * 2–4 word Title Case brand. Never the first N words of the goal.
  * Prefers one invented stem + optional descriptor.
  */
+function distillDeliveryName(goal: string): string | null {
+  const g = String(goal || "");
+  if (/\bmotodrop\b/i.test(g)) return "Motodrop";
+  if (/\bmoto\b/i.test(g) && /\bparcel\b/i.test(g)) return "Moto Parcel";
+  if (/\bcity\b/i.test(g) && /\b(courier|moto|parcel)\b/i.test(g)) return "City Courier";
+  if (/\bparcel\b/i.test(g) && /\bcourier\b/i.test(g)) return "Parcel Courier";
+  if (/\bparcel\b/i.test(g)) return "Parcel Run";
+  if (/\bcourier\b/i.test(g)) return "City Courier";
+  if (/\bmoto\b/i.test(g)) return "Moto Courier";
+  return null;
+}
+
+/** Header / chip / BottomNav — job-brief or §1 title only (never leftover bakery). */
+export function brandFromJobBriefMarkdown(md: string): string {
+  const text = String(md || "");
+  const labeled = text.match(/(?:\*\*)?Product name(?:\*\*)?:\s*([^\n*]+)/i)?.[1]?.trim();
+  if (labeled && !looksLikeGoalStubName(labeled) && labeled.split(/\s+/).length <= 4) {
+    return toTitleCase(labeled);
+  }
+  const heading = text.match(/^##\s*Product name\s*\n+([^\n#]+)/im)?.[1]?.trim();
+  if (heading && heading.split(/\s+/).length <= 4 && !looksLikeGoalStubName(heading)) {
+    return toTitleCase(heading);
+  }
+  return "";
+}
+
 export function inferProductName(goal: string, projectType?: string): string {
   const g = String(goal || "").replace(/\s+/g, " ").trim();
   const type = String(projectType || "").trim();
   const named = extractNamedBrand(g);
   if (named) return named;
   const domain = detectProductDomain(g, type);
+  if (domain === "delivery") {
+    const distilled = distillDeliveryName(g);
+    if (distilled) return distilled;
+  }
   const key = (g || type).toLowerCase();
   const h = stableHash(key || domain);
   const stems = STEMS[domain].filter((s) => s !== "Sparrow" || /\bsparrow\b/i.test(g));
@@ -283,7 +331,7 @@ export function looksLikeGoalStubName(name: string, goal?: string): boolean {
 export function looksLikeInventedChipName(name: string): boolean {
   const n = String(name || "").replace(/\s+/g, " ").trim();
   if (!n) return false;
-  return /^(Lumen|Quill|Beacon|Sparrow|Nest|Forge|Pulse|Harbor|North|Relay|Vista|Peak|Bloom|Crumb|Oven|Loaf|Hearth|Grain|Nova|Aether|Helio|Kite|Mesa)\s+(Learn|Path|Tutor|Kids|Flow|Desk|Focus|Studio|Site|Bakery|Market|Shop|Hub)\b/i.test(
+  return /^(Lumen|Quill|Beacon|Sparrow|Nest|Forge|Pulse|Harbor|North|Relay|Vista|Peak|Bloom|Crumb|Oven|Loaf|Hearth|Grain|Nova|Aether|Helio|Kite|Mesa)\s+(Learn|Path|Tutor|Kids|Flow|Desk|Focus|Studio|Site|Bakery|Market|Shop|Hub|Courier|Drop|Run)\b/i.test(
     n,
   );
 }
@@ -305,6 +353,8 @@ export function identityFitsGoal(name: string, goal: string, projectType?: strin
   if (!n) return false;
   const named = extractNamedBrand(goal);
   if (named && n !== named.toLowerCase()) return false;
+  if (domain === "delivery" && looksLikeShopKitBrand(name)) return false;
+  if (domain === "delivery" && /\b(bakery|crumb|loaf|breads?|wallet)\b/i.test(n)) return false;
   const inv = inventedChipDomain(name);
   if (inv) {
     if (named) return n === named.toLowerCase();
@@ -533,7 +583,14 @@ export function ensureProductIdentity(
   const existing = readProductIdentity(workspaceRoot);
   const goal = opts?.goal || "";
   const type = opts?.projectType;
-  const named = extractNamedBrand(goal);
+  let briefBrand = "";
+  try {
+    const briefAbs = path.join(workspaceRoot, "nebula-project", "job-brief.md");
+    if (fs.existsSync(briefAbs)) briefBrand = brandFromJobBriefMarkdown(fs.readFileSync(briefAbs, "utf8"));
+  } catch {
+    briefBrand = "";
+  }
+  const named = extractNamedBrand(goal) || briefBrand || "";
   const existingFits =
     Boolean(existing?.projectName) &&
     !looksLikeGoalStubName(existing.projectName, goal) &&

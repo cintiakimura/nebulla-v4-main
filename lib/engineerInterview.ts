@@ -5,6 +5,7 @@
 
 import fs from "fs";
 import path from "path";
+import { extractNamedBrand, inferProductName } from "./productIdentity";
 
 export const JOB_BRIEF_REL = "nebula-project/job-brief.md";
 export const JOB_BRIEF_REL_ALT = "nebulla-project/job-brief.md";
@@ -86,7 +87,8 @@ export function buildJobBriefMarkdown(opts: {
   const features = String(opts.features || "").trim();
   const tech = String(opts.tech || "").trim();
   const thesis = goal.split(/\n/).find((l) => l.trim() && !/^#|^\*\*Product name/i.test(l)) || goal.slice(0, 240);
-  const delivery = /\b(moto|motodrop|courier|delivery|dropoff|pickup)\b/i.test(`${goal} ${pages}`);
+  const productName = extractNamedBrand(goal) || inferProductName(goal);
+  const delivery = /\b(moto|motodrop|courier|delivery|dropoff|pickup|parcel)\b/i.test(`${goal} ${pages}`);
   const shop = /\b(shop|store|bike|spoke|baker|catalog|book)\b/i.test(`${goal} ${pages}`);
   const education = /\b(lesson|practice|teacher|student|reading|tutor)\b/i.test(`${goal} ${pages}`);
   const loop = delivery
@@ -101,6 +103,9 @@ export function buildJobBriefMarkdown(opts: {
     .join("\n");
   return [
     "# Job brief",
+    "",
+    "## Product name",
+    productName,
     "",
     "## Thesis",
     thesis.replace(/\s+/g, " ").trim().slice(0, 400),
@@ -165,7 +170,7 @@ export function jobBriefFitsRoutes(brief: string, routes: string[]): boolean {
   const b = String(brief || "").toLowerCase();
   const joined = routes.join(" ").toLowerCase();
   if (/request → accept|courier|delivery|pickup/.test(b)) {
-    if (/\/practice|breads\.json|\/catalog/.test(joined)) return false;
+    if (/\/practice|breads\.json|\/catalog|\/wallet/.test(joined)) return false;
     return routes.some((r) => /request/i.test(r));
   }
   if (/browse → book|catalog|ready bikes|loaves/.test(b)) {

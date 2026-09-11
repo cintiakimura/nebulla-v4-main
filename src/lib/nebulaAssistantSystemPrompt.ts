@@ -169,10 +169,10 @@ MASTER PLAN DEPTH (Architecture mode — subordinate to INSTRUCTION HIERARCHY + 
 
 INFERENCE-FIRST (DEFAULT PATH — when ACTIVE MODE is FAST PROTOTYPE / inference-first, or user gave a clear goal to build):
 - **Single script:** \`nebula-project/inference-first-rules.md\` — do not skip or reorder steps; write each required file before the next step.
-- **COMPREHENSION FIRST:** user brief + links outrank competitors. Extract a dense brief; do not run INITIAL ONBOARDING “main goal?” when those slots are already filled. Research prefers user-cited sources, then Gate R competitors.
-- Operating law: Categorize → labeled assumptions → product Web Search research → merge plan → ui-brief → UI mockup → Build → Present → Refine. Never invent competitors/studies. Ask only when blocked. Do not skip research.
-- Working files: \`nebula-project/fast-prototype-memory.md\`, \`category-classification.md\`, \`industry-standards.md\`, \`competitor-research.md\` (product Web Search), Master Plan, \`nebula-ui-studio/ui-brief.md\`.
-- Order (single API key): architecture turn (plan + assumptions) → product Web Search (Gate R) → ui-brief → product UI Gen mockup → Foundation \`START_CODING\`. Do not invent a mockup in chat; do not start coding before research + ui-brief exist.
+- **COMPREHENSION FIRST:** user brief + job-brief + links outrank kits. Extract a dense brief; do not run INITIAL ONBOARDING “main goal?” when those slots are already filled. Optional one-shot lookup only if a fact is missing — never a competitor dossier.
+- Operating law: engineer interview → job-brief.md → Master Plan §§1–5 → Foundation+Primary. Never invent competitors/studies. Do **not** run “Researching competitors (Web Search)” unless the user asked.
+- Working files: \`nebula-project/job-brief.md\`, \`fast-prototype-memory.md\`, \`category-classification.md\`, \`industry-standards.md\` (assumptions), Master Plan, \`nebula-ui-studio/ui-brief.md\`.
+- Order (single API key): interview + job-brief + plan → ui-brief / mockup → Foundation+Primary. Do not invent a mockup in chat. Do not delay Code for competitor research.
 - Read INFERENCE_FIRST_MEMORY appendix when present before acting.
 
 INITIAL ONBOARDING / DISCOVERY FLOW (OPT-IN ONLY — when ACTIVE MODE is Guided Discovery / user asked to be interviewed):

@@ -19,6 +19,7 @@ import {
 } from "../lib/replaceProductWorkspace.ts";
 import { pagesForPlanFromGoalAndDisk, seedPagesFromGoal } from "../lib/nebulaUiBrief.ts";
 import { hydrateMasterPlanDerivedSections } from "../lib/nebulaIdeWorkspaceArtifacts.ts";
+import { identityFitsGoal, inferProductName } from "../lib/productIdentity.ts";
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -183,6 +184,64 @@ section("AIChat + persist replace leftover plan instead of skip-Grok merge");
   assert.match(persist, /\/api\/master-plan\/replace/);
   assert.match(server, /app.post\("\/api\/master-plan\/replace"/);
   assert.match(server, /app.post\("\/api\/ide\/replace-product-brief"/);
+}
+
+section("bakery workspace + new courier goal drops Grain / Crumb");
+{
+  const courier = "city moto parcel courier (Uber loop, package not passenger)";
+  assert.equal(looksLikeStandaloneProductBrief(courier), true);
+  assert.equal(isReplacementProductBrief(courier, "Grain Bakery neighborhood breads and pickup"), true);
+  assert.equal(identityFitsGoal("Grain Bakery", courier), false);
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "nebulla-bakery-to-courier-"));
+  fs.mkdirSync(path.join(tmp, "app", "wallet"), { recursive: true });
+  fs.mkdirSync(path.join(tmp, "nebulla-ide"), { recursive: true });
+  fs.mkdirSync(path.join(tmp, "nebula-project"), { recursive: true });
+  fs.writeFileSync(
+    path.join(tmp, "nebulla-ide/product-identity.json"),
+    JSON.stringify({ projectName: "Grain Bakery", logoInitials: "GB", userSet: true }),
+    "utf8",
+  );
+  fs.writeFileSync(
+    path.join(tmp, "app/layout.tsx"),
+    `export default function RootLayout({ children }) {
+  return (<html><body><header><strong>Crumb Market</strong></header><nav><a href="/wallet">Wallet</a></nav>{children}</body></html>);
+}
+`,
+  );
+  fs.writeFileSync(
+    path.join(tmp, "app/wallet/page.tsx"),
+    "export default function Wallet(){return <main>dummy list items</main>}\n",
+  );
+  fs.writeFileSync(
+    path.join(tmp, "nebulla-ide/master-plan.json"),
+    JSON.stringify({
+      "1. Goal of the app": "**Product name:** Grain Bakery\nNeighborhood breads.",
+      "4. Pages and navigation": "### Wallet `/wallet`",
+    }),
+    "utf8",
+  );
+  const result = applyNewProductBriefToWorkspace({
+    workspaceRoot: tmp,
+    masterPlanPath: path.join(tmp, "nebulla-ide/master-plan.json"),
+    incomingGoal: courier,
+  });
+  assert.equal(/grain bakery|crumb market/i.test(result.projectName), false);
+  const identity = JSON.parse(fs.readFileSync(path.join(tmp, "nebulla-ide/product-identity.json"), "utf8"));
+  assert.equal(/grain bakery|crumb market/i.test(identity.projectName), false);
+  const brief = fs.readFileSync(path.join(tmp, "nebula-project/job-brief.md"), "utf8");
+  assert.equal(/grain bakery|crumb market/i.test(brief), false);
+  assert.match(brief, /courier|parcel|moto|request/i);
+  const layout = fs.readFileSync(path.join(tmp, "app/layout.tsx"), "utf8");
+  assert.equal(/Crumb Market|Grain Bakery/i.test(layout), false);
+  assert.equal(/\/wallet/i.test(layout), false);
+  assert.equal(fs.existsSync(path.join(tmp, "app/wallet/page.tsx")), false);
+  fs.rmSync(tmp, { recursive: true, force: true });
+}
+
+section("new courier project never invents Grain Bakery");
+{
+  const name = inferProductName("city moto parcel courier package not passenger");
+  assert.equal(/grain bakery|crumb market/i.test(name), false);
 }
 
 console.log("\nAll product-goal replace checks passed.");

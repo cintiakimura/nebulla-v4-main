@@ -19,7 +19,7 @@ import {
 const GENERIC_STUB_RE =
   /Interactive screen with mock data|Primary action works locally|Continue<\/button>/i;
 const LEFTOVER_COPY_RE =
-  /breads\.json|Today'?s breads|bikeStore|lessonStore/i;
+  /breads\.json|Today'?s breads|bikeStore|lessonStore|Crumb Market|Grain Bakery|Jobs as gigs|dummy list/i;
 
 function isDeliveryGoal(goal: string): boolean {
   return inferProductMockKind(goal) === "delivery";
@@ -143,7 +143,9 @@ export default function RequestPage() {
           const fd = new FormData(ev.currentTarget);
           addRequest(String(fd.get("pickup") || ""), String(fd.get("dropoff") || ""));
           acceptRequest();
-          window.location.href = "/";
+          const last4 = String(fd.get("card") || "").replace(/\\D/g, "").slice(-4);
+          if (last4) window.localStorage.setItem("nebulla_mock_card", last4);
+          window.location.href = "/track";
         }}
       >
         <label>
@@ -154,8 +156,86 @@ export default function RequestPage() {
           Dropoff
           <input name="dropoff" type="text" autoComplete="street-address" required />
         </label>
+        <section>
+          <h2>Pay</h2>
+          <p>Quote 8.50 (mock). Saved card stays in this browser.</p>
+          <label>
+            Card
+            <input name="card" type="text" placeholder="4242 4242 4242 4242" />
+          </label>
+        </section>
         <button type="submit">Accept request</button>
       </form>
+    </main>
+  );
+}
+`;
+}
+
+function driverPageJsx(): string {
+  return `"use client";
+
+import { useState } from "react";
+import { acceptRequest, listItems } from "../../lib/mockStore";
+
+export default function DriverPage() {
+  const [, setTick] = useState(0);
+  const items = listItems();
+  return (
+    <main>
+      <h1>Driver</h1>
+      <p>Accept a parcel run. Not a shop Wallet.</p>
+      <ul>
+        {items.map((row) => (
+          <li key={row.id}>
+            <strong>{row.title}</strong>
+            <span>{row.status}</span>
+            <button
+              type="button"
+              onClick={() => {
+                acceptRequest(row.id);
+                setTick((n) => n + 1);
+              }}
+            >
+              Accept
+            </button>
+          </li>
+        ))}
+      </ul>
+    </main>
+  );
+}
+`;
+}
+
+function accountPageJsx(): string {
+  return `"use client";
+
+export default function AccountPage() {
+  return (
+    <main>
+      <h1>Account</h1>
+      <section>
+        <h2>Pay</h2>
+        <p>Quote on the last job. Saved card stays in this browser.</p>
+        <form
+          onSubmit={(ev) => {
+            ev.preventDefault();
+            const fd = new FormData(ev.currentTarget);
+            window.localStorage.setItem(
+              "nebulla_mock_card",
+              String(fd.get("card") || "").replace(/\\D/g, "").slice(-4) || "4242",
+            );
+            window.location.href = "/";
+          }}
+        >
+          <label>
+            Card
+            <input name="card" type="text" placeholder="4242 4242 4242 4242" required />
+          </label>
+          <button type="submit">Save card</button>
+        </form>
+      </section>
     </main>
   );
 }
@@ -397,7 +477,7 @@ export function rewriteJobScreensIfNeeded(input: {
         needsMockWire(prev) ||
         looksLikeGenericContinueHome(prev) ||
         looksStubOrLeftover(prev) ||
-        (delivery && /Ready bikes|Today'?s breads|short lesson/i.test(prev));
+        (delivery && /Ready bikes|Today'?s breads|short lesson|Crumb Market|Wallet/i.test(prev));
       if (!should) continue;
       const next = education
         ? educationHomeJsx()
@@ -435,12 +515,30 @@ export function rewriteJobScreensIfNeeded(input: {
     if (!trackPrev || looksStubOrLeftover(trackPrev) || needsMockWire(trackPrev)) {
       if (writeRel(input.workspaceRoot, trackRel, trackPageJsx())) rewritten.push(trackRel);
     }
-    const payRel = "app/pay/page.tsx";
-    const payPrev = fs.existsSync(path.join(input.workspaceRoot, payRel))
-      ? fs.readFileSync(path.join(input.workspaceRoot, payRel), "utf8")
+    const driverRel = "app/driver/page.tsx";
+    const driverPrev = fs.existsSync(path.join(input.workspaceRoot, driverRel))
+      ? fs.readFileSync(path.join(input.workspaceRoot, driverRel), "utf8")
       : "";
-    if (!payPrev || looksStubOrLeftover(payPrev) || needsMockWire(payPrev)) {
-      if (writeRel(input.workspaceRoot, payRel, payPageJsx())) rewritten.push(payRel);
+    if (!driverPrev || looksStubOrLeftover(driverPrev) || needsMockWire(driverPrev)) {
+      if (writeRel(input.workspaceRoot, driverRel, driverPageJsx())) rewritten.push(driverRel);
+    }
+    const accountRel = "app/account/page.tsx";
+    const accountPrev = fs.existsSync(path.join(input.workspaceRoot, accountRel))
+      ? fs.readFileSync(path.join(input.workspaceRoot, accountRel), "utf8")
+      : "";
+    if (!accountPrev || looksStubOrLeftover(accountPrev) || needsMockWire(accountPrev)) {
+      if (writeRel(input.workspaceRoot, accountRel, accountPageJsx())) rewritten.push(accountRel);
+    }
+    for (const leftover of ["app/wallet/page.tsx", "app/pay/page.tsx", "src/app/wallet/page.tsx"]) {
+      const abs = path.join(input.workspaceRoot, leftover);
+      if (fs.existsSync(abs)) {
+        try {
+          fs.unlinkSync(abs);
+          rewritten.push(leftover);
+        } catch {
+          /* skip */
+        }
+      }
     }
   }
 

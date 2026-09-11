@@ -185,7 +185,7 @@ function collapsePalettesOnDisk(workspaceRoot: string, goal: string): string[] {
   return touched;
 }
 
-const KIT_LIVE_TITLE_RE = /Sparrow Tutor|Practice app/gi;
+const KIT_LIVE_TITLE_RE = /Sparrow Tutor|Practice app|Grain Bakery|Crumb Market|LoafLocal/gi;
 
 function rewriteKitProductTitles(text: string, productName: string, goal?: string): string {
   let out = String(text || "");

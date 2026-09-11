@@ -51,7 +51,9 @@ const motoGoal = "**Product name:** Motodrop\nMoto delivery: pickup, dropoff, ac
 const motoPages = seedPagesFromGoal(motoGoal);
 assert.ok(motoPages.some((p) => p.route === "/request"));
 assert.ok(motoPages.some((p) => p.route === "/track"));
-assert.ok(motoPages.some((p) => p.route === "/pay"));
+assert.ok(motoPages.some((p) => p.route === "/driver"));
+assert.ok(motoPages.some((p) => p.route === "/account"));
+assert.equal(motoPages.some((p) => p.route === "/pay" || p.route === "/wallet"), false);
 assert.equal(motoPages.some((p) => /practice|catalog/i.test(p.route)), false);
 
 const shopPages = seedPagesFromGoal("Spoke & Co neighborhood bike shop book a slot");
@@ -64,10 +66,10 @@ assert.equal(catalogPages.some((p) => p.route === "/request"), false);
 
 const motoBrief = buildJobBriefMarkdown({
   goal: motoGoal,
-  pages: "### Request `/request`\n### Track `/track`\n### Pay `/pay`",
+  pages: "### Request `/request`\n### Track `/track`\n### Driver `/driver`\n### Account `/account`",
 });
 assert.match(motoBrief, /request → accept → track/i);
-assert.equal(jobBriefFitsRoutes(motoBrief, ["/", "/request", "/track", "/pay"]), true);
+assert.equal(jobBriefFitsRoutes(motoBrief, ["/", "/request", "/track", "/driver", "/account"]), true);
 assert.equal(jobBriefFitsRoutes(motoBrief, ["/", "/practice"]), false);
 
 const shopBrief = buildJobBriefMarkdown({
@@ -108,7 +110,7 @@ assert.equal(
     path.join(tmp, "nebulla-ide/master-plan.json"),
     JSON.stringify({
       "1. Goal of the app": motoGoal,
-      "4. Pages and navigation": "### Home `/`\n### Request `/request`\n### Track `/track`\n### Pay `/pay`",
+      "4. Pages and navigation": "### Home `/`\n### Request `/request`\n### Track `/track`\n### Driver `/driver`\n### Account `/account`",
     }),
     "utf8",
   );
@@ -122,9 +124,13 @@ assert.equal(
   assert.equal(/baker|practice lesson/i.test(brief), false);
   assert.equal(fs.existsSync(path.join(tmp, "app/request/page.tsx")), true);
   assert.equal(fs.existsSync(path.join(tmp, "app/track/page.tsx")), true);
-  assert.equal(fs.existsSync(path.join(tmp, "app/pay/page.tsx")), true);
+  assert.equal(fs.existsSync(path.join(tmp, "app/driver/page.tsx")), true);
+  assert.equal(fs.existsSync(path.join(tmp, "app/account/page.tsx")), true);
+  assert.equal(fs.existsSync(path.join(tmp, "app/pay/page.tsx")), false);
+  assert.equal(fs.existsSync(path.join(tmp, "app/wallet/page.tsx")), false);
   const request = fs.readFileSync(path.join(tmp, "app/request/page.tsx"), "utf8");
   assert.match(request, /pickup/);
+  assert.match(request, /Pay|Quote|card/i);
   assert.equal(/breads\.json|Start practice/i.test(request), false);
   const home = fs.readFileSync(path.join(tmp, "app/page.tsx"), "utf8");
   assert.match(home, /Open requests|listItems/);

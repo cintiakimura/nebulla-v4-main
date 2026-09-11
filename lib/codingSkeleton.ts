@@ -116,10 +116,10 @@ export function skeletonFitsCurrentGoal(c: CodingSkeleton | null | undefined, go
   if (kids && c.skeleton === "web_dashboard") return false;
   if (market && /baker|bakery|bread/.test(g) && c.skeleton !== "marketplace") return false;
   const blob = JSON.stringify(c).toLowerCase();
-  if (/moto|motodrop|courier|delivery|dropoff/.test(g) && /bread|baker|lesson|bike|spoke|practice/.test(blob)) {
+  if (/moto|motodrop|courier|delivery|dropoff|parcel/.test(g) && /bread|baker|lesson|bike|spoke|practice|wallet|catalog/.test(blob)) {
     return false;
   }
-  if (/moto|motodrop|courier|delivery|dropoff/.test(g) && !/request|pickup|dropoff|rider/.test(blob)) {
+  if (/moto|motodrop|courier|delivery|dropoff|parcel/.test(g) && !/request|pickup|dropoff|rider|driver/.test(blob)) {
     return false;
   }
   return true;
@@ -348,12 +348,15 @@ function buildDefaults(skeleton: CodingSkeletonKind, text: string, kids: boolean
         verbs: ["request", "accept"],
         routes: [
           { path: "/", purpose: "Open delivery requests", entity: "Request" },
-          { path: "/request", purpose: "Pickup and dropoff — accept request", entity: "Request" },
+          { path: "/request", purpose: "Pickup, dropoff, pay mock on the job", entity: "Request" },
+          { path: "/track", purpose: "Last point mock", entity: "Request" },
+          { path: "/driver", purpose: "Rider accept", entity: "Request" },
+          { path: "/account", purpose: "Saved card + quote", entity: "Request" },
         ],
         auth: "none",
         out_of_scope: [...DEFAULT_OUT_OF_SCOPE],
         source: "classified",
-        skeleton_note: "Moto delivery: request with pickup + dropoff. No leftover bakery/bike/tutor stores.",
+        skeleton_note: "Courier parcel: Home/Request/Track/Driver/Account. Pay is a section, not Wallet-as-shop.",
       };
     }
     if (/\b(baker|bakery|bread|pastry|pickup order)\b/i.test(text)) {

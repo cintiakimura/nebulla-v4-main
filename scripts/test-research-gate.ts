@@ -379,7 +379,8 @@ try {
   assert.match(chat, /planningPhase = 'PLAN_READY'/);
   assert.equal(/planningPhase = 'START_CODING'/.test(chat), false);
   assert.match(chat, /isOrchestrationOnlyPlanSource\(planningPhase\)/);
-  assert.match(chat, /Foundation already on disk — send Continue/);
+  assert.match(chat, /foundationAlreadyLanded/);
+  assert.match(chat, /App is ready on Live/);
   {
     const idxLanded = chat.indexOf('const foundationAlreadyLanded');
     const idxHandoff = chat.lastIndexOf('await handlePostGrokCodingTurn');

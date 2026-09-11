@@ -22,7 +22,7 @@ export const EDUCATION_LEFTOVER_SLUGS = new Set([
 ]);
 
 export const BIKE_SHOP_SLUGS = new Set(["book", "mechanic", "catalog", "cart"]);
-export const BAKERY_LEFTOVER_SLUGS = new Set(["order", "baker", "confirmation"]);
+export const BAKERY_LEFTOVER_SLUGS = new Set(["order", "baker", "confirmation", "wallet", "catalog", "cart"]);
 
 function routeSlug(route: string): string {
   const s = String(route || "").trim();
@@ -35,7 +35,7 @@ export function leftoverRoutesConflictWithGoal(goal: string, routes: string[]): 
   const domain = detectProductDomain(goal);
   const slugs = (routes || []).map(routeSlug).filter(Boolean);
   const g = String(goal || "").toLowerCase();
-  const delivery = /moto|motodrop|courier|delivery|dropoff/.test(g);
+  const delivery = /moto|motodrop|courier|delivery|dropoff|parcel/.test(g);
   if (domain !== "education" && slugs.some((s) => EDUCATION_LEFTOVER_SLUGS.has(s))) {
     return true;
   }
@@ -57,7 +57,7 @@ export function looksLikeStandaloneProductBrief(text: string): boolean {
   if (isCodingCommandNote(raw) && !goal) return false;
   if (/^(continue|continue\.|continue!|build\s+next|next\s+slice)\b/i.test(raw)) return false;
   if (extractNamedBrand(goal)) return true;
-  return /\b(build|shop|marketplace|companion|bike|bakery|mechanic|app that|for (kids|parents|customers|readers))\b/i.test(
+  return /\b(build|shop|marketplace|companion|bike|bakery|mechanic|moto|courier|delivery|parcel|uber|dropoff|app that|for (kids|parents|customers|readers|riders|senders))\b/i.test(
     goal,
   );
 }
