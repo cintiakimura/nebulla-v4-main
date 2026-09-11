@@ -116,6 +116,7 @@ import {
   triggerUiStudioBetaAfterFilesApplied,
 } from '../../lib/uiStudioBetaEngine';
 import { userNoteRequestsCompetitorResearch, userNoteRequestsUiGeneration } from '../../lib/chatModeDetector';
+import { buildPostApplyApiAsk } from '../../../lib/engineerInterview';
 import { figmaPickActivityLine } from '../../lib/uiGenStatusLabels';
 import {
   clearDiscoveryClosed,
@@ -377,6 +378,7 @@ export function AIChat() {
   const autoSliceAbortRef = useRef(false);
   const autoSliceInFlightRef = useRef(false);
   const lastAutoSliceLabelRef = useRef<string | null>(null);
+  const apiAskSentRef = useRef(false);
   const lastAutoProductRouteCountRef = useRef<number | undefined>(undefined);
   const runAutoNextSliceRef = useRef<() => Promise<void>>(async () => {});
   /** One handoff after Foundation — stall watchdog and sendChat finally must not both start Go. */
@@ -485,6 +487,30 @@ export function AIChat() {
     // (that left “Syncing project artifacts…” stuck after files were already applied).
     if (options?.currentOnly || kind === 'wait') return;
   }, []);
+
+  const pushReadyAndApiAsk = useCallback(
+    (goal?: string, pages?: string) => {
+      pushActivity(PRODUCT_MVP_READY_MESSAGE, 'success');
+      if (apiAskSentRef.current) return;
+      apiAskSentRef.current = true;
+      const ask = buildPostApplyApiAsk({ goal, pages });
+      const stamp = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+      setMessages((p) => {
+        const next = [
+          ...p,
+          {
+            id: `api-ask-${Date.now()}`,
+            role: 'assistant' as const,
+            content: `${PRODUCT_MVP_READY_MESSAGE}\n\n${ask}`,
+            timestamp: stamp,
+          },
+        ];
+        messagesRef.current = next;
+        return next;
+      });
+    },
+    [pushActivity],
+  );
 
   /** Next Go slice without a user chat message (Plan → mockup → Foundation already ran). */
   const finishAutopilotSession = useCallback(
@@ -2105,6 +2131,7 @@ export function AIChat() {
           ),
         });
         lastAutoSliceLabelRef.current = null;
+        apiAskSentRef.current = false;
         messagesRef.current = [userMsg];
         setMessages([userMsg]);
         historyForApi = [{ role: 'user', content: text }];
@@ -2919,7 +2946,7 @@ export function AIChat() {
             } catch {
               /* ignore */
             }
-            pushActivity('App is ready on Live.', 'success');
+            pushReadyAndApiAsk(text, '');
           }
 
           const codingSliceLabel =

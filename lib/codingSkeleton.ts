@@ -227,7 +227,7 @@ export function formatCodingSkeletonForGo(c: CodingSkeleton): string {
 export const FOUNDATION_MIN_UI_CHECKLIST = `FOUNDATION MIN UI (visible on Live this Go — Foundation+Primary, not Data+API):
 1. Header: product identity name only (same string as chip / <title> / Live).
 2. Nav: only §4 routes (3–5 links). No leftover Practice/Session/Helper on a shop.
-3. Home (non-education): job title (Ready bikes / Today's loaves / Open requests); ≥2 mock items with name + status/price; one primary CTA to the main action route. Forbidden: "One short lesson", "Weekly streak", "Start practice", "Interactive screen with mock data".
+3. Home (non-education): job title (Ready bikes / Today's loaves / Open requests / Catalog); ≥2 mock items with name + status/price; one primary CTA to the main action route. Forbidden: "One short lesson", "Weekly streak", "Start practice", "Interactive screen with mock data".
 4. Home (education only): lesson + streak + Start practice OK; add Teacher route if the goal mentions teachers.
 5. Action screen (book / request / order / upload): ≥2 labeled fields or a file control; Submit/Accept updates lib/mockStore.ts. Not a single Continue on an empty card.
 6. Primary verb works without refresh: shop book/order updates the list; delivery pickup+dropoff then Accept updates status; education Start practice writes progress for Teacher.`;

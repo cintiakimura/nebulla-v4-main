@@ -1,4 +1,5 @@
 import { extractMasterPlanInner, sourceHasMasterPlanBlock } from '../../lib/masterPlanTags';
+import { ENGINEER_INTERVIEW_PROMPT } from '../../lib/engineerInterview';
 import { sanitizeAssistantChatText } from '../../lib/assistantChatSanitize';
 import {
   MASTER_PLAN_SECTION_KEYS,
@@ -386,15 +387,16 @@ export const CODING_QUALITY_APPENDIX = `
 ACTIVE MODE: CODING — Architecture-first + Incremental Development (Build → Debug → Next):
 1) Mentally scan nebulla-project/code-review-checklist.md before every file block.
 2) Follow Master Plan §1–§5 + Project Type; do not invent contradicting routes/features.
-3) Implement **one slice only** this turn (foundation → auth → data/API → primary feature → secondary → polish). Do not dump the whole app.
+3) This Go is Foundation+Primary (screens + the interview loop). Do not start a Data+API or Polish slice.
 4) Smallest safe change; no drive-by refactors; no temporary hacks.
 5) No hallucinated APIs/packages/env/paths — create them explicitly if needed in the same response.
 6) After the slice: remind to Validate (NDM happy path) before the next Go / slice.
 7) Output only START_CODING and/or \`\`\`file:relative/path\` … \`\`\` — never casual code fences in chat.
-8) Do not treat UI Studio mockup / preview-model as the spec. Implement screens and features from Master Plan sections and agreed architecture. Mockup is a temporary preview and may be wrong or partial. If mockup and plan disagree, plan wins.
-9) Render-only stack: MVP auth = mock/local role gates on Render. RLS = in-app authorization rules — never a hosted BaaS client or SUPABASE_* env.
-10) When emitting app/ src/ pages/ components/ product UI: leave a **runnable workspace root** — package.json with scripts.dev/build/start, framework entry (Next: app/layout + app/page + real product routes under app/ or pages/). Vite-only src/App.tsx + src/main.tsx is not done for a multi-page plan. Orphan pages without package.json are not done.
-11) Working app output: primary CTAs (role switch, start session, upload) must work with mock/local state in this slice, or be disabled with a short "next slice" reason — no silent dead buttons.
+8) Do not treat UI Studio mockup / preview-model as the spec. Implement screens and features from Master Plan / job-brief. Mockup is a temporary preview and may be wrong or partial. If mockup and plan disagree, plan wins.
+9) Render-only stack: MVP auth = mock/local role gates on Render. RLS = in-app authorization rules — never a hosted BaaS client or SUPABASE_* env. Vendor SDKs (Stripe/Mapbox/Twilio/Firebase) only if the user named them or pasted a key; else honest mock UI.
+10) Foundation+Primary in this Go — the interview loop must work in lib/mockStore.ts. No empty Wallet. No Data+API slice. After apply the product asks for keys once.
+11) When emitting app/ src/ pages/ components/ product UI: leave a **runnable workspace root** — package.json with scripts.dev/build/start, framework entry (Next: app/layout + app/page + real product routes under app/ or pages/). Vite-only src/App.tsx + src/main.tsx is not done for a multi-page plan. Orphan pages without package.json are not done.
+12) Working app output: primary CTAs must work with mock/local state, or be disabled with a short reason — no silent dead buttons.
 `.trim();
 
 /** Compact Chat personality — UNBREAKABLE when interactionMode is chat. Authority: chat-personality.md */
@@ -521,11 +523,12 @@ export function chatModeSystemAppendix(options: {
       [
         'ACTIVE MODE: FAST PROTOTYPE (inference-first — additive; Guided interview OFF)',
         '- Law: nebula-project/inference-first-rules.md for quality (no invented competitors; labeled assumptions). Guided interview OFF.',
+        ENGINEER_INTERVIEW_PROMPT,
         '- THIS TURN = PLAN ONLY. Do not emit START_CODING, <START_CODING>, or app ```file:``` blocks. Do not invent competitor-research.md.',
-        '- COMPREHENSION FIRST: extract the user brief (roles, privacy, tone, links) into the Master Plan this turn. Always fill §1 Goal. Do NOT ask the main-goal interview when the brief already states it.',
-        '- HARD OUTPUT THIS TURN: <START_MASTERPLAN>…</END_MASTERPLAN> with all five sections (real §1). A short chat-only reply is a failure.',
-        '- Required files this turn: nebula-project/fast-prototype-memory.md, category-classification.md, industry-standards.md (assumptions), Master Plan.',
-        '- AFTER this reply the product classifies the coding skeleton, then ui-brief / mockup, then Foundation Go. Do not look up competitors unless the user asked.',
+        '- COMPREHENSION FIRST: extract the user brief into job-brief.md then Master Plan this turn. Always fill §1 from the interview thesis. Do NOT ask the user the interview.',
+        '- HARD OUTPUT THIS TURN: file:nebula-project/job-brief.md then <START_MASTERPLAN>…</END_MASTERPLAN> with all five sections generated from that brief. A short chat-only reply is a failure.',
+        '- Required files this turn: nebula-project/job-brief.md, fast-prototype-memory.md, category-classification.md, industry-standards.md (assumptions), Master Plan.',
+        '- AFTER this reply the product classifies the coding skeleton, then ui-brief / mockup, then Foundation+Primary Go. Optional lookup only if a fact is missing. Do not look up competitors unless the user asked.',
         '- Never invent competitors, studies, or statistics. Prefer labeled assumptions over asking questions.',
         '- Anti-amnesia: read working files before acting; do not restart Step 3.1 if a valid draft exists.',
         '- Chat: ≤4 short lines (assumptions). All substance in Master Plan tags + nebula-project/ file blocks.',

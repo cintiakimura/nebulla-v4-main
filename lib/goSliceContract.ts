@@ -8,6 +8,7 @@ import path from "path";
 import { assessApplyRouteDepth, isStaticHtmlProductApply, listProductUiFiles } from "./workspaceCodedAppUi";
 import { goBlocked, type GoBlockedReason } from "./goBlockedReason";
 import { FOUNDATION_MIN_UI_CHECKLIST } from "./codingSkeleton";
+import { ENGINEER_INTERVIEW_PROMPT } from "./engineerInterview";
 
 export const GO_SLICE_LABELS = [
   "Foundation",
@@ -306,7 +307,7 @@ export function buildCompactGoCodeUserPrompt(opts: {
     "§4 Pages excerpt:",
     pages || "(from Master Plan §4)",
     constraints ? `\n${constraints}` : "",
-    isFoundation ? `\n${FOUNDATION_MIN_UI_CHECKLIST}` : "",
+    isFoundation ? `\n${FOUNDATION_MIN_UI_CHECKLIST}\n${ENGINEER_INTERVIEW_PROMPT}` : "",
     "",
     "ui-brief pages:",
     briefPages || "(none parsed)",

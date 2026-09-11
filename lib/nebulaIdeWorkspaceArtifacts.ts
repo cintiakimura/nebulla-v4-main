@@ -14,6 +14,7 @@ import {
   writeEditorState,
 } from "./visualUiEditorWorkspace";
 
+import { writeJobBriefFromPlan } from "./engineerInterview";
 import { MASTER_PLAN_ALL_KEYS, MASTER_PLAN_USER_SECTION_KEYS, normalizeMasterPlanRecord } from "./masterPlanSections";
 import {
   extractGoalFromMemoryMarkdown,
@@ -593,6 +594,7 @@ export function hydrateAndPersistMasterPlan(
     fs.writeFileSync(masterPlanPath, JSON.stringify(plan, null, 2), "utf8");
     scheduleWorkspaceAbsR2Sync(workspaceRoot, masterPlanPath);
   }
+  writeJobBriefFromPlan(workspaceRoot, plan);
   return plan;
 }
 

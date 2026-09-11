@@ -27,6 +27,7 @@ import { listProductUiFiles } from "./workspaceCodedAppUi";
 import { ensureInteractiveProductPreview } from "./interactiveProductPreview";
 import { rewriteEducationKitHomeIfNeeded } from "./rewriteEducationKitHome";
 import { rewriteJobScreensIfNeeded } from "./rewriteJobScreens";
+import { writeJobBriefFromPlan } from "./engineerInterview";
 
 export const PRODUCT_PALETTE_REL = "nebulla-ide/product-palette.json";
 
@@ -318,6 +319,13 @@ export function applyProductPalettePass(input: {
   for (const rel of jobScreens.rewritten) {
     if (!applied.includes(rel)) applied.push(rel);
   }
+  const brief = writeJobBriefFromPlan(
+    input.workspaceRoot,
+    readPlanFromWorkspace(input.workspaceRoot, input.masterPlanPath) || {
+      "1. Goal of the app": goal,
+    },
+  );
+  if (brief.written && !applied.includes(brief.rel)) applied.push(brief.rel);
   if (jobScreens.rewritten.length) {
     ensureInteractiveProductPreview(input.workspaceRoot, {
       projectName: identity.projectName,

@@ -574,6 +574,8 @@ assert.equal(APPLY_IN_FLIGHT_STALL_MS, 15_000);
     /App is ready on Live/,
     'Foundation on disk stays quiet — no Continue CTA',
   );
+  assert.match(chat, /buildPostApplyApiAsk/);
+  assert.match(chat, /pushReadyAndApiAsk/);
   assert.match(chat, /workspacePaths,/);
   assert.equal(/Continue — launching/.test(chat), false);
   assert.equal(

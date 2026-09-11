@@ -6,6 +6,7 @@
 
 import fs from "fs";
 import path from "path";
+import { looksLikeVendorSdkPath, userNamedVendor, userNoteHasVendorKey } from "./engineerInterview";
 
 const VENDOR = String.raw`supabase|firebase|amplify|appwrite|convex|planetscale|neon\.tech|clerk\.com|auth0`;
 
@@ -19,7 +20,7 @@ const AFFIRMATIVE_VENDOR_RE = new RegExp(
 );
 
 const BLOCKED_VENDOR_PATH_RE =
-  /(?:^|\/)(?:lib\/supabase(?:\.(ts|tsx|js|jsx)|\/)|supabase\/|firebase\/|lib\/firebase\.(ts|tsx|js|jsx)|supabase\.(ts|tsx|js|jsx))(?:\/|$)?/i;
+  /(?:^|\/)(?:lib\/supabase(?:\.(ts|tsx|js|jsx)|\/)|supabase\/|firebase\/|lib\/firebase\.(ts|tsx|js|jsx)|supabase\.(ts|tsx|js|jsx)|lib\/stripe(?:\.(ts|tsx|js|jsx)|\/)|stripe\/|@stripe\/|lib\/mapbox|mapbox-gl|lib\/twilio)(?:\/|$)?/i;
 
 const BLOCKED_VENDOR_BODY_RE =
   /@supabase\/supabase-js|createClient\s*\(\s*['"`]https?:\/\/[^'"`]*supabase|EXPO_PUBLIC_SUPABASE_|SUPABASE_URL|SUPABASE_ANON_KEY|SUPABASE_SERVICE|firebase\/app|initializeApp\s*\(/i;
@@ -120,9 +121,15 @@ export function shouldSkipUnsolicitedBaaSFile(
   body: string,
   planOrNote: string,
 ): boolean {
-  if (planOrNoteAllowsExternalBaaS(planOrNote)) return false;
+  if (
+    planOrNoteAllowsExternalBaaS(planOrNote) ||
+    userNamedVendor(planOrNote) ||
+    userNoteHasVendorKey(planOrNote)
+  ) {
+    return false;
+  }
   const rel = String(relativePath || "").replace(/\\/g, "/");
-  if (isBlockedExternalBaaSPath(rel)) return true;
+  if (isBlockedExternalBaaSPath(rel) || looksLikeVendorSdkPath(rel)) return true;
   if (/^firebase\//i.test(rel) || /firebase/i.test(rel) && /\.(ts|tsx|js|jsx)$/i.test(rel)) return true;
   if (/\.(ts|tsx|js|jsx)$/i.test(rel) && bodyLooksLikeBlockedExternalBaaS(body)) return true;
   if (/\.env/i.test(rel) && /SUPABASE_/i.test(body)) {
@@ -215,5 +222,6 @@ STACK (mandatory — Render-only):
 - Default product stack: Render PostgreSQL + Render Web Service (Nebulla-hosted API) + in-app / mock / local session auth.
 - RLS / roles / deny-by-default = authorization checks in app/server code on that stack — never a hosted BaaS product.
 - Do not emit supabase or firebase client files, packages, or SUPABASE_* env vars. Do not put those packages in package.json.
+- Do not emit Stripe / Mapbox / Twilio SDK files unless the user named that vendor or pasted a key. Honest mock UI instead.
 - Login + roles in MVP: mock role switch or local session stub on Render.
 `.trim();

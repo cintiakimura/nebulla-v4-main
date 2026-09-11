@@ -280,6 +280,8 @@ export function seedPagesFromGoal(goal: string): { name: string; route: string }
     return [
       { name: "Home", route: "/" },
       { name: "Request", route: "/request" },
+      { name: "Track", route: "/track" },
+      { name: "Pay", route: "/pay" },
     ];
   }
   if (/\b(bike|bicycle|mechanic|spoke)\b/i.test(g)) {

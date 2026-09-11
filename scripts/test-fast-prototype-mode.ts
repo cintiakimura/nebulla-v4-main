@@ -83,6 +83,8 @@ assert.ok(fast.startsWith(FAST_PROTOTYPE_BOOTSTRAP_PREFIX));
 assert.ok(fast.includes('inference-first-rules'));
 assert.ok(fast.includes('category-classification.md'));
 assert.ok(fast.includes('competitor-research.md'));
+assert.ok(fast.includes('job-brief.md'));
+assert.ok(fast.includes('ENGINEER INTERVIEW'));
 assert.ok(fast.includes('THIS TURN = PLAN ONLY'));
 assert.ok(fast.includes('Do NOT emit START_CODING'));
 assert.ok(fast.includes('Always fill §1 Goal'));

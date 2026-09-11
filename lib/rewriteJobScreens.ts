@@ -75,6 +75,58 @@ export default function Home() {
 `;
 }
 
+function trackPageJsx(): string {
+  return `"use client";
+
+import { listItems } from "../../lib/mockStore";
+
+export default function TrackPage() {
+  const items = listItems();
+  const last = items[0];
+  return (
+    <main>
+      <h1>Track</h1>
+      <p>Last point (mock). Maps stay fake until a key is pasted.</p>
+      <p><strong>{last ? last.title : "No request yet"}</strong></p>
+      <p>{last ? last.status : ""}</p>
+      <p>Pin: Harbor dock · updated just now</p>
+    </main>
+  );
+}
+`;
+}
+
+function payPageJsx(): string {
+  return `"use client";
+
+export default function PayPage() {
+  return (
+    <main>
+      <h1>Pay</h1>
+      <p>Saved card stays in this browser. No Stripe until you paste a key.</p>
+      <form
+        onSubmit={(ev) => {
+          ev.preventDefault();
+          window.localStorage.setItem("nebulla_mock_card", "4242");
+          window.location.href = "/";
+        }}
+      >
+        <label>
+          Card
+          <input name="card" type="text" placeholder="4242 4242 4242 4242" required />
+        </label>
+        <label>
+          Name
+          <input name="name" type="text" required />
+        </label>
+        <button type="submit">Save card</button>
+      </form>
+    </main>
+  );
+}
+`;
+}
+
 function requestPageJsx(productName: string): string {
   const name = productName.replace(/`/g, "");
   return `"use client";
@@ -112,12 +164,15 @@ export default function RequestPage() {
 
 function shopHomeJsx(goal: string): string {
   const bakery = /baker|bakery|bread|loaf|grain/i.test(goal);
-  const title = bakery ? "Today's loaves" : "Ready bikes";
+  const bike = /bike|bicycle|spoke|mechanic/i.test(goal);
+  const title = bakery ? "Today's loaves" : bike ? "Ready bikes" : "Catalog";
   const lead = bakery
     ? "Today's breads. Place a pickup order."
-    : "Ready bikes on the floor. Book a pickup or service slot.";
-  const href = bakery ? "/order" : "/book";
-  const cta = bakery ? "Place pickup order" : "Book slot";
+    : bike
+      ? "Ready bikes on the floor. Book a pickup or service slot."
+      : "Browse the catalog. Book or order from local stock.";
+  const href = bakery ? "/order" : bike ? "/book" : "/catalog";
+  const cta = bakery ? "Place pickup order" : bike ? "Book slot" : "Open catalog";
   return `"use client";
 
 import { listItems } from "../lib/mockStore";
@@ -137,6 +192,32 @@ export default function Home() {
         ))}
       </ul>
       <a href="${href}">${cta}</a>
+    </main>
+  );
+}
+`;
+}
+
+function catalogPageJsx(): string {
+  return `"use client";
+
+import { listItems } from "../../lib/mockStore";
+
+export default function CatalogPage() {
+  const items = listItems();
+  return (
+    <main>
+      <h1>Catalog</h1>
+      <p>Local stock. Book or order without a vendor SDK.</p>
+      <ul>
+        {items.map((row) => (
+          <li key={row.id}>
+            <strong>{row.title}</strong>
+            <span>{row.status}</span>
+          </li>
+        ))}
+      </ul>
+      <a href="/book">Book</a>
     </main>
   );
 }
@@ -347,10 +428,34 @@ export function rewriteJobScreensIfNeeded(input: {
     if (!prev || looksStubOrLeftover(prev) || needsMockWire(prev) || !/name=["']pickup["']/.test(prev)) {
       if (writeRel(input.workspaceRoot, rel, requestPageJsx(productName))) rewritten.push(rel);
     }
+    const trackRel = "app/track/page.tsx";
+    const trackPrev = fs.existsSync(path.join(input.workspaceRoot, trackRel))
+      ? fs.readFileSync(path.join(input.workspaceRoot, trackRel), "utf8")
+      : "";
+    if (!trackPrev || looksStubOrLeftover(trackPrev) || needsMockWire(trackPrev)) {
+      if (writeRel(input.workspaceRoot, trackRel, trackPageJsx())) rewritten.push(trackRel);
+    }
+    const payRel = "app/pay/page.tsx";
+    const payPrev = fs.existsSync(path.join(input.workspaceRoot, payRel))
+      ? fs.readFileSync(path.join(input.workspaceRoot, payRel), "utf8")
+      : "";
+    if (!payPrev || looksStubOrLeftover(payPrev) || needsMockWire(payPrev)) {
+      if (writeRel(input.workspaceRoot, payRel, payPageJsx())) rewritten.push(payRel);
+    }
   }
 
   if (shop) {
     const bakery = /baker|bakery|bread|loaf|grain/i.test(`${goal} ${productName}`);
+    const wantsCatalog = routes.some((r) => /catalog/i.test(`${r.route} ${r.name}`));
+    if (wantsCatalog) {
+      const abs = path.join(input.workspaceRoot, "app/catalog/page.tsx");
+      const prev = fs.existsSync(abs) ? fs.readFileSync(abs, "utf8") : "";
+      if (!prev || needsMockWire(prev) || looksStubOrLeftover(prev)) {
+        if (writeRel(input.workspaceRoot, "app/catalog/page.tsx", catalogPageJsx())) {
+          rewritten.push("app/catalog/page.tsx");
+        }
+      }
+    }
     const actionRel = bakery ? "app/order/page.tsx" : "app/book/page.tsx";
     const wantsAction = routes.some((r) => /book|slot|order|pickup/i.test(`${r.route} ${r.name}`));
     if (wantsAction || /spoke|bike|baker|loaf/i.test(`${goal} ${productName}`)) {

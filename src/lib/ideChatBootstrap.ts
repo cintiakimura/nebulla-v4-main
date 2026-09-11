@@ -2,6 +2,7 @@ import type { ConversationLogEntryDTO } from './conversationLogClient';
 import type { NebulaProjectType } from './ideHomeEvents';
 import { sanitizeAssistantChatText } from '../../lib/assistantChatSanitize';
 import { extractGoalFromUserNote } from '../../lib/spineSequenceClient';
+import { ENGINEER_INTERVIEW_PROMPT } from '../../lib/engineerInterview';
 
 /** Hidden user turn — Grok replies with the first onboarding question only (project-execution-rules §4). */
 export const IDE_CHAT_DISCOVERY_BOOTSTRAP =
@@ -37,16 +38,18 @@ export function buildFastPrototypeContinueBootstrap(userGoalOrBootstrap?: string
     : "";
   return (
     `${FAST_PROTOTYPE_CONTINUE_PREFIX} Your previous reply did NOT include <START_MASTERPLAN> tags. ` +
-    `This is a HARD retry — do NOT ask questions; do NOT apologize; do NOT interview.\n` +
+    `This is a HARD retry — do NOT ask the user questions; do NOT apologize. Run the private engineer interview, then write.\n` +
     goalBlock +
+    `${ENGINEER_INTERVIEW_PROMPT}\n` +
     `Immediately output in this order:\n` +
-    `1) <START_MASTERPLAN>…</END_MASTERPLAN> with ALL five sections (real content; label assumptions).\n` +
-    `   §1 goal/users/scope · §2 Project Type + labeled assumption defaults + Security baseline if accounts/kids/private data · ` +
-    `§3 features+KPI · §4 pages with /routes + purpose/primary_actions/authz/empty_state/error_state/nav_links · ` +
+    `1) \`\`\`file:nebula-project/job-brief.md\` … \`\`\` from the interview.\n` +
+    `2) <START_MASTERPLAN>…</END_MASTERPLAN> with ALL five sections generated FROM that job-brief (not a kit).\n` +
+    `   §1 thesis/actors/loop · §2–3 must-have/later + vendors mock|needs key · ` +
+    `§4 pages with /routes + purpose/primary_actions/authz/empty_state/error_state/nav_links · ` +
     `§5 hex tokens (15–25 lines).\n` +
-    `2) \`\`\`file:nebula-project/fast-prototype-memory.md\` … \`\`\`\n` +
-    `3) \`\`\`file:nebula-project/category-classification.md\` … \`\`\`\n` +
-    `4) \`\`\`file:nebula-project/industry-standards.md\` … \`\`\` (assumption defaults only).\n` +
+    `3) \`\`\`file:nebula-project/fast-prototype-memory.md\` … \`\`\`\n` +
+    `4) \`\`\`file:nebula-project/category-classification.md\` … \`\`\`\n` +
+    `5) \`\`\`file:nebula-project/industry-standards.md\` … \`\`\` (assumption defaults only).\n` +
     `Do NOT invent competitor names. Do NOT write competitor-research.md. Do NOT emit START_CODING or app file blocks.\n` +
     `Product classifies the coding skeleton, then ui-brief / mockup, then Foundation Go. Do not look up competitors unless the user asked.\n` +
     `Chat: at most 4 short lines listing assumptions.`
@@ -122,7 +125,9 @@ export function buildFastPrototypeBootstrap(
     `${FAST_PROTOTYPE_BOOTSTRAP_PREFIX} Follow nebula-project/inference-first-rules.md for quality (no invented competitors; labeled assumptions). ` +
     `Do NOT run Guided Discovery interview. ${typeClause}\n\n` +
     goalBlock +
+    `${ENGINEER_INTERVIEW_PROMPT}\n` +
     `THIS TURN = PLAN ONLY (one Grok job). Do not research, mockup, or write app code in this reply.\n` +
+    `Write nebula-project/job-brief.md from the interview, then generate §1–§5 from that brief only.\n` +
     `Write nebula-project/fast-prototype-memory.md (mode, timestamp, goal).\n` +
     `Categorize → nebula-project/category-classification.md (if confidence low: ONE question and stop).\n` +
     `industry-standards.md as ASSUMPTION defaults only (roles, security baseline when kids/accounts/payments). Not finished research.\n` +
