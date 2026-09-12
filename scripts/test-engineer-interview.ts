@@ -20,7 +20,8 @@ import {
   JOB_BRIEF_REL,
 } from "../lib/engineerInterview.ts";
 import { applyProductPalettePass } from "../lib/productPalettePass.ts";
-import { seedPagesFromGoal } from "../lib/nebulaUiBrief.ts";
+import { isActionVerbRoute, seedPagesFromGoal } from "../lib/nebulaUiBrief.ts";
+import { looksLikeDummyListBody } from "../lib/rewriteJobScreens.ts";
 import { shouldSkipUnsolicitedBaaSFile } from "../lib/mvpStackContract.ts";
 import { buildFastPrototypeBootstrap } from "../src/lib/ideChatBootstrap.ts";
 import { FOUNDATION_MIN_UI_CHECKLIST } from "../lib/codingSkeleton.ts";
@@ -84,6 +85,24 @@ assert.match(ask, /Paste keys or say keep mock/);
 assert.match(ask, /Maps|Payments|Push/);
 assert.equal(/Continue/i.test(ask), false);
 assert.ok(inferApiNeeds(motoGoal).includes("maps"));
+
+const creatorGoal = "creators + brands marketplace profiles portfolio prices outreach both ways";
+const creatorAsk = buildPostApplyApiAsk({ goal: creatorGoal });
+assert.match(creatorAsk, /Messaging|Payments/);
+assert.equal(/Maps \(live track\)|SMS/i.test(creatorAsk), false);
+assert.equal(
+  /Maps \(live track\)/i.test(buildPostApplyApiAsk({ goal: `${ENGINEER_INTERVIEW_PROMPT}\n${creatorGoal}` })),
+  false,
+);
+assert.equal(inferApiNeeds(creatorGoal).includes("maps"), false);
+assert.ok(inferApiNeeds(creatorGoal).includes("messaging"));
+assert.equal(isActionVerbRoute("/decline", "Decline"), true);
+assert.equal(isActionVerbRoute("/messages", "Messages"), false);
+assert.equal(looksLikeDummyListBody("<strong>First item</strong> Ready now <strong>Second item</strong> This afternoon Open"), true);
+assert.equal(looksLikeDummyListBody("<h1>Profile</h1><label>Portfolio</label>"), false);
+
+const courierPages = seedPagesFromGoal(motoGoal);
+assert.equal(courierPages.some((p) => /discover|decline/i.test(p.route)), false);
 
 assert.equal(userNoteHasVendorKey("sk_test_abc"), true);
 assert.equal(userNamedVendor("please use Stripe"), true);
@@ -162,6 +181,46 @@ assert.equal(
   assert.equal(/Open requests|Start practice/i.test(home), false);
   assert.equal(fs.existsSync(path.join(tmp, "app/catalog/page.tsx")), true);
   assert.match(fs.readFileSync(path.join(tmp, "app/catalog/page.tsx"), "utf8"), /Catalog|Book/);
+  fs.rmSync(tmp, { recursive: true, force: true });
+}
+
+{
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "nebulla-creator-hub-"));
+  fs.mkdirSync(path.join(tmp, "app", "profile"), { recursive: true });
+  fs.mkdirSync(path.join(tmp, "app", "decline"), { recursive: true });
+  fs.mkdirSync(path.join(tmp, "nebulla-ide"), { recursive: true });
+  const creatorWs = "creators + brands marketplace — profiles, portfolio, prices, outreach.";
+  fs.writeFileSync(
+    path.join(tmp, "app/page.tsx"),
+    "export default function Home(){return <main><strong>First item</strong> Ready now <strong>Second item</strong> This afternoon</main>;}\n",
+  );
+  fs.writeFileSync(
+    path.join(tmp, "app/profile/page.tsx"),
+    "export default function P(){return <main><strong>First item</strong> Ready now <strong>Second item</strong> This afternoon Open</main>;}\n",
+  );
+  fs.writeFileSync(path.join(tmp, "app/decline/page.tsx"), "export default function D(){return <main>Decline</main>;}\n");
+  fs.writeFileSync(
+    path.join(tmp, "nebulla-ide/master-plan.json"),
+    JSON.stringify({
+      "1. Goal of the app": creatorWs,
+      "4. Pages and navigation":
+        "### Home `/`\n### Discover `/discover`\n### Brand `/brand`\n### Messages `/messages`\n### Pricing `/pricing`\n### Profile `/profile`\n### Decline `/decline`",
+    }),
+    "utf8",
+  );
+  applyProductPalettePass({
+    workspaceRoot: tmp,
+    goal: creatorWs,
+    masterPlanPath: path.join(tmp, "nebulla-ide/master-plan.json"),
+  });
+  assert.equal(fs.existsSync(path.join(tmp, "app/decline/page.tsx")), false);
+  const profile = fs.readFileSync(path.join(tmp, "app/profile/page.tsx"), "utf8");
+  assert.match(profile, /Portfolio|Rates|Contact/);
+  assert.equal(looksLikeDummyListBody(profile), false);
+  assert.equal(fs.existsSync(path.join(tmp, "app/messages/page.tsx")), true);
+  assert.match(fs.readFileSync(path.join(tmp, "app/messages/page.tsx"), "utf8"), /Decline/);
+  const creatorHome = fs.readFileSync(path.join(tmp, "app/page.tsx"), "utf8");
+  assert.equal(/First item|Second item/i.test(creatorHome), false);
   fs.rmSync(tmp, { recursive: true, force: true });
 }
 

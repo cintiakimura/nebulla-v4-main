@@ -187,7 +187,7 @@ export function rewriteLayoutNavFromSection4(opts: {
     .join("\n          ");
   const nav = `<nav>\n          ${links}\n        </nav>`;
   const leftoverHref =
-    /href=["']\/(practice|session|helper|lessons|lesson|streak|quiz|progress|teacher|wallet|catalog|order)["']/i;
+    /href=["']\/(practice|session|helper|lessons|lesson|streak|quiz|progress|teacher|wallet|catalog|order|decline)["']/i;
   const leftoverLabel = /\b(Helper|Practice|Session|CogniMicro|Wallet|Crumb|Grain Bakery|Jobs)\b/;
   const rewritten: string[] = [];
   for (const rel of ["app/layout.tsx", "src/app/layout.tsx"]) {

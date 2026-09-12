@@ -154,6 +154,20 @@ const GOLDEN =
 }
 
 {
+  const creator =
+    "creators + brands marketplace — profiles, portfolio, prices, outreach both ways";
+  const hub = classifyCodingSkeleton(creator, "Web App");
+  assert.equal(hub.skeleton, "marketplace");
+  assert.equal(hub.skeleton, "marketplace");
+  assert.ok(hub.routes.some((r) => r.path === "/profile"));
+  assert.ok(hub.routes.some((r) => r.path === "/messages"));
+  assert.equal(hub.routes.some((r) => r.path === "/decline"), false);
+  assert.equal(hub.routes.some((r) => r.path === "/discover"), true);
+  const landingSkel = classifyCodingSkeleton("Photography one-pager portfolio landing page");
+  assert.equal(skeletonFitsCurrentGoal(landingSkel, creator), false);
+}
+
+{
   const root = path.dirname(fileURLToPath(import.meta.url));
   const repo = path.join(root, "..");
   assert.equal(fs.existsSync(path.join(repo, "nebula-project", "coding-skeleton.json")), false);

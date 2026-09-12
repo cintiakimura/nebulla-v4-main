@@ -313,8 +313,8 @@ function buildInteractiveHtml(opts: {
       var ctaId = DELIVERY ? "goRequest" : (SHOP ? "goOrder" : "primaryAct");
       var ctaLabel = DELIVERY ? "New request" : (BIKE ? "Book slot" : (SHOP ? "Place pickup order" : "Open"));
       var heading = DELIVERY ? "Open requests" : (BIKE ? "Ready bikes" : (SHOP ? "Today\\'s loaves" : "Ready today"));
-      var itemA = DELIVERY ? ["Harbor to Midtown", "Waiting for a rider"] : (BIKE ? ["City commuter", "Ready now"] : ["First listing", "Available now"]);
-      var itemB = DELIVERY ? ["Depot to North side", "Ready to accept"] : (BIKE ? ["Trail hardtail", "Tuned this morning"] : ["Second listing", "This afternoon"]);
+      var itemA = DELIVERY ? ["Harbor to Midtown", "Waiting for a rider"] : (BIKE ? ["City commuter", "Ready now"] : ["Maya Chen — photo", "$1.2k / post"]);
+      var itemB = DELIVERY ? ["Depot to North side", "Ready to accept"] : (BIKE ? ["Trail hardtail", "Tuned this morning"] : ["North Studio — video", "$2.4k / film"]);
       return (
         '<div class="card">' +
           '<h1>' + heading + '</h1>' +
@@ -488,11 +488,8 @@ function buildInteractiveHtml(opts: {
     return (
       '<div class="card">' +
         '<h1>' + label + '</h1>' +
-        '<div class="grid">' +
-          '<div class="role"><strong>First item</strong> Ready now</div>' +
-          '<div class="role"><strong>Second item</strong> This afternoon</div>' +
-        '</div>' +
-        '<div class="row"><button type="button" class="cta" id="primaryAct">Open</button></div>' +
+        '<p>Fields from this job — not a dummy list.</p>' +
+        '<div class="row"><button type="button" class="cta" id="primaryAct">Continue</button></div>' +
         '<div class="toast" id="toast"></div>' +
       '</div>'
     );

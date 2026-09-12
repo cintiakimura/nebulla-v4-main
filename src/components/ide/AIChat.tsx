@@ -2953,7 +2953,24 @@ export function AIChat() {
             } catch {
               /* ignore */
             }
-            pushReadyAndApiAsk(text, '');
+            {
+              let askGoal = extractGoalFromUserNote(text) || '';
+              let askPages = '';
+              try {
+                const mpRes = await fetch(withProjectQuery('/api/master-plan/read'), {
+                  credentials: 'include',
+                  cache: 'no-store',
+                });
+                const plan = mpRes.ok
+                  ? ((await readResponseJson(mpRes)) as Record<string, unknown>)
+                  : null;
+                askGoal = String(plan?.['1. Goal of the app'] || askGoal);
+                askPages = String(plan?.['4. Pages and navigation'] || '');
+              } catch {
+                /* use extracted goal */
+              }
+              pushReadyAndApiAsk(askGoal, askPages);
+            }
           }
 
           const codingSliceLabel =

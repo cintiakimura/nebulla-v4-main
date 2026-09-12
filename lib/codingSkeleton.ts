@@ -4,6 +4,7 @@
  */
 
 import { CODING_SKELETON_KEY, PRE_CODING_SUMMARY_KEY } from "./masterPlanSections";
+import { isActionVerbRoute } from "./nebulaUiBrief";
 
 export type CodingSkeletonKind = "mobile_home" | "web_dashboard" | "landing" | "marketplace";
 export type CodingAuth = "none" | "mock";
@@ -39,7 +40,9 @@ const DEFAULT_OUT_OF_SCOPE = ["supabase", "firebase", "payments", "DNS"];
 const KIDS_RE =
   /\b(kids?|child|children|student|learner|teacher|tutor|classroom|school|parent|adhd|reading|lesson|practice)\b/i;
 const LANDING_RE =
-  /\b(landing|one[- ]?pager|brochure|portfolio|photography|photographer|marketing site)\b/i;
+  /\b(landing(\s+page)?|one[- ]?pager|brochure|marketing site)\b/i;
+const PHOTO_LANDING_RE = /\b(photography|photographer)\b/i;
+const CREATOR_RE = /\b(creator|influencer|outreach|brands?\s+marketplace)\b/i;
 const MARKET_RE =
   /\b(marketplace|e-?commerce|shop|storefront|\bcart\b|catalog|baker|bakery|bread|pastry|pickup order|bike|bicycle|mechanic|spoke|moto|motodrop|courier|delivery|dropoff)\b/i;
 const DASH_RE = /\b(saas|analytics|admin|dashboard|crm|metrics|backoffice|internal tool)\b/i;
@@ -122,6 +125,9 @@ export function skeletonFitsCurrentGoal(c: CodingSkeleton | null | undefined, go
   if (/moto|motodrop|courier|delivery|dropoff|parcel/.test(g) && !/request|pickup|dropoff|rider|driver/.test(blob)) {
     return false;
   }
+  if (CREATOR_RE.test(g) && (c.skeleton === "landing" || /decline|first item|practice/.test(blob))) {
+    return false;
+  }
   return true;
 }
 
@@ -138,8 +144,10 @@ export function classifyCodingSkeleton(
   const typeHint = String(projectType || "").toLowerCase();
 
   const kids = KIDS_RE.test(text);
-  const landing = LANDING_RE.test(text) || /\blanding\b/.test(typeHint);
-  const market = MARKET_RE.test(text);
+  const landing =
+    (LANDING_RE.test(text) || (PHOTO_LANDING_RE.test(text) && !CREATOR_RE.test(text) && !MARKET_RE.test(text))) ||
+    (/\blanding\b/.test(typeHint) && !MARKET_RE.test(text) && !CREATOR_RE.test(text));
+  const market = MARKET_RE.test(text) || CREATOR_RE.test(text);
   const dash = DASH_RE.test(text) && !kids;
 
   let skeleton: CodingSkeletonKind = "mobile_home";
@@ -337,6 +345,30 @@ function buildDefaults(skeleton: CodingSkeletonKind, text: string, kids: boolean
     };
   }
   if (skeleton === "marketplace") {
+    if (CREATOR_RE.test(text) || /\b(creator|influencer|portfolio|outreach)\b/i.test(text)) {
+      return {
+        skeleton,
+        project_type: "marketplace",
+        roles: ["creator", "brand"],
+        entities: [
+          { name: "Profile", fields: ["portfolio", "rates", "contact"], owner_role: "creator" },
+          { name: "Outreach", fields: ["company", "budget", "message"], owner_role: "brand" },
+        ],
+        verbs: ["browse", "message", "decline"],
+        routes: [
+          { path: "/", purpose: "Creator and brand home", entity: "Profile" },
+          { path: "/discover", purpose: "Browse creators", entity: "Profile" },
+          { path: "/brand", purpose: "Company, budget, outreach", entity: "Outreach" },
+          { path: "/messages", purpose: "Offers — decline is a button", entity: "Outreach" },
+          { path: "/pricing", purpose: "Rates", entity: "Profile" },
+          { path: "/profile", purpose: "Portfolio, rates, contact", entity: "Profile" },
+        ],
+        auth: "mock",
+        out_of_scope: [...DEFAULT_OUT_OF_SCOPE],
+        source: "classified",
+        skeleton_note: "Creator/brand hub. Decline is an action on Messages, not a tab.",
+      };
+    }
     if (/\b(moto|motodrop|courier|delivery|dropoff)\b/i.test(text)) {
       return {
         skeleton,
@@ -466,6 +498,7 @@ function parseRoutesFromSection4(pages: string): CodingRoute[] {
   while ((m = re.exec(pages))) {
     const raw = m[1] || `/${m[2]}`;
     const path = normalizeRoute(raw);
+    if (isActionVerbRoute(path)) continue;
     if (found.has(path)) continue;
     found.add(path);
     out.push({ path, purpose: path === "/" ? "Home" : path.slice(1) });
@@ -486,12 +519,15 @@ function mergeRoutes(fromPlan: CodingRoute[], defaults: CodingRoute[], skeleton:
     filtered.unshift(defaults.find((r) => r.path === "/") || { path: "/", purpose: "Home" });
   }
   const seen = new Set<string>();
-  return filtered.filter((r) => {
-    const n = normalizeRoute(r.path);
-    if (seen.has(n)) return false;
-    seen.add(n);
-    return true;
-  });
+  return filtered
+    .filter((r) => !isActionVerbRoute(r.path, r.purpose))
+    .filter((r) => {
+      const n = normalizeRoute(r.path);
+      if (seen.has(n)) return false;
+      seen.add(n);
+      return true;
+    })
+    .slice(0, 7);
 }
 
 function asStringList(v: unknown): string[] {

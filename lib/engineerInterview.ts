@@ -24,37 +24,72 @@ Map answers: §1 thesis/actors/loop · §2–3 must-have, later, vendors as mock
 Do not hard-code another industry's kit. Do not emit Stripe/Firebase/Supabase/Mapbox/Twilio SDKs unless the user named that vendor or pasted a key.
 Do not ask for API keys before the mock product exists.`;
 
-export type ApiNeed = "maps" | "payments" | "push" | "sms";
-
-export function inferApiNeeds(goal: string, pages = ""): ApiNeed[] {
-  const blob = `${goal} ${pages}`.toLowerCase();
-  const needs: ApiNeed[] = [];
-  if (/\b(map|track|gps|live location|pickup|dropoff|courier|delivery|moto)\b/.test(blob)) {
-    needs.push("maps");
-  }
-  if (/\b(pay|wallet|card|checkout|stripe|apple pay|google pay|fare|price)\b/.test(blob)) {
-    needs.push("payments");
-  }
-  if (/\b(push|notify|notification|alert)\b/.test(blob) || /\b(courier|delivery|moto|request)\b/.test(blob)) {
-    needs.push("push");
-  }
-  if (/\b(sms|text message|otp|twilio)\b/.test(blob)) needs.push("sms");
-  return [...new Set(needs)];
-}
+export type ApiNeed = "maps" | "payments" | "push" | "sms" | "messaging";
 
 const API_LABEL: Record<ApiNeed, string> = {
   maps: "Maps (live track)",
   payments: "Payments (card / Apple Pay / Google Pay)",
   push: "Push notifications",
   sms: "SMS",
+  messaging: "Messaging",
 };
 
-/** One follow-up after Live exists. Never before apply. */
-export function buildPostApplyApiAsk(opts: { goal?: string; pages?: string }): string {
-  const needs = inferApiNeeds(opts.goal || "", opts.pages || "");
-  const list = (needs.length ? needs : (["maps", "payments", "push"] as ApiNeed[]))
-    .map((n) => API_LABEL[n])
-    .join(", ");
+/** Strip interview/bootstrap laundry lists so “maps / SMS” examples are not the ask. */
+export function sanitizeBriefForApiAsk(text: string): string {
+  let t = String(text || "");
+  const quoted = t.match(/User goal \/ brief:\s*"""([\s\S]*?)"""/i)?.[1];
+  if (quoted?.trim()) return quoted.trim();
+  t = t.replace(
+    /ENGINEER INTERVIEW[\s\S]*?Do not ask for API keys before the mock product exists\.?/gi,
+    " ",
+  );
+  t = t.replace(/FAST PROTOTYPE MODE\./gi, " ");
+  t = t.replace(/Vendors \([^)]{0,120}SMS[^)]*\)[^\n]*/gi, " ");
+  return t.replace(/\s+/g, " ").trim();
+}
+
+export function parseVendorsFromJobBrief(brief: string): ApiNeed[] {
+  const text = String(brief || "");
+  const section = text.match(/##\s*Vendors\s*([\s\S]*?)(?:\n##\s|$)/i)?.[1] || text;
+  const needs: ApiNeed[] = [];
+  const add = (n: ApiNeed) => {
+    if (!needs.includes(n)) needs.push(n);
+  };
+  for (const line of section.split("\n")) {
+    const l = line.toLowerCase();
+    if (!/mock|needs key|needs-key/.test(l)) continue;
+    if (/\bmaps?\b|live track|gps/.test(l)) add("maps");
+    if (/\bpayments?\b|stripe|apple pay|google pay|card\b/.test(l)) add("payments");
+    if (/\bpush\b/.test(l)) add("push");
+    if (/\bsms\b|twilio/.test(l)) add("sms");
+    if (/\bmessag/.test(l) && !/\bsms\b/.test(l)) add("messaging");
+  }
+  return needs;
+}
+
+export function inferApiNeeds(goal: string, pages = "", brief = ""): ApiNeed[] {
+  const fromBrief = parseVendorsFromJobBrief(brief);
+  if (fromBrief.length) return fromBrief;
+  const blob = sanitizeBriefForApiAsk(`${goal} ${pages}`).toLowerCase();
+  const needs: ApiNeed[] = [];
+  const creator = /\b(creator|influencer|outreach|portfolio)\b/.test(blob) || /\bbrands?\b.*\bmarketplace\b/.test(blob);
+  const delivery = /\b(moto|motodrop|courier|delivery|dropoff|parcel)\b/.test(blob);
+  if (/\b(map|gps|live location|live track)\b/.test(blob) || delivery) needs.push("maps");
+  if (/\b(wallet|checkout|stripe|apple pay|google pay|fare)\b/.test(blob) || (delivery && /\bpay\b/.test(blob))) {
+    needs.push("payments");
+  }
+  if (creator && /\b(prices?|pricing|rates?|budget)\b/.test(blob)) needs.push("payments");
+  if (/\b(push|onesignal)\b/.test(blob) || delivery) needs.push("push");
+  if (/\b(sms|twilio)\b/.test(blob)) needs.push("sms");
+  if (creator || /\b(message|inbox|outreach|dm)\b/.test(blob)) needs.push("messaging");
+  return [...new Set(needs)];
+}
+
+/** One follow-up after Live exists. Never before apply. From job-brief vendors — no hardcoded Maps kit. */
+export function buildPostApplyApiAsk(opts: { goal?: string; pages?: string; brief?: string }): string {
+  const goal = sanitizeBriefForApiAsk(opts.goal || "");
+  const needs = inferApiNeeds(goal, opts.pages || "", opts.brief || "");
+  const list = (needs.length ? needs : (["messaging"] as ApiNeed[])).map((n) => API_LABEL[n]).join(", ");
   return [
     "These APIs would make the mocks real: " + list + ".",
     "Paste keys or say keep mock.",
@@ -89,18 +124,24 @@ export function buildJobBriefMarkdown(opts: {
   const thesis = goal.split(/\n/).find((l) => l.trim() && !/^#|^\*\*Product name/i.test(l)) || goal.slice(0, 240);
   const productName = extractNamedBrand(goal) || inferProductName(goal);
   const delivery = /\b(moto|motodrop|courier|delivery|dropoff|pickup|parcel)\b/i.test(`${goal} ${pages}`);
-  const shop = /\b(shop|store|bike|spoke|baker|catalog|book)\b/i.test(`${goal} ${pages}`);
+  const creator = /\b(creator|influencer|outreach|portfolio)\b/i.test(`${goal} ${pages}`);
+  const shop = /\b(shop|store|bike|spoke|baker|catalog|book)\b/i.test(`${goal} ${pages}`) && !creator;
   const education = /\b(lesson|practice|teacher|student|reading|tutor)\b/i.test(`${goal} ${pages}`);
   const loop = delivery
     ? "request → accept → track → pay (mock)"
-    : shop
-      ? "browse → book/order → mark ready"
-      : education
-        ? "start practice → score on Teacher/Progress"
-        : "primary action → list updates";
-  const vendors = inferApiNeeds(goal, pages)
+    : creator
+      ? "discover → outreach → message (decline on the thread)"
+      : shop
+        ? "browse → book/order → mark ready"
+        : education
+          ? "start practice → score on Teacher/Progress"
+          : "primary action → list updates";
+  const vendorLines = inferApiNeeds(goal, pages)
     .map((n) => `- ${API_LABEL[n]}: mock`)
     .join("\n");
+  const vendors =
+    vendorLines ||
+    (creator ? "- Messaging: mock\n- Payments (card / Apple Pay / Google Pay): mock" : "- payments: mock");
   return [
     "# Job brief",
     "",
@@ -123,7 +164,7 @@ export function buildJobBriefMarkdown(opts: {
     pages ? pages.slice(0, 1600) : "(from §4)",
     "",
     "## Vendors",
-    vendors || "- maps / payments / push: mock",
+    vendors,
     "",
     "## Tech notes",
     tech ? tech.slice(0, 600) : "Default honest mock this build.",

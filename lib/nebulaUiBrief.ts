@@ -233,12 +233,25 @@ export function writeUiBriefMarkdown(
   return { written: true, content, path: UI_BRIEF_REL };
 }
 
+/** Verbs are actions on a screen — never their own §4 tab. */
+export const ACTION_VERB_ROUTE_RE =
+  /^\/(decline|accept|reject|approve|cancel|submit|send|open|continue|save|delete|edit|confirm)s?$/i;
+
+export function isActionVerbRoute(route: string, name = ""): boolean {
+  const r = String(route || "").replace(/\\/g, "/").trim();
+  if (ACTION_VERB_ROUTE_RE.test(r)) return true;
+  return /^(decline|accept|reject|approve|cancel|submit|send|open|continue)$/i.test(
+    String(name || "").trim(),
+  );
+}
+
 export function extractNamedRoutesFromPagesText(text: string): { name: string; route: string }[] {
   const out: { name: string; route: string }[] = [];
   const seen = new Set<string>();
   const add = (name: string, route: string) => {
     const r = route.replace(/`/g, "").trim();
     if (!r.startsWith("/")) return;
+    if (isActionVerbRoute(r, name)) return;
     const key = r.toLowerCase();
     if (seen.has(key)) return;
     seen.add(key);
@@ -298,6 +311,16 @@ export function seedPagesFromGoal(goal: string): { name: string; route: string }
       { name: "Practice", route: "/practice" },
       { name: "Teacher", route: "/teacher" },
       { name: "Progress", route: "/progress" },
+    ];
+  }
+  if (/\b(creator|influencer|brand|outreach|portfolio)\b/i.test(g) && !/\b(baker|bakery|landing page)\b/i.test(g)) {
+    return [
+      { name: "Home", route: "/" },
+      { name: "Discover", route: "/discover" },
+      { name: "Brand", route: "/brand" },
+      { name: "Messages", route: "/messages" },
+      { name: "Pricing", route: "/pricing" },
+      { name: "Profile", route: "/profile" },
     ];
   }
   if (/\b(shop|store|cart|checkout|ecommerce)\b/i.test(g)) {

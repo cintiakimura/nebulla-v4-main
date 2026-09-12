@@ -4,7 +4,7 @@
 
 import fs from "fs";
 import path from "path";
-import { extractNamedRoutesFromPagesText, seedPagesFromGoal } from "./nebulaUiBrief";
+import { extractNamedRoutesFromPagesText, isActionVerbRoute, seedPagesFromGoal } from "./nebulaUiBrief";
 import { extractNamedBrand, inferProductName, productNameFromPlan, readProductIdentity } from "./productIdentity";
 import {
   buildProductMockStoreSource,
@@ -20,6 +20,15 @@ const GENERIC_STUB_RE =
   /Interactive screen with mock data|Primary action works locally|Continue<\/button>/i;
 const LEFTOVER_COPY_RE =
   /breads\.json|Today'?s breads|bikeStore|lessonStore|Crumb Market|Grain Bakery|Jobs as gigs|dummy list/i;
+const DUMMY_LIST_BODY_RE =
+  /First item|Second item|First listing|Second listing|Ready now|This afternoon/i;
+
+export function looksLikeDummyListBody(src: string): boolean {
+  const s = String(src || "");
+  if (!s.trim()) return false;
+  const hits = (s.match(/First item|Second item|First listing|Second listing|Ready now|This afternoon/gi) || []).length;
+  return DUMMY_LIST_BODY_RE.test(s) && hits >= 2;
+}
 
 function isDeliveryGoal(goal: string): boolean {
   return inferProductMockKind(goal) === "delivery";
@@ -27,6 +36,10 @@ function isDeliveryGoal(goal: string): boolean {
 
 function isShopGoal(goal: string): boolean {
   return inferProductMockKind(goal) === "shop";
+}
+
+function isCreatorGoal(goal: string): boolean {
+  return inferProductMockKind(goal) === "creator";
 }
 
 function writeRel(workspaceRoot: string, rel: string, body: string): boolean {
@@ -372,6 +385,190 @@ export default function MechanicPage() {
 `;
 }
 
+function creatorHomeJsx(): string {
+  return `"use client";
+
+import { listItems } from "../lib/mockStore";
+
+export default function Home() {
+  const items = listItems();
+  return (
+    <main>
+      <h1>Creators and brands</h1>
+      <p>Profiles, rates, and outreach both ways.</p>
+      <ul>
+        {items.map((row) => (
+          <li key={row.id}>
+            <strong>{row.title}</strong>
+            <span>{row.status}</span>
+          </li>
+        ))}
+      </ul>
+      <a href="/discover">Discover</a>
+      <a href="/brand">Brand outreach</a>
+    </main>
+  );
+}
+`;
+}
+
+function creatorDiscoverJsx(): string {
+  return `"use client";
+
+import { listItems } from "../../lib/mockStore";
+
+export default function DiscoverPage() {
+  const items = listItems();
+  return (
+    <main>
+      <h1>Discover</h1>
+      <p>Creators with portfolio and rates.</p>
+      <ul>
+        {items.map((row) => (
+          <li key={row.id}>
+            <strong>{row.title}</strong>
+            <span>{row.status}</span>
+            <a href="/profile">Open profile</a>
+          </li>
+        ))}
+      </ul>
+    </main>
+  );
+}
+`;
+}
+
+function creatorBrandJsx(): string {
+  return `"use client";
+
+import { addOutreach } from "../../lib/mockStore";
+
+export default function BrandPage() {
+  return (
+    <main>
+      <h1>Brand</h1>
+      <form
+        onSubmit={(ev) => {
+          ev.preventDefault();
+          const fd = new FormData(ev.currentTarget);
+          addOutreach(String(fd.get("company") || ""), String(fd.get("budget") || ""));
+          window.location.href = "/messages";
+        }}
+      >
+        <label>
+          Company
+          <input name="company" type="text" required />
+        </label>
+        <label>
+          Budget
+          <input name="budget" type="text" required />
+        </label>
+        <label>
+          Outreach
+          <textarea name="note" required />
+        </label>
+        <button type="submit">Send outreach</button>
+      </form>
+    </main>
+  );
+}
+`;
+}
+
+function creatorMessagesJsx(): string {
+  return `"use client";
+
+import { useState } from "react";
+import { declineOffer, listItems } from "../../lib/mockStore";
+
+export default function MessagesPage() {
+  const [, setTick] = useState(0);
+  const items = listItems();
+  return (
+    <main>
+      <h1>Messages</h1>
+      <p>Decline is an action on the offer — not a tab.</p>
+      <ul>
+        {items.map((row) => (
+          <li key={row.id}>
+            <strong>{row.title}</strong>
+            <span>{row.status}</span>
+            <button
+              type="button"
+              onClick={() => {
+                declineOffer(row.id);
+                setTick((n) => n + 1);
+              }}
+            >
+              Decline
+            </button>
+          </li>
+        ))}
+      </ul>
+    </main>
+  );
+}
+`;
+}
+
+function creatorPricingJsx(): string {
+  return `"use client";
+
+export default function PricingPage() {
+  return (
+    <main>
+      <h1>Pricing</h1>
+      <form
+        onSubmit={(ev) => {
+          ev.preventDefault();
+          window.location.href = "/profile";
+        }}
+      >
+        <label>
+          Rate
+          <input name="rate" type="text" placeholder="$1,200 / post" required />
+        </label>
+        <button type="submit">Save rate</button>
+      </form>
+    </main>
+  );
+}
+`;
+}
+
+function creatorProfileJsx(): string {
+  return `"use client";
+
+export default function ProfilePage() {
+  return (
+    <main>
+      <h1>Profile</h1>
+      <form
+        onSubmit={(ev) => {
+          ev.preventDefault();
+          window.location.href = "/";
+        }}
+      >
+        <label>
+          Portfolio
+          <textarea name="portfolio" required />
+        </label>
+        <label>
+          Rates
+          <input name="rates" type="text" required />
+        </label>
+        <label>
+          Contact
+          <input name="contact" type="text" required />
+        </label>
+        <button type="submit">Save profile</button>
+      </form>
+    </main>
+  );
+}
+`;
+}
+
 function educationHomeJsx(): string {
   return `"use client";
 
@@ -429,7 +626,7 @@ export default function TeacherPage() {
 function looksStubOrLeftover(src: string): boolean {
   const s = String(src || "");
   if (!s.trim()) return true;
-  return GENERIC_STUB_RE.test(s) || LEFTOVER_COPY_RE.test(s);
+  return GENERIC_STUB_RE.test(s) || LEFTOVER_COPY_RE.test(s) || looksLikeDummyListBody(s);
 }
 
 function needsMockWire(src: string): boolean {
@@ -459,6 +656,7 @@ export function rewriteJobScreensIfNeeded(input: {
   const delivery = isDeliveryGoal(goal);
   const education = isEducationProductGoal(goal);
   const shop = isShopGoal(goal);
+  const creator = isCreatorGoal(goal);
   const kind = inferProductMockKind(goal, productName);
 
   if (writeRel(input.workspaceRoot, PRODUCT_MOCK_STORE_REL, buildProductMockStoreSource(kind))) {
@@ -469,7 +667,7 @@ export function rewriteJobScreensIfNeeded(input: {
   for (const rel of pageRels) {
     const abs = path.join(input.workspaceRoot, rel);
     if (!fs.existsSync(abs) && rel !== "app/page.tsx") continue;
-    if (!fs.existsSync(abs) && !delivery && !education && !shop) continue;
+    if (!fs.existsSync(abs) && !delivery && !education && !shop && !creator) continue;
     try {
       const prev = fs.existsSync(abs) ? fs.readFileSync(abs, "utf8") : "";
       const should =
@@ -483,9 +681,11 @@ export function rewriteJobScreensIfNeeded(input: {
         ? educationHomeJsx()
         : delivery
           ? deliveryHomeJsx()
-          : shop
-            ? shopHomeJsx(goal)
-            : prev;
+          : creator
+            ? creatorHomeJsx()
+            : shop
+              ? shopHomeJsx(goal)
+              : prev;
       if (next && next !== prev && writeRel(input.workspaceRoot, rel, next)) rewritten.push(rel);
     } catch {
       /* skip */
@@ -529,7 +729,45 @@ export function rewriteJobScreensIfNeeded(input: {
     if (!accountPrev || looksStubOrLeftover(accountPrev) || needsMockWire(accountPrev)) {
       if (writeRel(input.workspaceRoot, accountRel, accountPageJsx())) rewritten.push(accountRel);
     }
-    for (const leftover of ["app/wallet/page.tsx", "app/pay/page.tsx", "src/app/wallet/page.tsx"]) {
+    for (const leftover of [
+      "app/wallet/page.tsx",
+      "app/pay/page.tsx",
+      "src/app/wallet/page.tsx",
+      "app/discover/page.tsx",
+      "app/decline/page.tsx",
+    ]) {
+      const abs = path.join(input.workspaceRoot, leftover);
+      if (fs.existsSync(abs)) {
+        try {
+          fs.unlinkSync(abs);
+          rewritten.push(leftover);
+        } catch {
+          /* skip */
+        }
+      }
+    }
+  }
+
+  if (creator) {
+    const map: Record<string, () => string> = {
+      "/discover": creatorDiscoverJsx,
+      "/brand": creatorBrandJsx,
+      "/messages": creatorMessagesJsx,
+      "/pricing": creatorPricingJsx,
+      "/profile": creatorProfileJsx,
+    };
+    const want = routes.length ? routes : seedPagesFromGoal(goal);
+    for (const p of want) {
+      const fn = map[p.route];
+      if (!fn) continue;
+      const rel = p.route === "/" ? "app/page.tsx" : `app${p.route}/page.tsx`;
+      const abs = path.join(input.workspaceRoot, rel);
+      const prev = fs.existsSync(abs) ? fs.readFileSync(abs, "utf8") : "";
+      if (!prev || needsMockWire(prev) || looksStubOrLeftover(prev)) {
+        if (writeRel(input.workspaceRoot, rel, fn())) rewritten.push(rel);
+      }
+    }
+    for (const leftover of ["app/decline/page.tsx", "src/app/decline/page.tsx"]) {
       const abs = path.join(input.workspaceRoot, leftover);
       if (fs.existsSync(abs)) {
         try {
@@ -573,6 +811,42 @@ export function rewriteJobScreensIfNeeded(input: {
         }
       }
     }
+  }
+
+  for (const rootRel of ["app", "src/app"]) {
+    const root = path.join(input.workspaceRoot, rootRel);
+    if (!fs.existsSync(root)) continue;
+    const walk = (dir: string, segs: string[]) => {
+      for (const ent of fs.readdirSync(dir, { withFileTypes: true })) {
+        const full = path.join(dir, ent.name);
+        if (ent.isDirectory()) {
+          walk(full, [...segs, ent.name]);
+          continue;
+        }
+        if (!/^page\.(tsx|jsx)$/.test(ent.name)) continue;
+        const route = segs.length ? `/${segs.join("/")}` : "/";
+        const rel = path.relative(input.workspaceRoot, full).replace(/\\/g, "/");
+        if (isActionVerbRoute(route)) {
+          try {
+            fs.unlinkSync(full);
+            rewritten.push(rel);
+          } catch {
+            /* skip */
+          }
+          continue;
+        }
+        try {
+          const src = fs.readFileSync(full, "utf8");
+          if (!looksLikeDummyListBody(src)) continue;
+          if (creator && route === "/profile" && writeRel(input.workspaceRoot, rel, creatorProfileJsx())) {
+            rewritten.push(rel);
+          }
+        } catch {
+          /* skip */
+        }
+      }
+    };
+    walk(root, []);
   }
 
   if (education && /\bteacher/i.test(goal + pages)) {

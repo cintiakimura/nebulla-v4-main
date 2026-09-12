@@ -5,11 +5,17 @@
 
 export const PRODUCT_MOCK_STORE_REL = "lib/mockStore.ts";
 
-export type ProductMockKind = "delivery" | "shop" | "education" | "other";
+export type ProductMockKind = "delivery" | "shop" | "education" | "creator" | "other";
 
 export function inferProductMockKind(goal: string, productName = ""): ProductMockKind {
   const blob = `${goal} ${productName}`;
   if (/\b(moto|motodrop|courier|delivery|dropoff)\b/i.test(blob)) return "delivery";
+  if (
+    /\b(creator|influencer|outreach|portfolio)\b/i.test(blob) ||
+    (/\bbrand/.test(blob.toLowerCase()) && /\b(marketplace|creator|profile)\b/i.test(blob))
+  ) {
+    return "creator";
+  }
   if (/\b(bike|bicycle|spoke|baker|bakery|bread|shop|store|marketplace|loaflocal|grain)\b/i.test(blob)) {
     return "shop";
   }
@@ -25,6 +31,7 @@ export function mockStoreHasPrimaryVerb(src: string, kind: ProductMockKind): boo
   if (kind === "delivery") return /export function addRequest/.test(s) && /export function acceptRequest/.test(s);
   if (kind === "shop") return /export function addBooking/.test(s) && /export function markReady/.test(s);
   if (kind === "education") return /export function startPractice/.test(s);
+  if (kind === "creator") return /export function addOutreach/.test(s) && /export function declineOffer/.test(s);
   return /export function addItem/.test(s);
 }
 
@@ -72,6 +79,15 @@ function seed(): MockState {
   }
   if (KIND === "education") {
     return { items: [{ id: "l1", title: "One short lesson", status: "Ready" }], progress: 0 };
+  }
+  if (KIND === "creator") {
+    return {
+      items: [
+        { id: "c1", title: "Maya Chen — photo", status: "$1.2k / post" },
+        { id: "c2", title: "North Studio — video", status: "$2.4k / film" },
+      ],
+      progress: 0,
+    };
   }
   return {
     items: [
@@ -159,6 +175,24 @@ export function startPractice() {
     { id: uid(), title: "Practice scored", status: String(state.progress) + "%" },
     ...state.items,
   ];
+  save(state);
+  return state;
+}
+
+export function addOutreach(company: string, budget: string) {
+  const state = readMockState();
+  state.items = [
+    { id: uid(), title: company.trim() || "Brand", status: "Outreach · " + (budget.trim() || "budget open") },
+    ...state.items,
+  ];
+  save(state);
+  return state;
+}
+
+export function declineOffer(id?: string) {
+  const state = readMockState();
+  const item = id ? state.items.find((row) => row.id === id) : state.items[0];
+  if (item) item.status = "Declined";
   save(state);
   return state;
 }
