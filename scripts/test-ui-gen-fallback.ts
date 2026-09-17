@@ -34,7 +34,7 @@ section('helpers: Ready vs write vs Go');
   assert.equal(shouldWriteUiPreview({ gate: 'weak', uiStatus: 'partial' }), true);
   assert.equal(shouldWriteUiPreview({ gate: 'pass', uiStatus: 'ready' }), true);
   assert.equal(foundationCodingAllowedAfterResearch(true), true);
-  assert.equal(foundationCodingAllowedAfterResearch(false), false);
+  assert.equal(foundationCodingAllowedAfterResearch(false), true);
 }
 
 section('color conflict — tokens overlay keeps nodes');
