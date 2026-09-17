@@ -16,7 +16,6 @@ import {
   getBrowserProjectName,
   setBrowserProjectKey,
   setBrowserProjectName,
-  withProjectQuery,
 } from '../../lib/nebulaProjectApi';
 import {
   readGuestIndex,
@@ -47,7 +46,6 @@ import { openGitHubFile, openLocalFile } from '../../lib/fileOperations';
 import type { SmartChatFilePreview } from '../../lib/smartChatHandler';
 import { useIdeWorkspace } from './IdeWorkspaceContext';
 import { markEnterBuildScreen } from '../../lib/ideShellScreens';
-import { readStoredWorkspaceLiveUrl } from '../../lib/workspaceLiveUrl';
 import { resetGuidedCycle } from '../../lib/guidedFunnel';
 
 export { shortNameFromIdea } from '../../lib/projectNameFromIdea';
@@ -76,6 +74,21 @@ function projectInitials(name: string): string {
   return `${parts[0][0] || ''}${parts[1][0] || ''}`.toUpperCase();
 }
 
+const MONTHS_SHORT = [
+  'Jan',
+  'Feb',
+  'Mar',
+  'Apr',
+  'May',
+  'Jun',
+  'Jul',
+  'Aug',
+  'Sept',
+  'Oct',
+  'Nov',
+  'Dec',
+] as const;
+
 function formatWhen(iso: string): string {
   try {
     const d = new Date(iso);
@@ -87,6 +100,16 @@ function formatWhen(iso: string): string {
       hour: 'numeric',
       minute: '2-digit',
     });
+  } catch {
+    return 'Recently';
+  }
+}
+
+function formatCardDate(iso: string): string {
+  try {
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return 'Recently';
+    return `${d.getDate()} ${MONTHS_SHORT[d.getMonth()]} ${d.getFullYear()}`;
   } catch {
     return 'Recently';
   }
@@ -191,16 +214,13 @@ export function MyProjectsHome({
   const activeName = getBrowserProjectName().trim();
   /** Empty free-tier / default shell — keep Start prompt as the primary action. */
   const isPlaceholderWorkspace = /^untitled(\s+project)?$/i.test(activeName || '');
-  /** Real product work in progress → demote New Project so Code / explorer stay primary. */
   const hasExistingWork =
     !isDashboard &&
     !isPlaceholderWorkspace &&
     (workspacePaths.length > 0 ||
       openFileTabs.length > 0 ||
       (Boolean(activeKey) && activeKey !== 'default' && projects.length > 0));
-  /** Always show goal-first hero for Untitled shells (deployed fix is behavioral + this UX). */
   const showStartHeroFirst = isDashboard || !hasExistingWork || isPlaceholderWorkspace;
-  const activeLiveUrl = readStoredWorkspaceLiveUrl();
 
   const enterBuild = useCallback(() => {
     resetGuidedCycle();
@@ -470,34 +490,103 @@ export function MyProjectsHome({
     [onJustChat],
   );
 
-  const newProjectSection = (
+  const dashboardCreateSection = (
+    <section className="dashboard-home space-y-3">
+      <div className="space-y-1">
+        <h2 className="type-body-md">New project</h2>
+        <p className="type-label-sm">Describe the product. Start opens Build.</p>
+      </div>
+
+      <div className="overflow-hidden rounded-lg border border-border bg-transparent">
+        <textarea
+          id="nebula-dashboard-project-idea"
+          value={ideaInput}
+          onChange={(e) => {
+            setIdeaInput(e.target.value);
+            if (startError) setStartError('');
+          }}
+          rows={5}
+          disabled={busyStarting}
+          aria-label="New project brief"
+          placeholder="e.g. Education app for kids and teachers to practice reading"
+          className="ide-glass-input type-body-md w-full resize-y border-0 bg-transparent px-4 py-3 text-foreground outline-none placeholder:text-muted-foreground/70 disabled:opacity-60"
+        />
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border px-3 py-2.5 md:px-4">
+          <div className="flex flex-wrap gap-2">
+            {PROJECT_TYPES.map((t) => (
+              <button
+                key={t.id}
+                type="button"
+                disabled={busyStarting}
+                aria-pressed={ideaType === t.id}
+                onClick={() => setIdeaType((prev) => (prev === t.id ? null : t.id))}
+                className={cn(
+                  'dashboard-chip inline-flex items-center rounded-md px-3 disabled:cursor-not-allowed disabled:opacity-50',
+                  ideaType === t.id ? 'btn-cyan' : 'btn-secondary-surface text-muted-foreground',
+                )}
+              >
+                {t.title === 'Landing Page' ? 'Landing' : t.title}
+              </button>
+            ))}
+          </div>
+          <div className="ml-auto flex items-center gap-2">
+            <button
+              type="button"
+              title={listening ? 'Stop listening' : 'Voice input'}
+              aria-label={listening ? 'Stop listening' : 'Voice input'}
+              disabled={busyStarting}
+              onClick={toggleMic}
+              className={cn(
+                'btn-secondary-surface btn-icon',
+                listening && 'border-[var(--shell-border-strong)] text-foreground',
+              )}
+            >
+              <Mic className="h-4 w-4" aria-hidden />
+            </button>
+            <button
+              type="button"
+              disabled={busyStarting}
+              onClick={() => void onStartFromIdea()}
+              className="btn-cyan dashboard-start inline-flex items-center gap-1.5 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {startingIdea ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+              Start
+            </button>
+          </div>
+        </div>
+        {startError ? (
+          <p className="type-label-sm border-t border-border px-4 py-2">{startError}</p>
+        ) : null}
+      </div>
+    </section>
+  );
+
+  const newProjectSection = isDashboard ? (
+    dashboardCreateSection
+  ) : (
     <>
       <section className="space-y-3">
         <div className="space-y-1.5">
           <h2 className="type-section">
-            {isDashboard
-              ? 'New project'
-              : isPlaceholderWorkspace
-                ? 'Start with a prompt'
-                : hasExistingWork
-                  ? 'Start another project'
-                  : 'New Project'}
+            {isPlaceholderWorkspace
+              ? 'Start with a prompt'
+              : hasExistingWork
+                ? 'Start another project'
+                : 'New Project'}
           </h2>
           <p className="type-body-md max-w-xl text-muted-foreground">
-            {isDashboard
-              ? 'Describe what you want to build, pick a type, then Start — opens Build for that workspace.'
-              : isPlaceholderWorkspace
-                ? 'This workspace is still an empty Untitled shell. Add a prompt (optional platform), then Continue — classify the job → Master Plan → code. Anything missing is asked in chat. Free plan reuses this project slot and renames it.'
-                : hasExistingWork
-                  ? 'Create a separate project when you are ready. Your current workspace stays in the explorer and Code tab.'
-                  : 'Describe what you want to build. Missing details are asked in chat.'}
+            {isPlaceholderWorkspace
+              ? 'This workspace is still an empty Untitled shell. Add a prompt (optional platform), then Continue — classify the job → Master Plan → code. Anything missing is asked in chat. Free plan reuses this project slot and renames it.'
+              : hasExistingWork
+                ? 'Create a separate project when you are ready. Your current workspace stays in the explorer and Code tab.'
+                : 'Describe what you want to build. Missing details are asked in chat.'}
           </p>
         </div>
 
         <div className="ide-glass-card overflow-hidden rounded-lg border border-border">
           <label htmlFor="nebula-project-idea" className="type-label-sm flex items-center gap-2 px-4 pt-4">
             <Sparkles className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden />
-            <span className="text-foreground">{isDashboard ? 'Goal / brief' : 'Prompt'}</span>
+            <span className="text-foreground">Prompt</span>
           </label>
           <p
             id="nebula-project-idea-tip"
@@ -557,7 +646,7 @@ export function MyProjectsHome({
                 className="btn-cyan inline-flex items-center gap-1.5 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {startingIdea ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
-                {isDashboard ? 'Start' : 'Continue'}
+                Continue
               </button>
             </div>
           </div>
@@ -631,7 +720,58 @@ export function MyProjectsHome({
     </section>
   );
 
-  const projectsSection = (
+  const dashboardProjectsSection = (
+    <section className="space-y-3">
+      <div className="flex items-baseline gap-2">
+        <h2 className="type-section">Your projects</h2>
+        {loadingList ? (
+          <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
+        ) : (
+          <span className="type-label-sm">{projects.length}</span>
+        )}
+      </div>
+
+      {listNote ? (
+        <p className="type-label-sm rounded-md border border-border px-3 py-2">{listNote}</p>
+      ) : null}
+
+      {projects.length === 0 && !loadingList ? (
+        <p className="type-label-sm">No projects yet.</p>
+      ) : (
+        <ul className="dashboard-project-grid">
+          {projects.map((p) => {
+            const isActive = p.key === activeKey || p.name === getBrowserProjectName();
+            const sourceLabel = p.source === 'cloud' ? 'Cloud' : 'Local';
+            return (
+              <li key={`${p.source}-${p.key}`} className="dashboard-project-grid__item">
+                <button
+                  type="button"
+                  onClick={() => void onOpenProject(p)}
+                  className="flex w-full flex-col gap-2 text-left"
+                >
+                  <div
+                    className="flex h-36 w-full items-center justify-center rounded-lg border border-border bg-transparent"
+                    aria-hidden
+                  >
+                    <span className="type-body-md tracking-wide">{projectInitials(p.name)}</span>
+                  </div>
+                  <p className="type-section truncate">{p.name}</p>
+                  <p className="type-label-sm truncate">
+                    {formatCardDate(p.updatedAt)} · {sourceLabel}
+                    {isActive ? ' · Active' : ''}
+                  </p>
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </section>
+  );
+
+  const projectsSection = isDashboard ? (
+    dashboardProjectsSection
+  ) : (
     <section className="space-y-3">
       <div className="flex items-center justify-between gap-2">
         <h2 className="type-section">Your projects</h2>
@@ -661,9 +801,6 @@ export function MyProjectsHome({
         <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4">
           {projects.map((p) => {
             const isActive = p.key === activeKey || p.name === getBrowserProjectName();
-            const previewSrc = isActive
-              ? withProjectQuery(`/api/app-preview/bootstrap?_thumb=${encodeURIComponent(p.key)}`)
-              : '';
             return (
               <li key={`${p.source}-${p.key}`}>
                 <button
@@ -676,64 +813,19 @@ export function MyProjectsHome({
                       : 'border-border hover:border-[var(--shell-border-strong)]',
                   )}
                 >
-                  <div className="relative aspect-square w-full overflow-hidden bg-[#1a1a1a]">
-                    {isActive && previewSrc ? (
-                      <div className="pointer-events-none absolute inset-0 overflow-hidden">
-                        <iframe
-                          title={`${p.name} preview`}
-                          src={previewSrc}
-                          tabIndex={-1}
-                          className="absolute left-0 top-0 border-0 bg-transparent"
-                          style={{
-                            width: '400%',
-                            height: '400%',
-                            transform: 'scale(0.25)',
-                            transformOrigin: 'top left',
-                          }}
-                        />
-                      </div>
-                    ) : (
-                      <div
-                        className="flex h-full w-full flex-col items-center justify-center gap-2"
-                        aria-hidden
-                      >
-                        <div className="flex h-14 w-14 items-center justify-center rounded-lg border border-border text-sm text-foreground">
-                          {projectInitials(p.name)}
-                        </div>
-                        <div className="h-px w-10 bg-border" />
-                        <div className="flex w-3/5 flex-col gap-1.5 opacity-40">
-                          <div className="h-1.5 rounded-full bg-border" />
-                          <div className="h-1.5 w-4/5 rounded-full bg-border" />
-                          <div className="h-1.5 w-2/3 rounded-full bg-border" />
-                        </div>
-                      </div>
-                    )}
-                    {isActive ? (
-                      <span className="type-micro absolute left-2 top-2 rounded-md border border-border bg-[var(--shell-bg)]/90 px-1.5 py-0.5 uppercase tracking-wide">
-                        Active
-                      </span>
-                    ) : null}
+                  <div
+                    className="flex h-28 w-full items-center justify-center border-b border-border bg-transparent"
+                    aria-hidden
+                  >
+                    <span className="type-body-md tracking-wide">{projectInitials(p.name)}</span>
                   </div>
-                  <div className="space-y-1 border-t border-border px-3 py-2.5">
-                    <p className="type-body-dense truncate text-foreground">{p.name}</p>
-                    <p className="type-micro truncate">
+                  <div className="space-y-1 px-3 py-2.5">
+                    <p className="type-section truncate">{p.name}</p>
+                    <p className="type-label-sm truncate">
                       {formatWhen(p.updatedAt)}
                       {p.source === 'cloud' ? ' · Cloud' : ' · Local'}
+                      {isActive ? ' · Active' : ''}
                     </p>
-                    {isDashboard &&
-                    activeLiveUrl &&
-                    (p.key === activeKey || p.name === activeName) ? (
-                      <a
-                        href={activeLiveUrl}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="type-micro block truncate font-mono underline-offset-2 hover:underline"
-                        title={activeLiveUrl}
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        Live URL
-                      </a>
-                    ) : null}
                   </div>
                 </button>
               </li>
@@ -749,7 +841,7 @@ export function MyProjectsHome({
       <div
         className={cn(
           'mx-auto flex w-full flex-col gap-6 px-5 py-5 sm:px-6',
-          isDashboard ? 'max-w-3xl' : 'max-w-3xl',
+          isDashboard ? 'max-w-[680px] py-8' : 'max-w-3xl',
         )}
       >
         {showStartHeroFirst ? (
