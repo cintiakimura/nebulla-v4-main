@@ -4,6 +4,7 @@ import {
   ReactFlowProvider,
   Controls,
   Background,
+  BackgroundVariant,
   applyNodeChanges,
   applyEdgeChanges,
   addEdge,
@@ -229,7 +230,7 @@ export function MindMap({ pages, setPages, edges, setEdges, onSaveToMasterPlan }
           fitView
           className="bg-transparent dark"
         >
-        <Background id="nebulla-mindmap-dots" variant="dots" color="#4A4A4A" gap={16} size={1.25} />
+        <Background id="nebulla-mindmap-dots" variant={BackgroundVariant.Dots} color="#4A4A4A" gap={16} size={1.25} />
         <Controls className="border border-[#3A3A3A] bg-[#1C1C1C] fill-[#E8E8E8] text-[#E8E8E8]" />
         <Panel position="top-left" className="m-4 flex gap-2">
           <button
