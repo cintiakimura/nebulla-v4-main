@@ -136,7 +136,7 @@ export function PlanDeployDnsSection({ className }: { className?: string }) {
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
             <h2 className="type-section">Deploy &amp; domain</h2>
-            <p className="type-label-sm mt-1 max-w-xl">
+            <p className="type-body-md mt-1 max-w-xl text-[#E8E8E8]">
               Temporary hostname, your domain, repository, and DNS records for this project.
             </p>
           </div>

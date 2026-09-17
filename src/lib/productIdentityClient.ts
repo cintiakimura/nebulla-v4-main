@@ -67,7 +67,7 @@ export async function fetchProductIdentityClient(): Promise<ProductIdentity | nu
   }
 }
 
-/** Write §1 product name onto the header chip when the current label is a stub. */
+/** Write Plan / job-brief product name onto the header chip. */
 export async function promoteWorkspaceChipFromProductName(name: string): Promise<string | null> {
   const trimmed = String(name || '').trim();
   if (!trimmed || looksLikeGoalStubName(trimmed) || isWorkspaceLabelStub(trimmed)) return null;

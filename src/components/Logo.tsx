@@ -1,12 +1,12 @@
 import { cn } from '@/lib/utils';
 
-const LOGO_SRC = '/nebulla-logo.png';
+const LOGO_SRC = '/images/nebulla-mark.png?v=2';
 
 /**
- * Nebulla.beta mark — served from `public/nebulla-logo.png` (transparent PNG).
+ * Nebulla mark — tight crop from `public/images/nebulla-mark.png`.
  */
 export function Logo({
-  className = 'w-6 h-6',
+  className = 'h-[24px] w-[24px]',
   alt = 'Nebulla.beta',
 }: {
   className?: string;

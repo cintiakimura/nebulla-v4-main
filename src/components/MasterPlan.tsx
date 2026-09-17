@@ -155,7 +155,7 @@ export function MasterPlan({
               key={section.id}
               type="button"
               onClick={() => setActiveTab(section.id)}
-              className={`rounded-md border px-2.5 py-2 text-left text-xs tracking-wide transition-colors ${
+              className={`rounded-md border px-2.5 py-2 text-left type-body-dense tracking-wide transition-colors ${
                 activeTab === section.id
                   ? 'border-[var(--shell-border-strong)] text-foreground'
                   : 'border-transparent text-muted-foreground hover:border-border hover:text-foreground'
@@ -167,13 +167,13 @@ export function MasterPlan({
         </nav>
 
         <div className="min-h-0 flex-1 overflow-y-auto p-5 md:p-7">
-          <div className="prose prose-invert prose-sm mx-auto min-h-full max-w-2xl prose-headings:font-medium prose-p:text-muted-foreground prose-pre:rounded-md prose-pre:border prose-pre:border-border prose-pre:p-3">
+          <div className="prose prose-invert mx-auto min-h-full max-w-2xl prose-headings:font-normal prose-p:font-normal prose-p:text-[#E8E8E8] prose-li:text-[#E8E8E8] prose-pre:rounded-md prose-pre:border prose-pre:border-border prose-pre:p-3">
             {loading ? (
-              <p className="type-body-dense not-prose text-muted-foreground">Loading…</p>
+              <p className="type-body-md not-prose text-[#E8E8E8]">Loading…</p>
             ) : activeContent.trim() ? (
               <ReactMarkdown>{activeContent}</ReactMarkdown>
             ) : (
-              <p className="type-body-dense not-prose leading-relaxed text-muted-foreground">
+              <p className="type-body-md not-prose text-[#E8E8E8]">
                 No content in this section yet. Use the assistant for the guided interview — the Master
                 Plan fills as each tab is saved.
               </p>

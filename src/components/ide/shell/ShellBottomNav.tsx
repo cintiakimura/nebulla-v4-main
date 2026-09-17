@@ -70,7 +70,7 @@ export function ShellBottomNav() {
               aria-current={active ? 'page' : undefined}
               onClick={onClick}
               className={cn(
-                'relative inline-flex items-center gap-2 rounded-full px-3.5 py-2 text-[11px] transition-colors',
+                'type-section relative inline-flex items-center gap-2 rounded-full px-3.5 py-2 transition-colors',
                 active
                   ? 'border border-[var(--shell-border-strong)] text-foreground'
                   : 'border border-transparent text-muted-foreground hover:text-foreground',

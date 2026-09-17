@@ -192,17 +192,19 @@ function NebullaIDEShell() {
 
   useEffect(() => {
     if (!workspaceCtx) return;
-    const promoteIfStub = async () => {
-      const label = workspaceCtx.projectName || getBrowserProjectName();
-      if (label && !isWorkspaceLabelStub(label)) return;
+    const promoteFromProductIdentity = async () => {
       const identity = await fetchProductIdentityClient();
       const name = identity?.projectName?.trim();
       if (!name) return;
+      const label = workspaceCtx.projectName || getBrowserProjectName();
+      if (label && !isWorkspaceLabelStub(label) && label.toLowerCase() === name.toLowerCase()) {
+        return;
+      }
       await promoteWorkspaceChipFromProductName(name);
     };
-    void promoteIfStub();
+    void promoteFromProductIdentity();
     const onPlan = () => {
-      void promoteIfStub();
+      void promoteFromProductIdentity();
     };
     window.addEventListener('nebula-master-plan-updated', onPlan);
     return () => window.removeEventListener('nebula-master-plan-updated', onPlan);

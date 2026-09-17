@@ -186,8 +186,8 @@ export function ShellHeader({
             onClick={() => goToDashboard()}
             className="inline-flex shrink-0 items-center gap-2.5 rounded-md outline-none focus-visible:ring-1 focus-visible:ring-border"
           >
-            <Logo className="h-10 w-10 shrink-0 object-contain md:h-11 md:w-11" />
-            <span className="app-logotype text-[15px] tracking-[0.03em] md:text-base">Nebulla.beta</span>
+            <Logo className="h-[26px] w-[26px] shrink-0 object-contain" />
+            <span className="app-logotype text-[14.5px] tracking-[0.02em] text-[#E8E8E8]">Nebulla.beta</span>
           </button>
 
           <input
@@ -210,7 +210,7 @@ export function ShellHeader({
             placeholder="Project name"
             aria-label="Project name"
             title="Project name"
-            className="btn-secondary-surface type-body-dense min-w-0 max-w-[9rem] truncate rounded-md px-2.5 py-1.5 text-foreground outline-none placeholder:text-muted-foreground/50 sm:max-w-[12rem] md:max-w-[16rem]"
+            className="btn-secondary-surface type-body-md min-w-0 max-w-[9rem] truncate rounded-md px-2.5 py-1.5 text-[#E8E8E8] outline-none placeholder:text-muted-foreground/50 sm:max-w-[12rem] md:max-w-[16rem]"
           />
         </div>
 

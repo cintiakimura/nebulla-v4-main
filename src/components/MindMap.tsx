@@ -23,28 +23,28 @@ import { Link, Trash2, Plus, AlertTriangle, RefreshCw, Save } from 'lucide-react
 // Custom Node Component
 const PageNode = ({ data, id }: any) => {
   return (
-    <div className="px-4 py-2 shadow-lg rounded-md bg-[#040f1a] border border-cyan-500/30 min-w-[150px] relative group">
-      <Handle type="target" position={Position.Left} className="w-2 h-2 bg-cyan-400" />
-      <div className="flex justify-between items-center gap-4">
+    <div className="relative min-w-[150px] rounded-md border border-[#3A3A3A] bg-[#1C1C1C] px-4 py-2 group">
+      <Handle type="target" position={Position.Left} className="h-2 w-2 !bg-[#666666] !border-[#3A3A3A]" />
+      <div className="flex items-center justify-between gap-4">
         <div className="flex flex-col">
-          <span className="text-sm font-headline text-cyan-300">{data.label}</span>
+          <span className="type-body-md text-[#E8E8E8]">{data.label}</span>
           {data.isCreated ? (
-            <a href={`#${data.label.toLowerCase().replace(/\s+/g, '-')}`} className="text-[10px] text-emerald-400 hover:underline flex items-center gap-1">
+            <a href={`#${data.label.toLowerCase().replace(/\s+/g, '-')}`} className="type-body-dense mt-0.5 inline-flex items-center gap-1 text-[#A3A3A3] hover:underline">
               <Link className="w-3 h-3" />
               Live Link
             </a>
           ) : (
-            <span className="text-[10px] text-slate-500">Pending Creation</span>
+            <span className="type-body-dense mt-0.5 text-[#A3A3A3]">Pending Creation</span>
           )}
         </div>
         <button 
           onClick={(e) => { e.stopPropagation(); data.onDelete(id); }}
-          className="opacity-0 group-hover:opacity-100 text-slate-500 hover:text-red-400 transition-opacity"
+          className="opacity-0 group-hover:opacity-100 text-[#A3A3A3] hover:text-red-400 transition-opacity"
         >
           <Trash2 className="w-3.5 h-3.5" />
         </button>
       </div>
-      <Handle type="source" position={Position.Right} className="w-2 h-2 bg-cyan-400" />
+      <Handle type="source" position={Position.Right} className="h-2 w-2 !bg-[#666666] !border-[#3A3A3A]" />
     </div>
   );
 };
@@ -128,7 +128,7 @@ export function MindMap({ pages, setPages, edges, setEdges, onSaveToMasterPlan }
       const sourceNode = pages.find((n: Node) => n.id === pendingConnection.source);
       const targetNode = pages.find((n: Node) => n.id === pendingConnection.target);
       
-      setEdges((eds: Edge[]) => addEdge({ ...pendingConnection, animated: true, style: { stroke: '#00ffff' } }, eds));
+      setEdges((eds: Edge[]) => addEdge({ ...pendingConnection, animated: false, style: { stroke: '#5A5A5A', strokeWidth: 1 } }, eds));
       onSaveToMasterPlan();
       
       notifyChatAboutChange(`Connected page "${sourceNode?.data.label}" to "${targetNode?.data.label}". Please update the code to reflect this new navigation flow.`);
@@ -210,12 +210,18 @@ export function MindMap({ pages, setPages, edges, setEdges, onSaveToMasterPlan }
 
   const nodeToDeleteData = pages.find((n: Node) => n.id === nodeToDelete);
 
+  const edgesStyled = edges.map((edge: Edge) => ({
+    ...edge,
+    animated: false,
+    style: { ...edge.style, stroke: '#5A5A5A', strokeWidth: 1 },
+  }));
+
   return (
-    <div className="w-full min-h-0 h-[min(70vh,720px)] min-h-[320px] relative bg-[#020810] rounded-md overflow-hidden border border-white/5 shadow-2xl">
+    <div className="nebulla-mindmap relative h-[min(70vh,720px)] min-h-[320px] w-full overflow-hidden rounded-md border border-[#3A3A3A]">
       <ReactFlowProvider>
         <ReactFlow
           nodes={nodesWithCallbacks}
-          edges={edges}
+          edges={edgesStyled}
           onNodesChange={onNodesChange}
           onEdgesChange={onEdgesChange}
           onConnect={onConnect}
@@ -223,8 +229,8 @@ export function MindMap({ pages, setPages, edges, setEdges, onSaveToMasterPlan }
           fitView
           className="bg-transparent dark"
         >
-        <Background color="#00ffff" gap={16} size={1} />
-        <Controls className="bg-[#040f1a] border border-white/10 fill-cyan-300 text-cyan-300" />
+        <Background color="#2A2A2A" gap={20} size={1} />
+        <Controls className="border border-[#3A3A3A] bg-[#1C1C1C] fill-[#E8E8E8] text-[#E8E8E8]" />
         <Panel position="top-left" className="m-4 flex gap-2">
           <button
             type="button"

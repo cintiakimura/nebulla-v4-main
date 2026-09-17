@@ -37,7 +37,7 @@ export function BuildPreviewCanvas() {
   const [liveAvailable, setLiveAvailable] = useState(false);
   const [hasMockup, setHasMockup] = useState(false);
   const [liveLoadFailed, setLiveLoadFailed] = useState(false);
-  const [waitStatus, setWaitStatus] = useState('Waiting for preview');
+  const [waitStatus, setWaitStatus] = useState('Live app appears here after the first build.');
   const [previewMode, setPreviewMode] = useState<string | null>(null);
   const retriedLegacyRef = useRef(false);
   const retriedDeniedRef = useRef(false);
@@ -98,7 +98,7 @@ export function BuildPreviewCanvas() {
       if (data.previewStatusLabel?.trim() && data.previewHonesty !== 'real_routes') {
         setWaitStatus(
           data.previewHonesty === 'mockup_waiting'
-            ? 'Waiting for preview'
+            ? 'Live app appears here after the first build.'
             : sanitizeUserFacingCopy(data.previewStatusLabel.trim()),
         );
       }

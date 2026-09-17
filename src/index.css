@@ -573,10 +573,10 @@
   --icon-sm: 14px;
   --icon-md: 16px;
 
-  --text-section: 0.875rem;
-  --text-body: 0.8125rem;
-  --text-dense: 0.75rem;
-  --text-label: 0.6875rem;
+  --text-section: 0.875rem; /* 14 — pane titles */
+  --text-body: 0.9375rem; /* 15 — Plan / chat / deploy body */
+  --text-dense: 0.8125rem; /* 13 — captions */
+  --text-label: 0.8125rem; /* 13 — secondary */
 
   --ide-bg: var(--shell-bg);
   --ide-surface: var(--shell-bg);
@@ -814,7 +814,51 @@
 }
 
 .nebulla-ide-shell .font-light {
-  font-weight: 300 !important;
+  font-weight: 400 !important;
+}
+
+.nebulla-ide-shell .type-body-md {
+  font-size: var(--text-body);
+  line-height: 1.5;
+  font-weight: 400;
+  color: #e8e8e8;
+}
+
+.nebulla-ide-shell .type-section {
+  font-size: var(--text-section);
+  line-height: 1.35;
+  font-weight: 400;
+  color: #e8e8e8;
+}
+
+.nebulla-ide-shell .type-body-dense,
+.nebulla-ide-shell .type-label-sm {
+  font-size: var(--text-dense);
+  line-height: 1.45;
+  font-weight: 400;
+  color: #a3a3a3;
+}
+
+.nebulla-ide-shell .app-logotype {
+  font-size: 0.9375rem; /* 15 */
+  line-height: 1.25;
+  font-weight: 400;
+  letter-spacing: 0.02em;
+  color: #e8e8e8;
+}
+
+.nebulla-ide-shell .prose {
+  font-size: var(--text-body);
+  line-height: 1.5;
+  font-weight: 400;
+  color: #e8e8e8;
+}
+
+.nebulla-ide-shell .prose :where(p, li) {
+  font-size: var(--text-body);
+  line-height: 1.5;
+  font-weight: 400;
+  color: #e8e8e8;
 }
 
 .nebulla-ide-shell h1,
@@ -1149,6 +1193,12 @@
   overflow-x: hidden;
   overflow-y: auto;
 
+  /* Isolate landing from IDE type scale — headline size unchanged */
+  --text-section: 0.875rem;
+  --text-body: 0.8125rem;
+  --text-dense: 0.75rem;
+  --text-label: 0.6875rem;
+
   /* Landing type + rhythm — scoped; shell chrome unchanged */
   --landing-display: clamp(3rem, 5.5vw, 4.5rem); /* 48–72 */
   --landing-title: clamp(1.375rem, 2.1vw, 1.75rem); /* 22–28 */
@@ -1183,6 +1233,22 @@
   letter-spacing: 0.08em;
   line-height: 1.3;
   color: var(--landing-ink-3);
+}
+
+.nebulla-ide-shell .nebula-landing-page .type-body-md {
+  font-size: 0.8125rem;
+  line-height: 1.45;
+}
+
+.nebulla-ide-shell .nebula-landing-page .type-label-sm {
+  font-size: 0.6875rem;
+  line-height: 1.35;
+  color: var(--muted-foreground);
+}
+
+.nebulla-ide-shell .nebula-landing-page .app-logotype {
+  font-size: unset;
+  color: unset;
 }
 
 .nebulla-ide-shell .nebula-landing-page h1.landing-display {
@@ -1265,9 +1331,26 @@
 
 /* Logo keeps original brand color (do not grayscale) */
 .nebulla-ide-shell img[alt*='Nebulla'],
-.nebulla-ide-shell img[src*='nebulla-logo'] {
+.nebulla-ide-shell img[src*='nebulla-logo'],
+.nebulla-ide-shell img[src*='nebulla-mark'] {
   filter: none;
   opacity: 1;
+}
+
+/* Plan mind map — readable nodes on lifted canvas */
+.nebulla-ide-shell .nebulla-mindmap {
+  background-color: #121212;
+  background-image: radial-gradient(ellipse at 50% 42%, #161616 0%, #121212 72%);
+}
+
+.nebulla-ide-shell .nebulla-mindmap .react-flow__edge-path,
+.nebulla-ide-shell .nebulla-mindmap .react-flow__connection-path {
+  stroke: #5a5a5a !important;
+  stroke-width: 1px !important;
+}
+
+.nebulla-ide-shell .nebulla-mindmap .react-flow__background {
+  background-color: transparent !important;
 }
 
 /* Status / success / warning chips in chrome → gray */

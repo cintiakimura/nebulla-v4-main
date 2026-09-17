@@ -268,7 +268,7 @@ export function CodeScreen() {
       {/* Left: explorer (list scrolls) */}
       <aside className="ide-glass-chrome flex w-56 shrink-0 flex-col overflow-hidden border-r border-border md:w-64">
         <div className="flex h-9 shrink-0 items-center justify-between border-b border-border px-3">
-          <span className="type-label-sm">Files</span>
+          <span className="type-section">Files</span>
           <button
             type="button"
             title="Refresh"
