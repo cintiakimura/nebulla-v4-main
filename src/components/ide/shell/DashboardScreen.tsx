@@ -36,8 +36,8 @@ export function DashboardScreen({ onOpenAccount }: { onOpenAccount?: () => void 
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden overscroll-y-contain">
       <header className="ide-glass-chrome flex h-14 shrink-0 items-center gap-2 border-b border-border px-3 md:px-4">
         <div className="flex min-w-0 items-center gap-2.5">
-          <Logo className="h-[26px] w-[26px] shrink-0 object-contain" />
-          <span className="app-logotype text-[14.5px] tracking-[0.02em] text-[#E8E8E8]">Nebulla.beta</span>
+          <Logo className="h-[length:var(--ide-mark)] w-[length:var(--ide-mark)] shrink-0 object-contain" />
+          <span className="app-logotype">Nebulla.beta</span>
         </div>
         <div className="ml-auto flex shrink-0 items-center gap-1.5">
           <button

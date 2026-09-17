@@ -573,10 +573,18 @@
   --icon-sm: 14px;
   --icon-md: 16px;
 
-  --text-section: 0.875rem; /* 14 — pane titles */
-  --text-body: 0.9375rem; /* 15 — Plan / chat / deploy body */
-  --text-dense: 0.8125rem; /* 13 — captions */
-  --text-label: 0.8125rem; /* 13 — secondary */
+  /* IDE type system — Akkurat 300/400 only (computed px) */
+  --ide-mark: 34px;
+  --ide-wordmark: 16px;
+  --ide-title: 16px;
+  --ide-body: 18px;
+  --ide-caption: 13px;
+  --ide-code: 13px; /* Monaco; terminal stays 12px as before */
+
+  --text-section: var(--ide-title);
+  --text-body: var(--ide-body);
+  --text-dense: var(--ide-caption);
+  --text-label: var(--ide-caption);
 
   --ide-bg: var(--shell-bg);
   --ide-surface: var(--shell-bg);
@@ -612,9 +620,12 @@
   color: var(--ide-ink);
   background-color: var(--ide-bg) !important;
   background-image: none !important;
-  font-family: "Akkurat", ui-sans-serif, system-ui, sans-serif;
-  font-size: var(--text-body);
-  line-height: 1.45;
+  font-family: "Akkurat", sans-serif;
+  font-size: var(--ide-body);
+  font-weight: 400;
+  line-height: 1.55;
+  font-synthesis: none;
+  font-synthesis-weight: none;
   -webkit-font-smoothing: antialiased;
 
   --primary: var(--ide-ink-muted);
@@ -814,49 +825,56 @@
 }
 
 .nebulla-ide-shell .font-light {
-  font-weight: 400 !important;
+  font-weight: 300 !important;
 }
 
 .nebulla-ide-shell .type-body-md {
-  font-size: var(--text-body);
-  line-height: 1.5;
+  font-family: "Akkurat", sans-serif;
+  font-size: var(--ide-body);
+  line-height: 1.55;
   font-weight: 400;
   color: #e8e8e8;
 }
 
-.nebulla-ide-shell .type-section {
-  font-size: var(--text-section);
-  line-height: 1.35;
+.nebulla-ide-shell .type-section,
+.nebulla-ide-shell .type-title-sm {
+  font-family: "Akkurat", sans-serif;
+  font-size: var(--ide-title);
+  line-height: 1.3;
   font-weight: 400;
   color: #e8e8e8;
 }
 
 .nebulla-ide-shell .type-body-dense,
-.nebulla-ide-shell .type-label-sm {
-  font-size: var(--text-dense);
-  line-height: 1.45;
-  font-weight: 400;
+.nebulla-ide-shell .type-label-sm,
+.nebulla-ide-shell .type-micro {
+  font-family: "Akkurat", sans-serif;
+  font-size: var(--ide-caption);
+  line-height: 1.4;
+  font-weight: 300;
   color: #a3a3a3;
 }
 
 .nebulla-ide-shell .app-logotype {
-  font-size: 0.9375rem; /* 15 */
-  line-height: 1.25;
+  font-family: "Akkurat", sans-serif;
+  font-size: var(--ide-wordmark);
+  line-height: 1.3;
   font-weight: 400;
   letter-spacing: 0.02em;
   color: #e8e8e8;
 }
 
 .nebulla-ide-shell .prose {
-  font-size: var(--text-body);
-  line-height: 1.5;
+  font-family: "Akkurat", sans-serif;
+  font-size: var(--ide-body);
+  line-height: 1.55;
   font-weight: 400;
   color: #e8e8e8;
 }
 
 .nebulla-ide-shell .prose :where(p, li) {
-  font-size: var(--text-body);
-  line-height: 1.5;
+  font-size: var(--ide-body);
+  line-height: 1.55;
   font-weight: 400;
   color: #e8e8e8;
 }
@@ -864,10 +882,22 @@
 .nebulla-ide-shell h1,
 .nebulla-ide-shell h2,
 .nebulla-ide-shell h3 {
-  font-size: var(--text-section);
-  line-height: 1.35;
+  font-family: "Akkurat", sans-serif;
+  font-size: var(--ide-title);
+  line-height: 1.3;
   font-weight: 400;
   letter-spacing: 0;
+}
+
+.nebulla-ide-shell .monaco-editor,
+.nebulla-ide-shell .font-code {
+  font-family: var(--font-code);
+  font-weight: 400;
+}
+
+.nebulla-ide-shell .font-code {
+  font-size: 12px;
+  line-height: 1.45;
 }
 
 /* Landing headings inherit unless they carry a landing type class */
@@ -971,7 +1001,7 @@
   color: var(--cta-ink) !important;
   border: 1px solid var(--cta-fill) !important;
   border-width: 1px !important;
-  font-size: var(--text-dense);
+  font-size: 13px;
   font-weight: 400;
   line-height: 1.2;
   min-height: var(--control-h);
@@ -1002,12 +1032,18 @@
   background-color: transparent !important;
   color: var(--ide-btn-text) !important;
   border: 1px solid var(--shell-border) !important;
-  font-size: var(--text-dense);
+  font-size: 13px;
   font-weight: 400;
   line-height: 1.2;
   min-height: var(--control-h);
   border-radius: var(--radius-md);
   box-shadow: none !important;
+}
+
+.nebulla-ide-shell .btn-secondary-surface.type-body-md {
+  font-size: var(--ide-body);
+  font-weight: 400;
+  line-height: 1.55;
 }
 
 .nebulla-ide-shell .btn-secondary-surface:hover:not(:disabled) {
@@ -1198,6 +1234,10 @@
   --text-body: 0.8125rem;
   --text-dense: 0.75rem;
   --text-label: 0.6875rem;
+  --ide-wordmark: 0.9375rem;
+  --ide-title: 0.875rem;
+  --ide-body: 0.8125rem;
+  --ide-caption: 0.6875rem;
 
   /* Landing type + rhythm — scoped; shell chrome unchanged */
   --landing-display: clamp(3rem, 5.5vw, 4.5rem); /* 48–72 */
@@ -1337,10 +1377,9 @@
   opacity: 1;
 }
 
-/* Plan mind map — readable nodes on lifted canvas */
+/* Plan mind map — dotted grid + plate nodes */
 .nebulla-ide-shell .nebulla-mindmap {
   background-color: #121212;
-  background-image: radial-gradient(ellipse at 50% 42%, #161616 0%, #121212 72%);
 }
 
 .nebulla-ide-shell .nebulla-mindmap .react-flow__edge-path,
@@ -1351,6 +1390,33 @@
 
 .nebulla-ide-shell .nebulla-mindmap .react-flow__background {
   background-color: transparent !important;
+  background-image: none !important;
+}
+
+.nebulla-ide-shell .nebulla-mindmap .react-flow__background-pattern,
+.nebulla-ide-shell .nebulla-mindmap .react-flow__container svg pattern {
+  background-image: unset;
+}
+
+.nebulla-ide-shell .nebulla-mindmap-node {
+  background-color: #242424;
+  border: 1px solid #3a3a3a;
+}
+
+.nebulla-ide-shell .nebulla-mindmap-node__title {
+  font-family: "Akkurat", sans-serif;
+  font-size: var(--ide-body);
+  font-weight: 400;
+  line-height: 1.55;
+  color: #e8e8e8;
+}
+
+.nebulla-ide-shell .nebulla-mindmap-node__sub {
+  font-family: "Akkurat", sans-serif;
+  font-size: var(--ide-caption);
+  font-weight: 300;
+  line-height: 1.4;
+  color: #a3a3a3;
 }
 
 /* Status / success / warning chips in chrome → gray */

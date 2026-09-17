@@ -155,7 +155,7 @@ export function MasterPlan({
               key={section.id}
               type="button"
               onClick={() => setActiveTab(section.id)}
-              className={`rounded-md border px-2.5 py-2 text-left type-body-dense tracking-wide transition-colors ${
+              className={`type-section rounded-md border px-2.5 py-2 text-left tracking-wide transition-colors ${
                 activeTab === section.id
                   ? 'border-[var(--shell-border-strong)] text-foreground'
                   : 'border-transparent text-muted-foreground hover:border-border hover:text-foreground'

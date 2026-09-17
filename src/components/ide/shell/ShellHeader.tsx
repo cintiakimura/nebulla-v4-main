@@ -186,8 +186,8 @@ export function ShellHeader({
             onClick={() => goToDashboard()}
             className="inline-flex shrink-0 items-center gap-2.5 rounded-md outline-none focus-visible:ring-1 focus-visible:ring-border"
           >
-            <Logo className="h-[26px] w-[26px] shrink-0 object-contain" />
-            <span className="app-logotype text-[14.5px] tracking-[0.02em] text-[#E8E8E8]">Nebulla.beta</span>
+            <Logo className="h-[length:var(--ide-mark)] w-[length:var(--ide-mark)] shrink-0 object-contain" />
+            <span className="app-logotype">Nebulla.beta</span>
           </button>
 
           <input

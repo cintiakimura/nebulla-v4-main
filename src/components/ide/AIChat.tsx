@@ -3923,7 +3923,7 @@ export function AIChat() {
             }
             rows={2}
             disabled={uploadBusy}
-            className="min-h-[2.75rem] w-full resize-none bg-transparent pt-0 pr-16 text-[12px] leading-snug text-foreground outline-none placeholder:text-muted-foreground disabled:opacity-50"
+            className="type-body-md min-h-[2.75rem] w-full resize-none bg-transparent pt-0 pr-16 text-foreground outline-none placeholder:text-muted-foreground disabled:opacity-50"
           />
 
           <div className="mt-1 flex items-center justify-between gap-2">

@@ -14,7 +14,7 @@ export function PreviewWaitingThrobber({
       aria-live="polite"
       aria-busy="true"
     >
-      <p className="type-body-dense max-w-[18rem] text-center text-[#A3A3A3]">{line}</p>
+      <p className="type-body-md max-w-[20rem] text-center">{line}</p>
     </div>
   );
 }

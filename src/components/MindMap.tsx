@@ -23,18 +23,18 @@ import { Link, Trash2, Plus, AlertTriangle, RefreshCw, Save } from 'lucide-react
 // Custom Node Component
 const PageNode = ({ data, id }: any) => {
   return (
-    <div className="relative min-w-[150px] rounded-md border border-[#3A3A3A] bg-[#1C1C1C] px-4 py-2 group">
+    <div className="nebulla-mindmap-node relative min-w-[150px] rounded-md px-4 py-2 group">
       <Handle type="target" position={Position.Left} className="h-2 w-2 !bg-[#666666] !border-[#3A3A3A]" />
       <div className="flex items-center justify-between gap-4">
         <div className="flex flex-col">
-          <span className="type-body-md text-[#E8E8E8]">{data.label}</span>
+          <span className="nebulla-mindmap-node__title">{data.label}</span>
           {data.isCreated ? (
-            <a href={`#${data.label.toLowerCase().replace(/\s+/g, '-')}`} className="type-body-dense mt-0.5 inline-flex items-center gap-1 text-[#A3A3A3] hover:underline">
+            <a href={`#${data.label.toLowerCase().replace(/\s+/g, '-')}`} className="nebulla-mindmap-node__sub mt-0.5 inline-flex items-center gap-1 hover:underline">
               <Link className="w-3 h-3" />
               Live Link
             </a>
           ) : (
-            <span className="type-body-dense mt-0.5 text-[#A3A3A3]">Pending Creation</span>
+            <span className="nebulla-mindmap-node__sub mt-0.5">Pending Creation</span>
           )}
         </div>
         <button 
@@ -229,7 +229,7 @@ export function MindMap({ pages, setPages, edges, setEdges, onSaveToMasterPlan }
           fitView
           className="bg-transparent dark"
         >
-        <Background color="#2A2A2A" gap={20} size={1} />
+        <Background id="nebulla-mindmap-dots" variant="dots" color="#4A4A4A" gap={16} size={1.25} />
         <Controls className="border border-[#3A3A3A] bg-[#1C1C1C] fill-[#E8E8E8] text-[#E8E8E8]" />
         <Panel position="top-left" className="m-4 flex gap-2">
           <button
