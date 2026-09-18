@@ -126,8 +126,9 @@ export async function sendIdeAssistantGrokTurn(options: {
   });
 
   const inferenceFirstTurn =
-    options.codingHint === 'fast-prototype' ||
-    (options.chatMode === 'coding' && options.discoveryRequired !== true);
+    (options.codingHint === 'fast-prototype' ||
+      options.codingHint === 'brainstorm-close-confirmed') &&
+    options.discoveryRequired !== true;
 
   let inferenceMemory = '';
   if (inferenceFirstTurn && !hasAppStatusPayload) {

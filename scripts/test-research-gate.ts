@@ -290,10 +290,10 @@ try {
   const fast = buildFastPrototypeBootstrap("tutor kids with ADHD", "Web App");
   assert.equal(/Web Search/i.test(fast), false);
   assert.equal(/Do not skip research/i.test(fast), false);
-  assert.match(fast, /never "Not specified"/);
-  assert.match(fast, /coding skeleton|inferred defaults/i);
+  assert.match(fast, /chat-conversation-loop/);
+  assert.match(fast, /THIS TURN FORBIDDEN/);
   assert.equal(/skip-with-reason/i.test(fast), false);
-  assert.equal(/invent competitor names/i.test(fast), true);
+  assert.equal(/THIS TURN = PLAN ONLY/.test(fast), false);
   const bootstrapSrc = fs.readFileSync(path.join(root, "src/lib/ideChatBootstrap.ts"), "utf8");
   assert.equal(/skip-with-reason/i.test(bootstrapSrc), false);
 
@@ -308,7 +308,7 @@ try {
   assert.match(chat, /ensureResearchBeforeUiAndGo/);
   assert.match(chat, /requested: userNoteRequestsCompetitorResearch/);
   assert.equal(/Researching competitors/.test(chat), false);
-  assert.match(chat, /Classifying the job from your goal/);
+  assert.match(chat, /chat-conversation-loop|stayInBrainstormLoop|brainstorm-loop/);
   assert.match(chat, /research\.softAbort/);
   const researchClient = fs.readFileSync(path.join(root, "src/lib/nebulaResearchClient.ts"), "utf8");
   assert.match(researchClient, /if \(!options\.requested\)/);

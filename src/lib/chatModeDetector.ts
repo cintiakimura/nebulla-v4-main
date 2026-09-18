@@ -2,11 +2,9 @@
  * Chat mode detection for Nebula Guardian / Smart Chat Handler.
  * Run this FIRST on every user message before routing.
  *
- * Default incomplete-plan path: **inference-first** (`nebula-project/inference-first-rules.md`)
- * — categorize → research → draft → build. Guided interview is opt-in only.
- *
- * Mode sequence (product): Chat / Inference-first → Architecture → Coding → Debugging → UI
- * (+ File Ops short-circuit). Explicit brainstorm / full interview → Guided Discovery.
+ * Default incomplete-plan path: **conversation loop** (`chat-conversation-loop.md`)
+ * — receive seed → reflect north star → one advance. Guided interview is opt-in only.
+ * Continue-the-app / debug / file stay on their existing paths.
  */
 
 import {
@@ -29,11 +27,11 @@ export type ChatModeResult = {
   label: string;
   confidence: 'high' | 'medium' | 'low';
   /**
-   * When true, Guided interview / Discovery Q&A is required (opt-in exception).
-   * Default incomplete-plan builds use inference-first with discoveryRequired false.
+   * When true, stay in the thinking-stage conversation loop (not a plan job).
+   * Guided interview Q&A is a separate opt-in (`mode === 'guided'`).
    */
   discoveryRequired?: boolean;
-  /** When true, follow inference-first-rules.md (default for clear goals / new builds). */
+  /** When true, existing-app continue / later inference-first — not a fresh seed. */
   inferenceFirst?: boolean;
 };
 
@@ -123,8 +121,8 @@ export function detectChatMode(
       mode: 'free',
       label: 'Chat',
       confidence: 'low',
-      discoveryRequired: false,
-      inferenceFirst: planIncomplete,
+      discoveryRequired: planIncomplete,
+      inferenceFirst: false,
     };
   }
 
@@ -183,17 +181,33 @@ export function detectChatMode(
     };
   }
 
-  // Incomplete plan + clear goal / build → inference-first (default), not Q&A Discovery.
+  const looksContinueExisting =
+    /\b(continue(\s+(building|with|the\s+project|the\s+app))?|keep\s+(building|going)|next\s+slice)\b/i.test(
+      text,
+    );
+
+  // Incomplete plan + continue an existing app → coding path (not a fresh seed).
+  if (planIncomplete && looksContinueExisting && !looksGuided && !wantsInterview) {
+    return {
+      mode: 'coding',
+      label: 'Coding',
+      confidence: 'high',
+      discoveryRequired: false,
+      inferenceFirst: true,
+    };
+  }
+
+  // Incomplete plan + seed / build / paste → conversation loop (not a plan on this turn).
   if (
     planIncomplete &&
     (inferenceGoal || looksGuided || looksBuildExpand || looksCoding || looksArchitecture || looksUi)
   ) {
     return {
-      mode: 'coding',
-      label: 'Inference-first',
+      mode: 'free',
+      label: 'Chat',
       confidence: 'high',
-      discoveryRequired: false,
-      inferenceFirst: true,
+      discoveryRequired: true,
+      inferenceFirst: false,
     };
   }
 
@@ -212,8 +226,8 @@ export function detectChatMode(
       mode: 'free',
       label: 'Chat',
       confidence: 'medium',
-      discoveryRequired: false,
-      inferenceFirst: true,
+      discoveryRequired: true,
+      inferenceFirst: false,
     };
   }
 
@@ -258,7 +272,7 @@ export function describeChatMode(mode: ChatMode, discoveryRequired?: boolean): s
     case 'architecture':
       return "I'll deepen the Master Plan with research-backed architecture.";
     case 'coding':
-      return 'Inference-first or coding: categorize, research, draft the Master Plan, then build carefully.';
+      return 'Coding: continue the app carefully from the plan that already exists.';
     case 'debugging':
       return "Let's debug carefully: Verify → Analyze → Trace → Fix → Validate.";
     case 'ui':
@@ -267,6 +281,6 @@ export function describeChatMode(mode: ChatMode, discoveryRequired?: boolean): s
       return "I'll open the file and show a preview.";
     case 'free':
     default:
-      return 'Ask me anything — clear goals start inference-first; say "interview me" for guided Q&A.';
+      return 'Ask me anything — we talk first, then build. Say "interview me" if you want a guided Q&A.';
   }
 }

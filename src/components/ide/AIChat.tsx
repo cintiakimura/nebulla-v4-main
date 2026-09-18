@@ -37,13 +37,15 @@ import {
   conversationEntriesToIdeMessages,
   buildDiscoveryBootstrap,
   buildFastPrototypeBootstrap,
-  buildFastPrototypeContinueBootstrap,
   buildIdeaDiscoveryBootstrap,
-  FAST_PROTOTYPE_BOOTSTRAP_PREFIX,
-  FAST_PROTOTYPE_CONTINUE_PREFIX,
   isHiddenBootstrapUserMessage,
 } from '../../lib/ideChatBootstrap';
-import { sourceHasMasterPlanBlock } from '../../../lib/masterPlanTags';
+import {
+  buildBrainstormCloseConfirmedBootstrap,
+  clearBrainstormCloseState,
+  rememberCloseOffer,
+  resolveBrainstormCloseTurn,
+} from '../../lib/chatBrainstormClose';
 import {
   clearStoredStartMode,
   consumePendingStartMode,
@@ -1337,12 +1339,7 @@ export function AIChat() {
         pushActivity('Stopped: need a short usable goal before Master Plan, UI Gen, or Go.', 'warn');
         return;
       }
-      // Fast Prototype drafts + codes — Agent on; do not force Guided rediscovery.
-      markDiscoveryClosed(diskProjectKey);
-      if (interactionModeRef.current === 'chat') {
-        interactionModeRef.current = 'agent';
-        setAssistantInteractionMode('agent');
-      }
+      // Landing Build / Fast Prototype start = same conversation loop as typed + voice.
       if (ideaPrompt) {
         const stamp = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
         const visibleIdea: Message = {
@@ -1383,6 +1380,7 @@ export function AIChat() {
       bootstrapStartedRef.current = false;
       setSendError(null);
       clearDiscoveryClosed(diskProjectKey);
+      clearBrainstormCloseState(diskProjectKey);
       clearStoredStartMode(diskProjectKey);
       clearUiMockupStageFlags(diskProjectKey);
       // Do NOT consume guided-on-ready here. "Start with a prompt" reloads the page after
@@ -1679,6 +1677,7 @@ export function AIChat() {
         });
         const runInferenceFirst =
           !interviewIntent &&
+          !discoveryRequired &&
           chatMode !== 'debugging' &&
           chatMode !== 'file' &&
           (inferenceIntent ||
@@ -1702,8 +1701,10 @@ export function AIChat() {
           chatMode = 'coding';
           codingHint = 'fast-prototype';
         } else if (!masterPlanComplete && !interviewIntent) {
-          // Casual chat: never force Guided rediscovery when inference-first is the default path.
-          discoveryRequired = false;
+          // Keep the conversation loop; do not force Guided Q&A.
+          if (codingHint !== 'brainstorm-loop' && codingHint !== 'brainstorm-skip-lock') {
+            discoveryRequired = false;
+          }
           if (
             isFastPrototypeMode(diskProjectKey) &&
             (codingHint === 'discovery-required' || codingHint === 'guided-onboarding')
@@ -1760,13 +1761,10 @@ export function AIChat() {
       } catch {
         /* fall through to normal Grok / Master Plan / Go chat */
       }
-    } else if (
-      rawText.trim().startsWith(FAST_PROTOTYPE_BOOTSTRAP_PREFIX) ||
-      rawText.trim().startsWith(FAST_PROTOTYPE_CONTINUE_PREFIX)
-    ) {
-      discoveryRequired = false;
-      codingHint = 'fast-prototype';
-      chatMode = 'coding';
+    } else if (isHiddenBootstrapUserMessage(rawText)) {
+      discoveryRequired = true;
+      codingHint = 'brainstorm-loop';
+      chatMode = 'free';
     }
 
     // Chat "Create a new project: …" — default inference-first (same as My Projects Continue).
@@ -1815,11 +1813,6 @@ export function AIChat() {
       });
       clearIdeWorkspaceMetaCache();
       setStoredStartMode('fast_prototype', diskProjectKey);
-      markDiscoveryClosed(diskProjectKey);
-      if (interactionModeRef.current === 'chat') {
-        interactionModeRef.current = 'agent';
-        setAssistantInteractionMode('agent');
-      }
 
       setInput('');
       inputRef.current = '';
@@ -1925,8 +1918,26 @@ export function AIChat() {
     const sendAbort = sendingAbortRef.current;
     setSendError(null);
     const discoveryCompleteAck = detectOnboardingBuildStart(rawText, prior);
-    /** Bare "go" / "start coding" — must launch Foundation even if the model omits START_CODING. */
-    const userForcedCoding = isUserExplicitCodingRequest(rawText);
+    const closeTurn = isHiddenBootstrapUserMessage(rawText)
+      ? { kind: 'loop' as const, summary: null, skipInsists: 0 }
+      : resolveBrainstormCloseTurn(rawText, prior, diskProjectKey);
+    const brainstormCloseConfirmed = closeTurn.kind === 'confirmed' && Boolean(closeTurn.summary);
+    if (brainstormCloseConfirmed && closeTurn.summary) {
+      text = buildBrainstormCloseConfirmedBootstrap(closeTurn.summary);
+    }
+    const existingAppWork = workspaceFoundationLanded(workspacePaths, {
+      lastSlice: lastAutoSliceLabelRef.current,
+      projectKey: resolveActiveProjectIds(diskProjectKey).projectKey,
+    });
+    const stayInBrainstormLoop =
+      !brainstormCloseConfirmed &&
+      (isBootstrapTrigger || discoveryRequired || closeTurn.kind === 'skip-lock') &&
+      chatMode !== 'debugging' &&
+      chatMode !== 'file' &&
+      !hasAppStatusPayload &&
+      !existingAppWork;
+    /** Bare "go" / continue — only when this is not a fresh brainstorm. */
+    const userForcedCoding = isUserExplicitCodingRequest(rawText) && !stayInBrainstormLoop;
     if (userNoteRequestsUiGeneration(rawText) && !userForcedCoding && !hasAppStatusPayload) {
       beginPlanActivity('Generating UI from Master Plan…', chatWorkSteps(), {
         subhead: 'UI Gen v2 — §1 Goal and Go are not rewritten.',
@@ -1955,26 +1966,36 @@ export function AIChat() {
       return;
     }
     // Product promise: "nothing more to add" / explicit "go" starts coding — even if still Chat.
-    const fastPrototypeTurnEarly =
-      codingHint === 'fast-prototype' ||
-      rawText.trim().startsWith(FAST_PROTOTYPE_BOOTSTRAP_PREFIX) ||
-      rawText.trim().startsWith(FAST_PROTOTYPE_CONTINUE_PREFIX);
+    const fastPrototypeTurnEarly = codingHint === 'fast-prototype' && !stayInBrainstormLoop;
     if (
-      (discoveryCompleteAck || userForcedCoding || fastPrototypeTurnEarly) &&
+      (discoveryCompleteAck || userForcedCoding || fastPrototypeTurnEarly || brainstormCloseConfirmed) &&
       interactionModeRef.current === 'chat'
     ) {
       interactionModeRef.current = 'agent';
       setAssistantInteractionMode('agent');
       setAccessoryHint(
-        discoveryCompleteAck
+        brainstormCloseConfirmed
+          ? 'Summary locked — writing the Master Plan from what you confirmed.'
+          : discoveryCompleteAck
           ? 'Discovery done — switching to Agent and starting the first coding slice.'
-          : fastPrototypeTurnEarly
-            ? 'Fast Prototype — switching to Agent after the mockup so coding can start.'
-            : 'Switching to Agent — starting the next coding slice in your workspace.',
+          : 'Switching to Agent — starting the next coding slice in your workspace.',
       );
       window.setTimeout(() => setAccessoryHint(null), 4500);
     }
-    if (discoveryCompleteAck) {
+    if (brainstormCloseConfirmed) {
+      markDiscoveryClosed(diskProjectKey);
+      discoveryRequired = false;
+      chatMode = 'architecture';
+      codingHint = 'brainstorm-close-confirmed';
+    } else if (closeTurn.kind === 'skip-lock') {
+      discoveryRequired = true;
+      chatMode = 'free';
+      codingHint = 'brainstorm-skip-lock';
+    } else if (closeTurn.kind === 'correct' || closeTurn.kind === 'add-more') {
+      discoveryRequired = true;
+      chatMode = 'free';
+      codingHint = 'brainstorm-loop';
+    } else if (discoveryCompleteAck) {
       markDiscoveryClosed(diskProjectKey);
       discoveryRequired = false;
       chatMode = 'coding';
@@ -1986,20 +2007,21 @@ export function AIChat() {
     }
     const lockedChat = interactionModeRef.current === 'chat';
     const onboardingBuildStart = discoveryCompleteAck;
-    const fastPrototypeTurn =
-      codingHint === 'fast-prototype' ||
-      rawText.trim().startsWith(FAST_PROTOTYPE_BOOTSTRAP_PREFIX) ||
-      rawText.trim().startsWith(FAST_PROTOTYPE_CONTINUE_PREFIX);
-    const isFastPrototypeContinue = rawText.trim().startsWith(FAST_PROTOTYPE_CONTINUE_PREFIX);
+    const fastPrototypeTurn = codingHint === 'fast-prototype' && !stayInBrainstormLoop;
     const buildMode =
       !lockedChat &&
       !hasAppStatusPayload &&
       (detectBuildModeIntent(rawText) ||
         userForcedCoding ||
         onboardingBuildStart ||
-        fastPrototypeTurn);
+        fastPrototypeTurn ||
+        brainstormCloseConfirmed);
     const showWorkActivity =
-      buildMode || onboardingBuildStart || fastPrototypeTurn || userForcedCoding;
+      buildMode ||
+      onboardingBuildStart ||
+      fastPrototypeTurn ||
+      userForcedCoding ||
+      brainstormCloseConfirmed;
     try {
       console.info('[AIChat] turn', {
         interaction_mode: interactionModeRef.current,
@@ -2012,18 +2034,24 @@ export function AIChat() {
     } catch {
       /* ignore */
     }
-    if (onboardingBuildStart) {
+    if (brainstormCloseConfirmed) {
+      beginPlanActivity('Saving Master Plan…', chatWorkSteps(), {
+        subhead: 'From the summary you just confirmed. Coding waits.',
+        initialLog: 'Close confirmed — plan from CONFIRMED_SUMMARY (not the raw seed)',
+      });
+      pushActivity('Locking the plan from your confirmed summary…', 'info');
+    } else if (onboardingBuildStart) {
       beginPlanActivity('Saving Master Plan…', chatWorkSteps(), {
         subhead: 'Discovery complete — classify the job and draft the plan. Coding waits.',
         initialLog: `Discovery complete — "${rawText.trim()}"`,
       });
       pushActivity('Saving Master Plan…', 'info');
     } else if (fastPrototypeTurn) {
-      beginPlanActivity('Fast Prototype — classifying the job', chatWorkSteps(), {
-        subhead: 'Classify coding skeleton → draft plan → Foundation. No competitor search.',
-        initialLog: 'Fast Prototype — classify and plan (not researching competitors)',
+      beginPlanActivity('Preparing the plan…', chatWorkSteps(), {
+        subhead: 'Master Plan from the coding skeleton. Coding starts when Go is allowed.',
+        initialLog: 'Continue the app — plan and code (not a fresh brainstorm)',
       });
-      pushActivity('Classifying the job from your goal…', 'info');
+      pushActivity('Continuing the app from your last plan…', 'info');
     } else if (buildMode) {
       beginPlanActivity('Preparing the plan…', chatWorkSteps(), {
         subhead: 'Master Plan from the coding skeleton. Coding starts when Go is allowed.',
@@ -2093,14 +2121,14 @@ export function AIChat() {
 
     let skipGrokChat =
       interactionModeRef.current === 'agent' &&
-      (userForcedCoding || isFastPrototypeContinue) &&
+      userForcedCoding &&
       !onboardingBuildStart &&
       !hasAppStatusPayload;
     const maySkipChatIfPlanExists =
       interactionModeRef.current === 'agent' &&
       !onboardingBuildStart &&
       !hasAppStatusPayload &&
-      (userForcedCoding || isFastPrototypeContinue || fastPrototypeTurn || buildMode);
+      (userForcedCoding || fastPrototypeTurn || buildMode);
     if (maySkipChatIfPlanExists || looksLikeStandaloneProductBrief(text)) {
     try {
       const mpRes = await fetch(withProjectQuery('/api/master-plan/read'), {
@@ -2298,34 +2326,11 @@ export function AIChat() {
       const { displayText, hadCodingTag } = formatAssistantForIdeChatDisplay(raw);
       const agentAllowed = interactionModeRef.current === 'agent';
 
-      // First Fast Prototype reply often comes back as short chat prose (~hundreds of chars)
-      // with no Master Plan tags — one automatic hard continue (single API key queue).
-      if (
-        agentAllowed &&
-        fastPrototypeTurn &&
-        !isFastPrototypeContinue &&
-        mpSaved === 0 &&
-        !sourceHasMasterPlanBlock(masterPlanSource)
-      ) {
-        pushActivity(
-          'Draft incomplete (no Master Plan tags) — one automatic architecture continue…',
-          'warn',
-        );
-        setAccessoryHint('Continuing Fast Prototype — requesting full Master Plan + ui-brief…');
-        window.setTimeout(() => setAccessoryHint(null), 6000);
-        window.setTimeout(() => {
-          void sendChatRef.current(buildFastPrototypeContinueBootstrap(text));
-        }, 80);
-        resetCodingActivity();
-        setSending(false);
-        sendingRef.current = false;
-        return;
-      }
-
       const shortCodingNudge = isShortCodingGoNudge(displayText || raw);
       const assistantCodingPromise = isAssistantCodingPromise(displayText || raw);
       let willCode =
         agentAllowed &&
+        !brainstormCloseConfirmed &&
         (hadCodingTag ||
           hasGrokFileBlocks(raw) ||
           isCodingIntent(masterPlanSource) ||
@@ -2334,6 +2339,9 @@ export function AIChat() {
           shortCodingNudge ||
           userForcedCoding ||
           assistantCodingPromise);
+      if (displayText.trim()) {
+        rememberCloseOffer(displayText.trim(), diskProjectKey);
+      }
       const spoken = stripAssistantTagsForVoice(
         shortCodingNudge && !displayText.trim() ? SHORT_CODING_GO_SUMMARY : displayText,
       );

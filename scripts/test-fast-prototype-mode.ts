@@ -17,6 +17,7 @@ import {
   IDEA_DISCOVERY_BOOTSTRAP_PREFIX,
   isHiddenBootstrapUserMessage,
 } from '../src/lib/ideChatBootstrap';
+import { CHAT_SCOREBOARD_APPENDIX, chatModeSystemAppendix } from '../src/lib/grokChatArtifacts';
 
 assert.equal(normalizeStartMode('fast_prototype'), 'fast_prototype');
 assert.equal(normalizeStartMode('guided'), 'guided');
@@ -59,7 +60,8 @@ assert.equal(
 const guided = buildIdeaDiscoveryBootstrap('A tutoring marketplace', 'Web App');
 assert.ok(guided.startsWith(IDEA_DISCOVERY_BOOTSTRAP_PREFIX));
 assert.ok(!guided.includes('FAST PROTOTYPE'));
-assert.ok(guided.includes('Do NOT emit <START_MASTERPLAN>'));
+assert.ok(guided.includes('<START_MASTERPLAN>'));
+assert.ok(guided.includes('THIS TURN FORBIDDEN'));
 
 const denseBrief = [
   'Web app that tutors kids with ADHD.',
@@ -80,24 +82,19 @@ const fast = buildFastPrototypeBootstrap(
   'Mobile App',
 );
 assert.ok(fast.startsWith(FAST_PROTOTYPE_BOOTSTRAP_PREFIX));
-assert.ok(fast.includes('inference-first-rules'));
-assert.ok(fast.includes('category-classification.md'));
-assert.ok(fast.includes('competitor-research.md'));
+assert.ok(fast.includes('chat-conversation-loop.md'));
+assert.ok(fast.includes('chat-information-checklist.md'));
+assert.ok(fast.includes('emptiest required slot'));
+assert.ok(fast.includes('THIS TURN FORBIDDEN'));
+assert.ok(fast.includes('<START_MASTERPLAN>'));
+assert.ok(fast.includes('Do NOT run the engineer interview'));
 assert.ok(fast.includes('job-brief.md'));
-assert.ok(fast.includes('ENGINEER INTERVIEW'));
-assert.ok(fast.includes('THIS TURN = PLAN ONLY'));
-assert.ok(fast.includes('Do NOT emit START_CODING'));
-assert.ok(fast.includes('Always fill §1 Goal'));
-assert.ok(fast.includes('Never paste the raw user prompt'));
-assert.equal(/copy\/expand the user brief/i.test(fast), false);
+assert.equal(/THIS TURN = PLAN ONLY/.test(fast), false);
+assert.equal(/ENGINEER INTERVIEW/.test(fast), false);
+assert.equal(/HARD OUTPUT THIS TURN/.test(fast), false);
 assert.equal(/Web Search/i.test(fast), false);
 assert.equal(/Do not skip research/i.test(fast), false);
-assert.equal(/Do not skip or reorder/.test(fast), false);
 assert.equal(/Then emit START_CODING/.test(fast), false);
-assert.equal(/skip-with-reason/i.test(fast), false);
-assert.equal(/5\.1–5\.3 Competitor list/i.test(fast), false);
-assert.ok(fast.includes('UI Gen v2'));
-assert.ok(fast.includes('Foundation Go'));
 assert.ok(isHiddenBootstrapUserMessage(fast));
 assert.ok(isHiddenBootstrapUserMessage(buildDiscoveryBootstrap('Web App')));
 
@@ -105,8 +102,23 @@ const cont = buildFastPrototypeContinueBootstrap(
   'FAST PROTOTYPE MODE. User goal / brief:\n"""\nKids reading tutor with practice and parent progress.\nhttps://example.com/study\n"""\n',
 );
 assert.ok(isHiddenBootstrapUserMessage(cont));
-assert.ok(cont.includes('START_MASTERPLAN'));
+assert.ok(cont.includes('conversation loop') || cont.includes('chat-conversation-loop'));
+assert.equal(/HARD retry/.test(cont), false);
 assert.match(cont, /Kids reading tutor/i);
 assert.equal(/https?:\/\//.test(cont), false);
+
+assert.match(CHAT_SCOREBOARD_APPENDIX, /Slot 1/);
+assert.match(CHAT_SCOREBOARD_APPENDIX, /emptiest required slot/);
+assert.match(CHAT_SCOREBOARD_APPENDIX, /OFFER the close/);
+{
+  const appendix = chatModeSystemAppendix({
+    interactionMode: 'chat',
+    codingHint: 'brainstorm-loop',
+    discoveryRequired: true,
+  });
+  assert.match(appendix, /CHAT_SCOREBOARD/);
+  assert.match(appendix, /THIS TURN FORBIDDEN/);
+  assert.equal(/HARD OUTPUT THIS TURN/.test(appendix), false);
+}
 
 console.log('test-fast-prototype-mode: ok');

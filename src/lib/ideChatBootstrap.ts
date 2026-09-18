@@ -2,8 +2,7 @@ import type { ConversationLogEntryDTO } from './conversationLogClient';
 import type { NebulaProjectType } from './ideHomeEvents';
 import { sanitizeAssistantChatText } from '../../lib/assistantChatSanitize';
 import { extractGoalFromUserNote } from '../../lib/spineSequenceClient';
-import { ENGINEER_INTERVIEW_PROMPT } from '../../lib/engineerInterview';
-
+import { isBrainstormCloseConfirmedMessage } from './chatBrainstormClose';
 /** Hidden user turn — Grok replies with the first onboarding question only (project-execution-rules §4). */
 export const IDE_CHAT_DISCOVERY_BOOTSTRAP =
   "I'm ready. Follow project-execution-rules.md INITIAL ONBOARDING: ask only your first single discovery question about what I'm creating (app, landing page, site, or other — exact wording from the rules, one question in your reply).";
@@ -13,7 +12,21 @@ export const IDE_CHAT_DISCOVERY_BOOTSTRAP =
  * Prefer buildIdeaDiscoveryBootstrap for New Project → Start with a prompt.
  */
 export const IDE_CHAT_FAST_PROJECT_BOOTSTRAP =
-  "FAST PROJECT MODE. The user gave a short description for a new project (app, site, or landing). Follow project-execution-rules.md Discovery. First reply MUST: (1) a short \"Here's what I understood\" summary in bullets — only what the prompt clearly implies; note gaps if vague. (2) then ask exactly ONE missing required discovery question (include Project Type if unknown). Do NOT write Master Plan tags, code, or multiple questions. Do NOT rush to <START_MASTERPLAN>.";
+  "FAST PROJECT MODE. The user gave a short description for a new project. Follow chat-personality.md, chat-thinking-rules.md, chat-conversation-loop.md, and chat-information-checklist.md. Seed → reflect the north star → ask if that is right. After they confirm, one advance from the emptiest required slot. No bullets, no research talk, no plan. Do NOT write Master Plan tags, file blocks, or START_CODING.";
+
+/** Shared law for every hidden start turn (landing Build, idea, Fast Prototype, continue). */
+export const BRAINSTORM_LOOP_BOOTSTRAP_RULES =
+  `Follow nebulla-project/chat-conversation-loop.md (one beat per turn). ` +
+  `Beat A: this text is the seed / continuation — not a ticket and not “go build,” even if it is a long spec. ` +
+  `Beat B: as soon as you can name the goal, restate ONLY the north star in their words and ask if that is right ` +
+  `(adapt: “If I understood correctly, this exists so [goal]. Is that right?”). Repeat Beat B only if the goal changed. ` +
+  `Silent scoreboard: chat-information-checklist.md. Update slots after each user turn. Never show the list. ` +
+  `Next spoken beat from the emptiest required slot; prefer Slot 1 until confirmed. ` +
+  `Beat C: only after the goal is confirmed — ONE idea/resource with a reason, OR one blocking gap from that empty slot, OR one merge/cut. Never a questionnaire. ` +
+  `Beat D: if they are thinking out loud, stay on their thread, then one small advance. ` +
+  `Short spoken prose. No markdown lists unless they asked. No tool talk. No “next I’ll ask about…”. ` +
+  `If they say skip / just build / insist twice: still stay in the loop — reflect, or name the single biggest missing piece, or say you feel you have enough. ` +
+  `THIS TURN FORBIDDEN: <START_MASTERPLAN>, </END_MASTERPLAN>, START_CODING, <START_CODING>, \`\`\`file: blocks, job-brief.md, or any nebula-project/ files.`;
 
 const BOOTSTRAP_PREFIX = "I'm ready. Follow project-execution-rules.md INITIAL ONBOARDING:";
 
@@ -23,7 +36,7 @@ export const IDEA_DISCOVERY_BOOTSTRAP_PREFIX = 'IDEA PROMPT DISCOVERY.';
 /** Prefix for Fast Prototype (inference-first) — hidden from chat transcript. */
 export const FAST_PROTOTYPE_BOOTSTRAP_PREFIX = 'FAST PROTOTYPE MODE.';
 
-/** One automatic follow-up when the first Fast Prototype reply omitted Master Plan tags. */
+/** Hidden follow-up if a later product step re-enters the loop — never a plan retry. */
 export const FAST_PROTOTYPE_CONTINUE_PREFIX = 'FAST PROTOTYPE CONTINUE.';
 
 export function buildFastPrototypeContinueBootstrap(userGoalOrBootstrap?: string): string {
@@ -37,22 +50,10 @@ export function buildFastPrototypeContinueBootstrap(userGoalOrBootstrap?: string
     ? `User goal / brief:\n"""\n${clipped}\n"""\n\n`
     : "";
   return (
-    `${FAST_PROTOTYPE_CONTINUE_PREFIX} Your previous reply did NOT include <START_MASTERPLAN> tags. ` +
-    `This is a HARD retry — do NOT ask the user questions; do NOT apologize. Run the private engineer interview, then write.\n` +
+    `${FAST_PROTOTYPE_CONTINUE_PREFIX} Stay in the conversation loop. Do NOT retry a Master Plan. ` +
+    `${BRAINSTORM_LOOP_BOOTSTRAP_RULES}\n\n` +
     goalBlock +
-    `${ENGINEER_INTERVIEW_PROMPT}\n` +
-    `Immediately output in this order:\n` +
-    `1) \`\`\`file:nebula-project/job-brief.md\` … \`\`\` from the interview.\n` +
-    `2) <START_MASTERPLAN>…</END_MASTERPLAN> with ALL five sections generated FROM that job-brief (not a kit).\n` +
-    `   §1 thesis/actors/loop · §2–3 must-have/later + vendors mock|needs key · ` +
-    `§4 pages with /routes + purpose/primary_actions/authz/empty_state/error_state/nav_links · ` +
-    `§5 hex tokens (15–25 lines).\n` +
-    `3) \`\`\`file:nebula-project/fast-prototype-memory.md\` … \`\`\`\n` +
-    `4) \`\`\`file:nebula-project/category-classification.md\` … \`\`\`\n` +
-    `5) \`\`\`file:nebula-project/industry-standards.md\` … \`\`\` (assumption defaults only).\n` +
-    `Do NOT invent competitor names. Do NOT write competitor-research.md. Do NOT emit START_CODING or app file blocks.\n` +
-    `Product classifies the coding skeleton, then ui-brief / mockup, then Foundation Go. Do not look up competitors unless the user asked.\n` +
-    `Chat: at most 4 short lines listing assumptions.`
+    `If you already reflected the goal, do one Beat C or Beat D only. Remember typed and spoken share the same state.`
   );
 }
 
@@ -63,17 +64,16 @@ export function buildFastPrototypeContinueBootstrap(userGoalOrBootstrap?: string
 export function buildDiscoveryBootstrap(projectType?: NebulaProjectType | null): string {
   if (!projectType) {
     return (
-      `${BOOTSTRAP_PREFIX} Briefly greet in the spirit of chat-personality.md, then say you'll ask a few required questions to build the Master Plan, ` +
-      `then ask only your first single discovery question about what they're creating (not app-only — exact wording from the rules, one question in your reply). ` +
-      `Do NOT write Master Plan tags or code yet.`
+      `${BOOTSTRAP_PREFIX} Follow chat-personality.md and chat-conversation-loop.md. Warm greeting if they have not named an idea yet. ` +
+      `If they already named one, reflect it in their words and ask confirmation before anything else. ` +
+      `One spoken beat. No bullets, no research talk. Do NOT write Master Plan tags, file blocks, or START_CODING.`
     );
   }
   return (
     `${BOOTSTRAP_PREFIX} The user already chose project type **${projectType}** on My Projects. ` +
     `Store that as Project Type (do NOT ask the project-type question). ` +
-    `Briefly greet in the spirit of chat-personality.md, then say you'll ask a few required questions to build the Master Plan, then ask only your first single discovery question — the main goal — ` +
-    `using the exact wording from the rules (one question in your reply). ` +
-    `Use ${projectType} for later pages, navigation, UI/UX, and tech recommendations. Do NOT write Master Plan tags or code yet.`
+    `Follow chat-personality.md: greet briefly, then ask the main goal in their language — one question, no Master Plan pitch. ` +
+    `Use ${projectType} later. Do NOT write Master Plan tags or code yet.`
   );
 }
 
@@ -90,23 +90,18 @@ export function buildIdeaDiscoveryBootstrap(
     : `Project type is unknown — when it is the next missing required item, ask exactly: Web App / Mobile App / Landing Page / Other (please specify).`;
 
   return (
-    `${IDEA_DISCOVERY_BOOTSTRAP_PREFIX} Follow project-execution-rules.md Discovery (architecture-first). ${typeClause}\n\n` +
-    `User's idea prompt:\n"""\n${trimmed}\n"""\n\n` +
-    `Your first reply MUST:\n` +
-    `1) A short "Here's what I understood" summary in bullets (goal, users, main features, constraints, cited links) — only what the prompt clearly implies; say briefly if something is vague or missing.\n` +
-    `2) Then ask exactly ONE missing required discovery question (Discovery order: main goal if still unclear → project type if unknown → remaining necessary info one at a time → research pillars later).\n` +
-    `Skip anything the prompt already answered clearly — including goals, users, features, auth, privacy, routes/pages, and study/research notes. ` +
-    `URLs in the prompt are user citations: do NOT say you cannot browse or refuse to proceed because of links. ` +
-    `Use the surrounding text they wrote about the study; treat the URL as a reference to keep in the Master Plan. ` +
-    `Do NOT re-ask for facts already stated. Do NOT write Master Plan tags, code fences, or multiple questions. ` +
-    `Do NOT emit <START_MASTERPLAN> or <START_CODING> until Discovery is complete.`
+    `${IDEA_DISCOVERY_BOOTSTRAP_PREFIX} Follow chat-personality.md, chat-thinking-rules.md, chat-conversation-loop.md, and chat-information-checklist.md. ${typeClause}\n\n` +
+    `User's idea prompt (opening line of the talk — not a spec to execute, even if long):\n"""\n${trimmed}\n"""\n\n` +
+    `${BRAINSTORM_LOOP_BOOTSTRAP_RULES}\n` +
+    `First reply = Beat B (reflect the goal). Do not offer extras until they confirm, unless the goal is already crystal clear — then at most ONE Beat C. ` +
+    `Skip anything they already answered. Never invent to fill a hole. ` +
+    `URLs they pasted are citations — do not stall because you cannot open the link.`
   );
 }
 
 /**
- * Fast Prototype (additive): infer industry defaults, draft Master Plan with labeled
- * assumptions, then START_CODING Foundation — skip long Guided interview.
- * Law: nebula-project/inference-first-rules.md
+ * Landing Build / Fast Prototype / chat first seed — same conversation loop.
+ * Does not emit a Master Plan or job-brief on this turn.
  */
 export function buildFastPrototypeBootstrap(
   idea?: string | null,
@@ -114,35 +109,19 @@ export function buildFastPrototypeBootstrap(
 ): string {
   const trimmed = (idea || '').trim().slice(0, 4000);
   const typeClause = projectType
-    ? `Platform already chosen: **${projectType}**. Use it. Do NOT ask project type.`
-    : `Platform unknown — infer conservatively from the goal (prefer Web App unless mobile/kids/on-the-go is clear). State the assumption explicitly. Ask at most ONE question only if platform truly cannot be inferred.`;
+    ? `Platform already chosen: ${projectType}. Remember it; do not ask project type.`
+    : `Platform unknown — do not quiz them about it on this turn unless it is the one Beat C gap after they confirm the goal.`;
 
   const goalBlock = trimmed
     ? `User goal / brief:\n"""\n${trimmed}\n"""\n\n`
-    : `User chose Fast Prototype without a written goal yet. Ask exactly ONE question: the main goal (exact wording from INITIAL ONBOARDING goal question). After they answer, do not interview further — infer and draft.\n\n`;
+    : `No written goal yet. Beat B: ask what this exists to do — one spoken question, their language. Not the INITIAL ONBOARDING script.\n\n`;
 
   return (
-    `${FAST_PROTOTYPE_BOOTSTRAP_PREFIX} Follow nebula-project/inference-first-rules.md for quality (no invented competitors; labeled assumptions). ` +
-    `Do NOT run Guided Discovery interview. ${typeClause}\n\n` +
+    `${FAST_PROTOTYPE_BOOTSTRAP_PREFIX} Same loop as typed chat and voice. ${typeClause}\n\n` +
     goalBlock +
-    `${ENGINEER_INTERVIEW_PROMPT}\n` +
-    `THIS TURN = PLAN ONLY (one Grok job). Do not research, mockup, or write app code in this reply.\n` +
-    `Write nebula-project/job-brief.md from the interview, then generate §1–§5 from that brief only.\n` +
-    `Write nebula-project/fast-prototype-memory.md (mode, timestamp, goal).\n` +
-    `Categorize → nebula-project/category-classification.md (if confidence low: ONE question and stop).\n` +
-    `industry-standards.md as ASSUMPTION defaults only (roles, security baseline when kids/accounts/payments). Not finished research.\n` +
-    `Do NOT invent competitor names. Do NOT write nebula-project/competitor-research.md.\n` +
-    `Do NOT emit START_CODING, <START_CODING>, or app \`\`\`file:\` blocks (app/, src/, pages/, components/). nebula-project/ files are OK.\n` +
-    `Draft all five Master Plan sections inside <START_MASTERPLAN>…</END_MASTERPLAN> with REAL content (never placeholder "Build Untitled…" or empty cyan shells). Always fill §1 Goal with a distilled Goal tab from the user brief — never "Not specified", "TBD", empty, or the raw prompt pasted verbatim. Label inferred fields as assumptions. Competitors = none (inferred defaults) unless the user asked to research:\n` +
-    `- §1 Goal: purpose, primary users/roles, in/out of scope. Never paste the raw user prompt, study URLs, or "the study below" into §1.\n` +
-    `- §2 Tech and Research: Project Type; competitors = none (inferred defaults); **include Security baseline** when accounts/kids/students/private data apply.\n` +
-    `- §3 Features + at least one testable KPI (assumption-ranked from the classifier).\n` +
-    `- §4 Pages: every page with route \`/…\` AND fields purpose, primary_actions, data_entities, authz, empty_state, error_state, nav_links (minimum 3–5 pages).\n` +
-    `- §5 UI tokens: mood, hex palette, typography, density, radius, motion, components, nav (15–25 lines).\n` +
-    `List assumptions + stage=plan_drafted in fast-prototype-memory.md.\n` +
-    `Do NOT claim ui-brief is complete this turn.\n` +
-    `AFTER this reply the product classifies the coding skeleton, then ui-brief / UI Gen v2 mockup, then Foundation Go. Do not look up competitors unless the user asked.\n` +
-    `End with ≤4 lines: category, assumptions, main pages.`
+    `${BRAINSTORM_LOOP_BOOTSTRAP_RULES}\n` +
+    `First reply: Beat B on the seed. Long briefs still get a reflection + at most one advance. ` +
+    `Do NOT run Guided Discovery interview. Do NOT run the engineer interview. Do NOT write job-brief.md.`
   );
 }
 
@@ -185,5 +164,6 @@ export function isHiddenBootstrapUserMessage(text: string): boolean {
   if (t.startsWith(FAST_PROTOTYPE_BOOTSTRAP_PREFIX)) return true;
   if (t.startsWith(FAST_PROTOTYPE_CONTINUE_PREFIX)) return true;
   if (t.startsWith('FAST PROJECT MODE.')) return true;
+  if (isBrainstormCloseConfirmedMessage(t)) return true;
   return false;
 }

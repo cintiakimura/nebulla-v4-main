@@ -183,6 +183,8 @@ export async function handleSmartChatMessage(
   let codingHint: string | undefined;
   if (hardGuidedInterview) {
     codingHint = 'guided-onboarding';
+  } else if (discoveryRequired && mode === 'free') {
+    codingHint = 'brainstorm-loop';
   } else if (inferenceFirst || (mode === 'coding' && !masterPlanComplete)) {
     codingHint = 'fast-prototype';
   } else if (mode === 'coding') {

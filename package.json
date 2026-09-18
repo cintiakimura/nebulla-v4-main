@@ -58,7 +58,7 @@
     "test:ui-brief": "tsx scripts/test-ui-brief.ts",
     "test:uiux-section": "tsx scripts/test-uiux-section-builder.ts",
     "test:mind-map": "tsx scripts/test-mind-map-fidelity.ts",
-    "test:chat-mode": "tsx scripts/test-chat-mode-detector.ts",
+    "test:chat-mode": "tsx scripts/test-chat-mode-detector.ts && tsx scripts/test-chat-brainstorm-close.ts",
     "test:master-plan-status": "tsx scripts/test-master-plan-status-ui.ts",
     "test:methodology-pilots": "tsx scripts/pilot-master-plan-methodology.ts",
     "test:contract-telemetry": "tsx scripts/test-contract-telemetry.ts",

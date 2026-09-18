@@ -4,7 +4,7 @@ User-controlled lock in the IDE chat header. Orthogonal to automatic detector mo
 
 | Mode | Purpose | Writes files? | Best for |
 |------|---------|---------------|----------|
-| **Chat** | Brainstorm, discovery, planning, research talk | No | Voice / Open talk; BYOK while thinking |
+| **Chat** | Thinking stage — collaborator reflects, confirms, one idea at a time | No (no plan tags until they close) | Voice / Open talk; BYOK while thinking |
 | **Agent** | Implement, Go, file apply, debug fixes | Yes (under Master Plan gates) | Building after the plan is ready |
 
 ## Why it exists
@@ -38,7 +38,10 @@ User-controlled lock in the IDE chat header. Orthogonal to automatic detector mo
 ## Related
 
 - `nebulla-project/language-system.md` — IDE chrome `t()` + Chat/Plan `CONTENT_LOCALE` (applies to both Chat and Agent; personality stays Chat-only)
-- `nebulla-project/chat-personality.md` — **UNBREAKABLE** Chat brainstorming personality + greeting
+- `nebulla-project/chat-personality.md` — **UNBREAKABLE** Chat collaborator (voice)
+- `nebulla-project/chat-thinking-rules.md` — **UNBREAKABLE** Chat reasoning (four layers, evidence, confirm north star)
+- `nebulla-project/chat-conversation-loop.md` — **UNBREAKABLE** turn beats (receive → reflect → one advance)
+- `nebulla-project/chat-information-checklist.md` — **UNBREAKABLE** silent scoreboard (what “enough” means)
 - `nebulla-project/chat-mode-detection.md` — detector sequence (Discovery → Architecture → Coding …)
 - `nebulla-project/app-status-runtime.md` — preview health → NDM Verify
 - `nebulla-project/ui-generation-logic-v2.md` §17 — **Generate UI** = UI Studio Beta + seed patterns (Figma optional); Legacy v0 Studio is advanced-only

@@ -32,7 +32,9 @@ assert.match(ENGINEER_INTERVIEW_PROMPT, /job-brief/);
 assert.match(ENGINEER_INTERVIEW_PROMPT, /Do not ask for API keys before/);
 
 const boot = buildFastPrototypeBootstrap("Motodrop moto delivery pickup dropoff", "Web App");
-assert.match(boot, /ENGINEER INTERVIEW/);
+assert.match(boot, /chat-conversation-loop/);
+assert.match(boot, /THIS TURN FORBIDDEN/);
+assert.equal(/ENGINEER INTERVIEW/.test(boot), false);
 assert.match(boot, /job-brief\.md/);
 
 assert.match(FOUNDATION_MIN_UI_CHECKLIST, /Foundation\+Primary/);

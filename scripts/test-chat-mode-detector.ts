@@ -13,22 +13,29 @@ function section(name: string) {
   console.log(`\n✓ ${name}`);
 }
 
-section("incomplete plan: clear goal / build → inference-first (not Guided Q&A)");
+section("incomplete plan: seed / build → conversation loop (not a plan job)");
 {
   for (const msg of [
     "just build something",
     "implement the dashboard",
     "open UI Studio and generate ui",
     "refine the master plan architecture",
-    "continue building the app",
     "Education app for kids to practice reading; teachers track progress",
     "Build a mobile education app for kids to practice reading",
   ]) {
     const r = detectChatMode(msg, { masterPlanComplete: false });
-    assert.equal(r.mode, "coding", msg);
-    assert.equal(r.discoveryRequired, false, msg);
-    assert.equal(r.inferenceFirst, true, msg);
+    assert.equal(r.mode, "free", msg);
+    assert.equal(r.discoveryRequired, true, msg);
+    assert.equal(r.inferenceFirst, false, msg);
   }
+}
+
+section("incomplete plan: continue the app → coding path");
+{
+  const r = detectChatMode("continue building the app", { masterPlanComplete: false });
+  assert.equal(r.mode, "coding");
+  assert.equal(r.discoveryRequired, false);
+  assert.equal(r.inferenceFirst, true);
 }
 
 section("incomplete plan: explicit interview → Guided");

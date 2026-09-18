@@ -128,8 +128,9 @@ const boot = buildFastPrototypeBootstrap(
   'Mobile App',
 );
 assert.ok(isHiddenBootstrapUserMessage(boot));
-assert.ok(boot.includes('Security baseline'));
-assert.ok(boot.includes('primary_actions'));
-assert.ok(boot.includes('UI Gen v2'));
+assert.ok(boot.includes('chat-conversation-loop.md'));
+assert.ok(boot.includes('THIS TURN FORBIDDEN'));
+assert.equal(/<START_MASTERPLAN>/.test(boot), true);
+assert.equal(/THIS TURN = PLAN ONLY/.test(boot), false);
 
 console.log('test-start-prompt-path: ok');
