@@ -73,29 +73,22 @@ export function LandingPage({ onEnter }: LandingPageProps) {
   return (
     <div className="nebula-landing-page flex min-h-screen flex-col font-body text-foreground">
       <div className="nebula-landing-page__content relative z-[2] flex min-h-screen flex-col">
-        <header className="ide-glass-chrome flex h-14 shrink-0 items-center justify-between border-b border-border px-5 md:px-10">
+        <header className="ide-glass-chrome flex h-16 shrink-0 items-center justify-between border-b border-border px-5 md:h-[4.25rem] md:px-10">
           <div className="flex items-center gap-2.5">
             <Logo className="h-9 w-9 md:h-10 md:w-10" />
-            <span className="app-logotype text-[15px] tracking-[0.03em] md:text-base">Nebulla</span>
+            <span className="app-logotype text-base tracking-[0.03em] md:text-[17px]">Nebulla.dev</span>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-3">
             {FORCE_GUEST_MODE ? (
-              <a
-                href="/app"
-                onClick={() => markForceDashboardOnce()}
-                className="btn-secondary-surface inline-flex h-8 items-center rounded-md px-3 text-xs text-muted-foreground"
-              >
+              <a href="/app" onClick={() => markForceDashboardOnce()} className="landing-header-btn btn-secondary-surface">
                 Open app
               </a>
             ) : (
-              <a
-                href="/login"
-                className="btn-secondary-surface inline-flex h-8 items-center rounded-md px-3 text-xs text-muted-foreground"
-              >
+              <a href="/login" className="landing-header-btn btn-secondary-surface">
                 Log in
               </a>
             )}
-            <button type="button" onClick={handleTryFree} className="btn-cyan">
+            <button type="button" onClick={handleTryFree} className="landing-header-btn btn-cyan">
               {FORCE_GUEST_MODE ? 'Enter workspace' : 'Closed beta'}
             </button>
           </div>
@@ -103,19 +96,20 @@ export function LandingPage({ onEnter }: LandingPageProps) {
 
         <main className="flex flex-1 flex-col">
           {/* Hero — one display line; grouped band, not viewport-centered void */}
-          <section className="landing-hero flex flex-col items-center text-center">
-            <div className="landing-measure flex flex-col items-center">
-              <p className="landing-label">NEBULLA</p>
-              <h1 className="landing-display mt-2">
-                Talk like a friend.
-                <br />
-                Build like a pro.
-              </h1>
-              <p className="landing-body mt-4 max-w-[34rem]">
-                Architecture-first. You describe the goal — Nebulla plans and builds a real product
-                you can launch, not a dead mockup.
-              </p>
-              <LandingHeroPrompt className="mt-6 w-full" />
+          <section className="landing-hero">
+            <div className="landing-hero-split">
+              <div className="landing-hero-copy">
+                <h1 className="landing-display">
+                  <span className="landing-display-lead">Talk like a friend,</span>
+                  <span className="landing-display-punch">Build like a pro</span>
+                </h1>
+                <p className="landing-body mt-6 max-w-[28rem]">
+                  We brainstorm, look things up, and decide together.
+                  <br />
+                  Build a real product, not a dead mockup.
+                </p>
+              </div>
+              <LandingHeroPrompt className="w-full" />
             </div>
           </section>
 

@@ -94,8 +94,32 @@ export function LandingHeroPrompt({ className }: { className?: string }) {
   }, [listening]);
 
   return (
-    <div className={cn('mx-auto flex w-full flex-col items-center gap-2', className)}>
-      <div className="w-full overflow-hidden rounded-lg border border-border text-left shadow-none">
+    <div className={cn('flex w-full flex-col gap-3', className)}>
+      <button
+        type="button"
+        onClick={toggleMic}
+        disabled={busy}
+        className={cn(
+          'landing-hero-card landing-hero-card--voice',
+          listening && 'landing-hero-card--live',
+        )}
+        aria-label={listening ? 'Stop listening' : 'Start chat with voice'}
+      >
+        <p className="landing-hero-card-kicker">
+          Real talk. Real intelligence. Let’s ship something you can launch.
+        </p>
+        <span className="landing-hero-mic" aria-hidden>
+          <Mic className="h-8 w-8" strokeWidth={1.25} />
+        </span>
+        <span className="landing-hero-card-cta">{listening ? 'Listening…' : 'Start chat'}</span>
+      </button>
+
+      <p className="landing-hero-or">or</p>
+
+      <div className="landing-hero-card overflow-hidden text-left shadow-none">
+        <p className="landing-hero-card-kicker px-5 pt-5">
+          Write your prompt in your own words — we got you.
+        </p>
         <textarea
           value={draft}
           onChange={(e) => {
@@ -109,9 +133,9 @@ export function LandingHeroPrompt({ className }: { className?: string }) {
             }
           }}
           rows={4}
-          placeholder="Describe what you want to build…"
+          placeholder=""
           disabled={busy}
-          className="ide-glass-input min-h-[6.5rem] w-full resize-none border-0 bg-transparent px-4 py-4 text-[15px] font-light leading-relaxed text-foreground outline-none placeholder:text-muted-foreground/50 md:min-h-[7rem]"
+          className="ide-glass-input min-h-[5.5rem] w-full resize-none border-0 bg-transparent px-5 py-4 text-[15px] font-light leading-relaxed text-foreground outline-none placeholder:text-muted-foreground/50 md:min-h-[6.25rem]"
           aria-label="Project goal"
         />
 
