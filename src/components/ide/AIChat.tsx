@@ -205,7 +205,7 @@ import {
   OPEN_TALK_SILENCE_SEND_MS,
   stripAssistantTagsForVoice,
 } from '../../lib/voiceTtsShared';
-import { playTtsText } from '../../lib/ttsPlayback';
+import { playTtsText, unlockTtsAudio } from '../../lib/ttsPlayback';
 import { IdeAppStatusMenuButton } from './IdeAppStatusMenu';
 import {
   APP_STATUS_EVENTS,
@@ -1160,6 +1160,7 @@ export function AIChat() {
     };
 
     try {
+      unlockTtsAudio();
       recognition.start();
       liveHandsFreeRecognitionRef.current = recognition;
       isHandsFreeRef.current = true;
@@ -1603,6 +1604,7 @@ export function AIChat() {
     if (!rawText || sendingRef.current) return;
 
     if (micInputBlocked) return;
+    unlockTtsAudio();
 
     // Mirror sticky content locale (hysteresis) — skip hidden bootstraps.
     if (!isHiddenBootstrapUserMessage(rawText)) {
@@ -3149,6 +3151,7 @@ export function AIChat() {
         speakUrl: withProjectQuery('/api/speak'),
             signal: controller.signal,
         credentials: 'include',
+        headers: getGrokRequestHeaders(),
         language: contentLocaleRef.current,
         onAudio: (audio) => {
             const w = window as unknown as { nebula_ide_currentAudio?: HTMLAudioElement | null };
@@ -3172,6 +3175,13 @@ export function AIChat() {
         const aborted = (e as { name?: string })?.name === 'AbortError';
         if (!aborted && runId === ttsRunIdRef.current) {
           console.warn('[AIChat] TTS', e);
+          const msg = e instanceof Error ? e.message : String(e);
+          setAccessoryHint(
+            /NotAllowed|autoplay/i.test(msg)
+              ? 'Tap the mic once so the browser can play voice replies.'
+              : 'Voice reply could not play — check volume, or try the mic again.',
+          );
+          window.setTimeout(() => setAccessoryHint(null), 5000);
         }
     } finally {
       if (runId === ttsRunIdRef.current) finishPlayback();
@@ -3271,6 +3281,7 @@ export function AIChat() {
 
     voiceRecognitionRef.current = recognition;
     try {
+      unlockTtsAudio();
       recognition.start();
       setIsRecordingVoice(true);
       setAccessoryHint('Listening… click Send when done, or mic again to stop.');

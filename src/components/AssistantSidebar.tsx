@@ -37,7 +37,7 @@ import {
   MIC_REENABLE_AFTER_TTS_MS,
   VOICE_SILENCE_BEFORE_SEND_MS,
 } from '../lib/voiceTtsShared';
-import { playTtsText } from '../lib/ttsPlayback';
+import { playTtsText, unlockTtsAudio } from '../lib/ttsPlayback';
 
 import { MASTER_PLAN_SECTION_KEYS, parseMasterPlanBlock } from '../lib/masterPlanSections';
 
@@ -760,6 +760,7 @@ export function AssistantSidebar({
           void playTtsText({
             text: cleanText,
             speakUrl: '/api/speak',
+            credentials: 'include',
             language: resolveLanguageState(readLanguagePreferences()).resolvedContentLocale,
             signal: controller.signal,
             onAudio: (audio) => {
@@ -1088,6 +1089,7 @@ export function AssistantSidebar({
 
   const startAudioCapture = async () => {
     try {
+      unlockTtsAudio();
       if (!('webkitSpeechRecognition' in window)) {
         throw new Error('Speech recognition not supported in this browser.');
       }

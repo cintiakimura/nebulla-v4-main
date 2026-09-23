@@ -108,8 +108,16 @@ export function LandingPage({ onEnter }: LandingPageProps) {
                   <br />
                   Build a real product, not a dead mockup.
                 </p>
+                <LandingHeroPrompt className="mt-8 w-full" />
               </div>
-              <LandingHeroPrompt className="w-full" />
+              <div className="landing-hero-photo">
+                <img
+                  src="/images/landing-hero.png"
+                  alt="KG field device with screen and ethernet port"
+                  width={1600}
+                  height={1067}
+                />
+              </div>
             </div>
           </section>
 

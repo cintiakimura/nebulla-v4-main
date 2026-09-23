@@ -8,6 +8,7 @@ import {
   type IdeStartProjectType,
 } from '../lib/ideShellScreens';
 import { continueFromLandingGoal } from '../lib/landingGoalHandoff';
+import { unlockTtsAudio } from '../lib/ttsPlayback';
 
 const TYPES: { id: NonNullable<IdeStartProjectType>; label: string }[] = [
   { id: 'Web App', label: 'Web app' },
@@ -61,6 +62,7 @@ export function LandingHeroPrompt({ className }: { className?: string }) {
   }, []);
 
   const toggleMic = useCallback(() => {
+    unlockTtsAudio();
     const w = window as Window & {
       SpeechRecognition?: new () => SpeechRecognitionLike;
       webkitSpeechRecognition?: new () => SpeechRecognitionLike;

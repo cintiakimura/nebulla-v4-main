@@ -1379,6 +1379,21 @@
   text-align: left;
 }
 
+.nebulla-ide-shell .landing-hero-photo {
+  overflow: hidden;
+  border: 1px solid var(--shell-border);
+  border-radius: 14px;
+  background: #fff;
+}
+
+.nebulla-ide-shell .landing-hero-photo img {
+  display: block;
+  width: 100%;
+  height: auto;
+  object-fit: cover;
+  aspect-ratio: 3 / 2;
+}
+
 .nebulla-ide-shell .nebula-landing-page .landing-header-btn {
   display: inline-flex;
   align-items: center;

@@ -1,11 +1,51 @@
 /**
  * Low-latency TTS playback for Nebulla (AIChat + AssistantSidebar).
  * - Prefetches the next chunk while the current one plays
- * - Streams MPEG via MediaSource when supported (start before full download)
- * - Falls back to blob + HTMLAudioElement
+ * - Plays a complete MP3 blob (MediaSource + piped MPEG often lands silent on Safari/WebKit)
+ * - Unlocks the shared audio element on the user's mic / send gesture
  */
 
 import { splitTextForTts } from './voiceTtsShared';
+
+/** Tiny valid WAV — used only to unlock autoplay during a user gesture. */
+const SILENT_WAV =
+  'data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA';
+
+let sharedAudio: HTMLAudioElement | null = null;
+let audioUnlocked = false;
+
+function ensureSharedAudio(): HTMLAudioElement {
+  if (sharedAudio) return sharedAudio;
+  const audio = new Audio();
+  audio.preload = 'auto';
+  audio.playsInline = true;
+  audio.setAttribute('playsinline', 'true');
+  audio.muted = false;
+  audio.volume = 1;
+  sharedAudio = audio;
+  return audio;
+}
+
+/** Call from a click / mic tap so later TTS is allowed to play. */
+export function unlockTtsAudio(): void {
+  if (typeof window === 'undefined') return;
+  const audio = ensureSharedAudio();
+  if (audioUnlocked) return;
+  audio.muted = true;
+  audio.src = SILENT_WAV;
+  void audio
+    .play()
+    .then(() => {
+      audio.pause();
+      audio.currentTime = 0;
+      audio.muted = false;
+      audio.volume = 1;
+      audioUnlocked = true;
+    })
+    .catch(() => {
+      audio.muted = false;
+    });
+}
 
 export type TtsPlaybackOptions = {
   text: string;
@@ -22,11 +62,8 @@ export type TtsPlaybackOptions = {
 };
 
 function mseMpegSupported(): boolean {
-  try {
-    return typeof MediaSource !== 'undefined' && MediaSource.isTypeSupported('audio/mpeg');
-  } catch {
-    return false;
-  }
+  // Piped MP3 frames into MediaSource often fail silently (Safari/WebKit; split frames).
+  return false;
 }
 
 function appendBuffer(sb: SourceBuffer, chunk: Uint8Array): Promise<void> {
@@ -172,8 +209,12 @@ async function playMpegViaBlob(
   const t0 = performance.now();
   const blob = await response.blob();
   if (signal?.aborted) return () => {};
+  if (!blob.size) throw new Error('TTS returned empty audio');
   const url = URL.createObjectURL(blob);
   console.debug(`[TTS] blob ready ${Math.round(performance.now() - t0)}ms (${blob.size}b)`);
+  audio.muted = false;
+  audio.volume = 1;
+  audio.playsInline = true;
   audio.src = url;
   audio.preload = 'auto';
   await new Promise<void>((resolve, reject) => {
@@ -198,15 +239,31 @@ async function playMpegViaBlob(
     audio.onended = () => finish();
     audio.onerror = () => finish(new Error('audio element error'));
     // Play as soon as enough data is buffered (blob is local → near-instant).
-    void audio.play().then(
-      () => {
-        console.debug(`[TTS] blob play started ${Math.round(performance.now() - t0)}ms`);
-      },
-      (err) => {
-        if ((err as { name?: string })?.name === 'AbortError') finish();
-        else finish(err);
-      },
-    );
+    const startPlay = () =>
+      audio.play().then(
+        () => {
+          console.debug(`[TTS] blob play started ${Math.round(performance.now() - t0)}ms`);
+        },
+        (err) => {
+          const name = (err as { name?: string })?.name;
+          if (name === 'AbortError') {
+            finish();
+            return;
+          }
+          if (name === 'NotAllowedError') {
+            unlockTtsAudio();
+            void audio.play().then(
+              () => {
+                console.debug(`[TTS] blob play started after unlock ${Math.round(performance.now() - t0)}ms`);
+              },
+              finish,
+            );
+            return;
+          }
+          finish(err);
+        },
+      );
+    startPlay();
   });
   return () => {
     try {
@@ -301,7 +358,10 @@ export async function playTtsText(options: TtsPlaybackOptions): Promise<void> {
       const res = await resPromise;
       if (signal?.aborted) break;
 
-      const audio = new Audio();
+      const audio = ensureSharedAudio();
+      audio.muted = false;
+      audio.volume = 1;
+      audio.playsInline = true;
       options.onAudio?.(audio);
       revokeLast?.();
       revokeLast = null;
