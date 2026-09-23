@@ -91,6 +91,9 @@ assert.ok(isHiddenBootstrapUserMessage(boot));
 
 const seed = buildFastPrototypeBootstrap('motorcycle delivery', 'Web App');
 assert.match(seed, /THIS TURN FORBIDDEN/);
+assert.match(seed, /That.s a great idea/);
+assert.match(seed, /Is that right/);
+assert.match(seed, /full idea in mind/);
 assert.equal(/THIS TURN = PLAN ONLY/.test(seed), false);
 assert.ok(!seed.startsWith(BRAINSTORM_CLOSE_CONFIRMED_PREFIX));
 

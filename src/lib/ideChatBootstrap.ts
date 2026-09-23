@@ -16,17 +16,19 @@ export const IDE_CHAT_FAST_PROJECT_BOOTSTRAP =
 
 /** Shared law for every hidden start turn (landing Build, idea, Fast Prototype, continue). */
 export const BRAINSTORM_LOOP_BOOTSTRAP_RULES =
-  `Follow nebulla-project/chat-conversation-loop.md (one beat per turn). ` +
-  `Beat A: this text is the seed / continuation — not a ticket and not “go build,” even if it is a long spec. ` +
-  `Beat B: as soon as you can name the goal, restate ONLY the north star in their words and ask if that is right ` +
-  `(adapt: “If I understood correctly, this exists so [goal]. Is that right?”). Repeat Beat B only if the goal changed. ` +
-  `Silent scoreboard: chat-information-checklist.md. Update slots after each user turn. Never show the list. ` +
-  `Next spoken beat from the emptiest required slot; prefer Slot 1 until confirmed. ` +
-  `Beat C: only after the goal is confirmed — ONE idea/resource with a reason, OR one blocking gap from that empty slot, OR one merge/cut. Never a questionnaire. ` +
-  `Beat D: if they are thinking out loud, stay on their thread, then one small advance. ` +
-  `Short spoken prose. No markdown lists unless they asked. No tool talk. No “next I’ll ask about…”. ` +
-  `If they say skip / just build / insist twice: still stay in the loop — reflect, or name the single biggest missing piece, or say you feel you have enough. ` +
-  `THIS TURN FORBIDDEN: <START_MASTERPLAN>, </END_MASTERPLAN>, START_CODING, <START_CODING>, \`\`\`file: blocks, job-brief.md, or any nebula-project/ files.`;
+  `Follow nebulla-project/chat-conversation-loop.md. ` +
+  `Beat A: this text is the seed / continuation — not a ticket, even if it is a long spec. ` +
+  `FIRST REPLY after a product seed (then STOP and wait): (1) compliment — “That’s a great idea” or specific; ` +
+  `(2) reflect — “If I understood correctly, this is what the app should do: [goal in their words]. Is that right?”; ` +
+  `(3) fork — “Do you already have the full idea in mind, or do you want to brainstorm and shape it together?” ` +
+  `No extras, no research talk, no feature catalog on that first reply. ` +
+  `If they already have the full idea / go / hellos / just build: lock what you have. No workshop. Product starts Foundation+Primary. ` +
+  `If they want to brainstorm: silent research (never narrate tools) → 2–3 backend/v1 checks (roles, mock vs live maps-pay-push, what persists) ` +
+  `→ 2–4 feature ideas (name, why, v1 vs later) on THEIR product (not an Uber catalog) → ask the product name and offer 2–3 names. ` +
+  `After north star confirmed or they said that’s enough: you may say “Hello — I can build this now.” ` +
+  `Silent scoreboard: chat-information-checklist.md. Never show the list. Next spoken beat from the emptiest required slot after the first reply. ` +
+  `Short spoken prose. No tool talk. ` +
+  `THIS TURN FORBIDDEN on compliment / research / feature / name turns: <START_MASTERPLAN>, </END_MASTERPLAN>, START_CODING, <START_CODING>, \`\`\`file: blocks, job-brief.md, or any nebula-project/ files.`;
 
 const BOOTSTRAP_PREFIX = "I'm ready. Follow project-execution-rules.md INITIAL ONBOARDING:";
 
@@ -93,7 +95,7 @@ export function buildIdeaDiscoveryBootstrap(
     `${IDEA_DISCOVERY_BOOTSTRAP_PREFIX} Follow chat-personality.md, chat-thinking-rules.md, chat-conversation-loop.md, and chat-information-checklist.md. ${typeClause}\n\n` +
     `User's idea prompt (opening line of the talk — not a spec to execute, even if long):\n"""\n${trimmed}\n"""\n\n` +
     `${BRAINSTORM_LOOP_BOOTSTRAP_RULES}\n` +
-    `First reply = Beat B (reflect the goal). Do not offer extras until they confirm, unless the goal is already crystal clear — then at most ONE Beat C. ` +
+    `First reply = compliment + “If I understood correctly, this is what the app should do: … Is that right?” + full-idea vs brainstorm fork. Then wait. ` +
     `Skip anything they already answered. Never invent to fill a hole. ` +
     `URLs they pasted are citations — do not stall because you cannot open the link.`
   );
@@ -120,7 +122,7 @@ export function buildFastPrototypeBootstrap(
     `${FAST_PROTOTYPE_BOOTSTRAP_PREFIX} Same loop as typed chat and voice. ${typeClause}\n\n` +
     goalBlock +
     `${BRAINSTORM_LOOP_BOOTSTRAP_RULES}\n` +
-    `First reply: Beat B on the seed. Long briefs still get a reflection + at most one advance. ` +
+    `First reply: compliment + “If I understood correctly, this is what the app should do: … Is that right?” + fork. Then wait. ` +
     `Do NOT run Guided Discovery interview. Do NOT run the engineer interview. Do NOT write job-brief.md.`
   );
 }

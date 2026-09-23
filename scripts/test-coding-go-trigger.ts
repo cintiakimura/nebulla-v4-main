@@ -3,8 +3,10 @@
  */
 import assert from 'node:assert/strict';
 import {
+  isAssistantBuildNowCloser,
   isAssistantCodingPromise,
   isAssistantRefineClaim,
+  isGuidedFirstReplyShape,
   isPostCodeRefineRequest,
   isShortCodingGoNudge,
   isUserExplicitCodingRequest,
@@ -36,6 +38,22 @@ assert.equal(
   true,
 );
 assert.equal(isUserExplicitCodingRequest('what is the Master Plan?'), false);
+
+assert.equal(isUserExplicitCodingRequest('hello', { firstUserMessage: true }), false);
+assert.equal(isUserExplicitCodingRequest('hello', { firstUserMessage: false, closerReady: true }), true);
+assert.equal(isUserExplicitCodingRequest('hellos', { closerReady: true }), true);
+assert.equal(isUserExplicitCodingRequest('hellos', { firstUserMessage: true }), false);
+assert.equal(isUserExplicitCodingRequest('go', { firstUserMessage: true }), true);
+assert.equal(isUserExplicitCodingRequest('just build it', { firstUserMessage: true }), true);
+assert.equal(isUserExplicitCodingRequest('yes', { closerReady: false }), false);
+assert.equal(isUserExplicitCodingRequest('yes', { closerReady: true }), true);
+assert.equal(isAssistantBuildNowCloser('Hello — I can build this now.'), true);
+assert.equal(isAssistantCodingPromise('Hello — I can build this now.'), true);
+
+const firstReply =
+  "That's a great idea. If I understood correctly, this is what the app should do: kids practice reading in short sessions. Is that right? Do you already have the full idea in mind, or do you want to brainstorm and shape it together?";
+assert.equal(isGuidedFirstReplyShape(firstReply), true);
+assert.equal(isGuidedFirstReplyShape('So a reading app. Cool.'), false);
 
 const longRefine =
   'keep mock auth and mockStore as they are. apply a dark theme across the home screen. ' +

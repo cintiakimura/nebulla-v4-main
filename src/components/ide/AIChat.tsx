@@ -80,6 +80,7 @@ import {
   isPostCodeRefineRequest,
   isShortCodingGoNudge,
   isUserExplicitCodingRequest,
+  historyHasConfirmedNorthStar,
   SHORT_CODING_GO_SUMMARY,
 } from '../../lib/ideShortCodingNudge';
 import {
@@ -209,6 +210,8 @@ import {
   stripAssistantTagsForVoice,
 } from '../../lib/voiceTtsShared';
 import { playTtsText, unlockTtsAudio } from '../../lib/ttsPlayback';
+import { getTtsVoiceForRequest } from '../../lib/ttsVoicePrefs';
+import { TtsVoicePicker } from './TtsVoicePicker';
 import { IdeAppStatusMenuButton } from './IdeAppStatusMenu';
 import {
   APP_STATUS_EVENTS,
@@ -1934,15 +1937,27 @@ export function AIChat() {
       lastSlice: lastAutoSliceLabelRef.current,
       projectKey: resolveActiveProjectIds(diskProjectKey).projectKey,
     });
+    const firstUserMessage = !prior.some(
+      (m) => m.role === 'user' && !isHiddenBootstrapUserMessage(m.content),
+    );
+    const closerReady =
+      historyHasConfirmedNorthStar(prior) ||
+      brainstormCloseConfirmed ||
+      closeTurn.kind === 'confirmed';
+    const wantsLockAndBuild = isUserExplicitCodingRequest(rawText, {
+      firstUserMessage,
+      closerReady,
+    });
     const stayInBrainstormLoop =
       !brainstormCloseConfirmed &&
+      !wantsLockAndBuild &&
       (isBootstrapTrigger || discoveryRequired || closeTurn.kind === 'skip-lock') &&
       chatMode !== 'debugging' &&
       chatMode !== 'file' &&
       !hasAppStatusPayload &&
       !existingAppWork;
-    /** Bare "go" / continue — only when this is not a fresh brainstorm. */
-    const userForcedCoding = isUserExplicitCodingRequest(rawText) && !stayInBrainstormLoop;
+    /** go / hellos / just build lock the seed and start Foundation. First hello is a greeting. */
+    const userForcedCoding = wantsLockAndBuild;
     if (userNoteRequestsUiGeneration(rawText) && !hasAppStatusPayload && !existingAppWork) {
       beginPlanActivity('Generating UI from Master Plan…', chatWorkSteps(), {
         subhead: 'UI Gen v2 — §1 Goal and Go are not rewritten.',
@@ -1992,6 +2007,11 @@ export function AIChat() {
       discoveryRequired = false;
       chatMode = 'architecture';
       codingHint = 'brainstorm-close-confirmed';
+    } else if (userForcedCoding) {
+      markDiscoveryClosed(diskProjectKey);
+      discoveryRequired = false;
+      chatMode = 'coding';
+      codingHint = codingHint || 'user-go-start-coding';
     } else if (closeTurn.kind === 'skip-lock') {
       discoveryRequired = true;
       chatMode = 'free';
@@ -2005,10 +2025,6 @@ export function AIChat() {
       discoveryRequired = false;
       chatMode = 'coding';
       codingHint = 'discovery-complete-start-coding';
-    } else if (userForcedCoding) {
-      discoveryRequired = false;
-      chatMode = 'coding';
-      codingHint = codingHint || 'user-go-start-coding';
     }
     const lockedChat = interactionModeRef.current === 'chat';
     const onboardingBuildStart = discoveryCompleteAck;
@@ -3197,6 +3213,7 @@ export function AIChat() {
         credentials: 'include',
         headers: getGrokRequestHeaders(),
         language: contentLocaleRef.current,
+        voice: getTtsVoiceForRequest(),
         onAudio: (audio) => {
             const w = window as unknown as { nebula_ide_currentAudio?: HTMLAudioElement | null };
             w.nebula_ide_currentAudio = audio;
@@ -4031,6 +4048,7 @@ export function AIChat() {
                   )}
                 />
               </ChatRoundButton>
+              <TtsVoicePicker label={t('chat.voice')} />
             </div>
 
               {sending ? (

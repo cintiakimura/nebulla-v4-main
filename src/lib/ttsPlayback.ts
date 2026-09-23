@@ -6,6 +6,8 @@
  */
 
 import { splitTextForTts } from './voiceTtsShared';
+import { getTtsVoiceForRequest } from './ttsVoicePrefs';
+import type { TtsVoiceId } from '../../lib/ttsVoice';
 
 /** Tiny valid WAV — used only to unlock autoplay during a user gesture. */
 const SILENT_WAV =
@@ -58,6 +60,8 @@ export type TtsPlaybackOptions = {
   headers?: Record<string, string>;
   /** Content locale code (en|fr|it|es|de) — passed to /api/speak. */
   language?: string;
+  /** xAI voice name. Defaults to the persisted pick (Zenith). */
+  voice?: TtsVoiceId | string;
 };
 
 function mseMpegSupported(): boolean {
@@ -280,13 +284,18 @@ async function fetchSpeakChunk(
   credentials: RequestCredentials | undefined,
   headers: Record<string, string> | undefined,
   language?: string,
+  voice?: string,
 ): Promise<Response> {
   const t0 = performance.now();
   const res = await fetch(speakUrl, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...(headers || {}) },
     credentials,
-    body: JSON.stringify({ text, language: language || 'en' }),
+    body: JSON.stringify({
+      text,
+      language: language || 'en',
+      voice: voice || getTtsVoiceForRequest(),
+    }),
     signal,
   });
   console.debug(`[TTS] /api/speak TTFB ${Math.round(performance.now() - t0)}ms status=${res.status}`);
@@ -332,6 +341,7 @@ export async function playTtsText(options: TtsPlaybackOptions): Promise<void> {
       options.credentials,
       options.headers,
       options.language,
+      options.voice,
     );
   };
 
@@ -349,6 +359,7 @@ export async function playTtsText(options: TtsPlaybackOptions): Promise<void> {
         options.credentials,
         options.headers,
         options.language,
+        options.voice,
       );
       prefetch = null;
       // Prefetch the next chunk while this one downloads/plays.

@@ -47,10 +47,76 @@ export function isAssistantRefineClaim(text: string): boolean {
   return ASSISTANT_REFINE_CLAIM_RE.test(t);
 }
 
+export type CodingRequestContext = {
+  /** First user turn on an empty project — lone hello is a greeting. */
+  firstUserMessage?: boolean;
+  /** North star already confirmed, close offered, or they said that's enough. */
+  closerReady?: boolean;
+};
+
+const HELLO_GREETING_RE = /^(hello|hi|hey|hellos|hola|ciao|salut)[\s.!?]*$/i;
+
+const LOCK_AND_BUILD_RE =
+  /\b(already have (the )?(full )?idea|full idea in mind|no need to brainstorm|just build(?:\s+it)?|skip (the )?(talk|chat|workshop)|don'?t brainstorm|that'?s enough|enough for now)\b/i;
+
+const ALWAYS_GO_RE =
+  /^(go|go\.|go!|go\s+ahead|let'?s\s+go|build\s+it)[\s.!?]*$/i;
+
+const SPOKEN_CLOSER_RE =
+  /^(hello|hellos|go(?:\s+ahead)?|let'?s\s+go|build\s+it|yes|yeah|yep|ok|okay|do\s+it)[\s.!?]*$/i;
+
+export function isFirstMessageGreeting(text: string): boolean {
+  return HELLO_GREETING_RE.test(String(text || '').trim());
+}
+
+export function isLockAndBuildRequest(text: string): boolean {
+  return LOCK_AND_BUILD_RE.test(String(text || '').trim());
+}
+
+/** Assistant spoken closer after confirm — product must start Foundation. */
+export function isAssistantBuildNowCloser(text: string): boolean {
+  return /\bhello\b[\s,;:—–-]*\bi can build this now\b/i.test(String(text || '').trim());
+}
+
+export function historyHasConfirmedNorthStar(
+  prior?: Array<{ role?: string; content?: string }>,
+): boolean {
+  if (!prior?.length) return false;
+  let asked = false;
+  for (const m of prior) {
+    const role = String(m.role || '');
+    const content = String(m.content || '');
+    if (role === 'assistant' && /is that right/i.test(content)) asked = true;
+    if (
+      asked &&
+      role === 'user' &&
+      /^(yes|yeah|yep|yup|that'?s\s+right|that\s+is\s+right|correct|exactly|right)[\s.!?]*$/i.test(
+        content.trim(),
+      )
+    ) {
+      return true;
+    }
+    if (role === 'assistant' && /I think we(?:'ve| have) got (?:what we need|it)|here'?s what I heard/i.test(content)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/** First seed reply: compliment + reflect + fork. */
+export function isGuidedFirstReplyShape(text: string): boolean {
+  const t = String(text || '');
+  const compliment = /that'?s a great idea|love (this|that)|great idea/i.test(t);
+  const reflect = /if i understood correctly[\s\S]{0,240}is that right/i.test(t);
+  const fork = /full idea in mind|brainstorm and shape/i.test(t);
+  return compliment && reflect && fork;
+}
+
 /** User explicitly asked to code / Go — product must run Foundation or next slice, not only chat. */
-export function isUserExplicitCodingRequest(text: string): boolean {
+export function isUserExplicitCodingRequest(text: string, ctx?: CodingRequestContext): boolean {
   const t = String(text || '').trim();
   if (!t) return false;
+  if (ctx?.firstUserMessage && isFirstMessageGreeting(t)) return false;
   if (/\binterview\b/i.test(t) && !/\bSTART_CODING\b/i.test(t) && !hasStrongExplicitCodingSignal(t)) {
     return false;
   }
@@ -59,9 +125,11 @@ export function isUserExplicitCodingRequest(text: string): boolean {
   }
   if (hasStrongExplicitCodingSignal(t)) return true;
   if (isPostCodeRefineRequest(t)) return true;
+  if (isLockAndBuildRequest(t)) return true;
   // Short nudges only — a long paste without the signals above is discussion, not Go.
   if (t.length > 400) return false;
-  if (/^(go|go\.|go!)$/i.test(t)) return true;
+  if (ALWAYS_GO_RE.test(t)) return true;
+  if (ctx?.closerReady && SPOKEN_CLOSER_RE.test(t)) return true;
   // Soft-gate copy: "Reply continue" / "build next" / "continue please"
   if (/^(please\s+)?(continue|build\s+next|next\s+slice)(\s+please)?[\s.!]*$/i.test(t)) return true;
   if (/^(keep going|go ahead)[\s.!]*$/i.test(t)) return true;
@@ -87,6 +155,7 @@ export function isAssistantCodingPromise(text: string): boolean {
   const t = String(text || '').trim();
   if (!t) return false;
   if (isAssistantRefineClaim(t)) return true;
+  if (isAssistantBuildNowCloser(t)) return true;
   if (t.length > 500) return false;
   if (/\bSTART_CODING\b/i.test(t)) return true;
   return (

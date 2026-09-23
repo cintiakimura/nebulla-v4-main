@@ -9,6 +9,7 @@ import {
 } from '../lib/ideShellScreens';
 import { continueFromLandingGoal } from '../lib/landingGoalHandoff';
 import { unlockTtsAudio } from '../lib/ttsPlayback';
+import { TtsVoicePicker } from './ide/TtsVoicePicker';
 
 const TYPES: { id: NonNullable<IdeStartProjectType>; label: string }[] = [
   { id: 'Web App', label: 'Web app' },
@@ -160,6 +161,7 @@ export function LandingHeroPrompt({ className }: { className?: string }) {
           </div>
 
           <div className="ml-auto flex items-center gap-2">
+            <TtsVoicePicker />
             <button
               type="button"
               title={listening ? 'Stop listening' : 'Voice input'}

@@ -40,6 +40,8 @@ import {
   VOICE_SILENCE_BEFORE_SEND_MS,
 } from '../lib/voiceTtsShared';
 import { playTtsText, unlockTtsAudio } from '../lib/ttsPlayback';
+import { getTtsVoiceForRequest } from '../lib/ttsVoicePrefs';
+import { TtsVoicePicker } from './ide/TtsVoicePicker';
 
 import { MASTER_PLAN_SECTION_KEYS, parseMasterPlanBlock } from '../lib/masterPlanSections';
 
@@ -764,6 +766,7 @@ export function AssistantSidebar({
             speakUrl: '/api/speak',
             credentials: 'include',
             language: resolveLanguageState(readLanguagePreferences()).resolvedContentLocale,
+            voice: getTtsVoiceForRequest(),
             signal: controller.signal,
             onAudio: (audio) => {
               (window as any).nebula_currentAudio = audio;
@@ -1567,6 +1570,7 @@ export function AssistantSidebar({
               >
                 <Mic className="h-4 w-4 shrink-0" strokeWidth={1.75} aria-hidden />
               </button>
+              <TtsVoicePicker />
               <button
                 type="button"
                 onClick={toggleLive}

@@ -35,6 +35,7 @@ import {
   issuePreviewGrantCookieMerging,
 } from "./lib/appPreviewAuthz";
 import { createApiRateLimitGate } from "./lib/rateLimit";
+import { DEFAULT_TTS_VOICE, resolveTtsVoice, type TtsVoiceId } from "./lib/ttsVoice";
 import { getOpsReadiness, logOpsReadinessAtBoot } from "./lib/opsReadiness";
 import { registerFigmaIngestAdminRoutes } from "./lib/figmaIngestAdminRoutes";
 import {
@@ -6495,10 +6496,14 @@ ${answer.slice(0, 8000)}`;
       (typeof req.query.language === "string" && req.query.language) ||
       "en";
     const language = String(languageRaw).trim().toLowerCase().slice(0, 2) || "en";
+    const voiceRaw =
+      (typeof req.body?.voice === "string" && req.body.voice) ||
+      (typeof req.query.voice === "string" && req.query.voice) ||
+      "";
 
     try {
       const t0 = Date.now();
-      const upstream = await speakUpstream(text, language);
+      const upstream = await speakUpstream(text, language, voiceRaw);
       if (!upstream.body) {
         const audio = Buffer.from(await upstream.arrayBuffer());
       res.set({
@@ -6637,18 +6642,13 @@ startServer().catch((err) => {
   process.exit(1);
 });
 
-/** Open upstream Grok TTS and return the Response (body streamed — do not buffer). */
-async function speakUpstream(text: string, language = "en"): Promise<Response> {
-  const apiKey = readPlatformTtsApiKey();
-  const lang = ["en", "fr", "it", "es", "de"].includes(language) ? language : "en";
-
-  if (!apiKey) {
-    throw new Error(
-      `TTS needs an xAI key: set ${MAIN_AI_ENV_VAR} (preferred) or optional GROK_TTS_NEW_API_KEY in the server .env.`,
-    );
-  }
-
-  const response = await fetch("https://api.x.ai/v1/audio/speech", {
+async function fetchXaiSpeech(
+  apiKey: string,
+  text: string,
+  lang: string,
+  voice: TtsVoiceId,
+): Promise<Response> {
+  return fetch("https://api.x.ai/v1/audio/speech", {
     method: "POST",
     headers: {
       Authorization: `Bearer ${apiKey}`,
@@ -6657,21 +6657,20 @@ async function speakUpstream(text: string, language = "en"): Promise<Response> {
     body: JSON.stringify({
       model: "grok-tts-1",
       input: text,
-      voice: "Eve",
+      voice,
       response_format: "mp3",
-      // Best-effort; ignored if upstream does not support it yet.
       language: lang,
     }),
   });
+}
 
-  if (response.ok) {
-    return response;
-  }
-
-  const primaryError = await response.text();
-  console.warn(`[TTS] New endpoint failed (${response.status}). Trying compatibility fallback.`);
-
-  const fallback = await fetch("https://api.x.ai/v1/tts", {
+async function fetchXaiTtsCompat(
+  apiKey: string,
+  text: string,
+  lang: string,
+  voice: TtsVoiceId,
+): Promise<Response> {
+  return fetch("https://api.x.ai/v1/tts", {
     method: "POST",
     headers: {
       Authorization: `Bearer ${apiKey}`,
@@ -6679,7 +6678,7 @@ async function speakUpstream(text: string, language = "en"): Promise<Response> {
     },
     body: JSON.stringify({
       text,
-      voice_id: "Eve",
+      voice_id: voice,
       output_format: {
         codec: "mp3",
         sample_rate: 44100,
@@ -6688,6 +6687,40 @@ async function speakUpstream(text: string, language = "en"): Promise<Response> {
       language: lang,
     }),
   });
+}
+
+/** Open upstream Grok TTS and return the Response (body streamed — do not buffer). */
+async function speakUpstream(text: string, language = "en", voiceRaw?: string): Promise<Response> {
+  const apiKey = readPlatformTtsApiKey();
+  const lang = ["en", "fr", "it", "es", "de"].includes(language) ? language : "en";
+  let voice = resolveTtsVoice(voiceRaw);
+
+  if (!apiKey) {
+    throw new Error(
+      `TTS needs an xAI key: set ${MAIN_AI_ENV_VAR} (preferred) or optional GROK_TTS_NEW_API_KEY in the server .env.`,
+    );
+  }
+
+  let response = await fetchXaiSpeech(apiKey, text, lang, voice);
+  if (!response.ok && voice !== DEFAULT_TTS_VOICE) {
+    const rejected = await response.text().catch(() => "");
+    console.warn(`[TTS] voice ${voice} rejected (${response.status}) — falling back to ${DEFAULT_TTS_VOICE}. ${rejected.slice(0, 120)}`);
+    voice = DEFAULT_TTS_VOICE;
+    response = await fetchXaiSpeech(apiKey, text, lang, voice);
+  }
+
+  if (response.ok) {
+    return response;
+  }
+
+  const primaryError = await response.text();
+  console.warn(`[TTS] New endpoint failed (${response.status}). Trying compatibility fallback.`);
+
+  let fallback = await fetchXaiTtsCompat(apiKey, text, lang, voice);
+  if (!fallback.ok && voice !== DEFAULT_TTS_VOICE) {
+    voice = DEFAULT_TTS_VOICE;
+    fallback = await fetchXaiTtsCompat(apiKey, text, lang, voice);
+  }
 
   if (!fallback.ok) {
     const fallbackError = await fallback.text();
