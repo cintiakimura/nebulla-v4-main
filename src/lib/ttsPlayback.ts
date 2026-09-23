@@ -18,7 +18,6 @@ function ensureSharedAudio(): HTMLAudioElement {
   if (sharedAudio) return sharedAudio;
   const audio = new Audio();
   audio.preload = 'auto';
-  audio.playsInline = true;
   audio.setAttribute('playsinline', 'true');
   audio.muted = false;
   audio.volume = 1;
@@ -214,7 +213,7 @@ async function playMpegViaBlob(
   console.debug(`[TTS] blob ready ${Math.round(performance.now() - t0)}ms (${blob.size}b)`);
   audio.muted = false;
   audio.volume = 1;
-  audio.playsInline = true;
+  audio.setAttribute('playsinline', 'true');
   audio.src = url;
   audio.preload = 'auto';
   await new Promise<void>((resolve, reject) => {
@@ -361,7 +360,7 @@ export async function playTtsText(options: TtsPlaybackOptions): Promise<void> {
       const audio = ensureSharedAudio();
       audio.muted = false;
       audio.volume = 1;
-      audio.playsInline = true;
+      audio.setAttribute('playsinline', 'true');
       options.onAudio?.(audio);
       revokeLast?.();
       revokeLast = null;
