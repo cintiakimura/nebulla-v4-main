@@ -4,6 +4,8 @@
 import assert from 'node:assert/strict';
 import {
   isAssistantCodingPromise,
+  isAssistantRefineClaim,
+  isPostCodeRefineRequest,
   isShortCodingGoNudge,
   isUserExplicitCodingRequest,
 } from '../src/lib/ideShortCodingNudge.ts';
@@ -34,6 +36,21 @@ assert.equal(
   true,
 );
 assert.equal(isUserExplicitCodingRequest('what is the Master Plan?'), false);
+
+const longRefine =
+  'keep mock auth and mockStore as they are. apply a dark theme across the home screen. ' +
+  'fill the layout draft from the latest note. edit existing files only — globals.css, layout, and page components. ' +
+  'Do not add a new framework, do not wipe routes, and do not rewrite package.json. '.repeat(3);
+assert.ok(longRefine.length > 400);
+assert.equal(isPostCodeRefineRequest(longRefine), true);
+assert.equal(isUserExplicitCodingRequest(longRefine), true);
+
+const applyingTheme =
+  'Understood. Applying dark theme fixes, mobile-companion home update, layout draft fill, and css color pass on the existing files. ' +
+  'I will patch globals and the home screen in place. '.repeat(12);
+assert.ok(applyingTheme.length > 500);
+assert.equal(isAssistantRefineClaim(applyingTheme), true);
+assert.equal(isAssistantCodingPromise(applyingTheme), true);
 
 const explicitStartCodingPaste = `START_CODING — continue building.
 

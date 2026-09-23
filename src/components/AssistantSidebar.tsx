@@ -23,6 +23,8 @@ import {
   readOnboardingAutopilotDone,
 } from '../lib/ideProjectReset';
 import { runGoCodeAndApply } from '../lib/nebulaGrokCodingPipeline';
+import { isPostCodeRefineRequest } from '../lib/ideShortCodingNudge';
+import { buildEditExistingUserNote } from '../lib/fastPrototypeNextSlice';
 import { runMasterPlanUiPipelineWithV0 } from '../lib/ideArtifactSync';
 import { buildNebulaAssistantSystemPrompt } from '../lib/nebulaAssistantSystemPrompt';
 import { buildLanguagePromptAppendix } from '../lib/i18n/languagePromptAppendix';
@@ -878,7 +880,10 @@ export function AssistantSidebar({
   /** Go: Grok 4 writes only a short summary to master-plan.json, then Grok Code implements. */
   const handleGoCode = async () => {
     if (codeMode || isLoading) return;
-    const userNote = inputText.trim();
+    const rawNote = inputText.trim();
+    const userNote = isPostCodeRefineRequest(rawNote)
+      ? buildEditExistingUserNote(rawNote)
+      : rawNote;
     try {
       const r = await fetch(withProjectQuery('/api/config'));
       const cfg = (await readResponseJson(r)) as { hasGrokApiKey?: boolean };

@@ -76,6 +76,8 @@ import {
 } from '../../lib/nebulaAiCodingPipeline';
 import {
   isAssistantCodingPromise,
+  isAssistantRefineClaim,
+  isPostCodeRefineRequest,
   isShortCodingGoNudge,
   isUserExplicitCodingRequest,
   SHORT_CODING_GO_SUMMARY,
@@ -106,6 +108,7 @@ import {
   workspaceHasProductAppRoutes,
   FOUNDATION_RETRY_ACTIVITY,
   FOUNDATION_SLICE_INSTRUCTION,
+  buildEditExistingUserNote,
 } from '../../lib/fastPrototypeNextSlice';
 import { setGrokCodingActive } from '../../lib/nebulaGrokCodingGate';
 import { publishGrokActivity } from '../../lib/nebulaGrokActivityBus';
@@ -1940,7 +1943,7 @@ export function AIChat() {
       !existingAppWork;
     /** Bare "go" / continue — only when this is not a fresh brainstorm. */
     const userForcedCoding = isUserExplicitCodingRequest(rawText) && !stayInBrainstormLoop;
-    if (userNoteRequestsUiGeneration(rawText) && !userForcedCoding && !hasAppStatusPayload) {
+    if (userNoteRequestsUiGeneration(rawText) && !hasAppStatusPayload && !existingAppWork) {
       beginPlanActivity('Generating UI from Master Plan…', chatWorkSteps(), {
         subhead: 'UI Gen v2 — §1 Goal and Go are not rewritten.',
         initialLog: 'Generating UI from §5 tokens and ui-brief…',
@@ -2106,6 +2109,7 @@ export function AIChat() {
     const session = await fetchSessionUser();
     const userId = session?.uid?.trim() || 'anonymous';
     let scheduledTts = false;
+    let editGoArmed = false;
     let mpSaved = 0;
     const codingProblems: string[] = [];
     const noteProblem = (msg: string) => {
@@ -2330,6 +2334,26 @@ export function AIChat() {
 
       const shortCodingNudge = isShortCodingGoNudge(displayText || raw);
       const assistantCodingPromise = isAssistantCodingPromise(displayText || raw);
+      const postCodeRefine =
+        foundationLandedOnDisk() &&
+        (isPostCodeRefineRequest(rawText) ||
+          isUserExplicitCodingRequest(rawText) ||
+          isAssistantRefineClaim(displayText || raw));
+      if (foundationLandedOnDisk() && isAssistantRefineClaim(displayText || raw)) {
+        const editNote = buildEditExistingUserNote(rawText);
+        window.setTimeout(() => {
+          if (editGoArmed) return;
+          editGoArmed = true;
+          pushActivity('Applying the theme/layout edit in the workspace…', 'info');
+          void runGoCodeAndApply({
+            userId,
+            projectName,
+            userNote: editNote,
+            onProgress: pushActivity,
+            messages: [{ role: 'user', content: editNote }],
+          });
+        }, 2000);
+      }
       let willCode =
         agentAllowed &&
         !brainstormCloseConfirmed &&
@@ -2488,7 +2512,7 @@ export function AIChat() {
       const foundationAlreadyLanded = foundationLandedOnDisk();
       const wantsNextSlice = userNoteRequestsNextSlice(text);
       if (agentAllowed && (fastPrototypeTurn || willCode || mpSaved > 0)) {
-        if (wantsNextSlice && foundationAlreadyLanded) {
+        if (wantsNextSlice && foundationAlreadyLanded && !postCodeRefine) {
           mockupSkippedOrFailed = true;
           willCode = false;
           pushActivity(PRODUCT_MVP_READY_MESSAGE, 'success');
@@ -2695,7 +2719,8 @@ export function AIChat() {
           foundationGate.ok &&
           foundationAlreadyLanded &&
           !wantsNextSlice &&
-          !onboardingBuildStart
+          !onboardingBuildStart &&
+          !postCodeRefine
         ) {
           if (FAST_PROTOTYPE_SAME_SESSION_AUTOPILOT) {
             wantsNextSlice = true;
@@ -2733,7 +2758,13 @@ export function AIChat() {
         const planTurnNoChatCode = fastPrototypeTurn && !userForcedCoding;
         let launchedGoSlice: string | null = null;
         let coding =
-          agentAllowed && willCode && foundationGate.ok && !planTurnNoChatCode && !skipGrokChat
+          agentAllowed &&
+          willCode &&
+          foundationGate.ok &&
+          !planTurnNoChatCode &&
+          !skipGrokChat &&
+          !postCodeRefine &&
+          !editGoArmed
           ? await handlePostGrokCodingTurn({
               assistantContent: masterPlanSource,
               planningPhase,
@@ -2750,22 +2781,28 @@ export function AIChat() {
           fastPrototypeTurn ||
           shortCodingNudge ||
           userForcedCoding ||
-          assistantCodingPromise;
+          assistantCodingPromise ||
+          postCodeRefine;
         if (
           !coding.ran &&
           agentAllowed &&
           foundationGate.ok &&
           forceGoPipeline &&
           foundationAlreadyLanded &&
-          !onboardingBuildStart
+          !onboardingBuildStart &&
+          !postCodeRefine
         ) {
           pushActivity(PRODUCT_MVP_READY_MESSAGE, 'success');
           resetCodingActivity();
         } else if (!coding.ran && agentAllowed && foundationGate.ok && forceGoPipeline) {
           const foundationLanded = foundationLandedOnDisk();
-          if (foundationLanded) {
+          const editMode = foundationLanded && postCodeRefine;
+          if (foundationLanded && !editMode) {
             pushActivity(PRODUCT_MVP_READY_MESSAGE, 'success');
             resetCodingActivity();
+            sendingRef.current = false;
+            setSending(false);
+          } else if (editMode && editGoArmed) {
             sendingRef.current = false;
             setSending(false);
           } else {
@@ -2773,7 +2810,9 @@ export function AIChat() {
             pushActivity(FOUNDATION_RETRY_ACTIVITY, 'warn');
           }
           pushActivity(
-            onboardingBuildStart
+            editMode
+              ? 'EDIT — patching existing product files'
+              : onboardingBuildStart
               ? 'Nothing more to add — launching Go Code pipeline'
               : userForcedCoding
                 ? 'User asked to code — launching Go Code pipeline'
@@ -2782,8 +2821,11 @@ export function AIChat() {
                   : 'START_CODING — launching Foundation+Primary',
             wantsNextSlice && !foundationLanded ? 'warn' : 'info',
           );
-          launchedGoSlice = 'Foundation';
-          const goSliceInstruction = FOUNDATION_SLICE_INSTRUCTION;
+          launchedGoSlice = editMode ? 'Polish' : 'Foundation';
+          const goSliceInstruction = editMode
+            ? buildEditExistingUserNote(rawText)
+            : FOUNDATION_SLICE_INSTRUCTION;
+          if (editMode) editGoArmed = true;
           const goMessages = [
             {
               role: 'user' as const,
@@ -2791,7 +2833,9 @@ export function AIChat() {
             },
           ];
           beginCodingActivity('Grok Code — writing files to workspace', goWorkSteps(), {
-            subhead: wantsNextSlice && !foundationLanded
+            subhead: editMode
+                ? 'EDIT existing files'
+                : wantsNextSlice && !foundationLanded
                 ? FOUNDATION_RETRY_ACTIVITY
                 : 'Foundation+Primary',
             initialLog: 'Running Grok Code — apply starts after Code pass 1 returns files',
@@ -2850,7 +2894,7 @@ export function AIChat() {
             ok: go.ok,
             statusMessage: go.statusMessage,
             writtenCount: go.totalWritten,
-            sliceLabel: go.sliceLabel ?? 'Foundation',
+            sliceLabel: go.sliceLabel ?? (editMode ? 'Polish' : 'Foundation'),
             blockedReason: go.blockedReason,
             productRouteCount: go.productRouteCount,
           };
@@ -3422,7 +3466,9 @@ export function AIChat() {
           workspacePaths,
         })
       : null;
-    if (foundationLanded && !nextContinueLabel) {
+    const refineContinue =
+      isPostCodeRefineRequest(userNote) || isUserExplicitCodingRequest(userNote);
+    if (foundationLanded && !refineContinue) {
       const stamp = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
       setMessages((p) => {
         const next = [
@@ -3441,10 +3487,12 @@ export function AIChat() {
       setSending(false);
       return;
     }
-    const goSliceNote = userNote || FOUNDATION_SLICE_INSTRUCTION;
+    const goSliceNote = foundationLanded
+      ? buildEditExistingUserNote(userNote)
+      : userNote || FOUNDATION_SLICE_INSTRUCTION;
 
     beginCodingActivity('Grok Code — writing files to workspace', goWorkSteps(), {
-      subhead: 'Foundation+Primary',
+      subhead: foundationLanded ? 'EDIT existing files' : nextContinueLabel || 'Foundation+Primary',
       initialLog: 'Running Grok Code — apply starts after Code pass 1 returns files',
     });
     setGrokActivity((prev) =>

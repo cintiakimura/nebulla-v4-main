@@ -136,6 +136,31 @@ assert.match(
   }),
   /next-lesson|MUST NOT: Dashboard/,
 );
+assert.match(
+  buildCompactGoCodeUserPrompt({
+    sliceLine: "SLICE: Polish",
+    goal: "dark theme on the existing home",
+    pagesSection: "### Home `/`\n",
+    constraints: "",
+    uiBriefPageList: "- Home `/`",
+    sessionFocus: "MODE: EDIT dark theme layout draft",
+    continuation: true,
+  }),
+  /EDIT MODE — patch existing product files/,
+);
+assert.equal(
+  /Output Foundation AND Primary/.test(
+    buildCompactGoCodeUserPrompt({
+      sliceLine: "SLICE: Polish",
+      goal: "dark theme",
+      pagesSection: "",
+      constraints: "",
+      uiBriefPageList: "",
+      sessionFocus: "edit existing files",
+    }),
+  ),
+  false,
+);
 
 {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "nebulla-slice-thin-"));

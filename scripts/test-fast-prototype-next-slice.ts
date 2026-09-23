@@ -20,6 +20,9 @@ import {
   healLastAppliedSlice,
   preferLaterSlice,
   parsePersistedSliceLabel,
+  EDIT_EXISTING_SLICE_INSTRUCTION,
+  FOUNDATION_SLICE_INSTRUCTION,
+  buildNextGoUserNote,
   policyAFailedMessage,
   policyAStopMessage,
   policyATimeoutMessage,
@@ -327,15 +330,15 @@ assert.equal(
 );
 assert.equal(
   resolveNextContinueSlice({ productRoutesOnDisk: true, lastSlice: 'Foundation' }),
-  null,
+  'Polish',
 );
 assert.equal(
   resolveNextContinueSlice({ productRoutesOnDisk: true, lastSlice: 'Primary' }),
-  null,
+  'Polish',
 );
 assert.equal(
   resolveNextContinueSlice({ productRoutesOnDisk: true, lastSlice: 'Secondary' }),
-  null,
+  'Polish',
 );
 assert.match(policyAStopMessage('Secondary'), /App is ready on Live/);
 {
@@ -356,8 +359,8 @@ assert.match(policyAStopMessage('Secondary'), /App is ready on Live/);
       lastSlice: 'Foundation',
       workspacePaths: afterPrimary,
     }),
-    null,
-    'after Foundation+Primary there is no pending slice',
+    'Polish',
+    'after Foundation+Primary the next Go is an EDIT (Polish)',
   );
   assert.equal(
     resolveNextContinueSlice({
@@ -365,7 +368,7 @@ assert.match(policyAStopMessage('Secondary'), /App is ready on Live/);
       lastSlice: 'Foundation',
       planSlice: 'Secondary',
     }),
-    null,
+    'Polish',
   );
 }
 assert.match(policyAFailedMessage('Foundation'), /Retry Go/);
@@ -394,8 +397,16 @@ assert.equal(
       productRoutesOnDisk: workspaceFoundationLanded(firstGo),
       lastSlice: 'Foundation',
     }),
-    null,
+    'Polish',
   );
+  const refine =
+    'keep mock data, apply a dark theme, fill the layout draft, and edit existing files only. Do not scaffold a new app.';
+  const editNote = buildNextGoUserNote(true, refine);
+  assert.match(editNote, /MODE: EDIT/);
+  assert.equal(editNote.startsWith(EDIT_EXISTING_SLICE_INSTRUCTION), true);
+  assert.match(editNote, /User request:\n/);
+  assert.equal(editNote.includes(FOUNDATION_SLICE_INSTRUCTION), false);
+  assert.equal(buildNextGoUserNote(false, refine), refine);
 }
 assert.equal(
   workspaceFoundationLanded(['app/teacher/dashboard/page.tsx', 'app/parent/dashboard/page.tsx'], {

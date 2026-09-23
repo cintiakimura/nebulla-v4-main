@@ -21,6 +21,32 @@ function hasStrongExplicitCodingSignal(t: string): boolean {
   return false;
 }
 
+const POST_CODE_REFINE_PHRASE_RE =
+  /\b(dark\s+theme|light\s+theme|restyle|layout\s+draft|generate\s+ui|make\s+it\s+dark|keep\s+mock|edit\s+existing\s+files\s+only)\b/i;
+
+const POST_CODE_REFINE_VERB_RE =
+  /\b(fix|change|update|edit|restyle|rewrite)\b[\s\S]{0,48}\b(home|screen|page|css|theme|color|ui|layout)\b/i;
+
+/** After Live exists: theme / layout / edit-existing asks must start a new Go, even when long. */
+export function isPostCodeRefineRequest(text: string): boolean {
+  const t = String(text || '').trim();
+  if (!t) return false;
+  if (POST_CODE_REFINE_PHRASE_RE.test(t)) return true;
+  if (POST_CODE_REFINE_VERB_RE.test(t)) return true;
+  if (/\btheme\b/i.test(t)) return true;
+  return false;
+}
+
+const ASSISTANT_REFINE_CLAIM_RE =
+  /\b(applying|fixing|restyling|updating)\b[\s\S]{0,80}\b(theme|dark|layout|home|files|css)\b/i;
+
+/** Assistant claimed a theme/layout/file edit — must start Go even past the short-promise cap. */
+export function isAssistantRefineClaim(text: string): boolean {
+  const t = String(text || '').trim();
+  if (!t) return false;
+  return ASSISTANT_REFINE_CLAIM_RE.test(t);
+}
+
 /** User explicitly asked to code / Go — product must run Foundation or next slice, not only chat. */
 export function isUserExplicitCodingRequest(text: string): boolean {
   const t = String(text || '').trim();
@@ -32,6 +58,7 @@ export function isUserExplicitCodingRequest(text: string): boolean {
     return false;
   }
   if (hasStrongExplicitCodingSignal(t)) return true;
+  if (isPostCodeRefineRequest(t)) return true;
   // Short nudges only — a long paste without the signals above is discussion, not Go.
   if (t.length > 400) return false;
   if (/^(go|go\.|go!)$/i.test(t)) return true;
@@ -58,7 +85,9 @@ export function isUserExplicitCodingRequest(text: string): boolean {
 /** Assistant claimed coding started without emitting START_CODING — still launch Go. */
 export function isAssistantCodingPromise(text: string): boolean {
   const t = String(text || '').trim();
-  if (!t || t.length > 500) return false;
+  if (!t) return false;
+  if (isAssistantRefineClaim(t)) return true;
+  if (t.length > 500) return false;
   if (/\bSTART_CODING\b/i.test(t)) return true;
   return (
     /\b(starting|launching|running|proceeding with|beginning)\b.{0,40}\b(coding|foundation|go\s*code|file apply)\b/i.test(

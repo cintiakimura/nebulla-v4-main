@@ -26,12 +26,14 @@ import { dispatchStudioShowLiveApp, triggerUiStudioBetaAfterFilesApplied } from 
 import { markFoundationGoInFlight } from './foundationHeavyJob';
 import { setGrokCodingActive } from './nebulaGrokCodingGate';
 import {
+  buildEditExistingUserNote,
   buildNarrowSliceInstruction,
   FOUNDATION_RETRY_ACTIVITY,
   FOUNDATION_SLICE_INSTRUCTION,
   PRODUCT_MVP_READY_MESSAGE,
   userNoteRequestsNextSlice,
 } from './fastPrototypeNextSlice';
+import { isPostCodeRefineRequest } from './ideShortCodingNudge';
 import {
   isApplyTransportFailure,
   shouldSkipGoCodeSecondPassAfterApply,
@@ -1651,7 +1653,10 @@ export async function handlePostGrokCodingTurn(options: {
   }
 
   const nextSlice = userNoteRequestsNextSlice(userNote);
-  if (nextSlice && productRoutesOnDisk) {
+  const editExisting =
+    productRoutesOnDisk &&
+    (/MODE:\s*EDIT/i.test(String(userNote || '')) || isPostCodeRefineRequest(String(userNote || '')));
+  if (nextSlice && productRoutesOnDisk && !editExisting) {
     onProgress?.(PRODUCT_MVP_READY_MESSAGE, 'success');
     return {
       ran: true,
@@ -1663,8 +1668,19 @@ export async function handlePostGrokCodingTurn(options: {
   if (nextSlice && !productRoutesOnDisk) {
     onProgress?.(FOUNDATION_RETRY_ACTIVITY, 'warn');
   }
-  const instruction = (userNote || FOUNDATION_SLICE_INSTRUCTION).slice(0, 2000);
-  onProgress?.('START_CODING detected — launching Foundation+Primary', 'info');
+  const instruction = (
+    editExisting
+      ? /MODE:\s*EDIT/i.test(String(userNote || ''))
+        ? String(userNote)
+        : buildEditExistingUserNote(String(userNote || ''))
+      : userNote || FOUNDATION_SLICE_INSTRUCTION
+  ).slice(0, 4000);
+  onProgress?.(
+    editExisting
+      ? 'EDIT — patching existing product files'
+      : 'START_CODING detected — launching Foundation+Primary',
+    'info',
+  );
   const go = await runGoCodeAndApply({
     userId,
     projectName,

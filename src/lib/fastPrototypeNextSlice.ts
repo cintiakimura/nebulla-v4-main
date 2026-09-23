@@ -5,6 +5,7 @@
  */
 
 import { RESEARCH_STOPPED } from '../../lib/researchStages';
+import { isPostCodeRefineRequest } from './ideShortCodingNudge';
 
 export type AutopilotSliceLabel =
   | 'Foundation'
@@ -200,6 +201,26 @@ export const FOUNDATION_RETRY_ACTIVITY =
 export const FOUNDATION_SLICE_INSTRUCTION =
   'START_CODING — SLICE: Foundation+Primary in ONE Go. Router + §4 routes + lib/mockStore.ts. The goal verb must work with mock localStorage (no empty /api/* , no Data+API slice, no Polish). Shop: book/order updates the Home list; mechanic can mark ready. Delivery: pickup+dropoff submit appears on Home; Accept updates status. Education: Start practice writes progress on Teacher. Header = §1 identity name. Nav = §4 only. Job Home (list + CTA), not Interactive screen / Start practice unless education. File blocks now — then the app is ready on Live.';
 
+/** After product files exist — patch in place. Do not scaffold a second app. */
+export const EDIT_EXISTING_SLICE_INSTRUCTION =
+  'START_CODING — MODE: EDIT. Product files already exist. Do NOT scaffold a new app. Do NOT rewrite package.json, Next/Vite, routes, or mockStore shape unless the user asked. Edit existing files only (globals.css, layout, page components, layout draft). Honor the latest user note. File blocks now.';
+
+export function buildEditExistingUserNote(userRequest: string): string {
+  const req = String(userRequest || '').trim();
+  return req
+    ? `${EDIT_EXISTING_SLICE_INSTRUCTION}\n\nUser request:\n${req}`
+    : EDIT_EXISTING_SLICE_INSTRUCTION;
+}
+
+/** Next Go note: EDIT when files exist and the turn is a refine. Otherwise Foundation. */
+export function buildNextGoUserNote(foundationLanded: boolean, userRequest: string): string {
+  const req = String(userRequest || '').trim();
+  if (foundationLanded && isPostCodeRefineRequest(req)) {
+    return buildEditExistingUserNote(req);
+  }
+  return req || FOUNDATION_SLICE_INSTRUCTION;
+}
+
 /** After a 3-minute timeout — smaller shell so Grok Code can finish. */
 export const NARROW_FOUNDATION_SLICE_INSTRUCTION =
   'START_CODING — SLICE: Foundation — smallest runnable shell only (4–8 files): package.json, app/layout.tsx, app/globals.css, app/page.tsx, one nested app/<route>/page.tsx from the Master Plan. No extra dashboards. File blocks now.';
@@ -376,7 +397,8 @@ export function policyATimeoutMessage(_lastSlice?: string | null, foundationOnDi
 }
 
 /**
- * After Foundation+Primary there is nothing to Continue.
+ * After Foundation+Primary, the next user-driven Go is an EDIT (Polish), not a new shell.
+ * No routes yet → still Foundation.
  */
 export function resolveNextContinueSlice(opts: {
   lastSlice?: string | null;
@@ -386,7 +408,7 @@ export function resolveNextContinueSlice(opts: {
   planSlice?: string | null;
 }): AutopilotSliceLabel | null {
   if (!opts.productRoutesOnDisk) return 'Foundation';
-  return null;
+  return 'Polish';
 }
 
 function normalizeWorkspacePath(raw: string): string {

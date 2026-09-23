@@ -279,9 +279,13 @@ export function buildCompactGoCodeUserPrompt(opts: {
   const initials = String(opts.logoInitials || "").trim().slice(0, 4);
   const hint = String(opts.logoHint || "").trim().slice(0, 40);
   const isFoundation = /SLICE:\s*Foundation/i.test(slice);
-  const task = opts.continuation
-    ? "CONTINUATION — emit Foundation+Primary file blocks now (screens + lib/mockStore.ts)."
-    : "Run the coding pass now. Output Foundation AND Primary in this Go (screens + working mockStore verb) — not Data+API, not Polish.";
+  const isPolish = /SLICE:\s*Polish/i.test(slice);
+  const refineFocus =
+    /\b(theme|dark|restyle|layout\s+draft|edit existing|MODE:\s*EDIT)\b/i.test(focus);
+  const task =
+    opts.continuation || isPolish || refineFocus
+      ? 'EDIT MODE — patch existing product files from Session focus. No new scaffold. File blocks only.'
+      : 'Run the coding pass now. Output Foundation AND Primary in this Go (screens + working mockStore verb) — not Data+API, not Polish.';
   const quality = productSliceQualityLine(goal);
   const identity =
     productName
