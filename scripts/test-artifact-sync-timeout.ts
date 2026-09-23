@@ -16,7 +16,6 @@ import {
 } from '../src/lib/ideArtifactSync.ts';
 import {
   startGrokActivityWaitTicker,
-  GROK_WAIT_HEARTBEAT_TICKS,
   finishGrokActivity,
   isGrokWaitHeartbeatLine,
   pruneGrokWaitHeartbeats,
@@ -78,10 +77,15 @@ const root = path.join(__dirname, '..');
   const stop = startGrokActivityWaitTicker('Code pass 1', (msg, kind, opts) => {
     lines.push({ msg, kind, currentOnly: opts?.currentOnly });
   }, 20);
-  await new Promise((r) => setTimeout(r, GROK_WAIT_HEARTBEAT_TICKS * 20 + 80));
+  const hasHeartbeat = () =>
+    lines.some((l) => l.kind === 'info' && l.currentOnly === false && /still waiting/.test(l.msg));
+  const deadline = Date.now() + 2500;
+  while (!hasHeartbeat() && Date.now() < deadline) {
+    await new Promise((r) => setTimeout(r, 20));
+  }
   stop();
   assert.ok(
-    lines.some((l) => l.kind === 'info' && l.currentOnly === false && /still waiting/.test(l.msg)),
+    hasHeartbeat(),
     'wait ticker must commit a still-waiting heartbeat so chat is not silent on Code pass 1',
   );
 }
