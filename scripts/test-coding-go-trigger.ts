@@ -178,7 +178,9 @@ assert.equal(isShortCodingGoNudge('Starting the Foundation coding slice now.'), 
   assert.match(chat, /persistIdeChatTranscript/);
   assert.match(chat, /persistConversationTurn/);
   assert.match(chat, /mergeChatTranscripts/);
-  assert.match(chat, /if \(sendingRef\.current\) \{\s*stopSending/);
+  assert.match(chat, /if \(sendingRef\.current\) \{/);
+  assert.match(chat, /lastComposerSendRef\.current === rawText/);
+  assert.match(chat, /stopSending\(\)/);
   assert.equal(/if \(micInputBlocked\) return/.test(chat), false);
   assert.match(chat, /refineSameProduct/);
   assert.match(chat, /MIC_REENABLE_AFTER_TTS_MS/);
