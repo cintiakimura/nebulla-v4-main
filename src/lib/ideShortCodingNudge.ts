@@ -60,10 +60,10 @@ const LOCK_AND_BUILD_RE =
   /\b(already have (the )?(full )?idea|full idea in mind|no need to brainstorm|just build(?:\s+it)?|skip (the )?(talk|chat|workshop)|don'?t brainstorm|that'?s enough|enough for now)\b/i;
 
 const ALWAYS_GO_RE =
-  /^(go|go\.|go!|go\s+ahead|let'?s\s+go|build\s+it)[\s.!?]*$/i;
+  /^(go|go\.|go!|go\s+ahead|let'?s\s+go|build\s+it|you\s+can\s+start)[\s.!?]*$/i;
 
 const SPOKEN_CLOSER_RE =
-  /^(hello|hellos|go(?:\s+ahead)?|let'?s\s+go|build\s+it|yes|yeah|yep|ok|okay|do\s+it)[\s.!?]*$/i;
+  /^(hello|hellos|go(?:\s+ahead)?|let'?s\s+go|build\s+it|you\s+can\s+start|yes|yeah|yep|ok|okay|do\s+it)[\s.!?]*$/i;
 
 export function isFirstMessageGreeting(text: string): boolean {
   return HELLO_GREETING_RE.test(String(text || '').trim());

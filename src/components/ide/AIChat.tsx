@@ -172,7 +172,12 @@ import {
   type StartGuidedChatDetail,
 } from '../../lib/ideHomeEvents';
 import { inferProductName } from '../../lib/projectNameFromIdea';
-import { isReplacementProductBrief, looksLikeStandaloneProductBrief } from '../../../lib/productGoalFingerprint';
+import { extractStatedProductName, singleProductName } from '../../../lib/productIdentity';
+import {
+  isNewProductSeedAgainstCurrent,
+  isReplacementProductBrief,
+  looksLikeStandaloneProductBrief,
+} from '../../../lib/productGoalFingerprint';
 import { persistProductIdentityClient, promoteWorkspaceChipFromProductName } from '../../lib/productIdentityClient';
 import {
   ASK_FOR_SHORT_GOAL,
@@ -1948,16 +1953,25 @@ export function AIChat() {
       firstUserMessage,
       closerReady,
     });
+    const newProductSeed = isNewProductSeedAgainstCurrent({
+      userText: rawText,
+      chipName: getBrowserProjectName(),
+    });
     const stayInBrainstormLoop =
-      !brainstormCloseConfirmed &&
-      !wantsLockAndBuild &&
-      (isBootstrapTrigger || discoveryRequired || closeTurn.kind === 'skip-lock') &&
-      chatMode !== 'debugging' &&
-      chatMode !== 'file' &&
-      !hasAppStatusPayload &&
-      !existingAppWork;
+      Boolean(newProductSeed && !wantsLockAndBuild) ||
+      (!brainstormCloseConfirmed &&
+        !wantsLockAndBuild &&
+        (isBootstrapTrigger || discoveryRequired || closeTurn.kind === 'skip-lock') &&
+        chatMode !== 'debugging' &&
+        chatMode !== 'file' &&
+        !hasAppStatusPayload &&
+        !existingAppWork);
     /** go / hellos / just build lock the seed and start Foundation. First hello is a greeting. */
     const userForcedCoding = wantsLockAndBuild;
+    if (newProductSeed && !wantsLockAndBuild) {
+      interactionModeRef.current = 'chat';
+      setAssistantInteractionMode('chat');
+    }
     if (userNoteRequestsUiGeneration(rawText) && !hasAppStatusPayload && !existingAppWork) {
       beginPlanActivity('Generating UI from Master Plan…', chatWorkSteps(), {
         subhead: 'UI Gen v2 — §1 Goal and Go are not rewritten.',
@@ -2151,6 +2165,39 @@ export function AIChat() {
       !onboardingBuildStart &&
       !hasAppStatusPayload &&
       (userForcedCoding || fastPrototypeTurn || buildMode);
+    const seedProductName = singleProductName(
+      extractStatedProductName(rawText) || inferProductName(rawText),
+    );
+    const isolateNewProduct =
+      Boolean(newProductSeed) && !userNoteRequestsNextSlice(rawText);
+    let switchedProductWorkspace = false;
+    if (isolateNewProduct) {
+      try {
+        const created = await createProjectForCurrentSession(seedProductName);
+        clearIdeWorkspaceMetaCache();
+        switchedProductWorkspace = true;
+        clearBrainstormCloseState(created.projectKey);
+        clearDiscoveryClosed(created.projectKey);
+      } catch {
+        /* free-tier / cloud limit — replace in place after read */
+      }
+      void persistProductIdentityClient({
+        projectName: seedProductName,
+        goal: extractGoalFromUserNote(text) || rawText,
+        userSet: true,
+      });
+      lastAutoSliceLabelRef.current = null;
+      apiAskSentRef.current = false;
+      messagesRef.current = [userMsg];
+      setMessages([userMsg]);
+      historyForApi = [{ role: 'user', content: text }];
+      skipGrokChat = false;
+      diskPaths = [];
+      pushActivity(
+        `New project: ${seedProductName} — not reusing the previous workspace or Master Plan`,
+        'info',
+      );
+    }
     if (maySkipChatIfPlanExists || looksLikeStandaloneProductBrief(text)) {
     try {
       const mpRes = await fetch(withProjectQuery('/api/master-plan/read'), {
@@ -2162,12 +2209,62 @@ export function AIChat() {
         : null;
       const incomingGoal = extractGoalFromUserNote(text);
       const diskGoal = String(plan?.['1. Goal of the app'] || '');
+      const nextProductName = singleProductName(
+        extractStatedProductName(rawText) ||
+          extractStatedProductName(incomingGoal) ||
+          inferProductName(incomingGoal || rawText) ||
+          seedProductName,
+      );
+      const newSeed =
+        !switchedProductWorkspace &&
+        (newProductSeed ||
+          isNewProductSeedAgainstCurrent({
+            userText: rawText,
+            chipName: getBrowserProjectName(),
+            diskGoal,
+          }));
       const replacingProduct =
         Boolean(incomingGoal) &&
         looksLikeStandaloneProductBrief(text) &&
         !userNoteRequestsNextSlice(rawText) &&
         isReplacementProductBrief(incomingGoal, diskGoal);
-      if (replacingProduct) {
+      if (newSeed && !userNoteRequestsNextSlice(rawText)) {
+        try {
+          const created = await createProjectForCurrentSession(nextProductName);
+          clearIdeWorkspaceMetaCache();
+          clearBrainstormCloseState(created.projectKey);
+          clearDiscoveryClosed(created.projectKey);
+        } catch {
+          if (incomingGoal || nextProductName) {
+            await fetchJson<{ projectName?: string }>(withProjectQuery('/api/ide/replace-product-brief'), {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              credentials: 'include',
+              body: JSON.stringify(
+                withProjectBody({
+                  goal: incomingGoal || nextProductName,
+                  projectName: nextProductName,
+                }),
+              ),
+            });
+          }
+        }
+        void persistProductIdentityClient({
+          projectName: nextProductName,
+          goal: incomingGoal || rawText,
+          userSet: true,
+        });
+        lastAutoSliceLabelRef.current = null;
+        apiAskSentRef.current = false;
+        messagesRef.current = [userMsg];
+        setMessages([userMsg]);
+        historyForApi = [{ role: 'user', content: text }];
+        skipGrokChat = false;
+        diskPaths = [];
+        pushActivity(`New project: ${nextProductName} — not reusing the previous workspace or Master Plan`, 'info');
+      } else if (switchedProductWorkspace) {
+        skipGrokChat = false;
+      } else if (replacingProduct) {
         const replaced = await fetchJson<{ projectName?: string }>(withProjectQuery('/api/ide/replace-product-brief'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -2175,11 +2272,13 @@ export function AIChat() {
           body: JSON.stringify(
             withProjectBody({
               goal: incomingGoal,
-              projectName: getBrowserProjectName().trim() || 'Untitled Project',
+              projectName: nextProductName || getBrowserProjectName().trim() || 'Untitled Project',
             }),
           ),
         });
-        const nextBrand = String(replaced?.projectName || inferProductName(incomingGoal)).trim();
+        const nextBrand = singleProductName(
+          String(replaced?.projectName || nextProductName || inferProductName(incomingGoal)).trim(),
+        );
         if (nextBrand) {
           void promoteWorkspaceChipFromProductName(nextBrand);
           void persistProductIdentityClient({
@@ -2372,6 +2471,7 @@ export function AIChat() {
       }
       let willCode =
         agentAllowed &&
+        !stayInBrainstormLoop &&
         !brainstormCloseConfirmed &&
         (hadCodingTag ||
           hasGrokFileBlocks(raw) ||

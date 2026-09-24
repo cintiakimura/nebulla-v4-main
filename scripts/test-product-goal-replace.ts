@@ -8,6 +8,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
+  isNewProductSeedAgainstCurrent,
   isReplacementProductBrief,
   leftoverPlanConflictsWithGoal,
   leftoverRoutesConflictWithGoal,
@@ -19,7 +20,13 @@ import {
 } from "../lib/replaceProductWorkspace.ts";
 import { pagesForPlanFromGoalAndDisk, seedPagesFromGoal } from "../lib/nebulaUiBrief.ts";
 import { hydrateMasterPlanDerivedSections } from "../lib/nebulaIdeWorkspaceArtifacts.ts";
-import { identityFitsGoal, inferProductName } from "../lib/productIdentity.ts";
+import {
+  extractNamedBrand,
+  extractStatedProductName,
+  identityFitsGoal,
+  inferProductName,
+  singleProductName,
+} from "../lib/productIdentity.ts";
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -31,6 +38,27 @@ const SPOKE =
   "Spoke & Co neighborhood bike shop — ready bikes on the floor, book a pickup or mechanic slot.";
 const QUILL =
   "**Product name:** Quill Path\nLearning companion for daily reading. Helper, Session, and Practice. CogniMicro. Palette: education-calm.";
+
+section("Taskwise vs Quill Path / City Courier is a new seed");
+{
+  assert.equal(extractStatedProductName("Taskwise"), "Taskwise");
+  assert.equal(singleProductName("Quill Path Taskwise"), "Taskwise");
+  assert.equal(extractNamedBrand("Quill Path Taskwise"), "Taskwise");
+  assert.equal(inferProductName("Quill Path Taskwise"), "Taskwise");
+  assert.equal(inferProductName("Taskwise"), "Taskwise");
+  assert.equal(isNewProductSeedAgainstCurrent({ userText: "Taskwise", chipName: "Quill Path" }), true);
+  assert.equal(isNewProductSeedAgainstCurrent({ userText: "Taskwise", chipName: "City Courier" }), true);
+  assert.equal(isNewProductSeedAgainstCurrent({ userText: "Taskwise", chipName: "Taskwise" }), false);
+  assert.equal(isNewProductSeedAgainstCurrent({ userText: "hello", chipName: "Quill Path" }), false);
+  assert.equal(isReplacementProductBrief("Taskwise", QUILL), true);
+  assert.equal(looksLikeStandaloneProductBrief("Taskwise"), true);
+  const taskPages = seedPagesFromGoal("Taskwise — capture input, summary, tasks, dossier");
+  assert.deepEqual(
+    taskPages.map((p) => p.route),
+    ["/input", "/summary", "/tasks", "/dossier"],
+  );
+  assert.equal(leftoverRoutesConflictWithGoal("Taskwise", ["/", "/practice", "/teacher"]), true);
+}
 
 section("Spoke after Quill is a replacement, Continue is not");
 {
@@ -180,7 +208,14 @@ section("AIChat + persist replace leftover plan instead of skip-Grok merge");
   const server = fs.readFileSync(path.join(REPO, "server.ts"), "utf8");
   assert.match(chat, /replace-product-brief/);
   assert.match(chat, /isReplacementProductBrief/);
+  assert.match(chat, /isNewProductSeedAgainstCurrent/);
+  assert.match(chat, /createProjectForCurrentSession/);
+  assert.match(chat, /isolateNewProduct/);
+  assert.match(chat, /switchedProductWorkspace/);
+  assert.match(chat, /!stayInBrainstormLoop/);
+  assert.match(chat, /not reusing the previous workspace or Master Plan/);
   assert.match(chat, /previous plan and leftover routes cleared/);
+  assert.match(persist, /Never ask them to return to Quill Path/);
   assert.match(persist, /\/api\/master-plan\/replace/);
   assert.match(server, /app.post\("\/api\/master-plan\/replace"/);
   assert.match(server, /app.post\("\/api\/ide\/replace-product-brief"/);

@@ -44,6 +44,7 @@ assert.equal(isUserExplicitCodingRequest('hello', { firstUserMessage: false, clo
 assert.equal(isUserExplicitCodingRequest('hellos', { closerReady: true }), true);
 assert.equal(isUserExplicitCodingRequest('hellos', { firstUserMessage: true }), false);
 assert.equal(isUserExplicitCodingRequest('go', { firstUserMessage: true }), true);
+assert.equal(isUserExplicitCodingRequest('you can start', { firstUserMessage: true }), true);
 assert.equal(isUserExplicitCodingRequest('just build it', { firstUserMessage: true }), true);
 assert.equal(isUserExplicitCodingRequest('yes', { closerReady: false }), false);
 assert.equal(isUserExplicitCodingRequest('yes', { closerReady: true }), true);

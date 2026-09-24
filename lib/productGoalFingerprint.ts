@@ -3,7 +3,12 @@
  * Client-safe — no fs.
  */
 
-import { detectProductDomain, extractNamedBrand } from "./productIdentity";
+import {
+  detectProductDomain,
+  extractNamedBrand,
+  extractStatedProductName,
+  isWorkspaceLabelStub,
+} from "./productIdentity";
 import { extractGoalFromUserNote, isCodingCommandNote } from "./spineSequenceClient";
 
 export const EDUCATION_LEFTOVER_SLUGS = new Set([
@@ -36,6 +41,12 @@ export function leftoverRoutesConflictWithGoal(goal: string, routes: string[]): 
   const slugs = (routes || []).map(routeSlug).filter(Boolean);
   const g = String(goal || "").toLowerCase();
   const delivery = /moto|motodrop|courier|delivery|dropoff|parcel/.test(g);
+  if (
+    (domain === "tasks" || /\btaskwise\b/i.test(g)) &&
+    slugs.some((s) => EDUCATION_LEFTOVER_SLUGS.has(s))
+  ) {
+    return true;
+  }
   if (domain !== "education" && slugs.some((s) => EDUCATION_LEFTOVER_SLUGS.has(s))) {
     return true;
   }
@@ -52,10 +63,12 @@ export function leftoverRoutesConflictWithGoal(goal: string, routes: string[]): 
 export function looksLikeStandaloneProductBrief(text: string): boolean {
   const raw = String(text || "").trim();
   if (!raw) return false;
+  if (/^(continue|continue\.|continue!|build\s+next|next\s+slice)\b/i.test(raw)) return false;
+  if (/^(hello|hi|hey|hellos|yes|yeah|ok|go)[\s.!?]*$/i.test(raw)) return false;
+  if (extractStatedProductName(raw) || extractNamedBrand(raw)) return true;
   const goal = extractGoalFromUserNote(raw);
   if (!goal || goal.length < 20) return false;
   if (isCodingCommandNote(raw) && !goal) return false;
-  if (/^(continue|continue\.|continue!|build\s+next|next\s+slice)\b/i.test(raw)) return false;
   if (extractNamedBrand(goal)) return true;
   return /\b(build|shop|marketplace|companion|bike|bakery|mechanic|moto|courier|delivery|parcel|uber|dropoff|app that|for (kids|parents|customers|readers|riders|senders))\b/i.test(
     goal,
@@ -70,6 +83,11 @@ export function isReplacementProductBrief(incoming: string, existing: string): b
   const nextBrand = extractNamedBrand(next);
   const prevBrand = extractNamedBrand(prev);
   if (nextBrand && prevBrand && nextBrand.toLowerCase() !== prevBrand.toLowerCase()) {
+    return true;
+  }
+  const nextStated = extractStatedProductName(next) || nextBrand;
+  const prevStated = extractStatedProductName(prev) || prevBrand;
+  if (nextStated && prevStated && nextStated.toLowerCase() !== prevStated.toLowerCase()) {
     return true;
   }
   const nextDomain = detectProductDomain(next);
@@ -108,4 +126,35 @@ export function leftoverPlanConflictsWithGoal(plan: Record<string, unknown> | nu
   if (isReplacementProductBrief(goal, rest)) return true;
   const routes = extractRouteTokens(String(rec["4. Pages and navigation"] || ""));
   return leftoverRoutesConflictWithGoal(goal, routes);
+}
+
+/** Chip is Quill Path / City Courier and the user named Taskwise (or another product). */
+export function isNewProductSeedAgainstCurrent(opts: {
+  userText: string;
+  chipName?: string | null;
+  diskGoal?: string | null;
+}): boolean {
+  const raw = String(opts.userText || "").trim();
+  if (!raw) return false;
+  if (/^(continue|continue\.|continue!|build\s+next|next\s+slice|hello|hi|hey|hellos|yes|yeah|ok|go)[\s.!?]*$/i.test(raw)) {
+    return false;
+  }
+  const incoming =
+    extractStatedProductName(raw) ||
+    extractNamedBrand(raw) ||
+    extractNamedBrand(extractGoalFromUserNote(raw) || "");
+  const chip = String(opts.chipName || "").replace(/\s+/g, " ").trim();
+  const diskBrand =
+    extractNamedBrand(String(opts.diskGoal || "")) ||
+    extractStatedProductName(String(opts.diskGoal || ""));
+  const current = diskBrand || (!isWorkspaceLabelStub(chip) ? chip : "");
+  if (incoming && current && incoming.toLowerCase() !== current.toLowerCase()) {
+    return true;
+  }
+  const diskGoal = String(opts.diskGoal || "").trim();
+  if (diskGoal && looksLikeStandaloneProductBrief(raw)) {
+    const incomingGoal = extractGoalFromUserNote(raw) || raw;
+    if (isReplacementProductBrief(incomingGoal, diskGoal)) return true;
+  }
+  return false;
 }

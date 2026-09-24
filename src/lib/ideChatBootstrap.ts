@@ -28,6 +28,7 @@ export const BRAINSTORM_LOOP_BOOTSTRAP_RULES =
   `After north star confirmed or they said that’s enough: you may say “Hello — I can build this now.” ` +
   `Silent scoreboard: chat-information-checklist.md. Never show the list. Next spoken beat from the emptiest required slot after the first reply. ` +
   `Short spoken prose. No tool talk. ` +
+  `A newly named product is a new workspace — do not reuse another project’s Master Plan or ask them to go back to the previous chip unless they asked. ` +
   `THIS TURN FORBIDDEN on compliment / research / feature / name turns: <START_MASTERPLAN>, </END_MASTERPLAN>, START_CODING, <START_CODING>, \`\`\`file: blocks, job-brief.md, or any nebula-project/ files.`;
 
 const BOOTSTRAP_PREFIX = "I'm ready. Follow project-execution-rules.md INITIAL ONBOARDING:";

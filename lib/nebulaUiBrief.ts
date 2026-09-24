@@ -289,6 +289,14 @@ export function extractNamedRoutesFromPagesText(text: string): { name: string; r
 /** Safe defaults so Gate A can auto-build a brief when §4 has no routes yet. */
 export function seedPagesFromGoal(goal: string): { name: string; route: string }[] {
   const g = String(goal || "");
+  if (/\b(taskwise|dossier|\btasks?\b|\btodo\b|\bhabit\b|\bchecklist\b|\bproductiv)/i.test(g)) {
+    return [
+      { name: "Input", route: "/input" },
+      { name: "Summary", route: "/summary" },
+      { name: "Tasks", route: "/tasks" },
+      { name: "Dossier", route: "/dossier" },
+    ];
+  }
   if (/\b(moto|motodrop|courier|delivery|dropoff|parcel)\b/i.test(g)) {
     return [
       { name: "Home", route: "/" },

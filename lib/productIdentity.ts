@@ -126,14 +126,56 @@ function toTitleCase(name: string): string {
 
 export function extractNamedBrand(goal: string): string | null {
   const g = String(goal || "");
+  if (/\btaskwise\b/i.test(g)) return "Taskwise";
   if (/\bgrain\s+bakery\b/i.test(g)) return "Grain Bakery";
   if (/\bloaflocal\b/i.test(g)) return "LoafLocal";
-  if (/\bquill\s+path\b/i.test(g)) return "Quill Path";
+  if (/\bquill\s+path\b/i.test(g) && !/\btaskwise\b/i.test(g)) return "Quill Path";
   if (/\bspoke\s*&\s*co\b/i.test(g) || /\bspoke\s+and\s+co\b/i.test(g)) return "Spoke & Co";
   if (/\bmotodrop\b/i.test(g)) return "Motodrop";
   const labeled = g.match(/(?:\*\*)?Product name(?:\*\*)?:\s*([^\n*]+)/i)?.[1]?.trim();
   if (labeled && !looksLikeGoalStubName(labeled, g) && labeled.split(/\s+/).length <= 4) {
-    return toTitleCase(labeled);
+    return singleProductName(toTitleCase(labeled));
+  }
+  return extractStatedProductName(g);
+}
+
+const NOT_A_PRODUCT_NAME =
+  /^(hello|hellos|hi|hey|yes|yeah|yep|ok|okay|go|continue|please|thanks|thankyou|build|create|make)$/i;
+
+/** One brand string — never “Quill Path Taskwise”. */
+export function singleProductName(raw: string): string {
+  const n = String(raw || "").replace(/\s+/g, " ").trim();
+  if (!n) return "";
+  if (/\btaskwise\b/i.test(n)) return "Taskwise";
+  if (/\bquill\s+path\b/i.test(n) && !/\btaskwise\b/i.test(n)) return "Quill Path";
+  if (/\bcity\s+courier\b/i.test(n) && !/\btaskwise\b/i.test(n)) return "City Courier";
+  const labeled = n.match(/(?:\*\*)?Product name(?:\*\*)?:\s*([^\n*]+)/i)?.[1]?.trim();
+  if (labeled) return toTitleCase(labeled.split(/\s+/).slice(0, 3).join(" "));
+  const first = n.split(/[\n|,]/)[0].trim();
+  const words = first.split(/\s+/).filter(Boolean);
+  if (words.length > 3) return toTitleCase(words.slice(0, 2).join(" "));
+  return toTitleCase(first);
+}
+
+/** User named an app (Taskwise) without a Product-name label. */
+export function extractStatedProductName(text: string): string | null {
+  const t = String(text || "").trim();
+  if (!t) return null;
+  if (NOT_A_PRODUCT_NAME.test(t.replace(/[.!?]+$/g, ""))) return null;
+  if (/^taskwise\b/i.test(t)) return "Taskwise";
+  const called = t.match(
+    /\b(?:called|named|name(?:d)?)\s+([A-Z][A-Za-z0-9]+(?:\s+[A-Z][A-Za-z0-9]+){0,2})\b/,
+  );
+  if (called?.[1] && !NOT_A_PRODUCT_NAME.test(called[1])) {
+    return singleProductName(called[1]);
+  }
+  const lone = t.replace(/[.!?]+$/g, "").trim();
+  if (/^[A-Z][a-zA-Z0-9]{2,23}$/.test(lone) && !NOT_A_PRODUCT_NAME.test(lone)) {
+    return lone;
+  }
+  const first = t.split(/[\n.!?]/)[0].trim();
+  if (/^[A-Z][a-zA-Z0-9]{2,23}$/.test(first) && !NOT_A_PRODUCT_NAME.test(first)) {
+    return first;
   }
   return null;
 }
@@ -244,7 +286,7 @@ export function inferProductName(goal: string, projectType?: string): string {
   const g = String(goal || "").replace(/\s+/g, " ").trim();
   const type = String(projectType || "").trim();
   const named = extractNamedBrand(g);
-  if (named) return named;
+  if (named) return singleProductName(named);
   const domain = detectProductDomain(g, type);
   if (domain === "delivery") {
     const distilled = distillDeliveryName(g);
@@ -392,7 +434,7 @@ export function buildProductIdentity(
       : existingOk
         ? prior
         : inferProductName(goal, projectType);
-  const name = toTitleCase(keep);
+  const name = singleProductName(toTitleCase(keep));
   return {
     projectName: name,
     logoInitials: logoInitials(name),
