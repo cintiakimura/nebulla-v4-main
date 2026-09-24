@@ -7,6 +7,8 @@ import {
   BRAINSTORM_CLOSE_CONFIRMED_PREFIX,
   buildBrainstormCloseConfirmedBootstrap,
   clearBrainstormCloseState,
+  closeSummaryAsksUiIfEmpty,
+  closeSummaryNamesDocumentWorkflow,
   isCloseAddMoreReply,
   isCloseConfirmReply,
   isCloseCorrectReply,
@@ -105,10 +107,38 @@ const loopAppendix = chatModeSystemAppendix({
 assert.match(loopAppendix, /THIS TURN FORBIDDEN/);
 assert.match(loopAppendix, /CHAT_CLOSE/);
 assert.match(loopAppendix, /Critical partner/);
-assert.match(loopAppendix, /v1 can mock this/);
+assert.match(loopAppendix, /warning \+ option \+ a buildable solution/);
 assert.match(loopAppendix, /Do not invent risk/);
 assert.match(loopAppendix, /Never only echo/);
-assert.match(seed, /v1 can mock this/);
+assert.match(loopAppendix, /inferred workflow/);
+assert.match(loopAppendix, /If this is right, I'll lock it and build this product/);
+assert.equal(/v1 can mock this/.test(loopAppendix), false);
+assert.equal(/2–4 feature ideas/.test(seed), false);
+assert.match(seed, /inferred workflow/);
+assert.match(seed, /lock it and build this product/);
+
+const snapfillClose = [
+  "I think we've got what we need. Here's what I heard — tell me if this is right.",
+  'Goal: keep patient scans so the clinician can find them later.',
+  'Who: clinician and patient.',
+  'Features: capture, extract text, review, save into a per-client dossier and history so files live on-device.',
+  'Dependencies: Tesseract locally unless they choose cloud OCR; no mock of extract or save.',
+  'Walls: health images — local extract, they pick a compliance family.',
+  'UI: web or mobile, and how dense should it feel?',
+  "If this is right, I'll lock it and build this product.",
+].join(' ');
+assert.equal(looksLikeCloseOffer(snapfillClose), true);
+assert.equal(closeSummaryNamesDocumentWorkflow(snapfillClose), true);
+assert.equal(closeSummaryAsksUiIfEmpty(snapfillClose), true);
+assert.equal(
+  closeSummaryNamesDocumentWorkflow('Goal: three ideas. Mock OCR later. Shall we go?'),
+  false,
+);
+
+const healthBeat =
+  'Health images need care. We can extract locally on-device, or you pick a compliance family — either way we still build capture, review, and the dossier.';
+assert.match(healthBeat, /warning|care|local|compliance/i);
+assert.equal(/you can'?t build this|legal audit/i.test(healthBeat), false);
 
 const confirmAppendix = chatModeSystemAppendix({
   interactionMode: 'agent',

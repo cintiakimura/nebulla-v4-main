@@ -73,7 +73,11 @@ export function isFirstMessageGreeting(text: string): boolean {
 }
 
 export function isLockAndBuildRequest(text: string): boolean {
-  return LOCK_AND_BUILD_RE.test(String(text || '').trim());
+  const t = String(text || '').trim();
+  if (!t) return false;
+  if (/\bdo you already have the full idea in mind\b/i.test(t)) return false;
+  if (/\bor do you want to brainstorm\b/i.test(t)) return false;
+  return LOCK_AND_BUILD_RE.test(t);
 }
 
 /** Assistant spoken closer after confirm — product must start Foundation. */
@@ -128,6 +132,17 @@ export function isUserExplicitCodingRequest(text: string, ctx?: CodingRequestCon
   const t = String(text || '').trim();
   if (!t) return false;
   if (ctx?.firstUserMessage && isFirstMessageGreeting(t)) return false;
+  if (/^(please\s+)?(brainstorm|let'?s brainstorm|shape it together)([\s.!?].*)?$/i.test(t)) {
+    return false;
+  }
+  if (
+    /\?/.test(t) &&
+    /\b(api|privacy|ocr|storage|page|history|dossier)\b/i.test(t) &&
+    !hasStrongExplicitCodingSignal(t) &&
+    !isLockAndBuildRequest(t)
+  ) {
+    return false;
+  }
   if (/\binterview\b/i.test(t) && !/\bSTART_CODING\b/i.test(t) && !hasStrongExplicitCodingSignal(t)) {
     return false;
   }

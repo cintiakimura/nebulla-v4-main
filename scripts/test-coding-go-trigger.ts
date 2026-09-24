@@ -45,6 +45,11 @@ assert.equal(
 );
 assert.equal(isUserExplicitCodingRequest('what is the Master Plan?'), false);
 
+assert.equal(isUserExplicitCodingRequest('brainstorm'), false);
+assert.equal(isUserExplicitCodingRequest("let's brainstorm"), false);
+assert.equal(isUserExplicitCodingRequest('do we need an API?'), false);
+assert.equal(isUserExplicitCodingRequest('what about privacy?'), false);
+assert.equal(isFoundationCloseGate('brainstorm'), false);
 assert.equal(isUserExplicitCodingRequest('hello', { firstUserMessage: true }), false);
 assert.equal(isUserExplicitCodingRequest('hello', { firstUserMessage: false, closerReady: true }), true);
 assert.equal(isUserExplicitCodingRequest('hellos', { closerReady: true }), true);
@@ -66,6 +71,8 @@ assert.equal(isAssistantCodingPromise('Hello — I can build this now.'), true);
 const firstReply =
   "That's a great idea. If I understood correctly, this is what the app should do: kids practice reading in short sessions. Is that right? Do you already have the full idea in mind, or do you want to brainstorm and shape it together?";
 assert.equal(isGuidedFirstReplyShape(firstReply), true);
+assert.equal(isFoundationCloseGate(firstReply), false);
+assert.equal(isUserExplicitCodingRequest(firstReply), false);
 assert.equal(isGuidedFirstReplyShape('So a reading app. Cool.'), false);
 assert.equal(shouldUnlockMicAfterAssistantTurn(firstReply), true);
 assert.equal(shouldUnlockMicAfterAssistantTurn('brainstorm'), false);

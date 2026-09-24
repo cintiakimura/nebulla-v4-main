@@ -54,7 +54,7 @@ function storeRemove(key: string): void {
 }
 
 const CLOSE_OFFER_RE =
-  /I think we(?:'ve| have) got (?:what we need|it)|here'?s what I heard|this is what I(?:'ll| will) lock/i;
+  /I think we(?:'ve| have) got (?:what we need|it)|here'?s what I heard|this is what I(?:'ll| will) lock|If this is right[\s\S]{0,80}lock it and build/i;
 
 const CONFIRM_RE =
   /^(?:yes|yeah|yep|yup|ok|okay|sure|go(?:\s+ahead)?|looks?\s+good|that'?s\s+it|that\s+is\s+it|lock\s+it|faz\s+isso|perfect|sounds?\s+good|let'?s\s+go|build\s+it|do\s+it|that'?s\s+right|isso)(?:[.!]|\s|$)/i;
@@ -117,6 +117,25 @@ export function looksLikeCloseOffer(assistantText: string): boolean {
   if (/<START_MASTERPLAN>/i.test(t)) return false;
   if (/```file:/i.test(t)) return false;
   return CLOSE_OFFER_RE.test(t);
+}
+
+/** SnapFill-style close must name where files live, how extract runs, and who it is for. */
+export function closeSummaryNamesDocumentWorkflow(text: string): boolean {
+  const t = String(text || '');
+  const storage =
+    /\b(files? live|on.?device|local(?:ly)?|dossier|history|saved (?:on|to)|storage|where (?:the )?files)\b/i.test(
+      t,
+    );
+  const extract = /\b(extract|ocr|tesseract|read (?:the )?(?:doc|image|file|scan))\b/i.test(t);
+  const who = /\b(who|for |clinician|patient|client|sender|rider)\b/i.test(t);
+  return storage && extract && who;
+}
+
+/** Empty UI at close → one §5 question (vibe / web vs mobile / density). */
+export function closeSummaryAsksUiIfEmpty(text: string): boolean {
+  return /\b(web or mobile|web vs mobile|vibe|density|how should it (?:feel|look)|look and feel)\b/i.test(
+    String(text || ''),
+  );
 }
 
 export function isCloseConfirmReply(text: string): boolean {
