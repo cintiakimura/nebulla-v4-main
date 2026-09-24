@@ -34,6 +34,14 @@ export function takeSttTicket(ticket: string): string {
   return row.apiKey;
 }
 
+export type SttBatchOk = { ok: true; text: string; language?: string };
+export type SttBatchFail = { ok: false; status: number; error: string; voiceAcl: boolean };
+export type SttBatchResult = SttBatchOk | SttBatchFail;
+
+export function isSttBatchFail(result: SttBatchResult): result is SttBatchFail {
+  return result.ok === false;
+}
+
 export async function proxyBatchStt(opts: {
   apiKey: string;
   file: Buffer;
@@ -42,7 +50,7 @@ export async function proxyBatchStt(opts: {
   language?: string;
   productName?: string;
   extraKeyterms?: string[];
-}): Promise<{ ok: true; text: string; language?: string } | { ok: false; status: number; error: string; voiceAcl: boolean }> {
+}): Promise<SttBatchResult> {
   const language = normalizeSttLanguage(opts.language);
   const keyterms = buildSttKeyterms({ productName: opts.productName, extra: opts.extraKeyterms });
   const form = new FormData();

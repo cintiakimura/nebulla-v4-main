@@ -202,7 +202,7 @@ import {
 import { runWorkspaceBuildCheck } from "./lib/workspaceBuildCheck";
 import { applyProductPalettePass } from "./lib/productPalettePass";
 import { VOICE_ACL_HINT } from "./lib/grokVoiceStt";
-import { attachGrokSttWebSocket, mintSttTicket, proxyBatchStt } from "./lib/grokVoiceSttProxy";
+import { attachGrokSttWebSocket, isSttBatchFail, mintSttTicket, proxyBatchStt } from "./lib/grokVoiceSttProxy";
 import {
   parsePastedEnvAssignments,
   writeWorkspaceEnvLocal,
@@ -6683,14 +6683,14 @@ ${answer.slice(0, 8000)}`;
         productName: typeof body.productName === "string" ? body.productName : "",
         extraKeyterms: extra,
       });
-      if (!result.ok) {
+      if (isSttBatchFail(result)) {
         return res.status(result.status || 502).json({
           error: result.error,
           voiceAcl: result.voiceAcl,
           hint: result.voiceAcl ? VOICE_ACL_HINT : undefined,
         });
       }
-      res.json({ ok: true, text: result.text, language: result.language });
+      return res.json({ ok: true, text: result.text, language: result.language });
     } catch (err) {
       res.status(500).json({ error: err instanceof Error ? err.message : "STT failed" });
     }

@@ -537,16 +537,18 @@ function readSection1Goal(workspaceRoot: string): string {
   return "";
 }
 
-export function readProductIdentity(workspaceRoot: string): ProductIdentity | null {
+export function readStoredProductIdentity(workspaceRoot: string): ProductIdentity | null {
   const abs = path.join(workspaceRoot, PRODUCT_IDENTITY_REL);
-  let stored: ProductIdentity | null = null;
-  if (fs.existsSync(abs)) {
-    try {
-      stored = parseProductIdentity(JSON.parse(fs.readFileSync(abs, "utf8")));
-    } catch {
-      stored = null;
-    }
+  if (!fs.existsSync(abs)) return null;
+  try {
+    return parseProductIdentity(JSON.parse(fs.readFileSync(abs, "utf8")));
+  } catch {
+    return null;
   }
+}
+
+export function readProductIdentity(workspaceRoot: string): ProductIdentity | null {
+  const stored = readStoredProductIdentity(workspaceRoot);
   const goal = readSection1Goal(workspaceRoot);
   const locked = extractNamedBrand(goal);
   if (
@@ -727,6 +729,7 @@ export function ensureProductIdentity(
     force?: boolean;
   },
 ): ProductIdentity {
+  const storedOnDisk = readStoredProductIdentity(workspaceRoot);
   const existing = readProductIdentity(workspaceRoot);
   const goal = opts?.goal || "";
   const type = opts?.projectType;
@@ -769,17 +772,22 @@ export function ensureProductIdentity(
     candidate,
     opts?.force ? false : existing?.userSet,
   );
+  const diskName = String(storedOnDisk?.projectName || "").trim();
   const needsWrite =
     opts?.force === true ||
     !existing ||
     looksLikeGoalStubName(existing.projectName, goal) ||
     !identityFitsGoal(existing.projectName, goal, type) ||
     existing.projectName !== built.projectName ||
-    existing.logoInitials !== built.logoInitials;
+    existing.logoInitials !== built.logoInitials ||
+    (Boolean(diskName) && diskName.toLowerCase() !== built.projectName.toLowerCase());
   if (needsWrite && opts?.persist !== false && workspaceRoot) {
+    const keepUserSet =
+      Boolean(storedOnDisk?.userSet) &&
+      diskName.toLowerCase() === built.projectName.toLowerCase();
     return writeProductIdentity(workspaceRoot, {
       ...built,
-      userSet: opts?.force ? false : existing?.userSet || Boolean(opts?.userSet),
+      userSet: opts?.force ? false : keepUserSet || Boolean(opts?.userSet),
     });
   }
   return existing && !needsWrite ? existing : built;

@@ -18,6 +18,32 @@ export type GrokDictationSession = {
   stop: () => Promise<string>;
 };
 
+/** Live box = prior committed words + current partial (never append the same final twice). */
+export function applyDictationLive(committed: string, live: string): string {
+  const c = String(committed || '').replace(/\s+/g, ' ').trim();
+  const liveText = String(live || '').replace(/\s+/g, ' ').trim();
+  if (!liveText) return c;
+  if (!c) return liveText;
+  return `${c} ${liveText}`.trim();
+}
+
+/** Commit one utterance. Ignore repeats / growing replacements of the same phrase. */
+export function commitDictationUtterance(committed: string, utterance: string): string {
+  const c = String(committed || '').replace(/\s+/g, ' ').trim();
+  const u = String(utterance || '').replace(/\s+/g, ' ').trim();
+  if (!u) return c;
+  if (!c) return u;
+  if (c === u) return c;
+  if (u.startsWith(c) && (u.length === c.length || u[c.length] === ' ')) return u;
+  if (c.startsWith(u) && (c.length === u.length || c[u.length] === ' ')) return c;
+  if (c.endsWith(` ${u}`) || c.endsWith(u)) return c;
+  return `${c} ${u}`.trim();
+}
+
+function sameUtterance(a: string, b: string): boolean {
+  return String(a || '').replace(/\s+/g, ' ').trim().toLowerCase() === String(b || '').replace(/\s+/g, ' ').trim().toLowerCase();
+}
+
 function downsampleToPcm16(input: Float32Array, inputRate: number, outRate = 16000): Int16Array {
   const ratio = inputRate / outRate;
   const n = inputRate === outRate ? input.length : Math.floor(input.length / ratio);
@@ -99,6 +125,7 @@ export async function startGrokDictation(
   let recorder: MediaRecorder | null = null;
   const recorded: Blob[] = [];
   let lastText = '';
+  let lastUtterance = '';
   let stopped = false;
 
   const cleanupMic = () => {
@@ -157,8 +184,11 @@ export async function startGrokDictation(
       const text = String(msg.text || '').trim();
       if (!text) return;
       lastText = text;
-      opts.onPartial?.(text, Boolean(msg.is_final) || msg.type === 'transcript.done');
-      if (msg.speech_final || msg.type === 'transcript.done') {
+      const isFinal = Boolean(msg.is_final) || msg.type === 'transcript.done';
+      opts.onPartial?.(text, isFinal);
+      const shouldCommit = msg.speech_final || msg.type === 'transcript.done' || (isFinal && msg.type === 'transcript.partial');
+      if (shouldCommit && !sameUtterance(text, lastUtterance)) {
+        lastUtterance = text;
         opts.onUtterance?.(text);
       }
     }
@@ -187,7 +217,10 @@ export async function startGrokDictation(
     if (pcm.length) ws.send(pcm.buffer);
   };
   source.connect(processor);
-  processor.connect(audioCtx.destination);
+  const mute = audioCtx.createGain();
+  mute.gain.value = 0;
+  processor.connect(mute);
+  mute.connect(audioCtx.destination);
 
   const stop = async (): Promise<string> => {
     if (stopped) return lastText;
@@ -217,9 +250,10 @@ export async function startGrokDictation(
       const batch = await transcribeClipBatch({ blob, language, productName }).catch((err) => ({
         text: '',
         error: err instanceof Error ? err.message : 'batch STT failed',
+        voiceAcl: false,
       }));
       if (batch.text) lastText = batch.text;
-      else if (batch.error) opts.onError?.(batch.error, batch.voiceAcl);
+      else if (batch.error) opts.onError?.(batch.error, Boolean(batch.voiceAcl));
     }
     try {
       ws?.close();

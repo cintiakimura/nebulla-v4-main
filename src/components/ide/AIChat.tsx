@@ -56,7 +56,12 @@ import {
   setStoredStartMode,
 } from '../../lib/ideStartMode';
 import { fetchConversationLogEntries, persistConversationTurn } from '../../lib/conversationLogClient';
-import { startGrokDictation, type GrokDictationSession } from '../../lib/grokVoiceDictation';
+import {
+  applyDictationLive,
+  commitDictationUtterance,
+  startGrokDictation,
+  type GrokDictationSession,
+} from '../../lib/grokVoiceDictation';
 import {
   loadIdeChatTranscript,
   mergeChatTranscripts,
@@ -1038,6 +1043,11 @@ export function AIChat() {
   /** Pause mic only (keep Open talk intent for post-TTS resume). */
   const pauseHandsFreeListening = useCallback(() => {
     clearHandsFreeAutoSendTimers();
+    const grok = grokDictationRef.current;
+    grokDictationRef.current = null;
+    if (grok) {
+      void grok.stop().catch(() => {});
+    }
     const r = liveHandsFreeRecognitionRef.current;
     if (r) {
       try {
@@ -1047,6 +1057,7 @@ export function AIChat() {
       }
       liveHandsFreeRecognitionRef.current = null;
     }
+    setIsRecordingVoice(false);
   }, []);
 
   const interruptVoiceAndTts = useCallback(() => {
@@ -1144,25 +1155,28 @@ export function AIChat() {
       stopVoiceRecognition();
       stopHandsFree();
     }
+    if (opts?.resumeOnly && grokDictationRef.current) {
+      isHandsFreeRef.current = true;
+      setIsHandsFree(true);
+      setIsRecordingVoice(true);
+      return;
+    }
     const prefix = inputRef.current.trim();
     voiceDraftRef.current = prefix;
     unlockTtsAudio();
     void startGrokDictation({
       language: contentLocaleRef.current,
       productName: getBrowserProjectName(),
-      onPartial: (text, isFinal) => {
+      onPartial: (text) => {
         if (!isHandsFreeRef.current) return;
-        const shown = `${voiceDraftRef.current}${voiceDraftRef.current && text ? ' ' : ''}${text}`.trim();
+        const shown = applyDictationLive(voiceDraftRef.current, text);
         setInput(shown);
         inputRef.current = shown;
-        if (isFinal) {
-          voiceDraftRef.current = shown;
-        }
         noteHandsFreeSpeechActivity();
       },
       onUtterance: (text) => {
         if (!isHandsFreeRef.current) return;
-        const shown = `${voiceDraftRef.current}${voiceDraftRef.current && text ? ' ' : ''}${text}`.trim();
+        const shown = commitDictationUtterance(voiceDraftRef.current, text);
         voiceDraftRef.current = shown;
         setInput(shown);
         inputRef.current = shown;
@@ -3571,14 +3585,13 @@ export function AIChat() {
     void startGrokDictation({
       language: contentLocaleRef.current,
       productName: getBrowserProjectName(),
-      onPartial: (text, isFinal) => {
-        const shown = `${voiceDraftRef.current}${voiceDraftRef.current && text ? ' ' : ''}${text}`.trim();
+      onPartial: (text) => {
+        const shown = applyDictationLive(voiceDraftRef.current, text);
         setInput(shown);
         inputRef.current = shown;
-        if (isFinal) voiceDraftRef.current = shown;
       },
       onUtterance: (text) => {
-        const shown = `${voiceDraftRef.current}${voiceDraftRef.current && text ? ' ' : ''}${text}`.trim();
+        const shown = commitDictationUtterance(voiceDraftRef.current, text);
         voiceDraftRef.current = shown;
         setInput(shown);
         inputRef.current = shown;

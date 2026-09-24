@@ -15,7 +15,8 @@ import {
   isVoiceAclError,
   normalizeSttLanguage,
 } from "../lib/grokVoiceStt.ts";
-import { proxyBatchStt } from "../lib/grokVoiceSttProxy.ts";
+import { isSttBatchFail, proxyBatchStt } from "../lib/grokVoiceSttProxy.ts";
+import { applyDictationLive, commitDictationUtterance } from "../src/lib/grokVoiceDictation.ts";
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -54,7 +55,19 @@ assert.equal(isVoiceAclError(403, "team spending limit"), false);
   const server = fs.readFileSync(path.join(root, "server.ts"), "utf8");
   assert.match(server, /\/api\/stt/);
   assert.match(server, /attachGrokSttWebSocket/);
+  assert.match(chat, /applyDictationLive/);
+  assert.match(chat, /commitDictationUtterance/);
+  assert.match(client, /sameUtterance|lastUtterance/);
 }
+
+assert.equal(applyDictationLive("", "no"), "no");
+assert.equal(applyDictationLive("hello", "no"), "hello no");
+assert.equal(commitDictationUtterance("", "no"), "no");
+assert.equal(commitDictationUtterance("no", "no"), "no");
+assert.equal(commitDictationUtterance("no", "no"), "no");
+assert.equal(commitDictationUtterance(commitDictationUtterance("no", "no"), "no"), "no");
+assert.equal(commitDictationUtterance("hello", "world"), "hello world");
+assert.equal(commitDictationUtterance("no", "no it"), "no it");
 
 function readEnvKey(): string {
   const fromProc =
@@ -147,13 +160,13 @@ if (apiKey) {
     language: "en",
     productName: "MyDossier",
   });
-  if (!result.ok) {
+  if (isSttBatchFail(result)) {
     voiceAclBlocker = result.voiceAcl;
     smoke = `failed HTTP: ${result.error}`;
     if (result.voiceAcl) {
       assert.match(result.error, /Voice|STT|type instead/i);
     }
-  } else {
+  } else if (result.ok) {
     smoke = `ok tts=${ttsOk} text=${JSON.stringify(result.text)}`;
     if (ttsOk && result.text) {
       const t = result.text.toLowerCase();
