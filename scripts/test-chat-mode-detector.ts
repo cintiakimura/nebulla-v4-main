@@ -3,7 +3,13 @@
  * Run: npm run test:chat-mode
  */
 import assert from "node:assert/strict";
-import { detectChatMode, describeChatMode, userNoteRequestsCompetitorResearch, userNoteRequestsUiGeneration } from "../src/lib/chatModeDetector.ts";
+import {
+  detectChatMode,
+  describeChatMode,
+  userNoteRequestsCompetitorResearch,
+  userNoteRequestsUiGeneration,
+  userNoteSignalsFunctionalityOk,
+} from "../src/lib/chatModeDetector.ts";
 import {
   detectGuidedInterviewIntent,
   detectInferenceFirstIntent,
@@ -71,6 +77,17 @@ assert.equal(userNoteRequestsCompetitorResearch("research competitors"), true);
 assert.equal(userNoteRequestsCompetitorResearch("compare similar products"), true);
 assert.equal(userNoteRequestsCompetitorResearch("A bakery app for pickup orders"), false);
   assert.equal(userNoteRequestsUiGeneration("continue building"), false);
+}
+
+section("functionality-ok unlocks one post-code UI Gen — not a broken-app complaint");
+{
+  assert.equal(userNoteSignalsFunctionalityOk("the app works"), true);
+  assert.equal(userNoteSignalsFunctionalityOk("I'm happy with the functionality"), true);
+  assert.equal(userNoteSignalsFunctionalityOk("functionality is good"), true);
+  assert.equal(userNoteSignalsFunctionalityOk("it works well"), true);
+  assert.equal(userNoteSignalsFunctionalityOk("doesn't work"), false);
+  assert.equal(userNoteSignalsFunctionalityOk("make it work"), false);
+  assert.equal(userNoteSignalsFunctionalityOk("generate ui"), false);
 }
 
 section("inference intent helpers");

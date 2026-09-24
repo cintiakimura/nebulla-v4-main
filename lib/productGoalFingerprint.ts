@@ -11,6 +11,27 @@ import {
 } from "./productIdentity";
 import { extractGoalFromUserNote, isCodingCommandNote } from "./spineSequenceClient";
 
+/** Same-app refine after Live — never a new product seed. */
+export function isSameProductRefineTurn(text: string): boolean {
+  const t = String(text || "").trim();
+  if (!t) return false;
+  if (
+    /\b(keep\s+mock|make\s+it\s+dark|dark\s+theme|dark\s+palette|light\s+theme|fix the nav|fix\s+the\s+menu|add a filter|layout\s+draft|edit existing|restyle)\b/i.test(
+      t,
+    )
+  ) {
+    return true;
+  }
+  if (
+    t.length < 280 &&
+    /\b(nav|menu|theme|palette|color|filter|cta)\b/i.test(t) &&
+    !/\b(bridgen|taskwise|quill|new app|new product)\b/i.test(t)
+  ) {
+    return true;
+  }
+  return false;
+}
+
 export const EDUCATION_LEFTOVER_SLUGS = new Set([
   "session",
   "practice",
@@ -137,6 +158,7 @@ export function isNewProductSeedAgainstCurrent(opts: {
 }): boolean {
   const raw = String(opts.userText || "").trim();
   if (!raw) return false;
+  if (isSameProductRefineTurn(raw)) return false;
   if (/^(continue|continue\.|continue!|build\s+next|next\s+slice|hello|hi|hey|hellos|yes|yeah|ok|go)[\s.!?]*$/i.test(raw)) {
     return false;
   }

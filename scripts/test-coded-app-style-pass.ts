@@ -451,11 +451,11 @@ section("activity log is quiet after slices");
   const chat = fs.readFileSync(path.join(REPO, "src/components/ide/AIChat.tsx"), "utf8");
   const sync = fs.readFileSync(path.join(REPO, "src/lib/ideArtifactSync.ts"), "utf8");
   const slice = fs.readFileSync(path.join(REPO, "src/lib/fastPrototypeNextSlice.ts"), "utf8");
-  assert.match(chat, /App is ready on Live\./);
+  assert.match(chat, /PRODUCT_MVP_READY_MESSAGE/);
   assert.equal(/UI Studio Beta next/i.test(sync), false);
   assert.equal(/placeholder mockup/i.test(slice), false);
   assert.equal(/live practice app/i.test(chat), false);
-  assert.match(slice, /PRODUCT_MVP_READY_MESSAGE = 'App is ready on Live\.'/);
+  assert.match(slice, /First version is on Live, mock only/);
   assert.equal(/Continue — launching/.test(chat), false);
   assert.equal(/Send Continue for the next slice/.test(chat), false);
   assert.match(slice, /Foundation\+Primary/);
@@ -468,6 +468,7 @@ section("Generate UI after routes is a style pass, not a draft remount");
   assert.match(genFn, /workspaceHasCodedAppUi/);
   assert.match(genFn, /applyProductPalettePass/);
   assert.match(genFn, /coded_style_pass/);
+  assert.match(genFn, /uiPhase !== "post_code"/);
   const canvas = fs.readFileSync(
     path.join(REPO, "src/components/ide/shell/previewTools/BuildPreviewCanvas.tsx"),
     "utf8",

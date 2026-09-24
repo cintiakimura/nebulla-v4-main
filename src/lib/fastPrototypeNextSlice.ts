@@ -181,9 +181,10 @@ export function nextAutopilotSliceLabel(_current?: string | null): AutopilotSlic
 export const MAX_AUTOPILOT_SLICES = 0;
 
 /** Shown when autopilot / Continue has nothing left. */
-export const PRODUCT_MVP_READY_SHORT = 'App is ready on Live.';
+export const PRODUCT_MVP_READY_SHORT = 'First version is on Live, mock only.';
 
-export const PRODUCT_MVP_READY_MESSAGE = 'App is ready on Live.';
+export const PRODUCT_MVP_READY_MESSAGE =
+  'First version is on Live, mock only. What do you want to change?';
 
 /**
  * Foundation + style-pass + Live only. Data+API / Primary / Secondary / Polish
@@ -199,7 +200,7 @@ export const FOUNDATION_RETRY_ACTIVITY =
   'Foundation did not land. Retry Go for Foundation+Primary — you do not need to type Continue.';
 
 export const FOUNDATION_SLICE_INSTRUCTION =
-  'START_CODING — SLICE: Foundation+Primary in ONE Go. Router + §4 routes + lib/mockStore.ts. The goal verb must work with mock localStorage (no empty /api/* , no Data+API slice, no Polish). Shop: book/order updates the Home list; mechanic can mark ready. Delivery: pickup+dropoff submit appears on Home; Accept updates status. Education: Start practice writes progress on Teacher. Header = §1 identity name. Nav = §4 only. Job Home (list + CTA), not Interactive screen / Start practice unless education. File blocks now — then the app is ready on Live.';
+  'START_CODING — SLICE: Foundation+Primary in ONE Go. FIRST-SLICE UI FLOOR (must be visible on Live): header = one product name + initials (never concatenated leftovers); nav = §4 routes as real tabs (no empty chrome, no leftover Practice/Teacher unless this goal is education); globals.css = §5 palette or a dark calm default if §5 is thin / they asked dark-calm-low-stimulus (not cream-on-white); Home shows the goal verb + one primary CTA; lib/mockStore.ts only. Router + §4 routes. The goal verb must work with mock localStorage (no empty /api/* , no Data+API slice, no Polish). Shop: book/order updates the Home list; mechanic can mark ready. Delivery: pickup+dropoff submit appears on Home; Accept updates status. Education: Start practice writes progress on Teacher. File blocks now — then first version is on Live, mock only.';
 
 /** After product files exist — patch in place. Do not scaffold a second app. */
 export const EDIT_EXISTING_SLICE_INSTRUCTION =
@@ -215,7 +216,7 @@ export function buildEditExistingUserNote(userRequest: string): string {
 /** Next Go note: EDIT when files exist and the turn is a refine. Otherwise Foundation. */
 export function buildNextGoUserNote(foundationLanded: boolean, userRequest: string): string {
   const req = String(userRequest || '').trim();
-  if (foundationLanded && isPostCodeRefineRequest(req)) {
+  if (foundationLanded && req) {
     return buildEditExistingUserNote(req);
   }
   return req || FOUNDATION_SLICE_INSTRUCTION;

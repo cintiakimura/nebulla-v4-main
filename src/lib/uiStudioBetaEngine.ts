@@ -424,6 +424,38 @@ export async function applyUiStudioBetaToAppPreview(
 }
 
 /**
+ * One post-code UI Gen after the first slice is usable and the user says
+ * the app works. Applies onto existing files — not a pre-code mockup remount.
+ */
+export async function runOnePostCodeUiGenPass(options: {
+  projectName?: string;
+  projectKey?: string;
+  writtenPaths?: string[];
+  onProgress?: GrokActivityProgressFn;
+}): Promise<UiStudioBetaGenerateResult> {
+  const projectKey = options.projectKey || options.projectName || 'default';
+  if (hasPostCodeUiRefreshRun(projectKey)) {
+    options.onProgress?.('Post-code UI Gen already ran this session — keeping the live app.', 'info');
+    return { ok: true, skipped: true };
+  }
+  const result = await runUiStudioBetaGeneration({
+    projectName: options.projectName,
+    writtenPaths: options.writtenPaths,
+    autoTriggered: true,
+    uiPhase: 'post_code',
+    openPane: false,
+    onProgress: options.onProgress,
+  });
+  if (result.ok && !result.skipped) {
+    await applyUiStudioBetaToAppPreview(options.onProgress, { preferMockup: false });
+    markPostCodeUiRefreshDone(projectKey, options.writtenPaths || []);
+  } else if (result.ok && result.skipped) {
+    markPostCodeUiRefreshDone(projectKey, options.writtenPaths || []);
+  }
+  return result;
+}
+
+/**
  * After successful apply of UI-relevant files: post-code UI Gen cycle
  * (plan + file grounding). Re-runs when a later slice adds new UI routes;
  * otherwise reloads live App Preview only (mockup must not reclaim entry).

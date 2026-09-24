@@ -77,6 +77,16 @@ section("Quill Learn Kids leftover + influencer seed is a new workspace");
   assert.equal(isFoundationCloseGate("hellos"), true);
   assert.equal(isFoundationCloseGate("you can start"), true);
   assert.equal(isFoundationCloseGate("let’s keep Bridgen and start"), true);
+  assert.equal(
+    resolveNewProductWorkspaceAction({
+      userText: "make it dark, fix the nav, keep mock",
+      chipName: "Quill Learn Kids",
+      diskGoal: QUILL_GOAL,
+      productRoutesOnDisk: true,
+      workspacePaths: leftoverPaths,
+    }).mintNewProject,
+    false,
+  );
   const pages = seedPagesFromGoal(SEED);
   assert.equal(pages.some((p) => p.route === "/practice" || p.route === "/teacher"), false);
 

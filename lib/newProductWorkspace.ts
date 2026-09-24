@@ -12,6 +12,7 @@ import {
 import {
   isNewProductSeedAgainstCurrent,
   isReplacementProductBrief,
+  isSameProductRefineTurn,
   leftoverRoutesConflictWithGoal,
   looksLikeStandaloneProductBrief,
 } from "./productGoalFingerprint";
@@ -26,6 +27,8 @@ export function isFoundationCloseGate(text: string): boolean {
   if (/let['’]?s keep\b[\s\S]{0,80}\band start\b/i.test(t)) return true;
   return false;
 }
+
+export { isSameProductRefineTurn } from "./productGoalFingerprint";
 
 export function isInfluencerOrBrandBrief(text: string): boolean {
   return /\b(influencers?\s+and\s+brands?|brands?\s+and\s+influencers?|bridgen|influencer|creators?\s+and\s+brands)\b/i.test(
@@ -61,6 +64,15 @@ export function resolveNewProductWorkspaceAction(opts: {
   fromHomeNewProject?: boolean;
 }): NewProductWorkspaceAction {
   const userText = String(opts.userText || "").trim();
+  if (isSameProductRefineTurn(userText) && !opts.fromHomeNewProject) {
+    return {
+      mintNewProject: false,
+      skipGrokChat: false,
+      allowCodePass1: true,
+      editExistingForbidden: false,
+      productName: singleProductName(String(opts.chipName || "").trim()),
+    };
+  }
   const close = isFoundationCloseGate(userText);
   const productName = singleProductName(
     extractStatedProductName(userText) ||

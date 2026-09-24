@@ -281,7 +281,9 @@ export function buildCompactGoCodeUserPrompt(opts: {
   const isFoundation = /SLICE:\s*Foundation/i.test(slice);
   const isPolish = /SLICE:\s*Polish/i.test(slice);
   const refineFocus =
-    /\b(theme|dark|restyle|layout\s+draft|edit existing|MODE:\s*EDIT)\b/i.test(focus);
+    /\b(theme|dark|restyle|layout\s+draft|edit existing|MODE:\s*EDIT|nav|menu|color|palette|filter|keep\s+mock)\b/i.test(
+      focus,
+    );
   const task =
     opts.continuation || isPolish || refineFocus
       ? 'EDIT MODE — patch existing product files from Session focus. No new scaffold. File blocks only.'

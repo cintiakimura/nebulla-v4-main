@@ -4543,7 +4543,11 @@ ${modelJson}`;
         uiPhaseRaw === "pre_code" || uiPhaseRaw === "post_code" || uiPhaseRaw === "manual"
           ? uiPhaseRaw
           : undefined;
-      if (workspaceHasCodedAppUi(pp.workspaceRoot) && uiPhase !== "pre_code") {
+      if (
+        workspaceHasCodedAppUi(pp.workspaceRoot) &&
+        uiPhase !== "pre_code" &&
+        uiPhase !== "post_code"
+      ) {
         const styled = applyProductPalettePass({
           workspaceRoot: pp.workspaceRoot,
           masterPlanPath: pp.masterPlanPath,

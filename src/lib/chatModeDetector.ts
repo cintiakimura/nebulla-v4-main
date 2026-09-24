@@ -84,6 +84,30 @@ export function userNoteRequestsUiGeneration(text?: string | null): boolean {
   return /^(please\s+)?generate ui\b/i.test(t);
 }
 
+/** After Live: user says the first slice works / they are happy with functionality. */
+export function userNoteSignalsFunctionalityOk(text?: string | null): boolean {
+  const t = String(text || '').trim();
+  if (!t || t.length > 280) return false;
+  if (
+    /\b(doesn'?t work|does not work|not working|nothing works|make (it|this) work|still broken|is broken)\b/i.test(
+      t,
+    )
+  ) {
+    return false;
+  }
+  if (/\b(the )?(app|it|this)\s+works\b/i.test(t)) return true;
+  if (/\b(works (well|great|fine|for me)|it'?s working)\b/i.test(t)) return true;
+  if (
+    /\b(i'?m |we'?re )?(happy|good|fine|satisfied)\s+with\s+(the )?(functionality|features?|flows?|app|it|this)\b/i.test(
+      t,
+    )
+  ) {
+    return true;
+  }
+  if (/\bfunctionality (is |looks )?(good|fine|ok|okay|great|working)\b/i.test(t)) return true;
+  return false;
+}
+
 const FILE_RE =
   /\b(open file|load file|show (me )?the file|from github|open github|edit [\w./-]+\.(ts|tsx|js|jsx|md|json|css))\b/i;
 

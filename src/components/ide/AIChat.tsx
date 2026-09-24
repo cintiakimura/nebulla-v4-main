@@ -81,6 +81,7 @@ import {
   isShortCodingGoNudge,
   isUserExplicitCodingRequest,
   isFoundationCloseGate,
+  shouldUnlockMicAfterAssistantTurn,
   historyHasConfirmedNorthStar,
   SHORT_CODING_GO_SUMMARY,
 } from '../../lib/ideShortCodingNudge';
@@ -118,11 +119,17 @@ import { runMasterPlanUiPipeline } from '../../lib/ideArtifactSync';
 import {
   applyUiStudioBetaToAppPreview,
   dispatchStudioShowLiveApp,
+  hasPostCodeUiRefreshRun,
+  runOnePostCodeUiGenPass,
   runUiStudioBetaGeneration,
   triggerUiStudioBetaAfterPlanReady,
   triggerUiStudioBetaAfterFilesApplied,
 } from '../../lib/uiStudioBetaEngine';
-import { userNoteRequestsCompetitorResearch, userNoteRequestsUiGeneration } from '../../lib/chatModeDetector';
+import {
+  userNoteRequestsCompetitorResearch,
+  userNoteRequestsUiGeneration,
+  userNoteSignalsFunctionalityOk,
+} from '../../lib/chatModeDetector';
 import { buildPostApplyApiAsk } from '../../../lib/engineerInterview';
 import { figmaPickActivityLine } from '../../lib/uiGenStatusLabels';
 import {
@@ -180,6 +187,7 @@ import {
   looksLikeStandaloneProductBrief,
 } from '../../../lib/productGoalFingerprint';
 import { resolveNewProductWorkspaceAction } from '../../../lib/newProductWorkspace';
+import { isSameProductRefineTurn } from '../../../lib/productGoalFingerprint';
 import { persistProductIdentityClient, promoteWorkspaceChipFromProductName } from '../../lib/productIdentityClient';
 import {
   ASK_FOR_SHORT_GOAL,
@@ -1310,7 +1318,7 @@ export function AIChat() {
         {
           ...last,
           statusKind: 'success' as const,
-          content: 'App is ready on Live.',
+          content: PRODUCT_MVP_READY_MESSAGE,
         },
       ];
       messagesRef.current = next;
@@ -1618,6 +1626,13 @@ export function AIChat() {
 
     if (micInputBlocked) return;
     unlockTtsAudio();
+    const priorForMic = messagesRef.current;
+    const firstSpokenUser =
+      !isHiddenBootstrapUserMessage(rawText) &&
+      !priorForMic.some((m) => m.role === 'user' && !isHiddenBootstrapUserMessage(m.content));
+    if (firstSpokenUser) {
+      openTalkDesiredRef.current = true;
+    }
 
     // Mirror sticky content locale (hysteresis) — skip hidden bootstraps.
     if (!isHiddenBootstrapUserMessage(rawText)) {
@@ -1986,6 +2001,63 @@ export function AIChat() {
       interactionModeRef.current = 'chat';
       setAssistantInteractionMode('chat');
     }
+    const happyWithFunctionality = userNoteSignalsFunctionalityOk(rawText);
+    const postCodeUiProjectKey = resolveActiveProjectIds(diskProjectKey).projectKey;
+    if (
+      !hasAppStatusPayload &&
+      !newProductSeed &&
+      existingAppWork &&
+      (happyWithFunctionality || userNoteRequestsUiGeneration(rawText)) &&
+      !hasPostCodeUiRefreshRun(postCodeUiProjectKey)
+    ) {
+      beginPlanActivity('Final UI — restyle after coding…', chatWorkSteps(), {
+        subhead: 'One post-code UI Gen pass on existing files.',
+        initialLog: 'Running post-code UI Gen…',
+      });
+      try {
+        const productPaths = workspacePaths.filter((p) => {
+          const n = p.replace(/\\/g, '/');
+          return /^(app|src|pages|components)\//i.test(n);
+        });
+        const result = await runOnePostCodeUiGenPass({
+          projectName: getBrowserProjectName().trim() || undefined,
+          projectKey: postCodeUiProjectKey,
+          writtenPaths: productPaths.length ? productPaths : ['app/page.tsx', 'app/globals.css'],
+          onProgress: pushActivity,
+        });
+        if (result.ok) {
+          pushActivity('Post-code UI Gen applied to the live files. What next?', 'success');
+        } else {
+          pushActivity(result.error || 'Post-code UI Gen failed — live files unchanged.', 'error');
+        }
+      } catch (uiErr) {
+        pushActivity(uiErr instanceof Error ? uiErr.message : 'Post-code UI Gen failed', 'error');
+      }
+      const keepGoingForRefine =
+        isPostCodeRefineRequest(rawText) ||
+        isSameProductRefineTurn(rawText) ||
+        userForcedCoding;
+      if (!keepGoingForRefine) {
+        const stamp = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+        setMessages((p) => {
+          const next = [
+            ...p,
+            {
+              id: `a-post-code-ui-${Date.now()}`,
+              role: 'assistant' as const,
+              content: 'First version still on Live. I ran one UI pass on the existing files. What next?',
+              timestamp: stamp,
+            },
+          ];
+          messagesRef.current = next;
+          return next;
+        });
+        resetCodingActivity();
+        setSending(false);
+        sendingRef.current = false;
+        return;
+      }
+    }
     if (userNoteRequestsUiGeneration(rawText) && !hasAppStatusPayload && !existingAppWork) {
       beginPlanActivity('Generating UI from Master Plan…', chatWorkSteps(), {
         subhead: 'UI Gen v2 — §1 Goal and Go are not rewritten.',
@@ -2169,21 +2241,32 @@ export function AIChat() {
       });
     let planSliceFromDisk: string | null = null;
 
+    const refineSameProduct =
+      foundationLandedOnDisk() &&
+      !newProductSeed &&
+      (isPostCodeRefineRequest(rawText) || isSameProductRefineTurn(rawText));
     let skipGrokChat =
       interactionModeRef.current === 'agent' &&
       userForcedCoding &&
       !onboardingBuildStart &&
-      !hasAppStatusPayload;
+      !hasAppStatusPayload &&
+      !refineSameProduct;
     const maySkipChatIfPlanExists =
       interactionModeRef.current === 'agent' &&
       !onboardingBuildStart &&
       !hasAppStatusPayload &&
+      !refineSameProduct &&
       (userForcedCoding || fastPrototypeTurn || buildMode);
     const seedProductName = singleProductName(
       extractStatedProductName(rawText) || inferProductName(rawText) || seedActionEarly.productName,
     );
     const isolateNewProduct =
-      Boolean(newProductSeed) && !userNoteRequestsNextSlice(rawText);
+      Boolean(newProductSeed) &&
+      !userNoteRequestsNextSlice(rawText) &&
+      !refineSameProduct;
+    if (refineSameProduct) {
+      skipGrokChat = false;
+    }
     let switchedProductWorkspace = false;
     if (isolateNewProduct) {
       try {
@@ -2453,7 +2536,9 @@ export function AIChat() {
       const assistantCodingPromise = isAssistantCodingPromise(displayText || raw);
       const postCodeRefine =
         foundationLandedOnDisk() &&
+        !newProductSeed &&
         (isPostCodeRefineRequest(rawText) ||
+          isSameProductRefineTurn(rawText) ||
           isUserExplicitCodingRequest(rawText) ||
           isAssistantRefineClaim(displayText || raw));
       if (foundationLandedOnDisk() && isAssistantRefineClaim(displayText || raw)) {
@@ -2483,7 +2568,8 @@ export function AIChat() {
           fastPrototypeTurn ||
           shortCodingNudge ||
           userForcedCoding ||
-          assistantCodingPromise);
+          assistantCodingPromise ||
+          postCodeRefine);
       if (displayText.trim()) {
         rememberCloseOffer(displayText.trim(), diskProjectKey);
       }
@@ -2520,6 +2606,10 @@ export function AIChat() {
       // Start TTS as soon as spoken text exists — do not wait for UI pipeline / coding.
       if (spoken.trim()) {
         scheduledTts = true;
+        if (shouldUnlockMicAfterAssistantTurn(spoken) || shouldUnlockMicAfterAssistantTurn(displayText)) {
+          unlockTtsAudio();
+          openTalkDesiredRef.current = true;
+        }
         handsFreeResumeAfterTtsRef.current = openTalkDesiredRef.current;
         void playTtsForText(spoken);
       }
@@ -3113,9 +3203,9 @@ export function AIChat() {
             if (showWorkActivity) {
               setGrokActivity((prev) =>
                 advanceGrokActivity(prev, showWorkActivity ? 6 : 4, {
-                  currentAction: 'App is ready on Live.',
+                  currentAction: PRODUCT_MVP_READY_MESSAGE,
                   log: {
-                    message: 'App is ready on Live.',
+                    message: PRODUCT_MVP_READY_MESSAGE,
                     kind: 'info',
                   },
                 }),

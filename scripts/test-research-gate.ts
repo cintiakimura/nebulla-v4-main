@@ -380,7 +380,7 @@ try {
   assert.equal(/planningPhase = 'START_CODING'/.test(chat), false);
   assert.match(chat, /isOrchestrationOnlyPlanSource\(planningPhase\)/);
   assert.match(chat, /foundationAlreadyLanded/);
-  assert.match(chat, /App is ready on Live/);
+  assert.match(chat, /First version is on Live|App is ready on Live|PRODUCT_MVP_READY_MESSAGE/);
   {
     const idxLanded = chat.indexOf('const foundationAlreadyLanded');
     const idxHandoff = chat.lastIndexOf('await handlePostGrokCodingTurn');
@@ -402,8 +402,18 @@ try {
   assert.match(artifacts, /distillBriefToGoalSection/);
   assert.match(artifacts, /if \(!hasPlanShape\) return 0/);
   assert.match(chat, /userNoteRequestsUiGeneration/);
+  assert.match(chat, /userNoteSignalsFunctionalityOk/);
+  assert.match(chat, /runOnePostCodeUiGenPass/);
   assert.match(chat, /uiPhase: 'manual'/);
   assert.match(chat, /preferMockup: true/);
+  assert.match(
+    fs.readFileSync(path.join(root, "src/lib/uiStudioBetaEngine.ts"), "utf8"),
+    /uiPhase: 'post_code'/,
+  );
+  assert.match(
+    fs.readFileSync(path.join(root, "src/lib/uiStudioBetaEngine.ts"), "utf8"),
+    /applyUiStudioBetaToAppPreview/,
+  );
   assert.match(chat, /blockedCode: coding\.blockedReason\?\.code/);
   assert.match(
     fs.readFileSync(path.join(root, "lib/nebulaResearchStroke.ts"), "utf8"),

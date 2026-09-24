@@ -24,10 +24,10 @@ function hasStrongExplicitCodingSignal(t: string): boolean {
 }
 
 const POST_CODE_REFINE_PHRASE_RE =
-  /\b(dark\s+theme|light\s+theme|restyle|layout\s+draft|generate\s+ui|make\s+it\s+dark|keep\s+mock|edit\s+existing\s+files\s+only)\b/i;
+  /\b(dark\s+theme|light\s+theme|restyle|layout\s+draft|generate\s+ui|make\s+it\s+dark|keep\s+mock|edit\s+existing\s+files\s+only|fix the nav|fix\s+the\s+menu|add a filter|dark\s+palette|match the plan)\b/i;
 
 const POST_CODE_REFINE_VERB_RE =
-  /\b(fix|change|update|edit|restyle|rewrite)\b[\s\S]{0,48}\b(home|screen|page|css|theme|color|ui|layout)\b/i;
+  /\b(fix|change|update|edit|restyle|rewrite)\b[\s\S]{0,48}\b(home|screen|page|css|theme|color|ui|layout|nav|menu|filter)\b/i;
 
 /** After Live exists: theme / layout / edit-existing asks must start a new Go, even when long. */
 export function isPostCodeRefineRequest(text: string): boolean {
@@ -36,11 +36,12 @@ export function isPostCodeRefineRequest(text: string): boolean {
   if (POST_CODE_REFINE_PHRASE_RE.test(t)) return true;
   if (POST_CODE_REFINE_VERB_RE.test(t)) return true;
   if (/\btheme\b/i.test(t)) return true;
+  if (/\b(nav|menu|palette|color|filter)\b/i.test(t) && t.length < 280) return true;
   return false;
 }
 
 const ASSISTANT_REFINE_CLAIM_RE =
-  /\b(applying|fixing|restyling|updating)\b[\s\S]{0,80}\b(theme|dark|layout|home|files|css)\b/i;
+  /\b(applying|fixing|restyling|updating)\b[\s\S]{0,80}\b(theme|dark|layout|home|files|css|nav|menu|color|palette)\b/i;
 
 /** Assistant claimed a theme/layout/file edit — must start Go even past the short-promise cap. */
 export function isAssistantRefineClaim(text: string): boolean {
@@ -106,6 +107,14 @@ export function historyHasConfirmedNorthStar(
 }
 
 /** First seed reply: compliment + reflect + fork. */
+/** First compliment / “is that right?” — unlock TTS + mic without the word brainstorm. */
+export function shouldUnlockMicAfterAssistantTurn(text: string): boolean {
+  const t = String(text || '').trim();
+  if (!t) return false;
+  if (isGuidedFirstReplyShape(t)) return true;
+  return /is that right/i.test(t);
+}
+
 export function isGuidedFirstReplyShape(text: string): boolean {
   const t = String(text || '');
   const compliment = /that'?s a great idea|love (this|that)|great idea/i.test(t);

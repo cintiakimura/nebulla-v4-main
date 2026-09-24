@@ -126,7 +126,7 @@ assert.equal(nextAutopilotSliceLabel('Secondary'), null);
   assert.equal(d.advance, false);
   assert.equal(d.nextLabel, null);
   assert.equal(d.stopReason, 'session_complete');
-  assert.match(d.message, /App is ready on Live/i);
+  assert.match(d.message, /First version is on Live|App is ready on Live/i);
 }
 {
   const d = shouldAutopilotAdvance({
@@ -138,7 +138,7 @@ assert.equal(nextAutopilotSliceLabel('Secondary'), null);
   });
   assert.equal(d.advance, false);
   assert.equal(d.stopReason, 'session_complete');
-  assert.match(d.message, /App is ready on Live/i);
+  assert.match(d.message, /First version is on Live|App is ready on Live/i);
 }
 {
   const d = shouldAutopilotAdvance({
@@ -150,7 +150,7 @@ assert.equal(nextAutopilotSliceLabel('Secondary'), null);
   });
   assert.equal(d.advance, false);
   assert.equal(d.stopReason, 'session_complete');
-  assert.match(d.message, /App is ready on Live/i);
+  assert.match(d.message, /First version is on Live|App is ready on Live/i);
   assert.equal(/send a new goal/i.test(d.message), false);
 }
 {
@@ -163,7 +163,7 @@ assert.equal(nextAutopilotSliceLabel('Secondary'), null);
   });
   assert.equal(d.advance, false);
   assert.equal(d.stopReason, 'session_complete');
-  assert.match(d.message, /App is ready on Live/i);
+  assert.match(d.message, /First version is on Live|App is ready on Live/i);
 }
 {
   const d = shouldAutopilotAdvance({
@@ -175,7 +175,7 @@ assert.equal(nextAutopilotSliceLabel('Secondary'), null);
   });
   assert.equal(d.advance, false);
   assert.equal(d.stopReason, 'session_complete');
-  assert.match(d.message, /App is ready on Live/i);
+  assert.match(d.message, /First version is on Live|App is ready on Live/i);
 }
 {
   const d = shouldAutopilotAdvance({
@@ -227,7 +227,7 @@ assert.equal(nextAutopilotSliceLabel('Secondary'), null);
   });
   assert.equal(d.advance, false);
   assert.equal(d.stopReason, 'session_complete');
-  assert.match(d.message, /App is ready on Live/i);
+  assert.match(d.message, /First version is on Live|App is ready on Live/i);
 }
 {
   const d = shouldAutopilotAdvance({
@@ -263,7 +263,7 @@ assert.equal(nextAutopilotSliceLabel('Secondary'), null);
   });
   assert.equal(d.advance, false);
   assert.equal(d.stopReason, 'session_complete');
-  assert.match(d.message, /App is ready on Live/i);
+  assert.match(d.message, /First version is on Live|App is ready on Live/i);
 }
 {
   const d = shouldAutopilotAdvance({
@@ -340,7 +340,7 @@ assert.equal(
   resolveNextContinueSlice({ productRoutesOnDisk: true, lastSlice: 'Secondary' }),
   'Polish',
 );
-assert.match(policyAStopMessage('Secondary'), /App is ready on Live/);
+assert.match(policyAStopMessage('Secondary'), /First version is on Live|App is ready on Live/);
 {
   const afterPrimary = [
     'app/page.tsx',
@@ -372,9 +372,9 @@ assert.match(policyAStopMessage('Secondary'), /App is ready on Live/);
   );
 }
 assert.match(policyAFailedMessage('Foundation'), /Retry Go/);
-assert.match(policyAStopMessage('Foundation'), /App is ready on Live/);
-assert.match(policyAStopMessage('Data+API'), /App is ready on Live/);
-assert.match(policyAStopMessage('Polish'), /App is ready on Live/);
+assert.match(policyAStopMessage('Foundation'), /First version is on Live|App is ready on Live/);
+assert.match(policyAStopMessage('Data+API'), /First version is on Live|App is ready on Live/);
+assert.match(policyAStopMessage('Polish'), /First version is on Live|App is ready on Live/);
 assert.equal(countWorkspaceProductRoutes(['app/teacher/page.tsx']), 1);
 assert.equal(workspaceFoundationLanded(['app/teacher/page.tsx']), false);
 assert.equal(
@@ -582,7 +582,7 @@ assert.equal(APPLY_IN_FLIGHT_STALL_MS, 15_000);
   assert.match(chat, /launchedGoSlice/);
   assert.match(
     chat,
-    /App is ready on Live/,
+    /First version is on Live|App is ready on Live|PRODUCT_MVP_READY_MESSAGE/,
     'Foundation on disk stays quiet — no Continue CTA',
   );
   assert.match(chat, /buildPostApplyApiAsk/);

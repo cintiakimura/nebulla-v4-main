@@ -236,4 +236,19 @@ section("Cloud-project cwd still resolves platform structure (sheet catalog)");
   }
 }
 
+section("user happy with functionality → one post_code pass on existing files");
+{
+  const { userNoteSignalsFunctionalityOk } = await import("../src/lib/chatModeDetector.ts");
+  assert.equal(userNoteSignalsFunctionalityOk("the app works"), true);
+  const chat = fs.readFileSync(path.join(REPO, "src/components/ide/AIChat.tsx"), "utf8");
+  assert.match(chat, /existingAppWork &&/);
+  assert.match(chat, /runOnePostCodeUiGenPass/);
+  assert.match(chat, /Product routes already on disk — mockup deferred/);
+  const engine = fs.readFileSync(path.join(REPO, "src/lib/uiStudioBetaEngine.ts"), "utf8");
+  const helper = engine.slice(engine.indexOf("export async function runOnePostCodeUiGenPass"));
+  assert.match(helper, /uiPhase: 'post_code'/);
+  assert.match(helper, /applyUiStudioBetaToAppPreview/);
+  assert.match(helper, /hasPostCodeUiRefreshRun/);
+}
+
 console.log("\nfinal-ui-pass tests passed\n");

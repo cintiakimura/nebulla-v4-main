@@ -2,6 +2,8 @@
  * User "go" / "start coding" must force Foundation even without assistant START_CODING tags.
  */
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
 import {
   isAssistantBuildNowCloser,
   isAssistantCodingPromise,
@@ -11,7 +13,10 @@ import {
   isFoundationCloseGate,
   isShortCodingGoNudge,
   isUserExplicitCodingRequest,
+  shouldUnlockMicAfterAssistantTurn,
 } from '../src/lib/ideShortCodingNudge.ts';
+import { isNewProductSeedAgainstCurrent } from '../lib/productGoalFingerprint.ts';
+import { buildNextGoUserNote, EDIT_EXISTING_SLICE_INSTRUCTION } from '../src/lib/fastPrototypeNextSlice.ts';
 import { detectBuildModeIntent } from '../src/lib/ideWorkspaceChatContext.ts';
 
 assert.equal(isUserExplicitCodingRequest('go'), true);
@@ -62,6 +67,21 @@ const firstReply =
   "That's a great idea. If I understood correctly, this is what the app should do: kids practice reading in short sessions. Is that right? Do you already have the full idea in mind, or do you want to brainstorm and shape it together?";
 assert.equal(isGuidedFirstReplyShape(firstReply), true);
 assert.equal(isGuidedFirstReplyShape('So a reading app. Cool.'), false);
+assert.equal(shouldUnlockMicAfterAssistantTurn(firstReply), true);
+assert.equal(shouldUnlockMicAfterAssistantTurn('brainstorm'), false);
+assert.equal(shouldUnlockMicAfterAssistantTurn('If I understood correctly, this is a courier app. Is that right?'), true);
+
+const refineNav =
+  'make it dark, fix the nav, keep mock';
+assert.equal(isPostCodeRefineRequest(refineNav), true);
+assert.equal(isNewProductSeedAgainstCurrent({ userText: refineNav, chipName: 'Quill Learn Kids' }), false);
+assert.equal(
+  isNewProductSeedAgainstCurrent({ userText: 'Bridgen', chipName: 'Quill Learn Kids', diskGoal: 'Quill Learn Kids' }),
+  true,
+);
+const editNote = buildNextGoUserNote(true, refineNav);
+assert.equal(editNote.startsWith(EDIT_EXISTING_SLICE_INSTRUCTION), true);
+assert.equal(/scaffold a new app/i.test(editNote), true);
 
 const longRefine =
   'keep mock auth and mockStore as they are. apply a dark theme across the home screen. ' +
@@ -132,5 +152,17 @@ assert.equal(
 );
 
 assert.equal(isShortCodingGoNudge('Starting the Foundation coding slice now.'), true);
+
+{
+  const chat = fs.readFileSync(path.join(process.cwd(), 'src/components/ide/AIChat.tsx'), 'utf8');
+  assert.match(chat, /shouldUnlockMicAfterAssistantTurn/);
+  assert.match(chat, /openTalkDesiredRef\.current = true/);
+  assert.equal(/if\s*\(\s*\/brainstorm\/i\.test/.test(chat), false);
+  assert.match(chat, /refineSameProduct/);
+  assert.match(chat, /MIC_REENABLE_AFTER_TTS_MS/);
+  const floor = fs.readFileSync(path.join(process.cwd(), 'lib/codingSkeleton.ts'), 'utf8');
+  assert.match(floor, /dark calm default/);
+  assert.match(floor, /Never concatenate leftover brands/);
+}
 
 console.log('\n✓ coding go trigger detection passed\n');
