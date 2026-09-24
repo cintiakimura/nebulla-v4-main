@@ -88,6 +88,13 @@ export function productSliceQualityLine(goal: string): string {
       "MUST NOT: leftover breads.json, bakery-*, bikeStore, lessonStore, or generic Interactive screen with mock data."
     );
   }
+  if (/\b(poker|holdem|hold.?em|tips['’]?n?\s*hold|pot odds)\b/i.test(g)) {
+    return (
+      persist +
+      "MUST: first-slice apply is Table `/` + Hand `/hand` + Odds `/odds` + Advice `/advice`. Header = the locked name (Tips'n Hold'em). " +
+      "MUST NOT: app/dossiers/page.tsx, app/forms/page.tsx, Tesseract, leftover Quill/Lumen/Aether chips."
+    );
+  }
   if (isDocumentWorkflowGoal(g)) {
     return (
       persist +

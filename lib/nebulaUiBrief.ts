@@ -18,6 +18,8 @@ import { collapseWinningPalette } from "./uiGenerationEngine/v2/industryPalettes
 import {
   isBillsWorkflowGoal,
   isCuePlannerGoal,
+  isPokerWorkflowGoal,
+  isStreamOverlayGoal,
   leftoverRoutesConflictWithGoal,
 } from "./productGoalFingerprint";
 
@@ -309,6 +311,21 @@ export function seedPagesFromGoal(goal: string): { name: string; route: string }
       { name: "Tones", route: "/tones" },
     ];
   }
+  if (isStreamOverlayGoal(g)) {
+    return [
+      { name: "Overlay", route: "/" },
+      { name: "Alerts", route: "/alerts" },
+      { name: "Recent", route: "/recent" },
+    ];
+  }
+  if (isPokerWorkflowGoal(g)) {
+    return [
+      { name: "Table", route: "/" },
+      { name: "Hand", route: "/hand" },
+      { name: "Odds", route: "/odds" },
+      { name: "Advice", route: "/advice" },
+    ];
+  }
   if (/\b(influencer|influencers|bridgen|creators?\s+and\s+brands)\b/i.test(g)) {
     return [
       { name: "Home", route: "/" },
@@ -403,11 +420,13 @@ const AUTH_FIRST_SLICE = new Set([
 const PLACEHOLDER_ROUTE = /^\/[a-z]$/i;
 const EDUCATION_LEFTOVER_ROUTE = /^\/(practice|teacher|parent|kid|progress|session|tutor)$/i;
 const SECTION4_PAGE_NAME =
-  /^(home|today|dashboard|dossiers?|forms?|history|extract|review|inbox|upload|documents?|bills?|month|receipts?|totals?|water|exercise|tones?|cues?|login|register)$/i;
+  /^(home|today|dashboard|dossiers?|forms?|history|extract|review|inbox|upload|documents?|bills?|month|receipts?|totals?|water|exercise|tones?|cues?|table|hand|odds|advice|login|register)$/i;
 
 export function isDocumentWorkflowGoal(goal: string): boolean {
   const g = String(goal || "");
-  if (isBillsWorkflowGoal(g)) return false;
+  if (isBillsWorkflowGoal(g) || isCuePlannerGoal(g) || isPokerWorkflowGoal(g) || isStreamOverlayGoal(g)) {
+    return false;
+  }
   return /\b(mydossier|dossiers?|forms?\b|scans?|documents?|extract|ocr|tesseract|client.?side extract|keep\/find|find work later|per-client)\b/i.test(
     g,
   );
@@ -517,6 +536,12 @@ export function inferFirstSliceRoutes(
   if (isCuePlannerGoal(goal)) {
     next = next.filter((p) => !/^\/(dossiers?|forms|extract|input|summary|tasks)$/i.test(p.route));
   }
+  if (isStreamOverlayGoal(goal)) {
+    next = next.filter((p) => !/^\/(dossiers?|forms|extract|input|summary|tasks)$/i.test(p.route));
+  }
+  if (isPokerWorkflowGoal(goal)) {
+    next = next.filter((p) => !/^\/(dossiers?|forms|extract|input|summary|tasks)$/i.test(p.route));
+  }
   next = next.filter((p) => !PLACEHOLDER_ROUTE.test(p.route));
   if (documentJob) {
     next = next.filter((p) => !/^\/(settings|analytics|admin)$/i.test(p.route));
@@ -533,6 +558,11 @@ export function inferFirstSliceRoutes(
     "/water",
     "/exercise",
     "/tones",
+    "/alerts",
+    "/recent",
+    "/hand",
+    "/odds",
+    "/advice",
     "/dossiers",
     "/forms",
     "/dashboard",
@@ -570,6 +600,12 @@ export function productRoutesMatchGoal(goal: string, routes: string[]): boolean 
   }
   if (isCuePlannerGoal(goal)) {
     return nested.some((r) => /^\/(water|exercise|tones|today|cues)$/i.test(r));
+  }
+  if (isStreamOverlayGoal(goal)) {
+    return nested.some((r) => /^\/(alerts|recent|hud|overlay)$/i.test(r));
+  }
+  if (isPokerWorkflowGoal(goal)) {
+    return nested.some((r) => /^\/(hand|odds|advice|table)$/i.test(r));
   }
   return true;
 }

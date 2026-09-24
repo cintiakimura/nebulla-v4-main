@@ -146,6 +146,7 @@ function toTitleCase(name: string): string {
 
 export function extractNamedBrand(goal: string): string | null {
   const g = String(goal || "");
+  if (/\btips['’]?n?\s*hold['’]?e?m\b/i.test(g) || /\btips\s+n\s+hold/i.test(g)) return "Tips'n Hold'em";
   if (/\bnest\s+path\b/i.test(g)) return "Nest Path";
   if (/\btaskwise\b/i.test(g)) return "Taskwise";
   if (/\bbridgen\b/i.test(g)) return "Bridgen";
@@ -164,7 +165,61 @@ export function extractNamedBrand(goal: string): string | null {
 }
 
 const NOT_A_PRODUCT_NAME =
-  /^(hello|hellos|hi|hey|yes|yeah|yep|ok|okay|go|continue|please|thanks|thankyou|build|create|make)$/i;
+  /^(hello|hellos|hi|hey|yes|yeah|yep|ok|okay|go|continue|please|thanks|thankyou|build|create|make|what|who|why)$/i;
+
+/** One-word job stubs — never a locked brand, never an invented mash (Visualual). */
+const GENERIC_JOB_WORDS = new Set([
+  "visual",
+  "visualizer",
+  "overlay",
+  "dashboard",
+  "tracker",
+  "studio",
+  "app",
+  "tool",
+]);
+
+const KNOWN_ONE_WORD_BRANDS = /^(taskwise|bridgen|motodrop|mydossier)$/i;
+
+/** STT mash: Visual + ual → Visualual. Peel back to the real token. */
+export function peelMashedEchoToken(raw: string): string {
+  const n = String(raw || "").replace(/[^a-zA-Z0-9]/g, "").trim();
+  if (n.length < 8) return String(raw || "").trim();
+  for (let i = 3; i <= n.length - 3; i++) {
+    const head = n.slice(0, i);
+    const rest = n.slice(i);
+    if (head.toLowerCase().endsWith(rest.toLowerCase())) {
+      return head;
+    }
+  }
+  return String(raw || "").trim();
+}
+
+export function isGenericJobWord(name: string): boolean {
+  const n = peelMashedEchoToken(String(name || "").trim()).toLowerCase();
+  return GENERIC_JOB_WORDS.has(n);
+}
+
+/** Single token / mashed echo with no Monday job — not Slot 1. */
+export function isNameOnlyProductSeed(text: string): boolean {
+  const t = String(text || "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/[.!?]+$/g, "");
+  if (!t) return true;
+  if (KNOWN_ONE_WORD_BRANDS.test(t)) return false;
+  if (/\bnest\s+path\b/i.test(t)) return false;
+  const words = t.split(/\s+/).filter(Boolean);
+  if (words.length === 1) {
+    if (isGenericJobWord(t)) return true;
+    if (peelMashedEchoToken(t).toLowerCase() !== t.toLowerCase()) return true;
+    return /^[A-Za-z][A-Za-z0-9]{2,23}$/.test(t);
+  }
+  if (words.length === 2 && isGenericJobWord(words[0]) && !/\b(for|that|who|stream|twitch|overlay)\b/i.test(t)) {
+    return true;
+  }
+  return false;
+}
 
 /** §1 product name is one string — replace leftover brands, never concatenate. */
 export function replaceProductNameInGoal(goal: string, productName: string): string {
@@ -189,6 +244,7 @@ export function replaceProductNameInGoal(goal: string, productName: string): str
 export function singleProductName(raw: string): string {
   const n = String(raw || "").replace(/\s+/g, " ").trim();
   if (!n) return "";
+  if (/\btips['’]?n?\s*hold['’]?e?m\b/i.test(n) || /\btips\s+n\s+hold/i.test(n)) return "Tips'n Hold'em";
   if (/\bnest\s+path\b/i.test(n)) return "Nest Path";
   if (/\btaskwise\b/i.test(n)) return "Taskwise";
   if (/\bmydossier\b/i.test(n)) return "MyDossier";
@@ -219,11 +275,19 @@ export function extractStatedProductName(text: string): string | null {
     return singleProductName(called[1]);
   }
   const lone = t.replace(/[.!?]+$/g, "").trim();
-  if (/^[A-Z][a-zA-Z0-9]{2,23}$/.test(lone) && !NOT_A_PRODUCT_NAME.test(lone)) {
+  if (isGenericJobWord(lone) || (isNameOnlyProductSeed(lone) && !KNOWN_ONE_WORD_BRANDS.test(lone))) {
+    return null;
+  }
+  if (/^[A-Z][a-zA-Z0-9]{2,23}$/.test(lone) && !NOT_A_PRODUCT_NAME.test(lone) && !isGenericJobWord(lone)) {
     return lone;
   }
   const first = t.split(/[\n.!?]/)[0].trim();
-  if (/^[A-Z][a-zA-Z0-9]{2,23}$/.test(first) && !NOT_A_PRODUCT_NAME.test(first)) {
+  if (
+    /^[A-Z][a-zA-Z0-9]{2,23}$/.test(first) &&
+    !NOT_A_PRODUCT_NAME.test(first) &&
+    !isGenericJobWord(first) &&
+    !isNameOnlyProductSeed(first)
+  ) {
     return first;
   }
   return null;
@@ -268,6 +332,18 @@ export function detectProductDomain(goal: string, projectType?: string): Product
   const blob = `${goal}\n${projectType || ""}`.toLowerCase();
   if (/\b(influencer|influencers|bridgen|creators?\s+and\s+brands|brands?\s+and\s+influencers)\b/.test(blob)) {
     return "marketplace";
+  }
+  if (
+    /\b(twitch|kick\.com|stream overlay|obs overlay|facecam|latest follower|latest subscriber|latest tipper|stream hud|broadcast overlay|streamer overlay)\b/.test(
+      blob,
+    )
+  ) {
+    return "general";
+  }
+  if (
+    /\b(poker|texas hold|hold['’]?e?m|tips['’]?n?\s*hold|pot odds|preflop|hand odds)\b/.test(blob)
+  ) {
+    return "general";
   }
   if (/\blanding\b|\bmarketing\b|\bwaitlist\b/.test(blob) && !/\bmobile\b|\bexpo\b/.test(blob)) {
     return "landing";
@@ -355,6 +431,7 @@ export function inferProductName(goal: string, projectType?: string): string {
   const type = String(projectType || "").trim();
   const named = extractNamedBrand(g);
   if (named) return singleProductName(named);
+  if (isNameOnlyProductSeed(g) || isGenericJobWord(g)) return "";
   const domain = detectProductDomain(g, type);
   if (domain === "marketplace") {
     if (/\bbridgen\b/i.test(g)) return "Bridgen";
@@ -421,9 +498,15 @@ export function looksLikeGoalStubName(name: string, goal?: string): boolean {
     return true;
   }
   if (looksLikeEducationKitDefaultName(n, goal)) return true;
+  if (looksLikeConcatenatedLeftoverName(n)) return true;
   if (/\?/.test(n)) return true;
   if (/^(who|what|where|when|why|how|do|does|should|can|is|are)\b/i.test(n)) return true;
+  if (/^what$/i.test(n)) return true;
   if (/^(build|create|make|design|scaffold)\b/i.test(n)) return true;
+  if (isGenericJobWord(n)) return true;
+  if (peelMashedEchoToken(n).toLowerCase() !== lc && isGenericJobWord(peelMashedEchoToken(n))) {
+    return true;
+  }
   if (/\b(privacy-first|companion)\b/i.test(n)) return true;
   const words = lc.split(/\s+/).filter(Boolean);
   if (words.length > 4) return true;
@@ -447,9 +530,24 @@ export function looksLikeGoalStubName(name: string, goal?: string): boolean {
 export function looksLikeInventedChipName(name: string): boolean {
   const n = String(name || "").replace(/\s+/g, " ").trim();
   if (!n) return false;
+  if (looksLikeConcatenatedLeftoverName(n)) return true;
   return /^(Lumen|Quill|Beacon|Sparrow|Nest|Forge|Pulse|Harbor|North|Relay|Vista|Peak|Bloom|Crumb|Oven|Loaf|Hearth|Grain|Nova|Aether|Helio|Kite|Mesa)\s+(Learn|Path|Tutor|Kids|Flow|Desk|Focus|Studio|Site|Bakery|Market|Shop|Hub|Courier|Drop|Run)\b/i.test(
     n,
   );
+}
+
+/** “Quill Learn Aether Studio” — leftover chips mashed, never §1. */
+export function looksLikeConcatenatedLeftoverName(name: string): boolean {
+  const words = String(name || "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+  if (words.length < 3) return false;
+  const hits = words.filter((w) =>
+    /^(quill|learn|kids|aether|studio|lumen|path|kite|harbor|helio|nova|mesa|beacon)$/i.test(w),
+  );
+  return hits.length >= 3;
 }
 
 function inventedChipDomain(name: string): ProductDomain | null {
@@ -469,6 +567,7 @@ export function identityFitsGoal(name: string, goal: string, projectType?: strin
   if (!n) return false;
   const named = extractNamedBrand(goal);
   if (named && n !== named.toLowerCase()) return false;
+  if (looksLikeConcatenatedLeftoverName(name) && (!named || n !== named.toLowerCase())) return false;
   if (domain === "delivery" && looksLikeShopKitBrand(name)) return false;
   if (domain === "delivery" && /\b(bakery|crumb|loaf|breads?|wallet)\b/i.test(n)) return false;
   const inv = inventedChipDomain(name);

@@ -7,6 +7,7 @@ import fs from "fs";
 import path from "path";
 import { extractNamedBrand, inferProductName } from "./productIdentity";
 import { isDocumentWorkflowGoal, lockRequiresSignedInRoles } from "./nebulaUiBrief";
+import { isPokerWorkflowGoal } from "./productGoalFingerprint";
 
 export const JOB_BRIEF_REL = "nebula-project/job-brief.md";
 export const JOB_BRIEF_REL_ALT = "nebulla-project/job-brief.md";
@@ -156,12 +157,16 @@ export function inferSlot4Catalog(opts: { goal?: string; pages?: string; brief?:
   const tech = opts.tech || "";
   const blob = lockBlob({ goal, pages, brief, tech });
   const vendorNeeds = inferApiNeeds(goal, pages, brief);
+  if (isPokerWorkflowGoal(goal) && !/\b(upload|ocr|tesseract|s3|scans?)\b/i.test(goal)) {
+    return [];
+  }
   const extractLocked =
     isDocumentWorkflowGoal(goal) ||
     (isDocumentWorkflowGoal(`${goal} ${pages}`) &&
       /\b(ocr|tesseract|extract text|client[- ]?side extract|dossiers?|scans?)\b/i.test(goal));
   const filesLocked =
-    extractLocked || /\b(s3|r2|storage|keep documents?|files?\b|uploads?)\b/i.test(blob);
+    extractLocked ||
+    (/\b(s3|r2|storage|keep documents?|files?\b|uploads?)\b/i.test(blob) && !isPokerWorkflowGoal(goal));
   const authLocked =
     extractLocked ||
     lockRequiresSignedInRoles(goal, pages) ||

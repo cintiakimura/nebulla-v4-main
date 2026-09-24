@@ -10,6 +10,7 @@ import { reportGoApplyTelemetry } from './contractTelemetryClient';
 import { assessFoundationGoExit, assessOversizedGoApply, parseGoSliceLabel, shouldRunGoCodeSecondPass, type GoSliceLabel } from '../../lib/goSliceContract';
 import { PREVIEW_FALLBACK_CHAT_LINE } from '../../lib/uiGenerationEngine/v2/previewCompose';
 import { classifyGoFailure, formatBlockedReasonLine, goBlocked, type GoBlockedReason } from '../../lib/goBlockedReason';
+import { lastGoCodeFitsGoal } from '../../lib/productGoalFingerprint';
 import { assessApplyRouteDepth } from '../../lib/workspaceCodedAppUi';
 import { UNSOLICITED_BAAS_SKIP_REASON } from '../../lib/mvpStackContract';
 import {
@@ -1241,7 +1242,10 @@ export async function runGoCodeAndApply(options: {
         if (totalWritten > 0) break;
         if (blocked.code === 'GO_TIMEOUT') {
           const recovered = await recoverUnconsumedGoResult(projectName, onProgress);
-          if (recovered?.choices?.[0]?.message?.content?.trim()) {
+          if (
+            recovered?.choices?.[0]?.message?.content?.trim() &&
+            lastGoCodeFitsGoal(recovered.choices[0].message.content, userNote || '')
+          ) {
             onProgress?.('Recovering unapplied Go Code result from server', 'info');
             data = recovered;
           } else if (timeoutRelaunches < MAX_TIMEOUT_RELAUNCHES) {
@@ -1314,7 +1318,10 @@ export async function runGoCodeAndApply(options: {
         if (totalWritten > 0) break;
         if (blocked.code === 'GO_TIMEOUT') {
           const recovered = await recoverUnconsumedGoResult(projectName, onProgress);
-          if (recovered?.choices?.[0]?.message?.content?.trim()) {
+          if (
+            recovered?.choices?.[0]?.message?.content?.trim() &&
+            lastGoCodeFitsGoal(recovered.choices[0].message.content, userNote || '')
+          ) {
             onProgress?.('Recovering unapplied Go Code result from server', 'info');
             data = recovered;
           } else if (timeoutRelaunches < MAX_TIMEOUT_RELAUNCHES) {
@@ -1362,7 +1369,17 @@ export async function runGoCodeAndApply(options: {
           pass -= 1;
           continue;
         }
-        const empty = goBlocked('NO_FILE_BLOCKS');
+        const empty = goBlocked('GO_EMPTY_OUTPUT');
+        onProgress?.(formatBlockedReasonLine(empty), 'error');
+        return {
+          ok: false,
+          statusMessage: formatBlockedReasonLine(empty),
+          totalWritten,
+          blockedReason: empty,
+        };
+      }
+      if (!lastGoCodeFitsGoal(codeText, userNote || '')) {
+        const empty = goBlocked('GO_EMPTY_OUTPUT');
         onProgress?.(formatBlockedReasonLine(empty), 'error');
         return {
           ok: false,

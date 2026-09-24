@@ -207,6 +207,10 @@ assert.equal(isShortCodingGoNudge('Starting the Foundation coding slice now.'), 
       },
     } as Storage;
   }
+  persistIdeChatTranscript('cfproj_old', [
+    { id: 'u0', role: 'user', content: 'Visualual', timestamp: '8:47 AM' },
+    { id: 'a0', role: 'assistant', content: 'If I got this right — Visualual. Which sounds better?', timestamp: '8:47 AM' },
+  ]);
   persistIdeChatTranscript('cfproj_test', [
     { id: 'u1', role: 'user', content: 'Keep client scans and extract locally.', timestamp: '9:00 AM' },
     { id: 'a1', role: 'assistant', content: 'If I understood correctly, this is a dossier app. Is that right?', timestamp: '9:01 AM' },
@@ -219,6 +223,13 @@ assert.equal(isShortCodingGoNudge('Starting the Foundation coding slice now.'), 
   );
   assert.equal(merged.length >= 2, true);
   assert.match(merged.map((m) => m.content).join('\n'), /dossier app/);
+  const liveKept = mergeChatTranscripts(mergeChatTranscripts([], []), [
+    { id: 'u0', role: 'user', content: 'Visualual', timestamp: '8:47 AM' },
+    { id: 'a0', role: 'assistant', content: 'If I got this right — Visualual. Which sounds better?', timestamp: '8:47 AM' },
+    { id: 'u2', role: 'user', content: 'Can you summarize everything that I said to be sure?', timestamp: '8:48 AM' },
+  ]);
+  assert.equal(liveKept.length, 3);
+  assert.match(liveKept.map((m) => m.content).join('\n'), /summarize everything/);
   assert.equal(shouldPersistConversationBody('user', 'FAST PROJECT MODE. The user gave a product seed.'), false);
   assert.equal(shouldPersistConversationBody('assistant', 'Is that right?'), true);
   const parsed = parseConversationEntries(

@@ -58,7 +58,7 @@ const CLOSE_OFFER_RE =
   /I think we(?:'ve| have) got (?:what we need|it)|here'?s what I heard|this is what I(?:'ll| will) lock|If this is right[\s\S]{0,80}lock it and build/i;
 
 const CONFIRM_RE =
-  /^(?:yes|yeah|yep|yup|ok|okay|sure|go(?:\s+ahead)?|looks?\s+good|that'?s\s+it|that\s+is\s+it|lock\s+it|faz\s+isso|perfect|sounds?\s+good|let'?s\s+go|build\s+it|do\s+it|that'?s\s+right|isso)(?:[.!]|\s|$)/i;
+  /^(?:yes|yeah|yep|yup|ok|okay|sure|go(?:\s+ahead)?|looks?\s+good|that'?s\s+it|that\s+is\s+it|lock\s+it|lock\s+this\s+in|faz\s+isso|perfect|sounds?\s+good|let'?s\s+go|build\s+it|do\s+it|that'?s\s+right|isso)(?:[.!]|\s|$)/i;
 
 /** Stop adding features — not a correction. Bare “No” after “what else?” is close. */
 const ENOUGH_RE =
@@ -271,8 +271,9 @@ export function buildBrainstormCloseConfirmedBootstrap(summary: string): string 
     `1) Write \`\`\`file:nebula-project/job-brief.md\`\`\` distilled from the summary. ` +
     `Goal / thesis = the north star sentence (A→B why), never a category label, never the raw chat dump.\n` +
     `2) Emit <START_MASTERPLAN>…</END_MASTERPLAN> with all five sections generated FROM that brief. ` +
-    `§1 Goal of the app = one name + the north star sentence + who + in/out of scope. ` +
-    `§4 pages come from THIS goal only — never leftover Dossiers/Forms from a previous product.\n` +
+    `§1 Goal of the app = one locked name they confirmed (Tips'n Hold'em) + the north star sentence + who + in/out of scope. Never “What”. Never Quill Learn Aether Studio or other concatenated leftovers.\n` +
+    `§4 pages come from THIS goal only — poker = Table / Hand / Odds / Advice. Never leftover Dossiers/Forms unless the lock is documents.\n` +
+    `After no / lock this in: do NOT ask paste design or none, what kind of project, or one core feature.\n` +
     `Features must match the confirmed set. Do not restore cut/merged features. ` +
     `Dependencies: label defaults as assumptions; user choices stay open only if still open. ` +
     `Competitors = none unless the user asked to research during the talk.\n` +

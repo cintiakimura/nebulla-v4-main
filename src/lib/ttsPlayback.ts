@@ -270,6 +270,11 @@ async function playMpegViaBlob(
   });
   return () => {
     try {
+      if (audio.src === url) {
+        audio.pause();
+        audio.removeAttribute('src');
+        audio.load();
+      }
       URL.revokeObjectURL(url);
     } catch {
       /* ignore */

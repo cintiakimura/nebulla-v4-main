@@ -72,6 +72,10 @@ assert.equal(
   true,
 );
 
+assert.match(
+  fs.readFileSync(path.join(root, "src/lib/ideChatBootstrap.ts"), "utf8"),
+  /NAME-ONLY/,
+);
 assert.match(chat, /shouldHoldFirstSeedBeatA/);
 assert.match(chat, /planRecordReadyToSkipChat/);
 assert.match(chat, /mpSaved = beatAHold/);

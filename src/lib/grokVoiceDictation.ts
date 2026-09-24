@@ -37,6 +37,13 @@ export function commitDictationUtterance(committed: string, utterance: string): 
   if (u.startsWith(c) && (u.length === c.length || u[c.length] === ' ')) return u;
   if (c.startsWith(u) && (c.length === u.length || c[u.length] === ' ')) return c;
   if (c.endsWith(` ${u}`) || c.endsWith(u)) return c;
+  // Visual + Visualual (STT mashed the same word's tail) → keep Visual
+  if (!/\s/.test(c) && !/\s/.test(u)) {
+    const [shorter, longer] = c.length <= u.length ? [c, u] : [u, c];
+    if (longer.startsWith(shorter) && shorter.toLowerCase().endsWith(longer.slice(shorter.length).toLowerCase())) {
+      return shorter;
+    }
+  }
   return `${c} ${u}`.trim();
 }
 

@@ -27,6 +27,18 @@ export function htmlLooksLikeShowablePreview(html: string): boolean {
   return /ui-gen-mockup|shell--phone|data-screen=/i.test(t);
 }
 
+/** Dev server for THIS product root is up — not “files exist” / post_code_bridge. */
+export function previewMetaDevServerUp(meta: {
+  previewHonesty?: string | null;
+  previewMode?: string | null;
+}): boolean {
+  const m = String(meta.previewMode || "");
+  if (m === "post_code_bridge" || m === "thin_code_shell" || m === "pre_code_mockup" || m === "empty") {
+    return false;
+  }
+  return m === "next_app_live" || m === "live_app_static";
+}
+
 /** Product routes / interactive preview on disk — leave Waiting-for-mockup. */
 export function previewMetaHasProductRoutes(meta: {
   previewHonesty?: string | null;

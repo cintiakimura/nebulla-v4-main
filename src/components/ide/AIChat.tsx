@@ -67,7 +67,7 @@ import {
 import {
   loadIdeChatTranscript,
   mergeChatTranscripts,
-  persistIdeChatTranscript,
+  persistIdeChatTranscriptToKeys,
   threadHasAssistantBeat,
 } from '../../lib/ideChatTranscript';
 import {
@@ -193,14 +193,17 @@ import {
   type StartGuidedChatDetail,
 } from '../../lib/ideHomeEvents';
 import { inferProductName } from '../../lib/projectNameFromIdea';
-import { extractStatedProductName, singleProductName } from '../../../lib/productIdentity';
+import { extractStatedProductName, isNameOnlyProductSeed, singleProductName } from '../../../lib/productIdentity';
 import {
+  isChatContinuityTurn,
   isNewProductSeedAgainstCurrent,
   isReplacementProductBrief,
   looksLikeStandaloneProductBrief,
 } from '../../../lib/productGoalFingerprint';
 import { extractNamedRoutesFromPagesText, productRoutesMatchGoal } from '../../../lib/nebulaUiBrief';
+import { previewMetaDevServerUp } from '../../../lib/workspaceCodedAppUi';
 import {
+  priorHasSpokenFork,
   resolveNewProductWorkspaceAction,
   shouldHoldFirstSeedBeatA,
   workspacePathsToRoutes,
@@ -514,12 +517,29 @@ export function AIChat() {
   }, []);
 
   const pushReadyAndApiAsk = useCallback(
-    (goal?: string, pages?: string, tech?: string) => {
+    async (goal?: string, pages?: string, tech?: string) => {
       const fromPages = extractNamedRoutesFromPagesText(pages || '').map((p) => p.route);
       const fromDisk = workspacePathsToRoutes(workspacePaths);
       const routes = fromPages.length > 0 ? fromPages : fromDisk;
       if (!productRoutesMatchGoal(String(goal || ''), routes)) {
         pushActivity('This product is not on Live yet — matching routes are missing.', 'warn');
+        return false;
+      }
+      try {
+        const metaRes = await fetch(withProjectQuery('/api/app-preview/meta'), {
+          credentials: 'include',
+          cache: 'no-store',
+        });
+        const meta = (await readResponseJson(metaRes)) as {
+          previewHonesty?: string;
+          previewMode?: string;
+        };
+        if (!metaRes.ok || !previewMetaDevServerUp(meta)) {
+          pushActivity('App is not running yet — retry when this project’s server is up.', 'warn');
+          return false;
+        }
+      } catch {
+        pushActivity('App is not running yet — retry when this project’s server is up.', 'warn');
         return false;
       }
       pushActivity(PRODUCT_MVP_READY_MESSAGE, 'success');
@@ -538,7 +558,7 @@ export function AIChat() {
           },
         ];
         messagesRef.current = next;
-        persistIdeChatTranscript(diskProjectKey, next);
+        persistIdeChatTranscriptToKeys([diskProjectKey, getBrowserProjectKey()], next);
         return next;
       });
       return true;
@@ -1254,15 +1274,18 @@ export function AIChat() {
         const entries = await fetchConversationLogEntries();
         if (cancelled) return;
         const local = loadIdeChatTranscript(diskProjectKey);
-        const restored = mergeChatTranscripts(entries, local);
+        const live = messagesRef.current.filter(
+          (m) => (m.role === 'user' || m.role === 'assistant') && String(m.content || '').trim(),
+        );
+        const restored = mergeChatTranscripts(mergeChatTranscripts(entries, local), live);
         if (restored.length > 0) {
           setMessages(restored);
           messagesRef.current = restored;
-          persistIdeChatTranscript(diskProjectKey, restored);
+          persistIdeChatTranscriptToKeys([diskProjectKey, getBrowserProjectKey()], restored);
           if (threadHasAssistantBeat(restored)) {
             openTalkDesiredRef.current = true;
           }
-        } else if (messagesRef.current.length === 0) {
+        } else if (live.length === 0) {
           setMessages([]);
           messagesRef.current = [];
         }
@@ -1951,7 +1974,7 @@ export function AIChat() {
     setMessages((p) => {
       const next = [...p, userMsg];
       messagesRef.current = next;
-      persistIdeChatTranscript(diskProjectKey, next);
+      persistIdeChatTranscriptToKeys([diskProjectKey, getBrowserProjectKey()], next);
       return next;
     });
     void persistConversationTurn('user', userMsg.content).catch(() => {});
@@ -2296,20 +2319,28 @@ export function AIChat() {
     const isolateNewProduct =
       Boolean(newProductSeed) &&
       !userNoteRequestsNextSlice(rawText) &&
-      !refineSameProduct;
+      !refineSameProduct &&
+      !isChatContinuityTurn(rawText) &&
+      !isNameOnlyProductSeed(rawText);
     if (refineSameProduct) {
       skipGrokChat = false;
     }
     let switchedProductWorkspace = false;
+    const keepExistingTalk =
+      (priorHasSpokenFork(prior) || prior.some((m) => m.role === 'assistant' && String(m.content || '').trim())) &&
+      !looksLikeStandaloneProductBrief(rawText);
     if (isolateNewProduct) {
+      let mintedKey = '';
       try {
         const created = await mintEmptyProjectFromHome(seedProductName);
+        mintedKey = created.projectKey;
         clearIdeWorkspaceMetaCache();
         switchedProductWorkspace = true;
         clearBrainstormCloseState(created.projectKey);
         clearDiscoveryClosed(created.projectKey);
       } catch {
         const created = await createProjectForCurrentSession(seedProductName);
+        mintedKey = created.projectKey;
         clearIdeWorkspaceMetaCache();
         switchedProductWorkspace = true;
         clearBrainstormCloseState(created.projectKey);
@@ -2326,9 +2357,12 @@ export function AIChat() {
       });
       lastAutoSliceLabelRef.current = null;
       apiAskSentRef.current = false;
-      messagesRef.current = [userMsg];
-      setMessages([userMsg]);
-      historyForApi = [{ role: 'user', content: text }];
+      if (!keepExistingTalk) {
+        messagesRef.current = [userMsg];
+        setMessages([userMsg]);
+        historyForApi = [{ role: 'user', content: text }];
+      }
+      persistIdeChatTranscriptToKeys([mintedKey, diskProjectKey, getBrowserProjectKey()], messagesRef.current);
       skipGrokChat = false;
       diskPaths = [];
       pushActivity(
@@ -2373,7 +2407,12 @@ export function AIChat() {
         looksLikeStandaloneProductBrief(text) &&
         !userNoteRequestsNextSlice(rawText) &&
         isReplacementProductBrief(incomingGoal, diskGoal);
-      if (newSeed && !userNoteRequestsNextSlice(rawText)) {
+      if (
+        newSeed &&
+        !userNoteRequestsNextSlice(rawText) &&
+        !isChatContinuityTurn(rawText) &&
+        !isNameOnlyProductSeed(rawText)
+      ) {
         const created = await mintEmptyProjectFromHome(nextProductName);
         clearIdeWorkspaceMetaCache();
         clearBrainstormCloseState(created.projectKey);
@@ -2389,9 +2428,12 @@ export function AIChat() {
         });
         lastAutoSliceLabelRef.current = null;
         apiAskSentRef.current = false;
-        messagesRef.current = [userMsg];
-        setMessages([userMsg]);
-        historyForApi = [{ role: 'user', content: text }];
+        if (!keepExistingTalk) {
+          messagesRef.current = [userMsg];
+          setMessages([userMsg]);
+          historyForApi = [{ role: 'user', content: text }];
+        }
+        persistIdeChatTranscriptToKeys([created.projectKey, diskProjectKey, getBrowserProjectKey()], messagesRef.current);
         skipGrokChat = false;
         diskPaths = [];
         pushActivity(`New project: ${nextProductName} — not reusing the previous workspace or Master Plan`, 'info');
@@ -2422,9 +2464,12 @@ export function AIChat() {
         }
         lastAutoSliceLabelRef.current = null;
         apiAskSentRef.current = false;
-        messagesRef.current = [userMsg];
-        setMessages([userMsg]);
-        historyForApi = [{ role: 'user', content: text }];
+        if (!keepExistingTalk) {
+          messagesRef.current = [userMsg];
+          setMessages([userMsg]);
+          historyForApi = [{ role: 'user', content: text }];
+        }
+        persistIdeChatTranscriptToKeys([diskProjectKey, getBrowserProjectKey()], messagesRef.current);
         skipGrokChat = false;
         pushActivity('New product brief — previous plan and leftover routes cleared', 'info');
       } else if (maySkipChatIfPlanExists) {
@@ -2650,7 +2695,7 @@ export function AIChat() {
       setMessages((p) => {
           const next = [...p, ...toAppend];
         messagesRef.current = next;
-        persistIdeChatTranscript(diskProjectKey, next);
+        persistIdeChatTranscriptToKeys([diskProjectKey, getBrowserProjectKey()], next);
         return next;
       });
       for (const row of toAppend) {
@@ -3307,7 +3352,7 @@ export function AIChat() {
                 } catch {
                   /* ignore */
                 }
-                pushReadyAndApiAsk(askGoal, askPages, askTech);
+                await pushReadyAndApiAsk(askGoal, askPages, askTech);
               } else {
                 pushActivity(
                   'Files are not this product’s routes yet — Live is not ready.',

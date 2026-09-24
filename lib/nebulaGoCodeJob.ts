@@ -8,6 +8,7 @@ import {
 } from "./nebulaGoCodePending";
 import { grokChatCompletionsExtras } from "./grokRequestPolicy";
 import { classifyGoFailure, formatBlockedReasonLine, goBlocked } from "./goBlockedReason";
+import { lastGoCodeFitsGoal } from "./productGoalFingerprint";
 
 export { GO_CODE_JOB_TIMEOUT_MS };
 
@@ -171,6 +172,20 @@ export function goCodePendingToPollResponse(
           },
           last.codeError,
           last.blockedReason,
+        );
+      }
+      if (
+        last.blockedReason?.code === "GO_EMPTY_OUTPUT" ||
+        (last.codeText && !lastGoCodeFitsGoal(last.codeText, String(last.preCodingSummary || last.projectDisplayName || "")))
+      ) {
+        return pollBlockedPayload(
+          {
+            preCodingSummary: last.preCodingSummary,
+            summarySaved: Boolean(last.preCodingSummary),
+            durable: true,
+          },
+          last.codeError || "Stopped: Grok Code returned no file output. Try Go again.",
+          last.blockedReason || goBlocked("GO_EMPTY_OUTPUT"),
         );
       }
       return {

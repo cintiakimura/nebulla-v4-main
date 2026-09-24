@@ -192,6 +192,7 @@ import {
   filterUnsolicitedBaaSBlocks,
   MVP_STACK_GO_BULLETS,
 } from "./lib/mvpStackContract";
+import { shouldSkipLeftoverProductFile } from "./lib/productGoalFingerprint";
 import {
   ensureRunnableSkeleton,
   inspectRunnableSkeleton,
@@ -3059,9 +3060,18 @@ No approved UI code yet.
         baasFilter.kept,
         readCodingSkeletonFromPlan(planJson),
       );
-      const blocksToWrite = skeletonClamp.kept;
+      const applyGoal = String(
+        (planJson["1. Goal of the app"] as string) || userNoteGate || "",
+      );
+      const leftoverSkip = skeletonClamp.kept.filter((b) =>
+        shouldSkipLeftoverProductFile(b.relativePath, applyGoal),
+      );
+      const blocksToWrite = skeletonClamp.kept.filter(
+        (b) => !shouldSkipLeftoverProductFile(b.relativePath, applyGoal),
+      );
       for (const p of baasFilter.skipped) skipped.push(p);
       for (const p of skeletonClamp.skipped) skipped.push(p);
+      for (const b of leftoverSkip) skipped.push(b.relativePath);
 
       for (const b of blocksToWrite) {
         if (seen.has(b.relativePath)) continue;

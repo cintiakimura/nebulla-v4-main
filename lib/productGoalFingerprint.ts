@@ -8,9 +8,19 @@ import {
   extractNamedBrand,
   extractStatedProductName,
   inferProductName,
+  isNameOnlyProductSeed,
   isWorkspaceLabelStub,
 } from "./productIdentity";
 import { extractGoalFromUserNote, isCodingCommandNote } from "./spineSequenceClient";
+
+/** Recap / “what did I say” — never mint a project or wipe the thread. */
+export function isChatContinuityTurn(text: string): boolean {
+  const t = String(text || "").replace(/\s+/g, " ").trim();
+  if (!t) return false;
+  return /\b(summarize|summarise|recap|what did i (just )?say|everything i said|all i('ve| have) said|to be sure|repeat what i|catch me up)\b/i.test(
+    t,
+  );
+}
 
 /** Same-app refine after Live — never a new product seed. */
 export function isSameProductRefineTurn(text: string): boolean {
@@ -58,6 +68,22 @@ export function isBillsWorkflowGoal(goal: string): boolean {
   return /\b(bills?|receipts?|running totals?|month(?:ly)?[- ]?(?:list|bills|spend|total))\b/.test(g);
 }
 
+/** Texas Hold'em helper — hand / odds / advice. Never a document or bills leftover. */
+export function isPokerWorkflowGoal(goal: string): boolean {
+  const g = String(goal || "").toLowerCase();
+  return /\b(poker|texas hold|hold['’]?e?m|tips['’]?n?\s*hold|tips\s+n\s+hold|pot odds|preflop|hand odds)\b/.test(
+    g,
+  );
+}
+
+/** Twitch / OBS stream overlay — cam + last follower / sub / tip. Not Taskwise or dossiers. */
+export function isStreamOverlayGoal(goal: string): boolean {
+  const g = String(goal || "").toLowerCase();
+  return /\b(twitch|kick\.com|stream overlay|obs overlay|facecam|latest follower|latest subscriber|latest tipper|stream hud|broadcast overlay|streamer overlay)\b/.test(
+    g,
+  );
+}
+
 /** Llama Life–style day planner: water / exercise / positive cue tones — not Taskwise dossiers. */
 export function isCuePlannerGoal(goal: string): boolean {
   const g = String(goal || "").toLowerCase();
@@ -71,6 +97,8 @@ export function isCuePlannerGoal(goal: string): boolean {
 
 export const TASKWISE_CAPTURE_SLUGS = new Set(["input", "summary", "dossier", "dossiers", "tasks"]);
 export const PLANNER_CUE_SLUGS = new Set(["water", "exercise", "tones", "today", "cues"]);
+export const STREAM_OVERLAY_SLUGS = new Set(["overlay", "alerts", "recent", "hud"]);
+export const POKER_LOOP_SLUGS = new Set(["table", "hand", "odds", "advice"]);
 
 /** Chip / STT echo of the leftover name is not a new product brief. */
 export function isRepeatedChipAsProductGoal(userText: string, chipName?: string | null): boolean {
@@ -125,13 +153,58 @@ export function leftoverRoutesConflictWithGoal(goal: string, routes: string[]): 
   ) {
     return true;
   }
+  if (
+    isStreamOverlayGoal(g) &&
+    slugs.some((s) => TASKWISE_CAPTURE_SLUGS.has(s) || DOCUMENT_LEFTOVER_SLUGS.has(s) || EDUCATION_LEFTOVER_SLUGS.has(s))
+  ) {
+    return true;
+  }
+  if (
+    isPokerWorkflowGoal(g) &&
+    slugs.some(
+      (s) =>
+        DOCUMENT_LEFTOVER_SLUGS.has(s) ||
+        TASKWISE_CAPTURE_SLUGS.has(s) ||
+        EDUCATION_LEFTOVER_SLUGS.has(s) ||
+        BILLS_SLUGS.has(s),
+    )
+  ) {
+    return true;
+  }
   return false;
+}
+
+/** Apply must not write leftover kit pages for this lock (poker ≠ dossiers/forms). */
+export function shouldSkipLeftoverProductFile(relativePath: string, goal: string): boolean {
+  const rel = String(relativePath || "").replace(/\\/g, "/").replace(/^\.\//, "");
+  const slug = rel.match(/(?:^|\/)(?:src\/)?app\/([^/]+)\/page\.(tsx|jsx|js)$/i)?.[1]?.toLowerCase() || "";
+  if (!slug) return false;
+  const g = String(goal || "");
+  const documentLock = /\b(mydossier|dossiers?|documents?|ocr|tesseract|scans?|client[- ]?side extract)\b/i.test(g);
+  if (!documentLock && DOCUMENT_LEFTOVER_SLUGS.has(slug)) return true;
+  if (isPokerWorkflowGoal(g) && DOCUMENT_LEFTOVER_SLUGS.has(slug)) return true;
+  return false;
+}
+
+/** Empty Go / stale last-result must not apply a previous product’s files. */
+export function lastGoCodeFitsGoal(codeText: string, goal: string): boolean {
+  const body = String(codeText || "");
+  const g = String(goal || "");
+  if (!body.trim()) return false;
+  if (shouldSkipLeftoverProductFile("app/dossiers/page.tsx", g) && /app\/dossiers\/page/i.test(body)) {
+    return false;
+  }
+  if (shouldSkipLeftoverProductFile("app/forms/page.tsx", g) && /app\/forms\/page/i.test(body)) {
+    return false;
+  }
+  return true;
 }
 
 /** New Fast Prototype / New Project brief — not Continue / next slice. */
 export function looksLikeStandaloneProductBrief(text: string): boolean {
   const raw = String(text || "").trim();
   if (!raw) return false;
+  if (isChatContinuityTurn(raw) || isNameOnlyProductSeed(raw)) return false;
   if (/^(continue|continue\.|continue!|build\s+next|next\s+slice)\b/i.test(raw)) return false;
   if (/^(hello|hi|hey|hellos|yes|yeah|ok|go)[\s.!?]*$/i.test(raw)) return false;
   if (extractStatedProductName(raw) || extractNamedBrand(raw)) return true;
@@ -139,7 +212,7 @@ export function looksLikeStandaloneProductBrief(text: string): boolean {
   if (!goal || goal.length < 20) return false;
   if (isCodingCommandNote(raw) && !goal) return false;
   if (extractNamedBrand(goal)) return true;
-  return /\b(build|shop|marketplace|companion|bike|bakery|mechanic|moto|courier|delivery|parcel|uber|dropoff|influencer|influencers|brands?|bridgen|creator|app that|bills?|receipts?|running totals?|llama life|daily planner|drink water|nest path|for (kids|parents|customers|readers|riders|senders))\b/i.test(
+  return /\b(build|shop|marketplace|companion|bike|bakery|mechanic|moto|courier|delivery|parcel|uber|dropoff|influencer|influencers|brands?|bridgen|creator|app that|bills?|receipts?|running totals?|llama life|daily planner|drink water|nest path|poker|holdem|hold.?em|odds|for (kids|parents|customers|readers|riders|senders))\b/i.test(
     goal,
   );
 }
@@ -168,6 +241,8 @@ export function isReplacementProductBrief(incoming: string, existing: string): b
   if (prevDomain === "finance" && nextDomain !== "finance") return true;
   if (isBillsWorkflowGoal(next) && !isBillsWorkflowGoal(prev)) return true;
   if (isCuePlannerGoal(next) && !isCuePlannerGoal(prev)) return true;
+  if (isStreamOverlayGoal(next) && !isStreamOverlayGoal(prev)) return true;
+  if (isPokerWorkflowGoal(next) && !isPokerWorkflowGoal(prev)) return true;
   if (nextDomain === "planner" && prevDomain !== "planner") return true;
   if (nextBrand && prevBrand) return false;
   if (leftoverRoutesConflictWithGoal(next, extractRouteTokens(prev))) return true;
@@ -210,6 +285,7 @@ export function isNewProductSeedAgainstCurrent(opts: {
 }): boolean {
   const raw = String(opts.userText || "").trim();
   if (!raw) return false;
+  if (isChatContinuityTurn(raw) || isNameOnlyProductSeed(raw)) return false;
   if (isRepeatedChipAsProductGoal(raw, opts.chipName)) return false;
   if (isSameProductRefineTurn(raw)) return false;
   if (/^(continue|continue\.|continue!|build\s+next|next\s+slice|hello|hi|hey|hellos|yes|yeah|ok|go)[\s.!?]*$/i.test(raw)) {

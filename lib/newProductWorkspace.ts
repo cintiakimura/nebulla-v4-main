@@ -10,12 +10,14 @@ import {
   singleProductName,
 } from "./productIdentity";
 import {
+  isChatContinuityTurn,
   isNewProductSeedAgainstCurrent,
   isReplacementProductBrief,
   isSameProductRefineTurn,
   leftoverRoutesConflictWithGoal,
   looksLikeStandaloneProductBrief,
 } from "./productGoalFingerprint";
+import { isNameOnlyProductSeed } from "./productIdentity";
 
 /** go / hellos / you can start / let’s keep X and start — only then Code pass 1. */
 export function isFoundationCloseGate(text: string): boolean {
@@ -102,6 +104,15 @@ export function resolveNewProductWorkspaceAction(opts: {
       mintNewProject: false,
       skipGrokChat: false,
       allowCodePass1: true,
+      editExistingForbidden: false,
+      productName: singleProductName(String(opts.chipName || "").trim()),
+    };
+  }
+  if (!opts.fromHomeNewProject && (isChatContinuityTurn(userText) || isNameOnlyProductSeed(userText))) {
+    return {
+      mintNewProject: false,
+      skipGrokChat: false,
+      allowCodePass1: false,
       editExistingForbidden: false,
       productName: singleProductName(String(opts.chipName || "").trim()),
     };

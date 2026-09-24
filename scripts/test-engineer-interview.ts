@@ -141,6 +141,21 @@ const nestAsk = buildPostApplyApiAsk({
 });
 assert.equal(/OCR_PROVIDER|Tesseract|GOOGLE_VISION/i.test(nestAsk), false);
 assert.match(nestAsk, /No unclassified vendor keys|Keep mock/i);
+const pokerAsk = buildPostApplyApiAsk({
+  goal: "**Product name:** Tips'n Hold'em\nTexas Hold'em helper — hand, pot odds, advice.",
+  pages: "### Dossiers `/dossiers`\n### Forms `/forms`",
+  tech: "Slot 4 leftover: Tesseract client-side extract. S3.",
+});
+assert.equal(/Tesseract|OCR_PROVIDER|S3_BUCKET|GOOGLE_VISION/i.test(pokerAsk), false);
+assert.match(pokerAsk, /No unclassified vendor keys|Keep mock/i);
+assert.deepEqual(
+  inferSlot4Catalog({
+    goal: "**Product name:** Tips'n Hold'em\nTexas Hold'em helper — hand, pot odds, advice.",
+    pages: "### Dossiers `/dossiers`",
+    tech: "Tesseract. S3.",
+  }).map((r) => r.need),
+  [],
+);
 assert.equal(dossierRows.find((r) => r.need === "extract")?.requiresPaidKey, false);
 assert.match(ENGINEER_INTERVIEW_PROMPT, /do NOT ask for an OCR API key/i);
 

@@ -7,7 +7,7 @@ import { PreviewEditToolbar, type PreviewToolbarState } from './PreviewEditToolb
 import { PreviewWaitingThrobber } from './PreviewWaitingThrobber';
 import {
   htmlLooksLikeShowablePreview,
-  previewMetaHasProductRoutes,
+  previewMetaDevServerUp,
 } from '@/lib/workspaceCodedAppUi';
 import {
   applyUiStudioBetaToAppPreview,
@@ -70,7 +70,7 @@ export function BuildPreviewCanvas() {
       };
       if (!res.ok) return;
       setPreviewMode(typeof data.previewMode === 'string' ? data.previewMode : null);
-      const live = previewMetaHasProductRoutes(data);
+      const live = previewMetaDevServerUp(data);
       const mockupOnDisk = Boolean(String(data.mockupRel || '').trim());
       setLiveAvailable(live);
       setHasMockup(mockupOnDisk);
@@ -121,7 +121,7 @@ export function BuildPreviewCanvas() {
             previewHonesty?: string;
             previewMode?: string;
           };
-          const live = previewMetaHasProductRoutes(data);
+          const live = previewMetaDevServerUp(data);
           if (live && !userPickedDraftRef.current) {
             keepMockupRef.current = false;
             setShowMockup(false);

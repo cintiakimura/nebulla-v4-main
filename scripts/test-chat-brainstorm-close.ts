@@ -36,6 +36,7 @@ assert.equal(looksLikeCloseOffer(summary), true);
 assert.equal(looksLikeCloseOffer('If I understood correctly, this exists so delivery works. Is that right?'), false);
 assert.equal(looksLikeCloseOffer(`${summary}\n<START_MASTERPLAN>x</END_MASTERPLAN>`), false);
 
+assert.equal(isCloseConfirmReply('lock this in'), true);
 assert.equal(isCloseConfirmReply('yes'), true);
 assert.equal(isCloseConfirmReply('faz isso'), true);
 assert.equal(isCloseConfirmReply('looks good'), true);
@@ -122,6 +123,8 @@ assert.match(boot, /CONFIRMED_SUMMARY/);
 assert.match(boot, /THIS TURN = PLAN ONLY/);
 assert.match(boot, /north star/);
 assert.match(boot, /Do NOT emit START_CODING/);
+assert.match(boot, /do NOT ask paste design or none/i);
+assert.match(boot, /Table \/ Hand \/ Odds \/ Advice/);
 assert.ok(isHiddenBootstrapUserMessage(boot));
 
 const seed = buildFastPrototypeBootstrap('motorcycle delivery', 'Web App');

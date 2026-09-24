@@ -21,6 +21,20 @@ function storageKey(projectKey: string): string {
   return `${PREFIX}${k}`;
 }
 
+/** Write the same visible thread to every key this session might load. */
+export function persistIdeChatTranscriptToKeys(
+  keys: Array<string | null | undefined>,
+  messages: StoredChatTurn[],
+): void {
+  const seen = new Set<string>();
+  for (const raw of keys) {
+    const k = String(raw || "").trim() || "default";
+    if (seen.has(k)) continue;
+    seen.add(k);
+    persistIdeChatTranscript(k, messages);
+  }
+}
+
 export function persistIdeChatTranscript(projectKey: string, messages: StoredChatTurn[]): void {
   if (typeof localStorage === 'undefined') return;
   const visible = (messages || []).filter((m) => {

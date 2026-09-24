@@ -16,6 +16,11 @@ import {
   isBillsWorkflowGoal,
   isCuePlannerGoal,
   isRepeatedChipAsProductGoal,
+  isStreamOverlayGoal,
+  isChatContinuityTurn,
+  isPokerWorkflowGoal,
+  lastGoCodeFitsGoal,
+  shouldSkipLeftoverProductFile,
 } from "../lib/productGoalFingerprint.ts";
 import {
   applyNewProductBriefToWorkspace,
@@ -33,6 +38,10 @@ import {
   extractStatedProductName,
   identityFitsGoal,
   inferProductName,
+  isNameOnlyProductSeed,
+  looksLikeConcatenatedLeftoverName,
+  looksLikeGoalStubName,
+  peelMashedEchoToken,
   singleProductName,
 } from "../lib/productIdentity.ts";
 
@@ -354,6 +363,74 @@ section("Nest Path / Llama Life is not Taskwise dossiers");
   assert.equal(productRoutesMatchGoal(nest, ["/", "/water", "/exercise", "/tones"]), true);
   assert.equal(isNewProductSeedAgainstCurrent({ userText: nest, chipName: "Harbor Focus" }), true);
   assert.equal(isReplacementProductBrief(nest, "Taskwise capture input summary tasks dossier"), true);
+}
+
+section("Visual / Visualual is not a locked brand; Twitch overlay is not dossiers");
+{
+  assert.equal(peelMashedEchoToken("Visualual"), "Visual");
+  assert.equal(isNameOnlyProductSeed("Visual"), true);
+  assert.equal(isNameOnlyProductSeed("Visualual"), true);
+  assert.equal(extractStatedProductName("Visual"), null);
+  assert.equal(extractStatedProductName("Visualual"), null);
+  assert.equal(inferProductName("Visual"), "");
+  assert.equal(inferProductName("Visualual"), "");
+  assert.equal(looksLikeStandaloneProductBrief("Visual"), false);
+  assert.equal(isChatContinuityTurn("Can you summarize everything that I said to be sure?"), true);
+  assert.equal(isNewProductSeedAgainstCurrent({ userText: "Can you summarize everything that I said to be sure?", chipName: "Visualual" }), false);
+  assert.equal(isNewProductSeedAgainstCurrent({ userText: "Visualual", chipName: "Helio Hub" }), false);
+  const overlay =
+    "Twitch stream overlay — facecam plus latest follower, latest subscriber, latest tipper.";
+  assert.equal(isStreamOverlayGoal(overlay), true);
+  assert.equal(isStreamOverlayGoal("Visual"), false);
+  const seeded = seedPagesFromGoal(overlay);
+  assert.deepEqual(
+    seeded.map((p) => p.route),
+    ["/", "/alerts", "/recent"],
+  );
+  assert.equal(
+    leftoverRoutesConflictWithGoal(overlay, ["/", "/input", "/summary", "/tasks", "/dossier"]),
+    true,
+  );
+  const first = inferFirstSliceRoutes(overlay, "### Dossiers `/dossiers`\n### Tasks `/tasks`");
+  assert.equal(first.some((p) => /dossier|input|summary|tasks/.test(p.route)), false);
+  assert.ok(first.some((p) => p.route === "/alerts" || p.route === "/recent"));
+  assert.equal(productRoutesMatchGoal(overlay, ["/", "/dossiers", "/tasks"]), false);
+  assert.equal(productRoutesMatchGoal(overlay, ["/", "/alerts", "/recent"]), true);
+}
+
+section("Tips'n Hold'em poker lock is not dossiers / What / leftover chips");
+{
+  const poker =
+    "**Product name:** Tips'n Hold'em\nTexas Hold'em helper — type a hand, see pot odds, get advice at the table.";
+  assert.equal(extractNamedBrand(poker), "Tips'n Hold'em");
+  assert.equal(isPokerWorkflowGoal(poker), true);
+  assert.equal(isPokerWorkflowGoal("MyDossier keep scans and extract"), false);
+  assert.equal(looksLikeGoalStubName("What", poker), true);
+  assert.equal(looksLikeConcatenatedLeftoverName("Quill Learn Aether Studio"), true);
+  assert.equal(extractStatedProductName("What"), null);
+  assert.equal(isNewProductSeedAgainstCurrent({ userText: poker, chipName: "Lumen Learn" }), true);
+  assert.equal(
+    leftoverRoutesConflictWithGoal(poker, ["/", "/dossiers", "/forms", "/dashboard"]),
+    true,
+  );
+  const seeded = seedPagesFromGoal(poker);
+  assert.deepEqual(
+    seeded.map((p) => p.route),
+    ["/", "/hand", "/odds", "/advice"],
+  );
+  const first = inferFirstSliceRoutes(poker, "### Dossiers `/dossiers`\n### Forms `/forms`");
+  assert.equal(first.some((p) => /dossier|forms/.test(p.route)), false);
+  assert.ok(first.some((p) => p.route === "/hand" || p.route === "/odds"));
+  assert.equal(productRoutesMatchGoal(poker, ["/", "/dossiers", "/forms"]), false);
+  assert.equal(productRoutesMatchGoal(poker, ["/", "/hand", "/odds", "/advice"]), true);
+  assert.equal(shouldSkipLeftoverProductFile("app/dossiers/page.tsx", poker), true);
+  assert.equal(shouldSkipLeftoverProductFile("app/forms/page.tsx", poker), true);
+  assert.equal(shouldSkipLeftoverProductFile("app/hand/page.tsx", poker), false);
+  assert.equal(
+    lastGoCodeFitsGoal("```file:app/dossiers/page.tsx\nexport default function D()\n```", poker),
+    false,
+  );
+  assert.equal(isReplacementProductBrief(poker, "MyDossier keep family documents. Dossiers / Forms."), true);
 }
 
 section("new courier project never invents Grain Bakery");

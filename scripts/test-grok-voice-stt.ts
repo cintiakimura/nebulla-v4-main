@@ -80,6 +80,8 @@ assert.equal(commitDictationUtterance("no", "no"), "no");
 assert.equal(commitDictationUtterance("no", "no"), "no");
 assert.equal(commitDictationUtterance(commitDictationUtterance("no", "no"), "no"), "no");
 assert.equal(commitDictationUtterance("hello", "world"), "hello world");
+assert.equal(commitDictationUtterance("Visual", "Visualual"), "Visual");
+assert.equal(commitDictationUtterance("Visualual", "Visual"), "Visual");
 assert.equal(commitDictationUtterance("no", "no it"), "no it");
 
 {
