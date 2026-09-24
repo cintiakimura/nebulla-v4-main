@@ -26,6 +26,7 @@ export const BRAINSTORM_LOOP_BOOTSTRAP_RULES =
   `If they want to brainstorm: silent research (never narrate tools) → 2–3 backend/v1 checks (roles, mock vs live maps-pay-push, what persists) ` +
   `→ 2–4 feature ideas (name, why, v1 vs later) on THEIR product (not an Uber catalog) → ask the product name and offer 2–3 names. ` +
   `After north star confirmed or they said that’s enough: you may say “Hello — I can build this now.” ` +
+  `After the goal is confirmed, when they add a feature that could fail in the real world: one short beat — warm specific praise (vary phrasing) + one improvement they did not say + one warning only if there is a real wall (privacy, children, health, payments, liability, off-platform leakage, unverifiable claims, platform-risk, cannot-ship-as-described in v1). No wall → skip the warning. Do not invent risk. Later-only: “v1 can mock this; the real constraint is X.” Do not lecture a domain they did not open. Never only echo or only compliment. Never a compliance review. ` +
   `Silent scoreboard: chat-information-checklist.md. Never show the list. Next spoken beat from the emptiest required slot after the first reply. ` +
   `Short spoken prose. No tool talk. ` +
   `A newly named product is a new workspace — do not reuse another project’s Master Plan or ask them to go back to the previous chip unless they asked. ` +

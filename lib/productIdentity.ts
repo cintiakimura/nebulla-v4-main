@@ -17,7 +17,14 @@ export type ProductIdentity = {
   userSet?: boolean;
 };
 
-export type ProductDomain = "education" | "tasks" | "landing" | "commerce" | "delivery" | "general";
+export type ProductDomain =
+  | "education"
+  | "tasks"
+  | "landing"
+  | "commerce"
+  | "delivery"
+  | "marketplace"
+  | "general";
 
 const STOPWORDS = new Set([
   "a",
@@ -72,6 +79,7 @@ const STEMS: Record<ProductDomain, readonly string[]> = {
   landing: ["Harbor", "Vista", "North", "Peak", "Bloom"],
   commerce: ["Crumb", "Oven", "Loaf", "Hearth", "Grain"],
   delivery: ["Harbor", "Relay", "Mesa", "North", "Pulse"],
+  marketplace: ["Harbor", "Relay", "Bridge", "North", "Pulse"],
   general: ["Nova", "Aether", "Helio", "Kite", "Mesa"],
 };
 
@@ -81,6 +89,7 @@ const DESCRIPTORS: Record<ProductDomain, readonly string[]> = {
   landing: ["Studio", "Site"],
   commerce: ["Bakery", "Market", "Shop"],
   delivery: ["Courier", "Drop", "Run"],
+  marketplace: ["Link", "Cast", "Desk"],
   general: ["Studio", "Hub"],
 };
 
@@ -90,6 +99,7 @@ const HINTS: Record<ProductDomain, string> = {
   landing: "mark + wave",
   commerce: "loaf + spark",
   delivery: "pin + spark",
+  marketplace: "link + spark",
   general: "mark + spark",
 };
 
@@ -114,6 +124,8 @@ function toTitleCase(name: string): string {
   if (/^loaflocal$/i.test(raw)) return "LoafLocal";
   if (/^grain\s+bakery$/i.test(raw)) return "Grain Bakery";
   if (/^quill\s+path$/i.test(raw)) return "Quill Path";
+  if (/^quill\s+learn\s+kids$/i.test(raw)) return "Quill Learn Kids";
+  if (/^bridgen$/i.test(raw)) return "Bridgen";
   if (/^spoke\s*&\s*co$/i.test(raw) || /^spoke\s+and\s+co$/i.test(raw)) return "Spoke & Co";
   if (/^motodrop$/i.test(raw)) return "Motodrop";
   return raw
@@ -127,9 +139,11 @@ function toTitleCase(name: string): string {
 export function extractNamedBrand(goal: string): string | null {
   const g = String(goal || "");
   if (/\btaskwise\b/i.test(g)) return "Taskwise";
+  if (/\bbridgen\b/i.test(g)) return "Bridgen";
   if (/\bgrain\s+bakery\b/i.test(g)) return "Grain Bakery";
   if (/\bloaflocal\b/i.test(g)) return "LoafLocal";
-  if (/\bquill\s+path\b/i.test(g) && !/\btaskwise\b/i.test(g)) return "Quill Path";
+  if (/\bquill\s+learn\s+kids\b/i.test(g) && !/\b(bridgen|taskwise)\b/i.test(g)) return "Quill Learn Kids";
+  if (/\bquill\s+path\b/i.test(g) && !/\b(bridgen|taskwise|quill\s+learn)\b/i.test(g)) return "Quill Path";
   if (/\bspoke\s*&\s*co\b/i.test(g) || /\bspoke\s+and\s+co\b/i.test(g)) return "Spoke & Co";
   if (/\bmotodrop\b/i.test(g)) return "Motodrop";
   const labeled = g.match(/(?:\*\*)?Product name(?:\*\*)?:\s*([^\n*]+)/i)?.[1]?.trim();
@@ -142,13 +156,34 @@ export function extractNamedBrand(goal: string): string | null {
 const NOT_A_PRODUCT_NAME =
   /^(hello|hellos|hi|hey|yes|yeah|yep|ok|okay|go|continue|please|thanks|thankyou|build|create|make)$/i;
 
+/** §1 product name is one string — replace leftover brands, never concatenate. */
+export function replaceProductNameInGoal(goal: string, productName: string): string {
+  const name = singleProductName(productName);
+  let g = String(goal || "").trim();
+  if (!name) return g;
+  if (/\*\*Product name:\*\*/i.test(g)) {
+    g = g.replace(/^(\s*[-*]\s*)?\*\*Product name:\*\*\s*[^\n*]+/im, `**Product name:** ${name}`);
+  } else {
+    g = `**Product name:** ${name}\n${g}`;
+  }
+  g = g.replace(/\bquill\s+learn\s+kids\s+bridgen\b/gi, name);
+  g = g.replace(/\bquill\s+path\s+taskwise\b/gi, name);
+  g = g.replace(/\bquill\s+learn\s+kids\s+/gi, "");
+  if (name.toLowerCase() !== "quill learn kids") {
+    g = g.replace(/\bquill\s+learn\s+kids\b/gi, name);
+  }
+  return g.replace(/\n{3,}/g, "\n\n").trim();
+}
+
 /** One brand string — never “Quill Path Taskwise”. */
 export function singleProductName(raw: string): string {
   const n = String(raw || "").replace(/\s+/g, " ").trim();
   if (!n) return "";
   if (/\btaskwise\b/i.test(n)) return "Taskwise";
-  if (/\bquill\s+path\b/i.test(n) && !/\btaskwise\b/i.test(n)) return "Quill Path";
-  if (/\bcity\s+courier\b/i.test(n) && !/\btaskwise\b/i.test(n)) return "City Courier";
+  if (/\bbridgen\b/i.test(n)) return "Bridgen";
+  if (/\bquill\s+learn\s+kids\b/i.test(n) && !/\b(bridgen|taskwise)\b/i.test(n)) return "Quill Learn Kids";
+  if (/\bquill\s+path\b/i.test(n) && !/\b(bridgen|taskwise|quill\s+learn)\b/i.test(n)) return "Quill Path";
+  if (/\bcity\s+courier\b/i.test(n) && !/\b(bridgen|taskwise)\b/i.test(n)) return "City Courier";
   const labeled = n.match(/(?:\*\*)?Product name(?:\*\*)?:\s*([^\n*]+)/i)?.[1]?.trim();
   if (labeled) return toTitleCase(labeled.split(/\s+/).slice(0, 3).join(" "));
   const first = n.split(/[\n|,]/)[0].trim();
@@ -163,6 +198,7 @@ export function extractStatedProductName(text: string): string | null {
   if (!t) return null;
   if (NOT_A_PRODUCT_NAME.test(t.replace(/[.!?]+$/g, ""))) return null;
   if (/^taskwise\b/i.test(t)) return "Taskwise";
+  if (/^bridgen\b/i.test(t)) return "Bridgen";
   const called = t.match(
     /\b(?:called|named|name(?:d)?)\s+([A-Z][A-Za-z0-9]+(?:\s+[A-Z][A-Za-z0-9]+){0,2})\b/,
   );
@@ -217,6 +253,9 @@ export function looksLikeShopKitBrand(name: string): boolean {
 
 export function detectProductDomain(goal: string, projectType?: string): ProductDomain {
   const blob = `${goal}\n${projectType || ""}`.toLowerCase();
+  if (/\b(influencer|influencers|bridgen|creators?\s+and\s+brands|brands?\s+and\s+influencers)\b/.test(blob)) {
+    return "marketplace";
+  }
   if (/\blanding\b|\bmarketing\b|\bwaitlist\b/.test(blob) && !/\bmobile\b|\bexpo\b/.test(blob)) {
     return "landing";
   }
@@ -288,6 +327,9 @@ export function inferProductName(goal: string, projectType?: string): string {
   const named = extractNamedBrand(g);
   if (named) return singleProductName(named);
   const domain = detectProductDomain(g, type);
+  if (domain === "marketplace") {
+    if (/\bbridgen\b/i.test(g)) return "Bridgen";
+  }
   if (domain === "delivery") {
     const distilled = distillDeliveryName(g);
     if (distilled) return distilled;
@@ -552,9 +594,12 @@ function writeMasterPlanIfPresent(workspaceRoot: string, identity: ProductIdenti
       Object.assign(plan, next);
       if (uxChanged) changed = true;
       const goal = String(plan["1. Goal of the app"] || "");
-      if (goal.trim() && !extractNamedBrand(goal) && identity.projectName.trim()) {
-        plan["1. Goal of the app"] = `**Product name:** ${identity.projectName}\n${goal}`.trim();
-        changed = true;
+      if (goal.trim() && identity.projectName.trim()) {
+        const nextGoal = replaceProductNameInGoal(goal, identity.projectName);
+        if (nextGoal !== goal) {
+          plan["1. Goal of the app"] = nextGoal;
+          changed = true;
+        }
       }
       if (!changed) continue;
       const merged = { ...raw, ...plan };

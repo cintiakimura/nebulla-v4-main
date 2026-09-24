@@ -104,6 +104,11 @@ const loopAppendix = chatModeSystemAppendix({
 });
 assert.match(loopAppendix, /THIS TURN FORBIDDEN/);
 assert.match(loopAppendix, /CHAT_CLOSE/);
+assert.match(loopAppendix, /Critical partner/);
+assert.match(loopAppendix, /v1 can mock this/);
+assert.match(loopAppendix, /Do not invent risk/);
+assert.match(loopAppendix, /Never only echo/);
+assert.match(seed, /v1 can mock this/);
 
 const confirmAppendix = chatModeSystemAppendix({
   interactionMode: 'agent',

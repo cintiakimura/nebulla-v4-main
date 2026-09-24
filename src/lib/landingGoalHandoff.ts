@@ -5,10 +5,9 @@
 
 import { FORCE_GUEST_MODE } from './testingBranch';
 import {
-  createProjectForCurrentSession,
   fetchSessionUser,
+  mintEmptyProjectFromHome,
   renameActiveProjectDisplayName,
-  selectCloudProjectByName,
 } from './nebulaCloud';
 import { goToApp, goToLogin } from './authNavigate';
 import {
@@ -31,7 +30,7 @@ import { resetProjectFromScratch } from './ideProjectReset';
 import { inferProductName } from './projectNameFromIdea';
 import { persistProductIdentityClient } from './productIdentityClient';
 import { isUsableProjectGoal } from './spineSequenceGates';
-import { getBrowserProjectName, setBrowserProjectName } from './nebulaProjectApi';
+import { getBrowserProjectKey, getBrowserProjectName, setBrowserProjectName } from './nebulaProjectApi';
 
 /** Durable shell goal key (also written by persistLandingGoalForBuild). Survives refresh. */
 export const LANDING_GOAL_DURABLE_KEY = 'nebula_shell_goal_v1';
@@ -91,29 +90,9 @@ export function ensurePendingIdeaFromShellGoal(): void {
   }
 }
 
-/** Same create/reuse path as Dashboard `onStartFromIdea` (`MyProjectsHome`). */
+/** Same mint path as Dashboard `onStartFromIdea` — new key, leftover disk untouched. */
 async function ensureProjectOrReuse(label: string): Promise<void> {
-  const wanted = label.trim() || 'New Project';
-  try {
-    await createProjectForCurrentSession(wanted);
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    if (!/1 project|upgrade|Pricing/i.test(msg)) throw err;
-    const existing = getBrowserProjectName().trim();
-    if (existing) {
-      try {
-        await selectCloudProjectByName(existing);
-      } catch {
-        /* guest / already bound */
-      }
-    }
-    try {
-      const user = await fetchSessionUser();
-      await renameActiveProjectDisplayName(wanted, user?.uid ? 'cloud' : 'guest');
-    } catch {
-      setBrowserProjectName(wanted);
-    }
-  }
+  await mintEmptyProjectFromHome(label.trim() || 'New Project');
 }
 
 /**
@@ -133,15 +112,18 @@ export async function continueFromLandingGoal(
       return { ok: false, error: 'Add a short goal to continue.' };
     }
     const label = inferProductName(trimmed, type);
-    await resetProjectFromScratch(label, { goal: trimmed, projectType: type });
+    const beforeKey = getBrowserProjectKey();
     try {
       await ensureProjectOrReuse(label);
     } catch (e) {
       return { ok: false, error: e instanceof Error ? e.message : 'Could not start the project.' };
     }
+    if (!getBrowserProjectKey() || getBrowserProjectKey() === beforeKey) {
+      return { ok: false, error: 'Could not open an empty workspace. Leftover project files were left untouched.' };
+    }
+    await resetProjectFromScratch(label, { goal: trimmed, projectType: type });
     try {
-      const user = FORCE_GUEST_MODE ? null : await fetchSessionUser();
-      await renameActiveProjectDisplayName(label, user?.uid ? 'cloud' : 'guest');
+      await renameActiveProjectDisplayName(label, 'guest');
     } catch {
       setBrowserProjectName(label);
     }

@@ -8,6 +8,7 @@ import {
   isAssistantRefineClaim,
   isGuidedFirstReplyShape,
   isPostCodeRefineRequest,
+  isFoundationCloseGate,
   isShortCodingGoNudge,
   isUserExplicitCodingRequest,
 } from '../src/lib/ideShortCodingNudge.ts';
@@ -45,6 +46,12 @@ assert.equal(isUserExplicitCodingRequest('hellos', { closerReady: true }), true)
 assert.equal(isUserExplicitCodingRequest('hellos', { firstUserMessage: true }), false);
 assert.equal(isUserExplicitCodingRequest('go', { firstUserMessage: true }), true);
 assert.equal(isUserExplicitCodingRequest('you can start', { firstUserMessage: true }), true);
+assert.equal(isFoundationCloseGate('influencers and brands'), false);
+assert.equal(isFoundationCloseGate('That’s a great idea. Is that right?'), false);
+assert.equal(isFoundationCloseGate('go'), true);
+assert.equal(isFoundationCloseGate('hellos'), true);
+assert.equal(isFoundationCloseGate('you can start'), true);
+assert.equal(isFoundationCloseGate("let's keep Bridgen and start"), true);
 assert.equal(isUserExplicitCodingRequest('just build it', { firstUserMessage: true }), true);
 assert.equal(isUserExplicitCodingRequest('yes', { closerReady: false }), false);
 assert.equal(isUserExplicitCodingRequest('yes', { closerReady: true }), true);

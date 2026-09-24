@@ -138,9 +138,12 @@ export function migrateLegacyGuestProject(
 /** Free / guest: one active project. Delete an existing guest project to create another. */
 export const GUEST_FREE_PROJECT_LIMIT = 1;
 
-export function createGuestProject(initialPayload: ProjectPayload): ProjectIndexEntry {
+export function createGuestProject(
+  initialPayload: ProjectPayload,
+  opts?: { forceMint?: boolean },
+): ProjectIndexEntry {
   const idx = readGuestIndex();
-  if (idx.length >= GUEST_FREE_PROJECT_LIMIT) {
+  if (idx.length >= GUEST_FREE_PROJECT_LIMIT && !opts?.forceMint) {
     throw new Error(
       'Free plan allows 1 project. Delete your existing project, or sign in and upgrade for more.',
     );

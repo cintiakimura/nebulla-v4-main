@@ -86,13 +86,35 @@ export function pickPreferredCloudProject(
       const wid = sanitizeBrowserProjectKey(String(p.workspace_id || '').trim());
       return wid === k || sanitizeBrowserProjectKey(p.name) === k;
     });
-  return (
+  let matched =
     (name ? byName(name) : undefined) ||
     (key && key !== 'default' ? byKey(key) : undefined) ||
     (currentName ? byName(currentName) : undefined) ||
-    (currentKey && currentKey !== 'default' ? byKey(currentKey) : undefined) ||
-    (opts?.allowFallback === false ? undefined : projects[0])
-  );
+    (currentKey && currentKey !== 'default' ? byKey(currentKey) : undefined);
+  if (matched && shouldPreserveMintedProjectKey(currentKey, projects)) {
+    const matchedKey = sanitizeBrowserProjectKey(String(matched.workspace_id || '').trim());
+    if (matchedKey !== currentKey) matched = undefined;
+  }
+  if (matched) return matched;
+  if (opts?.allowFallback === false) return undefined;
+  // New Project just minted a key that is not on the cloud list — do not bind leftover Quill.
+  if (shouldPreserveMintedProjectKey(currentKey, projects) || shouldPreserveMintedProjectKey(key, projects)) {
+    return undefined;
+  }
+  return projects[0];
+}
+
+/** True when the browser key is a fresh mint (not any cloud workspace_id). */
+export function shouldPreserveMintedProjectKey(
+  currentKey: string | null | undefined,
+  projects: Array<{ workspace_id?: string | null; name?: string }>,
+): boolean {
+  const key = sanitizeBrowserProjectKey(String(currentKey || '').trim());
+  if (!key || key === 'default') return false;
+  return !projects.some((p) => {
+    const wid = sanitizeBrowserProjectKey(String(p.workspace_id || '').trim());
+    return wid === key || sanitizeBrowserProjectKey(String(p.name || '')) === key;
+  });
 }
 
 function persistActiveCloudSelection(name: string, diskKey: string): void {
@@ -264,6 +286,8 @@ export async function upsertCloudProject(payload: {
   edges: unknown;
   /** When renaming, pass the previous project name so free-tier limit allows the swap. */
   replaceName?: string;
+  /** New Project from home — mint a new workspace_id; do not reuse leftover disk. */
+  mintNewWorkspace?: boolean;
 }): Promise<boolean> {
   const res = await fetch('/api/projects', {
     method: 'POST',
@@ -380,13 +404,19 @@ export async function syncActiveCloudProjectFromSession(): Promise<{
     /* ignore */
   }
 
+  const currentKey = getBrowserProjectKey();
   const row = pickPreferredCloudProject(projects, {
     preferredName,
     preferredKey,
     currentName: getBrowserProjectName(),
-    currentKey: getBrowserProjectKey(),
+    currentKey,
+    allowFallback: false,
   });
   if (!row) return { synced: false };
+  const rowKey = sanitizeBrowserProjectKey(String(row.workspace_id || '').trim() || row.name);
+  if (shouldPreserveMintedProjectKey(currentKey, projects) && currentKey !== rowKey) {
+    return { synced: false };
+  }
 
   const name = row.name.trim() || 'Untitled project';
   const diskKey = sanitizeBrowserProjectKey(
@@ -486,7 +516,7 @@ export async function createAndSelectCloudProject(name: string): Promise<boolean
 /**
  * Create a project for the current session: cloud (PostgreSQL) when signed in,
  * otherwise guest localStorage. Returns the active name/key.
- * Throws when free-tier project limit is reached.
+ * Always mints a new disk key. Does not wipe leftover project folders.
  */
 export async function createProjectForCurrentSession(name: string): Promise<{
   projectName: string;
@@ -496,21 +526,40 @@ export async function createProjectForCurrentSession(name: string): Promise<{
   const trimmed = name.trim() || 'Untitled Project';
   const user = FORCE_GUEST_MODE ? null : await fetchSessionUser();
   if (user?.uid) {
-    const ok = await createAndSelectCloudProject(trimmed);
-    if (ok) {
-      return {
-        projectName: getBrowserProjectName().trim() || trimmed,
-        projectKey: getBrowserProjectKey(),
-        mode: 'cloud',
-      };
+    const previousKey = getBrowserProjectKey();
+    try {
+      await upsertCloudProject({
+        name: trimmed,
+        pages: [],
+        edges: [],
+        mintNewWorkspace: true,
+        replaceName:
+          getBrowserProjectName().trim() && getBrowserProjectName().trim() !== trimmed
+            ? getBrowserProjectName().trim()
+            : undefined,
+      });
+      const ok = await selectCloudProjectByName(trimmed);
+      const nextKey = getBrowserProjectKey();
+      if (ok && nextKey && nextKey !== previousKey) {
+        persistActiveCloudSelection(getBrowserProjectName().trim() || trimmed, nextKey);
+        return {
+          projectName: getBrowserProjectName().trim() || trimmed,
+          projectKey: nextKey,
+          mode: 'cloud',
+        };
+      }
+    } catch {
+      /* fall through to a new guest key — never reuse leftover disk */
     }
-    throw new Error('Could not create project. Try again or open Pricing to upgrade.');
   }
-  const entry = createGuestProject({
-    pages: [],
-    edges: [],
-    projectName: trimmed,
-  });
+  const entry = createGuestProject(
+    {
+      pages: [],
+      edges: [],
+      projectName: trimmed,
+    },
+    { forceMint: true },
+  );
   writeActiveGuestProjectId(entry.id);
   setBrowserProjectKey(entry.id);
   setBrowserProjectName(entry.name);
@@ -519,6 +568,18 @@ export async function createProjectForCurrentSession(name: string): Promise<{
   clearIdeWorkspaceMetaCache();
   dispatchWorkspaceSynced(entry.name, entry.id);
   return { projectName: entry.name, projectKey: entry.id, mode: 'guest' };
+}
+
+/**
+ * Home / new idea: always mint a new projectKey and empty guest/cloud workspace.
+ * Never reset or rename leftover disk (Quill Learn Kids stays untouched).
+ */
+export async function mintEmptyProjectFromHome(name: string): Promise<{
+  projectName: string;
+  projectKey: string;
+  mode: 'cloud' | 'guest';
+}> {
+  return createProjectForCurrentSession(name.trim() || 'New Project');
 }
 
 /** Local guest workspace (no GitHub) — for dev / try-before-login. */
@@ -627,6 +688,19 @@ export async function ensureCloudWorkspaceReady(): Promise<WorkspaceReadyResult>
   }
 
   if (projects.length === 1) {
+    const mintedKey = getBrowserProjectKey();
+    if (shouldPreserveMintedProjectKey(mintedKey, projects)) {
+      const mintedName = getBrowserProjectName().trim() || 'New Project';
+      persistActiveCloudSelection(mintedName, mintedKey);
+      setWorkspaceModePreference('guest');
+      return {
+        status: 'ready',
+        user,
+        projectName: mintedName,
+        projectKey: mintedKey,
+        mode: 'guest',
+      };
+    }
     const sync = await syncActiveCloudProjectFromSession();
     if (!sync.synced || !sync.projectName || !sync.projectKey) {
       return { status: 'error', message: 'Could not bind workspace context for this project.' };

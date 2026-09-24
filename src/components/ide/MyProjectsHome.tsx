@@ -22,10 +22,9 @@ import {
   writeActiveGuestProjectId,
 } from '../../lib/nebulaProjectStore';
 import {
-  createProjectForCurrentSession,
+  mintEmptyProjectFromHome,
   fetchSessionUser,
   listCloudProjectsDetailed,
-  renameActiveProjectDisplayName,
   selectCloudProjectByName,
   setWorkspaceModePreference,
 } from '../../lib/nebulaCloud';
@@ -317,29 +316,14 @@ export function MyProjectsHome({
     [enterBuild],
   );
 
-  /** Free plan: 1 project — if create fails, reuse + rename so the idea isn't stuck as Untitled. */
-  const ensureProjectOrReuse = useCallback(async (label: string) => {
-    const wanted = label.trim() || 'New Project';
-    try {
-      await createProjectForCurrentSession(wanted);
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      if (!/1 project|upgrade|Pricing/i.test(msg)) throw err;
-      const existing = getBrowserProjectName().trim();
-      if (existing) {
-        try {
-          await selectCloudProjectByName(existing);
-        } catch {
-          /* guest / already bound */
-        }
-      }
-      try {
-        const user = await fetchSessionUser();
-        await renameActiveProjectDisplayName(wanted, user?.uid ? 'cloud' : 'guest');
-      } catch {
-        setBrowserProjectName(wanted);
-      }
+  /** Always mint a new empty projectKey. Never reset leftover disk first. */
+  const ensureFreshProject = useCallback(async (label: string) => {
+    const before = getBrowserProjectKey();
+    const created = await mintEmptyProjectFromHome(label.trim() || 'New Project');
+    if (!created.projectKey || created.projectKey === before) {
+      throw new Error('Could not open an empty workspace. Leftover project files were left untouched.');
     }
+    return created;
   }, []);
 
   const onStartTypedProject = useCallback(
@@ -352,8 +336,8 @@ export function MyProjectsHome({
         setPendingStartMode('fast_prototype');
         markGuidedStartOnReady();
         const label = inferProductName('', type);
+        await ensureFreshProject(label);
         await resetProjectFromScratch(label, { projectType: type });
-        await ensureProjectOrReuse(label);
         void persistProductIdentityClient({ projectName: label, projectType: type });
         // Persist after reset/create so projectKey is current (UI Studio device framing).
         setPendingProjectType(type);
@@ -365,7 +349,7 @@ export function MyProjectsHome({
         setStartError(msg);
       }
     },
-    [busyStarting, ensureProjectOrReuse, enterBuild],
+    [busyStarting, ensureFreshProject, enterBuild],
   );
 
   const onStartFromIdea = useCallback(async () => {
@@ -381,8 +365,8 @@ export function MyProjectsHome({
       if (idea) setPendingProjectIdea(idea);
       setPendingStartMode('fast_prototype');
       markGuidedStartOnReady();
+      await ensureFreshProject(label);
       await resetProjectFromScratch(label, { goal: idea, projectType: ideaType });
-      await ensureProjectOrReuse(label);
       void persistProductIdentityClient({
         projectName: label,
         goal: idea,
@@ -397,7 +381,7 @@ export function MyProjectsHome({
       const msg = err instanceof Error ? err.message : 'Could not start the project. Try again.';
       setStartError(msg);
     }
-  }, [busyStarting, ideaInput, ideaType, ensureProjectOrReuse, enterBuild]);
+  }, [busyStarting, ideaInput, ideaType, ensureFreshProject, enterBuild]);
 
   const onJustChat = useCallback(() => {
     dispatchStartFreeChat();

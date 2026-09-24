@@ -1831,7 +1831,7 @@ export async function mountRenderStack(app: Express) {
     const uid = readSession(req);
     if (!uid) return res.status(401).json({ error: "Unauthorized" });
     if (!hasDb()) return res.status(503).json({ error: "Database not configured" });
-    const { name, pages, edges, replaceName } = req.body || {};
+    const { name, pages, edges, replaceName, mintNewWorkspace } = req.body || {};
     if (typeof name !== "string" || !name.trim()) {
       return res.status(400).json({ error: "name is required" });
     }
@@ -1888,7 +1888,7 @@ export async function mountRenderStack(app: Express) {
         const prevWid = prevRow.rows[0]?.workspace_id as string | undefined;
         if (prevWid && String(prevWid).trim()) workspaceId = String(prevWid).trim();
       }
-      if (!workspaceId || !String(workspaceId).trim()) {
+      if (mintNewWorkspace === true || !workspaceId || !String(workspaceId).trim()) {
         const rw = provisionWorkspaceForNewProject(trimmed);
         workspaceId = rw.id;
       }
@@ -1911,10 +1911,13 @@ export async function mountRenderStack(app: Express) {
          ON CONFLICT (user_id, name) DO UPDATE
          SET pages = EXCLUDED.pages,
              edges = EXCLUDED.edges,
-             workspace_id = COALESCE(
-               NULLIF(TRIM(public.nebula_projects.workspace_id), ''),
-               EXCLUDED.workspace_id
-             ),
+             workspace_id = CASE
+               WHEN ${mintNewWorkspace === true ? "TRUE" : "FALSE"} THEN EXCLUDED.workspace_id
+               ELSE COALESCE(
+                 NULLIF(TRIM(public.nebula_projects.workspace_id), ''),
+                 EXCLUDED.workspace_id
+               )
+             END,
              updated_at = NOW()
          RETURNING name, pages, edges, workspace_id, d1_database_id, d1_database_name, updated_at`,
         [crypto.randomUUID(), uid, trimmed, pagesJson, edgesJson, workspaceId]

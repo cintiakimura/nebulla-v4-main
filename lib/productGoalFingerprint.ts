@@ -41,8 +41,9 @@ export function leftoverRoutesConflictWithGoal(goal: string, routes: string[]): 
   const slugs = (routes || []).map(routeSlug).filter(Boolean);
   const g = String(goal || "").toLowerCase();
   const delivery = /moto|motodrop|courier|delivery|dropoff|parcel/.test(g);
+  const marketplace = domain === "marketplace" || /\b(influencer|bridgen|brands?)\b/i.test(g);
   if (
-    (domain === "tasks" || /\btaskwise\b/i.test(g)) &&
+    (domain === "tasks" || marketplace || /\btaskwise\b/i.test(g)) &&
     slugs.some((s) => EDUCATION_LEFTOVER_SLUGS.has(s))
   ) {
     return true;
@@ -70,7 +71,7 @@ export function looksLikeStandaloneProductBrief(text: string): boolean {
   if (!goal || goal.length < 20) return false;
   if (isCodingCommandNote(raw) && !goal) return false;
   if (extractNamedBrand(goal)) return true;
-  return /\b(build|shop|marketplace|companion|bike|bakery|mechanic|moto|courier|delivery|parcel|uber|dropoff|app that|for (kids|parents|customers|readers|riders|senders))\b/i.test(
+  return /\b(build|shop|marketplace|companion|bike|bakery|mechanic|moto|courier|delivery|parcel|uber|dropoff|influencer|influencers|brands?|bridgen|creator|app that|for (kids|parents|customers|readers|riders|senders))\b/i.test(
     goal,
   );
 }
@@ -152,8 +153,11 @@ export function isNewProductSeedAgainstCurrent(opts: {
     return true;
   }
   const diskGoal = String(opts.diskGoal || "").trim();
+  const incomingGoal = extractGoalFromUserNote(raw) || raw;
+  if (current && looksLikeStandaloneProductBrief(raw) && isReplacementProductBrief(incomingGoal, current)) {
+    return true;
+  }
   if (diskGoal && looksLikeStandaloneProductBrief(raw)) {
-    const incomingGoal = extractGoalFromUserNote(raw) || raw;
     if (isReplacementProductBrief(incomingGoal, diskGoal)) return true;
   }
   return false;

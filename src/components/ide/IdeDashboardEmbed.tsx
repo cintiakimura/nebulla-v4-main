@@ -120,8 +120,8 @@ export function IdeDashboardEmbed({
             ? 'Prompt project'
             : 'New project';
     void (async () => {
-      await resetProjectFromScratch(label);
       await createProjectForCurrentSession(label);
+      await resetProjectFromScratch(label);
       window.location.reload();
     })();
   }, []);

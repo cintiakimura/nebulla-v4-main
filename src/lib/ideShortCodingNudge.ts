@@ -6,6 +6,8 @@
  * must force the Go pipeline even when the model omits the START_CODING tag.
  */
 
+export { isFoundationCloseGate } from '../../lib/newProductWorkspace';
+
 const GO_NUDGE_RE =
   /\b(press\s+go|click\s+go|hit\s+go|use\s+go|tap\s+go|run\s+go|start_coding|go\s+code)\b/i;
 
@@ -128,6 +130,7 @@ export function isUserExplicitCodingRequest(text: string, ctx?: CodingRequestCon
   if (isLockAndBuildRequest(t)) return true;
   // Short nudges only — a long paste without the signals above is discussion, not Go.
   if (t.length > 400) return false;
+  if (/let['’]?s keep\b[\s\S]{0,80}\band start\b/i.test(t)) return true;
   if (ALWAYS_GO_RE.test(t)) return true;
   if (ctx?.closerReady && SPOKEN_CLOSER_RE.test(t)) return true;
   // Soft-gate copy: "Reply continue" / "build next" / "continue please"

@@ -80,6 +80,7 @@ import {
   isPostCodeRefineRequest,
   isShortCodingGoNudge,
   isUserExplicitCodingRequest,
+  isFoundationCloseGate,
   historyHasConfirmedNorthStar,
   SHORT_CODING_GO_SUMMARY,
 } from '../../lib/ideShortCodingNudge';
@@ -151,7 +152,7 @@ import {
   formatResearchStopMessage,
   RESEARCH_STOPPED,
 } from '../../lib/nebulaResearchClient';
-import { createProjectForCurrentSession } from '../../lib/nebulaCloud';
+import { createProjectForCurrentSession, mintEmptyProjectFromHome } from '../../lib/nebulaCloud';
 import { handleSmartChatMessage, type SmartChatFilePreview } from '../../lib/smartChatHandler';
 import { isMasterPlanCompleteForDiscovery, PRE_CODING_SUMMARY_KEY } from '../../lib/masterPlanSections';
 import {
@@ -178,6 +179,7 @@ import {
   isReplacementProductBrief,
   looksLikeStandaloneProductBrief,
 } from '../../../lib/productGoalFingerprint';
+import { resolveNewProductWorkspaceAction } from '../../../lib/newProductWorkspace';
 import { persistProductIdentityClient, promoteWorkspaceChipFromProductName } from '../../lib/productIdentityClient';
 import {
   ASK_FOR_SHORT_GOAL,
@@ -1949,16 +1951,28 @@ export function AIChat() {
       historyHasConfirmedNorthStar(prior) ||
       brainstormCloseConfirmed ||
       closeTurn.kind === 'confirmed';
-    const wantsLockAndBuild = isUserExplicitCodingRequest(rawText, {
-      firstUserMessage,
-      closerReady,
-    });
-    const newProductSeed = isNewProductSeedAgainstCurrent({
+    const seedActionEarly = resolveNewProductWorkspaceAction({
       userText: rawText,
       chipName: getBrowserProjectName(),
+      productRoutesOnDisk: workspaceHasProductAppRoutes(workspacePaths),
+      workspacePaths,
     });
+    const newProductSeed =
+      seedActionEarly.mintNewProject ||
+      isNewProductSeedAgainstCurrent({
+        userText: rawText,
+        chipName: getBrowserProjectName(),
+      });
+    const closeGate = isFoundationCloseGate(rawText);
+    const wantsLockAndBuild = newProductSeed
+      ? closeGate
+      : closeGate ||
+        isUserExplicitCodingRequest(rawText, {
+          firstUserMessage,
+          closerReady,
+        });
     const stayInBrainstormLoop =
-      Boolean(newProductSeed && !wantsLockAndBuild) ||
+      Boolean(newProductSeed && !closeGate) ||
       (!brainstormCloseConfirmed &&
         !wantsLockAndBuild &&
         (isBootstrapTrigger || discoveryRequired || closeTurn.kind === 'skip-lock') &&
@@ -1966,9 +1980,9 @@ export function AIChat() {
         chatMode !== 'file' &&
         !hasAppStatusPayload &&
         !existingAppWork);
-    /** go / hellos / just build lock the seed and start Foundation. First hello is a greeting. */
+    /** go / hellos / you can start / let’s keep X and start — only then Code pass 1. */
     const userForcedCoding = wantsLockAndBuild;
-    if (newProductSeed && !wantsLockAndBuild) {
+    if (newProductSeed && !closeGate) {
       interactionModeRef.current = 'chat';
       setAssistantInteractionMode('chat');
     }
@@ -2166,20 +2180,24 @@ export function AIChat() {
       !hasAppStatusPayload &&
       (userForcedCoding || fastPrototypeTurn || buildMode);
     const seedProductName = singleProductName(
-      extractStatedProductName(rawText) || inferProductName(rawText),
+      extractStatedProductName(rawText) || inferProductName(rawText) || seedActionEarly.productName,
     );
     const isolateNewProduct =
       Boolean(newProductSeed) && !userNoteRequestsNextSlice(rawText);
     let switchedProductWorkspace = false;
     if (isolateNewProduct) {
       try {
-        const created = await createProjectForCurrentSession(seedProductName);
+        const created = await mintEmptyProjectFromHome(seedProductName);
         clearIdeWorkspaceMetaCache();
         switchedProductWorkspace = true;
         clearBrainstormCloseState(created.projectKey);
         clearDiscoveryClosed(created.projectKey);
       } catch {
-        /* free-tier / cloud limit — replace in place after read */
+        const created = await createProjectForCurrentSession(seedProductName);
+        clearIdeWorkspaceMetaCache();
+        switchedProductWorkspace = true;
+        clearBrainstormCloseState(created.projectKey);
+        clearDiscoveryClosed(created.projectKey);
       }
       void persistProductIdentityClient({
         projectName: seedProductName,
@@ -2229,26 +2247,10 @@ export function AIChat() {
         !userNoteRequestsNextSlice(rawText) &&
         isReplacementProductBrief(incomingGoal, diskGoal);
       if (newSeed && !userNoteRequestsNextSlice(rawText)) {
-        try {
-          const created = await createProjectForCurrentSession(nextProductName);
-          clearIdeWorkspaceMetaCache();
-          clearBrainstormCloseState(created.projectKey);
-          clearDiscoveryClosed(created.projectKey);
-        } catch {
-          if (incomingGoal || nextProductName) {
-            await fetchJson<{ projectName?: string }>(withProjectQuery('/api/ide/replace-product-brief'), {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              credentials: 'include',
-              body: JSON.stringify(
-                withProjectBody({
-                  goal: incomingGoal || nextProductName,
-                  projectName: nextProductName,
-                }),
-              ),
-            });
-          }
-        }
+        const created = await mintEmptyProjectFromHome(nextProductName);
+        clearIdeWorkspaceMetaCache();
+        clearBrainstormCloseState(created.projectKey);
+        clearDiscoveryClosed(created.projectKey);
         void persistProductIdentityClient({
           projectName: nextProductName,
           goal: incomingGoal || rawText,
@@ -2472,6 +2474,7 @@ export function AIChat() {
       let willCode =
         agentAllowed &&
         !stayInBrainstormLoop &&
+        (!newProductSeed || closeGate) &&
         !brainstormCloseConfirmed &&
         (hadCodingTag ||
           hasGrokFileBlocks(raw) ||
@@ -2888,7 +2891,8 @@ export function AIChat() {
               projectName,
               userNote: text,
               onProgress: codingActivityRef.current ? pushActivity : undefined,
-              productRoutesOnDisk: foundationLandedOnDisk(),
+              productRoutesOnDisk:
+                !newProductSeed && !switchedProductWorkspace && foundationLandedOnDisk(),
             })
           : { ran: false };
         // No Go button: user "go" / Discovery / Fast Prototype / assistant coding promise starts coding.
