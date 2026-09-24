@@ -227,6 +227,20 @@ export function isAuthOnlyProductRoutes(paths: string[]): boolean {
   );
 }
 
+const AUTH_ONLY_ROUTE =
+  /^\/(login|auth|signin|sign-in|signup|register|sign-up)$/i;
+
+/** `/` plus at least one real product route (not login-only). */
+export function hasFoundationProductRoutes(productFiles: string[]): boolean {
+  const routes = inferRoutesFromProductFiles(productFiles);
+  const nested = routes.filter((r) => r !== "/" && !AUTH_ONLY_ROUTE.test(r));
+  return routes.includes("/") && nested.length >= 1;
+}
+
+export function workspaceHasFoundationProductRoutes(workspaceRoot: string): boolean {
+  return hasFoundationProductRoutes(listProductUiFiles(workspaceRoot, 80));
+}
+
 export function assessApplyRouteDepth(writtenPaths: string[]): {
   productRouteFiles: string[];
   productRoutes: string[];
@@ -306,7 +320,7 @@ function withHonesty(
  * Vite-only src/App.tsx + src/main.tsx is a thin shell — not "Code exists" success.
  */
 export function resolveAppPreviewAuthority(workspaceRoot: string): AppPreviewAuthority {
-  const productFiles = listProductUiFiles(workspaceRoot, 24);
+  const productFiles = listProductUiFiles(workspaceRoot, 80);
   const thinShell = isThinCodeShell(productFiles);
   const hasRealRoutes = inferRoutesFromProductFiles(productFiles).length > 0 && !thinShell;
   const indexHtml = readIndexHtml(workspaceRoot);
@@ -331,17 +345,36 @@ export function resolveAppPreviewAuthority(workspaceRoot: string): AppPreviewAut
     );
   }
 
-  if (hasRealRoutes && workspaceHasNextAppRoot(workspaceRoot)) {
+  const codedProductLive =
+    workspaceHasNextAppRoot(workspaceRoot) || hasFoundationProductRoutes(productFiles);
+
+  if (codedProductLive) {
+    if (workspaceHasNextAppRoot(workspaceRoot)) {
+      return withHonesty(
+        {
+          mode: "next_app_live",
+          statusLabel: "App Preview is the coded Next app",
+          codedApp: true,
+          indexIsMockup: false,
+          entryRel: null,
+          productFiles,
+          mockupRel,
+          limitation: null,
+        },
+        "real_routes",
+      );
+    }
     return withHonesty(
       {
-        mode: "next_app_live",
-        statusLabel: "App Preview is the coded Next app",
+        mode: "post_code_bridge",
+        statusLabel: "App Preview is the coded app",
         codedApp: true,
-        indexIsMockup: false,
+        indexIsMockup,
         entryRel: null,
         productFiles,
         mockupRel,
-        limitation: null,
+        limitation:
+          "This shell cannot run the workspace Vite/Next app in the iframe. Open Code to inspect the coded routes.",
       },
       "real_routes",
     );

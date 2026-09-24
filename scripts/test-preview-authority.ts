@@ -33,10 +33,13 @@ import {
 } from "../lib/nebulaIdeWorkspaceArtifacts.ts";
 import {
   ensureInteractiveProductPreview,
+  hasInteractiveProductPreview,
   inferPreviewScreensFromPaths,
   previewHtmlNeedsProductHeal,
   PRODUCT_PREVIEW_REL,
 } from "../lib/interactiveProductPreview.ts";
+import { readProductIdentity } from "../lib/productIdentity.ts";
+import { applyProductPalettePass } from "../lib/productPalettePass.ts";
 import { sanitizeUserFacingCopy } from "../lib/assistantChatSanitize.ts";
 
 const tokens = {
@@ -443,6 +446,69 @@ section("Foundation bakery routes own Preview — not catalog");
   assert.equal(/ZEbJpC67UQyeeynt1UR8gT/.test(html), false);
   assert.match(mockup, /Today's Fresh Breads/);
   assert.equal(/offline \/ Figma library structure/i.test(mockup), false);
+  fs.rmSync(root, { recursive: true, force: true });
+}
+
+section("leftover stock fixture never wins Live after coded routes");
+{
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "nebulla-preview-maya-"));
+  fs.mkdirSync(path.join(root, "app", "dossiers"), { recursive: true });
+  fs.mkdirSync(path.join(root, "public", "product-preview"), { recursive: true });
+  fs.mkdirSync(path.join(root, "nebulla-ide"), { recursive: true });
+  fs.writeFileSync(
+    path.join(root, "app", "page.tsx"),
+    'export default function Home(){ return <main>MyDossier home</main>; }\n',
+  );
+  fs.writeFileSync(
+    path.join(root, "app", "dossiers", "page.tsx"),
+    'export default function Dossiers(){ return <main>Dossiers</main>; }\n',
+  );
+  fs.writeFileSync(
+    path.join(root, PRODUCT_PREVIEW_REL),
+    `<!doctype html><html><body><main data-preview="interactive-product-preview">
+      <h1>Maya Chen</h1><p>Who are you today</p><p>Signed in as parent (mock session)</p>
+    </main></body></html>`,
+    "utf8",
+  );
+  fs.writeFileSync(
+    path.join(root, "nebulla-ide", "product-identity.json"),
+    JSON.stringify({ projectName: "ID", logoInitials: "ID" }, null, 2),
+    "utf8",
+  );
+  fs.writeFileSync(
+    path.join(root, "nebulla-ide", "master-plan.json"),
+    JSON.stringify(
+      { "1. Goal of the app": "MyDossier: a privacy-first document vault for families." },
+      null,
+      2,
+    ),
+    "utf8",
+  );
+
+  assert.equal(workspaceHasNextAppRoot(root), true);
+  assert.equal(hasInteractiveProductPreview(root), false);
+  const auth = resolveAppPreviewAuthority(root);
+  assert.equal(auth.mode, "next_app_live");
+  assert.equal(auth.honesty, "real_routes");
+  assert.notEqual(auth.mode, "interactive_product_preview");
+  assert.notEqual(auth.entryRel, PRODUCT_PREVIEW_REL);
+  const live = buildLiveHtmlFromNextApp(root, "MyDossier") || "";
+  assert.match(live, /next-app-live|MyDossier home/);
+  assert.equal(/Maya Chen/i.test(live), false);
+  assert.equal(/Who are you today/i.test(live), false);
+  const identity = readProductIdentity(root);
+  assert.equal(identity?.projectName, "MyDossier");
+  const palette = applyProductPalettePass({
+    workspaceRoot: root,
+    goal: "MyDossier: a privacy-first document vault for families.",
+  });
+  assert.equal(palette.applied.includes("public/product-preview/index.html"), false);
+  const ensured = ensureInteractiveProductPreview(root, {
+    projectName: "MyDossier",
+    productFiles: ["app/page.tsx", "app/dossiers/page.tsx"],
+  });
+  assert.equal(ensured.written, false);
+  assert.equal(fs.existsSync(path.join(root, PRODUCT_PREVIEW_REL)), false);
   fs.rmSync(root, { recursive: true, force: true });
 }
 

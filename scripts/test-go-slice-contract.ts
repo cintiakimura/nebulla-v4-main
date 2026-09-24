@@ -24,6 +24,11 @@ import {
   planNeedsSecurityBaseline,
 } from "../lib/securityBaselinePropose.ts";
 import { draftSection4AmendmentsForRoutes } from "../lib/mindMapAmendmentPropose.ts";
+import { classifyCodingSkeleton } from "../lib/codingSkeleton.ts";
+import {
+  firstSliceApplyLooksGeneric,
+  inferFirstSliceRoutes,
+} from "../lib/nebulaUiBrief.ts";
 
 assert.equal(parseGoSliceLabel("SLICE: Foundation\n- setup"), "Foundation");
 assert.equal(parseGoSliceLabel("working on Auth next"), "Auth");
@@ -342,6 +347,42 @@ assert.equal(
   });
   assert.equal(htmlProduct.ok, true);
   assert.equal(htmlProduct.blockedReason, null);
+}
+
+{
+  const goal = "MyDossier: keep and find family documents later. Client-side extract into per-client dossiers.";
+  const pages = "Dashboard / Dossiers / Forms";
+  const first = inferFirstSliceRoutes(goal, pages);
+  const routes = first.map((p) => p.route);
+  assert.ok(routes.includes("/dossiers"), `first slice must include /dossiers, got ${routes.join(",")}`);
+  assert.ok(routes.includes("/forms"), `first slice must include /forms, got ${routes.join(",")}`);
+  assert.ok(routes.includes("/dashboard"), `first slice must include /dashboard, got ${routes.join(",")}`);
+  assert.equal(routes.some((r) => r === "/login" || r === "/register"), false);
+  assert.equal(firstSliceApplyLooksGeneric(["/", "/login", "/register"]), true);
+  assert.equal(firstSliceApplyLooksGeneric(routes), false);
+  const skel = classifyCodingSkeleton(goal, "Web App", {
+    "1. Goal of the app": goal,
+    "4. Pages and navigation": pages,
+  });
+  assert.ok(skel.routes.some((r) => r.path === "/dossiers"));
+  assert.ok(skel.routes.some((r) => r.path === "/forms"));
+  assert.ok(skel.routes.some((r) => r.path === "/dashboard"));
+  assert.equal(skel.routes.every((r) => r.path === "/" || r.path === "/login" || r.path === "/register"), false);
+  assert.ok(skel.entities.some((e) => /dossier/i.test(e.name)));
+  const compact = buildCompactGoCodeUserPrompt({
+    sliceLine: "SLICE: Foundation",
+    goal,
+    pagesSection: pages,
+    constraints: "",
+    uiBriefPageList: "- Dashboard `/dashboard`\n- Dossiers `/dossiers`\n- Forms `/forms`",
+    sessionFocus: "Foundation",
+  });
+  assert.match(compact, /FIRST-SLICE APPLY/);
+  assert.match(compact, /\/dossiers/);
+  assert.match(compact, /\/forms/);
+  assert.match(compact, /\/dashboard/);
+  assert.match(productSliceQualityLine(goal), /\/dossiers/);
+  assert.equal(/only \/login \/register/.test(compact) || /Never only \/login/.test(compact), true);
 }
 
 console.log("\n✓ go-slice + security propose + mind-map amend tests passed\n");

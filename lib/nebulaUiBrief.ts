@@ -367,6 +367,162 @@ export function seedPagesFromGoal(goal: string): { name: string; route: string }
   ];
 }
 
+const AUTH_FIRST_SLICE = new Set([
+  "/login",
+  "/register",
+  "/signup",
+  "/sign-up",
+  "/signin",
+  "/sign-in",
+  "/auth",
+]);
+
+const PLACEHOLDER_ROUTE = /^\/[a-z]$/i;
+const EDUCATION_LEFTOVER_ROUTE = /^\/(practice|teacher|parent|kid|progress|session|tutor)$/i;
+const SECTION4_PAGE_NAME =
+  /^(home|dashboard|dossiers?|forms?|history|extract|review|inbox|upload|documents?|login|register)$/i;
+
+export function isDocumentWorkflowGoal(goal: string): boolean {
+  return /\b(mydossier|dossiers?|forms?\b|scans?|documents?|extract|ocr|tesseract|client.?side extract|keep\/find|find work later|per-client)\b/i.test(
+    String(goal || ""),
+  );
+}
+
+export function lockRequiresSignedInRoles(goal: string, pages = ""): boolean {
+  const blob = `${goal}\n${pages}`;
+  if (/\b(auth:?\s*none|no (login|sign-?in|auth))\b/i.test(blob)) return false;
+  return /\b(signed-?in roles?|sign-?in required|auth required|must (log|sign) ?in|private routes?)\b/i.test(
+    blob,
+  );
+}
+
+function slugFromPageName(name: string): string {
+  const n = String(name || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+  if (!n || /^(home|app|index)$/.test(n)) return "/";
+  if (/^dossiers?$/.test(n)) return "/dossiers";
+  if (/^forms?$/.test(n)) return "/forms";
+  return `/${n.split(/\s+/).slice(0, 3).join("-")}`;
+}
+
+/** §4 headings or "Dashboard / Dossiers / Forms" — routes even without backticks. */
+export function inferNamedPagesFromSection4(pages: string): { name: string; route: string }[] {
+  const extracted = extractNamedRoutesFromPagesText(pages);
+  const out = extracted.slice();
+  const seen = new Set(out.map((p) => p.route.toLowerCase()));
+  const chunks = String(pages || "")
+    .split(/\n|,|(?:\s+\/\s+)/)
+    .map((s) =>
+      s
+        .replace(/^#{1,4}\s+/, "")
+        .replace(/^[-*•]\s+/, "")
+        .replace(/`[^`]+`/g, "")
+        .trim(),
+    )
+    .filter(Boolean);
+  for (const chunk of chunks) {
+    const word = chunk.split(/\s+/).slice(0, 3).join(" ");
+    if (!SECTION4_PAGE_NAME.test(word) && !/^(dashboard|dossiers?|forms?|history|documents?)$/i.test(word)) {
+      continue;
+    }
+    const route = slugFromPageName(word);
+    if (seen.has(route.toLowerCase())) continue;
+    seen.add(route.toLowerCase());
+    out.push({ name: word.replace(/^\w/, (c) => c.toUpperCase()), route });
+  }
+  return out;
+}
+
+function addPage(
+  list: { name: string; route: string }[],
+  seen: Set<string>,
+  page: { name: string; route: string },
+): void {
+  const route = page.route.startsWith("/") ? page.route : `/${page.route}`;
+  const key = route.toLowerCase();
+  if (seen.has(key)) return;
+  seen.add(key);
+  list.push({ name: page.name, route });
+}
+
+/** Locked loop for Foundation apply — not a fixed /login /register / shell. */
+export function inferFirstSliceRoutes(
+  goal: string,
+  pagesSection = "",
+): { name: string; route: string }[] {
+  const fromPlan = inferNamedPagesFromSection4(pagesSection);
+  const seeded = seedPagesFromGoal(goal);
+  const documentJob = isDocumentWorkflowGoal(goal) || /\b(keep|find) (work|documents?|files?)\b/i.test(goal);
+  const education = /\b(adhd|kids?|child|student|teacher|tutor|classroom|school|parent|lesson|practice)\b/i.test(
+    goal,
+  );
+  const merged: { name: string; route: string }[] = [];
+  const seen = new Set<string>();
+  for (const p of fromPlan) addPage(merged, seen, p);
+  if (documentJob) {
+    for (const p of seeded) addPage(merged, seen, p);
+  }
+  if (merged.filter((p) => p.route !== "/").length === 0) {
+    for (const p of seeded) addPage(merged, seen, p);
+  }
+  let next = merged;
+  if (!lockRequiresSignedInRoles(goal, pagesSection)) {
+    next = next.filter((p) => !AUTH_FIRST_SLICE.has(p.route.toLowerCase()));
+  }
+  if (!education) {
+    next = next.filter((p) => !EDUCATION_LEFTOVER_ROUTE.test(p.route));
+  }
+  next = next.filter((p) => !PLACEHOLDER_ROUTE.test(p.route));
+  if (documentJob) {
+    next = next.filter((p) => !/^\/(settings|analytics|admin)$/i.test(p.route));
+  }
+  if (!next.some((p) => p.route === "/")) {
+    next.unshift({ name: "Home", route: "/" });
+  }
+  const order = [
+    "/",
+    "/dossiers",
+    "/forms",
+    "/dashboard",
+    "/history",
+    "/extract",
+    "/review",
+    "/practice",
+    "/teacher",
+  ];
+  next.sort((a, b) => {
+    const ia = order.indexOf(a.route.toLowerCase());
+    const ib = order.indexOf(b.route.toLowerCase());
+    return (ia === -1 ? 80 : ia) - (ib === -1 ? 80 : ib);
+  });
+  const capped = next.slice(0, 6);
+  if (firstSliceApplyLooksGeneric(capped.map((p) => p.route)) && !documentJob && fromPlan.length < 2) {
+    return [];
+  }
+  return capped;
+}
+
+export function firstSliceApplyLooksGeneric(routes: string[]): boolean {
+  const work = (routes || [])
+    .map((r) => {
+      const s = String(r || "").trim();
+      if (!s || s === "/") return "/";
+      return (s.startsWith("/") ? s : `/${s}`).replace(/\/+$/, "") || "/";
+    })
+    .filter((r) => r !== "/" && !AUTH_FIRST_SLICE.has(r.toLowerCase()) && !PLACEHOLDER_ROUTE.test(r));
+  const onlySaaSChrome = work.every((r) => GENERIC_SHELL_ROUTES.has(r.toLowerCase()));
+  return work.length === 0 || (onlySaaSChrome && !work.some((r) => /dossier|form|history|extract/i.test(r)));
+}
+
+export function formatFirstSliceApplyLine(routes: { name: string; route: string }[]): string {
+  const list = routes.length ? routes : [{ name: "Home", route: "/" }];
+  return `FIRST-SLICE APPLY (locked loop — emit these files): ${list
+    .map((p) => `${p.route} → app${p.route === "/" ? "" : p.route}/page.tsx`)
+    .join("; ")}. Never only /login /register / or leftover /A /practice /teacher.`;
+}
+
 const GENERIC_SHELL_ROUTES = new Set([
   "/",
   "/dashboard",

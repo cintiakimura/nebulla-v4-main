@@ -126,6 +126,13 @@ import {
 } from "./lib/researchArtifact";
 import { isResearchJobActive, runResearchStroke } from "./lib/nebulaResearchStroke";
 import { grokChatCompletionsExtras } from "./lib/grokRequestPolicy";
+import { callGrokWebSearch } from "./lib/grokWebSearch";
+import {
+  buildDiscoverySearchAppendix,
+  buildDiscoverySearchUserPrompt,
+  DISCOVERY_SEARCH_SYSTEM,
+  discoveryTurnWantsWebSearch,
+} from "./lib/discoveryWebSearch";
 import {
   buildLinkedContextAppendix,
   captureLinkedContextFromUserMessage,
@@ -178,6 +185,7 @@ import {
   assessApplyRouteDepth,
   resolveAppPreviewAuthority,
   workspaceHasCodedAppUi,
+  workspaceHasFoundationProductRoutes,
   listProductUiFiles,
 } from "./lib/workspaceCodedAppUi";
 import {
@@ -193,6 +201,10 @@ import {
 } from "./lib/runnableAppSkeleton";
 import { runWorkspaceBuildCheck } from "./lib/workspaceBuildCheck";
 import { applyProductPalettePass } from "./lib/productPalettePass";
+import {
+  parsePastedEnvAssignments,
+  writeWorkspaceEnvLocal,
+} from "./lib/engineerInterview";
 import {
   INTERACTIVE_PREVIEW_GO_BULLETS,
   ensureInteractiveProductPreview,
@@ -2616,11 +2628,15 @@ No approved UI code yet.
         html = buildLiveHtmlFromNextApp(pp.workspaceRoot, displayName) || "";
       }
 
+      const codedProductLive =
+        workspaceHasNextAppRoot(pp.workspaceRoot) ||
+        workspaceHasFoundationProductRoutes(pp.workspaceRoot);
+
       if (
         !html &&
         authority.mode === "interactive_product_preview" &&
         authority.entryRel &&
-        !workspaceHasNextAppRoot(pp.workspaceRoot)
+        !codedProductLive
       ) {
         const entryAbs = path.join(pp.workspaceRoot, authority.entryRel);
         if (fs.existsSync(entryAbs)) {
@@ -2642,9 +2658,13 @@ No approved UI code yet.
           authority.mode === "thin_code_shell" ||
           (authority.codedApp && !authority.entryRel))
       ) {
-        const productPrev = path.join(pp.workspaceRoot, PRODUCT_PREVIEW_REL);
-        if (fs.existsSync(productPrev)) {
-          html = fs.readFileSync(productPrev, "utf8");
+        if (codedProductLive) {
+          html = buildLiveHtmlFromNextApp(pp.workspaceRoot, displayName) || "";
+        } else {
+          const productPrev = path.join(pp.workspaceRoot, PRODUCT_PREVIEW_REL);
+          if (fs.existsSync(productPrev)) {
+            html = fs.readFileSync(productPrev, "utf8");
+          }
         }
         if (!html) {
           html = buildCodedAppPreviewBridgeHtml({
@@ -3089,6 +3109,10 @@ No approved UI code yet.
             ? String(body.projectName).trim()
             : "Untitled Project";
         const userNote = typeof body.userNote === "string" ? body.userNote.trim() : "";
+        const pastedEnv = parsePastedEnvAssignments(userNote);
+        if (Object.keys(pastedEnv).length) {
+          writeWorkspaceEnvLocal(workspaceRoot, pastedEnv);
+        }
         const writtenSnapshot = [...written];
         setTimeout(() => {
           try {
@@ -3146,6 +3170,24 @@ No approved UI code yet.
       res.json({ ok: true, ...result });
     } catch (err: any) {
       res.status(500).json({ ok: false, error: err?.message || "Style pass failed" });
+    }
+  });
+
+  /** Paste catalog keys into this workspace `.env.local` — never Master Plan or client JS. */
+  app.post("/api/workspace/env-local", (req, res) => {
+    try {
+      const { workspaceRoot } = projectPathsFor(req);
+      const body = (req.body || {}) as Record<string, unknown>;
+      const fromText = parsePastedEnvAssignments(typeof body.text === "string" ? body.text : "");
+      const rawValues = body.values && typeof body.values === "object" ? (body.values as Record<string, unknown>) : {};
+      const merged: Record<string, string> = { ...fromText };
+      for (const [k, v] of Object.entries(rawValues)) {
+        if (typeof v === "string" && v.trim()) merged[k] = v.trim();
+      }
+      const result = writeWorkspaceEnvLocal(workspaceRoot, merged);
+      res.json({ ok: true, ...result });
+    } catch (err: any) {
+      res.status(500).json({ ok: false, error: err?.message || "env-local write failed" });
     }
   });
 
@@ -6279,12 +6321,32 @@ ${answer.slice(0, 8000)}`;
       linkedContextStatus = "Could not load linked page — continuing without it.";
     }
     const linkedAppendix = buildLinkedContextAppendix(readLinkedContext(ppChat.workspaceRoot));
+    const lastUserForLookup = lastUserMessageContent(messagesForApi);
+    let discoveryLookupAppendix = "";
+    if (discoveryTurnWantsWebSearch(lastUserForLookup) && chatApiKeyOverride) {
+      try {
+        const looked = await callGrokWebSearch({
+          apiKey: chatApiKeyOverride,
+          system: DISCOVERY_SEARCH_SYSTEM,
+          user: buildDiscoverySearchUserPrompt(lastUserForLookup),
+          timeoutMs: 22_000,
+          stroke: "discovery",
+        });
+        discoveryLookupAppendix = buildDiscoverySearchAppendix(lastUserForLookup, looked);
+      } catch {
+        discoveryLookupAppendix = buildDiscoverySearchAppendix(lastUserForLookup, {
+          ok: false,
+          error: "lookup failed",
+        });
+      }
+    }
     const workspaceSystem = [
       workspaceBlock,
       rulesBlock,
       modeBlock,
       includeServerFileIndex ? serverFileIndexBlock : "",
       linkedAppendix,
+      discoveryLookupAppendix,
     ]
       .filter(Boolean)
       .join("\n");

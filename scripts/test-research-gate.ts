@@ -23,6 +23,14 @@ import { canStartUiMockup, readinessBlocksAutoFoundation } from "../src/lib/uiMo
 import { buildFastPrototypeBootstrap } from "../src/lib/ideChatBootstrap.ts";
 import { finishGrokActivityWithProblems } from "../src/lib/ideGrokActivityStatus.ts";
 import { formatGoBlockedByPlanMessage } from "../src/lib/masterPlanStatus.ts";
+import {
+  DISCOVERY_OCR_DEFAULT_LINE,
+  DISCOVERY_SEARCH_HONEST_MISS,
+  buildDiscoverySearchAppendix,
+  discoverySearchIsNameTurn,
+  discoverySearchIsOcrTurn,
+  discoveryTurnWantsWebSearch,
+} from "../lib/discoveryWebSearch.ts";
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -285,6 +293,40 @@ try {
     formatGoBlockedByPlanMessage({ error: RESEARCH_STOPPED }),
     RESEARCH_STOPPED,
   );
+
+  section("Name turn + Slot 4 OCR — silent lookup, honest miss, no Foundation");
+  {
+    assert.equal(discoveryTurnWantsWebSearch("Is MyDossier taken as a name?"), true);
+    assert.equal(discoverySearchIsNameTurn("Is MyDossier taken as a name?"), true);
+    assert.equal(discoveryTurnWantsWebSearch("do we need an OCR API? paste a Vision key?"), true);
+    assert.equal(discoverySearchIsOcrTurn("do we need an OCR API?"), true);
+    assert.equal(discoveryTurnWantsWebSearch("A bakery app for pickup orders"), false);
+    assert.equal(
+      discoveryTurnWantsWebSearch(
+        "That's a sharp Monday loop. Is that right? I can build what you have in mind right now, or we can shape it together and land on something stronger. Which sounds better?",
+      ),
+      false,
+    );
+    const miss = buildDiscoverySearchAppendix("Is SnapFill taken?", { ok: false, error: "blocked" });
+    assert.match(miss, new RegExp(DISCOVERY_SEARCH_HONEST_MISS.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+    assert.equal(/never look outside the app/i.test(miss), false);
+    assert.match(miss, /THIS TURN FORBIDDEN/);
+    assert.match(miss, /START_CODING/);
+    const ocrHit = buildDiscoverySearchAppendix("do we need an OCR API key for extract?", {
+      ok: true,
+      text: "Searching… ```json {\"tool\":\"web_search\"}``` Cloud Vision needs a key.",
+    });
+    assert.match(ocrHit, /Tesseract runs in the browser, no key/);
+    assert.match(ocrHit, /console\.cloud\.google\.com/);
+    assert.equal(/Searching/.test(ocrHit), false);
+    assert.equal(/web_search/.test(ocrHit), false);
+    assert.match(DISCOVERY_OCR_DEFAULT_LINE, /Tesseract/);
+    assert.equal(/paste a Vision key/i.test(DISCOVERY_OCR_DEFAULT_LINE), false);
+    const serverLookup = fs.readFileSync(path.join(root, "server.ts"), "utf8");
+    assert.match(serverLookup, /discoveryTurnWantsWebSearch/);
+    assert.match(serverLookup, /stroke:\s*"discovery"/);
+    assert.equal(/writeResearchArtifact/.test(fs.readFileSync(path.join(root, "lib/discoveryWebSearch.ts"), "utf8")), false);
+  }
 
   section("Fast Prototype default path does not run Web Search");
   const fast = buildFastPrototypeBootstrap("tutor kids with ADHD", "Web App");

@@ -44,12 +44,34 @@ import {
   setBrowserProjectKey,
   setBrowserProjectName,
 } from '../src/lib/nebulaProjectApi.ts';
+import { firstSliceApplyLooksGeneric, inferFirstSliceRoutes } from '../lib/nebulaUiBrief.ts';
 
 resetFastPrototypePrimaryAutoRunForTests();
 
 assert.equal(looksLikeFoundationSlice('Foundation'), true);
 assert.equal(looksLikeFoundationSlice('Primary'), false);
 assert.equal(looksLikeFoundationSlice(null), true);
+
+assert.match(FOUNDATION_SLICE_INSTRUCTION, /FIRST-SLICE APPLY/);
+assert.match(FOUNDATION_SLICE_INSTRUCTION, /\/dossiers/);
+assert.match(FOUNDATION_SLICE_INSTRUCTION, /\/forms/);
+assert.match(FOUNDATION_SLICE_INSTRUCTION, /\/dashboard/);
+assert.match(FOUNDATION_SLICE_INSTRUCTION, /never only \/login \/register/i);
+assert.equal(/only assert the generic shell|\/login \/register \/$/.test(FOUNDATION_SLICE_INSTRUCTION), false);
+{
+  const locked = inferFirstSliceRoutes(
+    'MyDossier keep and find documents — extract into dossiers and forms',
+    '### Dashboard `/dashboard`\n### Dossiers `/dossiers`\n### Forms `/forms`',
+  );
+  const routes = locked.map((p) => p.route);
+  assert.deepEqual(
+    ['/dossiers', '/forms', '/dashboard'].every((r) => routes.includes(r)),
+    true,
+    `Foundation first-slice routes must be the locked loop, got ${routes.join(',')}`,
+  );
+  assert.equal(firstSliceApplyLooksGeneric(['/', '/login', '/register', '/dashboard']), true);
+  assert.equal(firstSliceApplyLooksGeneric(routes), false);
+}
 
 assert.equal(FAST_PROTOTYPE_SAME_SESSION_AUTOPILOT, false);
 assert.equal(

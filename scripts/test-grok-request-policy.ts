@@ -27,6 +27,16 @@ section("Chat — no search, medium effort");
   assert.equal("tools" in extra, false);
 }
 
+section("Discovery lookup — web_search, no Go");
+{
+  const p = grokStrokePolicy("discovery");
+  assert.deepEqual(p.tools, [{ type: "web_search" }]);
+  assert.equal(strokeHasSearchTools("discovery"), true);
+  assert.equal(strokeHasSearchTools("go"), false);
+  const extra = grokResponsesExtras("discovery");
+  assert.deepEqual(extra.tools, [{ type: "web_search" }]);
+}
+
 section("Research — web_search + x_search, high effort");
 {
   const p = grokStrokePolicy("research");
@@ -80,13 +90,13 @@ section("UI Gen — no search, no reasoning_effort");
   assert.equal("reasoning" in resp, false);
 }
 
-section("Wiring — search tools only on research Responses call");
+section("Wiring — search tools on research + discovery Responses; not Go/UI");
 {
   const grokSearch = fs.readFileSync(path.join(root, "lib/grokWebSearch.ts"), "utf8");
   const goJob = fs.readFileSync(path.join(root, "lib/nebulaGoCodeJob.ts"), "utf8");
   const uiGrok = fs.readFileSync(path.join(root, "lib/nebulaUiStudioGrok.ts"), "utf8");
   const chat = fs.readFileSync(path.join(root, "lib/aiChatCompletion.ts"), "utf8");
-  assert.match(grokSearch, /grokResponsesExtras\("research", model\)/);
+  assert.match(grokSearch, /grokResponsesExtras\(stroke, model\)/);
   assert.match(grokSearch, /\/v1\/responses/);
   assert.match(goJob, /grokChatCompletionsExtras\("go", opts\.codeModel\)/);
   assert.equal(/web_search|x_search/.test(uiGrok), false);

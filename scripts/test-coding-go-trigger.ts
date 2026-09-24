@@ -69,10 +69,14 @@ assert.equal(isAssistantBuildNowCloser('Hello — I can build this now.'), true)
 assert.equal(isAssistantCodingPromise('Hello — I can build this now.'), true);
 
 const firstReply =
-  "That's a great idea. If I understood correctly, this is what the app should do: kids practice reading in short sessions. Is that right? Do you already have the full idea in mind, or do you want to brainstorm and shape it together?";
+  "That's a sharp Monday loop. If I understood correctly, this is what the app should do: kids practice reading in short sessions. Is that right? I can build what you have in mind right now, or we can shape it together and land on something stronger. Which sounds better?";
 assert.equal(isGuidedFirstReplyShape(firstReply), true);
 assert.equal(isFoundationCloseGate(firstReply), false);
 assert.equal(isUserExplicitCodingRequest(firstReply), false);
+assert.equal(isUserExplicitCodingRequest('brainstorm'), false);
+assert.equal(isFoundationCloseGate('brainstorm'), false);
+assert.equal(isUserExplicitCodingRequest('go', { closerReady: true }), true);
+assert.equal(isUserExplicitCodingRequest('hellos', { closerReady: true }), true);
 assert.equal(isGuidedFirstReplyShape('So a reading app. Cool.'), false);
 assert.equal(shouldUnlockMicAfterAssistantTurn(firstReply), true);
 assert.equal(shouldUnlockMicAfterAssistantTurn('brainstorm'), false);

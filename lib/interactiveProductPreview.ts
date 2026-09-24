@@ -640,7 +640,62 @@ export function previewHtmlNeedsProductHeal(html: string): boolean {
   );
 }
 
+function diskHasNextAppPage(workspaceRoot: string): boolean {
+  const root = path.resolve(workspaceRoot);
+  return [
+    "app/page.tsx",
+    "app/page.jsx",
+    "app/page.js",
+    "src/app/page.tsx",
+    "src/app/page.jsx",
+    "src/app/page.js",
+  ].some((rel) => fs.existsSync(path.join(root, rel)));
+}
+
+function listPreviewProductFiles(workspaceRoot: string, extra: string[] = []): string[] {
+  const files = extra.slice();
+  const root = path.resolve(workspaceRoot);
+  if (files.length) return files;
+  for (const top of ["app", "components", "pages", "src"]) {
+    const abs = path.join(root, top);
+    if (!fs.existsSync(abs)) continue;
+    const walk = (dir: string, rel: string, depth: number) => {
+      if (files.length >= 40 || depth > 4) return;
+      let ents: fs.Dirent[];
+      try {
+        ents = fs.readdirSync(dir, { withFileTypes: true });
+      } catch {
+        return;
+      }
+      for (const ent of ents) {
+        if (files.length >= 40) return;
+        if (ent.name.startsWith(".")) continue;
+        const nextRel = rel ? `${rel}/${ent.name}` : `${top}/${ent.name}`;
+        if (ent.isDirectory()) {
+          if (ent.name === "node_modules") continue;
+          walk(path.join(dir, ent.name), nextRel, depth + 1);
+        } else if (/\.(tsx|jsx|js)$/i.test(ent.name)) {
+          files.push(nextRel.replace(/\\/g, "/"));
+        }
+      }
+    };
+    walk(abs, "", 0);
+  }
+  return files;
+}
+
+function diskHasFoundationProductRoutes(workspaceRoot: string, productFiles?: string[]): boolean {
+  const routes = routesFromProductFiles(listPreviewProductFiles(workspaceRoot, productFiles || []));
+  const nested = routes.filter(
+    (r) => r !== "/" && !/^\/(login|auth|signin|sign-in|signup|register|sign-up)$/i.test(r),
+  );
+  return routes.includes("/") && nested.length >= 1;
+}
+
 export function hasInteractiveProductPreview(workspaceRoot: string): boolean {
+  if (diskHasNextAppPage(workspaceRoot) || diskHasFoundationProductRoutes(workspaceRoot)) {
+    return false;
+  }
   const abs = path.join(workspaceRoot, PRODUCT_PREVIEW_REL);
   if (!fs.existsSync(abs)) return false;
   try {
@@ -656,10 +711,8 @@ export function ensureInteractiveProductPreview(
   options?: { projectName?: string; productFiles?: string[]; logoInitials?: string },
 ): { written: boolean; path: string; screens: PreviewScreenHint[] } {
   const root = path.resolve(workspaceRoot);
-  const nextRoot = ["app/page.tsx", "app/page.jsx", "src/app/page.tsx", "src/app/page.jsx"].some((rel) =>
-    fs.existsSync(path.join(root, rel)),
-  );
-  if (nextRoot) {
+  const files = listPreviewProductFiles(root, options?.productFiles || []);
+  if (diskHasNextAppPage(root) || diskHasFoundationProductRoutes(root, files)) {
     for (const rel of [PRODUCT_PREVIEW_REL, "public/product-preview.html"]) {
       const abs = path.join(root, rel);
       if (fs.existsSync(abs)) {
@@ -671,38 +724,6 @@ export function ensureInteractiveProductPreview(
       }
     }
     return { written: false, path: PRODUCT_PREVIEW_REL, screens: [] };
-  }
-  const productFiles = options?.productFiles?.length
-    ? options.productFiles
-    : [];
-  // If caller didn't pass files, discover lightly from app/components/pages/src
-  let files = productFiles;
-  if (!files.length) {
-    for (const top of ["app", "components", "pages", "src"]) {
-      const abs = path.join(root, top);
-      if (!fs.existsSync(abs)) continue;
-      const walk = (dir: string, rel: string, depth: number) => {
-        if (files.length >= 40 || depth > 4) return;
-        let ents: fs.Dirent[];
-        try {
-          ents = fs.readdirSync(dir, { withFileTypes: true });
-        } catch {
-          return;
-        }
-        for (const ent of ents) {
-          if (files.length >= 40) return;
-          if (ent.name.startsWith(".")) continue;
-          const nextRel = rel ? `${rel}/${ent.name}` : `${top}/${ent.name}`;
-          if (ent.isDirectory()) {
-            if (ent.name === "node_modules") continue;
-            walk(path.join(dir, ent.name), nextRel, depth + 1);
-          } else if (/\.(tsx|jsx)$/i.test(ent.name)) {
-            files.push(nextRel.replace(/\\/g, "/"));
-          }
-        }
-      };
-      walk(abs, "", 0);
-    }
   }
 
   const screens = inferPreviewScreensFromPaths(files);

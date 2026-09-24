@@ -511,11 +511,11 @@ export function AIChat() {
   }, []);
 
   const pushReadyAndApiAsk = useCallback(
-    (goal?: string, pages?: string) => {
+    (goal?: string, pages?: string, tech?: string) => {
       pushActivity(PRODUCT_MVP_READY_MESSAGE, 'success');
       if (apiAskSentRef.current) return;
       apiAskSentRef.current = true;
-      const ask = buildPostApplyApiAsk({ goal, pages });
+      const ask = buildPostApplyApiAsk({ goal, pages, tech });
       const stamp = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
       setMessages((p) => {
         const next = [
@@ -1625,6 +1625,20 @@ export function AIChat() {
     if (!rawText || sendingRef.current) return;
 
     if (micInputBlocked) return;
+    if (
+      /\b(OCR_PROVIDER|GOOGLE_VISION_KEY|S3_BUCKET|S3_KEY|S3_SECRET|AUTH_SECRET|RESEND_API_KEY|STRIPE_SECRET_KEY|MAPBOX_TOKEN|sk_test_|sk_live_)\b/.test(
+        rawText,
+      )
+    ) {
+      void fetch(withProjectQuery('/api/workspace/env-local'), {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: rawText }),
+      }).catch(() => {
+        /* env write is optional */
+      });
+    }
     unlockTtsAudio();
     const priorForMic = messagesRef.current;
     const firstSpokenUser =
@@ -3226,6 +3240,7 @@ export function AIChat() {
             {
               let askGoal = extractGoalFromUserNote(text) || '';
               let askPages = '';
+              let askTech = '';
               try {
                 const mpRes = await fetch(withProjectQuery('/api/master-plan/read'), {
                   credentials: 'include',
@@ -3236,10 +3251,11 @@ export function AIChat() {
                   : null;
                 askGoal = String(plan?.['1. Goal of the app'] || askGoal);
                 askPages = String(plan?.['4. Pages and navigation'] || '');
+                askTech = String(plan?.['2. Tech and Research'] || '');
               } catch {
                 /* use extracted goal */
               }
-              pushReadyAndApiAsk(askGoal, askPages);
+              pushReadyAndApiAsk(askGoal, askPages, askTech);
             }
           }
 

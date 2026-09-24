@@ -535,7 +535,9 @@ export function AppPreviewPanel({
                 ? 'Interactive product preview with mock/local data — click through the happy path. Not UI Gen mockup; not full Next/Vite SSR.'
                 : previewMode === 'post_code_bridge'
                   ? 'Product files detected but no interactive preview yet. Re-run a coding slice, or inspect files in Explorer.'
-                  : previewMode === 'live_app_static'
+                  : previewMode === 'next_app_live'
+                    ? 'Serving the coded Next app — not the stock product-preview fixture.'
+                    : previewMode === 'live_app_static'
                     ? 'Serving workspace app entry / built static output.'
                     : 'App Preview authority from workspace bootstrap.'
           }
@@ -547,7 +549,9 @@ export function AppPreviewPanel({
                 ? 'Interactive preview (mock data)'
                 : previewMode === 'post_code_bridge'
                   ? 'Post-code (files only)'
-                  : previewMode === 'live_app_static'
+                  : previewMode === 'next_app_live'
+                    ? 'Coded Next app'
+                    : previewMode === 'live_app_static'
                     ? 'Live app preview'
                     : 'Preview')}
         </span>

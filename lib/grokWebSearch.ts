@@ -1,9 +1,9 @@
 /**
  * xAI Responses API + web_search tool (Live Search is deprecated / 410).
- * Phase 3 research stroke only — do not use on Go or UI Gen.
+ * Master Plan research or a short discovery lookup. Do not use on Go or UI Gen.
  */
 
-import { grokResponsesExtras } from "./grokRequestPolicy";
+import { grokResponsesExtras, type GrokStroke } from "./grokRequestPolicy";
 
 export type GrokWebSearchResult =
   | { ok: true; text: string; model: string }
@@ -36,9 +36,12 @@ export async function callGrokWebSearch(opts: {
   system: string;
   user: string;
   timeoutMs?: number;
+  /** Default research. Use discovery for brainstorm name / Slot 4 lookups. */
+  stroke?: Extract<GrokStroke, "research" | "discovery">;
 }): Promise<GrokWebSearchResult> {
   const model = opts.model?.trim() || process.env.GROK_CHAT_MODEL_GROK41?.trim() || "grok-4";
   const timeoutMs = opts.timeoutMs ?? 120_000;
+  const stroke = opts.stroke || "research";
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
@@ -54,7 +57,7 @@ export async function callGrokWebSearch(opts: {
           { role: "system", content: opts.system },
           { role: "user", content: opts.user },
         ],
-        ...grokResponsesExtras("research", model),
+        ...grokResponsesExtras(stroke, model),
       }),
       signal: controller.signal,
     });

@@ -4,7 +4,7 @@
  * Authority: nebula-project/recovery-orchestration.md §11
  */
 
-export type GrokStroke = "chat" | "research" | "plan" | "go" | "ui_gen";
+export type GrokStroke = "chat" | "research" | "discovery" | "plan" | "go" | "ui_gen";
 
 export type GrokReasoningEffort = "low" | "medium" | "high";
 
@@ -16,11 +16,14 @@ export type GrokStrokePolicy = {
   reasoning_effort: GrokReasoningEffort | null;
 };
 
-/** Research-only search tools. Chat / Go / UI Gen stay empty. */
+/** Master Plan research stroke. */
 export const RESEARCH_SEARCH_TOOLS: GrokBuiltInTool[] = [
   { type: "web_search" },
   { type: "x_search" },
 ];
+
+/** Brainstorm name / Slot 4 / API lookup — web_search only, no catalog dump. */
+export const DISCOVERY_SEARCH_TOOLS: GrokBuiltInTool[] = [{ type: "web_search" }];
 
 /**
  * xAI 400s `reasoning_effort` on coding/build models (built-in reasoning, not configurable).
@@ -37,6 +40,8 @@ export function grokStrokePolicy(stroke: GrokStroke): GrokStrokePolicy {
   switch (stroke) {
     case "research":
       return { stroke, tools: RESEARCH_SEARCH_TOOLS, reasoning_effort: "high" };
+    case "discovery":
+      return { stroke, tools: DISCOVERY_SEARCH_TOOLS, reasoning_effort: "medium" };
     case "chat":
       return { stroke, tools: [], reasoning_effort: "medium" };
     case "plan":
@@ -71,7 +76,7 @@ export function grokChatCompletionsExtras(
   return { reasoning_effort: effort };
 }
 
-/** Responses API extras. Search tools only on research. */
+/** Responses API extras. Search tools on research + discovery lookups. */
 export function grokResponsesExtras(stroke: GrokStroke, model?: string): Record<string, unknown> {
   const p = grokStrokePolicy(stroke);
   const extra: Record<string, unknown> = {};

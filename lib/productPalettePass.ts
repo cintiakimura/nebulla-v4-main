@@ -23,7 +23,7 @@ import {
   looksLikeEducationKitDefaultName,
   looksLikeGoalStubName,
 } from "./productIdentity";
-import { listProductUiFiles } from "./workspaceCodedAppUi";
+import { listProductUiFiles, resolveAppPreviewAuthority } from "./workspaceCodedAppUi";
 import { ensureInteractiveProductPreview } from "./interactiveProductPreview";
 import { workspaceHasNextAppRoot } from "./nextAppLivePreview";
 import { rewriteEducationKitHomeIfNeeded } from "./rewriteEducationKitHome";
@@ -273,13 +273,15 @@ export function applyProductPalettePass(input: {
     jobHint: input.jobHint || undefined,
   });
   if (cssRel) applied.push(cssRel);
+  const authority = resolveAppPreviewAuthority(input.workspaceRoot);
+  const fixtureIsActiveLive = authority.mode === "interactive_product_preview";
   const nextRoot = workspaceHasNextAppRoot(input.workspaceRoot);
-  if (!nextRoot && injectFinalUiIntoProductPreview(input.workspaceRoot, rec.tokens)) {
+  if (fixtureIsActiveLive && injectFinalUiIntoProductPreview(input.workspaceRoot, rec.tokens)) {
     applied.push("public/product-preview/index.html");
   }
   const previewAbs = path.join(input.workspaceRoot, "public/product-preview/index.html");
   const files = listProductUiFiles(input.workspaceRoot, 24);
-  if (!nextRoot && (files.length || fs.existsSync(previewAbs))) {
+  if (fixtureIsActiveLive && !nextRoot && (files.length || fs.existsSync(previewAbs))) {
     ensureInteractiveProductPreview(input.workspaceRoot, {
       projectName: identity.projectName,
       productFiles: files,

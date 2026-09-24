@@ -6,6 +6,7 @@
 import fs from "fs";
 import path from "path";
 import { extractNamedBrand, inferProductName } from "./productIdentity";
+import { isDocumentWorkflowGoal, lockRequiresSignedInRoles } from "./nebulaUiBrief";
 
 export const JOB_BRIEF_REL = "nebula-project/job-brief.md";
 export const JOB_BRIEF_REL_ALT = "nebulla-project/job-brief.md";
@@ -34,6 +35,44 @@ const API_LABEL: Record<ApiNeed, string> = {
   sms: "SMS",
   messaging: "Messaging",
 };
+
+/** Slot 4 catalog row — only emit when the lock actually classified it. */
+export type Slot4CatalogNeed =
+  | "extract"
+  | "files"
+  | "auth"
+  | "email"
+  | "payments"
+  | "maps"
+  | "push"
+  | "sms"
+  | "messaging";
+
+export type Slot4CatalogRow = {
+  need: Slot4CatalogNeed;
+  label: string;
+  weShip: string;
+  envNames: string[];
+  where: string;
+  requiresPaidKey: boolean;
+};
+
+export const SUPER_ADMIN_ENV_REL = "nebulla-ide/super-admin-env.json";
+export const WORKSPACE_ENV_LOCAL_REL = ".env.local";
+
+const CATALOG_ENV_NAMES = [
+  "OCR_PROVIDER",
+  "GOOGLE_VISION_KEY",
+  "S3_BUCKET",
+  "S3_KEY",
+  "S3_SECRET",
+  "AUTH_SECRET",
+  "RESEND_API_KEY",
+  "STRIPE_SECRET_KEY",
+  "MAPBOX_TOKEN",
+  "ONESIGNAL_REST_API_KEY",
+  "TWILIO_AUTH_TOKEN",
+] as const;
 
 /** Strip interview/bootstrap laundry lists so “maps / SMS” examples are not the ask. */
 export function sanitizeBriefForApiAsk(text: string): string {
@@ -92,30 +131,270 @@ export function isClientSideExtractClassified(text?: string | null): boolean {
   );
 }
 
-/** One follow-up after Live exists. Never before apply. From job-brief vendors — no hardcoded Maps kit. */
-export function buildPostApplyApiAsk(opts: { goal?: string; pages?: string; brief?: string }): string {
+function lockBlob(opts: { goal?: string; pages?: string; brief?: string; tech?: string }): string {
+  return sanitizeBriefForApiAsk(`${opts.goal || ""} ${opts.pages || ""} ${opts.brief || ""} ${opts.tech || ""}`);
+}
+
+function askedEmail(blob: string): boolean {
+  return /\b(resend|transactional email|status email|send email|email status)\b/i.test(blob);
+}
+
+function askedPayments(blob: string, vendorNeeds: ApiNeed[]): boolean {
+  return vendorNeeds.includes("payments") || /\b(stripe|checkout|apple pay|google pay|wallet)\b/i.test(blob);
+}
+
+function productMessages(blob: string, vendorNeeds: ApiNeed[]): boolean {
+  if (vendorNeeds.includes("messaging") || vendorNeeds.includes("sms")) return true;
+  return /\b(creator|influencer|outreach|inbox|dm\b|messages?\b)\b/i.test(blob);
+}
+
+/** Slot 4 → catalog rows. Never invent Messaging on a product that does not message. */
+export function inferSlot4Catalog(opts: { goal?: string; pages?: string; brief?: string; tech?: string }): Slot4CatalogRow[] {
   const goal = sanitizeBriefForApiAsk(opts.goal || "");
-  const blob = `${goal} ${opts.pages || ""} ${opts.brief || ""}`;
-  if (isClientSideExtractClassified(blob) && !/\b(map|stripe|sms|twilio|push)\b/i.test(blob)) {
-    return "First version is on Live, mock only. Super Admin env keys are optional after this loop works — no OCR API key needed for client-side extract. What do you want to change?";
+  const pages = opts.pages || "";
+  const brief = opts.brief || "";
+  const tech = opts.tech || "";
+  const blob = lockBlob({ goal, pages, brief, tech });
+  const vendorNeeds = inferApiNeeds(goal, pages, brief);
+  const extractLocked =
+    isDocumentWorkflowGoal(`${goal} ${pages}`) ||
+    /\b(ocr|tesseract|extract text|client[- ]?side extract|dossiers?|scans?)\b/i.test(blob);
+  const filesLocked =
+    extractLocked || /\b(s3|r2|storage|keep documents?|files?\b|uploads?)\b/i.test(blob);
+  const authLocked =
+    extractLocked ||
+    lockRequiresSignedInRoles(goal, pages) ||
+    /\b(mock roles?|signed-?in roles?|auth)\b/i.test(blob);
+  const tesseract = isClientSideExtractClassified(blob);
+  const visionAsked = /\b(google vision|vision api|cloud ocr)\b/i.test(blob);
+  const rows: Slot4CatalogRow[] = [];
+
+  if (extractLocked) {
+    rows.push({
+      need: "extract",
+      label: "Extract text",
+      weShip: tesseract
+        ? "Tesseract in-browser (no key)"
+        : visionAsked
+          ? "Vision OCR (optional) or Tesseract in-browser (no key)"
+          : "Tesseract in-browser (no key) or Vision",
+      envNames: ["OCR_PROVIDER", "GOOGLE_VISION_KEY"],
+      where: "console.cloud.google.com",
+      requiresPaidKey: false,
+    });
   }
-  const needs = inferApiNeeds(goal, opts.pages || "", opts.brief || "");
-  if (isClientSideExtractClassified(blob)) {
-    return "Keep mock unless you asked for a live API. Client-side extract does not need an OCR key. Super Admin env panel is optional after the loop exists.";
+  if (filesLocked) {
+    rows.push({
+      need: "files",
+      label: "Files",
+      weShip: "local now; S3 / R2 later",
+      envNames: ["S3_BUCKET", "S3_KEY", "S3_SECRET"],
+      where: "AWS / Cloudflare",
+      requiresPaidKey: false,
+    });
   }
-  const list = (needs.length ? needs : (["messaging"] as ApiNeed[])).map((n) => API_LABEL[n]).join(", ");
-  return [
-    "These APIs would make the mocks real: " + list + ".",
-    "Paste keys or say keep mock.",
-  ].join(" ");
+  if (authLocked) {
+    rows.push({
+      need: "auth",
+      label: "Auth",
+      weShip: "mock roles now; real later",
+      envNames: ["AUTH_SECRET"],
+      where: "generated",
+      requiresPaidKey: false,
+    });
+  }
+  if (askedEmail(blob)) {
+    rows.push({
+      need: "email",
+      label: "Email / status",
+      weShip: "optional",
+      envNames: ["RESEND_API_KEY"],
+      where: "resend.com",
+      requiresPaidKey: false,
+    });
+  }
+  if (askedPayments(blob, vendorNeeds)) {
+    rows.push({
+      need: "payments",
+      label: "Payments",
+      weShip: "mock now; Stripe only if they asked",
+      envNames: ["STRIPE_SECRET_KEY"],
+      where: "dashboard.stripe.com",
+      requiresPaidKey: true,
+    });
+  }
+  if (vendorNeeds.includes("maps")) {
+    rows.push({
+      need: "maps",
+      label: "Maps (live track)",
+      weShip: "mock pin now; live track later",
+      envNames: ["MAPBOX_TOKEN"],
+      where: "account.mapbox.com",
+      requiresPaidKey: true,
+    });
+  }
+  if (vendorNeeds.includes("push")) {
+    rows.push({
+      need: "push",
+      label: "Push notifications",
+      weShip: "mock now",
+      envNames: ["ONESIGNAL_REST_API_KEY"],
+      where: "onesignal.com",
+      requiresPaidKey: true,
+    });
+  }
+  if (vendorNeeds.includes("sms")) {
+    rows.push({
+      need: "sms",
+      label: "SMS",
+      weShip: "mock now",
+      envNames: ["TWILIO_AUTH_TOKEN"],
+      where: "twilio.com",
+      requiresPaidKey: true,
+    });
+  }
+  if (productMessages(blob, vendorNeeds) && !vendorNeeds.includes("sms")) {
+    rows.push({
+      need: "messaging",
+      label: "Messaging",
+      weShip: "mock inbox now",
+      envNames: [],
+      where: "in-app thread (no vendor until they ask)",
+      requiresPaidKey: false,
+    });
+  }
+  return rows;
+}
+
+export function formatSlot4CatalogAskLine(row: Slot4CatalogRow): string {
+  const env = row.envNames.length ? row.envNames.join(", ") : "none";
+  return `${row.label} — ${row.weShip} — ${env} — ${row.where}`;
+}
+
+export function buildSuperAdminEnvPanel(rows: Slot4CatalogRow[]): {
+  title: string;
+  note: string;
+  fields: Slot4CatalogRow[];
+} {
+  return {
+    title: "Super Admin — env wiring (optional after the loop)",
+    note: "Fields are for later paste. They do not replace extract/save. Filled values go to workspace .env.local only — never the Master Plan, never client JS.",
+    fields: rows,
+  };
+}
+
+export function writeSuperAdminEnvPanel(
+  workspaceRoot: string,
+  rows: Slot4CatalogRow[],
+): { rel: string; written: boolean } {
+  const rel = SUPER_ADMIN_ENV_REL;
+  const abs = path.join(workspaceRoot, rel);
+  fs.mkdirSync(path.dirname(abs), { recursive: true });
+  const body = JSON.stringify(buildSuperAdminEnvPanel(rows), null, 2);
+  const prev = fs.existsSync(abs) ? fs.readFileSync(abs, "utf8") : "";
+  if (prev === body) return { rel, written: false };
+  fs.writeFileSync(abs, body, "utf8");
+  return { rel, written: true };
+}
+
+export function parsePastedEnvAssignments(text: string): Record<string, string> {
+  const out: Record<string, string> = {};
+  const src = String(text || "");
+  const named = new RegExp(
+    `\\b(${CATALOG_ENV_NAMES.join("|")})\\s*[=:]\\s*["']?([^\\s"'\\n]+)["']?`,
+    "gi",
+  );
+  let m: RegExpExecArray | null;
+  while ((m = named.exec(src))) {
+    out[m[1].toUpperCase()] = m[2].trim();
+  }
+  const stripe = src.match(/\b(sk_(?:test|live)_[A-Za-z0-9]+)/);
+  if (stripe && !out.STRIPE_SECRET_KEY) out.STRIPE_SECRET_KEY = stripe[1];
+  return out;
+}
+
+function parseEnvLocalFile(raw: string): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const line of String(raw || "").split(/\r?\n/)) {
+    const t = line.trim();
+    if (!t || t.startsWith("#")) continue;
+    const eq = t.indexOf("=");
+    if (eq < 1) continue;
+    out[t.slice(0, eq).trim()] = t.slice(eq + 1).trim();
+  }
+  return out;
+}
+
+function serializeEnvLocal(values: Record<string, string>): string {
+  return (
+    Object.keys(values)
+      .sort()
+      .map((k) => `${k}=${values[k]}`)
+      .join("\n") + (Object.keys(values).length ? "\n" : "")
+  );
+}
+
+/** Merge filled keys into workspace `.env.local` only. */
+export function writeWorkspaceEnvLocal(
+  workspaceRoot: string,
+  values: Record<string, string>,
+): { rel: string; wrote: string[] } {
+  const wrote: string[] = [];
+  const clean: Record<string, string> = {};
+  for (const [k, v] of Object.entries(values || {})) {
+    const key = String(k || "").trim();
+    const val = String(v || "").trim();
+    if (!key || !val) continue;
+    if (/master-plan/i.test(key) || /master-plan/i.test(val)) continue;
+    if (!/^[A-Z][A-Z0-9_]*$/.test(key)) continue;
+    clean[key] = val;
+    wrote.push(key);
+  }
+  if (!wrote.length) return { rel: WORKSPACE_ENV_LOCAL_REL, wrote: [] };
+  const abs = path.join(workspaceRoot, WORKSPACE_ENV_LOCAL_REL);
+  if (path.basename(abs) !== ".env.local") {
+    return { rel: WORKSPACE_ENV_LOCAL_REL, wrote: [] };
+  }
+  const prev = fs.existsSync(abs) ? parseEnvLocalFile(fs.readFileSync(abs, "utf8")) : {};
+  const next = { ...prev, ...clean };
+  fs.writeFileSync(abs, serializeEnvLocal(next), "utf8");
+  return { rel: WORKSPACE_ENV_LOCAL_REL, wrote };
+}
+
+export function generateAuthSecret(): string {
+  return `auth_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 12)}`;
+}
+
+/** One follow-up after Live exists. Catalog rows from the Slot 4 lock — never a Messaging shrug. */
+export function buildPostApplyApiAsk(opts: {
+  goal?: string;
+  pages?: string;
+  brief?: string;
+  tech?: string;
+}): string {
+  const rows = inferSlot4Catalog(opts);
+  const tesseract = isClientSideExtractClassified(lockBlob(opts));
+  const lines = rows.map((r) => formatSlot4CatalogAskLine(r));
+  const extract = rows.find((r) => r.need === "extract");
+  const header = "First version is on Live, mock only.";
+  const closer =
+    "Ask once per lock: keep the default we ship, or paste a value for Super Admin env (workspace .env.local). Super Admin does not replace extract/save.";
+  const tessNote = tesseract
+    ? "Tesseract is the locked we-build — no Vision key required to ship the first extract loop."
+    : "";
+  if (!lines.length) {
+    return [header, "No unclassified vendor keys for this lock. Keep mock.", closer].join(" ");
+  }
+  return [header, tessNote, lines.join(". "), closer].filter(Boolean).join(" ");
 }
 
 export function userNoteHasVendorKey(text: string): boolean {
   const t = String(text || "");
   return (
+    Object.keys(parsePastedEnvAssignments(t)).length > 0 ||
     /\b(sk_live_|sk_test_|pk_live_|pk_test_)/.test(t) ||
     /\b(AIza[0-9A-Za-z_-]{20,}|AKIA[0-9A-Z]{16}|pk\.[a-zA-Z0-9]{20,})/.test(t) ||
-    /\b(MAPBOX|STRIPE_SECRET|GOOGLE_MAPS_API_KEY|TWILIO_AUTH)\b/.test(t)
+    /\b(MAPBOX|STRIPE_SECRET|GOOGLE_MAPS_API_KEY|TWILIO_AUTH|GOOGLE_VISION_KEY|RESEND_API_KEY)\b/.test(t)
   );
 }
 
@@ -201,6 +480,22 @@ export function writeJobBriefFromPlan(
   const abs = path.join(workspaceRoot, JOB_BRIEF_REL);
   fs.mkdirSync(path.dirname(abs), { recursive: true });
   const prev = fs.existsSync(abs) ? fs.readFileSync(abs, "utf8") : "";
+  const catalog = inferSlot4Catalog({
+    goal,
+    pages: String(plan["4. Pages and navigation"] || ""),
+    brief: body,
+    tech: String(plan["2. Tech and Research"] || ""),
+  });
+  writeSuperAdminEnvPanel(workspaceRoot, catalog);
+  if (catalog.some((r) => r.need === "auth")) {
+    const existing = path.join(workspaceRoot, WORKSPACE_ENV_LOCAL_REL);
+    const already = fs.existsSync(existing)
+      ? parseEnvLocalFile(fs.readFileSync(existing, "utf8"))
+      : {};
+    if (!already.AUTH_SECRET) {
+      writeWorkspaceEnvLocal(workspaceRoot, { AUTH_SECRET: generateAuthSecret() });
+    }
+  }
   if (prev === body) return { rel: JOB_BRIEF_REL, written: false };
   fs.writeFileSync(abs, body, "utf8");
   return { rel: JOB_BRIEF_REL, written: true };

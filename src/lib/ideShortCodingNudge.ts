@@ -77,6 +77,10 @@ export function isLockAndBuildRequest(text: string): boolean {
   if (!t) return false;
   if (/\bdo you already have the full idea in mind\b/i.test(t)) return false;
   if (/\bor do you want to brainstorm\b/i.test(t)) return false;
+  if (/I can build what you have in mind right now/i.test(t) && /shape it together/i.test(t)) {
+    return false;
+  }
+  if (/Which sounds better/i.test(t) && /land on something stronger/i.test(t)) return false;
   return LOCK_AND_BUILD_RE.test(t);
 }
 
@@ -121,9 +125,12 @@ export function shouldUnlockMicAfterAssistantTurn(text: string): boolean {
 
 export function isGuidedFirstReplyShape(text: string): boolean {
   const t = String(text || '');
-  const compliment = /that'?s a great idea|love (this|that)|great idea/i.test(t);
+  const compliment =
+    /that'?s a great idea|love (this|that)|great idea|sharp monday loop|that'?s a sharp/i.test(t);
   const reflect = /if i understood correctly[\s\S]{0,240}is that right/i.test(t);
-  const fork = /full idea in mind|brainstorm and shape/i.test(t);
+  const fork =
+    /I can build what you have in mind right now|land on something stronger|Which sounds better/i.test(t) ||
+    /full idea in mind|brainstorm and shape/i.test(t);
   return compliment && reflect && fork;
 }
 

@@ -9,6 +9,11 @@ import { assessApplyRouteDepth, isStaticHtmlProductApply, listProductUiFiles } f
 import { goBlocked, type GoBlockedReason } from "./goBlockedReason";
 import { FOUNDATION_MIN_UI_CHECKLIST } from "./codingSkeleton";
 import { ENGINEER_INTERVIEW_PROMPT } from "./engineerInterview";
+import {
+  formatFirstSliceApplyLine,
+  inferFirstSliceRoutes,
+  isDocumentWorkflowGoal,
+} from "./nebulaUiBrief";
 
 export const GO_SLICE_LABELS = [
   "Foundation",
@@ -81,6 +86,13 @@ export function productSliceQualityLine(goal: string): string {
       persist +
       "MUST: Home lists open requests; Request screen has pickup + dropoff address fields and Accept request. " +
       "MUST NOT: leftover breads.json, bakery-*, bikeStore, lessonStore, or generic Interactive screen with mock data."
+    );
+  }
+  if (isDocumentWorkflowGoal(g)) {
+    return (
+      persist +
+      "MUST: first-slice apply routes are the locked loop — Home plus /dossiers /forms /dashboard when §4 names those (intake → extract/review → save on a dossier → next status). lib/mockStore.ts holds dossier, document, form — not Maya Chen marketplace cards. " +
+      "MUST NOT: only /login /register / or leftover /A /practice /teacher / stock Home cards."
     );
   }
   return persist + "MUST NOT: generic Dashboard + Settings + role picker as the whole app.";
@@ -289,6 +301,8 @@ export function buildCompactGoCodeUserPrompt(opts: {
       ? 'EDIT MODE — patch existing product files from Session focus. No new scaffold. File blocks only.'
       : 'Run the coding pass now. Output Foundation AND Primary in this Go (screens + working mockStore verb) — not Data+API, not Polish.';
   const quality = productSliceQualityLine(goal);
+  const firstSlice = inferFirstSliceRoutes(goal, pages);
+  const firstSliceLine = formatFirstSliceApplyLine(firstSlice);
   const identity =
     productName
       ? [
@@ -312,6 +326,7 @@ export function buildCompactGoCodeUserPrompt(opts: {
     "",
     "§4 Pages excerpt:",
     pages || "(from Master Plan §4)",
+    firstSliceLine,
     constraints ? `\n${constraints}` : "",
     isFoundation ? `\n${FOUNDATION_MIN_UI_CHECKLIST}\n${ENGINEER_INTERVIEW_PROMPT}` : "",
     "",

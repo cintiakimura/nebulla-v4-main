@@ -12,12 +12,16 @@ import {
   buildPostApplyApiAsk,
   ENGINEER_INTERVIEW_PROMPT,
   inferApiNeeds,
+  inferSlot4Catalog,
   isClientSideExtractClassified,
   jobBriefFitsRoutes,
   looksLikeVendorSdkPath,
+  parsePastedEnvAssignments,
+  SUPER_ADMIN_ENV_REL,
   userNamedVendor,
   userNoteHasVendorKey,
   writeJobBriefFromPlan,
+  writeWorkspaceEnvLocal,
   JOB_BRIEF_REL,
 } from "../lib/engineerInterview.ts";
 import { applyProductPalettePass } from "../lib/productPalettePass.ts";
@@ -84,8 +88,10 @@ assert.match(shopBrief, /browse → book/i);
 assert.equal(jobBriefFitsRoutes(shopBrief, ["/", "/book", "/mechanic"]), true);
 
 const ask = buildPostApplyApiAsk({ goal: motoGoal });
-assert.match(ask, /Paste keys or say keep mock/);
 assert.match(ask, /Maps|Payments|Push/);
+assert.match(ask, /MAPBOX_TOKEN|account\.mapbox\.com/);
+assert.match(ask, /STRIPE_SECRET_KEY|dashboard\.stripe\.com/);
+assert.equal(/Messaging/i.test(ask), false);
 assert.equal(/Continue/i.test(ask), false);
 assert.ok(inferApiNeeds(motoGoal).includes("maps"));
 
@@ -112,12 +118,24 @@ assert.ok(dossierPages.some((p) => p.route === "/forms"));
 assert.ok(dossierPages.some((p) => p.route === "/dashboard"));
 assert.equal(dossierPages.some((p) => p.route === "/login" || p.route === "/register"), false);
 assert.equal(isClientSideExtractClassified("Tesseract client-side extract on-device"), true);
-const ocrAsk = buildPostApplyApiAsk({
-  goal: "**Product name:** MyDossier\nClient-side extract with Tesseract. Keep documents.",
-});
-assert.equal(/Paste keys or say keep mock/i.test(ocrAsk), false);
-assert.equal(/need an OCR/i.test(ocrAsk) || /no OCR API key/i.test(ocrAsk), true);
-assert.match(ocrAsk, /optional|client-side extract/i);
+const dossierGoal = "**Product name:** MyDossier\nClient-side extract with Tesseract. Keep documents.";
+const ocrAsk = buildPostApplyApiAsk({ goal: dossierGoal });
+assert.equal(/Messaging/i.test(ocrAsk), false);
+assert.match(ocrAsk, /Tesseract in-browser \(no key\)/);
+assert.match(ocrAsk, /OCR_PROVIDER/);
+assert.match(ocrAsk, /console\.cloud\.google\.com/);
+assert.match(ocrAsk, /S3_BUCKET/);
+assert.match(ocrAsk, /AUTH_SECRET/);
+assert.match(ocrAsk, /AWS \/ Cloudflare/);
+assert.match(ocrAsk, /no Vision key required/i);
+assert.equal(/paste (an? )?(OCR|Vision) key/i.test(ocrAsk), false);
+assert.equal(/demand a Vision key/i.test(ocrAsk), false);
+const dossierRows = inferSlot4Catalog({ goal: dossierGoal });
+assert.deepEqual(
+  dossierRows.map((r) => r.need),
+  ["extract", "files", "auth"],
+);
+assert.equal(dossierRows.find((r) => r.need === "extract")?.requiresPaidKey, false);
 assert.match(ENGINEER_INTERVIEW_PROMPT, /do NOT ask for an OCR API key/i);
 
 const courierPages = seedPagesFromGoal(motoGoal);
@@ -251,6 +269,36 @@ assert.equal(
   assert.equal(/Continue — launching/.test(chat), false);
   const prompt = fs.readFileSync(path.join(root, "src/lib/nebulaAssistantSystemPrompt.ts"), "utf8");
   assert.match(prompt, /ENGINEER_INTERVIEW_PROMPT/);
+}
+
+{
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "nebulla-env-catalog-"));
+  fs.mkdirSync(path.join(tmp, "nebulla-ide"), { recursive: true });
+  const plan = {
+    "1. Goal of the app": dossierGoal,
+    "4. Pages and navigation": "### Dashboard `/`\n### Dossiers `/dossiers`\n### Forms `/forms`",
+    "2. Tech and Research": "Slot 4: Tesseract client-side extract. Local files. Mock roles.",
+  };
+  fs.writeFileSync(path.join(tmp, "nebulla-ide/master-plan.json"), JSON.stringify(plan), "utf8");
+  writeJobBriefFromPlan(tmp, plan);
+  const panel = JSON.parse(fs.readFileSync(path.join(tmp, SUPER_ADMIN_ENV_REL), "utf8")) as {
+    fields: { need: string }[];
+    note: string;
+  };
+  assert.ok(panel.fields.some((f) => f.need === "extract"));
+  assert.match(panel.note, /\.env\.local/);
+  const envBody = fs.readFileSync(path.join(tmp, ".env.local"), "utf8");
+  assert.match(envBody, /AUTH_SECRET=/);
+  assert.equal(/GOOGLE_VISION_KEY=/.test(envBody), false);
+  const pasted = parsePastedEnvAssignments("RESEND_API_KEY=re_test_1 S3_BUCKET=docs");
+  writeWorkspaceEnvLocal(tmp, pasted);
+  const env2 = fs.readFileSync(path.join(tmp, ".env.local"), "utf8");
+  assert.match(env2, /RESEND_API_KEY=re_test_1/);
+  assert.match(env2, /S3_BUCKET=docs/);
+  const master = fs.readFileSync(path.join(tmp, "nebulla-ide/master-plan.json"), "utf8");
+  assert.equal(/re_test_1|AUTH_SECRET=/.test(master), false);
+  assert.equal(fs.existsSync(path.join(tmp, "app/admin/page.tsx")), false);
+  fs.rmSync(tmp, { recursive: true, force: true });
 }
 
 console.log("✓ engineer interview + job-brief + API ask");

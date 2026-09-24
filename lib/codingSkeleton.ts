@@ -4,7 +4,13 @@
  */
 
 import { CODING_SKELETON_KEY, PRE_CODING_SUMMARY_KEY } from "./masterPlanSections";
-import { isActionVerbRoute } from "./nebulaUiBrief";
+import {
+  formatFirstSliceApplyLine,
+  inferFirstSliceRoutes,
+  isActionVerbRoute,
+  isDocumentWorkflowGoal,
+  lockRequiresSignedInRoles,
+} from "./nebulaUiBrief";
 
 export type CodingSkeletonKind = "mobile_home" | "web_dashboard" | "landing" | "marketplace";
 export type CodingAuth = "none" | "mock";
@@ -128,6 +134,9 @@ export function skeletonFitsCurrentGoal(c: CodingSkeleton | null | undefined, go
   if (CREATOR_RE.test(g) && (c.skeleton === "landing" || /decline|first item|practice/.test(blob))) {
     return false;
   }
+  if (isDocumentWorkflowGoal(g) && /practice|teacher|lesson|maya chen/i.test(blob) && !/dossier|document|form/i.test(blob)) {
+    return false;
+  }
   return true;
 }
 
@@ -144,22 +153,34 @@ export function classifyCodingSkeleton(
   const typeHint = String(projectType || "").toLowerCase();
 
   const kids = KIDS_RE.test(text);
+  const documentJob = isDocumentWorkflowGoal(text);
   const landing =
     (LANDING_RE.test(text) || (PHOTO_LANDING_RE.test(text) && !CREATOR_RE.test(text) && !MARKET_RE.test(text))) ||
     (/\blanding\b/.test(typeHint) && !MARKET_RE.test(text) && !CREATOR_RE.test(text));
-  const market = MARKET_RE.test(text) || CREATOR_RE.test(text);
-  const dash = DASH_RE.test(text) && !kids;
+  const market = (MARKET_RE.test(text) || CREATOR_RE.test(text)) && !documentJob;
+  const dash = DASH_RE.test(text) && !kids && !documentJob;
 
   let skeleton: CodingSkeletonKind = "mobile_home";
-  if (kids) skeleton = "mobile_home";
+  if (kids && !documentJob) skeleton = "mobile_home";
+  else if (documentJob) skeleton = "web_dashboard";
   else if (landing && !market) skeleton = "landing";
   else if (market) skeleton = "marketplace";
   else if (dash || /\b(saas|web app|dashboard)\b/.test(typeHint)) skeleton = "web_dashboard";
   else if (/\bmobile\b/.test(typeHint)) skeleton = "mobile_home";
 
-  const fromPlanRoutes = parseRoutesFromSection4(section(masterPlan, "4. Pages and navigation"));
-  const built = buildDefaults(skeleton, text, kids);
-  const routes = mergeRoutes(fromPlanRoutes, built.routes, skeleton);
+  const pagesSection = section(masterPlan, "4. Pages and navigation");
+  const fromPlanRoutes = parseRoutesFromSection4(pagesSection);
+  const built = documentJob
+    ? documentWorkflowDefaults(text, pagesSection)
+    : buildDefaults(skeleton, text, kids);
+  const inferred = inferFirstSliceRoutes(text, pagesSection).map((p) => ({
+    path: p.route,
+    purpose: p.name,
+    entity: documentJob ? entityForDocumentRoute(p.route) : undefined,
+  }));
+  const routes = inferred.length
+    ? mergeRoutes(inferred, built.routes, skeleton)
+    : mergeRoutes(fromPlanRoutes, built.routes, skeleton);
   const merged: CodingSkeleton = {
     skeleton,
     project_type: projectTypeFromSkeleton(skeleton),
@@ -219,6 +240,7 @@ export function formatCodingSkeletonForGo(c: CodingSkeleton): string {
     `entities: ${c.entities.map((e) => e.name).join(", ")}`,
     `verbs: ${c.verbs.join(", ")}`,
     `routes: ${routes}`,
+    formatFirstSliceApplyLine(c.routes.map((r) => ({ name: r.purpose, route: r.path }))),
     `out_of_scope: ${c.out_of_scope.join(", ")}`,
     "MUST: implement only these routes + shared layout/components/lib. Mockup is not the spec.",
     c.skeleton === "web_dashboard"
@@ -511,10 +533,41 @@ function parseRoutesFromSection4(pages: string): CodingRoute[] {
   return out;
 }
 
+function documentWorkflowDefaults(text: string, pagesSection: string): CodingSkeleton {
+  return {
+    skeleton: "web_dashboard",
+    project_type: "web",
+    roles: ["user"],
+    entities: [
+      { name: "Dossier", fields: ["title", "client", "status"] },
+      { name: "Document", fields: ["dossierId", "title", "extractedText"] },
+      { name: "Form", fields: ["dossierId", "fields", "status"] },
+    ],
+    verbs: ["extract", "save", "review"],
+    routes: [
+      { path: "/", purpose: "Home — extract or open a dossier", entity: "Document" },
+      { path: "/dossiers", purpose: "Per-client dossiers", entity: "Dossier" },
+      { path: "/forms", purpose: "Forms to fill or review", entity: "Form" },
+      { path: "/dashboard", purpose: "Status of saved work", entity: "Dossier" },
+    ],
+    auth: lockRequiresSignedInRoles(text, pagesSection) ? "mock" : "none",
+    out_of_scope: [...DEFAULT_OUT_OF_SCOPE],
+    source: "classified",
+    skeleton_note: "Document loop: intake → extract/review → save on a dossier → next status. Auth only if the lock requires signed-in roles.",
+  };
+}
+
+function entityForDocumentRoute(route: string): string {
+  if (/form/i.test(route)) return "Form";
+  if (/dossier/i.test(route)) return "Dossier";
+  return "Document";
+}
+
 function mergeRoutes(fromPlan: CodingRoute[], defaults: CodingRoute[], skeleton: CodingSkeletonKind): CodingRoute[] {
   const base = fromPlan.length ? fromPlan : defaults;
+  const keepDashboard = base.some((r) => /dossier|form|extract|history/i.test(`${r.path} ${r.purpose}`));
   const filtered =
-    skeleton === "web_dashboard"
+    skeleton === "web_dashboard" || keepDashboard
       ? base
       : base.filter((r) => !EXTRA_ADMIN_RE.test(normalizeRoute(r.path)));
   if (!filtered.some((r) => normalizeRoute(r.path) === "/")) {

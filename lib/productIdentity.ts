@@ -390,6 +390,7 @@ export function looksLikeGoalStubName(name: string, goal?: string): boolean {
   if (/^(new project|untitled project|untitled|web app|mobile app|landing page)$/i.test(n)) {
     return true;
   }
+  if (/^id$/i.test(n)) return true;
   if (/^Project type /i.test(n) || /\bproject type\b/i.test(n) || /\b(mobile|web) app primary\b/i.test(n)) {
     return true;
   }
@@ -508,14 +509,56 @@ export function parseProductIdentity(raw: unknown): ProductIdentity | null {
   };
 }
 
+function readSection1Goal(workspaceRoot: string): string {
+  const root = String(workspaceRoot || "").trim();
+  if (!root) return "";
+  for (const rel of [
+    path.join("nebulla-ide", "master-plan.json"),
+    "master-plan.json",
+    path.join("nebula-project", "master-plan.json"),
+  ]) {
+    const abs = path.join(root, rel);
+    if (!fs.existsSync(abs)) continue;
+    try {
+      const rec = JSON.parse(fs.readFileSync(abs, "utf8")) as Record<string, unknown>;
+      const goal = String(rec["1. Goal of the app"] || rec.goal || "").trim();
+      if (goal) return goal;
+    } catch {
+      /* next */
+    }
+  }
+  return "";
+}
+
 export function readProductIdentity(workspaceRoot: string): ProductIdentity | null {
   const abs = path.join(workspaceRoot, PRODUCT_IDENTITY_REL);
-  if (!fs.existsSync(abs)) return null;
-  try {
-    return parseProductIdentity(JSON.parse(fs.readFileSync(abs, "utf8")));
-  } catch {
-    return null;
+  let stored: ProductIdentity | null = null;
+  if (fs.existsSync(abs)) {
+    try {
+      stored = parseProductIdentity(JSON.parse(fs.readFileSync(abs, "utf8")));
+    } catch {
+      stored = null;
+    }
   }
+  const goal = readSection1Goal(workspaceRoot);
+  const locked = extractNamedBrand(goal);
+  if (
+    stored?.userSet &&
+    stored.projectName &&
+    !looksLikeGoalStubName(stored.projectName, goal) &&
+    (!goal || identityFitsGoal(stored.projectName, goal))
+  ) {
+    return stored;
+  }
+  if (locked && (!stored || looksLikeGoalStubName(stored.projectName, goal) || !identityFitsGoal(stored.projectName, goal))) {
+    return {
+      projectName: locked,
+      logoInitials: logoInitials(locked),
+      logoHint: stored?.logoHint,
+      userSet: false,
+    };
+  }
+  return stored;
 }
 
 export function patchMasterPlanProductName(
@@ -616,10 +659,15 @@ function writeMasterPlanIfPresent(workspaceRoot: string, identity: ProductIdenti
 }
 
 function patchKnownPreviewFiles(workspaceRoot: string, identity: ProductIdentity): void {
+  const codedRoot = [
+    "app/page.tsx",
+    "app/page.jsx",
+    "src/app/page.tsx",
+    "src/app/page.jsx",
+  ].some((rel) => fs.existsSync(path.join(workspaceRoot, rel)));
   const rels = [
     "public/nebula-ui-gen-preview.html",
-    "public/product-preview.html",
-    "public/product-preview/index.html",
+    ...(codedRoot ? [] : ["public/product-preview.html", "public/product-preview/index.html"]),
     "index.html",
   ];
   for (const rel of rels) {

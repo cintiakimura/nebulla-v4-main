@@ -5,10 +5,13 @@
 
 export const PRODUCT_MOCK_STORE_REL = "lib/mockStore.ts";
 
-export type ProductMockKind = "delivery" | "shop" | "education" | "creator" | "other";
+export type ProductMockKind = "delivery" | "shop" | "education" | "creator" | "documents" | "other";
 
 export function inferProductMockKind(goal: string, productName = ""): ProductMockKind {
   const blob = `${goal} ${productName}`;
+  if (/\b(mydossier|dossiers?|forms?\b|scans?|documents?|extract|ocr|tesseract)\b/i.test(blob)) {
+    return "documents";
+  }
   if (/\b(moto|motodrop|courier|delivery|dropoff)\b/i.test(blob)) return "delivery";
   if (
     /\b(creator|influencer|outreach|portfolio)\b/i.test(blob) ||
@@ -32,6 +35,7 @@ export function mockStoreHasPrimaryVerb(src: string, kind: ProductMockKind): boo
   if (kind === "shop") return /export function addBooking/.test(s) && /export function markReady/.test(s);
   if (kind === "education") return /export function startPractice/.test(s);
   if (kind === "creator") return /export function addOutreach/.test(s) && /export function declineOffer/.test(s);
+  if (kind === "documents") return /export function extractDocument/.test(s) && /export function saveToDossier/.test(s);
   return /export function addItem/.test(s);
 }
 
@@ -44,6 +48,9 @@ export type MockItem = {
   pickup?: string;
   dropoff?: string;
   when?: string;
+  kind?: "dossier" | "document" | "form" | string;
+  dossierId?: string;
+  extractedText?: string;
 };
 
 export type MockState = {
@@ -79,6 +86,16 @@ function seed(): MockState {
   }
   if (KIND === "education") {
     return { items: [{ id: "l1", title: "One short lesson", status: "Ready" }], progress: 0 };
+  }
+  if (KIND === "documents") {
+    return {
+      items: [
+        { id: "d1", title: "Family records", status: "Open", kind: "dossier" },
+        { id: "doc1", title: "Lease scan", status: "Extracted", kind: "document", dossierId: "d1", extractedText: "Lease · 12 months" },
+        { id: "f1", title: "Intake form", status: "Draft", kind: "form", dossierId: "d1" },
+      ],
+      progress: 0,
+    };
   }
   if (KIND === "creator") {
     return {
@@ -193,6 +210,38 @@ export function declineOffer(id?: string) {
   const state = readMockState();
   const item = id ? state.items.find((row) => row.id === id) : state.items[0];
   if (item) item.status = "Declined";
+  save(state);
+  return state;
+}
+
+export function extractDocument(title: string, extractedText: string) {
+  const state = readMockState();
+  state.items = [
+    {
+      id: uid(),
+      title: title.trim() || "Scan",
+      status: "Extracted",
+      kind: "document",
+      extractedText: extractedText.trim(),
+    },
+    ...state.items,
+  ];
+  save(state);
+  return state;
+}
+
+export function saveToDossier(documentId: string, dossierTitle: string) {
+  const state = readMockState();
+  let dossier = state.items.find((row) => row.kind === "dossier" && row.title === dossierTitle.trim());
+  if (!dossier) {
+    dossier = { id: uid(), title: dossierTitle.trim() || "Dossier", status: "Open", kind: "dossier" };
+    state.items = [dossier, ...state.items];
+  }
+  const doc = state.items.find((row) => row.id === documentId);
+  if (doc) {
+    doc.dossierId = dossier.id;
+    doc.status = "Saved";
+  }
   save(state);
   return state;
 }
