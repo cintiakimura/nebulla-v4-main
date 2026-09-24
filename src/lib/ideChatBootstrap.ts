@@ -137,6 +137,7 @@ export type IdeChatMessage = {
 export function conversationEntriesToIdeMessages(entries: ConversationLogEntryDTO[]): IdeChatMessage[] {
   return entries
     .filter((e) => e.role === 'user' || e.role === 'assistant')
+    .filter((e) => !(e.role === 'user' && isHiddenBootstrapUserMessage(e.body || '')))
     .map((e, i) => {
       const raw = e.body || '';
       const content =

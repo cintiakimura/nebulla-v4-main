@@ -250,6 +250,9 @@ export async function listCloudProjectsDetailed(): Promise<ListCloudProjectsResu
     if (res.status === 401) {
       return { ok: false, projects: [], error: 'unauthorized' };
     }
+    if (res.status === 403) {
+      return { ok: false, projects: [], error: 'unauthorized' };
+    }
     if (res.status === 503) {
       return { ok: false, projects: [], error: 'unavailable' };
     }
@@ -299,7 +302,11 @@ export async function upsertCloudProject(payload: {
     method: 'POST',
     credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ ...payload, replaceName }),
+    body: JSON.stringify({
+      ...payload,
+      replaceName,
+      projectKey: getBrowserProjectKey(),
+    }),
   });
   if (!res.ok) {
     const data = await readResponseJson<{ error?: string; code?: string }>(res);
@@ -308,7 +315,7 @@ export async function upsertCloudProject(payload: {
         ? data.error
         : data.code === 'FREE_PROJECT_LIMIT'
           ? 'Free plan allows 1 project. Delete it or upgrade on the Pricing page.'
-          : 'Failed to save project';
+          : `Could not save project (HTTP ${res.status}). Apply did not create extra routes.`;
     throw new Error(msg);
   }
   void fireSilentProjectManager({ projectName: payload.name });

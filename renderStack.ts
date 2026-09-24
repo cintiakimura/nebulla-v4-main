@@ -1831,17 +1831,18 @@ export async function mountRenderStack(app: Express) {
     const uid = readSession(req);
     if (!uid) return res.status(401).json({ error: "Unauthorized" });
     if (!hasDb()) return res.status(503).json({ error: "Database not configured" });
-    const { name, pages, edges, replaceName, mintNewWorkspace } = req.body || {};
+    const { name, pages, edges, replaceName, mintNewWorkspace, projectKey } = req.body || {};
     if (typeof name !== "string" || !name.trim()) {
       return res.status(400).json({ error: "name is required" });
     }
     try {
       const db = requireDbPool();
       const trimmed = name.trim();
-      const renamingFrom =
+      let renamingFrom =
         typeof replaceName === "string" && replaceName.trim() && replaceName.trim() !== trimmed
           ? replaceName.trim()
           : "";
+      const bodyProjectKey = typeof projectKey === "string" ? projectKey.trim() : "";
       const existing = await db.query(
         `SELECT workspace_id, d1_database_id, d1_database_name, pages, edges FROM public.nebula_projects WHERE user_id = $1::uuid AND name = $2`,
         [uid, trimmed]
@@ -1882,8 +1883,22 @@ export async function mountRenderStack(app: Express) {
                 renameOk = true;
               }
             }
+            if (!renameOk && bodyProjectKey) {
+              const byWid = await db.query(
+                `SELECT workspace_id, name FROM public.nebula_projects WHERE user_id = $1::uuid AND workspace_id = $2 LIMIT 1`,
+                [uid, bodyProjectKey],
+              );
+              const owned = byWid.rows[0] as { workspace_id?: string; name?: string } | undefined;
+              if (owned?.workspace_id) {
+                reuseSingleWorkspaceId = String(owned.workspace_id).trim();
+                if (!renamingFrom && owned.name && String(owned.name).trim() !== trimmed) {
+                  renamingFrom = String(owned.name).trim();
+                }
+                renameOk = true;
+              }
+            }
             if (!renameOk) {
-              return res.status(403).json({
+              return res.status(409).json({
                 ok: false,
                 code: "FREE_PROJECT_LIMIT",
                 error:

@@ -16,3 +16,15 @@ export async function fetchConversationLogEntries(): Promise<ConversationLogEntr
   const data = await fetchJson<{ entries?: ConversationLogEntryDTO[] }>(withProjectQuery('/api/conversation-log'));
   return Array.isArray(data.entries) ? data.entries : [];
 }
+
+/** Persist one visible turn immediately so a long generation cannot drop the first half. */
+export async function persistConversationTurn(role: 'user' | 'assistant', body: string): Promise<void> {
+  const text = String(body || '').trim();
+  if (!text) return;
+  await fetchJson(withProjectQuery('/api/conversation-log'), {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ role, body: text }),
+  });
+}

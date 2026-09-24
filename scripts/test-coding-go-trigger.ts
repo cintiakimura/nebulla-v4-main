@@ -18,6 +18,8 @@ import {
 import { isNewProductSeedAgainstCurrent } from '../lib/productGoalFingerprint.ts';
 import { buildNextGoUserNote, EDIT_EXISTING_SLICE_INSTRUCTION } from '../src/lib/fastPrototypeNextSlice.ts';
 import { detectBuildModeIntent } from '../src/lib/ideWorkspaceChatContext.ts';
+import { loadIdeChatTranscript, mergeChatTranscripts, persistIdeChatTranscript } from '../src/lib/ideChatTranscript.ts';
+import { parseConversationEntries, shouldPersistConversationBody } from '../conversationLog.ts';
 
 assert.equal(isUserExplicitCodingRequest('go'), true);
 assert.equal(isUserExplicitCodingRequest('Go.'), true);
@@ -81,6 +83,10 @@ assert.equal(isGuidedFirstReplyShape('So a reading app. Cool.'), false);
 assert.equal(shouldUnlockMicAfterAssistantTurn(firstReply), true);
 assert.equal(shouldUnlockMicAfterAssistantTurn('brainstorm'), false);
 assert.equal(shouldUnlockMicAfterAssistantTurn('If I understood correctly, this is a courier app. Is that right?'), true);
+assert.equal(
+  shouldUnlockMicAfterAssistantTurn('That’s a sharp Monday loop. Keep dossiers or extract first?'),
+  true,
+);
 
 const refineNav =
   'make it dark, fix the nav, keep mock';
@@ -169,11 +175,55 @@ assert.equal(isShortCodingGoNudge('Starting the Foundation coding slice now.'), 
   assert.match(chat, /shouldUnlockMicAfterAssistantTurn/);
   assert.match(chat, /openTalkDesiredRef\.current = true/);
   assert.equal(/if\s*\(\s*\/brainstorm\/i\.test/.test(chat), false);
+  assert.match(chat, /persistIdeChatTranscript/);
+  assert.match(chat, /persistConversationTurn/);
+  assert.match(chat, /mergeChatTranscripts/);
+  assert.match(chat, /if \(sendingRef\.current\) \{\s*stopSending/);
+  assert.equal(/if \(micInputBlocked\) return/.test(chat), false);
   assert.match(chat, /refineSameProduct/);
   assert.match(chat, /MIC_REENABLE_AFTER_TTS_MS/);
   const floor = fs.readFileSync(path.join(process.cwd(), 'lib/codingSkeleton.ts'), 'utf8');
   assert.match(floor, /dark calm default/);
   assert.match(floor, /Never concatenate leftover brands/);
+}
+
+{
+  if (typeof globalThis.localStorage === 'undefined') {
+    const store = new Map<string, string>();
+    globalThis.localStorage = {
+      getItem: (k: string) => (store.has(k) ? store.get(k)! : null),
+      setItem: (k: string, v: string) => {
+        store.set(k, String(v));
+      },
+      removeItem: (k: string) => {
+        store.delete(k);
+      },
+      clear: () => store.clear(),
+      key: () => null,
+      get length() {
+        return store.size;
+      },
+    } as Storage;
+  }
+  persistIdeChatTranscript('cfproj_test', [
+    { id: 'u1', role: 'user', content: 'Keep client scans and extract locally.', timestamp: '9:00 AM' },
+    { id: 'a1', role: 'assistant', content: 'If I understood correctly, this is a dossier app. Is that right?', timestamp: '9:01 AM' },
+  ]);
+  const local = loadIdeChatTranscript('cfproj_test');
+  assert.equal(local.length, 2);
+  const merged = mergeChatTranscripts(
+    [{ iso: '2026-09-24T07:00:00.000Z', role: 'user', body: 'Keep client scans and extract locally.' }],
+    local,
+  );
+  assert.equal(merged.length >= 2, true);
+  assert.match(merged.map((m) => m.content).join('\n'), /dossier app/);
+  assert.equal(shouldPersistConversationBody('user', 'FAST PROJECT MODE. The user gave a product seed.'), false);
+  assert.equal(shouldPersistConversationBody('assistant', 'Is that right?'), true);
+  const parsed = parseConversationEntries(
+    '## Transcript\n\n### 2026-09-24T07:00:00.000Z • user\nKeep scans\n\n### 2026-09-24T07:01:00.000Z • assistant\nIs that right?\n',
+  );
+  assert.equal(parsed.length, 2);
+  assert.equal(parsed[1].body.includes('Is that right'), true);
 }
 
 console.log('\n✓ coding go trigger detection passed\n');

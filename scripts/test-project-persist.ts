@@ -163,8 +163,13 @@ section("projectName is a label; request projectKey wins");
   const projectsGet = resolveSrc.slice(resolveSrc.indexOf('app.get("/api/projects"'));
   assert.match(projectsGet, /status\(200\).*projects: \[\]/);
   assert.match(projectsGet, /GET \/api\/projects:/);
+  const projectsPost = resolveSrc.slice(resolveSrc.indexOf('app.post("/api/projects"'));
+  assert.match(projectsPost, /workspace_id = \$2/);
+  assert.match(projectsPost, /status\(409\)/);
+  assert.equal(/return res\.status\(403\)\.json\(\{\s*ok: false,\s*code: "FREE_PROJECT_LIMIT"/.test(projectsPost), false);
   const cloudClient = fs.readFileSync(path.join(root, "src/lib/nebulaCloud.ts"), "utf8");
   assert.match(cloudClient, /Your workspace was not reset/);
+  assert.match(cloudClient, /projectKey: getBrowserProjectKey\(\)/);
 }
 
 console.log("\n✓ project persist passed\n");

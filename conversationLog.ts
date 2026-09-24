@@ -54,7 +54,20 @@ function retentionCutoff(): number {
   return Date.now() - RETENTION_MS;
 }
 
-function parseEntries(markdown: string): LogEntry[] {
+/** Hidden IDE bootstraps must not replace the visible thread. */
+export function shouldPersistConversationBody(role: string, body: string): boolean {
+  const t = String(body || "").trim();
+  if (!t) return false;
+  if (role === "user" && /^(IDE CHAT|FAST PROJECT MODE|FAST PROTOTYPE MODE|BRAINSTORM CLOSE CONFIRMED)/i.test(t)) {
+    return false;
+  }
+  if (role === "user" && /THIS TURN FORBIDDEN|chat-conversation-loop\.md/i.test(t) && t.length > 400) {
+    return false;
+  }
+  return true;
+}
+
+export function parseConversationEntries(markdown: string): LogEntry[] {
   const marker = "## Transcript";
   const idx = markdown.indexOf(marker);
   let section = idx >= 0 ? markdown.slice(idx + marker.length).trim() : markdown.trim();
@@ -65,10 +78,10 @@ function parseEntries(markdown: string): LogEntry[] {
   for (const part of parts) {
     const trimmed = part.trim();
     if (!trimmed.startsWith("###")) continue;
-    const sep = trimmed.indexOf("\n\n");
-    if (sep === -1) continue;
-    const head = trimmed.slice(0, sep);
-    const body = trimmed.slice(sep + 2).trim();
+    const nl = trimmed.indexOf("\n");
+    if (nl === -1) continue;
+    const head = trimmed.slice(0, nl).trim();
+    const body = trimmed.slice(nl).replace(/^\n+/, "").trim();
     const hm = /^### (.+?) • (user|assistant|system)\s*$/.exec(head);
     if (!hm) continue;
     out.push({ iso: hm[1].trim(), role: hm[2] as LogRole, body });
@@ -115,7 +128,7 @@ function formatTranscriptForPrompt(entries: LogEntry[]): string {
 function readAndPruneFile(filePath: string, scope: ConversationLogScope): LogEntry[] {
   if (!fs.existsSync(filePath)) return [];
   const raw = fs.readFileSync(filePath, "utf8");
-  const entries = parseEntries(raw);
+  const entries = parseConversationEntries(raw);
   const pruned = filterByRetention(entries);
   if (pruned.length !== entries.length) {
     fs.mkdirSync(path.dirname(filePath), { recursive: true });
@@ -156,7 +169,7 @@ export function loadPrunedEntries(scope: ConversationLogScope): LogEntry[] {
   const leg = getLegacyConversationLogPath(scope.userId, scope.projectLabel);
   if (fs.existsSync(leg)) {
     const raw = fs.readFileSync(leg, "utf8");
-    let entries = filterByRetention(parseEntries(raw));
+    let entries = filterByRetention(parseConversationEntries(raw));
     fs.mkdirSync(path.dirname(primary), { recursive: true });
     fs.writeFileSync(primary, renderFile(scope, entries), "utf8");
     try {
@@ -198,13 +211,14 @@ export function appendConversationTurn(
   fs.mkdirSync(path.dirname(fp), { recursive: true });
   let entries: LogEntry[] = [];
   if (fs.existsSync(fp)) {
-    entries = filterByRetention(parseEntries(fs.readFileSync(fp, "utf8")));
+    entries = filterByRetention(parseConversationEntries(fs.readFileSync(fp, "utf8")));
   } else {
     const leg = getLegacyConversationLogPath(scope.userId, scope.projectLabel);
     if (fs.existsSync(leg)) {
-      entries = filterByRetention(parseEntries(fs.readFileSync(leg, "utf8")));
+      entries = filterByRetention(parseConversationEntries(fs.readFileSync(leg, "utf8")));
     }
   }
+  if (!shouldPersistConversationBody(role, content)) return;
   const iso = new Date().toISOString();
   entries.push({ iso, role, body: content.trim() });
   fs.writeFileSync(fp, renderFile(scope, entries), "utf8");

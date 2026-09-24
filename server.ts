@@ -201,6 +201,8 @@ import {
 } from "./lib/runnableAppSkeleton";
 import { runWorkspaceBuildCheck } from "./lib/workspaceBuildCheck";
 import { applyProductPalettePass } from "./lib/productPalettePass";
+import { VOICE_ACL_HINT } from "./lib/grokVoiceStt";
+import { attachGrokSttWebSocket, mintSttTicket, proxyBatchStt } from "./lib/grokVoiceSttProxy";
 import {
   parsePastedEnvAssignments,
   writeWorkspaceEnvLocal,
@@ -1603,6 +1605,28 @@ No approved UI code yet.
     } catch (error) {
       console.error("/api/conversation-log:", error);
       res.status(500).json({ error: error instanceof Error ? error.message : "Failed to read conversation log" });
+    }
+  });
+
+  app.post("/api/conversation-log", (req, res) => {
+    try {
+      const uid = readNebulaSessionUserId(req) || "anonymous";
+      const pp = projectPathsFor(req);
+      const body = (req.body || {}) as Record<string, unknown>;
+      const role = body.role === "assistant" ? "assistant" : body.role === "user" ? "user" : "";
+      const text = typeof body.body === "string" ? body.body : typeof body.content === "string" ? body.content : "";
+      if (!role || !text.trim()) {
+        return res.status(400).json({ ok: false, error: "role and body are required" });
+      }
+      const projectLabel =
+        typeof body.projectName === "string" && body.projectName.trim()
+          ? String(body.projectName).trim()
+          : "Untitled project";
+      appendConversationTurn({ userId: uid, projectKey: pp.projectKey, projectLabel }, role, text);
+      res.json({ ok: true });
+    } catch (error) {
+      console.error("POST /api/conversation-log:", error);
+      res.status(500).json({ ok: false, error: error instanceof Error ? error.message : "Failed to append conversation log" });
     }
   });
 
@@ -6217,6 +6241,14 @@ ${workflowContext}`;
     const convScopeChat = { userId: convUserId, projectKey: ppChat.projectKey, projectLabel: convProject };
 
     let messagesForApi: { role: string; content?: string }[] = Array.isArray(messages) ? messages : [];
+    try {
+      const lastUserEarly = [...messagesForApi].reverse().find((m) => m.role === "user");
+      if (lastUserEarly && typeof lastUserEarly.content === "string" && lastUserEarly.content.trim()) {
+        appendConversationTurn(convScopeChat, "user", lastUserEarly.content);
+      }
+    } catch (logErr) {
+      console.error("Conversation memory append failed (user turn):", logErr);
+    }
 
     if (Boolean(onboardingAutopilot)) {
       const rawMsgs = Array.isArray(messages) ? messages : [];
@@ -6507,10 +6539,6 @@ ${answer.slice(0, 8000)}`;
       }
 
       try {
-        const lastUser = [...messagesForApi].reverse().find((m) => m.role === "user");
-        if (lastUser && typeof lastUser.content === "string" && lastUser.content.length > 0) {
-          appendConversationTurn(convScopeChat, "user", lastUser.content);
-        }
         if (cleanText) {
           appendConversationTurn(convScopeChat, "assistant", cleanText);
         }
@@ -6618,6 +6646,56 @@ ${answer.slice(0, 8000)}`;
   app.get("/api/speak", handleSpeak);
   app.post("/api/speak", handleSpeak);
 
+  app.post("/api/stt/session", async (req, res) => {
+    try {
+      const apiKey = await resolveMainGrokApiKey(req);
+      if (!apiKey) {
+        return res.status(401).json({ error: "Same xAI chat key is required for Voice STT. Type instead.", voiceAcl: false });
+      }
+      res.json({ ok: true, ticket: mintSttTicket(apiKey) });
+    } catch (err) {
+      res.status(500).json({ error: err instanceof Error ? err.message : "STT session failed" });
+    }
+  });
+
+  app.post("/api/stt", async (req, res) => {
+    try {
+      const apiKey = await resolveMainGrokApiKey(req);
+      if (!apiKey) {
+        return res.status(401).json({
+          error: "Same xAI chat key is required for Voice STT. Type instead.",
+          voiceAcl: false,
+        });
+      }
+      const body = (req.body || {}) as Record<string, unknown>;
+      const b64 = typeof body.audioBase64 === "string" ? body.audioBase64.replace(/^data:[^;]+;base64,/, "") : "";
+      if (!b64) return res.status(400).json({ error: "audioBase64 is required" });
+      const file = Buffer.from(b64, "base64");
+      if (!file.length) return res.status(400).json({ error: "empty audio" });
+      const extra = Array.isArray(body.keyterms)
+        ? body.keyterms.filter((x): x is string => typeof x === "string")
+        : [];
+      const result = await proxyBatchStt({
+        apiKey,
+        file,
+        mime: typeof body.mime === "string" ? body.mime : "audio/webm",
+        language: typeof body.language === "string" ? body.language : "en",
+        productName: typeof body.productName === "string" ? body.productName : "",
+        extraKeyterms: extra,
+      });
+      if (!result.ok) {
+        return res.status(result.status || 502).json({
+          error: result.error,
+          voiceAcl: result.voiceAcl,
+          hint: result.voiceAcl ? VOICE_ACL_HINT : undefined,
+        });
+      }
+      res.json({ ok: true, text: result.text, language: result.language });
+    } catch (err) {
+      res.status(500).json({ error: err instanceof Error ? err.message : "STT failed" });
+    }
+  });
+
   registerGuardianRoutes(app);
   app.use(guardianExpressErrorHandler);
 
@@ -6688,6 +6766,7 @@ ${answer.slice(0, 8000)}`;
   const httpServer = app.listen(PORT, "0.0.0.0", () => {
     console.log(`Nebulla server listening on http://0.0.0.0:${PORT} (NODE_ENV=${process.env.NODE_ENV || "development"})`);
   });
+  attachGrokSttWebSocket(httpServer, async (req) => resolveMainGrokApiKey(req as express.Request));
   httpServer.on("error", (err: NodeJS.ErrnoException) => {
     captureError(err, { source: "server", route: `listen:${PORT}`, detail: err.code });
     if (err.code === "EADDRINUSE") {

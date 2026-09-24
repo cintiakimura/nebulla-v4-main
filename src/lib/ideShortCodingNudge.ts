@@ -115,12 +115,16 @@ export function historyHasConfirmedNorthStar(
 }
 
 /** First seed reply: compliment + reflect + fork. */
-/** First compliment / “is that right?” — unlock TTS + mic without the word brainstorm. */
+/** First assistant beat unlocks TTS + mic. Never require the word “brainstorm.” */
 export function shouldUnlockMicAfterAssistantTurn(text: string): boolean {
   const t = String(text || '').trim();
   if (!t) return false;
+  if (/^(please\s+)?(brainstorm|let'?s brainstorm|shape it together)([\s.!?].*)?$/i.test(t)) {
+    return false;
+  }
   if (isGuidedFirstReplyShape(t)) return true;
-  return /is that right/i.test(t);
+  if (/is that right|\?/.test(t)) return true;
+  return t.length >= 12;
 }
 
 export function isGuidedFirstReplyShape(text: string): boolean {
