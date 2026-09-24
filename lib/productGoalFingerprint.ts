@@ -7,6 +7,7 @@ import {
   detectProductDomain,
   extractNamedBrand,
   extractStatedProductName,
+  inferProductName,
   isWorkspaceLabelStub,
 } from "./productIdentity";
 import { extractGoalFromUserNote, isCodingCommandNote } from "./spineSequenceClient";
@@ -49,6 +50,26 @@ export const EDUCATION_LEFTOVER_SLUGS = new Set([
 
 export const BIKE_SHOP_SLUGS = new Set(["book", "mechanic", "catalog", "cart"]);
 export const BAKERY_LEFTOVER_SLUGS = new Set(["order", "baker", "confirmation", "wallet", "catalog", "cart"]);
+export const DOCUMENT_LEFTOVER_SLUGS = new Set(["dossiers", "dossier", "forms", "extract"]);
+export const BILLS_SLUGS = new Set(["bills", "month", "receipts", "totals"]);
+
+export function isBillsWorkflowGoal(goal: string): boolean {
+  const g = String(goal || "").toLowerCase();
+  return /\b(bills?|receipts?|running totals?|month(?:ly)?[- ]?(?:list|bills|spend|total))\b/.test(g);
+}
+
+/** Chip / STT echo of the leftover name is not a new product brief. */
+export function isRepeatedChipAsProductGoal(userText: string, chipName?: string | null): boolean {
+  const raw = String(userText || "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/[.!?]+$/g, "");
+  const chip = String(chipName || "")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!raw || !chip) return false;
+  return raw.toLowerCase() === chip.toLowerCase();
+}
 
 function routeSlug(route: string): string {
   const s = String(route || "").trim();
@@ -78,6 +99,12 @@ export function leftoverRoutesConflictWithGoal(goal: string, routes: string[]): 
   if (delivery && slugs.some((s) => BAKERY_LEFTOVER_SLUGS.has(s) || BIKE_SHOP_SLUGS.has(s))) {
     return true;
   }
+  if (
+    (domain === "finance" || isBillsWorkflowGoal(g)) &&
+    slugs.some((s) => DOCUMENT_LEFTOVER_SLUGS.has(s))
+  ) {
+    return true;
+  }
   return false;
 }
 
@@ -92,7 +119,7 @@ export function looksLikeStandaloneProductBrief(text: string): boolean {
   if (!goal || goal.length < 20) return false;
   if (isCodingCommandNote(raw) && !goal) return false;
   if (extractNamedBrand(goal)) return true;
-  return /\b(build|shop|marketplace|companion|bike|bakery|mechanic|moto|courier|delivery|parcel|uber|dropoff|influencer|influencers|brands?|bridgen|creator|app that|for (kids|parents|customers|readers|riders|senders))\b/i.test(
+  return /\b(build|shop|marketplace|companion|bike|bakery|mechanic|moto|courier|delivery|parcel|uber|dropoff|influencer|influencers|brands?|bridgen|creator|app that|bills?|receipts?|running totals?|for (kids|parents|customers|readers|riders|senders))\b/i.test(
     goal,
   );
 }
@@ -117,6 +144,9 @@ export function isReplacementProductBrief(incoming: string, existing: string): b
   if (nextDomain !== "general" && prevDomain !== "general" && nextDomain !== prevDomain) {
     return true;
   }
+  if (nextDomain === "finance" && prevDomain !== "finance") return true;
+  if (prevDomain === "finance" && nextDomain !== "finance") return true;
+  if (isBillsWorkflowGoal(next) && !isBillsWorkflowGoal(prev)) return true;
   if (nextBrand && prevBrand) return false;
   if (leftoverRoutesConflictWithGoal(next, extractRouteTokens(prev))) return true;
   return false;
@@ -158,6 +188,7 @@ export function isNewProductSeedAgainstCurrent(opts: {
 }): boolean {
   const raw = String(opts.userText || "").trim();
   if (!raw) return false;
+  if (isRepeatedChipAsProductGoal(raw, opts.chipName)) return false;
   if (isSameProductRefineTurn(raw)) return false;
   if (/^(continue|continue\.|continue!|build\s+next|next\s+slice|hello|hi|hey|hellos|yes|yeah|ok|go)[\s.!?]*$/i.test(raw)) {
     return false;
@@ -172,6 +203,15 @@ export function isNewProductSeedAgainstCurrent(opts: {
     extractStatedProductName(String(opts.diskGoal || ""));
   const current = diskBrand || (!isWorkspaceLabelStub(chip) ? chip : "");
   if (incoming && current && incoming.toLowerCase() !== current.toLowerCase()) {
+    return true;
+  }
+  const inferred = inferProductName(raw);
+  if (
+    current &&
+    inferred &&
+    inferred.toLowerCase() !== current.toLowerCase() &&
+    looksLikeStandaloneProductBrief(raw)
+  ) {
     return true;
   }
   const diskGoal = String(opts.diskGoal || "").trim();

@@ -469,6 +469,7 @@ CHAT_CLOSE (UNBREAKABLE until confirm; see chat-information-checklist.md § Clos
 - Forbidden in the summary: competitors, hex lists, security lecture, tool talk, code, file fences, <START_MASTERPLAN>, "mock OCR later", "phase 2."
 - Then WAIT. "I'm done" / "just build" once → still summarize and ask "this is what I'll lock — ok?" Do not end on "shall we go?"
 - Confirm (yes / that's it / go / looks good / faz isso) after a summary → Master Plan from this summary (§1 = north star) THEN Foundation of THAT product. You do not emit tags on a brainstorm turn. Do not Foundation on the compliment turn.
+- "No" / "that's everything" / "that's the heart" / "nothing else" = CLOSE. Do not ask "what else?" Summarize the locked loop once. Ask only empty required slots (name, who). Then wait for go. Do not Code pass 1 on this turn if files already failed. Do not claim Live.
 - Correct / add more → no plan. Update slots. Reflect or one advance or a revised mini-summary.
 `.trim();
 
@@ -587,10 +588,22 @@ export function chatModeSystemAppendix(options: {
       [
         'ACTIVE MODE: BRAINSTORM CLOSE CONFIRMED — PLAN FROM SUMMARY (highest priority this turn)',
         '- CONFIRMED_SUMMARY in the user message is the source of truth. Do not restart inference from the seed.',
-        '- §1 Goal = the north star sentence from that summary, not a category, not the raw prompt.',
+        '- §1 Goal = the north star sentence from that summary, not a category, not the raw prompt. §1 is one name.',
+        '- §4 pages come from THIS goal only (Bills / Month / Receipts / Totals when the goal is bills). Never leftover Dossiers/Forms.',
         '- Features must match the confirmed set. Do not restore cut features. Competitors = none unless they asked.',
         '- THIS TURN = PLAN ONLY: nebula-project/job-brief.md then <START_MASTERPLAN>…</END_MASTERPLAN>.',
-        '- Do NOT emit START_CODING, <START_CODING>, or app file blocks this turn.',
+        '- Do NOT emit START_CODING, <START_CODING>, or app file blocks this turn. Do not claim Live. Do not ask what else.',
+      ].join('\n'),
+    );
+  } else if (hint === 'brainstorm-enough-close') {
+    parts.push(
+      [
+        'ACTIVE MODE: BRAINSTORM ENOUGH — CLOSE THE LOOP (highest priority this turn)',
+        '- They said No / that\'s everything / that\'s the heart. The feature loop is closed.',
+        '- Do NOT ask "what else?" Do not reopen Slot 3. Do not invent extra features.',
+        '- Summarize the locked loop once. Ask only empty required slots (name, who). Then wait for go.',
+        '- THIS TURN FORBIDDEN: <START_MASTERPLAN>, START_CODING, <START_CODING>, ```file:``` blocks, job-brief.md, Live is ready.',
+        '- Do not Code pass 1 if files already failed. Do not claim Live.',
       ].join('\n'),
     );
   } else if (hint === 'brainstorm-skip-lock') {

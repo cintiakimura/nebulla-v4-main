@@ -24,6 +24,7 @@ export type ProductDomain =
   | "commerce"
   | "delivery"
   | "marketplace"
+  | "finance"
   | "general";
 
 const STOPWORDS = new Set([
@@ -80,6 +81,7 @@ const STEMS: Record<ProductDomain, readonly string[]> = {
   commerce: ["Crumb", "Oven", "Loaf", "Hearth", "Grain"],
   delivery: ["Harbor", "Relay", "Mesa", "North", "Pulse"],
   marketplace: ["Harbor", "Relay", "Bridge", "North", "Pulse"],
+  finance: ["Ledger", "Till", "Vault", "Tally", "Mint"],
   general: ["Nova", "Aether", "Helio", "Kite", "Mesa"],
 };
 
@@ -90,6 +92,7 @@ const DESCRIPTORS: Record<ProductDomain, readonly string[]> = {
   commerce: ["Bakery", "Market", "Shop"],
   delivery: ["Courier", "Drop", "Run"],
   marketplace: ["Link", "Cast", "Desk"],
+  finance: ["Bills", "Books", "Totals"],
   general: ["Studio", "Hub"],
 };
 
@@ -100,6 +103,7 @@ const HINTS: Record<ProductDomain, string> = {
   commerce: "loaf + spark",
   delivery: "pin + spark",
   marketplace: "link + spark",
+  finance: "receipt + spark",
   general: "mark + spark",
 };
 
@@ -283,6 +287,9 @@ export function detectProductDomain(goal: string, projectType?: string): Product
     return "education";
   }
   if (/\btask|\btodo|\bhabit|\bfocus|\bchecklist|\bproductiv/.test(blob)) return "tasks";
+  if (/\b(bills?|receipts?|running totals?|month(?:ly)?[- ]?(?:list|bills|spend|total))\b/.test(blob)) {
+    return "finance";
+  }
   if (/landing page/i.test(projectType || "")) return "landing";
   return "general";
 }

@@ -12,6 +12,7 @@ export type BrainstormCloseKind =
   | 'skip-lock'
   | 'correct'
   | 'add-more'
+  | 'enough'
   | 'confirmed';
 
 export type BrainstormCloseState = {
@@ -58,6 +59,10 @@ const CLOSE_OFFER_RE =
 
 const CONFIRM_RE =
   /^(?:yes|yeah|yep|yup|ok|okay|sure|go(?:\s+ahead)?|looks?\s+good|that'?s\s+it|that\s+is\s+it|lock\s+it|faz\s+isso|perfect|sounds?\s+good|let'?s\s+go|build\s+it|do\s+it|that'?s\s+right|isso)(?:[.!]|\s|$)/i;
+
+/** Stop adding features — not a correction. Bare “No” after “what else?” is close. */
+const ENOUGH_RE =
+  /^(?:no|nope|nah)[\s.!?]*$|that['’]?s\s+(?:everything|the\s+heart|all|enough)\b|^nothing\s+else\b|^no\s+more\b/i;
 
 const CORRECT_RE =
   /\b(?:no,?\s+(?:the\s+)?(?:goal|it'?s)|not\s+quite|actually\b|wrong\b|drop\s+|instead\b|riders\s+are|same-day|correction|change\s+the\s+goal)\b/i;
@@ -138,11 +143,18 @@ export function closeSummaryAsksUiIfEmpty(text: string): boolean {
   );
 }
 
+export function isCloseEnoughReply(text: string): boolean {
+  const t = String(text || '').trim();
+  if (!t || t.length > 220) return false;
+  if (isCloseCorrectReply(t) || isCloseAddMoreReply(t)) return false;
+  return ENOUGH_RE.test(t);
+}
+
 export function isCloseConfirmReply(text: string): boolean {
   const t = String(text || '').trim();
   if (!t || t.length > 220) return false;
   if (isCloseCorrectReply(t) || isCloseAddMoreReply(t)) return false;
-  return CONFIRM_RE.test(t);
+  return CONFIRM_RE.test(t) || isCloseEnoughReply(t);
 }
 
 export function isCloseCorrectReply(text: string): boolean {
@@ -218,6 +230,21 @@ export function resolveBrainstormCloseTurn(
     return { kind: 'skip-lock', summary: liveSummary, skipInsists };
   }
 
+  if (isCloseEnoughReply(userText)) {
+    if (liveSummary) {
+      writeBrainstormCloseState(
+        { offeredSummary: liveSummary, skipInsists, confirmedSummary: liveSummary },
+        projectKey,
+      );
+      return { kind: 'confirmed', summary: liveSummary, skipInsists };
+    }
+    writeBrainstormCloseState(
+      { offeredSummary: null, skipInsists, confirmedSummary: null },
+      projectKey,
+    );
+    return { kind: 'enough', summary: null, skipInsists };
+  }
+
   if (liveSummary && isCloseConfirmReply(userText)) {
     writeBrainstormCloseState(
       { offeredSummary: liveSummary, skipInsists, confirmedSummary: liveSummary },
@@ -244,7 +271,8 @@ export function buildBrainstormCloseConfirmedBootstrap(summary: string): string 
     `1) Write \`\`\`file:nebula-project/job-brief.md\`\`\` distilled from the summary. ` +
     `Goal / thesis = the north star sentence (A→B why), never a category label, never the raw chat dump.\n` +
     `2) Emit <START_MASTERPLAN>…</END_MASTERPLAN> with all five sections generated FROM that brief. ` +
-    `§1 Goal of the app = the north star sentence + who + in/out of scope.\n` +
+    `§1 Goal of the app = one name + the north star sentence + who + in/out of scope. ` +
+    `§4 pages come from THIS goal only — never leftover Dossiers/Forms from a previous product.\n` +
     `Features must match the confirmed set. Do not restore cut/merged features. ` +
     `Dependencies: label defaults as assumptions; user choices stay open only if still open. ` +
     `Competitors = none unless the user asked to research during the talk.\n` +

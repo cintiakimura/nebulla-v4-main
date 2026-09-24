@@ -13,12 +13,19 @@ import {
   leftoverPlanConflictsWithGoal,
   leftoverRoutesConflictWithGoal,
   looksLikeStandaloneProductBrief,
+  isBillsWorkflowGoal,
+  isRepeatedChipAsProductGoal,
 } from "../lib/productGoalFingerprint.ts";
 import {
   applyNewProductBriefToWorkspace,
   pruneAppRoutesNotInSection4,
 } from "../lib/replaceProductWorkspace.ts";
-import { pagesForPlanFromGoalAndDisk, seedPagesFromGoal } from "../lib/nebulaUiBrief.ts";
+import {
+  inferFirstSliceRoutes,
+  pagesForPlanFromGoalAndDisk,
+  productRoutesMatchGoal,
+  seedPagesFromGoal,
+} from "../lib/nebulaUiBrief.ts";
 import { hydrateMasterPlanDerivedSections } from "../lib/nebulaIdeWorkspaceArtifacts.ts";
 import {
   extractNamedBrand,
@@ -55,7 +62,7 @@ section("Taskwise vs Quill Path / City Courier is a new seed");
   const taskPages = seedPagesFromGoal("Taskwise — capture input, summary, tasks, dossier");
   assert.deepEqual(
     taskPages.map((p) => p.route),
-    ["/input", "/summary", "/tasks", "/dossier"],
+    ["/", "/input", "/summary", "/tasks", "/dossier"],
   );
   assert.equal(leftoverRoutesConflictWithGoal("Taskwise", ["/", "/practice", "/teacher"]), true);
 }
@@ -215,6 +222,9 @@ section("AIChat + persist replace leftover plan instead of skip-Grok merge");
   assert.match(chat, /!stayInBrainstormLoop/);
   assert.match(chat, /not reusing the previous workspace or Master Plan/);
   assert.match(chat, /previous plan and leftover routes cleared/);
+  assert.match(chat, /productRoutesMatchGoal/);
+  assert.match(chat, /brainstorm-enough-close/);
+  assert.match(chat, /Live is not ready/);
   assert.match(persist, /Never ask them to return to Quill Path/);
   assert.match(persist, /\/api\/master-plan\/replace/);
   assert.match(server, /app.post\("\/api\/master-plan\/replace"/);
@@ -271,6 +281,49 @@ section("bakery workspace + new courier goal drops Grain / Crumb");
   assert.equal(/\/wallet/i.test(layout), false);
   assert.equal(fs.existsSync(path.join(tmp, "app/wallet/page.tsx")), false);
   fs.rmSync(tmp, { recursive: true, force: true });
+}
+
+section("bills seed is a new product — leftover dossiers cannot apply");
+{
+  const bills =
+    "Household bills — month list, attach receipts, running totals. Not a dossier product.";
+  assert.equal(isBillsWorkflowGoal(bills), true);
+  assert.equal(isBillsWorkflowGoal("MyDossier keep scans in per-client dossiers"), false);
+  assert.equal(looksLikeStandaloneProductBrief(bills), true);
+  assert.equal(isReplacementProductBrief(bills, "Helio Hub document dossiers and forms"), true);
+  assert.equal(isReplacementProductBrief(bills, "Aether Studio MyDossier forms dashboard"), true);
+  assert.equal(
+    isNewProductSeedAgainstCurrent({
+      userText: bills,
+      chipName: "Helio Hub",
+      diskGoal: "MyDossier keep family documents. Dossiers / Forms / Dashboard.",
+    }),
+    true,
+  );
+  assert.equal(isRepeatedChipAsProductGoal("Helio Hub", "Helio Hub"), true);
+  assert.equal(isNewProductSeedAgainstCurrent({ userText: "Helio Hub", chipName: "Helio Hub" }), false);
+  const seeded = seedPagesFromGoal(bills);
+  assert.deepEqual(
+    seeded.map((p) => p.route),
+    ["/bills", "/month", "/receipts", "/totals"],
+  );
+  assert.equal(seeded.some((p) => p.route === "/dossiers"), false);
+  assert.equal(leftoverRoutesConflictWithGoal(bills, ["/", "/dossiers", "/forms", "/dashboard"]), true);
+  const leftoverPlan = {
+    "1. Goal of the app": bills,
+    "4. Pages and navigation": "### Dossiers `/dossiers`\n### Forms `/forms`\n### Dashboard `/dashboard`",
+  };
+  assert.equal(leftoverPlanConflictsWithGoal(leftoverPlan), true);
+  const first = inferFirstSliceRoutes(bills, leftoverPlan["4. Pages and navigation"]);
+  assert.equal(first.some((p) => p.route === "/dossiers" || p.route === "/forms"), false);
+  assert.ok(first.some((p) => p.route === "/bills" || p.route === "/month"));
+  assert.ok(first.some((p) => p.route === "/receipts" || p.route === "/totals"));
+  assert.equal(productRoutesMatchGoal(bills, ["/", "/dossiers", "/forms"]), false);
+  assert.equal(productRoutesMatchGoal(bills, ["/", "/month", "/receipts", "/totals"]), true);
+  assert.equal(productRoutesMatchGoal(bills, ["/"]), false);
+  const fromDisk = pagesForPlanFromGoalAndDisk(bills, ["/", "/dossiers", "/forms", "/dashboard"]);
+  assert.equal(fromDisk.some((p) => p.route === "/dossiers"), false);
+  assert.ok(fromDisk.some((p) => p.route === "/bills" || p.route === "/month"));
 }
 
 section("new courier project never invents Grain Bakery");

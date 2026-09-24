@@ -15,7 +15,7 @@ import {
   isGenericUiuxBoilerplate,
 } from "./uiuxSectionBuilder";
 import { collapseWinningPalette } from "./uiGenerationEngine/v2/industryPalettes";
-import { leftoverRoutesConflictWithGoal } from "./productGoalFingerprint";
+import { isBillsWorkflowGoal, leftoverRoutesConflictWithGoal } from "./productGoalFingerprint";
 
 export const UI_BRIEF_REL = "nebula-ui-studio/ui-brief.md";
 
@@ -289,12 +289,29 @@ export function extractNamedRoutesFromPagesText(text: string): { name: string; r
 /** Safe defaults so Gate A can auto-build a brief when §4 has no routes yet. */
 export function seedPagesFromGoal(goal: string): { name: string; route: string }[] {
   const g = String(goal || "");
+  if (isBillsWorkflowGoal(g)) {
+    return [
+      { name: "Bills", route: "/bills" },
+      { name: "Month", route: "/month" },
+      { name: "Receipts", route: "/receipts" },
+      { name: "Totals", route: "/totals" },
+    ];
+  }
   if (/\b(influencer|influencers|bridgen|creators?\s+and\s+brands)\b/i.test(g)) {
     return [
       { name: "Home", route: "/" },
       { name: "Discover", route: "/discover" },
       { name: "Campaigns", route: "/campaigns" },
       { name: "Brands", route: "/brands" },
+    ];
+  }
+  if (/\b(taskwise|\btasks?\b|\btodo\b|\bhabit\b|\bchecklist\b|\bproductiv)/i.test(g)) {
+    return [
+      { name: "Home", route: "/" },
+      { name: "Input", route: "/input" },
+      { name: "Summary", route: "/summary" },
+      { name: "Tasks", route: "/tasks" },
+      { name: "Dossier", route: "/dossier" },
     ];
   }
   if (
@@ -307,15 +324,6 @@ export function seedPagesFromGoal(goal: string): { name: string; route: string }
       { name: "Dossiers", route: "/dossiers" },
       { name: "Forms", route: "/forms" },
       { name: "Dashboard", route: "/dashboard" },
-    ];
-  }
-  if (/\b(taskwise|\btasks?\b|\btodo\b|\bhabit\b|\bchecklist\b|\bproductiv)/i.test(g)) {
-    return [
-      { name: "Home", route: "/" },
-      { name: "Input", route: "/input" },
-      { name: "Summary", route: "/summary" },
-      { name: "Tasks", route: "/tasks" },
-      { name: "Dossier", route: "/dossier" },
     ];
   }
   if (/\b(moto|motodrop|courier|delivery|dropoff|parcel)\b/i.test(g)) {
@@ -380,11 +388,13 @@ const AUTH_FIRST_SLICE = new Set([
 const PLACEHOLDER_ROUTE = /^\/[a-z]$/i;
 const EDUCATION_LEFTOVER_ROUTE = /^\/(practice|teacher|parent|kid|progress|session|tutor)$/i;
 const SECTION4_PAGE_NAME =
-  /^(home|dashboard|dossiers?|forms?|history|extract|review|inbox|upload|documents?|login|register)$/i;
+  /^(home|dashboard|dossiers?|forms?|history|extract|review|inbox|upload|documents?|bills?|month|receipts?|totals?|login|register)$/i;
 
 export function isDocumentWorkflowGoal(goal: string): boolean {
+  const g = String(goal || "");
+  if (isBillsWorkflowGoal(g)) return false;
   return /\b(mydossier|dossiers?|forms?\b|scans?|documents?|extract|ocr|tesseract|client.?side extract|keep\/find|find work later|per-client)\b/i.test(
-    String(goal || ""),
+    g,
   );
 }
 
@@ -404,6 +414,10 @@ function slugFromPageName(name: string): string {
   if (!n || /^(home|app|index)$/.test(n)) return "/";
   if (/^dossiers?$/.test(n)) return "/dossiers";
   if (/^forms?$/.test(n)) return "/forms";
+  if (/^bills?$/.test(n)) return "/bills";
+  if (/^month$/.test(n)) return "/month";
+  if (/^receipts?$/.test(n)) return "/receipts";
+  if (/^totals?$/.test(n)) return "/totals";
   return `/${n.split(/\s+/).slice(0, 3).join("-")}`;
 }
 
@@ -452,9 +466,17 @@ export function inferFirstSliceRoutes(
   goal: string,
   pagesSection = "",
 ): { name: string; route: string }[] {
-  const fromPlan = inferNamedPagesFromSection4(pagesSection);
+  const fromPlanRaw = inferNamedPagesFromSection4(pagesSection);
+  const fromPlan = leftoverRoutesConflictWithGoal(
+    goal,
+    fromPlanRaw.map((p) => p.route),
+  )
+    ? []
+    : fromPlanRaw;
   const seeded = seedPagesFromGoal(goal);
-  const documentJob = isDocumentWorkflowGoal(goal) || /\b(keep|find) (work|documents?|files?)\b/i.test(goal);
+  const documentJob =
+    !isBillsWorkflowGoal(goal) &&
+    (isDocumentWorkflowGoal(goal) || /\b(keep|find) (work|documents?|files?)\b/i.test(goal));
   const education = /\b(adhd|kids?|child|student|teacher|tutor|classroom|school|parent|lesson|practice)\b/i.test(
     goal,
   );
@@ -474,6 +496,9 @@ export function inferFirstSliceRoutes(
   if (!education) {
     next = next.filter((p) => !EDUCATION_LEFTOVER_ROUTE.test(p.route));
   }
+  if (isBillsWorkflowGoal(goal)) {
+    next = next.filter((p) => !/^\/(dossiers?|forms|extract)$/i.test(p.route));
+  }
   next = next.filter((p) => !PLACEHOLDER_ROUTE.test(p.route));
   if (documentJob) {
     next = next.filter((p) => !/^\/(settings|analytics|admin)$/i.test(p.route));
@@ -483,6 +508,10 @@ export function inferFirstSliceRoutes(
   }
   const order = [
     "/",
+    "/bills",
+    "/month",
+    "/receipts",
+    "/totals",
     "/dossiers",
     "/forms",
     "/dashboard",
@@ -502,6 +531,23 @@ export function inferFirstSliceRoutes(
     return [];
   }
   return capped;
+}
+
+/** True only when nested product routes belong to THIS goal — never leftover dossiers on a bills lock. */
+export function productRoutesMatchGoal(goal: string, routes: string[]): boolean {
+  const cleaned = (routes || []).map((r) => {
+    const s = String(r || "").trim();
+    if (!s || s === "/") return "/";
+    const withSlash = s.startsWith("/") ? s : `/${s}`;
+    return withSlash.replace(/\/+$/, "") || "/";
+  });
+  const nested = cleaned.filter((r) => r && r !== "/");
+  if (nested.length === 0) return false;
+  if (leftoverRoutesConflictWithGoal(goal, cleaned)) return false;
+  if (isBillsWorkflowGoal(goal)) {
+    return nested.some((r) => /^\/(bills|month|receipts|totals)$/i.test(r));
+  }
+  return true;
 }
 
 export function firstSliceApplyLooksGeneric(routes: string[]): boolean {

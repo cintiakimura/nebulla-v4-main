@@ -135,6 +135,7 @@ When they stop adding info **or** say that’s enough:
 Then wait.
 
 - **Confirm** (yes, that’s it, go, looks good, faz isso) → plan writer from this summary, then Foundation. Do not Foundation on the compliment turn. Do not EDIT because leftover preview HTML exists. Do not inject START_CODING while they are still answering Slot 2–4.
+- **No / that’s everything / that’s the heart** → close. Summarize the locked loop once. Ask only empty required slots (name, who). Wait for go. Do not ask “what else?” Do not Code pass 1 on that turn if files already failed. Do not claim Live.
 - **Correct** → update slots, no plan.
 - **Add more** → back to one advance, no plan.
 - **Just build** once → still summarize + “this is what I’ll lock — ok?”

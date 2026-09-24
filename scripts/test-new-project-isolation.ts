@@ -74,6 +74,8 @@ section("Quill Learn Kids leftover + influencer seed is a new workspace");
   assert.equal(leftoverRoutesConflictWithGoal(SEED, ["/practice", "/teacher"]), true);
   assert.equal(isFoundationCloseGate(SEED), false);
   assert.equal(isFoundationCloseGate("go"), true);
+  assert.equal(isFoundationCloseGate("build"), true);
+  assert.equal(isFoundationCloseGate("now"), true);
   assert.equal(isFoundationCloseGate("hellos"), true);
   assert.equal(isFoundationCloseGate("you can start"), true);
   assert.equal(isFoundationCloseGate("let’s keep Bridgen and start"), true);

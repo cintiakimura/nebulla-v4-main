@@ -16,4 +16,5 @@ export {
 export {
   isMasterPlanCompleteForDiscovery,
   isMasterPlanReadyForUiMockup,
+  planRecordReadyToSkipChat,
 } from '../../lib/masterPlanCompleteness';

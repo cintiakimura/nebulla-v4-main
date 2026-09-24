@@ -382,6 +382,11 @@ export function isMasterPlanCompleteForDiscovery(
  * Structure ready for plan-first UI mockup: §§1–5 usable + routes.
  * Security baseline is warn-only (auto-applied assumptions) — never blocks mockup or Go.
  */
+/** Skip Grok chat only for a usable §§1–5 + §4 pages plan — never a 2-node stub. */
+export function planRecordReadyToSkipChat(raw: Record<string, unknown> | null | undefined): boolean {
+  return isMasterPlanReadyForUiMockup(raw);
+}
+
 export function isMasterPlanReadyForUiMockup(
   raw: Record<string, unknown> | null | undefined,
 ): boolean {

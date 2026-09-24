@@ -28,4 +28,5 @@ export {
   seedGoalOfTheAppSection,
   uiBriefTooShort,
 } from '../../lib/spineSequenceClient';
+export { planRecordReadyToSkipChat } from '../../lib/masterPlanCompleteness';
 export type { GoPollPhase } from '../../lib/spineSequenceClient';

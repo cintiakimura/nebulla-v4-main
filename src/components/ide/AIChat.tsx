@@ -192,7 +192,12 @@ import {
   isReplacementProductBrief,
   looksLikeStandaloneProductBrief,
 } from '../../../lib/productGoalFingerprint';
-import { resolveNewProductWorkspaceAction } from '../../../lib/newProductWorkspace';
+import { extractNamedRoutesFromPagesText, productRoutesMatchGoal } from '../../../lib/nebulaUiBrief';
+import {
+  resolveNewProductWorkspaceAction,
+  shouldHoldFirstSeedBeatA,
+  workspacePathsToRoutes,
+} from '../../../lib/newProductWorkspace';
 import { isSameProductRefineTurn } from '../../../lib/productGoalFingerprint';
 import { persistProductIdentityClient, promoteWorkspaceChipFromProductName } from '../../lib/productIdentityClient';
 import {
@@ -200,6 +205,7 @@ import {
   extractGoalFromUserNote,
   isUsableProjectGoal,
   planRecordHasUsableGoal,
+  planRecordReadyToSkipChat,
 } from '../../lib/spineSequenceGates';
 import { ideContextSnippetForChat, useIdeWorkspace } from '@/components/ide/IdeWorkspaceContext';
 import { useIdeCenterTabs } from '@/components/ide/IdeCenterTabsContext';
@@ -518,8 +524,15 @@ export function AIChat() {
 
   const pushReadyAndApiAsk = useCallback(
     (goal?: string, pages?: string, tech?: string) => {
+      const fromPages = extractNamedRoutesFromPagesText(pages || '').map((p) => p.route);
+      const fromDisk = workspacePathsToRoutes(workspacePaths);
+      const routes = fromPages.length > 0 ? fromPages : fromDisk;
+      if (!productRoutesMatchGoal(String(goal || ''), routes)) {
+        pushActivity('This product is not on Live yet — matching routes are missing.', 'warn');
+        return false;
+      }
       pushActivity(PRODUCT_MVP_READY_MESSAGE, 'success');
-      if (apiAskSentRef.current) return;
+      if (apiAskSentRef.current) return true;
       apiAskSentRef.current = true;
       const ask = buildPostApplyApiAsk({ goal, pages, tech });
       const stamp = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
@@ -537,8 +550,9 @@ export function AIChat() {
         persistIdeChatTranscript(diskProjectKey, next);
         return next;
       });
+      return true;
     },
-    [pushActivity],
+    [pushActivity, workspacePaths],
   );
 
   /** Next Go slice without a user chat message (Plan → mockup → Foundation already ran). */
@@ -1715,11 +1729,20 @@ export function AIChat() {
             smart.codingHint === 'fast-prototype' ||
             Boolean(smart.modeMeta?.inferenceFirst && chatMode === 'coding'));
 
+        const beatAHoldEarly = shouldHoldFirstSeedBeatA({
+          userText: rawText,
+          prior: messagesRef.current,
+          isBootstrap: isHiddenBootstrapUserMessage(rawText),
+        });
         if (interviewIntent) {
           setStoredStartMode('guided', diskProjectKey);
           discoveryRequired = true;
           chatMode = 'guided';
           codingHint = 'guided-onboarding';
+        } else if (beatAHoldEarly) {
+          discoveryRequired = true;
+          chatMode = 'free';
+          codingHint = 'brainstorm-loop';
         } else if (runInferenceFirst) {
           // Default path: inference-first — auto Agent so files/plan apply.
           setStoredStartMode('fast_prototype', diskProjectKey);
@@ -1965,6 +1988,7 @@ export function AIChat() {
       ? { kind: 'loop' as const, summary: null, skipInsists: 0 }
       : resolveBrainstormCloseTurn(rawText, prior, diskProjectKey);
     const brainstormCloseConfirmed = closeTurn.kind === 'confirmed' && Boolean(closeTurn.summary);
+    const brainstormEnoughClose = closeTurn.kind === 'enough';
     if (brainstormCloseConfirmed && closeTurn.summary) {
       text = buildBrainstormCloseConfirmedBootstrap(closeTurn.summary);
     }
@@ -1999,7 +2023,16 @@ export function AIChat() {
           firstUserMessage,
           closerReady,
         });
+    const beatAHold = shouldHoldFirstSeedBeatA({
+      userText: rawText,
+      prior,
+      closeGate,
+      lockAndBuild: wantsLockAndBuild,
+      isBootstrap: isBootstrapTrigger,
+    });
     const stayInBrainstormLoop =
+      beatAHold ||
+      brainstormEnoughClose ||
       Boolean(newProductSeed && !closeGate) ||
       (!brainstormCloseConfirmed &&
         !wantsLockAndBuild &&
@@ -2010,7 +2043,7 @@ export function AIChat() {
         !existingAppWork);
     /** go / hellos / you can start / let’s keep X and start — only then Code pass 1. */
     const userForcedCoding = wantsLockAndBuild;
-    if (newProductSeed && !closeGate) {
+    if ((newProductSeed && !closeGate) || beatAHold) {
       interactionModeRef.current = 'chat';
       setAssistantInteractionMode('chat');
     }
@@ -2102,6 +2135,7 @@ export function AIChat() {
     const fastPrototypeTurnEarly = codingHint === 'fast-prototype' && !stayInBrainstormLoop;
     if (
       (discoveryCompleteAck || userForcedCoding || fastPrototypeTurnEarly || brainstormCloseConfirmed) &&
+      !brainstormEnoughClose &&
       interactionModeRef.current === 'chat'
     ) {
       interactionModeRef.current = 'agent';
@@ -2120,6 +2154,10 @@ export function AIChat() {
       discoveryRequired = false;
       chatMode = 'architecture';
       codingHint = 'brainstorm-close-confirmed';
+    } else if (brainstormEnoughClose) {
+      discoveryRequired = true;
+      chatMode = 'free';
+      codingHint = 'brainstorm-enough-close';
     } else if (userForcedCoding) {
       markDiscoveryClosed(diskProjectKey);
       discoveryRequired = false;
@@ -2295,6 +2333,10 @@ export function AIChat() {
         clearBrainstormCloseState(created.projectKey);
         clearDiscoveryClosed(created.projectKey);
       }
+      if (seedProductName) {
+        setBrowserProjectName(seedProductName);
+        void promoteWorkspaceChipFromProductName(seedProductName);
+      }
       void persistProductIdentityClient({
         projectName: seedProductName,
         goal: extractGoalFromUserNote(text) || rawText,
@@ -2311,6 +2353,13 @@ export function AIChat() {
         `New project: ${seedProductName} — not reusing the previous workspace or Master Plan`,
         'info',
       );
+    } else if (
+      beatAHold &&
+      seedProductName &&
+      seedProductName.trim().toLowerCase() !== getBrowserProjectName().trim().toLowerCase()
+    ) {
+      setBrowserProjectName(seedProductName);
+      void promoteWorkspaceChipFromProductName(seedProductName);
     }
     if (maySkipChatIfPlanExists || looksLikeStandaloneProductBrief(text)) {
     try {
@@ -2347,6 +2396,10 @@ export function AIChat() {
         clearIdeWorkspaceMetaCache();
         clearBrainstormCloseState(created.projectKey);
         clearDiscoveryClosed(created.projectKey);
+        if (nextProductName) {
+          setBrowserProjectName(nextProductName);
+          void promoteWorkspaceChipFromProductName(nextProductName);
+        }
         void persistProductIdentityClient({
           projectName: nextProductName,
           goal: incomingGoal || rawText,
@@ -2393,7 +2446,7 @@ export function AIChat() {
         skipGrokChat = false;
         pushActivity('New product brief — previous plan and leftover routes cleared', 'info');
       } else if (maySkipChatIfPlanExists) {
-        const hasPlan = planRecordHasUsableGoal(plan);
+        const hasPlan = planRecordReadyToSkipChat(plan);
         if (hasPlan) {
           planSliceFromDisk = parsePersistedSliceLabel(
             String((plan as Record<string, unknown>)[PRE_CODING_SUMMARY_KEY] ?? ''),
@@ -2525,7 +2578,9 @@ export function AIChat() {
         );
       }
 
-      mpSaved = await persistMasterPlanFromAssistantSource(
+      mpSaved = beatAHold
+        ? 0
+        : await persistMasterPlanFromAssistantSource(
         masterPlanSource,
         showWorkActivity ? pushActivity : undefined,
         [
@@ -2571,6 +2626,7 @@ export function AIChat() {
       }
       let willCode =
         agentAllowed &&
+        !beatAHold &&
         !stayInBrainstormLoop &&
         (!newProductSeed || closeGate) &&
         !brainstormCloseConfirmed &&
@@ -3025,7 +3081,14 @@ export function AIChat() {
         ) {
           pushActivity(PRODUCT_MVP_READY_MESSAGE, 'success');
           resetCodingActivity();
-        } else if (!coding.ran && agentAllowed && foundationGate.ok && forceGoPipeline) {
+        } else if (
+          !coding.ran &&
+          agentAllowed &&
+          foundationGate.ok &&
+          forceGoPipeline &&
+          !beatAHold &&
+          !stayInBrainstormLoop
+        ) {
           const foundationLanded = foundationLandedOnDisk();
           const editMode = foundationLanded && postCodeRefine;
           if (foundationLanded && !editMode) {
@@ -3221,23 +3284,6 @@ export function AIChat() {
             if (mpSaved > 0) {
               window.dispatchEvent(new CustomEvent('nebula-open-master-plan'));
             }
-            if (showWorkActivity) {
-              setGrokActivity((prev) =>
-                advanceGrokActivity(prev, showWorkActivity ? 6 : 4, {
-                  currentAction: PRODUCT_MVP_READY_MESSAGE,
-                  log: {
-                    message: PRODUCT_MVP_READY_MESSAGE,
-                    kind: 'info',
-                  },
-                }),
-              );
-            }
-            try {
-              dispatchStudioShowLiveApp();
-              window.dispatchEvent(new CustomEvent('nebula-open-app-preview'));
-            } catch {
-              /* ignore */
-            }
             {
               let askGoal = extractGoalFromUserNote(text) || '';
               let askPages = '';
@@ -3256,7 +3302,36 @@ export function AIChat() {
               } catch {
                 /* use extracted goal */
               }
-              pushReadyAndApiAsk(askGoal, askPages, askTech);
+              const liveRoutes = [
+                ...extractNamedRoutesFromPagesText(askPages).map((p) => p.route),
+                ...workspacePathsToRoutes(workspacePaths),
+              ];
+              const liveMatchesGoal = productRoutesMatchGoal(askGoal, liveRoutes);
+              if (liveMatchesGoal) {
+                if (showWorkActivity) {
+                  setGrokActivity((prev) =>
+                    advanceGrokActivity(prev, showWorkActivity ? 6 : 4, {
+                      currentAction: PRODUCT_MVP_READY_MESSAGE,
+                      log: {
+                        message: PRODUCT_MVP_READY_MESSAGE,
+                        kind: 'info',
+                      },
+                    }),
+                  );
+                }
+                try {
+                  dispatchStudioShowLiveApp();
+                  window.dispatchEvent(new CustomEvent('nebula-open-app-preview'));
+                } catch {
+                  /* ignore */
+                }
+                pushReadyAndApiAsk(askGoal, askPages, askTech);
+              } else {
+                pushActivity(
+                  'Files are not this product’s routes yet — Live is not ready.',
+                  'warn',
+                );
+              }
             }
           }
 

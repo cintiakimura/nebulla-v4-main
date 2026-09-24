@@ -326,8 +326,8 @@ assert.equal(
 );
 assert.match(
   chat,
-  /const hasPlan = planRecordHasUsableGoal\(plan\);/,
-  "skip Grok chat only when §1 Goal is usable — page contracts are not a goal",
+  /const hasPlan = planRecordReadyToSkipChat\(plan\);/,
+  "skip Grok chat only when §§1–5 + §4 pages are usable — not a stub",
 );
 assert.equal(
   /planRecordHasUsableGoal\(plan\) \|\| isMasterPlanCompleteForDiscovery/.test(chat),

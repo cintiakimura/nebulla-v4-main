@@ -1274,10 +1274,7 @@ export async function runGoCodeAndApply(options: {
               blockedReason: blocked,
             };
           }
-        } else if (
-          grokRelaunches < MAX_GROK_RELAUNCHES &&
-          (blocked.code === 'GO_EMPTY_OUTPUT' || blocked.code === 'GO_FAILED')
-        ) {
+        } else if (grokRelaunches < MAX_GROK_RELAUNCHES && blocked.code === 'GO_FAILED') {
           grokRelaunches += 1;
           onProgress?.('No Grok Code result — relaunching this slice once', 'warn');
           pass -= 1;

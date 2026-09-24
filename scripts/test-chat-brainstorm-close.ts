@@ -12,6 +12,7 @@ import {
   isCloseAddMoreReply,
   isCloseConfirmReply,
   isCloseCorrectReply,
+  isCloseEnoughReply,
   isSkipSummaryReply,
   looksLikeCloseOffer,
   resolveBrainstormCloseTurn,
@@ -38,7 +39,14 @@ assert.equal(looksLikeCloseOffer(`${summary}\n<START_MASTERPLAN>x</END_MASTERPLA
 assert.equal(isCloseConfirmReply('yes'), true);
 assert.equal(isCloseConfirmReply('faz isso'), true);
 assert.equal(isCloseConfirmReply('looks good'), true);
+assert.equal(isCloseEnoughReply('No'), true);
+assert.equal(isCloseEnoughReply('no.'), true);
+assert.equal(isCloseEnoughReply("that's everything"), true);
+assert.equal(isCloseEnoughReply("that’s the heart"), true);
+assert.equal(isCloseConfirmReply('No'), true);
+assert.equal(isCloseConfirmReply("that's everything"), true);
 assert.equal(isCloseCorrectReply('no, it’s same-day lab samples only'), true);
+assert.equal(isCloseEnoughReply('no, it’s same-day lab samples only'), false);
 assert.equal(isCloseAddMoreReply('wait, also tracking'), true);
 assert.equal(isSkipSummaryReply('just build it'), true);
 
@@ -83,6 +91,31 @@ const prior = [{ role: 'assistant', content: summary }];
   assert.equal(r.kind, 'loop');
 }
 
+{
+  clearBrainstormCloseState('t-no-close');
+  const r = resolveBrainstormCloseTurn('No', prior, 't-no-close');
+  assert.equal(r.kind, 'confirmed');
+}
+
+{
+  clearBrainstormCloseState('t-everything');
+  const r = resolveBrainstormCloseTurn("that's everything", prior, 't-everything');
+  assert.equal(r.kind, 'confirmed');
+}
+
+{
+  clearBrainstormCloseState('t-heart');
+  const r = resolveBrainstormCloseTurn("that's the heart", prior, 't-heart');
+  assert.equal(r.kind, 'confirmed');
+}
+
+{
+  clearBrainstormCloseState('t-no-bare');
+  const r = resolveBrainstormCloseTurn('No', [], 't-no-bare');
+  assert.equal(r.kind, 'enough');
+  assert.equal(r.summary, null);
+}
+
 const boot = buildBrainstormCloseConfirmedBootstrap(summary);
 assert.ok(boot.startsWith(BRAINSTORM_CLOSE_CONFIRMED_PREFIX));
 assert.match(boot, /CONFIRMED_SUMMARY/);
@@ -118,6 +151,8 @@ assert.match(loopAppendix, /Do not invent risk/);
 assert.match(loopAppendix, /Never only echo/);
 assert.match(loopAppendix, /inferred workflow/);
 assert.match(loopAppendix, /If this is right, I'll lock it and build this product/);
+assert.match(loopAppendix, /Do not ask "what else\?"/);
+assert.match(loopAppendix, /that's everything/);
 assert.match(loopAppendix, /I can build what you have in mind right now/);
 assert.match(loopAppendix, /HIPAA only if they said health/);
 assert.match(loopAppendix, /Guided Discovery OFF/);
@@ -160,5 +195,16 @@ const confirmAppendix = chatModeSystemAppendix({
 assert.match(confirmAppendix, /BRAINSTORM CLOSE CONFIRMED/);
 assert.match(confirmAppendix, /PLAN ONLY/);
 assert.match(confirmAppendix, /Do NOT emit START_CODING/);
+assert.match(confirmAppendix, /§4 pages come from THIS goal|never leftover Dossiers/);
+
+const enoughAppendix = chatModeSystemAppendix({
+  interactionMode: 'chat',
+  codingHint: 'brainstorm-enough-close',
+  discoveryRequired: true,
+});
+assert.match(enoughAppendix, /BRAINSTORM ENOUGH|that's the heart|what else/);
+assert.match(enoughAppendix, /Do NOT ask "what else\?"/);
+assert.match(enoughAppendix, /empty required slots/);
+assert.equal(/START_CODING on compliment/.test(enoughAppendix) || /THIS TURN FORBIDDEN/.test(enoughAppendix), true);
 
 console.log('test-chat-brainstorm-close: ok');
