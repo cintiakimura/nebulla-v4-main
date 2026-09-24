@@ -15,7 +15,11 @@ import {
   isGenericUiuxBoilerplate,
 } from "./uiuxSectionBuilder";
 import { collapseWinningPalette } from "./uiGenerationEngine/v2/industryPalettes";
-import { isBillsWorkflowGoal, leftoverRoutesConflictWithGoal } from "./productGoalFingerprint";
+import {
+  isBillsWorkflowGoal,
+  isCuePlannerGoal,
+  leftoverRoutesConflictWithGoal,
+} from "./productGoalFingerprint";
 
 export const UI_BRIEF_REL = "nebula-ui-studio/ui-brief.md";
 
@@ -297,6 +301,14 @@ export function seedPagesFromGoal(goal: string): { name: string; route: string }
       { name: "Totals", route: "/totals" },
     ];
   }
+  if (isCuePlannerGoal(g)) {
+    return [
+      { name: "Today", route: "/" },
+      { name: "Water", route: "/water" },
+      { name: "Exercise", route: "/exercise" },
+      { name: "Tones", route: "/tones" },
+    ];
+  }
   if (/\b(influencer|influencers|bridgen|creators?\s+and\s+brands)\b/i.test(g)) {
     return [
       { name: "Home", route: "/" },
@@ -305,7 +317,10 @@ export function seedPagesFromGoal(goal: string): { name: string; route: string }
       { name: "Brands", route: "/brands" },
     ];
   }
-  if (/\b(taskwise|\btasks?\b|\btodo\b|\bhabit\b|\bchecklist\b|\bproductiv)/i.test(g)) {
+  if (
+    /\btaskwise\b/i.test(g) ||
+    (/\bcapture\b/i.test(g) && /\binput\b/i.test(g) && /\bsummary\b/i.test(g))
+  ) {
     return [
       { name: "Home", route: "/" },
       { name: "Input", route: "/input" },
@@ -388,7 +403,7 @@ const AUTH_FIRST_SLICE = new Set([
 const PLACEHOLDER_ROUTE = /^\/[a-z]$/i;
 const EDUCATION_LEFTOVER_ROUTE = /^\/(practice|teacher|parent|kid|progress|session|tutor)$/i;
 const SECTION4_PAGE_NAME =
-  /^(home|dashboard|dossiers?|forms?|history|extract|review|inbox|upload|documents?|bills?|month|receipts?|totals?|login|register)$/i;
+  /^(home|today|dashboard|dossiers?|forms?|history|extract|review|inbox|upload|documents?|bills?|month|receipts?|totals?|water|exercise|tones?|cues?|login|register)$/i;
 
 export function isDocumentWorkflowGoal(goal: string): boolean {
   const g = String(goal || "");
@@ -499,6 +514,9 @@ export function inferFirstSliceRoutes(
   if (isBillsWorkflowGoal(goal)) {
     next = next.filter((p) => !/^\/(dossiers?|forms|extract)$/i.test(p.route));
   }
+  if (isCuePlannerGoal(goal)) {
+    next = next.filter((p) => !/^\/(dossiers?|forms|extract|input|summary|tasks)$/i.test(p.route));
+  }
   next = next.filter((p) => !PLACEHOLDER_ROUTE.test(p.route));
   if (documentJob) {
     next = next.filter((p) => !/^\/(settings|analytics|admin)$/i.test(p.route));
@@ -512,6 +530,9 @@ export function inferFirstSliceRoutes(
     "/month",
     "/receipts",
     "/totals",
+    "/water",
+    "/exercise",
+    "/tones",
     "/dossiers",
     "/forms",
     "/dashboard",
@@ -546,6 +567,9 @@ export function productRoutesMatchGoal(goal: string, routes: string[]): boolean 
   if (leftoverRoutesConflictWithGoal(goal, cleaned)) return false;
   if (isBillsWorkflowGoal(goal)) {
     return nested.some((r) => /^\/(bills|month|receipts|totals)$/i.test(r));
+  }
+  if (isCuePlannerGoal(goal)) {
+    return nested.some((r) => /^\/(water|exercise|tones|today|cues)$/i.test(r));
   }
   return true;
 }

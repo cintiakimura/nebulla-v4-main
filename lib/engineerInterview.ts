@@ -157,8 +157,9 @@ export function inferSlot4Catalog(opts: { goal?: string; pages?: string; brief?:
   const blob = lockBlob({ goal, pages, brief, tech });
   const vendorNeeds = inferApiNeeds(goal, pages, brief);
   const extractLocked =
-    isDocumentWorkflowGoal(`${goal} ${pages}`) ||
-    /\b(ocr|tesseract|extract text|client[- ]?side extract|dossiers?|scans?)\b/i.test(blob);
+    isDocumentWorkflowGoal(goal) ||
+    (isDocumentWorkflowGoal(`${goal} ${pages}`) &&
+      /\b(ocr|tesseract|extract text|client[- ]?side extract|dossiers?|scans?)\b/i.test(goal));
   const filesLocked =
     extractLocked || /\b(s3|r2|storage|keep documents?|files?\b|uploads?)\b/i.test(blob);
   const authLocked =

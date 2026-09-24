@@ -14,6 +14,7 @@ import {
   leftoverRoutesConflictWithGoal,
   looksLikeStandaloneProductBrief,
   isBillsWorkflowGoal,
+  isCuePlannerGoal,
   isRepeatedChipAsProductGoal,
 } from "../lib/productGoalFingerprint.ts";
 import {
@@ -324,6 +325,35 @@ section("bills seed is a new product — leftover dossiers cannot apply");
   const fromDisk = pagesForPlanFromGoalAndDisk(bills, ["/", "/dossiers", "/forms", "/dashboard"]);
   assert.equal(fromDisk.some((p) => p.route === "/dossiers"), false);
   assert.ok(fromDisk.some((p) => p.route === "/bills" || p.route === "/month"));
+}
+
+section("Nest Path / Llama Life is not Taskwise dossiers");
+{
+  const nest =
+    "Nest Path — calm personal daily planner inspired by Llama Life. One person. Built-in positive tones cue water and exercise all day.";
+  assert.equal(extractNamedBrand(nest), "Nest Path");
+  assert.equal(isCuePlannerGoal(nest), true);
+  assert.equal(isCuePlannerGoal("Taskwise — capture input, summary, tasks, dossier"), false);
+  const seeded = seedPagesFromGoal(nest);
+  assert.deepEqual(
+    seeded.map((p) => p.route),
+    ["/", "/water", "/exercise", "/tones"],
+  );
+  assert.equal(seeded.some((p) => /dossier|input|summary|tasks/.test(p.route)), false);
+  assert.equal(
+    leftoverRoutesConflictWithGoal(nest, ["/", "/input", "/summary", "/tasks", "/dossier", "/dossiers"]),
+    true,
+  );
+  const first = inferFirstSliceRoutes(
+    nest,
+    "### Dossiers `/dossiers`\n### Input `/input`\n### Tasks `/tasks`",
+  );
+  assert.equal(first.some((p) => /dossier|input|summary|tasks/.test(p.route)), false);
+  assert.ok(first.some((p) => p.route === "/water" || p.route === "/exercise"));
+  assert.equal(productRoutesMatchGoal(nest, ["/", "/input", "/tasks", "/dossier"]), false);
+  assert.equal(productRoutesMatchGoal(nest, ["/", "/water", "/exercise", "/tones"]), true);
+  assert.equal(isNewProductSeedAgainstCurrent({ userText: nest, chipName: "Harbor Focus" }), true);
+  assert.equal(isReplacementProductBrief(nest, "Taskwise capture input summary tasks dossier"), true);
 }
 
 section("new courier project never invents Grain Bakery");

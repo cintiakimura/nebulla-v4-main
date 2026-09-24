@@ -37,7 +37,7 @@ import {
   scheduleWorkspaceRelPathsR2Sync,
 } from "./nebulaWorkspaceStorage";
 import { ensureProductIdentity, patchMasterPlanProductName, productNameFromPlan } from "./productIdentity";
-import { leftoverPlanConflictsWithGoal } from "./productGoalFingerprint";
+import { isReplacementProductBrief, leftoverPlanConflictsWithGoal } from "./productGoalFingerprint";
 import { collapseWinningPalette } from "./uiGenerationEngine/v2/industryPalettes";
 
 export const MASTER_PLAN_TAB_KEYS = MASTER_PLAN_ALL_KEYS;
@@ -455,10 +455,18 @@ export function hydrateMasterPlanDerivedSections(
 
   const goal = String(out["1. Goal of the app"] ?? "").trim();
   if (leftoverPlanConflictsWithGoal(out)) {
-    out["2. Tech and Research"] = "";
-    out["3. Features and KPIs"] = "";
+    const goalText = String(out["1. Goal of the app"] ?? "").trim();
+    const rest = [
+      String(out["2. Tech and Research"] || ""),
+      String(out["3. Features and KPIs"] || ""),
+      String(out["5. UI/UX design"] || ""),
+    ].join("\n");
     out["4. Pages and navigation"] = "";
-    out["5. UI/UX design"] = "";
+    if (goalText && isReplacementProductBrief(goalText, rest)) {
+      out["2. Tech and Research"] = "";
+      out["3. Features and KPIs"] = "";
+      out["5. UI/UX design"] = "";
+    }
     changed = true;
   }
   const pagesNow = String(out["4. Pages and navigation"] ?? "").trim();

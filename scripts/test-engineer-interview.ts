@@ -135,6 +135,12 @@ assert.deepEqual(
   dossierRows.map((r) => r.need),
   ["extract", "files", "auth"],
 );
+const nestAsk = buildPostApplyApiAsk({
+  goal: "Nest Path daily planner. Positive tones cue water and exercise.",
+  pages: "### Dossiers `/dossiers`\n### Input `/input`",
+});
+assert.equal(/OCR_PROVIDER|Tesseract|GOOGLE_VISION/i.test(nestAsk), false);
+assert.match(nestAsk, /No unclassified vendor keys|Keep mock/i);
 assert.equal(dossierRows.find((r) => r.need === "extract")?.requiresPaidKey, false);
 assert.match(ENGINEER_INTERVIEW_PROMPT, /do NOT ask for an OCR API key/i);
 

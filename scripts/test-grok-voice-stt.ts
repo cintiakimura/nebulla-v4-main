@@ -16,7 +16,12 @@ import {
   normalizeSttLanguage,
 } from "../lib/grokVoiceStt.ts";
 import { isSttBatchFail, proxyBatchStt } from "../lib/grokVoiceSttProxy.ts";
-import { applyDictationLive, commitDictationUtterance } from "../src/lib/grokVoiceDictation.ts";
+import {
+  applyDictationLive,
+  commitDictationUtterance,
+  foldSttComposerEvents,
+  VOICE_FAILED_TYPE_HINT,
+} from "../src/lib/grokVoiceDictation.ts";
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -57,17 +62,42 @@ assert.equal(isVoiceAclError(403, "team spending limit"), false);
   assert.match(server, /attachGrokSttWebSocket/);
   assert.match(chat, /applyDictationLive/);
   assert.match(chat, /commitDictationUtterance/);
+  assert.match(chat, /silenceBrowserSpeechRecognition/);
+  assert.match(chat, /VOICE_FAILED_TYPE_HINT/);
+  assert.match(chat, /lastComposerSendRef/);
+  assert.equal(/webkitSpeechRecognition/.test(chat), false);
+  assert.equal(/new SpeechRecognition/.test(chat), false);
   assert.match(client, /sameUtterance|lastUtterance/);
+  assert.match(client, /silenceBrowserSpeechRecognition/);
+  assert.match(client, /buildSttKeyterms/);
 }
 
 assert.equal(applyDictationLive("", "no"), "no");
 assert.equal(applyDictationLive("hello", "no"), "hello no");
+assert.equal(applyDictationLive("I want an app", "I want an app"), "I want an app");
 assert.equal(commitDictationUtterance("", "no"), "no");
 assert.equal(commitDictationUtterance("no", "no"), "no");
 assert.equal(commitDictationUtterance("no", "no"), "no");
 assert.equal(commitDictationUtterance(commitDictationUtterance("no", "no"), "no"), "no");
 assert.equal(commitDictationUtterance("hello", "world"), "hello world");
 assert.equal(commitDictationUtterance("no", "no it"), "no it");
+
+{
+  const twice = foldSttComposerEvents([
+    { kind: "final", text: "I want an app inspired by Llama Life" },
+    { kind: "final", text: "I want an app inspired by Llama Life" },
+  ]);
+  assert.equal(twice.composer, "I want an app inspired by Llama Life");
+  assert.equal(twice.finalsAccepted, 1);
+  const partialThenTwoFinals = foldSttComposerEvents([
+    { kind: "partial", text: "I want an app inspired by Llama Life" },
+    { kind: "final", text: "I want an app inspired by Llama Life" },
+    { kind: "final", text: "I want an app inspired by Llama Life" },
+  ]);
+  assert.equal(partialThenTwoFinals.composer, "I want an app inspired by Llama Life");
+  assert.equal(partialThenTwoFinals.finalsAccepted, 1);
+}
+assert.equal(VOICE_FAILED_TYPE_HINT, "voice failed — type instead");
 
 function readEnvKey(): string {
   const fromProc =

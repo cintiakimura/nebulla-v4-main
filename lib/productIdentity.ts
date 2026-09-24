@@ -25,6 +25,7 @@ export type ProductDomain =
   | "delivery"
   | "marketplace"
   | "finance"
+  | "planner"
   | "general";
 
 const STOPWORDS = new Set([
@@ -82,6 +83,7 @@ const STEMS: Record<ProductDomain, readonly string[]> = {
   delivery: ["Harbor", "Relay", "Mesa", "North", "Pulse"],
   marketplace: ["Harbor", "Relay", "Bridge", "North", "Pulse"],
   finance: ["Ledger", "Till", "Vault", "Tally", "Mint"],
+  planner: ["Dawn", "Tide", "Quiet", "Kind", "Soft"],
   general: ["Nova", "Aether", "Helio", "Kite", "Mesa"],
 };
 
@@ -93,6 +95,7 @@ const DESCRIPTORS: Record<ProductDomain, readonly string[]> = {
   delivery: ["Courier", "Drop", "Run"],
   marketplace: ["Link", "Cast", "Desk"],
   finance: ["Bills", "Books", "Totals"],
+  planner: ["Day", "Cues", "Plan"],
   general: ["Studio", "Hub"],
 };
 
@@ -104,6 +107,7 @@ const HINTS: Record<ProductDomain, string> = {
   delivery: "pin + spark",
   marketplace: "link + spark",
   finance: "receipt + spark",
+  planner: "drop + spark",
   general: "mark + spark",
 };
 
@@ -142,6 +146,7 @@ function toTitleCase(name: string): string {
 
 export function extractNamedBrand(goal: string): string | null {
   const g = String(goal || "");
+  if (/\bnest\s+path\b/i.test(g)) return "Nest Path";
   if (/\btaskwise\b/i.test(g)) return "Taskwise";
   if (/\bbridgen\b/i.test(g)) return "Bridgen";
   if (/\bgrain\s+bakery\b/i.test(g)) return "Grain Bakery";
@@ -184,6 +189,7 @@ export function replaceProductNameInGoal(goal: string, productName: string): str
 export function singleProductName(raw: string): string {
   const n = String(raw || "").replace(/\s+/g, " ").trim();
   if (!n) return "";
+  if (/\bnest\s+path\b/i.test(n)) return "Nest Path";
   if (/\btaskwise\b/i.test(n)) return "Taskwise";
   if (/\bmydossier\b/i.test(n)) return "MyDossier";
   if (/\bbridgen\b/i.test(n)) return "Bridgen";
@@ -280,13 +286,26 @@ export function detectProductDomain(goal: string, projectType?: string): Product
     return "commerce";
   }
   if (
+    /\b(llama\s+life|nest\s+path|drink water|water breaks?|positive tones?|daily planner|daily routines?|cue(?:s)? (?:water|exercise|habit))\b/.test(
+      blob,
+    )
+  ) {
+    return "planner";
+  }
+  if (
     /learn|lesson|tutor|read|reading|kid|kids|child|children|school|homework|teacher|student|educat|adhd|classroom/.test(
       blob,
     )
   ) {
     return "education";
   }
-  if (/\btask|\btodo|\bhabit|\bfocus|\bchecklist|\bproductiv/.test(blob)) return "tasks";
+  if (/\btaskwise\b/.test(blob) || /\bcapture\b.*\bsummary\b.*\bdossier/.test(blob)) return "tasks";
+  if (
+    /\btodo\b|\bhabit tracker|\bchecklist|\bproductiv/.test(blob) ||
+    (/\btasks?\b/.test(blob) && !/\b(water|exercise|tones?|planner|llama)\b/.test(blob))
+  ) {
+    return "tasks";
+  }
   if (/\b(bills?|receipts?|running totals?|month(?:ly)?[- ]?(?:list|bills|spend|total))\b/.test(blob)) {
     return "finance";
   }

@@ -58,6 +58,20 @@ export function isBillsWorkflowGoal(goal: string): boolean {
   return /\b(bills?|receipts?|running totals?|month(?:ly)?[- ]?(?:list|bills|spend|total))\b/.test(g);
 }
 
+/** Llama Life–style day planner: water / exercise / positive cue tones — not Taskwise dossiers. */
+export function isCuePlannerGoal(goal: string): boolean {
+  const g = String(goal || "").toLowerCase();
+  if (/\btaskwise\b/.test(g) && !/\b(llama life|nest path|water|exercise|tones?)\b/.test(g)) {
+    return false;
+  }
+  return /\b(llama\s+life|nest\s+path|drink water|water breaks?|positive tones?|daily planner|daily routines?|cue(?:s)? (?:water|exercise)|gentle (?:tones?|sounds?))\b/.test(
+    g,
+  );
+}
+
+export const TASKWISE_CAPTURE_SLUGS = new Set(["input", "summary", "dossier", "dossiers", "tasks"]);
+export const PLANNER_CUE_SLUGS = new Set(["water", "exercise", "tones", "today", "cues"]);
+
 /** Chip / STT echo of the leftover name is not a new product brief. */
 export function isRepeatedChipAsProductGoal(userText: string, chipName?: string | null): boolean {
   const raw = String(userText || "")
@@ -105,6 +119,12 @@ export function leftoverRoutesConflictWithGoal(goal: string, routes: string[]): 
   ) {
     return true;
   }
+  if (
+    (domain === "planner" || isCuePlannerGoal(g)) &&
+    slugs.some((s) => TASKWISE_CAPTURE_SLUGS.has(s) || DOCUMENT_LEFTOVER_SLUGS.has(s))
+  ) {
+    return true;
+  }
   return false;
 }
 
@@ -119,7 +139,7 @@ export function looksLikeStandaloneProductBrief(text: string): boolean {
   if (!goal || goal.length < 20) return false;
   if (isCodingCommandNote(raw) && !goal) return false;
   if (extractNamedBrand(goal)) return true;
-  return /\b(build|shop|marketplace|companion|bike|bakery|mechanic|moto|courier|delivery|parcel|uber|dropoff|influencer|influencers|brands?|bridgen|creator|app that|bills?|receipts?|running totals?|for (kids|parents|customers|readers|riders|senders))\b/i.test(
+  return /\b(build|shop|marketplace|companion|bike|bakery|mechanic|moto|courier|delivery|parcel|uber|dropoff|influencer|influencers|brands?|bridgen|creator|app that|bills?|receipts?|running totals?|llama life|daily planner|drink water|nest path|for (kids|parents|customers|readers|riders|senders))\b/i.test(
     goal,
   );
 }
@@ -147,6 +167,8 @@ export function isReplacementProductBrief(incoming: string, existing: string): b
   if (nextDomain === "finance" && prevDomain !== "finance") return true;
   if (prevDomain === "finance" && nextDomain !== "finance") return true;
   if (isBillsWorkflowGoal(next) && !isBillsWorkflowGoal(prev)) return true;
+  if (isCuePlannerGoal(next) && !isCuePlannerGoal(prev)) return true;
+  if (nextDomain === "planner" && prevDomain !== "planner") return true;
   if (nextBrand && prevBrand) return false;
   if (leftoverRoutesConflictWithGoal(next, extractRouteTokens(prev))) return true;
   return false;

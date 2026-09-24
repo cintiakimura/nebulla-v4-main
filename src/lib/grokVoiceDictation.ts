@@ -18,13 +18,13 @@ export type GrokDictationSession = {
   stop: () => Promise<string>;
 };
 
+export const VOICE_FAILED_TYPE_HINT = 'voice failed — type instead';
+
+export type SttComposerEvent = { kind: 'partial' | 'final'; text: string };
+
 /** Live box = prior committed words + current partial (never append the same final twice). */
 export function applyDictationLive(committed: string, live: string): string {
-  const c = String(committed || '').replace(/\s+/g, ' ').trim();
-  const liveText = String(live || '').replace(/\s+/g, ' ').trim();
-  if (!liveText) return c;
-  if (!c) return liveText;
-  return `${c} ${liveText}`.trim();
+  return commitDictationUtterance(committed, live);
 }
 
 /** Commit one utterance. Ignore repeats / growing replacements of the same phrase. */
@@ -42,6 +42,52 @@ export function commitDictationUtterance(committed: string, utterance: string): 
 
 function sameUtterance(a: string, b: string): boolean {
   return String(a || '').replace(/\s+/g, ' ').trim().toLowerCase() === String(b || '').replace(/\s+/g, ' ').trim().toLowerCase();
+}
+
+/** Two (or more) finals for the same phrase stay one composer string. */
+export function foldSttComposerEvents(
+  events: readonly SttComposerEvent[],
+  initialCommitted = '',
+): { composer: string; finalsAccepted: number } {
+  let committed = String(initialCommitted || '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  let live = '';
+  let finalsAccepted = 0;
+  for (const ev of events) {
+    const t = String(ev.text || '')
+      .replace(/\s+/g, ' ')
+      .trim();
+    if (!t) continue;
+    if (ev.kind === 'partial') {
+      live = t;
+      continue;
+    }
+    const next = commitDictationUtterance(committed, t);
+    if (next !== committed) finalsAccepted += 1;
+    committed = next;
+    live = '';
+  }
+  return { composer: applyDictationLive(committed, live), finalsAccepted };
+}
+
+/** Grok STT owns the composer — do not start Web Speech next to /api/stt/stream. */
+export function silenceBrowserSpeechRecognition(): void {
+  if (typeof window === 'undefined') return;
+  const w = window as unknown as {
+    SpeechRecognition?: { prototype?: { start?: () => void; stop?: () => void; abort?: () => void } };
+    webkitSpeechRecognition?: { prototype?: { start?: () => void; stop?: () => void; abort?: () => void } };
+    __nebulaGrokSttOnly?: boolean;
+  };
+  w.__nebulaGrokSttOnly = true;
+  for (const key of ['SpeechRecognition', 'webkitSpeechRecognition'] as const) {
+    const proto = w[key]?.prototype;
+    if (!proto?.start || (proto.start as { __nebulaSilenced?: boolean }).__nebulaSilenced) continue;
+    proto.start = function silencedStart() {
+      /* Grok STT only — Web Speech must not write the composer */
+    };
+    (proto.start as { __nebulaSilenced?: boolean }).__nebulaSilenced = true;
+  }
 }
 
 function downsampleToPcm16(input: Float32Array, inputRate: number, outRate = 16000): Int16Array {
@@ -103,6 +149,7 @@ export async function transcribeClipBatch(opts: {
 export async function startGrokDictation(
   opts: GrokDictationHandlers & { language?: string; productName?: string },
 ): Promise<GrokDictationSession> {
+  silenceBrowserSpeechRecognition();
   const stream = await navigator.mediaDevices.getUserMedia({
     audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true },
   });
@@ -173,7 +220,7 @@ export async function startGrokDictation(
       return;
     }
     if (msg.type === 'error') {
-      opts.onError?.(msg.message || 'STT failed', msg.voiceAcl);
+      opts.onError?.(msg.message || VOICE_FAILED_TYPE_HINT, msg.voiceAcl);
       return;
     }
     if (msg.type === 'transcript.created') {
@@ -195,7 +242,7 @@ export async function startGrokDictation(
   };
 
   ws.onerror = () => {
-    opts.onError?.('STT stream dropped — you can type instead.');
+    opts.onError?.(VOICE_FAILED_TYPE_HINT);
   };
 
   try {
