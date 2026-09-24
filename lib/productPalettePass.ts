@@ -25,6 +25,7 @@ import {
 } from "./productIdentity";
 import { listProductUiFiles } from "./workspaceCodedAppUi";
 import { ensureInteractiveProductPreview } from "./interactiveProductPreview";
+import { workspaceHasNextAppRoot } from "./nextAppLivePreview";
 import { rewriteEducationKitHomeIfNeeded } from "./rewriteEducationKitHome";
 import { rewriteJobScreensIfNeeded } from "./rewriteJobScreens";
 import { writeJobBriefFromPlan } from "./engineerInterview";
@@ -272,12 +273,13 @@ export function applyProductPalettePass(input: {
     jobHint: input.jobHint || undefined,
   });
   if (cssRel) applied.push(cssRel);
-  if (injectFinalUiIntoProductPreview(input.workspaceRoot, rec.tokens)) {
+  const nextRoot = workspaceHasNextAppRoot(input.workspaceRoot);
+  if (!nextRoot && injectFinalUiIntoProductPreview(input.workspaceRoot, rec.tokens)) {
     applied.push("public/product-preview/index.html");
   }
   const previewAbs = path.join(input.workspaceRoot, "public/product-preview/index.html");
   const files = listProductUiFiles(input.workspaceRoot, 24);
-  if (files.length || fs.existsSync(previewAbs)) {
+  if (!nextRoot && (files.length || fs.existsSync(previewAbs))) {
     ensureInteractiveProductPreview(input.workspaceRoot, {
       projectName: identity.projectName,
       productFiles: files,
@@ -326,7 +328,7 @@ export function applyProductPalettePass(input: {
     },
   );
   if (brief.written && !applied.includes(brief.rel)) applied.push(brief.rel);
-  if (jobScreens.rewritten.length) {
+  if (jobScreens.rewritten.length && !nextRoot) {
     ensureInteractiveProductPreview(input.workspaceRoot, {
       projectName: identity.projectName,
       logoInitials: identity.logoInitials,

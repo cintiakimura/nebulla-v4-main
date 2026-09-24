@@ -99,7 +99,10 @@ export function detectProjectNameAnswer(
   if (!lastAssistant?.content?.trim()) return null;
   if (!assistantAskedProjectName(lastAssistant.content)) return null;
   const name = userText.trim().replace(/^["']|["']$/g, '');
-  if (name.length < 2 || name.length > 80) return null;
+  if (name.length < 2 || name.length > 40) return null;
+  if (/\?/.test(name)) return null;
+  if (/^(who|what|where|when|why|how|do|does|should|can)\b/i.test(name)) return null;
+  if (name.split(/\s+/).length > 4) return null;
   if (isOnboardingCompletionReply(name) || isDesignReferenceSkipReply(name)) return null;
   return name;
 }

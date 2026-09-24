@@ -24,6 +24,10 @@ import {
   previewMetaHasProductRoutes,
 } from "../lib/workspaceCodedAppUi.ts";
 import {
+  buildLiveHtmlFromNextApp,
+  workspaceHasNextAppRoot,
+} from "../lib/nextAppLivePreview.ts";
+import {
   ensurePreviewIndexHtml,
   writeBasicUiScaffold,
 } from "../lib/nebulaIdeWorkspaceArtifacts.ts";
@@ -31,7 +35,6 @@ import {
   ensureInteractiveProductPreview,
   inferPreviewScreensFromPaths,
   previewHtmlNeedsProductHeal,
-  PRODUCT_PREVIEW_MARKER,
   PRODUCT_PREVIEW_REL,
 } from "../lib/interactiveProductPreview.ts";
 import { sanitizeUserFacingCopy } from "../lib/assistantChatSanitize.ts";
@@ -235,24 +238,24 @@ section("coded app files beat interactive mock — honest bridge");
       "components/UploadLesson.tsx",
     ],
   });
-  assert.equal(ensured.path, PRODUCT_PREVIEW_REL);
-  const html = fs.readFileSync(path.join(root, PRODUCT_PREVIEW_REL), "utf8");
-  assert.match(html, new RegExp(PRODUCT_PREVIEW_MARKER, "i"));
-  assert.match(html, /Start practice/);
-  assert.match(html, /class="mark"|Tutor Demo/);
-  assert.match(html, /Reading practice|Start practice/);
-  assert.equal(/Source of truth remains your coded files/i.test(html), false);
-  assert.equal(/Signed in as parent \(mock session\)/i.test(html), false);
-  assert.equal(previewHtmlNeedsProductHeal(html), false);
+  assert.equal(ensured.written, false);
+  assert.equal(fs.existsSync(path.join(root, PRODUCT_PREVIEW_REL)), false);
+  assert.equal(workspaceHasNextAppRoot(root), true);
+  const live = buildLiveHtmlFromNextApp(root, "Tutor Demo");
+  assert.ok(live);
+  assert.match(live, /next-app-live/);
+  assert.match(live, /app\/page\.tsx/);
+  assert.match(live, /Home/);
   assert.equal(
     previewHtmlNeedsProductHeal('Source of truth remains your coded files: app/page.tsx'),
     true,
   );
   const auth = resolveAppPreviewAuthority(root);
-  assert.equal(auth.mode, "interactive_product_preview");
+  assert.equal(auth.mode, "next_app_live");
   assert.equal(auth.codedApp, true);
-  assert.equal(auth.entryRel, PRODUCT_PREVIEW_REL);
-  assert.match(auth.statusLabel, /coded app|Interactive preview/i);
+  assert.notEqual(auth.entryRel, PRODUCT_PREVIEW_REL);
+  assert.match(auth.statusLabel, /Next app|coded/i);
+  assert.equal(previewIframeCanRunProduct({ previewMode: auth.mode }), true);
   const bridge = buildCodedAppPreviewBridgeHtml({
     projectName: "Tutor Demo",
     productFiles: auth.productFiles,
@@ -428,11 +431,13 @@ section("Foundation bakery routes own Preview — not catalog");
   });
   const auth = resolveAppPreviewAuthority(root);
   assert.notEqual(auth.mode, "pre_code_mockup");
-  assert.equal(auth.mode, "interactive_product_preview");
+  assert.equal(auth.mode, "next_app_live");
+  assert.equal(auth.entryRel, null);
+  assert.equal(fs.existsSync(path.join(root, PRODUCT_PREVIEW_REL)), false);
   assert.equal(previewIframeCanRunProduct({ previewMode: auth.mode }), true);
   assert.equal(previewMetaHasProductRoutes({ previewHonesty: auth.honesty, previewMode: auth.mode }), true);
-  const html = fs.readFileSync(path.join(root, PRODUCT_PREVIEW_REL), "utf8");
-  assert.match(html, /Today's breads|Place pickup order/i);
+  const html = buildLiveHtmlFromNextApp(root, "Crumb Bakery") || "";
+  assert.match(html, /Breads|next-app-live/);
   assert.equal(/Sparrow Tutor/i.test(html), false);
   assert.equal(/\bFigma\b/i.test(html), false);
   assert.equal(/ZEbJpC67UQyeeynt1UR8gT/.test(html), false);

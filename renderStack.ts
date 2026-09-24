@@ -1847,6 +1847,7 @@ export async function mountRenderStack(app: Express) {
         [uid, trimmed]
       );
       const hasExisting = Boolean(existing.rows[0]);
+      let reuseSingleWorkspaceId = "";
       if (!hasExisting) {
         const tierRow = await db.query(
           `SELECT billing_tier FROM public.nebula_users WHERE id = $1::uuid`,
@@ -1870,16 +1871,29 @@ export async function mountRenderStack(app: Express) {
             renameOk = Boolean(owns.rows[0]);
           }
           if (n >= 1 && !renameOk) {
-            return res.status(403).json({
-              ok: false,
-              code: "FREE_PROJECT_LIMIT",
-              error:
-                "Free plan allows 1 project. Delete your existing project, or upgrade on the Pricing page for more.",
-            });
+            if (mintNewWorkspace !== true && n === 1) {
+              const only = await db.query(
+                `SELECT workspace_id, name FROM public.nebula_projects WHERE user_id = $1::uuid LIMIT 1`,
+                [uid],
+              );
+              const row = only.rows[0] as { workspace_id?: string; name?: string } | undefined;
+              if (row?.workspace_id) {
+                reuseSingleWorkspaceId = String(row.workspace_id).trim();
+                renameOk = true;
+              }
+            }
+            if (!renameOk) {
+              return res.status(403).json({
+                ok: false,
+                code: "FREE_PROJECT_LIMIT",
+                error:
+                  "Free plan allows 1 project. Delete your existing project, or upgrade on the Pricing page for more.",
+              });
+            }
           }
         }
       }
-      let workspaceId = existing.rows[0]?.workspace_id as string | undefined;
+      let workspaceId = (existing.rows[0]?.workspace_id as string | undefined) || reuseSingleWorkspaceId || undefined;
       if ((!workspaceId || !String(workspaceId).trim()) && renamingFrom) {
         const prevRow = await db.query(
           `SELECT workspace_id, pages, edges FROM public.nebula_projects WHERE user_id = $1::uuid AND name = $2`,
@@ -1899,6 +1913,13 @@ export async function mountRenderStack(app: Express) {
           : hasExisting
             ? JSON.stringify(existing.rows[0].pages ?? [])
             : JSON.stringify(pages ?? []);
+      if (reuseSingleWorkspaceId && !hasExisting) {
+        await db.query(
+          `UPDATE public.nebula_projects SET name = $3, updated_at = NOW()
+           WHERE user_id = $1::uuid AND workspace_id = $2`,
+          [uid, reuseSingleWorkspaceId, trimmed],
+        );
+      }
       const edgesJson =
         edges !== undefined && !(hasExisting && Array.isArray(edges) && edges.length === 0)
           ? JSON.stringify(edges)

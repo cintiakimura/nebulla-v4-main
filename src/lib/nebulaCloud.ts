@@ -289,11 +289,17 @@ export async function upsertCloudProject(payload: {
   /** New Project from home — mint a new workspace_id; do not reuse leftover disk. */
   mintNewWorkspace?: boolean;
 }): Promise<boolean> {
+  const currentName = getBrowserProjectName().trim();
+  const replaceName =
+    payload.replaceName ||
+    (currentName && currentName !== payload.name.trim() && payload.mintNewWorkspace !== true
+      ? currentName
+      : undefined);
   const res = await fetch('/api/projects', {
     method: 'POST',
     credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
+    body: JSON.stringify({ ...payload, replaceName }),
   });
   if (!res.ok) {
     const data = await readResponseJson<{ error?: string; code?: string }>(res);

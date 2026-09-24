@@ -146,6 +146,7 @@ export function extractNamedBrand(goal: string): string | null {
   if (/\bquill\s+path\b/i.test(g) && !/\b(bridgen|taskwise|quill\s+learn)\b/i.test(g)) return "Quill Path";
   if (/\bspoke\s*&\s*co\b/i.test(g) || /\bspoke\s+and\s+co\b/i.test(g)) return "Spoke & Co";
   if (/\bmotodrop\b/i.test(g)) return "Motodrop";
+  if (/\bmydossier\b/i.test(g)) return "MyDossier";
   const labeled = g.match(/(?:\*\*)?Product name(?:\*\*)?:\s*([^\n*]+)/i)?.[1]?.trim();
   if (labeled && !looksLikeGoalStubName(labeled, g) && labeled.split(/\s+/).length <= 4) {
     return singleProductName(toTitleCase(labeled));
@@ -180,6 +181,7 @@ export function singleProductName(raw: string): string {
   const n = String(raw || "").replace(/\s+/g, " ").trim();
   if (!n) return "";
   if (/\btaskwise\b/i.test(n)) return "Taskwise";
+  if (/\bmydossier\b/i.test(n)) return "MyDossier";
   if (/\bbridgen\b/i.test(n)) return "Bridgen";
   if (/\bquill\s+learn\s+kids\b/i.test(n) && !/\b(bridgen|taskwise)\b/i.test(n)) return "Quill Learn Kids";
   if (/\bquill\s+path\b/i.test(n) && !/\b(bridgen|taskwise|quill\s+learn)\b/i.test(n)) return "Quill Path";
@@ -198,6 +200,7 @@ export function extractStatedProductName(text: string): string | null {
   if (!t) return null;
   if (NOT_A_PRODUCT_NAME.test(t.replace(/[.!?]+$/g, ""))) return null;
   if (/^taskwise\b/i.test(t)) return "Taskwise";
+  if (/^mydossier\b/i.test(t)) return "MyDossier";
   if (/^bridgen\b/i.test(t)) return "Bridgen";
   const called = t.match(
     /\b(?:called|named|name(?:d)?)\s+([A-Z][A-Za-z0-9]+(?:\s+[A-Z][A-Za-z0-9]+){0,2})\b/,
@@ -391,6 +394,8 @@ export function looksLikeGoalStubName(name: string, goal?: string): boolean {
     return true;
   }
   if (looksLikeEducationKitDefaultName(n, goal)) return true;
+  if (/\?/.test(n)) return true;
+  if (/^(who|what|where|when|why|how|do|does|should|can|is|are)\b/i.test(n)) return true;
   if (/^(build|create|make|design|scaffold)\b/i.test(n)) return true;
   if (/\b(privacy-first|companion)\b/i.test(n)) return true;
   const words = lc.split(/\s+/).filter(Boolean);

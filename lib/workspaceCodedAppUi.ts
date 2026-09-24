@@ -10,6 +10,7 @@ import {
   PRODUCT_PREVIEW_REL,
   hasInteractiveProductPreview,
 } from "./interactiveProductPreview";
+import { workspaceHasNextAppRoot } from "./nextAppLivePreview";
 
 export const UI_GEN_MOCKUP_META = 'name="nebulla-preview" content="ui-gen-mockup"';
 export const UI_GEN_MOCKUP_MARKER = "ui-gen-mockup";
@@ -36,6 +37,7 @@ export function previewMetaHasProductRoutes(meta: {
   return (
     h === "real_routes" ||
     m === "interactive_product_preview" ||
+    m === "next_app_live" ||
     m === "live_app_static" ||
     m === "post_code_bridge"
   );
@@ -46,7 +48,7 @@ export function previewIframeCanRunProduct(meta: {
   previewMode?: string | null;
 }): boolean {
   const m = String(meta.previewMode || "");
-  return m === "interactive_product_preview" || m === "live_app_static";
+  return m === "interactive_product_preview" || m === "next_app_live" || m === "live_app_static";
 }
 
 const SKIP_DIR = new Set([
@@ -74,6 +76,7 @@ export type AppPreviewMode =
   | "post_code_bridge"
   | "thin_code_shell"
   | "interactive_product_preview"
+  | "next_app_live"
   | "live_app_static"
   | "empty";
 
@@ -320,6 +323,22 @@ export function resolveAppPreviewAuthority(workspaceRoot: string): AppPreviewAut
         codedApp: true,
         indexIsMockup: false,
         entryRel: built,
+        productFiles,
+        mockupRel,
+        limitation: null,
+      },
+      "real_routes",
+    );
+  }
+
+  if (hasRealRoutes && workspaceHasNextAppRoot(workspaceRoot)) {
+    return withHonesty(
+      {
+        mode: "next_app_live",
+        statusLabel: "App Preview is the coded Next app",
+        codedApp: true,
+        indexIsMockup: false,
+        entryRel: null,
         productFiles,
         mockupRel,
         limitation: null,

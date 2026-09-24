@@ -22,7 +22,8 @@ You are a senior product engineer who just received a client brief. Run this int
 Optional tool/web lookup only when a fact is missing (typical IA, how fares are quoted, which vendors exist). Stop when the interview is answered. Not a competitor dossier.
 Map answers: §1 thesis/actors/loop · §2–3 must-have, later, vendors as mock|needs key + what you'll ask after Live · §4 screens/fields/buttons only · §5 visual tokens.
 Do not hard-code another industry's kit. Do not emit Stripe/Firebase/Supabase/Mapbox/Twilio SDKs unless the user named that vendor or pasted a key.
-Do not ask for API keys before the mock product exists.`;
+Do not ask for API keys before the mock product exists.
+If Slot 4 classified extract as client-side / Tesseract / on-device, do NOT ask for an OCR API key. Super Admin env panel is optional after the loop exists.`;
 
 export type ApiNeed = "maps" | "payments" | "push" | "sms" | "messaging";
 
@@ -85,10 +86,23 @@ export function inferApiNeeds(goal: string, pages = "", brief = ""): ApiNeed[] {
   return [...new Set(needs)];
 }
 
+export function isClientSideExtractClassified(text?: string | null): boolean {
+  return /\b(tesseract|client[- ]?side extract|on[- ]?device extract|local extract|we[- ]?build.{0,40}extract)\b/i.test(
+    String(text || ""),
+  );
+}
+
 /** One follow-up after Live exists. Never before apply. From job-brief vendors — no hardcoded Maps kit. */
 export function buildPostApplyApiAsk(opts: { goal?: string; pages?: string; brief?: string }): string {
   const goal = sanitizeBriefForApiAsk(opts.goal || "");
+  const blob = `${goal} ${opts.pages || ""} ${opts.brief || ""}`;
+  if (isClientSideExtractClassified(blob) && !/\b(map|stripe|sms|twilio|push)\b/i.test(blob)) {
+    return "First version is on Live, mock only. Super Admin env keys are optional after this loop works — no OCR API key needed for client-side extract. What do you want to change?";
+  }
   const needs = inferApiNeeds(goal, opts.pages || "", opts.brief || "");
+  if (isClientSideExtractClassified(blob)) {
+    return "Keep mock unless you asked for a live API. Client-side extract does not need an OCR key. Super Admin env panel is optional after the loop exists.";
+  }
   const list = (needs.length ? needs : (["messaging"] as ApiNeed[])).map((n) => API_LABEL[n]).join(", ");
   return [
     "These APIs would make the mocks real: " + list + ".",

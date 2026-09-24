@@ -656,6 +656,22 @@ export function ensureInteractiveProductPreview(
   options?: { projectName?: string; productFiles?: string[]; logoInitials?: string },
 ): { written: boolean; path: string; screens: PreviewScreenHint[] } {
   const root = path.resolve(workspaceRoot);
+  const nextRoot = ["app/page.tsx", "app/page.jsx", "src/app/page.tsx", "src/app/page.jsx"].some((rel) =>
+    fs.existsSync(path.join(root, rel)),
+  );
+  if (nextRoot) {
+    for (const rel of [PRODUCT_PREVIEW_REL, "public/product-preview.html"]) {
+      const abs = path.join(root, rel);
+      if (fs.existsSync(abs)) {
+        try {
+          fs.unlinkSync(abs);
+        } catch {
+          /* ignore */
+        }
+      }
+    }
+    return { written: false, path: PRODUCT_PREVIEW_REL, screens: [] };
+  }
   const productFiles = options?.productFiles?.length
     ? options.productFiles
     : [];
@@ -710,5 +726,5 @@ WORKING APP OUTPUT (mandatory for product UI slices):
 - Home is the core job (next lesson), not a full-page "Who are you today?" role picker. Role switch is a small control.
 - Wire primary controls with mock/localStorage/in-memory state in the same slice. Silent no-op buttons are forbidden.
 - If a control cannot ship in this slice: disable it and label why (e.g. "Next slice: real AI"). Never leave a primary CTA that does nothing.
-- Nebulla may serve public/product-preview as an Interactive preview (mock data) when the iframe cannot run Vite/Next — still implement real client wiring in app/ source.
+- When a Next root exists (app/page.tsx), Live must render that app — never public/product-preview/index.html. Delete or ignore product-preview after Foundation.
 `.trim();

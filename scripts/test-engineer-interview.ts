@@ -12,6 +12,7 @@ import {
   buildPostApplyApiAsk,
   ENGINEER_INTERVIEW_PROMPT,
   inferApiNeeds,
+  isClientSideExtractClassified,
   jobBriefFitsRoutes,
   looksLikeVendorSdkPath,
   userNamedVendor,
@@ -102,6 +103,22 @@ assert.equal(isActionVerbRoute("/decline", "Decline"), true);
 assert.equal(isActionVerbRoute("/messages", "Messages"), false);
 assert.equal(looksLikeDummyListBody("<strong>First item</strong> Ready now <strong>Second item</strong> This afternoon Open"), true);
 assert.equal(looksLikeDummyListBody("<h1>Profile</h1><label>Portfolio</label>"), false);
+
+const dossierPages = seedPagesFromGoal(
+  "**Product name:** MyDossier\nKeep client scans, extract locally with Tesseract, review, save dossiers.",
+);
+assert.ok(dossierPages.some((p) => p.route === "/dossiers"));
+assert.ok(dossierPages.some((p) => p.route === "/forms"));
+assert.ok(dossierPages.some((p) => p.route === "/dashboard"));
+assert.equal(dossierPages.some((p) => p.route === "/login" || p.route === "/register"), false);
+assert.equal(isClientSideExtractClassified("Tesseract client-side extract on-device"), true);
+const ocrAsk = buildPostApplyApiAsk({
+  goal: "**Product name:** MyDossier\nClient-side extract with Tesseract. Keep documents.",
+});
+assert.equal(/Paste keys or say keep mock/i.test(ocrAsk), false);
+assert.equal(/need an OCR/i.test(ocrAsk) || /no OCR API key/i.test(ocrAsk), true);
+assert.match(ocrAsk, /optional|client-side extract/i);
+assert.match(ENGINEER_INTERVIEW_PROMPT, /do NOT ask for an OCR API key/i);
 
 const courierPages = seedPagesFromGoal(motoGoal);
 assert.equal(courierPages.some((p) => /discover|decline/i.test(p.route)), false);

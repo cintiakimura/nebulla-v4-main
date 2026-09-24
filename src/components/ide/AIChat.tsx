@@ -1914,9 +1914,15 @@ export function AIChat() {
     const isBootstrapTrigger = isHiddenBootstrapUserMessage(rawText);
     const projectNameAnswer = detectProjectNameAnswer(rawText, prior);
     if (projectNameAnswer) {
+      const previousChip = getBrowserProjectName().trim();
       setBrowserProjectName(projectNameAnswer);
       clearIdeWorkspaceMetaCache();
-      void upsertCloudProject({ name: projectNameAnswer, pages: [], edges: [] }).catch(() => {});
+      void upsertCloudProject({
+        name: projectNameAnswer,
+        pages: [],
+        edges: [],
+        replaceName: previousChip && previousChip !== projectNameAnswer ? previousChip : undefined,
+      }).catch(() => {});
     }
     const latestAppIssue = alreadyHasAppStatus ? getAppStatusDebugIssues(1).primary : null;
     const displayContent =

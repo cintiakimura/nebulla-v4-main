@@ -201,6 +201,11 @@ import {
   PRODUCT_PREVIEW_REL,
 } from "./lib/interactiveProductPreview";
 import {
+  buildLiveHtmlFromNextApp,
+  removeProductPreviewAfterFoundation,
+  workspaceHasNextAppRoot,
+} from "./lib/nextAppLivePreview";
+import {
   masterPlanKeyForTabIndex,
   normalizeMasterPlanRecord,
   parseMasterPlanBlock,
@@ -2594,18 +2599,6 @@ No approved UI code yet.
       // Coded app/src pages: serve those routes or an honest bridge — never the role-picker mock.
 
       let authority = resolveAppPreviewAuthority(pp.workspaceRoot);
-      if (
-        authority.honesty === "real_routes" &&
-        authority.codedApp &&
-        !hasInteractiveProductPreview(pp.workspaceRoot)
-      ) {
-        ensureInteractiveProductPreview(pp.workspaceRoot, {
-          projectName: displayName,
-          productFiles: authority.productFiles,
-          logoInitials: readProductIdentity(pp.workspaceRoot)?.logoInitials,
-        });
-        authority = resolveAppPreviewAuthority(pp.workspaceRoot);
-      }
       let html = "";
       const surface = String(q.surface || "").toLowerCase();
       const preferMockup = surface === "mockup" || surface === "ui-gen";
@@ -2619,10 +2612,15 @@ No approved UI code yet.
         }
       }
 
+      if (!html && authority.mode === "next_app_live") {
+        html = buildLiveHtmlFromNextApp(pp.workspaceRoot, displayName) || "";
+      }
+
       if (
         !html &&
         authority.mode === "interactive_product_preview" &&
-        authority.entryRel
+        authority.entryRel &&
+        !workspaceHasNextAppRoot(pp.workspaceRoot)
       ) {
         const entryAbs = path.join(pp.workspaceRoot, authority.entryRel);
         if (fs.existsSync(entryAbs)) {
@@ -3097,11 +3095,15 @@ No approved UI code yet.
             const diskUi = listProductUiFiles(workspaceRoot, 24);
             const diskDepth = assessApplyRouteDepth(diskUi.length ? diskUi : writtenSnapshot);
             if (!diskDepth.zeroProductRoutes) {
-              ensureInteractiveProductPreview(workspaceRoot, {
-                projectName,
-                productFiles: diskUi.length ? diskUi : writtenSnapshot,
-                logoInitials: readProductIdentity(workspaceRoot)?.logoInitials,
-              });
+              if (workspaceHasNextAppRoot(workspaceRoot)) {
+                removeProductPreviewAfterFoundation(workspaceRoot);
+              } else {
+                ensureInteractiveProductPreview(workspaceRoot, {
+                  projectName,
+                  productFiles: diskUi.length ? diskUi : writtenSnapshot,
+                  logoInitials: readProductIdentity(workspaceRoot)?.logoInitials,
+                });
+              }
               applyProductPalettePass({
                 workspaceRoot,
                 masterPlanPath: pp.masterPlanPath,

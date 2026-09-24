@@ -31,6 +31,9 @@ function section(name: string) {
 section("stub names and Grain Bakery brand");
 {
   assert.equal(looksLikeGoalStubName("Project type Mobile App primary"), true);
+  assert.equal(looksLikeGoalStubName("Who should keep the scans?"), true);
+  assert.equal(looksLikeGoalStubName("MyDossier"), false);
+  assert.equal(inferProductName("**Product name:** MyDossier\nKeep client scans."), "MyDossier");
   assert.equal(isWorkspaceLabelStub("Project type Mobile App primary"), true);
   assert.equal(isWorkspaceLabelStub("Untitled Project"), true);
   assert.equal(isWorkspaceLabelStub("LoafLocal"), false);
@@ -192,9 +195,7 @@ section("style pass writes globals + preview without a draft file");
   const layout = fs.readFileSync(path.join(tmp, "app/layout.tsx"), "utf8");
   assert.match(layout, /Grain Bakery/);
   assert.equal(/Project type Mobile App primary/.test(layout), false);
-  const preview = fs.readFileSync(path.join(tmp, "public/product-preview/index.html"), "utf8");
-  assert.match(preview, /#8B4513|#8b4513/);
-  assert.match(preview, /Grain Bakery/);
+  assert.equal(fs.existsSync(path.join(tmp, "public/product-preview/index.html")), false);
   assert.equal(fs.existsSync(path.join(tmp, "public/nebula-ui-gen-preview.html")), false);
   const brief = fs.readFileSync(path.join(tmp, "nebula-ui-studio/ui-brief.md"), "utf8");
   assert.equal(/education-calm/i.test(brief), false);

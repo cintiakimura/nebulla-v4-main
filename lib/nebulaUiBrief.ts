@@ -297,8 +297,21 @@ export function seedPagesFromGoal(goal: string): { name: string; route: string }
       { name: "Brands", route: "/brands" },
     ];
   }
-  if (/\b(taskwise|dossier|\btasks?\b|\btodo\b|\bhabit\b|\bchecklist\b|\bproductiv)/i.test(g)) {
+  if (
+    /\b(mydossier|dossiers?|forms?|scans?|documents?|extract|ocr|tesseract|client.?side extract)\b/i.test(
+      g,
+    )
+  ) {
     return [
+      { name: "Home", route: "/" },
+      { name: "Dossiers", route: "/dossiers" },
+      { name: "Forms", route: "/forms" },
+      { name: "Dashboard", route: "/dashboard" },
+    ];
+  }
+  if (/\b(taskwise|\btasks?\b|\btodo\b|\bhabit\b|\bchecklist\b|\bproductiv)/i.test(g)) {
+    return [
+      { name: "Home", route: "/" },
       { name: "Input", route: "/input" },
       { name: "Summary", route: "/summary" },
       { name: "Tasks", route: "/tasks" },

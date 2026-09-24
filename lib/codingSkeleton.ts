@@ -234,7 +234,7 @@ export function formatCodingSkeletonForGo(c: CodingSkeleton): string {
  */
 export const FOUNDATION_MIN_UI_CHECKLIST = `FOUNDATION MIN UI (visible on Live this Go — Foundation+Primary, not Data+API):
 1. Header: ONE product name + initials (same string as chip / <title> / Live). Never concatenate leftover brands (no Quill Learn Kids Bridgen).
-2. Nav: §4 routes as real tabs/segments (3–5 links). No empty chrome. No leftover Practice/Teacher/Session unless THIS goal is education.
+2. Nav: §4 routes as real tabs/segments (3–5 links), including inferred workflow pages from the lock (dossiers + forms + dashboard when the goal is keep/find documents). No empty chrome. No leftover Practice/Teacher/Session unless THIS goal is education. Forbidden first slice: login/register + stock Home cards only.
 3. Home (non-education): job title from the goal verb; ≥2 mock items; one primary CTA to the main action route. Forbidden: "One short lesson", "Weekly streak", "Start practice", "Interactive screen with mock data".
 4. Home (education only): lesson + streak + Start practice OK; add Teacher route if the goal mentions teachers.
 5. Action screen (book / request / order / upload): ≥2 labeled fields or a file control; Submit/Accept updates lib/mockStore.ts. Not a single Continue on an empty card.
