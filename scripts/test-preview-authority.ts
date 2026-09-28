@@ -32,6 +32,7 @@ import {
   PREVIEW_RENDER_FIX_LABEL,
   previewHtmlHasLeakedSource,
   previewTextLooksLikeLeakedSource,
+  scrubPreviewDocumentIfSourceLeaked,
 } from "../lib/previewSourceHonesty.ts";
 import {
   ensurePreviewIndexHtml,
@@ -549,6 +550,43 @@ section("source-shaped preview text is not App looks OK");
   assert.equal(/App looks OK/i.test(auth.statusLabel), false);
   assert.match(PREVIEW_RENDER_FIX_LABEL, /First version on disk/);
   fs.rmSync(root, { recursive: true, force: true });
+}
+
+section("iframe onLoad scrub rewrites leaked source (new empty workspace after deploy — do not reuse a live courier project)");
+{
+  const doc = {
+    body: {
+      innerText: "City Courier\nconst [open, setOpen] = useState(\nreturn (",
+      textContent: "City Courier\nconst [open, setOpen] = useState(\nreturn (",
+      innerHTML: "<pre>const [open, setOpen] = useState(0); return (</pre>",
+    },
+    documentElement: {
+      innerText: "",
+      innerHTML: "",
+      getAttribute: () => null,
+      setAttribute: () => undefined,
+    },
+    querySelector: () => ({ getAttribute: () => "app/page.tsx" }),
+    querySelectorAll: () => [{ innerText: "useState return (" }],
+  };
+  assert.equal(scrubPreviewDocumentIfSourceLeaked(doc, "app/page.tsx"), true);
+  assert.match(String(doc.body.innerHTML), /Preview failed to render/);
+  assert.doesNotMatch(String(doc.body.innerHTML), /useState/);
+  const clean = {
+    body: { innerText: "Request a pickup", textContent: "Request a pickup", innerHTML: "<h1>Request a pickup</h1>" },
+    documentElement: { getAttribute: () => null, setAttribute: () => undefined },
+    querySelector: () => null,
+    querySelectorAll: () => [],
+  };
+  assert.equal(scrubPreviewDocumentIfSourceLeaked(clean, "app/page.tsx"), false);
+  const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+  const studio = fs.readFileSync(path.join(repo, "src/components/ide/IdeUiStudioBeta.tsx"), "utf8");
+  const canvas = fs.readFileSync(
+    path.join(repo, "src/components/ide/shell/previewTools/BuildPreviewCanvas.tsx"),
+    "utf8",
+  );
+  assert.match(studio, /attachPreviewIframeSourceScrub/);
+  assert.match(canvas, /attachPreviewIframeSourceScrub/);
 }
 
 section("user-facing logs never print Figma keys");

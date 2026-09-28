@@ -5,6 +5,7 @@
  */
 
 import { reportAppRuntimeIssue, type AppRuntimeIssueSource } from './ideAppRuntimeStatus';
+import { PREVIEW_SOURCE_SCRUB_INLINE_SCRIPT } from '../../lib/previewSourceHonesty';
 import {
   PREVIEW_RUNTIME_BRIDGE_SCRIPT,
   PREVIEW_RUNTIME_MSG_SOURCE,
@@ -30,6 +31,12 @@ export function injectPreviewRuntimeBridge(win: Window | null): boolean {
     script.type = 'text/javascript';
     script.text = PREVIEW_RUNTIME_BRIDGE_SCRIPT;
     (doc.head || doc.documentElement).appendChild(script);
+    if (!(win as unknown as Record<string, unknown>).__nebullaPreviewSourceScrub) {
+      const scrub = doc.createElement('script');
+      scrub.type = 'text/javascript';
+      scrub.text = PREVIEW_SOURCE_SCRUB_INLINE_SCRIPT;
+      (doc.head || doc.documentElement).appendChild(scrub);
+    }
     return true;
   } catch {
     return false;

@@ -3,6 +3,8 @@
  * Used by client inject + server bootstrap HTML so capture starts before onload.
  */
 
+import { PREVIEW_SOURCE_SCRUB_INLINE_SCRIPT } from '../../lib/previewSourceHonesty';
+
 export const PREVIEW_RUNTIME_MSG_SOURCE = 'nebulla-preview-runtime';
 
 const INJECT_FLAG = '__nebullaPreviewRuntimeBridge';
@@ -112,7 +114,7 @@ export function wrapHtmlWithPreviewRuntimeBridge(html: string): string {
   if (raw.includes(PREVIEW_RUNTIME_BOOTSTRAP_MARKER) || raw.includes(INJECT_FLAG)) {
     return raw;
   }
-  const tag = `${PREVIEW_RUNTIME_BOOTSTRAP_MARKER}<script>${PREVIEW_RUNTIME_BRIDGE_SCRIPT}</script>`;
+  const tag = `${PREVIEW_RUNTIME_BOOTSTRAP_MARKER}<script>${PREVIEW_RUNTIME_BRIDGE_SCRIPT}</script><script>${PREVIEW_SOURCE_SCRUB_INLINE_SCRIPT}</script>`;
   if (/<head([^>]*)>/i.test(raw)) {
     return raw.replace(/<head([^>]*)>/i, `<head$1>${tag}`);
   }

@@ -33,6 +33,7 @@ section('bootstrap HTML wraps with early bridge');
   const out = wrapHtmlWithPreviewRuntimeBridge(html);
   assert.ok(out.includes(PREVIEW_RUNTIME_BOOTSTRAP_MARKER));
   assert.ok(out.includes('__nebullaPreviewRuntimeBridge'));
+  assert.ok(out.includes('__nebullaPreviewSourceScrub'));
   assert.ok(out.includes('network-error'));
   // idempotent
   const twice = wrapHtmlWithPreviewRuntimeBridge(out);

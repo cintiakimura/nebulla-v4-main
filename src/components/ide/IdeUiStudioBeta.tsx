@@ -26,6 +26,7 @@ import {
 import { cn } from '@/lib/utils';
 import { useLanguage } from '@/components/i18n/LanguageProvider';
 import { getBrowserProjectName, withProjectBody, withProjectQuery } from '../../lib/nebulaProjectApi';
+import { attachPreviewIframeSourceScrub } from '../../../lib/previewSourceHonesty';
 import { getGrokRequestHeaders } from '../../lib/grokUserKey';
 import { getStoredV0ApiKey, getV0RequestHeaders, hasLocalV0ApiKey, NEBULLA_V0_KEY_STORAGE } from '../../lib/v0Key';
 import { formatV0UiError } from '../../lib/v0ErrorMessage';
@@ -2336,6 +2337,7 @@ export function IdeUiStudioBeta({
                       src={livePreviewUrl}
                       className="min-h-[640px] w-full border-0 bg-white"
                       sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals"
+                      onLoad={(e) => attachPreviewIframeSourceScrub(e.currentTarget)}
                     />
                   ) : previewSurface === 'v0-live' && v0DemoUrl ? (
                     <iframe
@@ -2382,6 +2384,7 @@ export function IdeUiStudioBeta({
                     src={livePreviewUrl}
                     className="min-h-[420px] w-full flex-1 border-0 bg-white"
                     sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals"
+                    onLoad={(e) => attachPreviewIframeSourceScrub(e.currentTarget)}
                   />
                 ) : previewSurface === 'v0-live' && v0DemoUrl ? (
                   <iframe

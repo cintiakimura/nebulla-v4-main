@@ -29,7 +29,7 @@ import {
   scheduleAppRuntimeHealthyCheck,
 } from '../lib/ideAppRuntimeStatus';
 import { IdeAppStatusPreviewBadge } from './ide/IdeAppStatusMenu';
-import { scrubPreviewDocumentIfSourceLeaked } from '../../lib/previewSourceHonesty';
+import { attachPreviewIframeSourceScrub } from '../../lib/previewSourceHonesty';
 
 const PREVIEW_WIDTH_LS = 'nebulla_app_preview_width_px';
 
@@ -314,11 +314,7 @@ export function AppPreviewPanel({
     connectPreviewWindow(w);
     applyPageHash(w, selectedPageLabel);
     const injected = injectPreviewRuntimeBridge(w);
-    try {
-      scrubPreviewDocumentIfSourceLeaked(iframeRef.current?.contentDocument, 'app/page.tsx');
-    } catch {
-      /* ignore */
-    }
+    attachPreviewIframeSourceScrub(iframeRef.current);
     if (injected) {
       scheduleAppRuntimeHealthyCheck({ quietMs: 4000 });
     }
