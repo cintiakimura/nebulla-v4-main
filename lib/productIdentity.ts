@@ -389,13 +389,6 @@ export function detectProductDomain(goal: string, projectType?: string): Product
   return "general";
 }
 
-function optionalAudienceWord(goal: string, domain: ProductDomain, desc: string): string | null {
-  if (domain === "education" && /\bkids?\b|\bchildren\b/.test(goal.toLowerCase())) {
-    if (desc.toLowerCase() !== "kids") return "Kids";
-  }
-  return null;
-}
-
 /**
  * 2–4 word Title Case brand. Never the first N words of the goal.
  * Prefers one invented stem + optional descriptor.
@@ -446,9 +439,8 @@ export function inferProductName(goal: string, projectType?: string): string {
   const descs = DESCRIPTORS[domain];
   const stem = stems[h % stems.length];
   const desc = descs[(h >>> 4) % descs.length];
-  const extra = optionalAudienceWord(g, domain, desc);
-  const parts = extra ? [stem, desc, extra] : [stem, desc];
-  return toTitleCase(parts.slice(0, 4).join(" ")) || "Nova Studio";
+  // Never copy audience words from the brief (Kids/children) — that looks like a chopped goal.
+  return toTitleCase([stem, desc].join(" ")) || "Nova Studio";
 }
 
 /** Two letters from the product name (first two words, or first two letters of one word). */
