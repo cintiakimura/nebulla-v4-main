@@ -10,7 +10,8 @@ import {
   PRODUCT_PREVIEW_REL,
   hasInteractiveProductPreview,
 } from "./interactiveProductPreview";
-import { workspaceHasNextAppRoot } from "./nextAppLivePreview";
+import { buildLiveHtmlFromNextApp, workspaceHasNextAppRoot } from "./nextAppLivePreview";
+import { PREVIEW_RENDER_FIX_LABEL, previewHtmlHasLeakedSource } from "./previewSourceHonesty";
 
 export const UI_GEN_MOCKUP_META = 'name="nebulla-preview" content="ui-gen-mockup"';
 export const UI_GEN_MOCKUP_MARKER = "ui-gen-mockup";
@@ -362,18 +363,21 @@ export function resolveAppPreviewAuthority(workspaceRoot: string): AppPreviewAut
 
   if (codedProductLive) {
     if (workspaceHasNextAppRoot(workspaceRoot)) {
+      const liveHtml = buildLiveHtmlFromNextApp(workspaceRoot) || "";
+      const renderFailed =
+        /Preview failed to render/i.test(liveHtml) || previewHtmlHasLeakedSource(liveHtml);
       return withHonesty(
         {
           mode: "next_app_live",
-          statusLabel: "App Preview is the coded Next app",
+          statusLabel: renderFailed ? PREVIEW_RENDER_FIX_LABEL : "App Preview is the coded Next app",
           codedApp: true,
           indexIsMockup: false,
           entryRel: null,
           productFiles,
           mockupRel,
-          limitation: null,
+          limitation: renderFailed ? PREVIEW_RENDER_FIX_LABEL : null,
         },
-        "real_routes",
+        renderFailed ? "thin_code_shell" : "real_routes",
       );
     }
     return withHonesty(

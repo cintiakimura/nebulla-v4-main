@@ -379,19 +379,16 @@ export function buildPostApplyApiAsk(opts: {
   tech?: string;
 }): string {
   const rows = inferSlot4Catalog(opts);
-  const tesseract = isClientSideExtractClassified(lockBlob(opts));
-  const lines = rows.map((r) => formatSlot4CatalogAskLine(r));
-  const extract = rows.find((r) => r.need === "extract");
   const header = "First version is on Live, mock only.";
-  const closer =
-    "Ask once per lock: keep the default we ship, or paste a value for Super Admin env (workspace .env.local). Super Admin does not replace extract/save.";
-  const tessNote = tesseract
-    ? "Tesseract is the locked we-build — no Vision key required to ship the first extract loop."
-    : "";
-  if (!lines.length) {
-    return [header, "No unclassified vendor keys for this lock. Keep mock.", closer].join(" ");
+  const one = rows.find((r) => r.requiresPaidKey) || rows[0];
+  if (!one) {
+    return `${header} Keep mock. Super Admin env can wait.`;
   }
-  return [header, tessNote, lines.join(". "), closer].filter(Boolean).join(" ");
+  const tesseract = one.need === "extract" && isClientSideExtractClassified(lockBlob(opts));
+  const lock = tesseract
+    ? "One lock: keep Tesseract in-browser (no Vision key), or add a vendor later in Super Admin."
+    : `One lock: keep mock ${one.label.toLowerCase()}, or add a key later in Super Admin.`;
+  return `${header} ${lock}`;
 }
 
 export function userNoteHasVendorKey(text: string): boolean {

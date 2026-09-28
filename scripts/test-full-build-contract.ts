@@ -13,6 +13,7 @@ import {
   fillMissingSection3Features,
   fillMissingSection4PageFields,
   formatFullBuildApplyLine,
+  formatFullBuildFirstSpokenLine,
   formatFullBuildIncompleteStop,
   fullBuildGoUserNote,
   fullBuildIncompleteFollowUp,
@@ -384,7 +385,16 @@ section("FAST LANE persist fill before incomplete gate (new empty workspace — 
   assert.match(formatFullBuildIncompleteStop("plan/ui-brief"), /Full Build will not start/);
   assert.doesNotMatch(formatFullBuildIncompleteStop("x"), /Foundation will not start/);
   assert.match(FULL_BUILD_INCOMPLETE_STOP, /after persist/);
+  assert.match(FULL_BUILD_NO_RETRY_ACTIVITY, /Not retrying Foundation\+Primary/);
   assert.match(chat, /Architecture POST abort after fill persist is not "you cancelled coding"/);
+  const spoken = formatFullBuildFirstSpokenLine(seed);
+  assert.ok(spoken.length > 40, spoken);
+  assert.match(spoken, /Got it|first version/i);
+  assert.doesNotMatch(spoken, /\?/);
+  assert.doesNotMatch(spoken, /who is it for|which sounds better|talk first/i);
+  assert.match(chat, /formatFullBuildFirstSpokenLine\(seedForPlan\)/);
+  assert.doesNotMatch(chat, /fastLaneFillAllowGo !== null\s*\n\s*\? ''/);
+  assert.match(chat, /skipGrokChat/);
   const server = fs.readFileSync(path.join(REPO, "server.ts"), "utf8");
   const fillFn = server.slice(server.indexOf('app.post("/api/master-plan/fill-missing-section4"'));
   assert.match(fillFn, /applyFullBuildPlanFill/);

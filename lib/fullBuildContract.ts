@@ -550,6 +550,30 @@ export function seedAlreadyHasWhoAndJob(text: string): boolean {
   return SEED_WHO_RE.test(t) && SEED_JOB_RE.test(t);
 }
 
+function collectSeedTokens(re: RegExp, text: string): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  const r = new RegExp(re.source, "gi");
+  let m: RegExpExecArray | null;
+  while ((m = r.exec(text))) {
+    const w = String(m[1] || m[0] || "").toLowerCase();
+    if (!w || seen.has(w)) continue;
+    seen.add(w);
+    out.push(w);
+  }
+  return out;
+}
+
+/** One spoken chat line before Go — not an interview, not an empty skipGrokChat bubble. */
+export function formatFullBuildFirstSpokenLine(seed: string): string {
+  const t = String(seed || "").replace(/\s+/g, " ").trim();
+  const roles = collectSeedTokens(SEED_WHO_RE, t).slice(0, 3);
+  const jobs = collectSeedTokens(SEED_JOB_RE, t).slice(0, 3);
+  const roleBit = roles.length ? roles.join(", ") : "your users";
+  const jobBit = jobs.length ? jobs.join(", ") : "the job you named";
+  return `Got it — ${roleBit} + ${jobBit}. I'll draft the plan from your brief and build a first version.`;
+}
+
 /**
  * Skip the plan-writing Grok call only when THIS seed already has a Full Build-complete plan.
  * Leftover stubs / bootstrap shells / a different product must not skip.

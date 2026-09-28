@@ -159,8 +159,9 @@ export function IdeAppStatusMenuButton({
   const [open, setOpen] = useState(false);
   const errorCount = snap.issues.filter((i) => i.severity !== 'info').length;
   const runtimeHealthy = errorCount === 0;
-  // Phase 7: “App looks OK” only when honesty is real_routes.
-  const honestSuccess = runtimeHealthy && honesty === 'real_routes';
+  const renderFix = /preview needs a render fix/i.test(previewLabel || '');
+  // Phase 7: “App looks OK” only when honesty is real_routes and the canvas is not leaked source.
+  const honestSuccess = runtimeHealthy && honesty === 'real_routes' && !renderFix;
 
   useEffect(() => {
     const onOpen = () => {
@@ -208,8 +209,10 @@ export function IdeAppStatusMenuButton({
       : t('appStatus.nIssues', { count: errorCount })
     : honesty === 'mockup_waiting'
       ? t('appStatus.mockupWaiting')
-      : honesty === 'thin_code_shell'
-        ? t('appStatus.thinShell')
+      : honesty === 'thin_code_shell' || renderFix
+        ? renderFix
+          ? previewLabel || 'First version on disk — preview needs a render fix'
+          : t('appStatus.thinShell')
         : honesty === 'empty'
           ? previewLabel || t('appStatus.noPreview')
           : honestSuccess
@@ -295,10 +298,11 @@ export function IdeAppStatusMenuButton({
 /** Compact status dot for the preview dock chrome. */
 export function IdeAppStatusPreviewBadge() {
   const { t } = useLanguage();
-  const { honesty } = usePreviewHonesty();
+  const { honesty, previewLabel } = usePreviewHonesty();
   const count = getAppRuntimeErrorCount();
   const runtimeHealthy = count === 0;
-  const honestSuccess = runtimeHealthy && honesty === 'real_routes';
+  const renderFix = /preview needs a render fix/i.test(previewLabel || '');
+  const honestSuccess = runtimeHealthy && honesty === 'real_routes' && !renderFix;
   return (
     <button
       type="button"

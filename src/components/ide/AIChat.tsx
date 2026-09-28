@@ -96,7 +96,7 @@ import {
 } from '../../lib/nebulaAiCodingPipeline';
 import { isFoundationGoInFlight } from '../../lib/foundationHeavyJob';
 import { abortHonestyUserLine, abortWithUserStopReason, isAbortLikeError, isAbortLikeMessage } from '../../lib/abortLikeError';
-import { fullBuildGoUserNote, fullBuildIncompleteFollowUp, formatFullBuildIncompleteStop, FULL_BUILD_INCOMPLETE_STOP, FULL_BUILD_NO_RETRY_ACTIVITY, seedAlreadyHasWhoAndJob, shouldSkipGrokChatForExistingPlan } from '../../../lib/fullBuildContract';
+import { fullBuildGoUserNote, fullBuildIncompleteFollowUp, formatFullBuildFirstSpokenLine, formatFullBuildIncompleteStop, FULL_BUILD_INCOMPLETE_STOP, FULL_BUILD_NO_RETRY_ACTIVITY, seedAlreadyHasWhoAndJob, shouldSkipGrokChatForExistingPlan } from '../../../lib/fullBuildContract';
 import {
   isAssistantCodingPromise,
   isAssistantRefineClaim,
@@ -566,7 +566,9 @@ export function AIChat() {
           {
             id: `api-ask-${Date.now()}`,
             role: 'assistant' as const,
-            content: `${PRODUCT_MVP_READY_MESSAGE}\n\n${ask}`,
+            content: /First version is on Live/i.test(ask)
+              ? ask
+              : `${PRODUCT_MVP_READY_MESSAGE}\n\n${ask}`,
             timestamp: stamp,
           },
         ];
@@ -2693,8 +2695,8 @@ export function AIChat() {
         if (skipGrokChat) {
           skippedGrokChat = true;
           assistantContent =
-            fastLaneFillAllowGo !== null
-              ? ''
+            seedAlreadyHasWhoAndJob(seedForPlan) || fastLaneFillAllowGo !== null
+              ? formatFullBuildFirstSpokenLine(seedForPlan)
               : foundationLandedOnDisk()
                 ? PRODUCT_MVP_READY_MESSAGE
                 : 'Master Plan already on disk — continuing the plan, then Full Build.';
@@ -3330,7 +3332,7 @@ export function AIChat() {
                   : 'START_CODING — launching Full Build',
             wantsNextSlice && !foundationLanded && fastPrototypeTurn ? 'warn' : 'info',
           );
-          launchedGoSlice = editMode ? 'Polish' : 'Foundation';
+          launchedGoSlice = editMode ? 'Polish' : fastPrototypeTurn ? 'Foundation' : 'Full Build';
           const goSliceInstruction = editMode
             ? buildEditExistingUserNote(rawText)
             : fastPrototypeTurn
@@ -3506,7 +3508,7 @@ export function AIChat() {
             noteProblem(
               coding.blockedReason
                 ? `${coding.blockedReason.message} [${coding.blockedReason.code}]`
-                : blockedLine || 'Foundation coding reported a problem',
+                : blockedLine || 'Full Build coding reported a problem',
             );
             if (coding.blockedReason?.code === 'RESEARCH_INCOMPLETE') {
               setAccessoryHint('Retry research — Full Build will not start until Gate R is complete.');
@@ -4107,7 +4109,7 @@ export function AIChat() {
         const problems = [
           go.blockedReason
             ? `${go.blockedReason.message} [${go.blockedReason.code}]`
-            : go.statusMessage || 'Foundation coding reported a problem',
+            : go.statusMessage || 'Full Build coding reported a problem',
         ];
         if (go.ok) {
           try {

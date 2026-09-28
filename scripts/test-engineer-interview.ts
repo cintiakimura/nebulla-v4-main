@@ -42,7 +42,7 @@ assert.match(boot, /THIS TURN FORBIDDEN/);
 assert.equal(/ENGINEER INTERVIEW/.test(boot), false);
 assert.match(boot, /job-brief\.md/);
 
-assert.match(FOUNDATION_MIN_UI_CHECKLIST, /Foundation\+Primary/);
+assert.match(FOUNDATION_MIN_UI_CHECKLIST, /Full Build emits this on every §4 route/);
 assert.match(
   buildCompactGoCodeUserPrompt({
     sliceLine: "SLICE: Foundation",
@@ -88,16 +88,21 @@ assert.match(shopBrief, /browse → book/i);
 assert.equal(jobBriefFitsRoutes(shopBrief, ["/", "/book", "/mechanic"]), true);
 
 const ask = buildPostApplyApiAsk({ goal: motoGoal });
-assert.match(ask, /Maps|Payments|Push/);
-assert.match(ask, /MAPBOX_TOKEN|account\.mapbox\.com/);
-assert.match(ask, /STRIPE_SECRET_KEY|dashboard\.stripe\.com/);
+assert.match(ask, /First version is on Live, mock only/);
+assert.match(ask, /One lock/);
+assert.ok(
+  [/AUTH_SECRET/, /MAPBOX_TOKEN/, /ONESIGNAL/].filter((re) => re.test(ask)).length <= 1,
+  "no AUTH+MAPBOX+ONESIGNAL wall in the first-version bubble",
+);
+assert.doesNotMatch(ask, /AUTH_SECRET/);
+assert.doesNotMatch(ask, /ONESIGNAL/);
 assert.equal(/Messaging/i.test(ask), false);
-assert.equal(/Continue/i.test(ask), false);
 assert.ok(inferApiNeeds(motoGoal).includes("maps"));
 
 const creatorGoal = "creators + brands marketplace profiles portfolio prices outreach both ways";
 const creatorAsk = buildPostApplyApiAsk({ goal: creatorGoal });
-assert.match(creatorAsk, /Messaging|Payments/);
+assert.match(creatorAsk, /First version is on Live, mock only/);
+assert.match(creatorAsk, /One lock|Keep mock/i);
 assert.equal(/Maps \(live track\)|SMS/i.test(creatorAsk), false);
 assert.equal(
   /Maps \(live track\)/i.test(buildPostApplyApiAsk({ goal: `${ENGINEER_INTERVIEW_PROMPT}\n${creatorGoal}` })),
@@ -121,13 +126,12 @@ assert.equal(isClientSideExtractClassified("Tesseract client-side extract on-dev
 const dossierGoal = "**Product name:** MyDossier\nClient-side extract with Tesseract. Keep documents.";
 const ocrAsk = buildPostApplyApiAsk({ goal: dossierGoal });
 assert.equal(/Messaging/i.test(ocrAsk), false);
-assert.match(ocrAsk, /Tesseract in-browser \(no key\)/);
-assert.match(ocrAsk, /OCR_PROVIDER/);
-assert.match(ocrAsk, /console\.cloud\.google\.com/);
-assert.match(ocrAsk, /S3_BUCKET/);
-assert.match(ocrAsk, /AUTH_SECRET/);
-assert.match(ocrAsk, /AWS \/ Cloudflare/);
-assert.match(ocrAsk, /no Vision key required/i);
+assert.match(ocrAsk, /First version is on Live, mock only/);
+assert.match(ocrAsk, /Tesseract in-browser \(no Vision key\)|One lock/);
+assert.doesNotMatch(ocrAsk, /AUTH_SECRET/);
+assert.doesNotMatch(ocrAsk, /S3_BUCKET/);
+assert.doesNotMatch(ocrAsk, /MAPBOX_TOKEN/);
+assert.doesNotMatch(ocrAsk, /ONESIGNAL/);
 assert.equal(/paste (an? )?(OCR|Vision) key/i.test(ocrAsk), false);
 assert.equal(/demand a Vision key/i.test(ocrAsk), false);
 const dossierRows = inferSlot4Catalog({ goal: dossierGoal });

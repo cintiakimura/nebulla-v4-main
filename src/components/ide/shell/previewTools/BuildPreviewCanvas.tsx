@@ -18,6 +18,7 @@ import {
 } from '../../../../lib/uiStudioBetaEngine';
 import { sanitizeUserFacingCopy } from '../../../../../lib/assistantChatSanitize';
 import { subscribeGrokCodingActive } from '../../../../lib/nebulaGrokCodingGate';
+import { scrubPreviewDocumentIfSourceLeaked } from '../../../../../lib/previewSourceHonesty';
 
 export function buildPreviewBootstrapPath(opts: { rev: number; showDraft: boolean }): string {
   const q = `/api/app-preview/bootstrap?_rev=${opts.rev}`;
@@ -338,6 +339,7 @@ export function BuildPreviewCanvas() {
                 return;
               }
               const visual = htmlLooksLikeShowablePreview(html);
+              if (doc) scrubPreviewDocumentIfSourceLeaked(doc, 'app/page.tsx');
               setHasVisualPreview(visual);
               if (visual) {
                 setFailed(false);

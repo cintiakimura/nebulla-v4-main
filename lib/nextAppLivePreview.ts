@@ -5,6 +5,11 @@ import fs from "fs";
 import path from "path";
 import { PRODUCT_PREVIEW_REL } from "./interactiveProductPreview";
 import { readProductIdentity } from "./productIdentity";
+import {
+  buildPreviewFailedHtml,
+  previewHtmlHasLeakedSource,
+  previewTextLooksLikeLeakedSource,
+} from "./previewSourceHonesty";
 
 export const NEXT_APP_LIVE_MARKER = "next-app-live";
 
@@ -131,7 +136,11 @@ export function buildLiveHtmlFromNextApp(
   const title = String(identity?.projectName || displayName || "App").trim() || "App";
   const initials = String(identity?.logoInitials || title.slice(0, 2)).trim() || "AP";
   const navRoutes = listNextAppRoutes(workspaceRoot);
-  const copy = extractVisibleCopy(page.body);
+  const rawCopy = extractVisibleCopy(page.body);
+  const copy = rawCopy.filter((t) => !previewTextLooksLikeLeakedSource(t));
+  if (rawCopy.length > 0 && copy.length === 0) {
+    return buildPreviewFailedHtml(page.rel);
+  }
   const cssAbs = ["app/globals.css", "src/app/globals.css"]
     .map((rel) => path.join(workspaceRoot, rel))
     .find((abs) => fs.existsSync(abs));
@@ -150,6 +159,9 @@ export function buildLiveHtmlFromNextApp(
     copy.length > 0
       ? copy.map((t) => `<p>${escapeHtml(t)}</p>`).join("")
       : `<p>${escapeHtml(title)}</p><button type="button">Continue</button>`;
+  if (previewHtmlHasLeakedSource(body) || previewTextLooksLikeLeakedSource(body)) {
+    return buildPreviewFailedHtml(page.rel);
+  }
   return `<!doctype html>
 <html lang="en">
 <head>

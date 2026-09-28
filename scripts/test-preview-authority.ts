@@ -29,6 +29,11 @@ import {
   workspaceHasNextAppRoot,
 } from "../lib/nextAppLivePreview.ts";
 import {
+  PREVIEW_RENDER_FIX_LABEL,
+  previewHtmlHasLeakedSource,
+  previewTextLooksLikeLeakedSource,
+} from "../lib/previewSourceHonesty.ts";
+import {
   ensurePreviewIndexHtml,
   writeBasicUiScaffold,
 } from "../lib/nebulaIdeWorkspaceArtifacts.ts";
@@ -512,6 +517,37 @@ section("leftover stock fixture never wins Live after coded routes");
   });
   assert.equal(ensured.written, false);
   assert.equal(fs.existsSync(path.join(root, PRODUCT_PREVIEW_REL)), false);
+  fs.rmSync(root, { recursive: true, force: true });
+}
+
+section("source-shaped preview text is not App looks OK");
+{
+  assert.equal(previewTextLooksLikeLeakedSource("useState return ("), true);
+  assert.equal(previewTextLooksLikeLeakedSource("Request a pickup"), false);
+  const leakedHtml = "<main><p>useState</p><p>return (</p></main>";
+  assert.equal(previewHtmlHasLeakedSource(leakedHtml), true);
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "nebulla-preview-leak-"));
+  fs.mkdirSync(path.join(root, "app"), { recursive: true });
+  fs.writeFileSync(
+    path.join(root, "app/page.tsx"),
+    [
+      'import { useState } from "react";',
+      "export default function Home() {",
+      "  return (",
+      "    <div>useState</div>",
+      "    <div>return (</div>",
+      "  );",
+      "}",
+    ].join("\n"),
+  );
+  const live = buildLiveHtmlFromNextApp(root, "Leak Demo") || "";
+  assert.match(live, /Preview failed to render|next-app-live/);
+  assert.equal(/<p>useState<\/p>/i.test(live), false);
+  const auth = resolveAppPreviewAuthority(root);
+  assert.equal(auth.honesty === "real_routes", false);
+  assert.match(auth.statusLabel, /preview needs a render fix|Preview failed/i);
+  assert.equal(/App looks OK/i.test(auth.statusLabel), false);
+  assert.match(PREVIEW_RENDER_FIX_LABEL, /First version on disk/);
   fs.rmSync(root, { recursive: true, force: true });
 }
 
