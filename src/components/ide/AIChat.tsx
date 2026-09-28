@@ -96,7 +96,7 @@ import {
 } from '../../lib/nebulaAiCodingPipeline';
 import { isFoundationGoInFlight } from '../../lib/foundationHeavyJob';
 import { abortHonestyUserLine, abortWithUserStopReason, isAbortLikeError, isAbortLikeMessage } from '../../lib/abortLikeError';
-import { fullBuildGoUserNote, fullBuildIncompleteFollowUp, seedAlreadyHasWhoAndJob, shouldSkipGrokChatForExistingPlan } from '../../../lib/fullBuildContract';
+import { fullBuildGoUserNote, fullBuildIncompleteFollowUp, FULL_BUILD_NO_RETRY_ACTIVITY, seedAlreadyHasWhoAndJob, shouldSkipGrokChatForExistingPlan } from '../../../lib/fullBuildContract';
 import {
   isAssistantCodingPromise,
   isAssistantRefineClaim,
@@ -132,7 +132,6 @@ import {
   userNoteRequestsNextSlice,
   workspaceFoundationLanded,
   workspaceHasProductAppRoutes,
-  FOUNDATION_RETRY_ACTIVITY,
   FOUNDATION_SLICE_INSTRUCTION,
   buildEditExistingUserNote,
 } from '../../lib/fastPrototypeNextSlice';
@@ -3269,7 +3268,7 @@ export function AIChat() {
             setSending(false);
           } else {
           if (wantsNextSlice && !foundationLanded && fastPrototypeTurn) {
-            pushActivity(FOUNDATION_RETRY_ACTIVITY, 'warn');
+            pushActivity(FULL_BUILD_NO_RETRY_ACTIVITY, 'warn');
           }
           pushActivity(
             editMode
@@ -3314,7 +3313,7 @@ export function AIChat() {
             subhead: editMode
                 ? 'EDIT existing files'
                 : wantsNextSlice && !foundationLanded && fastPrototypeTurn
-                ? FOUNDATION_RETRY_ACTIVITY
+                ? FULL_BUILD_NO_RETRY_ACTIVITY
                 : fastPrototypeTurn
                   ? 'Foundation+Primary'
                   : 'Full Build',

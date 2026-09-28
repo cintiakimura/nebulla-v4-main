@@ -143,7 +143,8 @@ section("Go prompt lists every §4 route in full_build; Fast Prototype still cla
   assert.match(compactFull, /\/teacher/);
   assert.match(compactFull, /\/login/);
   assert.match(compactFull, /MANDATORY FILE BLOCKS/);
-  assert.match(compactFull, /index.html is not success/);
+  assert.match(compactFull, /BAN: only public\/index\.html/);
+  assert.ok(compactFull.trimStart().startsWith("FULL BUILD APPLY"), compactFull.slice(0, 80));
   assert.doesNotMatch(compactFull, /Foundation AND Primary in this Go/);
 
   const compactFp = buildCompactGoCodeUserPrompt({
@@ -277,7 +278,19 @@ section("go-code 409 surfaces completeness; empty files ≠ App looks OK");
   assert.equal(htmlOnly.blockedReason?.code, "APPLY_EMPTY_PRODUCT");
 }
 
-section("FAST LANE courier seed + you can build — do not skip chat on leftover/empty plan");
+section("courier goal-only plan fill → allowGo before Go");
+{
+  const courierGoal =
+    "City Courier: clients request pickup, drivers accept the job, track, pay, and rate.";
+  const applied = applyFullBuildPlanFill({
+    "1. Goal of the app": courierGoal,
+  });
+  assert.equal(applied.filled, true);
+  const r = assessFullBuildCompleteness({ plan: applied.plan });
+  assert.equal(r.allowGo, true, r.gaps.map((g) => `${g.code}: ${g.message}`).join(" | "));
+  assert.match(String(applied.plan["3. Features and KPIs"] || ""), /Request pickup/i);
+  assert.ok(r.routes.some((x) => x.route === "/request"));
+}
 {
   const seed =
     "City Courier: clients request pickup, drivers accept the job, track, pay, and rate. you can build";
@@ -320,7 +333,8 @@ section("FAST LANE courier seed + you can build — do not skip chat on leftover
   assert.match(pipeline, /FULL_BUILD_NO_RETRY_ACTIVITY/);
   assert.match(pipeline, /200_prose/);
   assert.match(pipeline, /MAX_GROK_RELAUNCHES = 0/);
-  assert.doesNotMatch(pipeline, /FOUNDATION_RETRY_ACTIVITY/);
+  assert.match(pipeline, /goBlocked\('NO_FILE_BLOCKS'/);
+  assert.doesNotMatch(chat, /Foundation did not land\. Retry Go for Foundation\+Primary/);
 }
 {
   const chat = fs.readFileSync(path.join(REPO, "src/components/ide/AIChat.tsx"), "utf8");

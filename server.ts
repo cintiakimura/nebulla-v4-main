@@ -5582,10 +5582,8 @@ Rules:
         if (buildMode === "full_build") {
           try {
             const filled = applyFullBuildPlanFill(planForGate);
-            if (filled.filled) {
-              persistMasterPlanJson(ppGo.workspaceRoot, masterPlanPath, filled.plan);
-              planForGate = filled.plan as Record<string, string>;
-            }
+            persistMasterPlanJson(ppGo.workspaceRoot, masterPlanPath, filled.plan);
+            planForGate = filled.plan as Record<string, string>;
           } catch {
             /* still evaluate the gate */
           }
@@ -5766,10 +5764,8 @@ Rules:
         if (fullBuildGo) {
           try {
             const filledSnap = applyFullBuildPlanFill(planSnapshot);
-            if (filledSnap.filled) {
-              persistMasterPlanJson(ppGo.workspaceRoot, masterPlanPath, filledSnap.plan);
-              planSnapshot = filledSnap.plan as Record<string, string>;
-            }
+            persistMasterPlanJson(ppGo.workspaceRoot, masterPlanPath, filledSnap.plan);
+            planSnapshot = filledSnap.plan as Record<string, string>;
           } catch {
             /* evaluate anyway */
           }
@@ -6067,8 +6063,11 @@ Implementation (${fullBuildPrompt ? "ONE Full Build Go — every §4 route" : "O
 ${
   fullBuildPrompt
     ? `- Implement **every** Master Plan §4 route and the core jobs in this Go. Not a 1–2 screen Foundation clamp. Continue is only for extra Polish / integrations.
+- FIRST output line in the user payload is FULL BUILD APPLY — honor it with \`\`\`file:app/<route>/page.tsx\`\`\` for each listed path (root: \`\`\`file:app/page.tsx\`\`\`).
 - Real \`app/layout.tsx\` + root \`app/page.tsx\` + \`app/<route>/page.tsx\` for each §4 path, with working primary controls and lib/mockStore.ts. Home is the core user job.
-- Every §4 route MUST be a \`\`\`file:app/<route>/page.tsx\`\`\` block (root: \`\`\`file:app/page.tsx\`\`\`). index.html / ui-brief.md alone is a failed Full Build.
+- Reply is ONLY file: blocks + one short note. No “Press Go.” No plan essay.
+- Minimum: layout + Home + the 2–3 primary job routes (courier: request / driver / track; kids: practice / teacher) if you cannot finish every §4 path. Never empty output.
+- BAN: only public/index.html, only nebula-ui-studio/*, only mockup HTML.
 - Coding skeleton + §4: all listed routes + shared layout. Mockup is occupancy only — do not copy mockup pixels.
 - Do NOT emit only login chrome. Do not invent hosted BaaS.`
     : `- Implement only the slice named in "${PRE_CODING_SUMMARY_KEY}" (or infer next incomplete slice: Foundation first if no app shell exists).

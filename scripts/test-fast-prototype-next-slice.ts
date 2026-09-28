@@ -209,7 +209,7 @@ assert.equal(nextAutopilotSliceLabel('Secondary'), null);
   assert.equal(d.advance, false);
   assert.equal(d.nextLabel, null);
   assert.equal(d.stopReason, 'failed');
-  assert.match(d.message, /Foundation did not land/i);
+  assert.match(d.message, /Not retrying Foundation/i);
   assert.equal(/Foundation applied/i.test(d.message), false);
   assert.equal(/bypassing/i.test(d.message), false);
 }
@@ -236,7 +236,7 @@ assert.equal(nextAutopilotSliceLabel('Secondary'), null);
   });
   assert.equal(d.advance, false);
   assert.equal(d.stopReason, 'failed');
-  assert.match(d.message, /Retry Go/i);
+  assert.match(d.message, /Not retrying Foundation/i);
 }
 {
   const d = shouldAutopilotAdvance({
@@ -261,7 +261,7 @@ assert.equal(nextAutopilotSliceLabel('Secondary'), null);
   });
   assert.equal(d.advance, false);
   assert.equal(d.stopReason, 'failed');
-  assert.match(d.message, /Retry Go/i);
+  assert.match(d.message, /Not retrying Foundation/i);
 }
 {
   const d = shouldAutopilotAdvance({
@@ -273,7 +273,7 @@ assert.equal(nextAutopilotSliceLabel('Secondary'), null);
   });
   assert.equal(d.advance, false);
   assert.equal(d.stopReason, 'failed');
-  assert.match(d.message, /Retry Go/i);
+  assert.match(d.message, /Not retrying Foundation/i);
 }
 {
   const d = shouldAutopilotAdvance({
@@ -324,7 +324,7 @@ assert.equal(nextAutopilotSliceLabel('Secondary'), null);
   assert.equal(d.advance, false);
   assert.equal(d.stopReason, 'failed');
   assert.match(d.message, /GO_TIMEOUT/);
-  assert.match(d.message, /Foundation\+Primary did not finish|did not land/);
+  assert.match(d.message, /Not retrying Foundation/);
 }
 {
   const d = shouldAutopilotAdvance({
@@ -340,7 +340,8 @@ assert.equal(nextAutopilotSliceLabel('Secondary'), null);
   assert.match(d.message, /Foundation/);
   assert.equal(/Send Continue/i.test(d.message), false);
 }
-assert.match(policyATimeoutMessage('Primary', true), /Foundation\+Primary did not finish/);
+assert.match(policyATimeoutMessage('Primary', true), /GO_TIMEOUT/);
+assert.match(policyATimeoutMessage('Primary', true), /Not retrying Foundation/);
 assert.match(policyATimeoutMessage('Foundation', false), /Foundation/);
 assert.equal(
   resolveNextContinueSlice({ productRoutesOnDisk: false, lastSlice: 'Primary' }),
@@ -393,7 +394,7 @@ assert.match(policyAStopMessage('Secondary'), /First version is on Live|App is r
     'Polish',
   );
 }
-assert.match(policyAFailedMessage('Foundation'), /Retry Go/);
+assert.match(policyAFailedMessage('Foundation'), /Not retrying Foundation/);
 assert.match(policyAStopMessage('Foundation'), /First version is on Live|App is ready on Live/);
 assert.match(policyAStopMessage('Data+API'), /First version is on Live|App is ready on Live/);
 assert.match(policyAStopMessage('Polish'), /First version is on Live|App is ready on Live/);
@@ -528,7 +529,7 @@ assert.equal(APPLY_IN_FLIGHT_STALL_MS, 15_000);
   assert.equal(/Starting code — first slice/.test(chat), false);
   assert.match(chat, /\/api\/source-control\/overview/);
   assert.match(chat, /stale empty explorer|diskPaths/);
-  assert.match(chat, /FOUNDATION_RETRY_ACTIVITY/);
+  assert.match(chat, /FULL_BUILD_NO_RETRY_ACTIVITY/);
   assert.match(chat, /productRoutesOnDisk: foundationOnDisk/);
   assert.equal(
     /\\b\(primary\|secondary\|polish\)\\b/.test(chat),

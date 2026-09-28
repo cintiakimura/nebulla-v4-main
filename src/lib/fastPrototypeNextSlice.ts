@@ -5,6 +5,7 @@
  */
 
 import { RESEARCH_STOPPED } from '../../lib/researchStages';
+import { FULL_BUILD_NO_RETRY_ACTIVITY } from '../../lib/fullBuildContract';
 import { isPostCodeRefineRequest } from './ideShortCodingNudge';
 
 export type AutopilotSliceLabel =
@@ -196,8 +197,7 @@ export const FAST_PROTOTYPE_SAME_SESSION_AUTOPILOT = false;
 export const FOUNDATION_PRODUCT_ROUTE_MIN = 3;
 
 /** Empty explorer — retry the same Foundation+Primary Go. */
-export const FOUNDATION_RETRY_ACTIVITY =
-  'Foundation did not land. Retry Go for Foundation+Primary — you do not need to type Continue.';
+export const FOUNDATION_RETRY_ACTIVITY = FULL_BUILD_NO_RETRY_ACTIVITY;
 
 export const FOUNDATION_SLICE_INSTRUCTION =
   'START_CODING — SLICE: Foundation+Primary in ONE Go. FIRST-SLICE APPLY = the locked loop from Master Plan §4. Poker / Tips\'n Hold\'em: emit app/page.tsx + app/hand/page.tsx + app/odds/page.tsx + app/advice/page.tsx — NEVER app/dossiers or app/forms unless §1 is a document lock. If §4 is Dashboard / Dossiers / Forms AND the lock is documents, emit app/page.tsx + app/dossiers/page.tsx + app/forms/page.tsx + app/dashboard/page.tsx — never only /login /register / or leftover /A. Infer history/per-client dossier when the north star is keep/find work later; do not quiz “do you want a history page?” Auth pages only if the lock requires signed-in roles. FIRST-SLICE UI FLOOR (must be visible on Live): header = one locked product name + initials (chip / §1 — never a previous chat question, never “What”, never concatenated leftovers like Quill Learn Aether Studio); nav = those §4 routes as real tabs or left sidebar (web) / hamburger (mobile); no leftover Practice/Teacher unless this goal is education; globals.css = §5 palette or a dark calm default if §5 is thin / they asked dark-calm-low-stimulus (not cream-on-white); Home shows the goal verb + one primary CTA; lib/mockStore.ts shaped like THIS product (hand/odds/advice for poker — dossier/document/form only for document locks). Client-side extract (Tesseract) only if this lock is documents. The goal verb must work with mock localStorage (no empty /api/* , no Data+API slice, no Polish). Shop: book/order updates the Home list; mechanic can mark ready. Delivery: pickup+dropoff submit appears on Home; Accept updates status. Education: Start practice writes progress on Teacher. File blocks now — then first version is on Live only if THIS root’s dev server is up.';
@@ -384,17 +384,13 @@ export function policyAStopMessage(_lastSlice?: string | null): string {
 }
 
 export function policyAFailedMessage(lastSlice?: string | null): string {
-  if (!lastSlice || looksLikePrePrimaryShellSlice(lastSlice)) {
-    return FOUNDATION_RETRY_ACTIVITY;
-  }
-  return `${String(lastSlice).trim()} did not land. Retry Go — you do not need to type Continue.`;
+  void lastSlice;
+  return FULL_BUILD_NO_RETRY_ACTIVITY;
 }
 
 export function policyATimeoutMessage(_lastSlice?: string | null, foundationOnDisk?: boolean): string {
-  if (!foundationOnDisk) {
-    return `Grok Code timed out [GO_TIMEOUT]. ${FOUNDATION_RETRY_ACTIVITY}`;
-  }
-  return 'Grok Code timed out [GO_TIMEOUT]. Foundation+Primary did not finish. Retry Go — you do not need to type Continue.';
+  void foundationOnDisk;
+  return `Grok Code timed out [GO_TIMEOUT]. ${FULL_BUILD_NO_RETRY_ACTIVITY}`;
 }
 
 /**

@@ -415,7 +415,7 @@ try {
     const idxPass1 = chat.indexOf("currentAction: 'Grok Code — Code pass 1");
     const idxGateR = chat.indexOf('const st = await fetchResearchStatus(projectName)');
     assert.ok(idxGateR >= 0 && idxPass1 > idxGateR, 'do not show Code pass 1 before Gate R re-check');
-    assert.match(chat, /FOUNDATION_RETRY_ACTIVITY|Retry Go for Foundation/);
+    assert.match(chat, /FULL_BUILD_NO_RETRY_ACTIVITY|FOUNDATION_RETRY_ACTIVITY/);
     assert.equal(/continuing Foundation anyway/.test(chat), false);
   }
   assert.match(chat, /planningPhase = 'PLAN_READY'/);

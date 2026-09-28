@@ -1455,7 +1455,7 @@ export async function runGoCodeAndApply(options: {
           pass -= 1;
           continue;
         }
-        const empty = goBlocked('GO_EMPTY_OUTPUT', FULL_BUILD_NO_RETRY_ACTIVITY);
+        const empty = goBlocked('NO_FILE_BLOCKS', FULL_BUILD_NO_RETRY_ACTIVITY);
         logGoCodeFinish('200_empty', { chars: 0 });
         onProgress?.(formatBlockedReasonLine(empty), 'error');
         return {
@@ -1466,7 +1466,7 @@ export async function runGoCodeAndApply(options: {
         };
       }
       if (!goOutputHasProductFileBlocks(codeText)) {
-        const empty = goBlocked('GO_EMPTY_OUTPUT', FULL_BUILD_NO_RETRY_ACTIVITY);
+        const empty = goBlocked('NO_FILE_BLOCKS', FULL_BUILD_NO_RETRY_ACTIVITY);
         logGoCodeFinish(codeText.trim() ? '200_prose' : '200_empty', {
           chars: codeText.length,
         });
@@ -1479,7 +1479,7 @@ export async function runGoCodeAndApply(options: {
         };
       }
       if (!lastGoCodeFitsGoal(codeText, userNote || '')) {
-        const empty = goBlocked('GO_EMPTY_OUTPUT', FULL_BUILD_NO_RETRY_ACTIVITY);
+        const empty = goBlocked('NO_FILE_BLOCKS', FULL_BUILD_NO_RETRY_ACTIVITY);
         logGoCodeFinish('200_prose', { chars: codeText.length, reason: 'goal_mismatch' });
         onProgress?.(formatBlockedReasonLine(empty), 'error');
         return {

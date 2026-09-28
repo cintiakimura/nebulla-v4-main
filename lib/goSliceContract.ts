@@ -343,6 +343,8 @@ export function buildCompactGoCodeUserPrompt(opts: {
           .join("\n")
       : "";
   return [
+    firstSliceLine,
+    "Reply is ONLY ```file:relative/path``` blocks plus one short note. No Press Go. No plan essay.",
     slice,
     `Session focus: ${focus || "(next incomplete slice)"}`,
     "",
@@ -353,9 +355,8 @@ export function buildCompactGoCodeUserPrompt(opts: {
     "",
     "§4 Pages excerpt:",
     pages || "(from Master Plan §4)",
-    firstSliceLine,
     fullBuild
-      ? "MANDATORY FILE BLOCKS: ```file:package.json```, ```file:app/layout.tsx```, ```file:app/globals.css```, ```file:app/page.tsx```, ```file:lib/mockStore.ts```, and ```file:app/<route>/page.tsx``` for every §4 path. index.html is not success."
+      ? "MANDATORY FILE BLOCKS: ```file:app/layout.tsx``` + ```file:app/page.tsx``` and ```file:app/<route>/page.tsx``` for every §4 path. Minimum: layout + Home + 2–3 primary job routes if you cannot finish all. BAN: only public/index.html, only nebula-ui-studio/*, only mockup HTML."
       : "",
     constraints ? `\n${constraints}` : "",
     isFoundation ? `\n${FOUNDATION_MIN_UI_CHECKLIST}\n${ENGINEER_INTERVIEW_PROMPT}` : "",

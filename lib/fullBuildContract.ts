@@ -2,7 +2,7 @@
  * Full Build contract — complete Plan, then one thick Go of every §4 route.
  * Mockup is occupancy only. Not autopilot. Not Fast Prototype's 1–2 screen clamp.
  */
-import { isCodingSkeletonReady, readCodingSkeletonFromPlan, skeletonFitsCurrentGoal } from "./codingSkeleton";
+import { ensureCodingSkeletonOnPlan, isCodingSkeletonReady, readCodingSkeletonFromPlan, skeletonFitsCurrentGoal } from "./codingSkeleton";
 import {
   BUILD_MODE_PLAN_KEY,
   MASTER_PLAN_SECTION_KEYS,
@@ -238,20 +238,30 @@ export function fillMissingSection4PageFields(opts: {
 export function applyFullBuildPlanFill(
   plan: Record<string, unknown> | Record<string, string>,
 ): { plan: Record<string, unknown>; filled: boolean } {
-  const next = { ...(plan as Record<string, unknown>) };
+  let next = { ...(plan as Record<string, unknown>) };
   const s1 = String(next[MASTER_PLAN_SECTION_KEYS[0]] ?? "").trim();
-  const s4 = String(next[MASTER_PLAN_SECTION_KEYS[3]] ?? "").trim();
-  const skeleton = readCodingSkeletonFromPlan(next);
-  const result = fillMissingSection4PageFields({ section4: s4, goal: s1, skeleton });
   let filled = false;
-  if (result.filled) {
-    next[MASTER_PLAN_SECTION_KEYS[3]] = result.section;
+
+  const s2Key = MASTER_PLAN_SECTION_KEYS[1];
+  const s2fill = fillMissingSection2Tech({
+    section2: String(next[s2Key] ?? ""),
+    goal: s1,
+  });
+  if (s2fill.filled) {
+    next[s2Key] = s2fill.section;
     filled = true;
   }
+
+  const ensured = ensureCodingSkeletonOnPlan(next, { goal: s1 });
+  if (ensured.plan !== next) {
+    next = ensured.plan;
+    filled = true;
+  }
+  const skeleton = ensured.skeleton;
+
   const s3Key = MASTER_PLAN_SECTION_KEYS[2];
-  const s3 = String(next[s3Key] ?? "").trim();
   const features = fillMissingSection3Features({
-    section3: s3,
+    section3: String(next[s3Key] ?? "").trim(),
     goal: s1,
     skeleton,
   });
@@ -259,9 +269,20 @@ export function applyFullBuildPlanFill(
     next[s3Key] = features.section;
     filled = true;
   }
-  const s2Key = MASTER_PLAN_SECTION_KEYS[1];
+
+  const s4Key = MASTER_PLAN_SECTION_KEYS[3];
+  const result = fillMissingSection4PageFields({
+    section4: String(next[s4Key] ?? "").trim(),
+    goal: s1,
+    skeleton,
+  });
+  if (result.filled) {
+    next[s4Key] = result.section;
+    filled = true;
+  }
+
   const s2 = String(next[s2Key] ?? "");
-  if (!AUTH_STATED_RE.test([s1, s2, String(next[MASTER_PLAN_SECTION_KEYS[3]] ?? "")].join("\n"))) {
+  if (!AUTH_STATED_RE.test([s1, s2, String(next[s4Key] ?? "")].join("\n"))) {
     const authLine =
       skeleton?.auth === "none"
         ? "Auth model: assumption: no sign-in for this pass (mock/local if we add it)."
@@ -269,6 +290,17 @@ export function applyFullBuildPlanFill(
     next[s2Key] = `${s2.trim()}\n${authLine}`.trim();
     filled = true;
   }
+
+  const s5Key = MASTER_PLAN_SECTION_KEYS[4];
+  const s5fill = fillMissingSection5Ui({
+    section5: String(next[s5Key] ?? ""),
+    goal: s1,
+  });
+  if (s5fill.filled) {
+    next[s5Key] = s5fill.section;
+    filled = true;
+  }
+
   return { plan: next, filled };
 }
 
@@ -419,6 +451,33 @@ export function fullBuildCodingTaskLine(): string {
 
 const COURIER_GOAL_RE = /\b(moto|motodrop|courier|delivery|dropoff|parcel)\b/i;
 
+function fillMissingSection2Tech(opts: { section2: string; goal: string }): { section: string; filled: boolean } {
+  const s2 = String(opts.section2 || "").trim();
+  if (!isThin(s2, 24)) return { section: s2, filled: false };
+  return {
+    section: [
+      "Mobile/web Next.js App Router, TypeScript. Inferred stack.",
+      "Auth model: assumption: mock/local role gates. No hosted BaaS.",
+      "assumption: no live competitor search this pass.",
+    ].join("\n"),
+    filled: true,
+  };
+}
+
+function fillMissingSection5Ui(opts: { section5: string; goal: string }): { section: string; filled: boolean } {
+  const s5 = String(opts.section5 || "").trim();
+  if (!isThin(s5, 24)) return { section: s5, filled: false };
+  const courier = COURIER_GOAL_RE.test(String(opts.goal || ""));
+  return {
+    section: [
+      courier ? "Mood street, high contrast, mobile-first." : "Mood calm, readable, one accent.",
+      "Palette #111111 #F5C518 #F7F7F5. Typography sans. Density comfortable.",
+      "assumption: inferred tokens — correct if they named a different vibe.",
+    ].join("\n"),
+    filled: true,
+  };
+}
+
 /** Fill empty §3 from the confirmed goal — labeled assumptions, not a new product. */
 export function fillMissingSection3Features(opts: {
   section3: string;
@@ -458,10 +517,11 @@ export function fillMissingSection3Features(opts: {
 /** Client Go note for Full Build — every §4 `file:` block; index.html is not success. */
 export function fullBuildGoUserNote(): string {
   return [
-    "START_CODING — SLICE: Foundation. MODE: Full Build (every §4 route — not a Foundation+Primary clamp).",
+    formatFullBuildApplyLine([]),
+    "START_CODING — Full Build. Reply is ONLY ```file:relative/path``` blocks plus one short note. No Press Go. No plan essay.",
     fullBuildCodingTaskLine(),
-    "Emit ```file:relative/path``` for package.json, app/layout.tsx, app/globals.css, app/page.tsx, lib/mockStore.ts, and one app/<route>/page.tsx for every Master Plan §4 route (root is file:app/page.tsx).",
-    "index.html and nebula-ui-studio/ui-brief.md are not the product. File blocks only.",
+    "Minimum: ```file:app/layout.tsx``` + ```file:app/page.tsx``` + ```file:app/<route>/page.tsx``` for every §4 route (courier: /request /driver /track /account; kids: /practice /teacher). If you cannot finish all, still emit Home + 2–3 primary job routes.",
+    "BAN: only public/index.html, only nebula-ui-studio/*, only mockup HTML.",
   ].join("\n");
 }
 
