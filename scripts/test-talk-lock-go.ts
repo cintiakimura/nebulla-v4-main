@@ -18,6 +18,7 @@ import {
   shouldSkipGrokChatForExistingPlan,
   shouldStartGoAfterTalk,
   TALK_CLOSE_QUESTION,
+  userAcceptedTalkClose,
 } from "../lib/fullBuildContract.ts";
 import { ensureCodingSkeletonOnPlan } from "../lib/codingSkeleton.ts";
 
@@ -88,12 +89,39 @@ section("Go reads frozen plan — skip chat; replacement brief talks again");
   assert.equal(shouldStartGoAfterTalk({ plan: frozen, userText: pizza, seedText: pizza }), false);
 }
 
+section("you can start coding accepts close");
+{
+  assert.equal(userAcceptedTalkClose("you can start"), true);
+  assert.equal(userAcceptedTalkClose("you can start coding"), true);
+  assert.equal(userAcceptedTalkClose("Yes — you can start coding."), true);
+  assert.equal(userAcceptedTalkClose("start coding"), true);
+  assert.equal(userAcceptedTalkClose("go ahead"), true);
+  const frozen = freezePlan(completeCourierPlan());
+  assert.equal(
+    shouldSkipGrokChatForExistingPlan({ plan: frozen, seedText: "you can start coding" }),
+    true,
+  );
+  assert.equal(
+    shouldStartGoAfterTalk({
+      plan: frozen,
+      userText: "you can start coding",
+      seedText: "you can start coding",
+    }),
+    true,
+  );
+}
+
 section("canned first line is not the unfrozen talk door");
 {
   const chat = fs.readFileSync(path.join(REPO, "src/components/ide/AIChat.tsx"), "utf8");
   assert.match(chat, /shouldOpenTalkTurn/);
   assert.match(chat, /TALK_CLOSE_QUESTION/);
   assert.match(chat, /sendIdeAssistantGrokTurn/);
+  const iAccept = chat.indexOf("Plan frozen — one Go (no second interview)");
+  const iGrok = chat.indexOf("await sendIdeAssistantGrokTurn");
+  assert.ok(iAccept > 0 && iGrok > iAccept, "accept freeze+Go must run before Grok chat");
+  assert.match(chat.slice(Math.max(0, iAccept - 1200), iAccept), /\/api\/master-plan\/freeze/);
+  assert.match(chat.slice(iAccept, iGrok), /runGoCodeAndApply/);
   assert.doesNotMatch(chat, /formatFullBuildFirstSpokenLine\(seedForPlan\)/);
   const spoken = formatFullBuildFirstSpokenLine(COURIER_SEED);
   assert.ok(spoken.length > 20);

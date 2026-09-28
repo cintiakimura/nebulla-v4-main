@@ -621,16 +621,26 @@ export function freezePlan(
   return next;
 }
 
+export function planAllowsGoAfterFill(
+  plan: Record<string, unknown> | Record<string, string> | null | undefined,
+): boolean {
+  if (!plan || typeof plan !== "object") return false;
+  if (assessFullBuildCompleteness({ plan }).allowGo) return true;
+  const filled = applyFullBuildPlanFill({ ...(plan as Record<string, unknown>) });
+  return assessFullBuildCompleteness({ plan: filled.plan }).allowGo;
+}
+
 export function shouldOpenTalkTurn(opts: {
   plan: Record<string, unknown> | null | undefined;
   seedText?: string;
   userText?: string;
 }): boolean {
   const plan = opts.plan && typeof opts.plan === "object" ? opts.plan : null;
-  if (!isPlanFrozen(plan)) return true;
   const seed = String(opts.userText || opts.seedText || "").trim();
   const goal = String(plan?.["1. Goal of the app"] || "").trim();
   if (seed && goal && isReplacementProductBrief(seed, goal)) return true;
+  if (userAcceptedTalkClose(opts.userText || "") && planAllowsGoAfterFill(plan)) return false;
+  if (!isPlanFrozen(plan)) return true;
   return false;
 }
 
@@ -639,15 +649,18 @@ export function userAcceptedTalkClose(text: string): boolean {
   if (!t) return false;
   if (/\bSTART_CODING\b/i.test(t)) return true;
   if (/^(no|nope|nah)([\s,!.].*)?$/i.test(t)) return true;
+  if (/\byou\s+can\s+start(\s+coding)?\b/i.test(t)) return true;
+  if (/\bstart\s+coding\b/i.test(t)) return true;
+  if (/\bgo\s+ahead\b/i.test(t)) return true;
   if (
-    /\b(looks good|that'?s (all|enough|fine|it)|nothing (else|more) to add|no add|go ahead|build it|just build|you can build|let'?s (build|go))\b/i.test(
+    /\b(looks good|that'?s (all|enough|fine|it)|nothing (else|more) to add|no add|build it|just build|you can build|let'?s (build|go))\b/i.test(
       t,
     )
   ) {
     return true;
   }
   if (/^(go|go\.|go!|build|build\s+it|now)[\s.!?]*$/i.test(t)) return true;
-  if (/^you\s+can\s+(start|build)\b/i.test(t)) return true;
+  if (/\byou\s+can\s+(start|build)\b/i.test(t)) return true;
   return false;
 }
 
@@ -663,7 +676,7 @@ export function shouldStartGoAfterTalk(opts: {
   if (isPlanFrozen(plan)) return true;
   if (!userAcceptedTalkClose(opts.userText)) return false;
   if (!plan) return false;
-  return assessFullBuildCompleteness({ plan }).allowGo;
+  return planAllowsGoAfterFill(plan);
 }
 
 /**
@@ -680,6 +693,7 @@ export function shouldSkipGrokChatForExistingPlan(opts: {
   const fb = assessFullBuildCompleteness({ plan });
   if (!fb.allowGo) return false;
   const seed = String(opts.seedText || "").trim();
+  if (userAcceptedTalkClose(seed)) return true;
   const goal = String(plan["1. Goal of the app"] || "").trim();
   const sk = readCodingSkeletonFromPlan(plan);
   if (seed && !skeletonFitsCurrentGoal(sk, seed)) return false;

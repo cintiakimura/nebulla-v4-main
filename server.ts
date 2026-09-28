@@ -1639,7 +1639,8 @@ No approved UI code yet.
       if (fs.existsSync(pp.masterPlanPath)) {
         plan = JSON.parse(fs.readFileSync(pp.masterPlanPath, "utf8")) as Record<string, unknown>;
       }
-      const frozen = freezePlan(plan);
+      const filled = applyFullBuildPlanFill(plan);
+      const frozen = freezePlan(filled.plan);
       persistMasterPlanJson(pp.workspaceRoot, pp.masterPlanPath, frozen);
       res.json({
         ok: true,

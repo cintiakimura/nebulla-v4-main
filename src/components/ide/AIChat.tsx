@@ -2639,7 +2639,81 @@ export function AIChat() {
       if (!fastPrototypeTurn && !buildMode && fastLaneFillAllowGo == null) skipGrokChat = false;
     }
     }
-    if (openTalk) skipGrokChat = false;
+    const startGoThisTurn = wantsLockAndBuild;
+    if (openTalk && !startGoThisTurn) skipGrokChat = false;
+    if (startGoThisTurn) skipGrokChat = true;
+
+    if (startGoThisTurn) {
+      try {
+        await fetchJson<{ ok?: boolean }>(withProjectQuery('/api/master-plan/fill-missing-section4'), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify(
+            withProjectBody({
+              projectName: getBrowserProjectName().trim(),
+              userNote: seedForPlan,
+            }),
+          ),
+        });
+      } catch {
+        /* freeze still persists the agreed §§ */
+      }
+      try {
+        const fr = await fetchJson<{ plan?: Record<string, unknown> }>(
+          withProjectQuery('/api/master-plan/freeze'),
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify(withProjectBody({})),
+          },
+        );
+        if (fr.plan) planOnDisk = fr.plan;
+      } catch {
+        if (planOnDisk) planOnDisk = freezePlan(planOnDisk);
+      }
+      const lockTs = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+      const lockLine = 'Plan locked — starting one Full Build on this workspace.';
+      setMessages((p) => {
+        const next = [
+          ...p,
+          { id: `a-lock-${Date.now()}`, role: 'assistant' as const, content: lockLine, timestamp: lockTs },
+        ];
+        messagesRef.current = next;
+        return next;
+      });
+      pushActivity('Plan frozen — one Go (no second interview)', 'info');
+      beginCodingActivity('Grok Code — writing files to workspace', goWorkSteps(), {
+        subhead: 'Full Build',
+        initialLog: 'Running Grok Code — apply starts after Code pass 1 returns files',
+      });
+      setInferenceFirstStage('coding', diskProjectKey);
+      try {
+        const go = await runGoCodeAndApply({
+          userId,
+          projectName,
+          userNote: fullBuildGoUserNote(),
+          onProgress: pushActivity,
+          messages: [{ role: 'user', content: fullBuildGoUserNote() }],
+        });
+        if (!go.ok && isGoAborting(projectName)) {
+          holdCodingFailure('Stopped — you cancelled coding. Chat is unlocked.');
+        } else if (!go.ok) {
+          pushActivity(go.statusMessage || 'Full Build did not finish.', 'warn');
+        }
+      } catch (codingErr) {
+        if (isAbortLikeError(codingErr) && isGoAborting(projectName)) {
+          holdCodingFailure('Stopped — you cancelled coding. Chat is unlocked.');
+        } else if (isAbortLikeError(codingErr)) {
+          pushActivity('Research / UI mockup skipped — Full Build continues from the locked plan.', 'warn');
+        } else {
+          const fail = codingErr instanceof Error ? codingErr.message : 'Could not write files to workspace';
+          holdCodingFailure(fail);
+        }
+      }
+      return;
+    }
 
     try {
       if (showWorkActivity && !skipGrokChat) {
@@ -2783,6 +2857,8 @@ export function AIChat() {
 
       let { displayText, hadCodingTag } = formatAssistantForIdeChatDisplay(raw);
       if (
+        !startGoThisTurn &&
+        !skipGrokChat &&
         assessFullBuildCompleteness({ plan: planOnDisk || {} }).allowGo &&
         !isPlanFrozen(planOnDisk) &&
         !displayText.includes(TALK_CLOSE_QUESTION)
@@ -3007,7 +3083,10 @@ export function AIChat() {
       }
       const foundationAlreadyLanded = foundationLandedOnDisk();
       const wantsNextSlice = userNoteRequestsNextSlice(text);
-      if (agentAllowed && (fastPrototypeTurn || willCode || mpSaved > 0)) {
+      if (startGoThisTurn) {
+        mockupSkippedOrFailed = true;
+        lastResearchError = null;
+      } else if (agentAllowed && (fastPrototypeTurn || willCode || mpSaved > 0)) {
         if (wantsNextSlice && foundationAlreadyLanded && !postCodeRefine) {
           mockupSkippedOrFailed = true;
           willCode = false;
@@ -3154,7 +3233,12 @@ export function AIChat() {
       });
           } else {
             mockupSkippedOrFailed = true;
-            pushActivity('UI mockup incomplete — coding continues', 'warn');
+            pushActivity(
+              willCode
+                ? 'UI mockup incomplete — skipping mockup, starting Full Build'
+                : 'UI mockup incomplete — staying in plan (Go has not started)',
+              'warn',
+            );
           }
         } else if (fastLaneFillAllowGo === true) {
           mockupSkippedOrFailed = true;
@@ -3185,6 +3269,9 @@ export function AIChat() {
         let foundationGate = willCode
           ? await canStartFoundationCoding({ mockupSkippedOrFailed })
           : { ok: false as const, reason: 'blocked' as const };
+        if (willCode && !foundationGate.ok && startGoThisTurn) {
+          foundationGate = { ok: true as const, reason: 'explicit_skip' as const };
+        }
         if (willCode && !foundationGate.ok) {
           const stopMsg =
             lastResearchError && !isAbortLikeMessage(lastResearchError)
@@ -3656,18 +3743,23 @@ export function AIChat() {
             'warn',
           );
         } else if (isAbortLikeError(codingErr) && mpSaved > 0) {
-          pushActivity(
-            `${abortHonestyUserLine(codingErr)} Master Plan is saved.`,
-            'warn',
-          );
+          if (isGoAborting(projectName)) {
+            holdCodingFailure('Stopped — you cancelled coding. Chat is unlocked.');
+          } else {
+            pushActivity('Research / UI mockup skipped — Master Plan is saved.', 'warn');
+          }
         } else if (codingActivityRef.current) {
           const fail = isAbortLikeError(codingErr)
-            ? abortHonestyUserLine(codingErr)
+            ? abortHonestyUserLine(codingErr, { userStopped: isGoAborting(projectName) })
             : codingErr instanceof Error
               ? codingErr.message
               : 'Could not write files to workspace';
           setSendError(fail);
-          holdCodingFailure(fail);
+          if (isAbortLikeError(codingErr) && !isGoAborting(projectName)) {
+            pushActivity(fail, 'warn');
+          } else {
+            holdCodingFailure(fail);
+          }
         }
       }
 
@@ -3692,10 +3784,11 @@ export function AIChat() {
         setSending(false);
         return;
       } else if (isAbortLikeError(e) && mpSaved > 0) {
-        pushActivity(
-          `${abortHonestyUserLine(e)} Master Plan is saved.`,
-          'warn',
-        );
+        if (isGoAborting(projectName)) {
+          holdCodingFailure('Stopped — you cancelled coding. Chat is unlocked.');
+        } else {
+          pushActivity('Research / UI mockup skipped — Master Plan is saved.', 'warn');
+        }
         resetCodingActivity();
         return;
       }
