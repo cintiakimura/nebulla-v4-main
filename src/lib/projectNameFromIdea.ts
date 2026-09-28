@@ -10,6 +10,7 @@ export {
   looksLikeGoalStubName,
   looksLikeEducationKitDefaultName,
   isWorkspaceLabelStub,
+  isReservedPlaceholderProductName,
   productNameFromPlan,
   buildProductIdentity,
 } from '../../lib/productIdentity';

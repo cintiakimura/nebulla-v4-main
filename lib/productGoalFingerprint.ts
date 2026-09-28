@@ -9,6 +9,7 @@ import {
   extractStatedProductName,
   inferProductName,
   isNameOnlyProductSeed,
+  isReservedPlaceholderProductName,
   isWorkspaceLabelStub,
 } from "./productIdentity";
 import { extractGoalFromUserNote, isCodingCommandNote } from "./spineSequenceClient";
@@ -206,7 +207,13 @@ export function looksLikeStandaloneProductBrief(text: string): boolean {
   if (!raw) return false;
   if (isChatContinuityTurn(raw) || isNameOnlyProductSeed(raw)) return false;
   if (/^(continue|continue\.|continue!|build\s+next|next\s+slice)\b/i.test(raw)) return false;
-  if (/^(hello|hi|hey|hellos|yes|yeah|ok|go)[\s.!?]*$/i.test(raw)) return false;
+  if (
+    /^(hello|hi|hey|hellos|yes|yeah|ok|go|you\s+can\s+(start|build)|just\s+build(\s+it)?|build\s+mode)[\s.!?]*$/i.test(
+      raw,
+    )
+  ) {
+    return false;
+  }
   if (extractStatedProductName(raw) || extractNamedBrand(raw)) return true;
   const goal = extractGoalFromUserNote(raw);
   if (!goal || goal.length < 20) return false;
@@ -288,13 +295,14 @@ export function isNewProductSeedAgainstCurrent(opts: {
   if (isChatContinuityTurn(raw) || isNameOnlyProductSeed(raw)) return false;
   if (isRepeatedChipAsProductGoal(raw, opts.chipName)) return false;
   if (isSameProductRefineTurn(raw)) return false;
-  if (/^(continue|continue\.|continue!|build\s+next|next\s+slice|hello|hi|hey|hellos|yes|yeah|ok|go)[\s.!?]*$/i.test(raw)) {
+  if (/^(continue|continue\.|continue!|build\s+next|next\s+slice|hello|hi|hey|hellos|yes|yeah|ok|go|you\s+can\s+(start|build)|just\s+build(\s+it)?|build\s+mode)[\s.!?]*$/i.test(raw)) {
     return false;
   }
   const incoming =
     extractStatedProductName(raw) ||
     extractNamedBrand(raw) ||
     extractNamedBrand(extractGoalFromUserNote(raw) || "");
+  if (incoming && isReservedPlaceholderProductName(incoming)) return false;
   const chip = String(opts.chipName || "").replace(/\s+/g, " ").trim();
   const diskBrand =
     extractNamedBrand(String(opts.diskGoal || "")) ||
@@ -304,6 +312,7 @@ export function isNewProductSeedAgainstCurrent(opts: {
     return true;
   }
   const inferred = inferProductName(raw);
+  if (inferred && isReservedPlaceholderProductName(inferred)) return false;
   if (
     current &&
     inferred &&

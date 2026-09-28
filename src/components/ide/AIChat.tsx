@@ -21,6 +21,7 @@ import {
   getBrowserProjectKey,
   getBrowserProjectName,
   getIdentityFreeze,
+  freezeIdentityAfterMasterPlanSave,
   resolveActiveProjectIds,
   restoreFrozenIdentityIfDrifted,
   setBrowserProjectName,
@@ -203,7 +204,7 @@ import {
   type StartGuidedChatDetail,
 } from '../../lib/ideHomeEvents';
 import { inferProductName } from '../../lib/projectNameFromIdea';
-import { extractStatedProductName, isNameOnlyProductSeed, singleProductName } from '../../../lib/productIdentity';
+import { extractStatedProductName, isNameOnlyProductSeed, isReservedPlaceholderProductName, singleProductName } from '../../../lib/productIdentity';
 import {
   isChatContinuityTurn,
   isNewProductSeedAgainstCurrent,
@@ -226,7 +227,12 @@ import {
   isUsableProjectGoal,
   planRecordHasUsableGoal,
   planRecordReadyToSkipChat,
+  usableGoalFromChatTurns,
 } from '../../lib/spineSequenceGates';
+import {
+  masterPlanRecordLooksEmpty,
+  shouldPersistPlanFromChatBeforeRename,
+} from '../../../lib/identityFreeze';
 import { ideContextSnippetForChat, useIdeWorkspace } from '@/components/ide/IdeWorkspaceContext';
 import { useIdeCenterTabs } from '@/components/ide/IdeCenterTabsContext';
 import { ChatFilePreview } from '@/components/ide/ChatFilePreview';
@@ -2056,7 +2062,23 @@ export function AIChat() {
       historyHasConfirmedNorthStar(prior) ||
       brainstormCloseConfirmed ||
       closeTurn.kind === 'confirmed';
-    const identityFrozen = Boolean(getIdentityFreeze()?.projectKey);
+    const chatGoal = usableGoalFromChatTurns(prior, rawText);
+    let identityFrozen = Boolean(getIdentityFreeze()?.projectKey);
+    if (chatGoal && !identityFrozen) {
+      const header = getBrowserProjectName().trim();
+      const freezeName = isReservedPlaceholderProductName(header)
+        ? inferProductName(chatGoal) || header
+        : header || inferProductName(chatGoal);
+      freezeIdentityAfterMasterPlanSave({
+        projectKey: getBrowserProjectKey(),
+        projectName:
+          freezeName && !isReservedPlaceholderProductName(freezeName)
+            ? freezeName
+            : inferProductName(chatGoal) || 'Untitled Project',
+      });
+      restoreFrozenIdentityIfDrifted();
+      identityFrozen = Boolean(getIdentityFreeze()?.projectKey);
+    }
     if (identityFrozen) restoreFrozenIdentityIfDrifted();
     const seedActionEarly = resolveNewProductWorkspaceAction({
       userText: rawText,
@@ -2369,6 +2391,39 @@ export function AIChat() {
       !hasAppStatusPayload &&
       !refineSameProduct &&
       (userForcedCoding || fastPrototypeTurn || buildMode);
+    const fastLaneCloser =
+      isFoundationCloseGate(rawText) || detectBuildModeIntent(rawText) || Boolean(buildMode);
+    if (fastLaneCloser && chatGoal) {
+      try {
+        const mpRes = await fetch(withProjectQuery('/api/master-plan/read'), {
+          credentials: 'include',
+          cache: 'no-store',
+        });
+        const plan = mpRes.ok
+          ? ((await readResponseJson(mpRes)) as Record<string, unknown>)
+          : null;
+        if (
+          shouldPersistPlanFromChatBeforeRename({
+            planEmpty: masterPlanRecordLooksEmpty(plan),
+            chatHasUsableGoal: true,
+          })
+        ) {
+          await fetchJson<{ ok?: boolean }>(withProjectQuery('/api/master-plan/bootstrap-from-chat'), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify(
+              withProjectBody({
+                userNote: chatGoal,
+                projectName: getBrowserProjectName().trim(),
+              }),
+            ),
+          });
+        }
+      } catch {
+        /* plan bootstrap best-effort — Go fill still runs on this workspace */
+      }
+    }
     const seedProductName = identityFrozen
       ? singleProductName(getIdentityFreeze()?.projectName || getBrowserProjectName())
       : singleProductName(
@@ -2377,6 +2432,7 @@ export function AIChat() {
     const isolateNewProduct =
       Boolean(newProductSeed) &&
       !identityFrozen &&
+      !fastLaneCloser &&
       !userNoteRequestsNextSlice(rawText) &&
       !refineSameProduct &&
       !isChatContinuityTurn(rawText) &&
@@ -2430,8 +2486,10 @@ export function AIChat() {
       );
     } else if (
       !identityFrozen &&
+      !fastLaneCloser &&
       beatAHold &&
       seedProductName &&
+      !isReservedPlaceholderProductName(seedProductName) &&
       seedProductName.trim().toLowerCase() !== getBrowserProjectName().trim().toLowerCase()
     ) {
       setBrowserProjectName(seedProductName);
@@ -2458,6 +2516,7 @@ export function AIChat() {
           );
       const newSeed =
         !identityFrozen &&
+        !fastLaneCloser &&
         !switchedProductWorkspace &&
         (newProductSeed ||
           isNewProductSeedAgainstCurrent({

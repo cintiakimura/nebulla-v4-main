@@ -17,6 +17,7 @@ export {
   isUsableProjectGoal,
   isCodingCommandNote,
   extractGoalFromUserNote,
+  usableGoalFromChatTurns,
   extractGoalFromMemoryMarkdown,
   extractProductGoalFromSection,
   firstPurposeSentences,

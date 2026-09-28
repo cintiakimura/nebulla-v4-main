@@ -7,6 +7,7 @@ import {
   extractNamedBrand,
   extractStatedProductName,
   inferProductName,
+  isReservedPlaceholderProductName,
   singleProductName,
 } from "./productIdentity";
 import {
@@ -28,7 +29,9 @@ export function isFoundationCloseGate(text: string): boolean {
   if (/^(go|go\.|go!|go\s+ahead|let'?s\s+go)[\s.!?]*$/i.test(t)) return true;
   if (/^(build|build\s+it|now)[\s.!?]*$/i.test(t)) return true;
   if (/^hellos[\s.!?]*$/i.test(t)) return true;
-  if (/^you\s+can\s+start\b/i.test(t)) return true;
+  if (/^you\s+can\s+(start|build)\b/i.test(t)) return true;
+  if (/^just\s+build(\s+it)?[\s.!?]*$/i.test(t)) return true;
+  if (/^build\s+mode[\s.!?]*$/i.test(t)) return true;
   if (/let['’]?s keep\b[\s\S]{0,80}\band start\b/i.test(t)) return true;
   return false;
 }
@@ -122,13 +125,14 @@ export function resolveNewProductWorkspaceAction(opts: {
     };
   }
   const close = isFoundationCloseGate(userText);
-  const productName = singleProductName(
-    opts.identityFrozen
-      ? String(opts.chipName || "").trim()
-      : extractStatedProductName(userText) ||
-          extractNamedBrand(userText) ||
-          inferProductName(userText),
-  );
+  const rawName = opts.identityFrozen
+    ? String(opts.chipName || "").trim()
+    : extractStatedProductName(userText) ||
+      extractNamedBrand(userText) ||
+      inferProductName(userText);
+  const productName = isReservedPlaceholderProductName(rawName)
+    ? singleProductName(String(opts.chipName || "").trim())
+    : singleProductName(rawName);
   const routes = workspacePathsToRoutes(opts.workspacePaths || []);
   const diskGoal = String(opts.diskGoal || "").trim();
   const seedAgainstCurrent = isNewProductSeedAgainstCurrent({
@@ -142,10 +146,12 @@ export function resolveNewProductWorkspaceAction(opts: {
     Boolean(opts.productRoutesOnDisk && diskGoal && looksLikeStandaloneProductBrief(userText)) &&
     isReplacementProductBrief(userText, diskGoal);
   const mintNewProject = Boolean(
-    shouldMintWorkspaceAfterPlanFreeze({
-      frozen: Boolean(opts.identityFrozen),
-      fromHomeNewProject: opts.fromHomeNewProject,
-    }) && (opts.fromHomeNewProject || seedAgainstCurrent || leftoverRoutes || goalMismatch),
+    !close &&
+      shouldMintWorkspaceAfterPlanFreeze({
+        frozen: Boolean(opts.identityFrozen),
+        fromHomeNewProject: opts.fromHomeNewProject,
+      }) &&
+      (opts.fromHomeNewProject || seedAgainstCurrent || leftoverRoutes || goalMismatch),
   );
   return {
     mintNewProject,

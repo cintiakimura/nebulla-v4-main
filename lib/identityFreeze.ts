@@ -91,6 +91,25 @@ export function resolveFrozenWorkspaceTarget(opts: {
   };
 }
 
+export function shouldPersistPlanFromChatBeforeRename(opts: {
+  planEmpty: boolean;
+  chatHasUsableGoal: boolean;
+}): boolean {
+  return Boolean(opts.planEmpty && opts.chatHasUsableGoal);
+}
+
+export function masterPlanRecordLooksEmpty(plan: Record<string, unknown> | null | undefined): boolean {
+  if (!plan || typeof plan !== "object") return true;
+  const keys = [
+    "1. Goal of the app",
+    "2. Tech and Research",
+    "3. Features and KPIs",
+    "4. Pages and navigation",
+    "5. UI/UX design",
+  ];
+  return keys.every((k) => !String(plan[k] ?? "").trim());
+}
+
 export function shouldMintWorkspaceAfterPlanFreeze(opts: {
   frozen: boolean;
   fromHomeNewProject?: boolean;

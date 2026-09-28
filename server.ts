@@ -289,8 +289,10 @@ import {
 } from "./lib/nebulaWorkspaceStorage";
 import {
   ensureProductIdentity,
+  isReservedPlaceholderProductName,
   PRODUCT_IDENTITY_REL,
   readProductIdentity,
+  readStoredProductIdentity,
   writeProductIdentity,
 } from "./lib/productIdentity";
 import {
@@ -1601,6 +1603,43 @@ No approved UI code yet.
       });
     } catch (e) {
       res.status(500).json({ error: e instanceof Error ? e.message : "fill failed" });
+    }
+  });
+
+  app.post("/api/master-plan/bootstrap-from-chat", (req, res) => {
+    try {
+      const pp = projectPathsFor(req);
+      const body = (req.body || {}) as Record<string, unknown>;
+      const userNote = typeof body.userNote === "string" ? body.userNote.trim() : "";
+      const rawName = typeof body.projectName === "string" ? body.projectName.trim() : "";
+      const projectName = isReservedPlaceholderProductName(rawName) ? "" : rawName;
+      const mp = bootstrapMasterPlanFromWorkspace({
+        workspaceRoot: pp.workspaceRoot,
+        masterPlanPath: pp.masterPlanPath,
+        projectName: projectName || "Untitled Project",
+        userNote,
+      });
+      hydrateAndPersistMasterPlan(pp.workspaceRoot, pp.masterPlanPath);
+      try {
+        syncMindMapFromMasterPlan({
+          workspaceRoot: pp.workspaceRoot,
+          masterPlanPath: pp.masterPlanPath,
+          projectLabel:
+            readStoredProductIdentity(pp.workspaceRoot)?.projectName || projectName || "Untitled Project",
+        });
+      } catch {
+        /* ignore */
+      }
+      const plan = readMasterPlanFile(pp.masterPlanPath);
+      const identity = readStoredProductIdentity(pp.workspaceRoot);
+      res.json({
+        ok: true,
+        updated: mp.updated,
+        productName: identity?.projectName || "",
+        planEmpty: Object.values(plan).every((v) => !String(v || "").trim()),
+      });
+    } catch (e) {
+      res.status(500).json({ error: e instanceof Error ? e.message : "bootstrap failed" });
     }
   });
 

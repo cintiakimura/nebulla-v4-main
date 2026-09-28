@@ -39,6 +39,7 @@ import {
 } from "./nebulaWorkspaceStorage";
 import {
   ensureProductIdentity,
+  isReservedPlaceholderProductName,
   patchMasterPlanProductName,
   productNameFromPlan,
   readStoredProductIdentity,
@@ -97,7 +98,9 @@ export function fillMissingMasterPlanSectionsLocal(opts: {
       ? frozenId
       : ensureProductIdentity(opts.workspaceRoot, {
           goal: goal || note,
-          projectName: opts.projectName,
+          projectName: isReservedPlaceholderProductName(opts.projectName)
+            ? ""
+            : opts.projectName,
           persist: true,
         });
   const name = identity.projectName || opts.projectName.trim() || "Untitled Project";

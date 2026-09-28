@@ -316,6 +316,7 @@ export function isWorkspaceLabelStub(name: string): boolean {
   if (!n) return true;
   if (/^Project type /i.test(n)) return true;
   if (/^(untitled project|untitled|new project)$/i.test(n)) return true;
+  if (isReservedPlaceholderProductName(n)) return true;
   return looksLikeGoalStubName(n);
 }
 
@@ -431,7 +432,7 @@ export function inferProductName(goal: string, projectType?: string): string {
   const g = String(goal || "").replace(/\s+/g, " ").trim();
   const type = String(projectType || "").trim();
   const named = extractNamedBrand(g);
-  if (named) return singleProductName(named);
+  if (named && !isReservedPlaceholderProductName(named)) return singleProductName(named);
   if (isNameOnlyProductSeed(g) || isGenericJobWord(g)) return "";
   const domain = detectProductDomain(g, type);
   if (domain === "marketplace") {
@@ -439,7 +440,7 @@ export function inferProductName(goal: string, projectType?: string): string {
   }
   if (domain === "delivery") {
     const distilled = distillDeliveryName(g);
-    if (distilled) return distilled;
+    if (distilled && !isReservedPlaceholderProductName(distilled)) return distilled;
   }
   const key = (g || type).toLowerCase();
   const h = stableHash(key || domain);
@@ -447,8 +448,9 @@ export function inferProductName(goal: string, projectType?: string): string {
   const descs = DESCRIPTORS[domain];
   const stem = stems[h % stems.length];
   const desc = descs[(h >>> 4) % descs.length];
-  // Never copy audience words from the brief (Kids/children) — that looks like a chopped goal.
-  return toTitleCase([stem, desc].join(" ")) || "Nova Studio";
+  const invented = toTitleCase([stem, desc].join(" "));
+  if (!invented || isReservedPlaceholderProductName(invented)) return "";
+  return invented;
 }
 
 /** Two letters from the product name (first two words, or first two letters of one word). */
@@ -498,6 +500,7 @@ export function looksLikeGoalStubName(name: string, goal?: string): boolean {
     return true;
   }
   if (looksLikeEducationKitDefaultName(n, goal)) return true;
+  if (isReservedPlaceholderProductName(n)) return true;
   if (looksLikeConcatenatedLeftoverName(n)) return true;
   if (/\?/.test(n)) return true;
   if (/^(who|what|where|when|why|how|do|does|should|can|is|are)\b/i.test(n)) return true;
@@ -523,6 +526,24 @@ export function looksLikeGoalStubName(name: string, goal?: string): boolean {
   for (let k = 3; k <= Math.min(5, goalWords.length); k++) {
     if (goalWords.slice(0, k).join(" ") === lc) return true;
   }
+  return false;
+}
+
+/**
+ * UI-gen / hash placeholders — never a product title, never a new workspace name.
+ * Aether Studio, Helio Studio, Nebulla Workspace, Cosmic Night, and * Studio from the mockup seed.
+ */
+export function isReservedPlaceholderProductName(name: string): boolean {
+  const n = String(name || "").replace(/\s+/g, " ").trim();
+  if (!n) return false;
+  if (/^(nebulla workspace|cosmic night)$/i.test(n)) return true;
+  if (/^nebulla\b/i.test(n)) return true;
+  if (/^cosmic\s+night\b/i.test(n)) return true;
+  if (/^(aether studio|helio studio|nova studio|kite studio|aether hub|helio hub|nova hub|kite hub)$/i.test(n)) {
+    return true;
+  }
+  if (/^(nova|aether|helio|kite|mesa)\s+(studio|hub)$/i.test(n)) return true;
+  if (looksLikeInventedChipName(n) && /\s(studio|hub)$/i.test(n)) return true;
   return false;
 }
 

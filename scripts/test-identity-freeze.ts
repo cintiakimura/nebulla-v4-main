@@ -10,21 +10,31 @@ import { fileURLToPath } from "node:url";
 import {
   isPostPlanIdentityLockTurn,
   lockNameAfterPlanSave,
+  masterPlanRecordLooksEmpty,
   mergeIdentityFreeze,
   resolveFrozenProjectKey,
   resolveFrozenWorkspaceTarget,
   shouldMintWorkspaceAfterPlanFreeze,
+  shouldPersistPlanFromChatBeforeRename,
   shouldRunBrandGenerator,
 } from "../lib/identityFreeze.ts";
 import {
   applyPlanIdentityAndWinningPalette,
+  bootstrapMasterPlanFromWorkspace,
   fillMissingMasterPlanSectionsLocal,
   readMasterPlanFile,
 } from "../lib/nebulaIdeWorkspaceArtifacts.ts";
-import { inferProductName, looksLikeInventedChipName, productNameFromPlan, readStoredProductIdentity } from "../lib/productIdentity.ts";
-import { resolveNewProductWorkspaceAction } from "../lib/newProductWorkspace.ts";
+import {
+  inferProductName,
+  isReservedPlaceholderProductName,
+  looksLikeInventedChipName,
+  productNameFromPlan,
+  readStoredProductIdentity,
+} from "../lib/productIdentity.ts";
+import { isFoundationCloseGate, resolveNewProductWorkspaceAction } from "../lib/newProductWorkspace.ts";
 import { isNewProductSeedAgainstCurrent } from "../lib/productGoalFingerprint.ts";
 import { shortNameFromIdea } from "../src/lib/projectNameFromIdea.ts";
+import { usableGoalFromChatTurns } from "../lib/spineSequenceClient.ts";
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 void REPO;
@@ -142,6 +152,76 @@ section("first Master Plan save freezes name + workspace id on disk");
   assert.equal(secondPass.productName, "Quill Learn");
   assert.equal(readStoredProductIdentity(tmp)?.workspaceId, "cfproj_quill_learn");
 
+  fs.rmSync(tmp, { recursive: true, force: true });
+}
+
+section("courier brief + you can build keeps the same workspace, plan is not empty, name is not Aether Studio");
+{
+  assert.equal(isReservedPlaceholderProductName("Aether Studio"), true);
+  assert.equal(isReservedPlaceholderProductName("Helio Studio"), true);
+  assert.equal(isReservedPlaceholderProductName("Nebulla Workspace"), true);
+  assert.equal(isReservedPlaceholderProductName("Cosmic Night"), true);
+  assert.equal(isReservedPlaceholderProductName("Nova Studio"), true);
+  assert.equal(isReservedPlaceholderProductName("Aether Hub"), true);
+  assert.equal(isReservedPlaceholderProductName("City Courier"), false);
+  assert.equal(inferProductName("you can build"), "");
+  assert.equal(isFoundationCloseGate("you can build"), true);
+  assert.equal(
+    resolveNewProductWorkspaceAction({
+      userText: "you can build",
+      chipName: "Aether Studio",
+      productRoutesOnDisk: true,
+      workspacePaths: ["app/page.tsx"],
+    }).mintNewProject,
+    false,
+  );
+  assert.equal(
+    isNewProductSeedAgainstCurrent({ userText: "you can build", chipName: "Aether Studio" }),
+    false,
+  );
+
+  const courierBrief = "city moto parcel courier (Uber loop, package not passenger)";
+  const key = "cfproj_courier_live";
+  const freeze = mergeIdentityFreeze(null, {
+    projectKey: key,
+    projectName: inferProductName(courierBrief) || "City Courier",
+  });
+  assert.equal(freeze.projectKey, key);
+  assert.equal(/aether studio/i.test(freeze.projectName), false);
+  const afterCloser = mergeIdentityFreeze(freeze, {
+    projectKey: "cfproj_aether_studio",
+    projectName: "Aether Studio",
+  });
+  assert.equal(afterCloser.projectKey, key);
+  assert.equal(afterCloser.projectName, freeze.projectName);
+
+  const chatGoal = usableGoalFromChatTurns(
+    [{ role: "user", content: courierBrief }],
+    "you can build",
+  );
+  assert.match(chatGoal, /courier/i);
+  assert.equal(
+    shouldPersistPlanFromChatBeforeRename({ planEmpty: true, chatHasUsableGoal: Boolean(chatGoal) }),
+    true,
+  );
+
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "nebulla-courier-fast-lane-"));
+  const mp = path.join(tmp, "nebulla-ide", "master-plan.json");
+  fs.mkdirSync(path.dirname(mp), { recursive: true });
+  fs.writeFileSync(mp, JSON.stringify({}, null, 2), "utf8");
+  assert.equal(masterPlanRecordLooksEmpty(readMasterPlanFile(mp)), true);
+  bootstrapMasterPlanFromWorkspace({
+    workspaceRoot: tmp,
+    masterPlanPath: mp,
+    projectName: "Aether Studio",
+    userNote: chatGoal,
+  });
+  const plan = readMasterPlanFile(mp);
+  assert.equal(masterPlanRecordLooksEmpty(plan), false);
+  assert.ok(String(plan["1. Goal of the app"] || "").trim().length > 8);
+  assert.equal(/Aether Studio/i.test(JSON.stringify(plan)), false);
+  const stored = readStoredProductIdentity(tmp);
+  assert.equal(stored && /aether studio/i.test(stored.projectName), false);
   fs.rmSync(tmp, { recursive: true, force: true });
 }
 

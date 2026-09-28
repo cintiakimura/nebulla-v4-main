@@ -29,6 +29,7 @@ function isAuthFieldLabel(raw: string): boolean {
 function productBrandName(projectName: string): string {
   const n = String(projectName || "").trim();
   if (!n || looksLikeGoalStubName(n) || isAuthFieldLabel(n)) return "";
+  if (/studio$/i.test(n) && /^(nova|aether|helio|kite|mesa)\b/i.test(n)) return "";
   return n.slice(0, 36);
 }
 
@@ -139,7 +140,7 @@ export function mapSlots(input: SlotContentInput): SlotMap {
             ? "Home"
             : "Home";
 
-  const brand = productBrandName(input.projectName) || (isLanding ? "Welcome" : "Nova Studio");
+  const brand = productBrandName(input.projectName) || (isLanding ? "Welcome" : "Home");
   const initials = logoInitials(brand);
 
   const pageTitleSource = isAuth

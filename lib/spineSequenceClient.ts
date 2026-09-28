@@ -384,3 +384,20 @@ export function seedGoalOfTheAppSection(
     .trim()
     .slice(0, 900);
 }
+
+/** Goal already spoken in chat even when Master Plan tabs are still empty. */
+export function usableGoalFromChatTurns(
+  prior: { role?: string; content?: string }[] | null | undefined,
+  currentText: string,
+): string {
+  const current = extractGoalFromUserNote(currentText) || String(currentText || "").trim();
+  if (isUsableProjectGoal(current) && current.length >= 20) return current.slice(0, 2000);
+  const list = prior || [];
+  for (let i = list.length - 1; i >= 0; i--) {
+    const m = list[i];
+    if (String(m.role || "") !== "user") continue;
+    const g = extractGoalFromUserNote(String(m.content || ""));
+    if (isUsableProjectGoal(g) && g.length >= 20) return g.slice(0, 2000);
+  }
+  return "";
+}
