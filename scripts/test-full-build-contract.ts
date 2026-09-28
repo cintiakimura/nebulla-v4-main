@@ -329,7 +329,8 @@ section("courier goal-only plan fill → allowGo before Go");
   );
   const chat = fs.readFileSync(path.join(REPO, "src/components/ide/AIChat.tsx"), "utf8");
   assert.match(chat, /shouldSkipGrokChatForExistingPlan/);
-  assert.match(chat, /Architecture turn — writing Master Plan/);
+  assert.match(chat, /shouldOpenTalkTurn/);
+  assert.match(chat, /\/api\/master-plan\/freeze/);
   assert.doesNotMatch(chat, /Retry Go for Foundation\+Primary/);
   assert.match(FULL_BUILD_NO_RETRY_ACTIVITY, /Not retrying Foundation\+Primary/);
   const pipeline = fs.readFileSync(path.join(REPO, "src/lib/nebulaGrokCodingPipeline.ts"), "utf8");
@@ -351,7 +352,7 @@ section("courier goal-only plan fill → allowGo before Go");
   assert.doesNotMatch(pipeline, /polling until the Foundation job is scheduled/);
 }
 
-section("FAST LANE persist fill before incomplete gate (new empty workspace — do not reuse City Courier)");
+section("talk-first: fill during talk is allowed; skip-chat is not the first-turn door");
 {
   const seed =
     "Same-day motorcycle courier: clients request pickup, drivers accept jobs, both track parcels and pay at drop-off.";
@@ -371,29 +372,21 @@ section("FAST LANE persist fill before incomplete gate (new empty workspace — 
   assert.equal(r.allowGo, true, r.gaps.map((g) => `${g.code}: ${g.message}`).join(" | "));
 
   const chat = fs.readFileSync(path.join(REPO, "src/components/ide/AIChat.tsx"), "utf8");
-  const iArch = chat.indexOf("Architecture turn — writing Master Plan");
-  assert.ok(iArch > 0, "architecture activity");
-  const afterArch = chat.slice(iArch);
-  const iFill = afterArch.indexOf("fill-missing-section4");
-  const iGate = afterArch.indexOf("const readiness = await assessUiMockupReadiness");
-  const iGo = afterArch.indexOf("runGoCodeAndApply");
-  assert.ok(iFill > 0 && iFill < iGate, "fill persist must run before assessUiMockupReadiness");
-  assert.ok(iGo > iFill, "Go must not start until fill-missing-section4 returns in this turn");
-  assert.match(afterArch, /fastLaneFillAllowGo/);
+  assert.match(chat, /shouldOpenTalkTurn/);
+  assert.match(chat, /TALK_CLOSE_QUESTION/);
+  const iFill = chat.indexOf("Filled missing plan fields from the confirmed goal");
+  const iGoKick = chat.indexOf("let go = await runGoCodeAndApply");
+  assert.ok(iFill > 0 && iGoKick > iFill, "Go still fills empty machine fields after lock");
   assert.match(chat, /skipGrokChat && fastLaneFillAllowGo == null/);
-  assert.match(afterArch, /formatFullBuildIncompleteStop/);
   assert.match(formatFullBuildIncompleteStop("plan/ui-brief"), /Full Build will not start/);
   assert.doesNotMatch(formatFullBuildIncompleteStop("x"), /Foundation will not start/);
   assert.match(FULL_BUILD_INCOMPLETE_STOP, /after persist/);
   assert.match(FULL_BUILD_NO_RETRY_ACTIVITY, /Not retrying Foundation\+Primary/);
-  assert.match(chat, /Architecture POST abort after fill persist is not "you cancelled coding"/);
   const spoken = formatFullBuildFirstSpokenLine(seed);
   assert.ok(spoken.length > 40, spoken);
   assert.match(spoken, /Got it|first version/i);
   assert.doesNotMatch(spoken, /\?/);
-  assert.doesNotMatch(spoken, /who is it for|which sounds better|talk first/i);
-  assert.match(chat, /formatFullBuildFirstSpokenLine\(seedForPlan\)/);
-  assert.doesNotMatch(chat, /fastLaneFillAllowGo !== null\s*\n\s*\? ''/);
+  assert.doesNotMatch(chat, /formatFullBuildFirstSpokenLine\(seedForPlan\)/);
   assert.match(chat, /skipGrokChat/);
   const server = fs.readFileSync(path.join(REPO, "server.ts"), "utf8");
   const fillFn = server.slice(server.indexOf('app.post("/api/master-plan/fill-missing-section4"'));

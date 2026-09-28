@@ -3,7 +3,9 @@ import {
   buildModeSystemAppendix,
   chatModeSystemAppendix,
   IDE_CHAT_EXECUTION_APPENDIX,
+  TALK_UNTIL_LOCK_APPENDIX,
 } from './grokChatArtifacts';
+import { isPlanFrozen } from '../../lib/fullBuildContract';
 import { getGrokRequestHeaders } from './grokUserKey';
 import { withProjectBody, withProjectQuery } from './nebulaProjectApi';
 import {
@@ -152,6 +154,7 @@ export async function sendIdeAssistantGrokTurn(options: {
     `\n\n${IDE_CHAT_EXECUTION_APPENDIX}` +
     (modeAppendix ? `\n\n${modeAppendix}` : '') +
     (buildMode ? `\n\n${buildModeSystemAppendix()}` : '') +
+    (!isPlanFrozen(latestMP) ? `\n\n${TALK_UNTIL_LOCK_APPENDIX}` : '') +
     (inferenceMemory ? `\n\n${inferenceMemory}` : '') +
     (ideAppendix.trim()
       ? `\n\nIDE_EDITOR_SURFACE (active workspace file context — user may be editing here):\n${ideAppendix.trim()}`

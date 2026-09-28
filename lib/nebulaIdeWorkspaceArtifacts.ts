@@ -46,7 +46,13 @@ import {
   writeProductIdentity,
 } from "./productIdentity";
 import { isReplacementProductBrief, leftoverPlanConflictsWithGoal } from "./productGoalFingerprint";
-import { applyFullBuildPlanFill, fillMissingSection3Features } from "./fullBuildContract";
+import {
+  applyFullBuildPlanFill,
+  fillMissingSection3Features,
+  isPlanFrozen,
+  PLAN_FROZEN_KEY,
+  PLAN_LOCKED_AT_KEY,
+} from "./fullBuildContract";
 import { ensureCodingSkeletonOnPlan } from "./codingSkeleton";
 import { collapseWinningPalette } from "./uiGenerationEngine/v2/industryPalettes";
 
@@ -58,7 +64,16 @@ export function readMasterPlanFile(masterPlanPath: string): Record<string, strin
   if (!fs.existsSync(masterPlanPath)) return {};
   try {
     const raw = JSON.parse(fs.readFileSync(masterPlanPath, "utf8")) as Record<string, unknown>;
-    return normalizeMasterPlanRecord(raw);
+    const out = normalizeMasterPlanRecord(raw);
+    for (const [k, v] of Object.entries(raw)) {
+      if (typeof v === "string" && !(k in out)) out[k] = v;
+    }
+    if (raw[PLAN_FROZEN_KEY] === true || raw[PLAN_FROZEN_KEY] === "true") {
+      out[PLAN_FROZEN_KEY] = "true";
+    }
+    const lockedAt = String(raw[PLAN_LOCKED_AT_KEY] || "").trim();
+    if (lockedAt) out[PLAN_LOCKED_AT_KEY] = lockedAt;
+    return out;
   } catch {
     return {};
   }
@@ -86,6 +101,15 @@ export function fillMissingMasterPlanSectionsLocal(opts: {
   projectName: string;
   userNote?: string;
 }): { updated: string[] } {
+  let diskRaw: Record<string, unknown> = {};
+  try {
+    if (fs.existsSync(opts.masterPlanPath)) {
+      diskRaw = JSON.parse(fs.readFileSync(opts.masterPlanPath, "utf8")) as Record<string, unknown>;
+    }
+  } catch {
+    diskRaw = {};
+  }
+  if (isPlanFrozen(diskRaw)) return { updated: [] };
   const plan = readMasterPlanFile(opts.masterPlanPath);
   const missing = listMissingMasterPlanSections(plan);
   if (missing.length === 0) return { updated: [] };
@@ -659,14 +683,28 @@ export function hydrateAndPersistMasterPlan(
   workspaceRoot: string,
   masterPlanPath: string
 ): Record<string, string> {
+  let diskRaw: Record<string, unknown> = {};
+  try {
+    if (fs.existsSync(masterPlanPath)) {
+      diskRaw = JSON.parse(fs.readFileSync(masterPlanPath, "utf8")) as Record<string, unknown>;
+    }
+  } catch {
+    diskRaw = {};
+  }
   let plan = readMasterPlanFile(masterPlanPath);
   const { plan: hydrated, changed } = hydrateMasterPlanDerivedSections(workspaceRoot, plan);
   plan = hydrated;
   const identityPass = applyPlanIdentityAndWinningPalette(workspaceRoot, plan);
   plan = identityPass.plan;
   if (changed || identityPass.changed) {
+    const merged = { ...diskRaw, ...plan };
+    if (isPlanFrozen(diskRaw)) {
+      merged[PLAN_FROZEN_KEY] = true;
+      const at = String(diskRaw[PLAN_LOCKED_AT_KEY] || plan[PLAN_LOCKED_AT_KEY] || "").trim();
+      if (at) merged[PLAN_LOCKED_AT_KEY] = at;
+    }
     fs.mkdirSync(path.dirname(masterPlanPath), { recursive: true });
-    fs.writeFileSync(masterPlanPath, JSON.stringify(plan, null, 2), "utf8");
+    fs.writeFileSync(masterPlanPath, JSON.stringify(merged, null, 2), "utf8");
     scheduleWorkspaceAbsR2Sync(workspaceRoot, masterPlanPath);
   }
   writeJobBriefFromPlan(workspaceRoot, plan);

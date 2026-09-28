@@ -96,7 +96,7 @@ import {
 } from '../../lib/nebulaAiCodingPipeline';
 import { isFoundationGoInFlight } from '../../lib/foundationHeavyJob';
 import { abortHonestyUserLine, abortWithUserStopReason, isAbortLikeError, isAbortLikeMessage } from '../../lib/abortLikeError';
-import { fullBuildGoUserNote, fullBuildIncompleteFollowUp, formatFullBuildFirstSpokenLine, formatFullBuildIncompleteStop, FULL_BUILD_INCOMPLETE_STOP, FULL_BUILD_NO_RETRY_ACTIVITY, seedAlreadyHasWhoAndJob, shouldSkipGrokChatForExistingPlan } from '../../../lib/fullBuildContract';
+import { assessFullBuildCompleteness, freezePlan, fullBuildGoUserNote, fullBuildIncompleteFollowUp, formatFullBuildIncompleteStop, FULL_BUILD_INCOMPLETE_STOP, FULL_BUILD_NO_RETRY_ACTIVITY, isPlanFrozen, shouldOpenTalkTurn, shouldSkipGrokChatForExistingPlan, shouldStartGoAfterTalk, TALK_CLOSE_QUESTION, userAcceptedTalkClose } from '../../../lib/fullBuildContract';
 import {
   isAssistantCodingPromise,
   isAssistantRefineClaim,
@@ -2076,6 +2076,18 @@ export function AIChat() {
       identityFrozen = Boolean(getIdentityFreeze()?.projectKey);
     }
     if (identityFrozen) restoreFrozenIdentityIfDrifted();
+    let planOnDisk: Record<string, unknown> | null = null;
+    try {
+      const mpEarly = await fetch(withProjectQuery('/api/master-plan/read'), {
+        credentials: 'include',
+        cache: 'no-store',
+      });
+      planOnDisk = mpEarly.ok
+        ? ((await readResponseJson(mpEarly)) as Record<string, unknown>)
+        : null;
+    } catch {
+      planOnDisk = null;
+    }
     const seedActionEarly = resolveNewProductWorkspaceAction({
       userText: rawText,
       chipName: getBrowserProjectName(),
@@ -2091,13 +2103,12 @@ export function AIChat() {
           chipName: getBrowserProjectName(),
         }));
     const closeGate = isFoundationCloseGate(rawText);
-    const wantsLockAndBuild = newProductSeed
-      ? closeGate
-      : closeGate ||
-        isUserExplicitCodingRequest(rawText, {
-          firstUserMessage,
-          closerReady,
-        });
+    const seedForPlan = String(chatGoal || rawText || '').trim();
+    const wantsLockAndBuild = shouldStartGoAfterTalk({
+      plan: planOnDisk,
+      userText: rawText,
+      seedText: seedForPlan,
+    });
     const beatAHold = shouldHoldFirstSeedBeatA({
       userText: rawText,
       prior,
@@ -2375,40 +2386,27 @@ export function AIChat() {
       foundationLandedOnDisk() &&
       !newProductSeed &&
       (isPostCodeRefineRequest(rawText) || isSameProductRefineTurn(rawText));
-    let skipGrokChat =
-      interactionModeRef.current === 'agent' &&
-      userForcedCoding &&
-      !onboardingBuildStart &&
-      !hasAppStatusPayload &&
-      !refineSameProduct;
+    const fastLaneCloser =
+      isFoundationCloseGate(rawText) || detectBuildModeIntent(rawText) || Boolean(buildMode);
+    const skipOk = shouldSkipGrokChatForExistingPlan({
+      plan: planOnDisk,
+      seedText: seedForPlan,
+    });
+    const openTalk = shouldOpenTalkTurn({
+      plan: planOnDisk,
+      seedText: seedForPlan,
+      userText: rawText,
+    });
+    let skipGrokChat = skipOk && !openTalk;
     const maySkipChatIfPlanExists =
       interactionModeRef.current === 'agent' &&
       !onboardingBuildStart &&
       !hasAppStatusPayload &&
       !refineSameProduct &&
       (userForcedCoding || fastPrototypeTurn || buildMode);
-    const fastLaneCloser =
-      isFoundationCloseGate(rawText) || detectBuildModeIntent(rawText) || Boolean(buildMode);
-    const seedForPlan = String(chatGoal || rawText || '').trim();
-    let planOnDisk: Record<string, unknown> | null = null;
-    try {
-      const mpEarly = await fetch(withProjectQuery('/api/master-plan/read'), {
-        credentials: 'include',
-        cache: 'no-store',
-      });
-      planOnDisk = mpEarly.ok
-        ? ((await readResponseJson(mpEarly)) as Record<string, unknown>)
-        : null;
-    } catch {
-      planOnDisk = null;
-    }
-    const skipOk = shouldSkipGrokChatForExistingPlan({
-      plan: planOnDisk,
-      seedText: seedForPlan,
-    });
     let fastLaneFillAllowGo: boolean | null = null;
     let fastLaneFillAsk: string | null = null;
-    if (fastLaneCloser && chatGoal && !skipOk) {
+    if (openTalk && chatGoal && !isPlanFrozen(planOnDisk)) {
       try {
         await fetchJson<{ ok?: boolean }>(withProjectQuery('/api/master-plan/bootstrap-from-chat'), {
           method: 'POST',
@@ -2421,46 +2419,14 @@ export function AIChat() {
             }),
           ),
         });
-      } catch {
-        /* fill-missing-section4 still writes from the seed */
-      }
-    }
-    if (fastLaneCloser && seedAlreadyHasWhoAndJob(seedForPlan) && !skipOk) {
-      pushActivity(
-        'Architecture turn — writing Master Plan §§1–5 from the seed (then one Go). Same workspace.',
-        'info',
-      );
-      // Persist applyFullBuildPlanFill + skeleton to disk, then completeness. Not the pre-fill draft.
-      try {
-        const filled = await fetchJson<{
-          ok?: boolean;
-          allowGo?: boolean;
-          ask?: string | null;
-        }>(withProjectQuery('/api/master-plan/fill-missing-section4'), {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          credentials: 'include',
-          body: JSON.stringify(
-            withProjectBody({
-              projectName: getBrowserProjectName().trim(),
-              userNote: seedForPlan,
-            }),
-          ),
-        });
         try {
           window.dispatchEvent(new CustomEvent('nebula-master-plan-updated'));
         } catch {
           /* ignore */
         }
-        mpSaved = Math.max(mpSaved, 1);
-        fastLaneFillAllowGo = filled.allowGo === true;
-        fastLaneFillAsk = typeof filled.ask === 'string' ? filled.ask : null;
       } catch {
-        fastLaneFillAllowGo = false;
-        fastLaneFillAsk = null;
+        /* talk still runs — plan fills from Grok tags */
       }
-      // Plan is on disk from fill — do not start the architecture POST (abort ≠ cancelled coding).
-      skipGrokChat = true;
     }
     const seedProductName = identityFrozen
       ? singleProductName(getIdentityFreeze()?.projectName || getBrowserProjectName())
@@ -2470,6 +2436,8 @@ export function AIChat() {
     const isolateNewProduct =
       Boolean(newProductSeed) &&
       !identityFrozen &&
+      !isPlanFrozen(planOnDisk) &&
+      !userAcceptedTalkClose(rawText) &&
       !fastLaneCloser &&
       !userNoteRequestsNextSlice(rawText) &&
       !refineSameProduct &&
@@ -2517,6 +2485,7 @@ export function AIChat() {
       }
       persistIdeChatTranscriptToKeys([mintedKey, diskProjectKey, getBrowserProjectKey()], messagesRef.current);
       skipGrokChat = false;
+      planOnDisk = null;
       diskPaths = [];
       pushActivity(
         `New project: ${seedProductName} — not reusing the previous workspace or Master Plan`,
@@ -2569,6 +2538,8 @@ export function AIChat() {
         isReplacementProductBrief(incomingGoal, diskGoal);
       if (
         newSeed &&
+        !isPlanFrozen(plan) &&
+        !userAcceptedTalkClose(rawText) &&
         !userNoteRequestsNextSlice(rawText) &&
         !isChatContinuityTurn(rawText) &&
         !isNameOnlyProductSeed(rawText)
@@ -2668,6 +2639,7 @@ export function AIChat() {
       if (!fastPrototypeTurn && !buildMode && fastLaneFillAllowGo == null) skipGrokChat = false;
     }
     }
+    if (openTalk) skipGrokChat = false;
 
     try {
       if (showWorkActivity && !skipGrokChat) {
@@ -2694,12 +2666,11 @@ export function AIChat() {
         let skippedGrokChat = false;
         if (skipGrokChat) {
           skippedGrokChat = true;
-          assistantContent =
-            seedAlreadyHasWhoAndJob(seedForPlan) || fastLaneFillAllowGo !== null
-              ? formatFullBuildFirstSpokenLine(seedForPlan)
-              : foundationLandedOnDisk()
-                ? PRODUCT_MVP_READY_MESSAGE
-                : 'Master Plan already on disk — continuing the plan, then Full Build.';
+          assistantContent = skipOk
+            ? 'Locked plan — continuing Full Build from this workspace.'
+            : foundationLandedOnDisk()
+              ? PRODUCT_MVP_READY_MESSAGE
+              : 'Master Plan already on disk — continuing the plan, then Full Build.';
           planningPhase = 'PLAN_READY';
           if (fastLaneFillAllowGo == null) {
             pushActivity(
@@ -2794,12 +2765,30 @@ export function AIChat() {
       if (mpSaved > 0) {
         void rememberActiveCloudProject();
       }
+      try {
+        const mpAfter = await fetch(withProjectQuery('/api/master-plan/read'), {
+          credentials: 'include',
+          cache: 'no-store',
+        });
+        planOnDisk = mpAfter.ok
+          ? ((await readResponseJson(mpAfter)) as Record<string, unknown>)
+          : planOnDisk;
+      } catch {
+        /* keep last planOnDisk */
+      }
 
       if (/<NEBULA_UI_STUDIO_PROMPT>/i.test(masterPlanSource)) {
         dispatchOpenUiStudio({ tab: 'mockups' });
       }
 
-      const { displayText, hadCodingTag } = formatAssistantForIdeChatDisplay(raw);
+      let { displayText, hadCodingTag } = formatAssistantForIdeChatDisplay(raw);
+      if (
+        assessFullBuildCompleteness({ plan: planOnDisk || {} }).allowGo &&
+        !isPlanFrozen(planOnDisk) &&
+        !displayText.includes(TALK_CLOSE_QUESTION)
+      ) {
+        displayText = `${displayText.trim()}\n\n${TALK_CLOSE_QUESTION}`.trim();
+      }
       const agentAllowed = interactionModeRef.current === 'agent';
 
       const shortCodingNudge = isShortCodingGoNudge(displayText || raw);
@@ -2844,6 +2833,15 @@ export function AIChat() {
       if (fastLaneFillAllowGo === false) {
         willCode = false;
         noteProblem(fastLaneFillAsk || FULL_BUILD_INCOMPLETE_STOP);
+      }
+      if (
+        !shouldStartGoAfterTalk({
+          plan: planOnDisk,
+          userText: rawText,
+          seedText: seedForPlan,
+        })
+      ) {
+        willCode = false;
       }
       if (displayText.trim()) {
         rememberCloseOffer(displayText.trim(), diskProjectKey);
@@ -3253,6 +3251,22 @@ export function AIChat() {
         if (willCode && foundationGate.ok) {
           sendingRef.current = true;
           setSending(true);
+          if (!isPlanFrozen(planOnDisk)) {
+            try {
+              const fr = await fetchJson<{ plan?: Record<string, unknown>; projectKey?: string }>(
+                withProjectQuery('/api/master-plan/freeze'),
+                {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  credentials: 'include',
+                  body: JSON.stringify(withProjectBody({})),
+                },
+              );
+              if (fr.plan) planOnDisk = fr.plan;
+            } catch {
+              if (planOnDisk) planOnDisk = freezePlan(planOnDisk);
+            }
+          }
         }
 
         // Fast Prototype plan turn must not apply app file blocks / START_CODING from the

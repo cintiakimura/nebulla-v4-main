@@ -182,8 +182,11 @@ import {
   applyFullBuildPlanFill,
   assessFullBuildCompleteness,
   detectQuickDraftIntent,
+  freezePlan,
   fullBuildGoBlockedMessage,
+  isPlanFrozen,
   readBuildModeFromPlan,
+  shouldStartGoAfterTalk,
   writeBuildModeOnPlan,
   type BuildMode,
 } from "./lib/fullBuildContract";
@@ -1573,12 +1576,22 @@ No approved UI code yet.
       const rawName = typeof body.projectName === "string" ? body.projectName.trim() : "";
       const projectName = isReservedPlaceholderProductName(rawName) ? "" : rawName;
       if (userNote) {
-        fillMissingMasterPlanSectionsLocal({
-          workspaceRoot: pp.workspaceRoot,
-          masterPlanPath: pp.masterPlanPath,
-          projectName: projectName || "Untitled Project",
-          userNote,
-        });
+        let existing: Record<string, unknown> = {};
+        try {
+          if (fs.existsSync(pp.masterPlanPath)) {
+            existing = JSON.parse(fs.readFileSync(pp.masterPlanPath, "utf8")) as Record<string, unknown>;
+          }
+        } catch {
+          existing = {};
+        }
+        if (!isPlanFrozen(existing)) {
+          fillMissingMasterPlanSectionsLocal({
+            workspaceRoot: pp.workspaceRoot,
+            masterPlanPath: pp.masterPlanPath,
+            projectName: projectName || "Untitled Project",
+            userNote,
+          });
+        }
       }
       let plan: Record<string, unknown> = {};
       if (fs.existsSync(pp.masterPlanPath)) {
@@ -1616,6 +1629,27 @@ No approved UI code yet.
       });
     } catch (e) {
       res.status(500).json({ error: e instanceof Error ? e.message : "fill failed" });
+    }
+  });
+
+  app.post("/api/master-plan/freeze", (req, res) => {
+    try {
+      const pp = projectPathsFor(req);
+      let plan: Record<string, unknown> = {};
+      if (fs.existsSync(pp.masterPlanPath)) {
+        plan = JSON.parse(fs.readFileSync(pp.masterPlanPath, "utf8")) as Record<string, unknown>;
+      }
+      const frozen = freezePlan(plan);
+      persistMasterPlanJson(pp.workspaceRoot, pp.masterPlanPath, frozen);
+      res.json({
+        ok: true,
+        projectKey: pp.projectKey,
+        planFrozen: true,
+        planLockedAt: frozen.planLockedAt,
+        plan: frozen,
+      });
+    } catch (e) {
+      res.status(500).json({ error: e instanceof Error ? e.message : "freeze failed" });
     }
   });
 
@@ -5526,18 +5560,37 @@ Rules:
       }
       // Gate R before any preparing job — incomplete research must not look like Go started.
       {
+        let planRaw: Record<string, unknown> = {};
         let planForGate: Record<string, string> = {};
         try {
           if (fs.existsSync(masterPlanPath)) {
             const raw = JSON.parse(fs.readFileSync(masterPlanPath, "utf8"));
             if (raw && typeof raw === "object") {
+              planRaw = raw as Record<string, unknown>;
               for (const [k, v] of Object.entries(raw)) {
                 if (typeof v === "string") planForGate[k] = v;
+              }
+              if (raw.planFrozen === true || raw.planFrozen === "true") {
+                planForGate.planFrozen = "true";
+              }
+              if (typeof raw.planLockedAt === "string" && raw.planLockedAt.trim()) {
+                planForGate.planLockedAt = raw.planLockedAt.trim();
               }
             }
           }
         } catch {
           planForGate = {};
+          planRaw = {};
+        }
+        if (!shouldStartGoAfterTalk({ plan: planRaw, userText: note, seedText: note })) {
+          return res.status(409).json({
+            ok: false,
+            pending: false,
+            preparing: false,
+            coding: false,
+            error: "Talk until the plan is locked — then one Go.",
+            code: "TALK_NOT_LOCKED",
+          });
         }
         const existingGoGoal = String(planForGate["1. Goal of the app"] || "").trim();
         if (!existingGoGoal || !isUsableProjectGoal(existingGoGoal)) {
@@ -5667,6 +5720,12 @@ Rules:
             for (const [k, v] of Object.entries(raw)) {
               if (typeof v === "string") planSnapshot[k] = v;
             }
+            if (raw.planFrozen === true || raw.planFrozen === "true") {
+              planSnapshot.planFrozen = "true";
+            }
+            if (typeof raw.planLockedAt === "string" && raw.planLockedAt.trim()) {
+              planSnapshot.planLockedAt = raw.planLockedAt.trim();
+            }
           }
         }
       } catch {
@@ -5685,7 +5744,7 @@ Rules:
         source: string;
         completeness?: ReturnType<typeof assessMasterPlanCompletenessWithWorkspace>;
       } = { written: [], source: "skipped" };
-      if (!continuation) {
+      if (!continuation && !isPlanFrozen(planSnapshot)) {
         // Local fill only — Grok plan synthesis here used to burn the 55s kick abort
         // and leave poll on "preparing" until GO_TIMEOUT (no Grok Code job).
         try {
@@ -5725,7 +5784,9 @@ Rules:
 
       // Industry-standard security baseline before Go — never leave SEC gaps as a hard stop for MVP.
       try {
-        const ensured = ensureSecurityBaselineInPlan(planSnapshot);
+        const ensured = isPlanFrozen(planSnapshot)
+          ? { applied: false, plan: planSnapshot }
+          : ensureSecurityBaselineInPlan(planSnapshot);
         if (ensured.applied) {
           planSnapshot = { ...planSnapshot, ...ensured.plan };
           try {

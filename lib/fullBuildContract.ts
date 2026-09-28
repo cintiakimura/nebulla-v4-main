@@ -18,6 +18,12 @@ import { isReplacementProductBrief, looksLikeStandaloneProductBrief } from "./pr
 
 export { BUILD_MODE_PLAN_KEY };
 
+/** Durable lock on master-plan.json — coding reads only this frozen plan. */
+export const PLAN_FROZEN_KEY = "planFrozen";
+export const PLAN_LOCKED_AT_KEY = "planLockedAt";
+
+export const TALK_CLOSE_QUESTION = "I think I have everything I need. Anything you want to add?";
+
 export type BuildMode = "full_build" | "fast_prototype";
 
 export type FullBuildGap = {
@@ -235,9 +241,29 @@ export function fillMissingSection4PageFields(opts: {
   return { section: next, filled: Boolean(next) && next !== s4 };
 }
 
+function applyFrozenPlanMachineFill(
+  plan: Record<string, unknown>,
+): { plan: Record<string, unknown>; filled: boolean } {
+  const next = { ...plan };
+  const s1 = String(next[MASTER_PLAN_SECTION_KEYS[0]] ?? "").trim();
+  const s2Key = MASTER_PLAN_SECTION_KEYS[1];
+  const s4Key = MASTER_PLAN_SECTION_KEYS[3];
+  const s2 = String(next[s2Key] ?? "");
+  const s4 = String(next[s4Key] ?? "");
+  if (AUTH_STATED_RE.test([s1, s2, s4].join("\n"))) {
+    return { plan: next, filled: false };
+  }
+  const authLine = "Auth model: assumption: mock/local role gates. No hosted BaaS.";
+  next[s2Key] = `${s2.trim()}\n${authLine}`.trim();
+  return { plan: next, filled: true };
+}
+
 export function applyFullBuildPlanFill(
   plan: Record<string, unknown> | Record<string, string>,
 ): { plan: Record<string, unknown>; filled: boolean } {
+  if (isPlanFrozen(plan)) {
+    return applyFrozenPlanMachineFill({ ...(plan as Record<string, unknown>) });
+  }
   let next = { ...(plan as Record<string, unknown>) };
   const s1 = String(next[MASTER_PLAN_SECTION_KEYS[0]] ?? "").trim();
   let filled = false;
@@ -564,7 +590,7 @@ function collectSeedTokens(re: RegExp, text: string): string[] {
   return out;
 }
 
-/** One spoken chat line before Go — not an interview, not an empty skipGrokChat bubble. */
+/** Spoken helper only — must not replace a Grok talk turn on an unfrozen plan. */
 export function formatFullBuildFirstSpokenLine(seed: string): string {
   const t = String(seed || "").replace(/\s+/g, " ").trim();
   const roles = collectSeedTokens(SEED_WHO_RE, t).slice(0, 3);
@@ -574,9 +600,75 @@ export function formatFullBuildFirstSpokenLine(seed: string): string {
   return `Got it — ${roleBit} + ${jobBit}. I'll draft the plan from your brief and build a first version.`;
 }
 
+export function isPlanFrozen(
+  plan: Record<string, unknown> | Record<string, string> | null | undefined,
+): boolean {
+  if (!plan || typeof plan !== "object") return false;
+  const rec = plan as Record<string, unknown>;
+  if (rec[PLAN_FROZEN_KEY] === true || rec[PLAN_FROZEN_KEY] === "true") return true;
+  return Boolean(String(rec[PLAN_LOCKED_AT_KEY] || "").trim());
+}
+
+/** Sets lock flag + timestamp. Does not change §§1–5. */
+export function freezePlan(
+  plan: Record<string, unknown> | Record<string, string>,
+): Record<string, unknown> {
+  const next = { ...(plan as Record<string, unknown>) };
+  next[PLAN_FROZEN_KEY] = true;
+  if (!String(next[PLAN_LOCKED_AT_KEY] || "").trim()) {
+    next[PLAN_LOCKED_AT_KEY] = new Date().toISOString();
+  }
+  return next;
+}
+
+export function shouldOpenTalkTurn(opts: {
+  plan: Record<string, unknown> | null | undefined;
+  seedText?: string;
+  userText?: string;
+}): boolean {
+  const plan = opts.plan && typeof opts.plan === "object" ? opts.plan : null;
+  if (!isPlanFrozen(plan)) return true;
+  const seed = String(opts.userText || opts.seedText || "").trim();
+  const goal = String(plan?.["1. Goal of the app"] || "").trim();
+  if (seed && goal && isReplacementProductBrief(seed, goal)) return true;
+  return false;
+}
+
+export function userAcceptedTalkClose(text: string): boolean {
+  const t = String(text || "").replace(/\s+/g, " ").trim();
+  if (!t) return false;
+  if (/\bSTART_CODING\b/i.test(t)) return true;
+  if (/^(no|nope|nah)([\s,!.].*)?$/i.test(t)) return true;
+  if (
+    /\b(looks good|that'?s (all|enough|fine|it)|nothing (else|more) to add|no add|go ahead|build it|just build|you can build|let'?s (build|go))\b/i.test(
+      t,
+    )
+  ) {
+    return true;
+  }
+  if (/^(go|go\.|go!|build|build\s+it|now)[\s.!?]*$/i.test(t)) return true;
+  if (/^you\s+can\s+(start|build)\b/i.test(t)) return true;
+  return false;
+}
+
+export function shouldStartGoAfterTalk(opts: {
+  plan: Record<string, unknown> | null | undefined;
+  userText: string;
+  seedText?: string;
+}): boolean {
+  const plan = opts.plan && typeof opts.plan === "object" ? opts.plan : null;
+  const seed = String(opts.userText || opts.seedText || "").trim();
+  const goal = String(plan?.["1. Goal of the app"] || "").trim();
+  if (seed && goal && isReplacementProductBrief(seed, goal)) return false;
+  if (isPlanFrozen(plan)) return true;
+  if (!userAcceptedTalkClose(opts.userText)) return false;
+  if (!plan) return false;
+  return assessFullBuildCompleteness({ plan }).allowGo;
+}
+
 /**
- * Skip the plan-writing Grok call only when THIS seed already has a Full Build-complete plan.
- * Leftover stubs / bootstrap shells / a different product must not skip.
+ * Skip Grok talk only after THIS workspace plan is frozen for this seed.
+ * Fresh / unfrozen plans always talk. Replacement briefs talk again.
  */
 export function shouldSkipGrokChatForExistingPlan(opts: {
   plan: Record<string, unknown> | null | undefined;
@@ -584,6 +676,7 @@ export function shouldSkipGrokChatForExistingPlan(opts: {
 }): boolean {
   const plan = opts.plan && typeof opts.plan === "object" ? opts.plan : null;
   if (!plan) return false;
+  if (!isPlanFrozen(plan)) return false;
   const fb = assessFullBuildCompleteness({ plan });
   if (!fb.allowGo) return false;
   const seed = String(opts.seedText || "").trim();
