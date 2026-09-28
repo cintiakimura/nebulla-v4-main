@@ -25,7 +25,7 @@ export type GoBlockedReason = {
 };
 
 export const GO_BLOCKED_MESSAGES: Record<GoBlockedCode, string> = {
-  RESEARCH_INCOMPLETE: "Stopped: research not complete — Foundation will not start.",
+  RESEARCH_INCOMPLETE: "Stopped: research not complete — Full Build will not start.",
   UI_BRIEF_MISSING:
     "Stopped: ui-brief.md missing, too short, or has no pages. Finish Master Plan §§1–5, then Generate UI.",
   MASTER_PLAN_INCOMPLETE:

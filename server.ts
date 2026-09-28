@@ -1568,12 +1568,25 @@ No approved UI code yet.
   app.post("/api/master-plan/fill-missing-section4", (req, res) => {
     try {
       const pp = projectPathsFor(req);
+      const body = (req.body || {}) as Record<string, unknown>;
+      const userNote = typeof body.userNote === "string" ? body.userNote.trim() : "";
+      const rawName = typeof body.projectName === "string" ? body.projectName.trim() : "";
+      const projectName = isReservedPlaceholderProductName(rawName) ? "" : rawName;
+      if (userNote) {
+        fillMissingMasterPlanSectionsLocal({
+          workspaceRoot: pp.workspaceRoot,
+          masterPlanPath: pp.masterPlanPath,
+          projectName: projectName || "Untitled Project",
+          userNote,
+        });
+      }
       let plan: Record<string, unknown> = {};
       if (fs.existsSync(pp.masterPlanPath)) {
         plan = JSON.parse(fs.readFileSync(pp.masterPlanPath, "utf8")) as Record<string, unknown>;
       }
-      const ensured = ensureCodingSkeletonOnPlan(plan, {
-        goal: String(plan["1. Goal of the app"] || ""),
+      const withMode = writeBuildModeOnPlan(plan, "full_build");
+      const ensured = ensureCodingSkeletonOnPlan(withMode, {
+        goal: String(withMode["1. Goal of the app"] || userNote || ""),
       });
       const filled = applyFullBuildPlanFill(ensured.plan);
       persistMasterPlanJson(pp.workspaceRoot, pp.masterPlanPath, filled.plan);
@@ -4789,7 +4802,7 @@ ${modelJson}`;
       if (!researchGateUi.ok) {
         return res.status(409).json({
           ok: false,
-          error: RESEARCH_STOPPED.replace("Foundation will not start", "UI Gen not started"),
+          error: RESEARCH_STOPPED.replace("Full Build will not start", "UI Gen not started"),
           code: "RESEARCH_INCOMPLETE",
           reasons: researchGateUi.reasons,
         });

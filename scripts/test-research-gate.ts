@@ -287,7 +287,7 @@ try {
   );
 
   section("Go stop copy");
-  assert.equal(RESEARCH_STOPPED, "Stopped: research not complete — Foundation will not start.");
+  assert.equal(RESEARCH_STOPPED, "Stopped: research not complete — Full Build will not start.");
   assert.equal(RESEARCH_STAGE_SEARCHING, "Researching competitors and patterns (Web Search)…");
   assert.equal(
     formatGoBlockedByPlanMessage({ error: RESEARCH_STOPPED }),
@@ -465,7 +465,7 @@ try {
   {
     const done = finishGrokActivityWithProblems(null, [
       "Architecture incomplete: research not complete (need ≥5 real competitors + rankings)",
-      "Stopped: research not complete — Foundation will not start.",
+      "Stopped: research not complete — Full Build will not start.",
     ]);
     const banner = String(done.currentAction || done.steps?.[0]?.detail || done.steps?.[0]?.label || "");
     assert.match(banner, /Stopped: research not complete/);

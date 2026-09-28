@@ -528,6 +528,16 @@ export function fullBuildGoUserNote(): string {
 export const FULL_BUILD_NO_RETRY_ACTIVITY =
   "Stopped: Code returned no product file blocks. Not retrying Foundation+Primary — not asking you to type go again.";
 
+/** After persist + assessFullBuildCompleteness — never gate on the pre-fill draft. */
+export const FULL_BUILD_INCOMPLETE_STOP =
+  "Stopped: Master Plan still incomplete after persist (§§1–5 / usable §4) — Full Build will not start.";
+
+export function formatFullBuildIncompleteStop(detail?: string): string {
+  const d = String(detail || "").replace(/\s+/g, " ").trim();
+  if (!d) return FULL_BUILD_INCOMPLETE_STOP;
+  return `Stopped: architecture inputs incomplete (${d}) — Full Build will not start.`;
+}
+
 const SEED_WHO_RE = /\b(client|driver|rider|customer|kid|teacher|parent|user|sender|buyer|seller|courier|brand|creator)\b/i;
 const SEED_JOB_RE =
   /\b(request|pickup|accept|track|pay|rate|practice|deliver|book|order|dropoff|parcel)\b/i;

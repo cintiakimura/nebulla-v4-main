@@ -91,7 +91,7 @@ export async function callGrokWebSearch(opts: {
     return {
       ok: false,
       error: aborted
-        ? "Web Search research timed out. Try Go again — Foundation will not start without research."
+        ? "Web Search research timed out. Try Go again — Full Build will not start without research."
         : e instanceof Error
           ? e.message
           : String(e),

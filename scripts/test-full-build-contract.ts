@@ -13,8 +13,10 @@ import {
   fillMissingSection3Features,
   fillMissingSection4PageFields,
   formatFullBuildApplyLine,
+  formatFullBuildIncompleteStop,
   fullBuildGoUserNote,
   fullBuildIncompleteFollowUp,
+  FULL_BUILD_INCOMPLETE_STOP,
   FULL_BUILD_NO_RETRY_ACTIVITY,
   inferFullBuildRoutes,
   normalizeBuildMode,
@@ -346,6 +348,48 @@ section("courier goal-only plan fill → allowGo before Go");
   const pipeline = fs.readFileSync(path.join(REPO, "src/lib/nebulaGrokCodingPipeline.ts"), "utf8");
   assert.match(pipeline, /\[go-code\]/);
   assert.doesNotMatch(pipeline, /polling until the Foundation job is scheduled/);
+}
+
+section("FAST LANE persist fill before incomplete gate (new empty workspace — do not reuse City Courier)");
+{
+  const seed =
+    "Same-day motorcycle courier: clients request pickup, drivers accept jobs, both track parcels and pay at drop-off.";
+  assert.equal(seedAlreadyHasWhoAndJob(seed), true);
+  const empty = ensureCodingSkeletonOnPlan(
+    { "1. Goal of the app": seed },
+    { goal: seed, projectType: "Mobile App" },
+  );
+  const applied = applyFullBuildPlanFill(empty.plan);
+  const s3 = String(applied.plan["3. Features and KPIs"] || "");
+  const s4 = String(applied.plan["4. Pages and navigation"] || "");
+  assert.match(s3, /Request pickup/i);
+  assert.match(s3, /Accept job/i);
+  assert.match(s4, /\/request/i);
+  assert.match(s4, /\/driver/i);
+  const r = assessFullBuildCompleteness({ plan: applied.plan });
+  assert.equal(r.allowGo, true, r.gaps.map((g) => `${g.code}: ${g.message}`).join(" | "));
+
+  const chat = fs.readFileSync(path.join(REPO, "src/components/ide/AIChat.tsx"), "utf8");
+  const iArch = chat.indexOf("Architecture turn — writing Master Plan");
+  assert.ok(iArch > 0, "architecture activity");
+  const afterArch = chat.slice(iArch);
+  const iFill = afterArch.indexOf("fill-missing-section4");
+  const iGate = afterArch.indexOf("const readiness = await assessUiMockupReadiness");
+  const iGo = afterArch.indexOf("runGoCodeAndApply");
+  assert.ok(iFill > 0 && iFill < iGate, "fill persist must run before assessUiMockupReadiness");
+  assert.ok(iGo > iFill, "Go must not start until fill-missing-section4 returns in this turn");
+  assert.match(afterArch, /fastLaneFillAllowGo/);
+  assert.match(chat, /skipGrokChat && fastLaneFillAllowGo == null/);
+  assert.match(afterArch, /formatFullBuildIncompleteStop/);
+  assert.match(formatFullBuildIncompleteStop("plan/ui-brief"), /Full Build will not start/);
+  assert.doesNotMatch(formatFullBuildIncompleteStop("x"), /Foundation will not start/);
+  assert.match(FULL_BUILD_INCOMPLETE_STOP, /after persist/);
+  assert.match(chat, /Architecture POST abort after fill persist is not "you cancelled coding"/);
+  const server = fs.readFileSync(path.join(REPO, "server.ts"), "utf8");
+  const fillFn = server.slice(server.indexOf('app.post("/api/master-plan/fill-missing-section4"'));
+  assert.match(fillFn, /applyFullBuildPlanFill/);
+  assert.match(fillFn, /assessFullBuildCompleteness/);
+  assert.match(fillFn, /persistMasterPlanJson/);
 }
 
 console.log("\n✓ full-build contract tests passed\n");

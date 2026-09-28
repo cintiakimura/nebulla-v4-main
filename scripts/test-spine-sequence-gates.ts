@@ -116,7 +116,7 @@ section("Gate A/B chat — no silent continue / false coding-ok");
 assert.equal(/Foundation may still start/.test(chat), false);
 assert.match(chat, /mockup deferred — coding Foundation/);
 assert.equal(/continuing Foundation anyway/.test(chat), false);
-assert.match(chat, /Foundation will not start/);
+assert.match(chat, /Full Build will not start/);
 assert.equal(
   /foundationGate = \{ ok: true, reason: 'explicit_skip' \}/.test(chat),
   false,

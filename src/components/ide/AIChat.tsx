@@ -96,7 +96,7 @@ import {
 } from '../../lib/nebulaAiCodingPipeline';
 import { isFoundationGoInFlight } from '../../lib/foundationHeavyJob';
 import { abortHonestyUserLine, abortWithUserStopReason, isAbortLikeError, isAbortLikeMessage } from '../../lib/abortLikeError';
-import { fullBuildGoUserNote, fullBuildIncompleteFollowUp, FULL_BUILD_NO_RETRY_ACTIVITY, seedAlreadyHasWhoAndJob, shouldSkipGrokChatForExistingPlan } from '../../../lib/fullBuildContract';
+import { fullBuildGoUserNote, fullBuildIncompleteFollowUp, formatFullBuildIncompleteStop, FULL_BUILD_INCOMPLETE_STOP, FULL_BUILD_NO_RETRY_ACTIVITY, seedAlreadyHasWhoAndJob, shouldSkipGrokChatForExistingPlan } from '../../../lib/fullBuildContract';
 import {
   isAssistantCodingPromise,
   isAssistantRefineClaim,
@@ -227,10 +227,6 @@ import {
   planRecordHasUsableGoal,
   usableGoalFromChatTurns,
 } from '../../lib/spineSequenceGates';
-import {
-  masterPlanRecordLooksEmpty,
-  shouldPersistPlanFromChatBeforeRename,
-} from '../../../lib/identityFreeze';
 import { ideContextSnippetForChat, useIdeWorkspace } from '@/components/ide/IdeWorkspaceContext';
 import { useIdeCenterTabs } from '@/components/ide/IdeCenterTabsContext';
 import { ChatFilePreview } from '@/components/ide/ChatFilePreview';
@@ -2408,36 +2404,61 @@ export function AIChat() {
       plan: planOnDisk,
       seedText: seedForPlan,
     });
+    let fastLaneFillAllowGo: boolean | null = null;
+    let fastLaneFillAsk: string | null = null;
     if (fastLaneCloser && chatGoal && !skipOk) {
       try {
-        if (
-          shouldPersistPlanFromChatBeforeRename({
-            planEmpty: masterPlanRecordLooksEmpty(planOnDisk),
-            chatHasUsableGoal: true,
-          })
-        ) {
-          await fetchJson<{ ok?: boolean }>(withProjectQuery('/api/master-plan/bootstrap-from-chat'), {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            credentials: 'include',
-            body: JSON.stringify(
-              withProjectBody({
-                userNote: chatGoal,
-                projectName: getBrowserProjectName().trim(),
-              }),
-            ),
-          });
-        }
+        await fetchJson<{ ok?: boolean }>(withProjectQuery('/api/master-plan/bootstrap-from-chat'), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify(
+            withProjectBody({
+              userNote: chatGoal,
+              projectName: getBrowserProjectName().trim(),
+            }),
+          ),
+        });
       } catch {
-        /* plan bootstrap best-effort — architecture chat still runs */
+        /* fill-missing-section4 still writes from the seed */
       }
     }
     if (fastLaneCloser && seedAlreadyHasWhoAndJob(seedForPlan) && !skipOk) {
-      skipGrokChat = false;
       pushActivity(
         'Architecture turn — writing Master Plan §§1–5 from the seed (then one Go). Same workspace.',
         'info',
       );
+      // Persist applyFullBuildPlanFill + skeleton to disk, then completeness. Not the pre-fill draft.
+      try {
+        const filled = await fetchJson<{
+          ok?: boolean;
+          allowGo?: boolean;
+          ask?: string | null;
+        }>(withProjectQuery('/api/master-plan/fill-missing-section4'), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify(
+            withProjectBody({
+              projectName: getBrowserProjectName().trim(),
+              userNote: seedForPlan,
+            }),
+          ),
+        });
+        try {
+          window.dispatchEvent(new CustomEvent('nebula-master-plan-updated'));
+        } catch {
+          /* ignore */
+        }
+        mpSaved = Math.max(mpSaved, 1);
+        fastLaneFillAllowGo = filled.allowGo === true;
+        fastLaneFillAsk = typeof filled.ask === 'string' ? filled.ask : null;
+      } catch {
+        fastLaneFillAllowGo = false;
+        fastLaneFillAsk = null;
+      }
+      // Plan is on disk from fill — do not start the architecture POST (abort ≠ cancelled coding).
+      skipGrokChat = true;
     }
     const seedProductName = identityFrozen
       ? singleProductName(getIdentityFreeze()?.projectName || getBrowserProjectName())
@@ -2610,7 +2631,7 @@ export function AIChat() {
         skipGrokChat = false;
         pushActivity('New product brief — previous plan and leftover routes cleared', 'info');
       } else if (maySkipChatIfPlanExists) {
-        const hasPlan = skipOk;
+        const hasPlan = skipOk || fastLaneFillAllowGo === true;
         if (hasPlan) {
           planSliceFromDisk = parsePersistedSliceLabel(
             String((plan as Record<string, unknown>)[PRE_CODING_SUMMARY_KEY] ?? ''),
@@ -2622,13 +2643,15 @@ export function AIChat() {
             );
           }
           skipGrokChat = true;
-          pushActivity(
-            fastPrototypeTurn
-              ? 'Master Plan already on disk — skipping Grok chat, continuing classify / plan / Foundation+Primary'
-              : 'Master Plan already on disk — skipping Grok chat, continuing classify / plan / Full Build',
-            'info',
-          );
-        } else if (skipGrokChat) {
+          if (fastLaneFillAllowGo == null) {
+            pushActivity(
+              fastPrototypeTurn
+                ? 'Master Plan already on disk — skipping Grok chat, continuing classify / plan / Foundation+Primary'
+                : 'Master Plan already on disk — skipping Grok chat, continuing classify / plan / Full Build',
+              'info',
+            );
+          }
+        } else if (skipGrokChat && fastLaneFillAllowGo == null) {
           skipGrokChat = false;
           const fromPrompt = extractGoalFromUserNote(text);
           pushActivity(
@@ -2640,7 +2663,7 @@ export function AIChat() {
         }
       }
     } catch {
-      if (!fastPrototypeTurn && !buildMode) skipGrokChat = false;
+      if (!fastPrototypeTurn && !buildMode && fastLaneFillAllowGo == null) skipGrokChat = false;
     }
     }
 
@@ -2669,14 +2692,19 @@ export function AIChat() {
         let skippedGrokChat = false;
         if (skipGrokChat) {
           skippedGrokChat = true;
-          assistantContent = foundationLandedOnDisk()
-            ? PRODUCT_MVP_READY_MESSAGE
-            : 'Master Plan already on disk — continuing the plan, then Full Build.';
+          assistantContent =
+            fastLaneFillAllowGo !== null
+              ? ''
+              : foundationLandedOnDisk()
+                ? PRODUCT_MVP_READY_MESSAGE
+                : 'Master Plan already on disk — continuing the plan, then Full Build.';
           planningPhase = 'PLAN_READY';
-          pushActivity(
-            'Master Plan on disk — skipping Grok chat; classify / plan next (not coding yet)',
-            'info',
-          );
+          if (fastLaneFillAllowGo == null) {
+            pushActivity(
+              'Master Plan on disk — skipping Grok chat; classify / plan next (not coding yet)',
+              'info',
+            );
+          }
         }
         if (!skippedGrokChat) {
           try {
@@ -2697,22 +2725,27 @@ export function AIChat() {
               ideLocale: resolvedIdeLocale,
               contentLocale: contentLocaleRef.current,
               contentMode: prefs.contentMode,
-              signal: sendAbort.signal,
+              signal: fastLaneFillAllowGo !== null ? undefined : sendAbort.signal,
             }));
           } catch (grokErr) {
             const grokMsg = grokErr instanceof Error ? grokErr.message : String(grokErr);
-            if (
+            if (fastLaneFillAllowGo !== null && isAbortLikeError(grokErr)) {
+              // Architecture POST abort after fill persist is not "you cancelled coding".
+              assistantContent =
+                'Master Plan is saved from the seed — Full Build continues from disk.';
+              planningPhase = 'PLAN_READY';
+            } else if (
               (/timed out/i.test(grokMsg) || isAbortLikeError(grokErr)) &&
               (userForcedCoding || fastPrototypeTurn || buildMode)
             ) {
               pushActivity(
                 isAbortLikeError(grokErr)
                   ? 'Grok chat interrupted — continuing from saved Master Plan'
-                  : 'Grok chat timed out after 90s — Master Plan is saved; continuing classify / plan / Foundation (not waiting on chat).',
+                  : 'Grok chat timed out after 90s — Master Plan is saved; continuing classify / plan / Full Build (not waiting on chat).',
                 'warn',
               );
               assistantContent =
-                'Grok chat timed out; Master Plan is saved — continuing the plan, then Foundation.';
+                'Grok chat timed out; Master Plan is saved — continuing the plan, then Full Build.';
               planningPhase = 'PLAN_READY';
             } else {
               throw grokErr;
@@ -2734,7 +2767,7 @@ export function AIChat() {
       const masterPlanSource = (
         isOrchestrationOnlyPlanSource(planningPhase) ? raw : planningPhase || raw
       ).trim();
-      if (showWorkActivity) {
+      if (showWorkActivity && !skipGrokChat) {
         pushActivity(`Grok replied (${raw.length.toLocaleString()} chars)`, 'success');
         setGrokActivity((prev) =>
           advanceGrokActivity(prev, 2, {
@@ -2744,7 +2777,7 @@ export function AIChat() {
         );
       }
 
-      mpSaved = beatAHold
+      const persistedFromChat = beatAHold
         ? 0
         : await persistMasterPlanFromAssistantSource(
         masterPlanSource,
@@ -2755,6 +2788,7 @@ export function AIChat() {
           getBrowserProjectName(),
         ],
       );
+      mpSaved = beatAHold ? 0 : Math.max(mpSaved, persistedFromChat);
       if (mpSaved > 0) {
         void rememberActiveCloudProject();
       }
@@ -2805,6 +2839,10 @@ export function AIChat() {
           userForcedCoding ||
           assistantCodingPromise ||
           postCodeRefine);
+      if (fastLaneFillAllowGo === false) {
+        willCode = false;
+        noteProblem(fastLaneFillAsk || FULL_BUILD_INCOMPLETE_STOP);
+      }
       if (displayText.trim()) {
         rememberCloseOffer(displayText.trim(), diskProjectKey);
       }
@@ -2820,7 +2858,11 @@ export function AIChat() {
           content: displayText.trim(),
           timestamp: ts,
         });
-      } else if (willCode && (onboardingBuildStart || shortCodingNudge || userForcedCoding)) {
+      } else if (
+        willCode &&
+        fastLaneFillAllowGo == null &&
+        (onboardingBuildStart || shortCodingNudge || userForcedCoding)
+      ) {
         toAppend.push({
           id: `a-${Date.now()}`,
           role: 'assistant',
@@ -2938,23 +2980,25 @@ export function AIChat() {
         }
       }
 
-      // Unlock composer before mockup. This shell does not mount IdeUiStudioBeta;
-      // generate can take minutes and must not freeze the input.
-      setSending(false);
-      sendingRef.current = false;
+      // Unlock composer before mockup — except FAST LANE fill, which must not abort Go
+      // as "cancelled coding" while the persist write is already on disk.
+      if (fastLaneFillAllowGo == null) {
+        setSending(false);
+        sendingRef.current = false;
+      }
 
       // Stage B — UI mockup after plan + ui-brief, BEFORE coding (single API key queue).
       let uiMockupStarted = false;
       let mockupSkippedOrFailed = false;
       let lastResearchError: string | null = null;
-      if (sendAbort.signal.aborted) {
+      if (sendAbort.signal.aborted && fastLaneFillAllowGo == null) {
         // A newer send replaced this controller — do not stack a second heavy job.
         if (sendingAbortRef.current !== sendAbort) {
           return;
         }
         if (mpSaved > 0 && (userForcedCoding || fastPrototypeTurn || willCode)) {
           pushActivity(
-            'Chat send interrupted — Master Plan is saved; continuing to mockup / Foundation',
+            'Chat send interrupted — Master Plan is saved; continuing to mockup / Full Build',
             'warn',
           );
         } else {
@@ -2985,7 +3029,7 @@ export function AIChat() {
           lastResearchError = lastResearchError || stopMsg;
           codingProblems.push(lastResearchError);
           pushActivity(lastResearchError, 'error');
-          setAccessoryHint('Retry research — Foundation will not start until Gate R is complete.');
+          setAccessoryHint('Retry research — Full Build will not start until Gate R is complete.');
           window.setTimeout(() => setAccessoryHint(null), 8000);
           willCode = false;
           try {
@@ -3008,6 +3052,7 @@ export function AIChat() {
         await syncPlanViewsAfterResearch();
         const readiness = await assessUiMockupReadiness({ projectKey: diskProjectKey });
         if (
+          fastLaneFillAllowGo == null &&
           readinessBlocksAutoFoundation(readiness) &&
           readiness.reasons.length &&
           !lastResearchError
@@ -3111,10 +3156,13 @@ export function AIChat() {
             mockupSkippedOrFailed = true;
             pushActivity('UI mockup incomplete — coding continues', 'warn');
           }
+        } else if (fastLaneFillAllowGo === true) {
+          mockupSkippedOrFailed = true;
         } else if (fastPrototypeTurn || willCode) {
           noteProblem(
-            `Stopped: architecture inputs incomplete (${readiness.reasons.join('; ') || 'plan/ui-brief'}) — Foundation will not start.`,
+            formatFullBuildIncompleteStop(readiness.reasons.join('; ') || 'plan/ui-brief'),
           );
+          willCode = false;
         }
         }
         }
@@ -3145,7 +3193,7 @@ export function AIChat() {
           lastResearchError = null;
           noteProblem(stopMsg);
           pushActivity(stopMsg, 'error');
-          setAccessoryHint('Retry research — Foundation will not start until Gate R is complete.');
+          setAccessoryHint('Retry research — Full Build will not start until Gate R is complete.');
           window.setTimeout(() => setAccessoryHint(null), 8000);
           willCode = false;
           try {
@@ -3190,7 +3238,7 @@ export function AIChat() {
             lastResearchError = stopMsg;
             noteProblem(stopMsg);
             pushActivity(stopMsg, 'error');
-            setAccessoryHint('Retry research — Foundation will not start until Gate R is complete.');
+            setAccessoryHint('Retry research — Full Build will not start until Gate R is complete.');
             window.setTimeout(() => setAccessoryHint(null), 8000);
             willCode = false;
             foundationGate = { ok: false as const, reason: 'blocked' as const };
@@ -3461,7 +3509,7 @@ export function AIChat() {
                 : blockedLine || 'Foundation coding reported a problem',
             );
             if (coding.blockedReason?.code === 'RESEARCH_INCOMPLETE') {
-              setAccessoryHint('Retry research — Foundation will not start until Gate R is complete.');
+              setAccessoryHint('Retry research — Full Build will not start until Gate R is complete.');
               window.setTimeout(() => setAccessoryHint(null), 8000);
             }
           }
@@ -3584,7 +3632,14 @@ export function AIChat() {
         }
       } catch (codingErr) {
         console.warn('[AIChat] coding apply:', codingErr);
-        if (isAbortLikeError(codingErr) && mpSaved > 0) {
+        if (isAbortLikeError(codingErr) && fastLaneFillAllowGo !== null) {
+          pushActivity(
+            fastLaneFillAllowGo
+              ? 'Coding wait interrupted — Master Plan is already on disk from the seed.'
+              : formatFullBuildIncompleteStop(fastLaneFillAsk || undefined),
+            'warn',
+          );
+        } else if (isAbortLikeError(codingErr) && mpSaved > 0) {
           pushActivity(
             `${abortHonestyUserLine(codingErr)} Master Plan is saved.`,
             'warn',
@@ -3607,7 +3662,20 @@ export function AIChat() {
 
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      if (isAbortLikeError(e) && mpSaved > 0) {
+      if (isAbortLikeError(e) && fastLaneFillAllowGo !== null) {
+        pushActivity(
+          fastLaneFillAllowGo
+            ? 'Architecture chat interrupted — Master Plan is already on disk; Full Build continues.'
+            : formatFullBuildIncompleteStop(fastLaneFillAsk || undefined),
+          'warn',
+        );
+        if (!fastLaneFillAllowGo) {
+          resetCodingActivity();
+        }
+        sendingRef.current = false;
+        setSending(false);
+        return;
+      } else if (isAbortLikeError(e) && mpSaved > 0) {
         pushActivity(
           `${abortHonestyUserLine(e)} Master Plan is saved.`,
           'warn',
@@ -3922,7 +3990,7 @@ export function AIChat() {
     ) {
       const stopMsg = formatResearchStopMessage(researchSt.reasons);
       setSendError(stopMsg);
-      setAccessoryHint('Retry research — Foundation will not start until Gate R is complete.');
+      setAccessoryHint('Retry research — Full Build will not start until Gate R is complete.');
       window.setTimeout(() => setAccessoryHint(null), 8000);
       sendingRef.current = false;
       setSending(false);
