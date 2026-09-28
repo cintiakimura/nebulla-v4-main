@@ -50,7 +50,8 @@ const LANDING_RE =
 const PHOTO_LANDING_RE = /\b(photography|photographer)\b/i;
 const CREATOR_RE = /\b(creator|influencer|outreach|brands?\s+marketplace)\b/i;
 const MARKET_RE =
-  /\b(marketplace|e-?commerce|shop|storefront|\bcart\b|catalog|baker|bakery|bread|pastry|pickup order|bike|bicycle|mechanic|spoke|moto|motodrop|courier|delivery|dropoff)\b/i;
+  /\b(marketplace|e-?commerce|shop|storefront|\bcart\b|catalog|baker|bakery|bread|pastry|pickup order|bike|bicycle|mechanic|spoke)\b/i;
+const COURIER_RE = /\b(moto|motodrop|courier|delivery|dropoff|parcel)\b/i;
 const DASH_RE = /\b(saas|analytics|admin|dashboard|crm|metrics|backoffice|internal tool)\b/i;
 
 const EXTRA_ADMIN_RE = /^\/(settings|analytics|dashboard|admin)(\/|$)/i;
@@ -125,10 +126,14 @@ export function skeletonFitsCurrentGoal(c: CodingSkeleton | null | undefined, go
   if (kids && c.skeleton === "web_dashboard") return false;
   if (market && /baker|bakery|bread/.test(g) && c.skeleton !== "marketplace") return false;
   const blob = JSON.stringify(c).toLowerCase();
-  if (/moto|motodrop|courier|delivery|dropoff|parcel/.test(g) && /bread|baker|lesson|bike|spoke|practice|wallet|catalog/.test(blob)) {
+  if (COURIER_RE.test(g) && (c.skeleton === "web_dashboard" || c.skeleton === "landing")) return false;
+  if (COURIER_RE.test(g) && (c.auth === "none" || (c.roles.length <= 1 && /^users?$/i.test(c.roles[0] || "")))) {
     return false;
   }
-  if (/moto|motodrop|courier|delivery|dropoff|parcel/.test(g) && !/request|pickup|dropoff|rider|driver/.test(blob)) {
+  if (COURIER_RE.test(g) && /bread|baker|lesson|bike|spoke|practice|wallet|catalog/.test(blob)) {
+    return false;
+  }
+  if (COURIER_RE.test(g) && !/request|pickup|dropoff|rider|driver|client/.test(blob)) {
     return false;
   }
   if (CREATOR_RE.test(g) && (c.skeleton === "landing" || /decline|first item|practice/.test(blob))) {
@@ -154,15 +159,17 @@ export function classifyCodingSkeleton(
 
   const kids = KIDS_RE.test(text);
   const documentJob = isDocumentWorkflowGoal(text);
+  const courier = COURIER_RE.test(text) && !documentJob;
   const landing =
-    (LANDING_RE.test(text) || (PHOTO_LANDING_RE.test(text) && !CREATOR_RE.test(text) && !MARKET_RE.test(text))) ||
-    (/\blanding\b/.test(typeHint) && !MARKET_RE.test(text) && !CREATOR_RE.test(text));
-  const market = (MARKET_RE.test(text) || CREATOR_RE.test(text)) && !documentJob;
-  const dash = DASH_RE.test(text) && !kids && !documentJob;
+    (LANDING_RE.test(text) || (PHOTO_LANDING_RE.test(text) && !CREATOR_RE.test(text) && !MARKET_RE.test(text) && !courier)) ||
+    (/\blanding\b/.test(typeHint) && !MARKET_RE.test(text) && !CREATOR_RE.test(text) && !courier);
+  const market = (MARKET_RE.test(text) || CREATOR_RE.test(text)) && !documentJob && !courier;
+  const dash = DASH_RE.test(text) && !kids && !documentJob && !courier;
 
   let skeleton: CodingSkeletonKind = "mobile_home";
   if (kids && !documentJob) skeleton = "mobile_home";
   else if (documentJob) skeleton = "web_dashboard";
+  else if (courier) skeleton = "mobile_home";
   else if (landing && !market) skeleton = "landing";
   else if (market) skeleton = "marketplace";
   else if (dash || /\b(saas|web app|dashboard)\b/.test(typeHint)) skeleton = "web_dashboard";
@@ -247,14 +254,14 @@ export function formatCodingSkeletonForGo(c: CodingSkeleton): string {
       ? "Settings/dashboard allowed for this skeleton."
       : "MUST NOT: /dashboard /settings /analytics /admin unless listed above.",
     FOUNDATION_MIN_UI_CHECKLIST,
-    "This Go is Foundation+Primary. The goal verb must persist in lib/mockStore.ts (localStorage). No empty /api stubs. Do not start a Data+API or Polish slice. After this Go: first version is on Live, mock only.",
+    "This Go is Full Build for the listed routes (not a web_dashboard leftover). The goal verb must persist in lib/mockStore.ts (localStorage). No empty /api stubs. After this Go: first version is on Live, mock only.",
   ].join("\n");
 }
 
 /**
  * Numbered Foundation checklist — Grok Code must emit this UI on Live (not a generic shell).
  */
-export const FOUNDATION_MIN_UI_CHECKLIST = `FOUNDATION MIN UI (visible on Live this Go — Foundation+Primary, not Data+API):
+export const FOUNDATION_MIN_UI_CHECKLIST = `FOUNDATION MIN UI (visible on Live this Go — Full Build emits this on every §4 route; Fast Prototype still uses one Foundation clamp):
 1. Header: ONE product name + initials (same string as chip / <title> / Live). Never concatenate leftover brands (no Quill Learn Kids Bridgen).
 2. Nav: §4 routes as real tabs/segments (3–5 links), including inferred workflow pages from the lock (dossiers + forms + dashboard when the goal is keep/find documents). No empty chrome. No leftover Practice/Teacher/Session unless THIS goal is education. Forbidden first slice: login/register + stock Home cards only.
 3. Home (non-education): job title from the goal verb; ≥2 mock items; one primary CTA to the main action route. Forbidden: "One short lesson", "Weekly streak", "Start practice", "Interactive screen with mock data".
@@ -393,27 +400,8 @@ function buildDefaults(skeleton: CodingSkeletonKind, text: string, kids: boolean
         skeleton_note: "Creator/brand hub. Decline is an action on Messages, not a tab.",
       };
     }
-    if (/\b(moto|motodrop|courier|delivery|dropoff)\b/i.test(text)) {
-      return {
-        skeleton,
-        project_type: "marketplace",
-        roles: ["sender", "rider"],
-        entities: [
-          { name: "Request", fields: ["pickup", "dropoff", "status"], owner_role: "sender" },
-        ],
-        verbs: ["request", "accept"],
-        routes: [
-          { path: "/", purpose: "Open delivery requests", entity: "Request" },
-          { path: "/request", purpose: "Pickup, dropoff, pay mock on the job", entity: "Request" },
-          { path: "/track", purpose: "Last point mock", entity: "Request" },
-          { path: "/driver", purpose: "Rider accept", entity: "Request" },
-          { path: "/account", purpose: "Saved card + quote", entity: "Request" },
-        ],
-        auth: "none",
-        out_of_scope: [...DEFAULT_OUT_OF_SCOPE],
-        source: "classified",
-        skeleton_note: "Courier parcel: Home/Request/Track/Driver/Account. Pay is a section, not Wallet-as-shop.",
-      };
+    if (COURIER_RE.test(text)) {
+      return courierMobileDefaults();
     }
     if (/\b(baker|bakery|bread|pastry|pickup order)\b/i.test(text)) {
       return {
@@ -476,6 +464,9 @@ function buildDefaults(skeleton: CodingSkeletonKind, text: string, kids: boolean
       source: "classified",
     };
   }
+  if (COURIER_RE.test(text)) {
+    return courierMobileDefaults();
+  }
   const teacher = /\bteacher|\beducator/i.test(text) || kids;
   return {
     skeleton: "mobile_home",
@@ -504,6 +495,29 @@ function buildDefaults(skeleton: CodingSkeletonKind, text: string, kids: boolean
     skeleton_note: kids
       ? "Home is practice, not login or admin dashboard. Teacher is /teacher, not Home."
       : "Home is the job, not a dashboard.",
+  };
+}
+
+function courierMobileDefaults(): CodingSkeleton {
+  return {
+    skeleton: "mobile_home",
+    project_type: "mobile",
+    roles: ["client", "driver"],
+    entities: [
+      { name: "Request", fields: ["pickup", "dropoff", "status", "quote"], owner_role: "client" },
+    ],
+    verbs: ["request", "accept", "track", "pay", "rate"],
+    routes: [
+      { path: "/", purpose: "Open delivery requests", entity: "Request" },
+      { path: "/request", purpose: "Request pickup", entity: "Request" },
+      { path: "/track", purpose: "Track the job", entity: "Request" },
+      { path: "/driver", purpose: "Driver accept job", entity: "Request" },
+      { path: "/account", purpose: "Pay and rate", entity: "Request" },
+    ],
+    auth: "mock",
+    out_of_scope: [...DEFAULT_OUT_OF_SCOPE, "dashboard"],
+    source: "classified",
+    skeleton_note: "Mobile courier: client + driver, mock auth. Request / accept / track / pay / rate.",
   };
 }
 

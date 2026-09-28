@@ -232,6 +232,12 @@ assert.equal(
   assert.equal(research.code, "RESEARCH_INCOMPLETE");
   const key = classifyGoFailure({ httpStatus: 401, error: "Main AI API key is missing" });
   assert.equal(key.code, "KEY_AUTH");
+  const mapped409 = classifyGoFailure({
+    httpStatus: 409,
+    code: "MASTER_PLAN_INCOMPLETE",
+    error: "Stopped: Plan is not complete for Full Build. §3 Features is empty.",
+  });
+  assert.equal(mapped409.code, "MASTER_PLAN_INCOMPLETE");
   const timeout = classifyGoFailure({ error: "Grok Code timed out after 3 minutes. A narrower retry may run automatically." });
   assert.equal(timeout.code, "GO_TIMEOUT");
 }
@@ -240,6 +246,14 @@ assert.equal(
   const empty = assessFoundationGoExit({ totalWritten: 0, writtenPaths: [], sliceLabel: "Foundation" });
   assert.equal(empty.ok, false);
   assert.equal(empty.blockedReason?.code, "GO_EMPTY_OUTPUT");
+
+  const htmlOnly = assessFoundationGoExit({
+    totalWritten: 2,
+    writtenPaths: ["index.html", "nebula-ui-studio/ui-brief.md"],
+    sliceLabel: "Foundation",
+  });
+  assert.equal(htmlOnly.ok, false);
+  assert.equal(htmlOnly.blockedReason?.code, "APPLY_EMPTY_PRODUCT");
 
   const publicOnly = assessFoundationGoExit({
     totalWritten: 1,

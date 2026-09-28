@@ -247,6 +247,17 @@ export function applyFullBuildPlanFill(
     next[MASTER_PLAN_SECTION_KEYS[3]] = result.section;
     filled = true;
   }
+  const s3Key = MASTER_PLAN_SECTION_KEYS[2];
+  const s3 = String(next[s3Key] ?? "").trim();
+  const features = fillMissingSection3Features({
+    section3: s3,
+    goal: s1,
+    skeleton,
+  });
+  if (features.filled) {
+    next[s3Key] = features.section;
+    filled = true;
+  }
   const s2Key = MASTER_PLAN_SECTION_KEYS[1];
   const s2 = String(next[s2Key] ?? "");
   if (!AUTH_STATED_RE.test([s1, s2, String(next[MASTER_PLAN_SECTION_KEYS[3]] ?? "")].join("\n"))) {
@@ -261,15 +272,15 @@ export function applyFullBuildPlanFill(
 }
 
 /**
- * After MASTER_PLAN_INCOMPLETE: fill-missing once, then at most one Go if completeness is OK.
- * A second 409 never auto-Gos.
+ * After MASTER_PLAN_INCOMPLETE: fill-missing once more, then stop.
+ * Never auto-retry Go (a second 409 must not loop). Completeness OK is handled by fill-before-Go.
  */
 export function fullBuildIncompleteFollowUp(opts: {
   alreadyFilled: boolean;
   completenessOk: boolean;
 }): { fill: boolean; retryGo: boolean } {
+  void opts.completenessOk;
   if (!opts.alreadyFilled) return { fill: true, retryGo: false };
-  if (opts.completenessOk) return { fill: false, retryGo: true };
   return { fill: false, retryGo: false };
 }
 
@@ -403,4 +414,52 @@ export function shouldClampToFastPrototypeSlice(mode: BuildMode): boolean {
 
 export function fullBuildCodingTaskLine(): string {
   return "FULL BUILD — implement every §4 route and the core jobs in this single Go. Mock/local data OK. Mockup is not the spec. File blocks only.";
+}
+
+const COURIER_GOAL_RE = /\b(moto|motodrop|courier|delivery|dropoff|parcel)\b/i;
+
+/** Fill empty §3 from the confirmed goal — labeled assumptions, not a new product. */
+export function fillMissingSection3Features(opts: {
+  section3: string;
+  goal: string;
+  skeleton?: { verbs?: string[] } | null;
+}): { section: string; filled: boolean } {
+  const s3 = String(opts.section3 || "").trim();
+  if (!isThin(s3, 24)) return { section: s3, filled: false };
+  const goal = String(opts.goal || "").replace(/\s+/g, " ").trim();
+  if (COURIER_GOAL_RE.test(goal)) {
+    return {
+      section: [
+        "Request pickup — client books a same-day parcel.",
+        "Accept job — driver claims an open request.",
+        "Track — client and driver see last-known mock location.",
+        "Pay — mock payment at drop-off.",
+        "Rate — both parties rate after delivery.",
+        "assumption: labels and mock/local data only (no live payments or GPS).",
+      ].join("\n"),
+      filled: true,
+    };
+  }
+  const verbs = (opts.skeleton?.verbs || []).map((v) => String(v).replace(/_/g, " ").trim()).filter(Boolean);
+  const verbLine =
+    verbs.length > 0
+      ? verbs.map((v) => v.charAt(0).toUpperCase() + v.slice(1)).join(", ")
+      : goal.slice(0, 160) || "the core jobs named in §1";
+  return {
+    section: [
+      `Core jobs: ${verbLine}.`,
+      "assumption: inferred from the confirmed goal — correct if a job is missing.",
+    ].join("\n"),
+    filled: true,
+  };
+}
+
+/** Client Go note for Full Build — every §4 `file:` block; index.html is not success. */
+export function fullBuildGoUserNote(): string {
+  return [
+    "START_CODING — SLICE: Foundation. MODE: Full Build (every §4 route — not a Foundation+Primary clamp).",
+    fullBuildCodingTaskLine(),
+    "Emit ```file:relative/path``` for package.json, app/layout.tsx, app/globals.css, app/page.tsx, lib/mockStore.ts, and one app/<route>/page.tsx for every Master Plan §4 route (root is file:app/page.tsx).",
+    "index.html and nebula-ui-studio/ui-brief.md are not the product. File blocks only.",
+  ].join("\n");
 }

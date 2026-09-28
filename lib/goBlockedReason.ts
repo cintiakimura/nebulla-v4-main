@@ -28,10 +28,12 @@ export const GO_BLOCKED_MESSAGES: Record<GoBlockedCode, string> = {
   RESEARCH_INCOMPLETE: "Stopped: research not complete — Foundation will not start.",
   UI_BRIEF_MISSING:
     "Stopped: ui-brief.md missing, too short, or has no pages. Finish Master Plan §§1–5, then Generate UI.",
-  MASTER_PLAN_INCOMPLETE: "Stopped: Master Plan is too thin for Foundation. Finish §§1–5, then try Go again.",
+  MASTER_PLAN_INCOMPLETE:
+    "Stopped: Master Plan is too thin for Full Build. Missing sections were filled from the goal where possible. Not asking you to type go again.",
   GO_MODEL_REJECTED: "Stopped: coding model rejected the request (invalid parameters). Retry Go — Foundation did not start.",
   GO_TIMEOUT: "Stopped: Grok Code timed out after 3 minutes. A narrower retry may run automatically.",
-  GO_EMPTY_OUTPUT: "Stopped: Grok Code returned no file output. Try Go again.",
+  GO_EMPTY_OUTPUT:
+    "Stopped: Grok Code returned no file blocks (empty Code output). That is not a product — not asking you to type go again.",
   NO_FILE_BLOCKS: "Stopped: Grok Code returned no file blocks. Foundation did not start.",
   APPLY_FAILED: "Stopped: file apply wrote 0 files. Foundation did not land.",
   APPLY_EMPTY_PRODUCT:
@@ -115,6 +117,16 @@ export function classifyGoFailure(input: {
     .join(" ");
   const lower = text.toLowerCase();
 
+  if (status === 409) {
+    const codeRaw = typeof input.code === "string" ? input.code : "";
+    if (/research_in_flight/i.test(codeRaw)) {
+      return goBlocked("GO_FAILED", text || "Research still running.");
+    }
+    if (isGoBlockedCode(codeRaw)) {
+      return goBlocked(codeRaw, extractGoFailureText(input.error) || text);
+    }
+    return goBlocked("MASTER_PLAN_INCOMPLETE", text || undefined);
+  }
   if (status === 401 || status === 403 || /api key|unauthorized|invalid api key|401|403/i.test(lower)) {
     if (/invalid-argument|reasoning.?effort|does not support parameter/i.test(lower)) {
       return goBlocked("GO_MODEL_REJECTED", text);

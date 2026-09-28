@@ -5592,6 +5592,14 @@ Rules:
           const fullBuildGate = assessFullBuildCompleteness({ plan: planForGate });
           if (!fullBuildGate.allowGo) {
             const blocked = goBlocked("MASTER_PLAN_INCOMPLETE", fullBuildGoBlockedMessage(fullBuildGate));
+            console.warn(
+              "[go-code] 409 MASTER_PLAN_INCOMPLETE",
+              JSON.stringify({
+                ask: fullBuildGate.ask,
+                gaps: fullBuildGate.gaps,
+                allowGo: fullBuildGate.allowGo,
+              }).slice(0, 1600),
+            );
             return res.status(409).json({
               ok: false,
               pending: false,
@@ -5769,6 +5777,10 @@ Rules:
           if (!fb.allowGo) {
             clearGoCodePending(ppGo.workspaceRoot);
             const hard = goBlocked("MASTER_PLAN_INCOMPLETE", fullBuildGoBlockedMessage(fb));
+            console.warn(
+              "[go-code] 409 MASTER_PLAN_INCOMPLETE (post-fill)",
+              JSON.stringify({ ask: fb.ask, gaps: fb.gaps, allowGo: fb.allowGo }).slice(0, 1600),
+            );
             return res.status(409).json({
               ok: false,
               pending: false,
@@ -5781,7 +5793,7 @@ Rules:
           }
         }
         gateWarnings.push(blocked.message);
-        console.warn("[go-code] bypass MASTER_PLAN_INCOMPLETE — continuing Foundation", blocked.message);
+        console.warn("[go-code] bypass MASTER_PLAN_INCOMPLETE — continuing Full Build", blocked.message);
       }
 
       // Phase 2: IF after fill the plan is still unusable — warn and continue (status bar owns the issue).
@@ -6056,6 +6068,7 @@ ${
   fullBuildPrompt
     ? `- Implement **every** Master Plan §4 route and the core jobs in this Go. Not a 1–2 screen Foundation clamp. Continue is only for extra Polish / integrations.
 - Real \`app/layout.tsx\` + root \`app/page.tsx\` + \`app/<route>/page.tsx\` for each §4 path, with working primary controls and lib/mockStore.ts. Home is the core user job.
+- Every §4 route MUST be a \`\`\`file:app/<route>/page.tsx\`\`\` block (root: \`\`\`file:app/page.tsx\`\`\`). index.html / ui-brief.md alone is a failed Full Build.
 - Coding skeleton + §4: all listed routes + shared layout. Mockup is occupancy only — do not copy mockup pixels.
 - Do NOT emit only login chrome. Do not invent hosted BaaS.`
     : `- Implement only the slice named in "${PRE_CODING_SUMMARY_KEY}" (or infer next incomplete slice: Foundation first if no app shell exists).

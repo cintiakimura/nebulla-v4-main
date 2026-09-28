@@ -96,7 +96,7 @@ import {
 } from '../../lib/nebulaAiCodingPipeline';
 import { isFoundationGoInFlight } from '../../lib/foundationHeavyJob';
 import { abortHonestyUserLine, abortWithUserStopReason, isAbortLikeError, isAbortLikeMessage } from '../../lib/abortLikeError';
-import { fullBuildIncompleteFollowUp } from '../../../lib/fullBuildContract';
+import { fullBuildGoUserNote, fullBuildIncompleteFollowUp } from '../../../lib/fullBuildContract';
 import {
   isAssistantCodingPromise,
   isAssistantRefineClaim,
@@ -2608,7 +2608,9 @@ export function AIChat() {
           }
           skipGrokChat = true;
           pushActivity(
-            'Master Plan already on disk — skipping Grok chat, continuing classify / plan / Foundation+Primary',
+            fastPrototypeTurn
+              ? 'Master Plan already on disk — skipping Grok chat, continuing classify / plan / Foundation+Primary'
+              : 'Master Plan already on disk — skipping Grok chat, continuing classify / plan / Full Build',
             'info',
           );
         } else if (skipGrokChat) {
@@ -2654,7 +2656,7 @@ export function AIChat() {
           skippedGrokChat = true;
           assistantContent = foundationLandedOnDisk()
             ? PRODUCT_MVP_READY_MESSAGE
-            : 'Master Plan already on disk — continuing the plan, then Foundation+Primary.';
+            : 'Master Plan already on disk — continuing the plan, then Full Build.';
           planningPhase = 'PLAN_READY';
           pushActivity(
             'Master Plan on disk — skipping Grok chat; classify / plan next (not coding yet)',
@@ -3015,7 +3017,7 @@ export function AIChat() {
         ) {
           mockupSkippedOrFailed = true;
           pushActivity(
-            'Product routes already on disk — mockup deferred — coding Foundation+Primary',
+            'Product routes already on disk — mockup deferred — coding Full Build',
             'info',
           );
         } else if (readiness.ok && (fastPrototypeTurn || willCode)) {
@@ -3250,7 +3252,7 @@ export function AIChat() {
             sendingRef.current = false;
             setSending(false);
           } else {
-          if (wantsNextSlice && !foundationLanded) {
+          if (wantsNextSlice && !foundationLanded && fastPrototypeTurn) {
             pushActivity(FOUNDATION_RETRY_ACTIVITY, 'warn');
           }
           pushActivity(
@@ -3262,13 +3264,15 @@ export function AIChat() {
                 ? 'User asked to code — launching Go Code pipeline'
                 : fastPrototypeTurn
                   ? 'Fast Prototype — launching Foundation+Primary'
-                  : 'START_CODING — launching Foundation+Primary',
-            wantsNextSlice && !foundationLanded ? 'warn' : 'info',
+                  : 'START_CODING — launching Full Build',
+            wantsNextSlice && !foundationLanded && fastPrototypeTurn ? 'warn' : 'info',
           );
           launchedGoSlice = editMode ? 'Polish' : 'Foundation';
           const goSliceInstruction = editMode
             ? buildEditExistingUserNote(rawText)
-            : FOUNDATION_SLICE_INSTRUCTION;
+            : fastPrototypeTurn
+              ? FOUNDATION_SLICE_INSTRUCTION
+              : fullBuildGoUserNote();
           if (editMode) editGoArmed = true;
           const goMessages = [
             {
@@ -3276,12 +3280,28 @@ export function AIChat() {
               content: goSliceInstruction,
             },
           ];
+          if (!editMode && !fastPrototypeTurn) {
+            try {
+              await fetchJson<{ ok?: boolean }>(withProjectQuery('/api/master-plan/fill-missing-section4'), {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
+                body: JSON.stringify(withProjectBody({ projectName })),
+              });
+              window.dispatchEvent(new CustomEvent('nebula-master-plan-updated'));
+              pushActivity('Filled missing plan fields from the confirmed goal — starting one Full Build Go.', 'info');
+            } catch {
+              /* still attempt one Go */
+            }
+          }
           beginCodingActivity('Grok Code — writing files to workspace', goWorkSteps(), {
             subhead: editMode
                 ? 'EDIT existing files'
-                : wantsNextSlice && !foundationLanded
+                : wantsNextSlice && !foundationLanded && fastPrototypeTurn
                 ? FOUNDATION_RETRY_ACTIVITY
-                : 'Foundation+Primary',
+                : fastPrototypeTurn
+                  ? 'Foundation+Primary'
+                  : 'Full Build',
             initialLog: 'Running Grok Code — apply starts after Code pass 1 returns files',
           });
           setInferenceFirstStage('coding', diskProjectKey);
@@ -3298,8 +3318,13 @@ export function AIChat() {
             onProgress: pushActivity,
             messages: goMessages,
           });
-          // 409: fill-missing §4 once. Retry Go only if completeness is then OK. Never auto-Go on a second 409.
+          // 409 completeness: fill-missing once more, then stop. Never auto-Go on 409.
           if (!go.ok && go.blockedReason?.code === 'MASTER_PLAN_INCOMPLETE') {
+            try {
+              console.warn('[go-code] 409 after Full Build kick', go.blockedReason, go.statusMessage);
+            } catch {
+              /* ignore */
+            }
             const follow = fullBuildIncompleteFollowUp({ alreadyFilled: false, completenessOk: false });
             if (follow.fill && !isGoAborting(projectName)) {
               try {
@@ -3315,44 +3340,26 @@ export function AIChat() {
                   body: JSON.stringify(withProjectBody({ projectName })),
                 });
                 window.dispatchEvent(new CustomEvent('nebula-master-plan-updated'));
-                const next = fullBuildIncompleteFollowUp({
+                fullBuildIncompleteFollowUp({
                   alreadyFilled: true,
                   completenessOk: filled.allowGo === true,
                 });
-                if (next.retryGo && !isGoAborting(projectName) && !isGoCodeWaitActive(projectName)) {
-                  pushActivity('Filled missing page details from the goal — retrying coding once…', 'info');
-                  go = await runGoCodeAndApply({
-                    userId,
-                    projectName,
-                    userNote: goSliceInstruction,
-                    onProgress: pushActivity,
-                    messages: goMessages,
-                  });
-                  if (!go.ok && go.blockedReason?.code === 'MASTER_PLAN_INCOMPLETE') {
-                    const ask =
-                      (go as { ask?: string }).ask ||
-                      filled.ask ||
-                      go.blockedReason.message;
-                    pushActivity(ask, 'warn');
-                  }
-                } else {
-                  const ask = filled.ask || go.blockedReason.message;
-                  pushActivity(ask, 'warn');
-                  const stamp = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-                  setMessages((p) => {
-                    const nextMsgs = [
-                      ...p,
-                      {
-                        id: `a-plan-gap-${Date.now()}`,
-                        role: 'assistant' as const,
-                        content: ask,
-                        timestamp: stamp,
-                      },
-                    ];
-                    messagesRef.current = nextMsgs;
-                    return nextMsgs;
-                  });
-                }
+                const ask = filled.ask || go.blockedReason.message;
+                pushActivity(ask, 'warn');
+                const stamp = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+                setMessages((p) => {
+                  const nextMsgs = [
+                    ...p,
+                    {
+                      id: `a-plan-gap-${Date.now()}`,
+                      role: 'assistant' as const,
+                      content: ask,
+                      timestamp: stamp,
+                    },
+                  ];
+                  messagesRef.current = nextMsgs;
+                  return nextMsgs;
+                });
               } catch {
                 /* keep first go failure */
               }
@@ -3683,7 +3690,6 @@ export function AIChat() {
         speakUrl: withProjectQuery('/api/speak'),
             signal: controller.signal,
         credentials: 'include',
-        headers: getGrokRequestHeaders(),
         language: contentLocaleRef.current,
         voice: getTtsVoiceForRequest(),
         onAudio: (audio) => {
@@ -3706,7 +3712,10 @@ export function AIChat() {
       console.debug(`[TTS] full turn ${Math.round(performance.now() - t0)}ms`);
       } catch (e) {
         const aborted = (e as { name?: string })?.name === 'AbortError';
-        if (!aborted && runId === ttsRunIdRef.current) {
+        const ttsOnly = (e as { ttsNonFatal?: boolean })?.ttsNonFatal;
+        if (ttsOnly) {
+          console.warn('[AIChat] TTS failed — coding continues');
+        } else if (!aborted && runId === ttsRunIdRef.current) {
           console.warn('[AIChat] TTS', e);
           const msg = e instanceof Error ? e.message : String(e);
           setAccessoryHint(
@@ -3810,12 +3819,12 @@ export function AIChat() {
             id: `go-block-${Date.now()}`,
             role: 'assistant' as const,
             content:
-              'Coding writes files to your workspace — that needs **Agent** mode.\n\nSwitch to Agent to start Foundation+Primary?',
+              'Coding writes files to your workspace — that needs **Agent** mode.\n\nSwitch to Agent to start Full Build?',
             timestamp: stamp,
             showSwitchToAgentCta: true,
             pendingAgentText: userNote
               ? `START_CODING — ${userNote}`
-              : 'START_CODING — Foundation+Primary',
+              : 'START_CODING — Full Build',
           },
         ];
         messagesRef.current = next;
@@ -3871,7 +3880,7 @@ export function AIChat() {
     const userMsg: Message = {
       id: `go-${Date.now()}`,
       role: 'user',
-      content: userNote ? `START_CODING — ${userNote}` : 'START_CODING — Foundation+Primary',
+      content: userNote ? `START_CODING — ${userNote}` : 'START_CODING — Full Build',
       timestamp: ts,
     };
     setMessages((p) => {
@@ -3937,10 +3946,10 @@ export function AIChat() {
     }
     const goSliceNote = foundationLanded
       ? buildEditExistingUserNote(userNote)
-      : userNote || FOUNDATION_SLICE_INSTRUCTION;
+      : userNote || fullBuildGoUserNote();
 
     beginCodingActivity('Grok Code — writing files to workspace', goWorkSteps(), {
-      subhead: foundationLanded ? 'EDIT existing files' : nextContinueLabel || 'Foundation+Primary',
+      subhead: foundationLanded ? 'EDIT existing files' : nextContinueLabel || 'Full Build',
       initialLog: 'Running Grok Code — apply starts after Code pass 1 returns files',
     });
     setGrokActivity((prev) =>

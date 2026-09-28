@@ -184,7 +184,7 @@ export function goCodePendingToPollResponse(
             summarySaved: Boolean(last.preCodingSummary),
             durable: true,
           },
-          last.codeError || "Stopped: Grok Code returned no file output. Try Go again.",
+          last.codeError || "Stopped: Grok Code returned no file blocks (empty Code output). Not asking you to type go again.",
           last.blockedReason || goBlocked("GO_EMPTY_OUTPUT"),
         );
       }

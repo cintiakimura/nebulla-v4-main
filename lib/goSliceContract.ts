@@ -354,6 +354,9 @@ export function buildCompactGoCodeUserPrompt(opts: {
     "§4 Pages excerpt:",
     pages || "(from Master Plan §4)",
     firstSliceLine,
+    fullBuild
+      ? "MANDATORY FILE BLOCKS: ```file:package.json```, ```file:app/layout.tsx```, ```file:app/globals.css```, ```file:app/page.tsx```, ```file:lib/mockStore.ts```, and ```file:app/<route>/page.tsx``` for every §4 path. index.html is not success."
+      : "",
     constraints ? `\n${constraints}` : "",
     isFoundation ? `\n${FOUNDATION_MIN_UI_CHECKLIST}\n${ENGINEER_INTERVIEW_PROMPT}` : "",
     "",

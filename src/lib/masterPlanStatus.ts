@@ -125,6 +125,6 @@ export function formatGoBlockedByPlanMessage(payload: {
   return [
     "Go is paused until the Master Plan is more complete.",
     ...lines.map((l) => `• ${l}`),
-    'Open Master Plan or continue Discovery in chat — then try Go again.',
+    'Open Master Plan or continue Discovery in chat. Missing fields are filled from the goal when possible — not asking you to type go again.',
   ].join('\n');
 }

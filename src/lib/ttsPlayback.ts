@@ -306,7 +306,10 @@ async function fetchSpeakChunk(
   console.debug(`[TTS] /api/speak TTFB ${Math.round(performance.now() - t0)}ms status=${res.status}`);
   if (!res.ok) {
     const errBody = await res.text().catch(() => '');
-    throw new Error(`TTS failed (${res.status}): ${errBody.slice(0, 140)}`);
+    const err = new Error(`TTS failed (${res.status}): ${errBody.slice(0, 140)}`);
+    (err as Error & { ttsNonFatal?: boolean }).ttsNonFatal = true;
+    console.warn('[TTS] /api/speak non-OK — voice skipped, coding continues', res.status, errBody.slice(0, 200));
+    throw err;
   }
   return res;
 }
@@ -367,10 +370,15 @@ export async function playTtsText(options: TtsPlaybackOptions): Promise<void> {
         options.voice,
       );
       prefetch = null;
-      // Prefetch the next chunk while this one downloads/plays.
       if (i + 1 < chunks.length) startPrefetch(i + 1);
 
-      const res = await resPromise;
+      let res: Response;
+      try {
+        res = await resPromise;
+      } catch (e) {
+        if ((e as { ttsNonFatal?: boolean })?.ttsNonFatal) return;
+        throw e;
+      }
       if (signal?.aborted) break;
 
       const audio = ensureSharedAudio();

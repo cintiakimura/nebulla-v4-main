@@ -32,11 +32,11 @@ import {
 } from './abortLikeError';
 import { markFoundationGoInFlight, isFoundationGoInFlight } from './foundationHeavyJob';
 import { setGrokCodingActive } from './nebulaGrokCodingGate';
+import { fullBuildGoUserNote } from '../../lib/fullBuildContract';
 import {
   buildEditExistingUserNote,
   buildNarrowSliceInstruction,
   FOUNDATION_RETRY_ACTIVITY,
-  FOUNDATION_SLICE_INSTRUCTION,
   PRODUCT_MVP_READY_MESSAGE,
   userNoteRequestsNextSlice,
 } from './fastPrototypeNextSlice';
@@ -608,16 +608,25 @@ export async function applyGeneratedFiles(
       typeof apply.runnableRoot === 'boolean'
         ? ` ${apply.runnableStatusLine || `Runnable root: ${apply.runnableRoot ? 'yes' : 'no'}`}.`
         : '';
+    const exit = assessFoundationGoExit({
+      totalWritten: writtenCount,
+      writtenPaths,
+      sliceLabel: parseGoSliceLabel(artifactContext?.userNote) || 'Foundation',
+      runnableRoot: apply.runnableRoot,
+    });
+    const productOk = exit.ok && writtenCount > 0;
     return {
-      ok: writtenCount > 0,
+      ok: productOk,
       writtenCount,
       skippedCount,
       writtenPaths,
       runnableRoot: apply.runnableRoot,
       runnableStatusLine: apply.runnableStatusLine,
       deployable: apply.deployable,
-      message:
-        writtenCount > 0
+      message: !productOk
+        ? exit.blockedReason?.message ||
+          'Wrote files but no app/ or pages/ routes — index.html / ui-brief.md is not the product.'
+        : writtenCount > 0
           ? `Applied ${writtenCount} file(s)${skippedCount ? `, skipped ${skippedCount}` : ''}${
               apply.usedFallbackPath ? ` (fallback: ${apply.usedFallbackPath})` : ''
             }.${runnableNote}`
@@ -1021,12 +1030,11 @@ async function kickGoCodeJob(options: {
         (err instanceof DOMException && err.name === 'AbortError') ||
         (err instanceof Error && /abort/i.test(err.message));
       if (aborted) {
-        onProgress?.(
-          'Go kick still preparing — polling until the Foundation job is scheduled (not coding yet)',
-          'warn',
-        );
-        switchWaitLabel(GO_PREPARING_LABEL);
-        return await pollGoCodeUntilDone(projectName, onProgress, codingLabel);
+        const line =
+          'Go kick timed out before a coding job was scheduled. Not polling for empty Code output — not asking you to type go again.';
+        onProgress?.(line, 'error');
+        const blocked = goBlocked('GO_TIMEOUT', line);
+        return { error: line, blockedReason: blocked, code: blocked.code };
       }
       throw err;
     } finally {
@@ -1082,6 +1090,21 @@ async function kickGoCodeJob(options: {
       }
     }
     if (!goRes.ok) {
+      try {
+        console.warn(
+          '[go-code]',
+          goRes.status,
+          JSON.stringify({
+            code: data.code,
+            error: data.error,
+            blockedReason: (data as GoCodePayload).blockedReason,
+            ask: (data as { ask?: unknown }).ask,
+            masterPlanCompleteness: (data as { masterPlanCompleteness?: unknown }).masterPlanCompleteness,
+          }).slice(0, 1600),
+        );
+      } catch {
+        console.warn('[go-code]', goRes.status, String(data.error || '').slice(0, 400));
+      }
       if (goRes.status === 429) {
         const waitSec = Math.min(45, Math.max(8, Number((data as { retryAfterSec?: number }).retryAfterSec) || 15));
         onProgress?.(
@@ -1178,7 +1201,7 @@ export async function runGoCodeAndApply(options: {
             role: 'user' as const,
             content: (userNote && userNote.trim()
               ? userNote.trim()
-              : 'START_CODING — Foundation slice only'
+              : 'START_CODING — Full Build, every §4 route'
             ).slice(0, 2000),
           },
         ];
@@ -1412,7 +1435,10 @@ export async function runGoCodeAndApply(options: {
           pass -= 1;
           continue;
         }
-        const empty = goBlocked('GO_EMPTY_OUTPUT');
+        const empty = goBlocked(
+          'GO_EMPTY_OUTPUT',
+          'Stopped: Grok Code returned no ```file:``` blocks for §4 routes (coding-prompt failure). index.html is not the product. Not asking you to type go again.',
+        );
         onProgress?.(formatBlockedReasonLine(empty), 'error');
         return {
           ok: false,
@@ -1422,7 +1448,10 @@ export async function runGoCodeAndApply(options: {
         };
       }
       if (!lastGoCodeFitsGoal(codeText, userNote || '')) {
-        const empty = goBlocked('GO_EMPTY_OUTPUT');
+        const empty = goBlocked(
+          'GO_EMPTY_OUTPUT',
+          'Stopped: Grok Code returned no ```file:``` blocks for §4 routes (coding-prompt failure). index.html is not the product. Not asking you to type go again.',
+        );
         onProgress?.(formatBlockedReasonLine(empty), 'error');
         return {
           ok: false,
@@ -1748,12 +1777,12 @@ export async function handlePostGrokCodingTurn(options: {
       ? /MODE:\s*EDIT/i.test(String(userNote || ''))
         ? String(userNote)
         : buildEditExistingUserNote(String(userNote || ''))
-      : userNote || FOUNDATION_SLICE_INSTRUCTION
+      : userNote || fullBuildGoUserNote()
   ).slice(0, 4000);
   onProgress?.(
     editExisting
       ? 'EDIT — patching existing product files'
-      : 'START_CODING detected — launching Foundation+Primary',
+      : 'START_CODING detected — launching Full Build',
     'info',
   );
   const go = await runGoCodeAndApply({

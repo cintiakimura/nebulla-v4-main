@@ -45,7 +45,7 @@ const GOLDEN =
   assert.match(formatCodingSkeletonForGo(kids), /FOUNDATION MIN UI/);
   assert.match(formatCodingSkeletonForGo(kids), /1\. Header:/);
   assert.match(formatCodingSkeletonForGo(kids), /5\. Action screen/);
-  assert.match(formatCodingSkeletonForGo(kids), /Foundation\+Primary/);
+  assert.match(formatCodingSkeletonForGo(kids), /Full Build/);
   assert.ok(kids.routes.some((r) => r.path === "/teacher" || r.path === "/progress"));
   assert.equal(isCodingSkeletonReady(kids), true);
 }
@@ -139,13 +139,25 @@ const GOLDEN =
 {
   const motoGoal = "**Product name:** Motodrop\nMoto delivery: pickup and dropoff, accept request.";
   const moto = classifyCodingSkeleton(motoGoal, "Web App");
-  assert.equal(moto.skeleton, "marketplace");
+  assert.equal(moto.skeleton, "mobile_home");
+  assert.equal(moto.project_type, "mobile");
+  assert.equal(moto.auth, "mock");
+  assert.ok(moto.roles.includes("client"));
+  assert.ok(moto.roles.includes("driver"));
+  assert.ok(moto.verbs.includes("request"));
+  assert.ok(moto.verbs.includes("rate"));
   assert.ok(moto.routes.some((r) => r.path === "/request"));
   assert.ok(moto.routes.some((r) => r.path === "/track"));
   assert.ok(moto.routes.some((r) => r.path === "/driver"));
   assert.ok(moto.routes.some((r) => r.path === "/account"));
   assert.equal(moto.routes.some((r) => r.path === "/wallet"), false);
   assert.ok(moto.entities.some((e) => e.name === "Request"));
+  const leftoverDash = classifyCodingSkeleton("SaaS analytics admin for internal metrics");
+  assert.equal(skeletonFitsCurrentGoal(leftoverDash, motoGoal), false);
+  const city = classifyCodingSkeleton("City Courier same-day parcel pickup");
+  assert.equal(city.skeleton, "mobile_home");
+  assert.equal(city.auth, "mock");
+  assert.deepEqual(city.roles.slice().sort(), ["client", "driver"].sort());
   const bakerySkel = classifyCodingSkeleton(
     "A web app for a neighborhood bakery. Customers browse today’s breads and place a pickup order.",
     "Web App",

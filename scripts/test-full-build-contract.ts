@@ -10,8 +10,10 @@ import {
   applyFullBuildPlanFill,
   assessFullBuildCompleteness,
   detectQuickDraftIntent,
+  fillMissingSection3Features,
   fillMissingSection4PageFields,
   formatFullBuildApplyLine,
+  fullBuildGoUserNote,
   fullBuildIncompleteFollowUp,
   inferFullBuildRoutes,
   normalizeBuildMode,
@@ -19,6 +21,8 @@ import {
 } from "../lib/fullBuildContract.ts";
 import { ensureCodingSkeletonOnPlan } from "../lib/codingSkeleton.ts";
 import { inferFirstSliceRoutes } from "../lib/nebulaUiBrief.ts";
+import { classifyGoFailure, GO_BLOCKED_MESSAGES } from "../lib/goBlockedReason.ts";
+import { assessFoundationGoExit } from "../lib/goSliceContract.ts";
 import { buildCompactGoCodeUserPrompt, buildLocalPreCodingSummary } from "../lib/goSliceContract.ts";
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -135,7 +139,8 @@ section("Go prompt lists every §4 route in full_build; Fast Prototype still cla
   assert.match(compactFull, /\/practice/);
   assert.match(compactFull, /\/teacher/);
   assert.match(compactFull, /\/login/);
-  assert.match(compactFull, /every §4 route/);
+  assert.match(compactFull, /MANDATORY FILE BLOCKS/);
+  assert.match(compactFull, /index.html is not success/);
   assert.doesNotMatch(compactFull, /Foundation AND Primary in this Go/);
 
   const compactFp = buildCompactGoCodeUserPrompt({
@@ -221,9 +226,52 @@ section("courier-like §4 prose → fill-missing → completeness OK");
   const first = fullBuildIncompleteFollowUp({ alreadyFilled: false, completenessOk: false });
   assert.deepEqual(first, { fill: true, retryGo: false });
   const afterOk = fullBuildIncompleteFollowUp({ alreadyFilled: true, completenessOk: true });
-  assert.deepEqual(afterOk, { fill: false, retryGo: true });
+  assert.deepEqual(afterOk, { fill: false, retryGo: false });
   const second409 = fullBuildIncompleteFollowUp({ alreadyFilled: true, completenessOk: false });
   assert.deepEqual(second409, { fill: false, retryGo: false });
+}
+
+section("courier brief empty §3 auto-filled → completeness OK");
+{
+  const courierGoal =
+    "City Courier: request pickup, accept job, track, pay, rate — same-day motorcycle parcels.";
+  const raw = {
+    "1. Goal of the app": courierGoal,
+    "2. Tech and Research": "Mobile Next.js. Inferred stack. No live competitor search.",
+    "3. Features and KPIs": "",
+    "4. Pages and navigation": "Home `/`\nRequest `/request`\nTrack `/track`\nDriver `/driver`\nAccount `/account`",
+    "5. UI/UX design": "Mood street. Palette #111 #F5C518. Typography sans. Density comfortable.",
+  };
+  const features = fillMissingSection3Features({ section3: "", goal: courierGoal });
+  assert.equal(features.filled, true);
+  assert.match(features.section, /Request pickup/i);
+  assert.match(features.section, /Accept job/i);
+  assert.match(features.section, /assumption:/i);
+  const { plan: withSk } = ensureCodingSkeletonOnPlan(raw, { goal: courierGoal, projectType: "Mobile App" });
+  const applied = applyFullBuildPlanFill(withSk);
+  assert.equal(applied.filled, true);
+  assert.match(String(applied.plan["3. Features and KPIs"] || ""), /Request pickup/i);
+  const r = assessFullBuildCompleteness({ plan: applied.plan });
+  assert.equal(r.allowGo, true, r.gaps.map((g) => `${g.code}: ${g.message}`).join(" | "));
+}
+
+section("go-code 409 surfaces completeness; empty files ≠ App looks OK");
+{
+  const mapped = classifyGoFailure({
+    httpStatus: 409,
+    code: "MASTER_PLAN_INCOMPLETE",
+    error: "Stopped: Plan is not complete for Full Build. §3 Features is empty — name the core jobs as verbs. Not coding.",
+  });
+  assert.equal(mapped.code, "MASTER_PLAN_INCOMPLETE");
+  assert.match(mapped.message, /§3 Features is empty|not complete for Full Build/i);
+  assert.doesNotMatch(GO_BLOCKED_MESSAGES.GO_EMPTY_OUTPUT, /Try Go again/i);
+  const htmlOnly = assessFoundationGoExit({
+    totalWritten: 2,
+    writtenPaths: ["index.html", "nebula-ui-studio/ui-brief.md"],
+    sliceLabel: "Foundation",
+  });
+  assert.equal(htmlOnly.ok, false);
+  assert.equal(htmlOnly.blockedReason?.code, "APPLY_EMPTY_PRODUCT");
 }
 
 section("409 retry policy in chat — no blind second Go; abort honesty");
@@ -231,7 +279,12 @@ section("409 retry policy in chat — no blind second Go; abort honesty");
   const chat = fs.readFileSync(path.join(REPO, "src/components/ide/AIChat.tsx"), "utf8");
   assert.match(chat, /fill-missing-section4/);
   assert.match(chat, /fullBuildIncompleteFollowUp/);
-  assert.equal(/Retrying Foundation coding after Master Plan gate/.test(chat), false);
+  assert.equal(/retrying coding once/i.test(chat), false);
+  assert.match(chat, /fullBuildGoUserNote/);
+  assert.match(fullBuildGoUserNote(), /app\/<route>\/page\.tsx/);
+  const pipeline = fs.readFileSync(path.join(REPO, "src/lib/nebulaGrokCodingPipeline.ts"), "utf8");
+  assert.match(pipeline, /\[go-code\]/);
+  assert.doesNotMatch(pipeline, /polling until the Foundation job is scheduled/);
 }
 
 console.log("\n✓ full-build contract tests passed\n");
