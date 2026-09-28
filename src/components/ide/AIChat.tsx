@@ -20,7 +20,9 @@ import { isUserAppProductPath } from '../../../lib/nebulaOrchestrationPaths';
 import {
   getBrowserProjectKey,
   getBrowserProjectName,
+  getIdentityFreeze,
   resolveActiveProjectIds,
+  restoreFrozenIdentityIfDrifted,
   setBrowserProjectName,
   withProjectBody,
   withProjectQuery,
@@ -2054,18 +2056,22 @@ export function AIChat() {
       historyHasConfirmedNorthStar(prior) ||
       brainstormCloseConfirmed ||
       closeTurn.kind === 'confirmed';
+    const identityFrozen = Boolean(getIdentityFreeze()?.projectKey);
+    if (identityFrozen) restoreFrozenIdentityIfDrifted();
     const seedActionEarly = resolveNewProductWorkspaceAction({
       userText: rawText,
       chipName: getBrowserProjectName(),
       productRoutesOnDisk: workspaceHasProductAppRoutes(workspacePaths),
       workspacePaths,
+      identityFrozen,
     });
     const newProductSeed =
-      seedActionEarly.mintNewProject ||
-      isNewProductSeedAgainstCurrent({
-        userText: rawText,
-        chipName: getBrowserProjectName(),
-      });
+      !identityFrozen &&
+      (seedActionEarly.mintNewProject ||
+        isNewProductSeedAgainstCurrent({
+          userText: rawText,
+          chipName: getBrowserProjectName(),
+        }));
     const closeGate = isFoundationCloseGate(rawText);
     const wantsLockAndBuild = newProductSeed
       ? closeGate
@@ -2363,11 +2369,14 @@ export function AIChat() {
       !hasAppStatusPayload &&
       !refineSameProduct &&
       (userForcedCoding || fastPrototypeTurn || buildMode);
-    const seedProductName = singleProductName(
-      extractStatedProductName(rawText) || inferProductName(rawText) || seedActionEarly.productName,
-    );
+    const seedProductName = identityFrozen
+      ? singleProductName(getIdentityFreeze()?.projectName || getBrowserProjectName())
+      : singleProductName(
+          extractStatedProductName(rawText) || inferProductName(rawText) || seedActionEarly.productName,
+        );
     const isolateNewProduct =
       Boolean(newProductSeed) &&
+      !identityFrozen &&
       !userNoteRequestsNextSlice(rawText) &&
       !refineSameProduct &&
       !isChatContinuityTurn(rawText) &&
@@ -2420,6 +2429,7 @@ export function AIChat() {
         'info',
       );
     } else if (
+      !identityFrozen &&
       beatAHold &&
       seedProductName &&
       seedProductName.trim().toLowerCase() !== getBrowserProjectName().trim().toLowerCase()
@@ -2438,13 +2448,16 @@ export function AIChat() {
         : null;
       const incomingGoal = extractGoalFromUserNote(text);
       const diskGoal = String(plan?.['1. Goal of the app'] || '');
-      const nextProductName = singleProductName(
-        extractStatedProductName(rawText) ||
-          extractStatedProductName(incomingGoal) ||
-          inferProductName(incomingGoal || rawText) ||
-          seedProductName,
-      );
+      const nextProductName = identityFrozen
+        ? singleProductName(getIdentityFreeze()?.projectName || getBrowserProjectName())
+        : singleProductName(
+            extractStatedProductName(rawText) ||
+              extractStatedProductName(incomingGoal) ||
+              inferProductName(incomingGoal || rawText) ||
+              seedProductName,
+          );
       const newSeed =
+        !identityFrozen &&
         !switchedProductWorkspace &&
         (newProductSeed ||
           isNewProductSeedAgainstCurrent({
@@ -2489,7 +2502,7 @@ export function AIChat() {
         pushActivity(`New project: ${nextProductName} — not reusing the previous workspace or Master Plan`, 'info');
       } else if (switchedProductWorkspace) {
         skipGrokChat = false;
-      } else if (replacingProduct) {
+      } else if (replacingProduct && !identityFrozen) {
         const replaced = await fetchJson<{ projectName?: string }>(withProjectQuery('/api/ide/replace-product-brief'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },

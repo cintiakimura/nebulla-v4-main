@@ -281,6 +281,7 @@ import { getCloudflareDnsStatus } from "./lib/nebulaCloudflareDns";
 import { getProjectKeyFromRequest, sanitizeProjectKey } from "./lib/nebulaProjectKey";
 import {
   deleteWorkspacePrefixFromR2Safe,
+  projectKeyFromWorkspaceRoot,
   scheduleWorkspaceAbsR2Sync,
   scheduleWorkspaceFileR2Sync,
   scheduleWorkspaceRelPathsR2Sync,
@@ -790,7 +791,9 @@ async function startServer() {
       for (const [k, v] of Object.entries(next as Record<string, unknown>)) {
         if (typeof v === "string") asStrings[k] = v;
       }
-      const identityPass = applyPlanIdentityAndWinningPalette(workspaceRoot, asStrings);
+      const identityPass = applyPlanIdentityAndWinningPalette(workspaceRoot, asStrings, {
+        workspaceId: projectKeyFromWorkspaceRoot(workspaceRoot) || undefined,
+      });
       next = { ...(next as Record<string, unknown>), ...identityPass.plan };
     }
     fs.mkdirSync(path.dirname(masterPlanPath), { recursive: true });

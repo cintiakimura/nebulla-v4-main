@@ -18,6 +18,7 @@ import {
   looksLikeStandaloneProductBrief,
 } from "./productGoalFingerprint";
 import { isNameOnlyProductSeed } from "./productIdentity";
+import { shouldMintWorkspaceAfterPlanFreeze } from "./identityFreeze";
 import { userNoteRequestsShapeTurn } from "../src/lib/chatModeDetector";
 
 /** go / hellos / you can start / let’s keep X and start — only then Code pass 1. */
@@ -99,6 +100,7 @@ export function resolveNewProductWorkspaceAction(opts: {
   productRoutesOnDisk?: boolean;
   workspacePaths?: string[];
   fromHomeNewProject?: boolean;
+  identityFrozen?: boolean;
 }): NewProductWorkspaceAction {
   const userText = String(opts.userText || "").trim();
   if (isSameProductRefineTurn(userText) && !opts.fromHomeNewProject) {
@@ -121,9 +123,11 @@ export function resolveNewProductWorkspaceAction(opts: {
   }
   const close = isFoundationCloseGate(userText);
   const productName = singleProductName(
-    extractStatedProductName(userText) ||
-      extractNamedBrand(userText) ||
-      inferProductName(userText),
+    opts.identityFrozen
+      ? String(opts.chipName || "").trim()
+      : extractStatedProductName(userText) ||
+          extractNamedBrand(userText) ||
+          inferProductName(userText),
   );
   const routes = workspacePathsToRoutes(opts.workspacePaths || []);
   const diskGoal = String(opts.diskGoal || "").trim();
@@ -138,7 +142,10 @@ export function resolveNewProductWorkspaceAction(opts: {
     Boolean(opts.productRoutesOnDisk && diskGoal && looksLikeStandaloneProductBrief(userText)) &&
     isReplacementProductBrief(userText, diskGoal);
   const mintNewProject = Boolean(
-    opts.fromHomeNewProject || seedAgainstCurrent || leftoverRoutes || goalMismatch,
+    shouldMintWorkspaceAfterPlanFreeze({
+      frozen: Boolean(opts.identityFrozen),
+      fromHomeNewProject: opts.fromHomeNewProject,
+    }) && (opts.fromHomeNewProject || seedAgainstCurrent || leftoverRoutes || goalMismatch),
   );
   return {
     mintNewProject,

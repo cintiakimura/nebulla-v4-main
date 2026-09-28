@@ -37,7 +37,13 @@ import {
   scheduleWorkspaceAbsR2Sync,
   scheduleWorkspaceRelPathsR2Sync,
 } from "./nebulaWorkspaceStorage";
-import { ensureProductIdentity, patchMasterPlanProductName, productNameFromPlan } from "./productIdentity";
+import {
+  ensureProductIdentity,
+  patchMasterPlanProductName,
+  productNameFromPlan,
+  readStoredProductIdentity,
+  writeProductIdentity,
+} from "./productIdentity";
 import { isReplacementProductBrief, leftoverPlanConflictsWithGoal } from "./productGoalFingerprint";
 import { applyFullBuildPlanFill } from "./fullBuildContract";
 import { collapseWinningPalette } from "./uiGenerationEngine/v2/industryPalettes";
@@ -85,11 +91,15 @@ export function fillMissingMasterPlanSectionsLocal(opts: {
   const routes = discoverWorkspaceRoutes(opts.workspaceRoot);
   const note = (opts.userNote ?? "").trim().slice(0, 2000);
   const goal = String(plan["1. Goal of the app"] ?? "").trim();
-  const identity = ensureProductIdentity(opts.workspaceRoot, {
-    goal: goal || note,
-    projectName: opts.projectName,
-    persist: true,
-  });
+  const frozenId = readStoredProductIdentity(opts.workspaceRoot);
+  const identity =
+    frozenId?.frozen && frozenId.projectName
+      ? frozenId
+      : ensureProductIdentity(opts.workspaceRoot, {
+          goal: goal || note,
+          projectName: opts.projectName,
+          persist: true,
+        });
   const name = identity.projectName || opts.projectName.trim() || "Untitled Project";
   const refHint = summarizeDesignReferencesForPrompt(opts.workspaceRoot, 280);
   const next = { ...plan };
@@ -539,21 +549,39 @@ export function hydrateMasterPlanDerivedSections(
 export function applyPlanIdentityAndWinningPalette(
   workspaceRoot: string,
   plan: Record<string, string>,
+  opts?: { workspaceId?: string },
 ): { plan: Record<string, string>; changed: boolean; productName: string } {
   const next = { ...plan };
   let changed = false;
   const goal = String(next["1. Goal of the app"] || "").trim();
   const fromPlan = productNameFromPlan(next);
+  const stored = workspaceRoot ? readStoredProductIdentity(workspaceRoot) : null;
+  const workspaceId =
+    String(opts?.workspaceId || stored?.workspaceId || "").trim() ||
+    (workspaceRoot ? projectKeyFromWorkspaceRoot(workspaceRoot) : "");
   const identity =
-    goal || fromPlan
-      ? ensureProductIdentity(workspaceRoot, {
-          goal,
-          projectName: fromPlan || undefined,
-          persist: Boolean(workspaceRoot),
-        })
-      : null;
-  if (identity) {
-    const patched = patchMasterPlanProductName(next, identity);
+    stored?.frozen && stored.projectName
+      ? stored
+      : goal || fromPlan
+        ? ensureProductIdentity(workspaceRoot, {
+            goal,
+            projectName: fromPlan || undefined,
+            persist: Boolean(workspaceRoot),
+            workspaceId,
+          })
+        : null;
+  if (identity && fromPlan && workspaceRoot && !stored?.frozen) {
+    writeProductIdentity(workspaceRoot, {
+      ...identity,
+      projectName: fromPlan,
+      frozen: true,
+      userSet: true,
+      workspaceId,
+    });
+  }
+  const locked = stored?.frozen && stored.projectName ? stored : identity;
+  if (locked) {
+    const patched = patchMasterPlanProductName(next, fromPlan ? { ...locked, projectName: fromPlan } : locked);
     Object.assign(next, patched.plan);
     if (patched.changed) changed = true;
   }
@@ -565,7 +593,11 @@ export function applyPlanIdentityAndWinningPalette(
       changed = true;
     }
   }
-  return { plan: next, changed, productName: identity?.projectName || fromPlan || "" };
+  return {
+    plan: next,
+    changed,
+    productName: fromPlan || locked?.projectName || identity?.projectName || "",
+  };
 }
 
 /** Hydrate Master Plan §4/§5 if needed, then write nebula-ui-studio/v0-prompt.md (legacy distill). */

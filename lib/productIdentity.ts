@@ -15,6 +15,10 @@ export type ProductIdentity = {
   logoHint?: string;
   /** User renamed the project — do not auto-replace with inferProductName. */
   userSet?: boolean;
+  /** First successful Master Plan save — do not re-infer brand or switch workspace. */
+  frozen?: boolean;
+  /** Workspace id frozen with the plan name (same as request projectKey). */
+  workspaceId?: string;
 };
 
 export type ProductDomain =
@@ -133,6 +137,7 @@ function toTitleCase(name: string): string {
   if (/^grain\s+bakery$/i.test(raw)) return "Grain Bakery";
   if (/^quill\s+path$/i.test(raw)) return "Quill Path";
   if (/^quill\s+learn\s+kids$/i.test(raw)) return "Quill Learn Kids";
+  if (/^quill\s+learn$/i.test(raw)) return "Quill Learn";
   if (/^bridgen$/i.test(raw)) return "Bridgen";
   if (/^spoke\s*&\s*co$/i.test(raw) || /^spoke\s+and\s+co$/i.test(raw)) return "Spoke & Co";
   if (/^motodrop$/i.test(raw)) return "Motodrop";
@@ -153,6 +158,7 @@ export function extractNamedBrand(goal: string): string | null {
   if (/\bgrain\s+bakery\b/i.test(g)) return "Grain Bakery";
   if (/\bloaflocal\b/i.test(g)) return "LoafLocal";
   if (/\bquill\s+learn\s+kids\b/i.test(g) && !/\b(bridgen|taskwise)\b/i.test(g)) return "Quill Learn Kids";
+  if (/\bquill\s+learn\b/i.test(g) && !/\b(bridgen|taskwise)\b/i.test(g)) return "Quill Learn";
   if (/\bquill\s+path\b/i.test(g) && !/\b(bridgen|taskwise|quill\s+learn)\b/i.test(g)) return "Quill Path";
   if (/\bspoke\s*&\s*co\b/i.test(g) || /\bspoke\s+and\s+co\b/i.test(g)) return "Spoke & Co";
   if (/\bmotodrop\b/i.test(g)) return "Motodrop";
@@ -250,6 +256,7 @@ export function singleProductName(raw: string): string {
   if (/\bmydossier\b/i.test(n)) return "MyDossier";
   if (/\bbridgen\b/i.test(n)) return "Bridgen";
   if (/\bquill\s+learn\s+kids\b/i.test(n) && !/\b(bridgen|taskwise)\b/i.test(n)) return "Quill Learn Kids";
+  if (/\bquill\s+learn\b/i.test(n) && !/\b(bridgen|taskwise)\b/i.test(n)) return "Quill Learn";
   if (/\bquill\s+path\b/i.test(n) && !/\b(bridgen|taskwise|quill\s+learn)\b/i.test(n)) return "Quill Path";
   if (/\bcity\s+courier\b/i.test(n) && !/\b(bridgen|taskwise)\b/i.test(n)) return "City Courier";
   const labeled = n.match(/(?:\*\*)?Product name(?:\*\*)?:\s*([^\n*]+)/i)?.[1]?.trim();
@@ -316,7 +323,8 @@ export function isWorkspaceLabelStub(name: string): boolean {
 export function productNameFromPlan(plan: Record<string, unknown> | null | undefined): string {
   const rec = plan && typeof plan === "object" ? plan : {};
   const goal = String(rec["1. Goal of the app"] || rec.goal || "").trim();
-  return extractNamedBrand(goal) || "";
+  const ui = String(rec["5. UI/UX design"] || "").trim();
+  return extractNamedBrand(goal) || extractNamedBrand(ui) || "";
 }
 
 export function looksLikeShopKitBrand(name: string): boolean {
@@ -618,11 +626,14 @@ export function parseProductIdentity(raw: unknown): ProductIdentity | null {
       ? o.logoInitials.trim().slice(0, 2).toUpperCase()
       : logoInitials(projectName);
   const logoHint = typeof o.logoHint === "string" && o.logoHint.trim() ? o.logoHint.trim() : undefined;
+  const workspaceId = typeof o.workspaceId === "string" ? o.workspaceId.trim() : "";
   return {
     projectName,
     logoInitials: initials.length === 1 ? `${initials}P` : initials || "NP",
     logoHint,
     userSet: o.userSet === true,
+    frozen: o.frozen === true,
+    workspaceId: workspaceId || undefined,
   };
 }
 
@@ -659,6 +670,7 @@ export function readStoredProductIdentity(workspaceRoot: string): ProductIdentit
 
 export function readProductIdentity(workspaceRoot: string): ProductIdentity | null {
   const stored = readStoredProductIdentity(workspaceRoot);
+  if (stored?.frozen && stored.projectName) return stored;
   const goal = readSection1Goal(workspaceRoot);
   const locked = extractNamedBrand(goal);
   if (
@@ -808,11 +820,19 @@ export function writeProductIdentity(
 ): ProductIdentity {
   const abs = path.join(workspaceRoot, PRODUCT_IDENTITY_REL);
   fs.mkdirSync(path.dirname(abs), { recursive: true });
+  let prev: ProductIdentity | null = null;
+  try {
+    if (fs.existsSync(abs)) prev = parseProductIdentity(JSON.parse(fs.readFileSync(abs, "utf8")));
+  } catch {
+    prev = null;
+  }
   const payload: ProductIdentity = {
     projectName: identity.projectName.trim(),
     logoInitials: logoInitials(identity.projectName),
     logoHint: identity.logoHint || undefined,
     userSet: Boolean(identity.userSet),
+    frozen: Boolean(identity.frozen || prev?.frozen),
+    workspaceId: identity.workspaceId || prev?.workspaceId,
   };
   if (identity.logoInitials?.trim()) {
     payload.logoInitials = identity.logoInitials.trim().slice(0, 2).toUpperCase();
@@ -837,9 +857,14 @@ export function ensureProductIdentity(
     persist?: boolean;
     /** New Project / new goal — ignore leftover userSet chip. */
     force?: boolean;
+    /** Workspace id to freeze with the plan name. */
+    workspaceId?: string;
   },
 ): ProductIdentity {
   const storedOnDisk = readStoredProductIdentity(workspaceRoot);
+  if (storedOnDisk?.frozen && storedOnDisk.projectName && opts?.force !== true) {
+    return storedOnDisk;
+  }
   const existing = readProductIdentity(workspaceRoot);
   const goal = opts?.goal || "";
   const type = opts?.projectType;
@@ -898,6 +923,7 @@ export function ensureProductIdentity(
     return writeProductIdentity(workspaceRoot, {
       ...built,
       userSet: opts?.force ? false : keepUserSet || Boolean(opts?.userSet),
+      workspaceId: opts?.workspaceId || storedOnDisk?.workspaceId,
     });
   }
   return existing && !needsWrite ? existing : built;

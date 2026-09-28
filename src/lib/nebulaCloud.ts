@@ -18,6 +18,7 @@ import {
 } from './nebulaProjectStore';
 import {
   getBrowserProjectKey,
+  clearIdentityFreeze,
   getBrowserProjectName,
   setBrowserProjectKey,
   setBrowserProjectName,
@@ -537,6 +538,7 @@ export async function createProjectForCurrentSession(name: string): Promise<{
   mode: 'cloud' | 'guest';
 }> {
   const trimmed = name.trim() || 'Untitled Project';
+  clearIdentityFreeze();
   const user = FORCE_GUEST_MODE ? null : await fetchSessionUser();
   if (user?.uid) {
     const previousKey = getBrowserProjectKey();

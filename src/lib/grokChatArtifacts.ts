@@ -7,8 +7,9 @@ import {
   masterPlanSectionSeparationRules,
 } from './masterPlanSections';
 import { fetchJson } from './apiFetch';
-import { withProjectBody, withProjectQuery, getBrowserProjectName } from './nebulaProjectApi';
-import { productNameFromPlan } from '../../lib/productIdentity';
+import { withProjectBody, withProjectQuery, getBrowserProjectName, getBrowserProjectKey, freezeIdentityAfterMasterPlanSave, restoreFrozenIdentityIfDrifted } from './nebulaProjectApi';
+import { looksLikeInventedChipName, productNameFromPlan } from '../../lib/productIdentity';
+import { lockNameAfterPlanSave } from '../../lib/identityFreeze';
 import { isReplacementProductBrief } from '../../lib/productGoalFingerprint';
 import { promoteWorkspaceChipFromProductName } from './productIdentityClient';
 import { buildLanguagePromptAppendix } from './i18n/languagePromptAppendix';
@@ -247,7 +248,21 @@ export async function persistMasterPlanFromAssistantSource(
       '1. Goal of the app': parsed[1] || '',
       '5. UI/UX design': parsed[5] || '',
     });
-    void promoteWorkspaceChipFromProductName(productNameFromSave || fromPlan);
+    const lockedName = lockNameAfterPlanSave({
+      fromPlan,
+      fromSave: productNameFromSave,
+      headerName: getBrowserProjectName(),
+      looksInvented: looksLikeInventedChipName,
+    });
+    const freezeName = lockedName || fromPlan;
+    if (freezeName) {
+      freezeIdentityAfterMasterPlanSave({
+        projectKey: getBrowserProjectKey(),
+        projectName: freezeName,
+      });
+      restoreFrozenIdentityIfDrifted();
+      void promoteWorkspaceChipFromProductName(freezeName);
+    }
     try {
       window.dispatchEvent(new CustomEvent('nebula-master-plan-updated'));
     } catch {

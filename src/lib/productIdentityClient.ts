@@ -1,6 +1,7 @@
 import { fetchJson } from './apiFetch';
 import {
   getBrowserProjectName,
+  getIdentityFreeze,
   withProjectBody,
   withProjectQuery,
 } from './nebulaProjectApi';
@@ -71,6 +72,10 @@ export async function fetchProductIdentityClient(): Promise<ProductIdentity | nu
 export async function promoteWorkspaceChipFromProductName(name: string): Promise<string | null> {
   const trimmed = String(name || '').trim();
   if (!trimmed || looksLikeGoalStubName(trimmed) || isWorkspaceLabelStub(trimmed)) return null;
+  const freeze = getIdentityFreeze();
+  if (freeze?.projectName && freeze.projectName.toLowerCase() !== trimmed.toLowerCase()) {
+    return freeze.projectName;
+  }
   const current = getBrowserProjectName().trim();
   if (current && current.toLowerCase() === trimmed.toLowerCase()) {
     return current;
@@ -80,7 +85,7 @@ export async function promoteWorkspaceChipFromProductName(name: string): Promise
     const result = await renameActiveProjectDisplayName(trimmed, mode);
     await persistProductIdentityClient({
       projectName: result.projectName,
-      userSet: false,
+      userSet: true,
     });
     return result.projectName;
   } catch {

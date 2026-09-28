@@ -74,8 +74,8 @@ const goSessionAbortedByProject = new Set<string>();
 const goAbortingByProject = new Set<string>();
 const applyAbortByProject = new Map<string, AbortController>();
 
-function goPollProjectKey(projectName?: string): string {
-  return (projectName || '').trim() || 'default';
+function goPollProjectKey(_projectName?: string): string {
+  return getBrowserProjectKey() || 'default';
 }
 
 function clearCodingLocks(projectName: string): void {

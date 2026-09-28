@@ -1,3 +1,12 @@
+import {
+  IDENTITY_FREEZE_STORAGE_KEY,
+  mergeIdentityFreeze,
+  parseIdentityFreezeRecord,
+  resolveFrozenProjectKey,
+  resolveFrozenWorkspaceTarget,
+  type IdentityFreezeRecord,
+} from '../../lib/identityFreeze';
+
 /** Active browser project key for API calls (cloud workspace on server). */
 const KEY_LS = 'nebula_browser_project_key_v1';
 const NAME_LS = 'nebula_browser_project_name_v1';
@@ -5,6 +14,7 @@ const NAME_LS = 'nebula_browser_project_name_v1';
 let currentProjectKey = 'default';
 /** DB project name (must match `nebula_projects.name` when logged in) for per-project disk / cfproj_ scope. */
 let currentProjectName = '';
+let identityFreeze: IdentityFreezeRecord | null = null;
 
 function sanitizeProjectKey(raw: string): string {
   const cleaned = String(raw || 'default')
@@ -12,6 +22,19 @@ function sanitizeProjectKey(raw: string): string {
     .replace(/[^a-zA-Z0-9_-]/g, '')
     .slice(0, 64);
   return cleaned || 'default';
+}
+
+function persistIdentityFreeze(): void {
+  if (typeof localStorage === 'undefined') return;
+  try {
+    if (identityFreeze) {
+      localStorage.setItem(IDENTITY_FREEZE_STORAGE_KEY, JSON.stringify(identityFreeze));
+    } else {
+      localStorage.removeItem(IDENTITY_FREEZE_STORAGE_KEY);
+    }
+  } catch {
+    /* ignore */
+  }
 }
 
 function persistBrowserProject(): void {
@@ -23,6 +46,7 @@ function persistBrowserProject(): void {
     } else {
       localStorage.removeItem(NAME_LS);
     }
+    persistIdentityFreeze();
   } catch {
     /* ignore */
   }
@@ -36,6 +60,12 @@ function restoreBrowserProjectFromStorage(): void {
     const n = localStorage.getItem(NAME_LS)?.trim();
     if (k) currentProjectKey = sanitizeProjectKey(k);
     if (n) currentProjectName = n;
+    try {
+      const raw = localStorage.getItem(IDENTITY_FREEZE_STORAGE_KEY);
+      identityFreeze = raw ? parseIdentityFreezeRecord(JSON.parse(raw)) : null;
+    } catch {
+      identityFreeze = null;
+    }
   } catch {
     /* ignore */
   }
@@ -49,7 +79,48 @@ export function setBrowserProjectKey(key: string): void {
 }
 
 export function getBrowserProjectKey(): string {
-  return currentProjectKey;
+  return resolveFrozenProjectKey({
+    freezeKey: identityFreeze?.projectKey,
+    browserKey: currentProjectKey,
+  });
+}
+
+export function getIdentityFreeze(): IdentityFreezeRecord | null {
+  return identityFreeze;
+}
+
+/** First successful Master Plan save — later turns cannot change key or brand. */
+export function freezeIdentityAfterMasterPlanSave(opts: {
+  projectKey: string;
+  projectName: string;
+}): IdentityFreezeRecord {
+  const next = mergeIdentityFreeze(identityFreeze, {
+    projectKey: sanitizeProjectKey(opts.projectKey),
+    projectName: String(opts.projectName || '').trim(),
+  });
+  identityFreeze = next;
+  persistIdentityFreeze();
+  return next;
+}
+
+/** Home / explicit new product mint — freeze belongs to the previous workspace. */
+export function clearIdentityFreeze(): void {
+  identityFreeze = null;
+  persistIdentityFreeze();
+}
+
+/** Header ≠ frozen plan name: restore plan name on the same key. */
+export function restoreFrozenIdentityIfDrifted(): IdentityFreezeRecord | null {
+  if (!identityFreeze) return null;
+  const target = resolveFrozenWorkspaceTarget({
+    freeze: identityFreeze,
+    headerName: currentProjectName,
+    headerKey: currentProjectKey,
+  });
+  currentProjectKey = sanitizeProjectKey(target.projectKey);
+  if (target.projectName) currentProjectName = target.projectName;
+  persistBrowserProject();
+  return identityFreeze;
 }
 
 export function setBrowserProjectName(name: string): void {
@@ -71,15 +142,31 @@ export function resolveActiveProjectIds(diskProjectKey?: string | null): {
   projectName: string;
 } {
   const fromDisk = String(diskProjectKey || '').trim();
-  const projectKey = fromDisk || currentProjectKey || 'default';
-  const projectName = currentProjectName.trim() || projectKey;
+  const projectKey = resolveFrozenProjectKey({
+    freezeKey: identityFreeze?.projectKey,
+    browserKey: fromDisk || currentProjectKey,
+  });
+  const projectName = (identityFreeze?.projectName || currentProjectName).trim() || projectKey;
   return { projectKey, projectName };
 }
 
+function apiProjectKey(): string {
+  return resolveFrozenProjectKey({
+    freezeKey: identityFreeze?.projectKey,
+    browserKey: currentProjectKey,
+  });
+}
+
+function apiProjectName(): string {
+  return (identityFreeze?.projectName || currentProjectName).trim();
+}
+
 function projectQueryParams(): string {
-  const parts = [`projectKey=${encodeURIComponent(currentProjectKey)}`];
-  if (currentProjectName) {
-    parts.push(`projectName=${encodeURIComponent(currentProjectName)}`);
+  const key = apiProjectKey();
+  const name = apiProjectName();
+  const parts = [`projectKey=${encodeURIComponent(key)}`];
+  if (name) {
+    parts.push(`projectName=${encodeURIComponent(name)}`);
   }
   return parts.join('&');
 }
@@ -93,11 +180,13 @@ export function withProjectQuery(url: string): string {
 export function withProjectBody<T extends Record<string, unknown>>(
   body: T,
 ): T & { projectKey: string } & { projectName?: string } {
-  const out = { ...body, projectKey: currentProjectKey } as T & { projectKey: string } & {
+  const key = apiProjectKey();
+  const name = apiProjectName();
+  const out = { ...body, projectKey: key } as T & { projectKey: string } & {
     projectName?: string;
   };
-  if (currentProjectName) {
-    out.projectName = currentProjectName;
+  if (name) {
+    out.projectName = name;
   }
   return out;
 }
