@@ -165,7 +165,6 @@ export async function runUiStudioBetaGeneration(
     // Auto UI Gen waits; an explicit Generate UI after coding must not die on a stale client lock.
     if (
       isFoundationGoInFlight(options.projectName) &&
-      options.uiPhase !== 'manual' &&
       options.uiPhase !== 'post_code'
     ) {
       onProgress?.(

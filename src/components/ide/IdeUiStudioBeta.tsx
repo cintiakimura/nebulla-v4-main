@@ -189,7 +189,7 @@ function buildWaitingModel(stageHint?: string): EditorModel {
             type: 'text',
             text:
               stageHint?.trim() ||
-              'Press Generate UI when Master Plan + ui-brief are ready (inference-first runs this before coding). This canvas is a static layout draft — not the live coded Expo/React app. Regenerate if chrome looks generic.',
+              'Press Generate UI when Master Plan + ui-brief are ready. This canvas is a **Pre-code mockup** (temporary) — not the live coded app.',
             style: {
               ...defaultStyle(),
               backgroundColor: '#FAFAF9',
@@ -417,6 +417,8 @@ export function IdeUiStudioBeta({
   useEffect(() => {
     void loadEligibility();
   }, [loadEligibility]);
+
+  useEffect(() => subscribeGrokCodingActive(setGrokCodingActive), []);
 
   useEffect(() => {
     let cancelled = false;
@@ -1796,8 +1798,10 @@ export function IdeUiStudioBeta({
 
   const layerCount = page ? Object.keys(page.nodes).length : 0;
   const atMaxRegens = regenCount >= maxRegens && regenCount > 0;
-  const generateDisabled = busy || preferenceRecovery || atMaxRegens;
-  const generateTitle = atMaxRegens
+  const generateDisabled = busy || grokCodingActive || preferenceRecovery || atMaxRegens;
+  const generateTitle = grokCodingActive
+    ? 'Go is writing files — Generate UI is disabled until Live is ready'
+    : atMaxRegens
     ? t('uiStudio.generationsExhausted', { max: maxRegens })
     : t('uiStudio.generateTitle');
 

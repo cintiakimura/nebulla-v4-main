@@ -499,6 +499,7 @@ function addPage(
 export function inferFirstSliceRoutes(
   goal: string,
   pagesSection = "",
+  opts?: { maxRoutes?: number; includeImpliedAuth?: boolean },
 ): { name: string; route: string }[] {
   const fromPlanRaw = inferNamedPagesFromSection4(pagesSection);
   const fromPlan = leftoverRoutesConflictWithGoal(
@@ -524,8 +525,16 @@ export function inferFirstSliceRoutes(
     for (const p of seeded) addPage(merged, seen, p);
   }
   let next = merged;
-  if (!lockRequiresSignedInRoles(goal, pagesSection)) {
+  const impliedAuth =
+    opts?.includeImpliedAuth === true ||
+    lockRequiresSignedInRoles(goal, pagesSection) ||
+    /\b(teacher|parent|login|sign-?in|account)\b/i.test(`${goal}\n${pagesSection}`);
+  if (!impliedAuth) {
     next = next.filter((p) => !AUTH_FIRST_SLICE.has(p.route.toLowerCase()));
+  } else if (opts?.includeImpliedAuth && !next.some((p) => AUTH_FIRST_SLICE.has(p.route.toLowerCase()))) {
+    if (/\b(teacher|parent|kids?|child|student|login|sign-?in)\b/i.test(goal)) {
+      next.push({ name: "Login", route: "/login" });
+    }
   }
   if (!education) {
     next = next.filter((p) => !EDUCATION_LEFTOVER_ROUTE.test(p.route));
@@ -577,7 +586,8 @@ export function inferFirstSliceRoutes(
     const ib = order.indexOf(b.route.toLowerCase());
     return (ia === -1 ? 80 : ia) - (ib === -1 ? 80 : ib);
   });
-  const capped = next.slice(0, 6);
+  const maxRoutes = Math.max(1, opts?.maxRoutes ?? 6);
+  const capped = next.slice(0, maxRoutes);
   if (firstSliceApplyLooksGeneric(capped.map((p) => p.route)) && !documentJob && fromPlan.length < 2) {
     return [];
   }

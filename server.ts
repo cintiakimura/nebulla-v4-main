@@ -178,6 +178,14 @@ import {
   parseGoSliceLabel,
   shouldSkipPhaseALlm,
 } from "./lib/goSliceContract";
+import {
+  assessFullBuildCompleteness,
+  detectQuickDraftIntent,
+  fullBuildGoBlockedMessage,
+  readBuildModeFromPlan,
+  writeBuildModeOnPlan,
+  type BuildMode,
+} from "./lib/fullBuildContract";
 import { classifyGoFailure, goBlocked } from "./lib/goBlockedReason";
 import {
   buildCodedAppPreviewBridgeHtml,
@@ -256,6 +264,7 @@ import {
   failGoCodePreparing,
   readGoCodePending,
   writeGoCodePending,
+  clearGoCodePending,
 } from "./lib/nebulaGoCodePending";
 import {
   callGrokGenerateUiSvg,
@@ -1476,7 +1485,8 @@ No approved UI code yet.
         checkUiBrief: true,
       });
       completeness = softenSecurityBlocksForMvpGo(completeness);
-      // Optional acknowledgment only — coding/Go must not depend on this.
+      const fullBuildStatus = assessFullBuildCompleteness({ plan });
+      const buildModeStatus = readBuildModeFromPlan(plan as Record<string, unknown>);
       const securityProposal = buildSecurityBaselineProposal(plan);
       const section1 = String((plan as Record<string, string>)["1. Goal of the app"] || "");
       const qName = typeof req.query.projectName === "string" ? req.query.projectName : "";
@@ -1495,7 +1505,9 @@ No approved UI code yet.
       res.json({
         mode: completeness.mode,
         ok: completeness.ok,
-        allowGo: completeness.allowGo,
+        allowGo: buildModeStatus === "full_build" ? fullBuildStatus.allowGo : completeness.allowGo,
+        buildMode: buildModeStatus,
+        fullBuildAsk: fullBuildStatus.ask,
         shape: completeness.shape,
         gaps: completeness.gaps,
         sectionLengths: completeness.sectionLengths,
@@ -5454,6 +5466,33 @@ Rules:
           }
         }
         void researchGateEarly;
+
+        let buildMode: BuildMode = detectQuickDraftIntent(note)
+          ? "fast_prototype"
+          : readBuildModeFromPlan(planForGate);
+        try {
+          const nextMode = writeBuildModeOnPlan(planForGate, buildMode);
+          persistMasterPlanJson(ppGo.workspaceRoot, masterPlanPath, nextMode);
+          planForGate = nextMode as Record<string, string>;
+        } catch {
+          planForGate = writeBuildModeOnPlan(planForGate, buildMode) as Record<string, string>;
+        }
+        if (buildMode === "full_build") {
+          const fullBuildGate = assessFullBuildCompleteness({ plan: planForGate });
+          if (!fullBuildGate.allowGo) {
+            const blocked = goBlocked("MASTER_PLAN_INCOMPLETE", fullBuildGoBlockedMessage(fullBuildGate));
+            return res.status(409).json({
+              ok: false,
+              pending: false,
+              preparing: false,
+              coding: false,
+              error: blocked.message,
+              code: blocked.code,
+              blockedReason: blocked,
+              ask: fullBuildGate.ask,
+            });
+          }
+        }
       }
 
       if (existingGo?.status === "preparing") {
@@ -5598,15 +5637,35 @@ Rules:
           `[go-code] Master Plan gaps mode=${completeness.mode} shape=${completeness.shape} count=${completeness.gaps.length} allowGo=${completeness.allowGo}`,
         );
       }
+      const goBuildMode: BuildMode = detectQuickDraftIntent(note)
+        ? "fast_prototype"
+        : readBuildModeFromPlan(planSnapshot);
+      const fullBuildGo = goBuildMode === "full_build";
       const gateWarnings: string[] = [];
       if (!completeness.allowGo) {
         const blocked = goBlocked("MASTER_PLAN_INCOMPLETE");
+        if (fullBuildGo) {
+          const fb = assessFullBuildCompleteness({ plan: planSnapshot });
+          if (!fb.allowGo) {
+            clearGoCodePending(ppGo.workspaceRoot);
+            const hard = goBlocked("MASTER_PLAN_INCOMPLETE", fullBuildGoBlockedMessage(fb));
+            return res.status(409).json({
+              ok: false,
+              pending: false,
+              preparing: false,
+              coding: false,
+              error: hard.message,
+              code: hard.code,
+              blockedReason: hard,
+            });
+          }
+        }
         gateWarnings.push(blocked.message);
         console.warn("[go-code] bypass MASTER_PLAN_INCOMPLETE — continuing Foundation", blocked.message);
       }
 
       // Phase 2: IF after fill the plan is still unusable — warn and continue (status bar owns the issue).
-      if (!isMasterPlanReadyForUiMockup(planSnapshot)) {
+      if (!isMasterPlanReadyForUiMockup(planSnapshot) && !fullBuildGo) {
         gateWarnings.push(
           "Master Plan is still thin after fill — continuing Foundation anyway.",
         );
@@ -5657,6 +5716,7 @@ Rules:
               userNote: note,
               existingSummary,
               projectName: convProject,
+              buildMode: readBuildModeFromPlan(plan),
             });
         console.log(
           `[go-code] Local ${PRE_CODING_SUMMARY_KEY} (skipped Grok-4 Phase A; ${summary.length} chars)`,
@@ -5728,6 +5788,7 @@ Strict rules:
           userNote: note,
           existingSummary,
           projectName: convProject,
+          buildMode: readBuildModeFromPlan(plan),
         });
       }
       summary = summary.slice(0, 2000);
@@ -5780,7 +5841,26 @@ Strict rules:
 
       const workflowContext = buildProjectWorkflowExecutionContext(req);
       const codeModel = process.env.GROK_CODE_MODEL?.trim() || "grok-code-fast-1";
-      const codeQualityContract = `ARCHITECTURE-FIRST + INCREMENTAL DEVELOPMENT (mandatory):
+      const goBuildModePrompt: BuildMode = detectQuickDraftIntent(note)
+        ? "fast_prototype"
+        : readBuildModeFromPlan(planSnapshot);
+      const fullBuildPrompt = goBuildModePrompt === "full_build";
+      const codeQualityContract = fullBuildPrompt
+        ? `ARCHITECTURE-FIRST + FULL BUILD (mandatory):
+- Nebulla wins on pure logic + clean architecture — not agent count. Prefer maintainable, typed, smallest-safe code.
+- Mentally apply nebulla-project/code-review-checklist.md before every file (imports, nulls, env, HTTP, security, boundaries, hydration, loops).
+- This Go implements **every Master Plan §4 route** and the core jobs in that Plan (one thick pass). Not Fast Prototype's 1–2 screen clamp. Not autopilot Primary→Secondary→Polish.
+- Real \`app/**/page.tsx\` or \`pages/\` routes. src/App.tsx + src/main.tsx alone is a failed Full Build for multi-page plans.
+- No hallucinated packages, APIs, env vars, or paths — create them explicitly in this response if needed.
+- Prefer smallest safe change over clever refactors. No temporary hacks. Explicit error handling on I/O.
+- UI: §2 research patterns + §5 visuals + Project Type — NEVER Nebulla IDE chrome (#080A14 / #00D4D4).
+- Header: product name + 2-letter initials mark (32–40px rounded, §5 accent). Never paste the §1 goal sentence as the app title. No AI logo image. Logo is not a Go gate.
+MOCKUP VS FINAL UI (mandatory):
+${MOCKUP_NON_AUTHORITATIVE_GO_BULLETS}
+${MVP_STACK_GO_BULLETS}
+${RUNNABLE_SKELETON_GO_BULLETS}
+${INTERACTIVE_PREVIEW_GO_BULLETS}`
+        : `ARCHITECTURE-FIRST + INCREMENTAL DEVELOPMENT (mandatory):
 - Nebulla wins on pure logic + clean architecture — not agent count. Prefer maintainable, typed, smallest-safe code.
 - Mentally apply nebulla-project/code-review-checklist.md before every file (imports, nulls, env, HTTP, security, boundaries, hydration, loops).
 - Follow nebulla-project/incremental-development.md: Build one slice → Debug/Validate (NDM) → Next. Never dump the entire app when it can be sliced.
@@ -5799,7 +5879,25 @@ ${RUNNABLE_SKELETON_GO_BULLETS}
 ${INTERACTIVE_PREVIEW_GO_BULLETS}`;
 
       const codeSystemPrompt = continuation
-        ? `You are Grok Code (CONTINUATION pass). master-plan.json was updated but the **Foundation slice** (runnable shell) is still missing.
+        ? fullBuildPrompt
+          ? `You are Grok Code (CONTINUATION pass). Pass 1 wrote zero product UI files. Emit the real app now.
+
+${codeQualityContract}
+
+Output every §4 route in THIS response:
+- \`package.json\` + \`app/layout.tsx\`, \`app/globals.css\`, root \`app/page.tsx\`
+- One \`app/<route>/page.tsx\` for each Master Plan §4 route (kids: practice + teacher + login when implied)
+- Shared \`components/\` / \`lib/mockStore.ts\`
+- Short \`README.md\` with npm install / npm run dev / npm run build
+- Do NOT return only master-plan.json
+- Mockup is occupancy only
+
+File blocks only: \`\`\`file:relative/path\` … \`\`\` — no chat prose.
+
+${lockedUserConstraintsFromPlan(planSnapshot)}
+
+${workflowContext}`
+          : `You are Grok Code (CONTINUATION pass). master-plan.json was updated but the **Foundation slice** (runnable shell) is still missing.
 
 ${codeQualityContract}
 
@@ -5833,12 +5931,19 @@ Master Plan (project-execution-rules — MUST be complete before code):
 - §4: full page contracts (route, purpose, primary_actions, data_entities, authz, empty/error, nav). §5: 15–25 lines tokens only.
 - Also keep \`nebula-ui-studio/ui-brief.md\` in sync when §4/§5 change (primary UI input). V0/\`v0-prompt.md\` is optional legacy only.
 
-Implementation (ONE SLICE per Go — Build → Debug → Next):
-- Implement only the slice named in "${PRE_CODING_SUMMARY_KEY}" (or infer next incomplete slice: Foundation first if no app shell exists).
+Implementation (${fullBuildPrompt ? "ONE Full Build Go — every §4 route" : "ONE SLICE per Go — Build → Debug → Next"}):
+${
+  fullBuildPrompt
+    ? `- Implement **every** Master Plan §4 route and the core jobs in this Go. Not a 1–2 screen Foundation clamp. Continue is only for extra Polish / integrations.
+- Real \`app/layout.tsx\` + root \`app/page.tsx\` + \`app/<route>/page.tsx\` for each §4 path, with working primary controls and lib/mockStore.ts. Home is the core user job.
+- Coding skeleton + §4: all listed routes + shared layout. Mockup is occupancy only — do not copy mockup pixels.
+- Do NOT emit only login chrome. Do not invent hosted BaaS.`
+    : `- Implement only the slice named in "${PRE_CODING_SUMMARY_KEY}" (or infer next incomplete slice: Foundation first if no app shell exists).
 - Foundation for a multi-page plan: \`app/layout.tsx\` + root \`app/page.tsx\` + at least one more \`app/<route>/page.tsx\` from the Coding skeleton (or §4), with working primary controls (not silent no-ops). One mock store per entity. Do not stop at a single static dashboard. Home must be the core user job (for tutoring/ADHD: child's next short lesson), not Dashboard + Settings + "Who are you today?".
 - Coding skeleton: implement only listed routes + shared layout. No extra /dashboard /settings /analytics unless skeleton is web_dashboard. Mockup is not the spec. Do not claim Preview or the product is finished after Foundation.
 - Data+API slice: \`app/api\` (or \`pages/api\`) plus a workspace store; screens must read/write through it. Mock-only UI that dies on refresh is a failed slice.
-- Later slices: smallest coherent set (often 3–8 file blocks). Do NOT emit every §4 route in one pass.
+- Later slices: smallest coherent set (often 3–8 file blocks). Do NOT emit every §4 route in one pass.`
+}
 - Include master-plan.json updates IN THE SAME response if needed — never as the only file when app code is due.
 - Honor security baseline (RLS/tenant filters) in Auth/Data slices.
 
@@ -5888,6 +5993,7 @@ ${workflowContext}`;
         productName: productIdentity.projectName,
         logoInitials: productIdentity.logoInitials,
         logoHint: productIdentity.logoHint,
+        buildMode: goBuildModePrompt,
       });
       const existingLinked = buildLinkedContextAppendix(readLinkedContext(ppGo.workspaceRoot));
       const codeMessages: { role: string; content: string }[] = [

@@ -19,6 +19,9 @@ export const PRE_CODING_SUMMARY_KEY = "Pre-coding summary (Grok)";
 /** Structured coding contract on the same master-plan.json — not a new file family. */
 export const CODING_SKELETON_KEY = "Coding skeleton";
 
+/** full_build (default) vs fast_prototype (explicit thin draft). */
+export const BUILD_MODE_PLAN_KEY = "NEBULA_BUILD_MODE";
+
 /** User-facing tabs (Master Plan UI) — section 6 is internal/env. */
 export const MASTER_PLAN_USER_SECTION_KEYS = [...MASTER_PLAN_SECTION_KEYS] as const;
 

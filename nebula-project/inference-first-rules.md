@@ -416,20 +416,18 @@ Record `stage=ui_mockup` in `fast-prototype-memory.md` (or product stage flag).
 
 ---
 
-### Step 9.1 — Build foundation slice
-**Build** the first coding slice only (after Step 8.3 has been triggered):
-- app shell
-- routing
-- layout
-- base design tokens if needed
+### Step 9.1 — Full Build coding pass (default)
+**After** Step 8.3 mockup has been triggered (occupancy only) **and** the Plan is complete:
 
-Use the plan `Coding skeleton` (routes + entities). Empty competitor research must not block Foundation when that object exists.
+**Full Build (default):** implement **every §4 route** and the core jobs in one Go. Not autopilot. Not a 1–2 screen clamp.
 
-Use incremental development.  
-Do not implement all features in one pass.  
-Record `stage=coding`.
+**Fast Prototype (explicit quick draft only):** first coding slice only (shell, routing, layout).
 
-**Output required:** foundation files applied
+Use the plan `Coding skeleton` (routes + entities). Empty competitor research must not block Go when that object exists.
+
+Record `stage=coding`. Do not start Go if §§1–5 / §4 contracts / auth model / skeleton are missing — name the missing field; do not say Foundation.
+
+**Output required:** product files applied matching §4 (Full Build) or foundation files (quick draft)
 
 ---
 

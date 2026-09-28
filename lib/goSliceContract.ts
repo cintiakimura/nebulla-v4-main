@@ -14,6 +14,13 @@ import {
   inferFirstSliceRoutes,
   isDocumentWorkflowGoal,
 } from "./nebulaUiBrief";
+import {
+  formatFullBuildApplyLine,
+  fullBuildCodingTaskLine,
+  inferFullBuildRoutes,
+  shouldClampToFastPrototypeSlice,
+  type BuildMode,
+} from "./fullBuildContract";
 
 export const GO_SLICE_LABELS = [
   "Foundation",
@@ -214,6 +221,7 @@ export function buildLocalPreCodingSummary(opts: {
   userNote?: string;
   existingSummary?: string;
   projectName?: string;
+  buildMode?: BuildMode;
 }): string {
   const fromNote = parseGoSliceLabel(opts.userNote);
   const fromExisting = parseGoSliceLabel(opts.existingSummary);
@@ -225,19 +233,26 @@ export function buildLocalPreCodingSummary(opts: {
   const slice = fromNote || clampClaimedSliceToWorkspace(rawSlice, opts.workspaceRoot);
   const name = (opts.projectName || "App").trim().slice(0, 64);
   const focus = String(opts.userNote || "").trim().slice(0, 180);
+  const fullBuild = !shouldClampToFastPrototypeSlice(opts.buildMode || "full_build");
+  const firstFullGo = fullBuild && !fromNote;
+  const thisGo = firstFullGo
+    ? `- This Go: Full Build — implement every Master Plan §4 route (not a 1–2 screen Foundation clamp)`
+    : `- This Go: ${slice} slice only — Build → Debug → Next; do not dump every §4 route`;
   const lines = [
-    formatSlicePromptLine(slice),
+    formatSlicePromptLine(firstFullGo ? "Foundation" : slice),
     `- Project: ${name}`,
     `- Project Type: infer from Master Plan §1 (prefer Mobile App when kids/tutor/ADHD)`,
-    `- This Go: ${slice} slice only — Build → Debug → Next; do not dump every §4 route`,
+    thisGo,
     focus && !isBareGoNote(focus) ? `- Session focus: ${focus}` : `- Session focus: next incomplete ${slice} work from Master Plan`,
     "- Files: app/, src/, components/, lib/ for this slice — prefer real screens over master-plan.json-only",
     `- Quality: ${productSliceQualityLine(name)}`,
-    "- Coding skeleton on the plan: implement only listed routes + layout. Mockup is not the spec.",
+    fullBuild && firstFullGo
+      ? "- Coding skeleton + §4: implement ALL listed routes + layout. Mockup is occupancy only, not the spec."
+      : "- Coding skeleton on the plan: implement only listed routes + layout. Mockup is not the spec.",
     "- Validate: routes render, no Nebulla IDE chrome (#080A14 / #00D4D4), auth fields only on Login",
     "- Risks: hosted BaaS clients; oversized multi-route dump",
   ];
-  return lines.join("\n").slice(0, 1200);
+  return lines.join("\n").slice(0, 1600);
 }
 
 /** True when Master Plan already has a usable PRE_CODING_SUMMARY / SLICE line. */
@@ -287,29 +302,34 @@ export function buildCompactGoCodeUserPrompt(opts: {
   productName?: string;
   logoInitials?: string;
   logoHint?: string;
+  buildMode?: BuildMode;
 }): string {
   const slice = String(opts.sliceLine || "SLICE: Foundation").trim().slice(0, 80);
   const goal = String(opts.goal || "").replace(/\s+/g, " ").trim().slice(0, 800);
-  const pages = String(opts.pagesSection || "").trim().slice(0, 1600);
+  const pages = String(opts.pagesSection || "").trim().slice(0, 2200);
   const constraints = String(opts.constraints || "").trim().slice(0, 2200);
   const briefPages = String(opts.uiBriefPageList || "").trim().slice(0, 800);
   const focus = String(opts.sessionFocus || "").trim().slice(0, 400);
   const productName = String(opts.productName || "").trim().slice(0, 48);
   const initials = String(opts.logoInitials || "").trim().slice(0, 4);
   const hint = String(opts.logoHint || "").trim().slice(0, 40);
+  const fullBuild = !shouldClampToFastPrototypeSlice(opts.buildMode || "full_build");
   const isFoundation = /SLICE:\s*Foundation/i.test(slice);
   const isPolish = /SLICE:\s*Polish/i.test(slice);
   const refineFocus =
     /\b(theme|dark|restyle|layout\s+draft|edit existing|MODE:\s*EDIT|nav|menu|color|palette|filter|keep\s+mock)\b/i.test(
       focus,
     );
+  const extraWork = opts.continuation || isPolish || refineFocus || /SLICE:\s*(Secondary|Polish)\b/i.test(slice);
   const task =
-    opts.continuation || isPolish || refineFocus
+    extraWork
       ? 'EDIT MODE — patch existing product files from Session focus. No new scaffold. File blocks only.'
-      : 'Run the coding pass now. Output Foundation AND Primary in this Go (screens + working mockStore verb) — not Data+API, not Polish.';
+      : fullBuild
+        ? fullBuildCodingTaskLine()
+        : 'Run the coding pass now. Output Foundation AND Primary in this Go (screens + working mockStore verb) — not Data+API, not Polish.';
   const quality = productSliceQualityLine(goal);
-  const firstSlice = inferFirstSliceRoutes(goal, pages);
-  const firstSliceLine = formatFirstSliceApplyLine(firstSlice);
+  const routes = fullBuild ? inferFullBuildRoutes(goal, pages) : inferFirstSliceRoutes(goal, pages);
+  const firstSliceLine = fullBuild ? formatFullBuildApplyLine(routes) : formatFirstSliceApplyLine(routes);
   const identity =
     productName
       ? [
@@ -342,7 +362,9 @@ export function buildCompactGoCodeUserPrompt(opts: {
     "",
     quality,
     "",
-    "Obey Master Plan Coding skeleton if present — only those routes this slice. No extra admin/analytics/settings unless skeleton is web_dashboard. Mockup is not the spec.",
+    fullBuild
+      ? "Obey Master Plan Coding skeleton + §4 — every listed route this Go. No extra admin/analytics unless the plan names them. Mockup is occupancy only."
+      : "Obey Master Plan Coding skeleton if present — only those routes this slice. No extra admin/analytics/settings unless skeleton is web_dashboard. Mockup is not the spec.",
     "",
     task,
     "File blocks only: ```file:relative/path``` — no chat prose.",

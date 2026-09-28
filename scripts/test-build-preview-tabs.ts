@@ -45,6 +45,7 @@ section("tabs are real tablist buttons, not a Live span");
   assert.match(toolbar, /onClick=\{\(\) => onShowCatalogMockup\?\.\(\)\}/);
   assert.equal(/<span[^>]*>\s*Live app\s*<\/span>/.test(toolbar), false);
   assert.match(toolbar, /z-30/);
+  assert.match(toolbar, /codingBusy \|\| !onGenerateUi/);
   const genIdx = toolbar.indexOf('aria-label="Generate UI"');
   const liveIdx = toolbar.indexOf('aria-label="Live app"');
   assert.ok(liveIdx > 0 && genIdx > liveIdx);

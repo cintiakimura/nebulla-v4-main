@@ -37,6 +37,8 @@ type Props = {
   /** Single Generate UI control for the Build preview canvas. */
   onGenerateUi?: () => void;
   generateBusy?: boolean;
+  /** Go / coding job running — Generate UI must not be clickable. */
+  codingBusy?: boolean;
   /** Coded product routes exist — Preview can show the live practice app. */
   liveAvailable?: boolean;
   showingMockup?: boolean;
@@ -59,6 +61,7 @@ export function PreviewEditToolbar({
   onRedo,
   onGenerateUi,
   generateBusy = false,
+  codingBusy = false,
   liveAvailable = false,
   showingMockup = true,
   onShowLiveApp,
@@ -364,9 +367,13 @@ export function PreviewEditToolbar({
 
       <button
         type="button"
-        title="Generate UI from Master Plan + ui-brief"
+        title={
+          codingBusy
+            ? 'Go is writing files — Generate UI is disabled until Live is ready'
+            : 'Generate UI from Master Plan + ui-brief (Pre-code mockup)'
+        }
         aria-label="Generate UI"
-        disabled={generateBusy || !onGenerateUi}
+        disabled={generateBusy || codingBusy || !onGenerateUi}
         onClick={() => onGenerateUi?.()}
         className="btn-cyan ml-1 h-8 shrink-0 rounded-md px-2.5 text-[11px] disabled:opacity-40"
       >

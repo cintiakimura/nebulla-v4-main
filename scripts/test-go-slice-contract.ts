@@ -376,8 +376,20 @@ assert.equal(
     constraints: "",
     uiBriefPageList: "- Dashboard `/dashboard`\n- Dossiers `/dossiers`\n- Forms `/forms`",
     sessionFocus: "Foundation",
+    buildMode: "fast_prototype",
   });
   assert.match(compact, /FIRST-SLICE APPLY/);
+  const compactFull = buildCompactGoCodeUserPrompt({
+    sliceLine: "SLICE: Foundation",
+    goal,
+    pagesSection: pages,
+    constraints: "",
+    uiBriefPageList: "- Dashboard `/dashboard`\n- Dossiers `/dossiers`\n- Forms `/forms`",
+    sessionFocus: "Foundation",
+    buildMode: "full_build",
+  });
+  assert.match(compactFull, /FULL BUILD APPLY/);
+  assert.match(compactFull, /\/dossiers/);
   assert.match(compact, /\/dossiers/);
   assert.match(compact, /\/forms/);
   assert.match(compact, /\/dashboard/);

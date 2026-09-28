@@ -1200,7 +1200,7 @@ export async function runGoCodeAndApply(options: {
             {
               role: 'user' as const,
               content:
-                'CONTINUATION — master-plan.json is updated. Output the Foundation slice only: layout.tsx, globals.css, root page, minimal routing shell. Do NOT implement every §4 route. Do NOT stop at master-plan.json only.',
+                'CONTINUATION — pass 1 wrote zero product UI files. Output every §4 route now (layout, globals, pages). Do NOT stop at master-plan.json only.',
             },
           ]
         : activeMessages;

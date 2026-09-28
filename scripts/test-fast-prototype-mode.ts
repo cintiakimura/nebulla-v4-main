@@ -5,6 +5,7 @@
 import assert from 'node:assert/strict';
 import {
   detectFastPrototypeIntent,
+  detectQuickDraftIntent,
   isIdeStartMode,
   normalizeStartMode,
 } from '../src/lib/ideStartMode';
@@ -12,20 +13,31 @@ import {
   buildDiscoveryBootstrap,
   buildFastPrototypeBootstrap,
   buildFastPrototypeContinueBootstrap,
+  buildFullBuildBootstrap,
   buildIdeaDiscoveryBootstrap,
   FAST_PROTOTYPE_BOOTSTRAP_PREFIX,
+  FULL_BUILD_BOOTSTRAP_PREFIX,
   IDEA_DISCOVERY_BOOTSTRAP_PREFIX,
   isHiddenBootstrapUserMessage,
 } from '../src/lib/ideChatBootstrap';
 import { CHAT_SCOREBOARD_APPENDIX, chatModeSystemAppendix } from '../src/lib/grokChatArtifacts';
 
+assert.equal(normalizeStartMode('full_build'), 'full_build');
 assert.equal(normalizeStartMode('fast_prototype'), 'fast_prototype');
 assert.equal(normalizeStartMode('guided'), 'guided');
-assert.equal(normalizeStartMode('nope'), 'fast_prototype'); // default = inference-first
-assert.equal(normalizeStartMode(undefined), 'fast_prototype');
+assert.equal(normalizeStartMode('nope'), 'full_build'); // default = Full Build
+assert.equal(normalizeStartMode(undefined), 'full_build');
 assert.equal(isIdeStartMode('fast_prototype'), true);
+assert.equal(isIdeStartMode('full_build'), true);
 assert.equal(isIdeStartMode('guided'), true);
 assert.equal(isIdeStartMode('agent'), false);
+
+assert.equal(detectQuickDraftIntent('Fast prototype: marketplace for local tutors'), true);
+assert.equal(detectQuickDraftIntent('quick draft of the reading app'), true);
+assert.equal(
+  detectQuickDraftIntent('A mobile education app for kids to practice reading; teachers track progress.'),
+  false,
+);
 
 assert.equal(
   detectFastPrototypeIntent('Fast prototype: marketplace for local tutors'),
@@ -96,6 +108,16 @@ assert.equal(/Web Search/i.test(fast), false);
 assert.equal(/Do not skip research/i.test(fast), false);
 assert.equal(/Then emit START_CODING/.test(fast), false);
 assert.ok(isHiddenBootstrapUserMessage(fast));
+{
+  const full = buildFullBuildBootstrap(
+    'A mobile education app for kids to practice reading; teachers track progress.',
+    'Mobile App',
+  );
+  assert.ok(full.startsWith(FULL_BUILD_BOOTSTRAP_PREFIX));
+  assert.ok(full.includes('FULL BUILD CONTRACT'));
+  assert.ok(full.includes('every §4 route'));
+  assert.ok(isHiddenBootstrapUserMessage(full));
+}
 assert.ok(isHiddenBootstrapUserMessage(buildDiscoveryBootstrap('Web App')));
 
 const cont = buildFastPrototypeContinueBootstrap(

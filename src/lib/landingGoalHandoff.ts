@@ -53,7 +53,7 @@ export function commitLandingGoalHandoff(
   if (!persistLandingGoalForBuild(trimmed, type ?? null)) return false;
 
   setPendingProjectIdea(trimmed);
-  setPendingStartMode('fast_prototype');
+  setPendingStartMode('full_build');
   if (type === 'Web App' || type === 'Mobile App' || type === 'Landing Page') {
     setPendingProjectType(type);
   }
@@ -86,7 +86,7 @@ export function ensurePendingIdeaFromShellGoal(): void {
     setPendingProjectIdea(goal);
   }
   if (!peekPendingStartMode()) {
-    setPendingStartMode('fast_prototype');
+    setPendingStartMode('full_build');
   }
 }
 
@@ -137,7 +137,7 @@ export async function continueFromLandingGoal(
       setPendingProjectType(type);
     }
     setPendingProjectIdea(trimmed);
-    setPendingStartMode('fast_prototype');
+    setPendingStartMode('full_build');
     markGuidedStartOnReady();
     try {
       localStorage.setItem(LEGACY_INITIAL_PROMPT_KEY, trimmed);

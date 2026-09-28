@@ -25,7 +25,7 @@ export const BRAINSTORM_LOOP_BOOTSTRAP_RULES =
   `No extras. Don't narrate searching (silent lookup is allowed later on name / Slot 4 / API turns — not on this first reply). No feature catalog. No Foundation. No START_CODING. Do NOT inject Guided Discovery. Never ask what kind of project, paste design or none, or one core feature after a product seed. ` +
   `FAST LANE (now / just build / go / hellos / full idea): infer the Monday loop silently. 1–2 light clarifiers only if the seed is empty (who + one job). Then lock and build the REAL loop — not a 3-button mock. Say they can push back. If Slot 1 was never confirmed, reflect first. ` +
   `LOCK LANE (brainstorm / shape together): silent scoreboard. Next spoken beat = emptiest required slot per turn (Who → Features+inferred workflow → Dependencies). Infer extra pages; don’t quiz. Never mock the workflow (dossier, review, save, extract) if it serves the north star. ` +
-  `Close: short summary (goal, who, loop including inferred pages — history/dossier when keep-documents — real dependencies, walls already named). Ask UI once only if they never answered vibe / web vs mobile. Then “If this is right, I’ll lock it and build this product.” Confirm → plan → Foundation of THAT product. ` +
+  `Close: short summary (goal, who, loop including inferred pages — history/dossier when keep-documents — real dependencies, walls already named). Ask UI once only if they never answered vibe / web vs mobile. Then “If this is right, I’ll lock it and build this product.” Confirm → complete Plan §§1–5 → one Full Build Go of every §4 route. Fast Prototype thin draft only if they asked for a quick draft. ` +
   `Ban as the ending: “v1 / phase 2 / good enough for now / we can add that later / shall we go?” Mock a vendor only when classified user-choice or truly unavailable — never mock the workflow. ` +
   `Sensitivity: one warning + option + a buildable solution (not a legal audit). HIPAA only if they said health. ` +
   `Keep warmth on every beat. Coding only after close or explicit go / hellos / just build. First-message “hello” on an empty project is not coding. ` +
@@ -40,6 +40,9 @@ export const IDEA_DISCOVERY_BOOTSTRAP_PREFIX = 'IDEA PROMPT DISCOVERY.';
 
 /** Prefix for Fast Prototype (inference-first) — hidden from chat transcript. */
 export const FAST_PROTOTYPE_BOOTSTRAP_PREFIX = 'FAST PROTOTYPE MODE.';
+
+/** Prefix for Full Build (default) — hidden from chat transcript. */
+export const FULL_BUILD_BOOTSTRAP_PREFIX = 'FULL BUILD MODE.';
 
 /** Hidden follow-up if a later product step re-enters the loop — never a plan retry. */
 export const FAST_PROTOTYPE_CONTINUE_PREFIX = 'FAST PROTOTYPE CONTINUE.';
@@ -128,6 +131,35 @@ export function buildFastPrototypeBootstrap(
   );
 }
 
+/**
+ * Default start: complete Plan then one thick Go of every §4 route.
+ */
+export function buildFullBuildBootstrap(
+  idea?: string | null,
+  projectType?: NebulaProjectType | null,
+): string {
+  const trimmed = (idea || '').trim().slice(0, 4000);
+  const typeClause = projectType
+    ? `Platform already chosen: ${projectType}. Remember it; do not ask project type.`
+    : `Platform unknown — do not quiz them about it on this turn unless it is the one Beat C gap after they confirm the goal.`;
+
+  const goalBlock = trimmed
+    ? `User goal / brief:\n"""\n${trimmed}\n"""\n\n`
+    : `No written goal yet. Beat B: ask what this exists to do — one spoken question, their language. Not the INITIAL ONBOARDING script.\n\n`;
+
+  return (
+    `${FULL_BUILD_BOOTSTRAP_PREFIX} Same loop as typed chat and voice. ${typeClause}\n\n` +
+    goalBlock +
+    `${BRAINSTORM_LOOP_BOOTSTRAP_RULES}\n` +
+    `FULL BUILD CONTRACT: Infer a COMPLETE Master Plan (§§1–5). §4 lists every product route this pass (not Home alone if the goal implies practice, teacher, login). Each page: name, route, purpose, roles, primary actions, plus empty/error/loading or labeled assumption:. Auth model stated (mock/local OK). Coding skeleton on the plan. ` +
+    `Ask at most one blocking question when a page would otherwise be invented. Do not start Go / Foundation / coding until that Plan is complete. ` +
+    `UI Gen v2 mockup is occupancy only (label Pre-code mockup). One Go implements every §4 route. Not autopilot. Not Fast Prototype 1–2 screens. ` +
+    `First reply: specific compliment + “If I understood correctly, this is what the app should do: … Is that right?” + “I can build what you have in mind right now, or we can shape it together and land on something stronger. Which sounds better?” Then wait. ` +
+    `Do NOT run Guided Discovery. Do NOT ask what kind of project / paste design or none / one core feature. ` +
+    `Do NOT run the engineer interview. Do NOT write job-brief.md.`
+  );
+}
+
 export type IdeChatMessage = {
   id: string;
   role: 'user' | 'assistant';
@@ -166,6 +198,7 @@ export function isHiddenBootstrapUserMessage(text: string): boolean {
   if (t.startsWith(BOOTSTRAP_PREFIX)) return true;
   if (t.startsWith(IDEA_DISCOVERY_BOOTSTRAP_PREFIX)) return true;
   if (t.startsWith(FAST_PROTOTYPE_BOOTSTRAP_PREFIX)) return true;
+  if (t.startsWith(FULL_BUILD_BOOTSTRAP_PREFIX)) return true;
   if (t.startsWith(FAST_PROTOTYPE_CONTINUE_PREFIX)) return true;
   if (t.startsWith('FAST PROJECT MODE.')) return true;
   if (isBrainstormCloseConfirmedMessage(t)) return true;

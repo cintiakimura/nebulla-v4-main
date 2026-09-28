@@ -93,7 +93,7 @@ section("shell goal alone does not re-queue Fast Prototype");
     localStorage.setItem(NEBULA_START_GUIDED_ON_READY_KEY, "1");
     ensurePendingIdeaFromShellGoal();
     assert.match(String(peekPendingProjectIdea() || ""), /privacy-first/i);
-    assert.equal(peekPendingStartMode(), "fast_prototype");
+    assert.equal(peekPendingStartMode(), "full_build");
     lsClear();
   }
 }

@@ -36,6 +36,7 @@ import { openSettingsAiKeys } from './shell/SettingsScreen';
 import {
   buildDiscoveryBootstrap,
   buildFastPrototypeBootstrap,
+  buildFullBuildBootstrap,
   buildIdeaDiscoveryBootstrap,
   isHiddenBootstrapUserMessage,
 } from '../../lib/ideChatBootstrap';
@@ -50,7 +51,9 @@ import {
   consumePendingStartMode,
   detectGuidedInterviewIntent,
   detectInferenceFirstIntent,
+  detectQuickDraftIntent,
   isFastPrototypeMode,
+  isFullBuildMode,
   peekPendingStartMode,
   setPendingStartMode,
   setStoredStartMode,
@@ -1336,7 +1339,7 @@ export function AIChat() {
     const ideaPrompt = consumePendingProjectIdea();
     const projectType = consumePendingProjectType();
 
-    if (startMode === 'fast_prototype') {
+    if (startMode === 'fast_prototype' || startMode === 'full_build') {
       // Phase 1: IF goal empty/junk THEN stop and ask; do not open Go or UI Gen.
       if (!isUsableProjectGoal(ideaPrompt || '')) {
         const stamp = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
@@ -1362,7 +1365,6 @@ export function AIChat() {
         pushActivity('Stopped: need a short usable goal before Master Plan, UI Gen, or Go.', 'warn');
         return;
       }
-      // Landing Build / Fast Prototype start = same conversation loop as typed + voice.
       if (ideaPrompt) {
         const stamp = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
         const visibleIdea: Message = {
@@ -1374,7 +1376,11 @@ export function AIChat() {
         setMessages([visibleIdea]);
         messagesRef.current = [visibleIdea];
       }
-      void sendChatRef.current(buildFastPrototypeBootstrap(ideaPrompt, projectType));
+      const boot =
+        startMode === 'fast_prototype'
+          ? buildFastPrototypeBootstrap(ideaPrompt, projectType)
+          : buildFullBuildBootstrap(ideaPrompt, projectType);
+      void sendChatRef.current(boot);
       return;
     }
 
@@ -1478,7 +1484,7 @@ export function AIChat() {
       if (fromEventIdea) setPendingProjectIdea(fromEventIdea);
       if (fromEventType) setPendingProjectType(fromEventType);
       // Live event without pending mode → respect stored pending, else default inference-first.
-      if (!peekPendingStartMode()) setPendingStartMode('fast_prototype');
+      if (!peekPendingStartMode()) setPendingStartMode('full_build');
       const pendingIdea = peekPendingProjectIdea() || fromEventIdea;
       if (!pendingIdea && messagesRef.current.length > 0) return;
       bootstrapStartedRef.current = true;
@@ -1750,7 +1756,10 @@ export function AIChat() {
           codingHint = 'brainstorm-loop';
         } else if (runInferenceFirst) {
           // Default path: inference-first — auto Agent so files/plan apply.
-          setStoredStartMode('fast_prototype', diskProjectKey);
+          setStoredStartMode(
+            detectQuickDraftIntent(rawText) ? 'fast_prototype' : 'full_build',
+            diskProjectKey,
+          );
           markDiscoveryClosed(diskProjectKey);
           if (interactionModeRef.current === 'chat') {
             interactionModeRef.current = 'agent';
@@ -1765,7 +1774,7 @@ export function AIChat() {
             discoveryRequired = false;
           }
           if (
-            isFastPrototypeMode(diskProjectKey) &&
+            (isFastPrototypeMode(diskProjectKey) || isFullBuildMode(diskProjectKey)) &&
             (codingHint === 'discovery-required' || codingHint === 'guided-onboarding')
           ) {
             codingHint = undefined;
@@ -1871,7 +1880,10 @@ export function AIChat() {
         goal: projectCreation.description,
       });
       clearIdeWorkspaceMetaCache();
-      setStoredStartMode('fast_prototype', diskProjectKey);
+      setStoredStartMode(
+        detectQuickDraftIntent(projectCreation.description) ? 'fast_prototype' : 'full_build',
+        diskProjectKey,
+      );
 
       setInput('');
       inputRef.current = '';
@@ -1890,7 +1902,11 @@ export function AIChat() {
       });
 
       setTimeout(() => {
-        void sendChatRef.current(buildFastPrototypeBootstrap(projectCreation.description));
+        void sendChatRef.current(
+          detectQuickDraftIntent(projectCreation.description)
+            ? buildFastPrototypeBootstrap(projectCreation.description)
+            : buildFullBuildBootstrap(projectCreation.description),
+        );
       }, 10);
 
       return;

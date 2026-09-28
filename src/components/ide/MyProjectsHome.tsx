@@ -333,7 +333,7 @@ export function MyProjectsHome({
       setStartError('');
       try {
         // Platform chip → inference-first; chat asks for the goal if still missing.
-        setPendingStartMode('fast_prototype');
+        setPendingStartMode('full_build');
         markGuidedStartOnReady();
         const label = inferProductName('', type);
         await ensureFreshProject(label);
@@ -363,7 +363,7 @@ export function MyProjectsHome({
         : inferProductName('', ideaType || '');
       // Prompt optional — missing goal/platform is asked in chat after Continue.
       if (idea) setPendingProjectIdea(idea);
-      setPendingStartMode('fast_prototype');
+      setPendingStartMode('full_build');
       markGuidedStartOnReady();
       await ensureFreshProject(label);
       await resetProjectFromScratch(label, { goal: idea, projectType: ideaType });

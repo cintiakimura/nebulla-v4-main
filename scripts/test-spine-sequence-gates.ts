@@ -395,6 +395,7 @@ assert.match(pipeline, /blockedReason: blocked/);
 assert.match(server, /blockedReason: blocked/);
 assert.match(server, /gateWarnings/);
 assert.match(server, /bypass MASTER_PLAN_INCOMPLETE/);
+assert.match(server, /fullBuildGoBlockedMessage/);
 assert.equal(/bypass RESEARCH_INCOMPLETE/.test(server), false);
 assert.equal(/coding continues without waiting for Gate R/.test(server), false);
 assert.equal(/scheduling Foundation without waiting on research/.test(server), false);

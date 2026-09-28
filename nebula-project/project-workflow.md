@@ -124,17 +124,18 @@
 - **Open room (only if needed):** `nebulla-project/ui-generation-logic-v2.md`
 - **Must not:** Auto-trigger V0 as mandatory; treat mockup as product spec
 
-### Step 9 — Foundation coding slice
-1. Build Foundation only (shell, routing, layout).
-2. Apply via `file:` / apply pipeline to disk.
+### Step 9 — Full Build coding pass (default)
+1. After Plan is complete (§§1–5, §4 page contracts, auth model, coding skeleton), run **one** Go that implements **every §4 route** and the core jobs in that Plan.
+2. Apply via `file:` / apply pipeline to disk (`app/` / `src/` product files — not `public/*.html` only).
 3. Append Deferred security lines if needed — do not implement full security stack.
-- **Input:** Master Plan + ui-brief (plan wins over mockup)
-- **Output:** Workspace product files (Foundation under `app/` / `src/` / equiv.)
-- **Done when:** Foundation files on disk
+4. Fast Prototype thin draft (1–2 screen Foundation clamp) only when the user explicitly asked for a quick draft / MVP slice.
+- **Input:** Master Plan + coding skeleton (plan wins over mockup pixels). `ui-brief.md` is occupancy for Pre-code mockup only.
+- **Output:** Workspace product files matching §4 routes
+- **Done when:** All §4 routes exist as product files, or honest timeout listing files that did apply
 - **IF OK:** Go to Step 10
-- **IF PARTIAL/MISSING/TIMEOUT:** Report → stay Step 9 or user retry
+- **IF PARTIAL/MISSING/TIMEOUT:** Report files that applied → stay Step 9 or user retry (do not claim Live mockup as success)
 - **Open room (only if needed):** `nebulla-project/incremental-development.md`
-- **Must not:** Dump all §4 routes; clone mockup as sole UI; invent BaaS vendors
+- **Must not:** Clamp Full Build to 1–2 screens; clone mockup as the product; invent BaaS vendors; start Go while Plan is incomplete; enable same-session autopilot
 
 ### Step 10 — Validate Foundation
 1. Validate shell/routes happy path (NDM).
@@ -204,7 +205,6 @@
   - Mind map from §4
   - `nebula-ui-studio/ui-brief.md`
   - UI Gen v2 mockup attempt (OK or PARTIAL)
-  - Foundation files on disk
-  - Primary feature files on disk (or PARTIAL with listed gap)
+  - Full Build product files on disk matching §4 (or PARTIAL with listed gap; Fast Prototype may land a thinner Foundation only if explicitly requested)
   - User-facing draft summary
   - Deferred offer made or SKIPPED_OPTIONAL

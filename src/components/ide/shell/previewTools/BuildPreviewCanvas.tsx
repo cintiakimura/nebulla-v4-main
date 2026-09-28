@@ -17,6 +17,7 @@ import {
   runUiStudioBetaGeneration,
 } from '../../../../lib/uiStudioBetaEngine';
 import { sanitizeUserFacingCopy } from '../../../../../lib/assistantChatSanitize';
+import { subscribeGrokCodingActive } from '../../../../lib/nebulaGrokCodingGate';
 
 export function buildPreviewBootstrapPath(opts: { rev: number; showDraft: boolean }): string {
   const q = `/api/app-preview/bootstrap?_rev=${opts.rev}`;
@@ -33,6 +34,7 @@ export function BuildPreviewCanvas() {
   const [showMockup, setShowMockup] = useState(true);
   const [generateBusy, setGenerateBusy] = useState(false);
   const [engineBusy, setEngineBusy] = useState(false);
+  const [codingBusy, setCodingBusy] = useState(false);
   const [hasVisualPreview, setHasVisualPreview] = useState(false);
   const [liveAvailable, setLiveAvailable] = useState(false);
   const [hasMockup, setHasMockup] = useState(false);
@@ -182,6 +184,8 @@ export function BuildPreviewCanvas() {
     };
   }, [bump, refreshWaitState]);
 
+  useEffect(() => subscribeGrokCodingActive(setCodingBusy), []);
+
   useEffect(() => {
     void refreshWaitState();
   }, [rev, refreshWaitState]);
@@ -206,7 +210,7 @@ export function BuildPreviewCanvas() {
   }, [bump, hasMockup]);
 
   const onGenerateUi = useCallback(async () => {
-    if (generateBusy) return;
+    if (generateBusy || codingBusy) return;
     setGenerateBusy(true);
     setFailed(false);
     keepMockupRef.current = !liveAvailable;
@@ -246,7 +250,7 @@ export function BuildPreviewCanvas() {
     } finally {
       setGenerateBusy(false);
     }
-  }, [bump, generateBusy, liveAvailable, refreshWaitState]);
+  }, [bump, generateBusy, codingBusy, liveAvailable, refreshWaitState]);
 
   const statusLine = generateBusy || engineBusy ? 'Generating UI…' : waitStatus;
 
@@ -255,6 +259,7 @@ export function BuildPreviewCanvas() {
       <PreviewEditToolbar
         hasSelection={hasSelection}
         generateBusy={generateBusy || engineBusy}
+        codingBusy={codingBusy}
         liveAvailable={liveAvailable}
         hasMockup={hasMockup}
         showingMockup={showMockup}
