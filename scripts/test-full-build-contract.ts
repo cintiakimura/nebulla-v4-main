@@ -15,9 +15,12 @@ import {
   formatFullBuildApplyLine,
   fullBuildGoUserNote,
   fullBuildIncompleteFollowUp,
+  FULL_BUILD_NO_RETRY_ACTIVITY,
   inferFullBuildRoutes,
   normalizeBuildMode,
+  seedAlreadyHasWhoAndJob,
   shouldClampToFastPrototypeSlice,
+  shouldSkipGrokChatForExistingPlan,
 } from "../lib/fullBuildContract.ts";
 import { ensureCodingSkeletonOnPlan } from "../lib/codingSkeleton.ts";
 import { inferFirstSliceRoutes } from "../lib/nebulaUiBrief.ts";
@@ -274,7 +277,51 @@ section("go-code 409 surfaces completeness; empty files ≠ App looks OK");
   assert.equal(htmlOnly.blockedReason?.code, "APPLY_EMPTY_PRODUCT");
 }
 
-section("409 retry policy in chat — no blind second Go; abort honesty");
+section("FAST LANE courier seed + you can build — do not skip chat on leftover/empty plan");
+{
+  const seed =
+    "City Courier: clients request pickup, drivers accept the job, track, pay, and rate. you can build";
+  assert.equal(seedAlreadyHasWhoAndJob(seed), true);
+  assert.equal(
+    shouldSkipGrokChatForExistingPlan({ plan: {}, seedText: seed }),
+    false,
+  );
+  const leftover = {
+    "1. Goal of the app": "SaaS analytics admin for internal metrics and dashboards.",
+    "2. Tech and Research": "Web Next.js. Inferred stack. Auth model: assumption: mock/local role gates.",
+    "3. Features and KPIs": "View metrics. Filter. KPI: weekly active admins.",
+    "4. Pages and navigation": [
+      "### Dashboard `/dashboard`",
+      "- Purpose: metrics home",
+      "- Roles: admin",
+      "- Primary actions: filter",
+      "- Auth model: assumption: mock/local",
+      "- Empty state: assumption: none yet",
+      "- Error state: assumption: try again",
+      "- Loading state: assumption: brief wait",
+    ].join("\n"),
+    "5. UI/UX design": "Mood calm. Palette #111 #EEE. Typography sans. Density comfortable.",
+  };
+  const leftoverSk = ensureCodingSkeletonOnPlan(leftover, {
+    goal: String(leftover["1. Goal of the app"]),
+    projectType: "Web App",
+  });
+  assert.equal(
+    shouldSkipGrokChatForExistingPlan({ plan: leftoverSk.plan, seedText: seed }),
+    false,
+    "leftover dashboard must not skip architecture for a courier seed",
+  );
+  const chat = fs.readFileSync(path.join(REPO, "src/components/ide/AIChat.tsx"), "utf8");
+  assert.match(chat, /shouldSkipGrokChatForExistingPlan/);
+  assert.match(chat, /Architecture turn — writing Master Plan/);
+  assert.doesNotMatch(chat, /Retry Go for Foundation\+Primary/);
+  assert.match(FULL_BUILD_NO_RETRY_ACTIVITY, /Not retrying Foundation\+Primary/);
+  const pipeline = fs.readFileSync(path.join(REPO, "src/lib/nebulaGrokCodingPipeline.ts"), "utf8");
+  assert.match(pipeline, /FULL_BUILD_NO_RETRY_ACTIVITY/);
+  assert.match(pipeline, /200_prose/);
+  assert.match(pipeline, /MAX_GROK_RELAUNCHES = 0/);
+  assert.doesNotMatch(pipeline, /FOUNDATION_RETRY_ACTIVITY/);
+}
 {
   const chat = fs.readFileSync(path.join(REPO, "src/components/ide/AIChat.tsx"), "utf8");
   assert.match(chat, /fill-missing-section4/);

@@ -2,7 +2,7 @@
  * Full Build contract — complete Plan, then one thick Go of every §4 route.
  * Mockup is occupancy only. Not autopilot. Not Fast Prototype's 1–2 screen clamp.
  */
-import { isCodingSkeletonReady, readCodingSkeletonFromPlan } from "./codingSkeleton";
+import { isCodingSkeletonReady, readCodingSkeletonFromPlan, skeletonFitsCurrentGoal } from "./codingSkeleton";
 import {
   BUILD_MODE_PLAN_KEY,
   MASTER_PLAN_SECTION_KEYS,
@@ -14,6 +14,7 @@ import {
   seedPagesFromGoal,
   extractNamedRoutesFromPagesText,
 } from "./nebulaUiBrief";
+import { isReplacementProductBrief, looksLikeStandaloneProductBrief } from "./productGoalFingerprint";
 
 export { BUILD_MODE_PLAN_KEY };
 
@@ -462,4 +463,39 @@ export function fullBuildGoUserNote(): string {
     "Emit ```file:relative/path``` for package.json, app/layout.tsx, app/globals.css, app/page.tsx, lib/mockStore.ts, and one app/<route>/page.tsx for every Master Plan §4 route (root is file:app/page.tsx).",
     "index.html and nebula-ui-studio/ui-brief.md are not the product. File blocks only.",
   ].join("\n");
+}
+
+export const FULL_BUILD_NO_RETRY_ACTIVITY =
+  "Stopped: Code returned no product file blocks. Not retrying Foundation+Primary — not asking you to type go again.";
+
+const SEED_WHO_RE = /\b(client|driver|rider|customer|kid|teacher|parent|user|sender|buyer|seller|courier|brand|creator)\b/i;
+const SEED_JOB_RE =
+  /\b(request|pickup|accept|track|pay|rate|practice|deliver|book|order|dropoff|parcel)\b/i;
+
+/** Seed already names who + a job — FAST LANE must write the Plan, not skip chat. */
+export function seedAlreadyHasWhoAndJob(text: string): boolean {
+  const t = String(text || "").replace(/\s+/g, " ").trim();
+  if (t.length < 24) return false;
+  if (looksLikeStandaloneProductBrief(t)) return true;
+  return SEED_WHO_RE.test(t) && SEED_JOB_RE.test(t);
+}
+
+/**
+ * Skip the plan-writing Grok call only when THIS seed already has a Full Build-complete plan.
+ * Leftover stubs / bootstrap shells / a different product must not skip.
+ */
+export function shouldSkipGrokChatForExistingPlan(opts: {
+  plan: Record<string, unknown> | null | undefined;
+  seedText: string;
+}): boolean {
+  const plan = opts.plan && typeof opts.plan === "object" ? opts.plan : null;
+  if (!plan) return false;
+  const fb = assessFullBuildCompleteness({ plan });
+  if (!fb.allowGo) return false;
+  const seed = String(opts.seedText || "").trim();
+  const goal = String(plan["1. Goal of the app"] || "").trim();
+  const sk = readCodingSkeletonFromPlan(plan);
+  if (seed && !skeletonFitsCurrentGoal(sk, seed)) return false;
+  if (seed && goal && isReplacementProductBrief(seed, goal)) return false;
+  return true;
 }

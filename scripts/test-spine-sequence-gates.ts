@@ -326,8 +326,12 @@ assert.equal(
 );
 assert.match(
   chat,
-  /const hasPlan = planRecordReadyToSkipChat\(plan\);/,
-  "skip Grok chat only when §§1–5 + §4 pages are usable — not a stub",
+  /shouldSkipGrokChatForExistingPlan/,
+  "skip Grok chat only when Full Build completeness matches this seed — not a leftover stub",
+);
+assert.equal(
+  /const hasPlan = planRecordReadyToSkipChat\(plan\);/.test(chat),
+  false,
 );
 assert.equal(
   /planRecordHasUsableGoal\(plan\) \|\| isMasterPlanCompleteForDiscovery/.test(chat),

@@ -32,11 +32,10 @@ import {
 } from './abortLikeError';
 import { markFoundationGoInFlight, isFoundationGoInFlight } from './foundationHeavyJob';
 import { setGrokCodingActive } from './nebulaGrokCodingGate';
-import { fullBuildGoUserNote } from '../../lib/fullBuildContract';
+import { FULL_BUILD_NO_RETRY_ACTIVITY, fullBuildGoUserNote } from '../../lib/fullBuildContract';
 import {
   buildEditExistingUserNote,
   buildNarrowSliceInstruction,
-  FOUNDATION_RETRY_ACTIVITY,
   PRODUCT_MVP_READY_MESSAGE,
   userNoteRequestsNextSlice,
 } from './fastPrototypeNextSlice';
@@ -45,6 +44,23 @@ import {
   isApplyTransportFailure,
   shouldSkipGoCodeSecondPassAfterApply,
 } from './applyTransportFailure';
+
+function goOutputHasProductFileBlocks(text: string): boolean {
+  const cleaned = normalizeGrokFileBlockSyntax(String(text || ''));
+  const paths = extractGrokFilePaths(cleaned);
+  if (paths.some((p) => /(?:^|\/)(?:src\/)?(?:app|pages)\//i.test(p) || /page\.(tsx|jsx|js)$/i.test(p))) {
+    return true;
+  }
+  return /```file:(?:src\/)?(?:app|pages)\//i.test(cleaned);
+}
+
+function logGoCodeFinish(reason: string, extra?: Record<string, unknown>): void {
+  try {
+    console.warn('[go-code] finish', reason, extra ? JSON.stringify(extra).slice(0, 800) : '');
+  } catch {
+    console.warn('[go-code] finish', reason);
+  }
+}
 
 const START_CODING_RE = /<\s*START_CODING\s*>|\bSTART_CODING\b/i;
 /** Safety cap — wall clock GO_POLL_MAX_WAIT_MS is the real stop. */
@@ -1250,9 +1266,9 @@ export async function runGoCodeAndApply(options: {
     let partialPlanOnly = false;
     let lastRunnable: { runnableRoot?: boolean; runnableStatusLine?: string } = {};
     let grokRelaunches = 0;
-    const MAX_GROK_RELAUNCHES = 1;
+    const MAX_GROK_RELAUNCHES = 0;
     let timeoutRelaunches = 0;
-    const MAX_TIMEOUT_RELAUNCHES = 1;
+    const MAX_TIMEOUT_RELAUNCHES = 0;
     let activeNote = userNote;
     let activeMessages = baseMessages;
 
@@ -1297,6 +1313,9 @@ export async function runGoCodeAndApply(options: {
           blocked.code === 'MASTER_PLAN_INCOMPLETE' ||
           blocked.code === 'UI_BRIEF_MISSING';
         if (hardGate) {
+          logGoCodeFinish(blocked.code === 'MASTER_PLAN_INCOMPLETE' ? '409' : blocked.code, {
+            message: blocked.message,
+          });
           onProgress?.(formatBlockedReasonLine(blocked), 'error');
           return {
             ok: false,
@@ -1327,6 +1346,7 @@ export async function runGoCodeAndApply(options: {
             pass -= 1;
             continue;
           } else {
+            logGoCodeFinish('timeout', { message: blocked.message });
             onProgress?.(formatBlockedReasonLine(blocked), 'error');
             try {
               window.dispatchEvent(
@@ -1435,10 +1455,21 @@ export async function runGoCodeAndApply(options: {
           pass -= 1;
           continue;
         }
-        const empty = goBlocked(
-          'GO_EMPTY_OUTPUT',
-          'Stopped: Grok Code returned no ```file:``` blocks for §4 routes (coding-prompt failure). index.html is not the product. Not asking you to type go again.',
-        );
+        const empty = goBlocked('GO_EMPTY_OUTPUT', FULL_BUILD_NO_RETRY_ACTIVITY);
+        logGoCodeFinish('200_empty', { chars: 0 });
+        onProgress?.(formatBlockedReasonLine(empty), 'error');
+        return {
+          ok: false,
+          statusMessage: formatBlockedReasonLine(empty),
+          totalWritten,
+          blockedReason: empty,
+        };
+      }
+      if (!goOutputHasProductFileBlocks(codeText)) {
+        const empty = goBlocked('GO_EMPTY_OUTPUT', FULL_BUILD_NO_RETRY_ACTIVITY);
+        logGoCodeFinish(codeText.trim() ? '200_prose' : '200_empty', {
+          chars: codeText.length,
+        });
         onProgress?.(formatBlockedReasonLine(empty), 'error');
         return {
           ok: false,
@@ -1448,10 +1479,8 @@ export async function runGoCodeAndApply(options: {
         };
       }
       if (!lastGoCodeFitsGoal(codeText, userNote || '')) {
-        const empty = goBlocked(
-          'GO_EMPTY_OUTPUT',
-          'Stopped: Grok Code returned no ```file:``` blocks for §4 routes (coding-prompt failure). index.html is not the product. Not asking you to type go again.',
-        );
+        const empty = goBlocked('GO_EMPTY_OUTPUT', FULL_BUILD_NO_RETRY_ACTIVITY);
+        logGoCodeFinish('200_prose', { chars: codeText.length, reason: 'goal_mismatch' });
         onProgress?.(formatBlockedReasonLine(empty), 'error');
         return {
           ok: false,
@@ -1770,7 +1799,7 @@ export async function handlePostGrokCodingTurn(options: {
     };
   }
   if (nextSlice && !productRoutesOnDisk) {
-    onProgress?.(FOUNDATION_RETRY_ACTIVITY, 'warn');
+    onProgress?.(FULL_BUILD_NO_RETRY_ACTIVITY, 'warn');
   }
   const instruction = (
     editExisting

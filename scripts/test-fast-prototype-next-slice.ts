@@ -617,7 +617,7 @@ assert.equal(APPLY_IN_FLIGHT_STALL_MS, 15_000);
     'Continue must not assume product routes exist',
   );
   assert.match(pipeline, /blockGoIfResearchIncomplete/);
-  assert.match(pipeline, /FOUNDATION_RETRY_ACTIVITY/);
+  assert.match(pipeline, /FULL_BUILD_NO_RETRY_ACTIVITY/);
   assert.match(pipeline, /goBlocked\('NO_FILE_BLOCKS'\)/);
   assert.match(pipeline, /goBlocked\('APPLY_FAILED'\)/);
   assert.match(pipeline, /shouldRunGoCodeSecondPass/);

@@ -96,7 +96,7 @@ import {
 } from '../../lib/nebulaAiCodingPipeline';
 import { isFoundationGoInFlight } from '../../lib/foundationHeavyJob';
 import { abortHonestyUserLine, abortWithUserStopReason, isAbortLikeError, isAbortLikeMessage } from '../../lib/abortLikeError';
-import { fullBuildGoUserNote, fullBuildIncompleteFollowUp } from '../../../lib/fullBuildContract';
+import { fullBuildGoUserNote, fullBuildIncompleteFollowUp, seedAlreadyHasWhoAndJob, shouldSkipGrokChatForExistingPlan } from '../../../lib/fullBuildContract';
 import {
   isAssistantCodingPromise,
   isAssistantRefineClaim,
@@ -226,7 +226,6 @@ import {
   extractGoalFromUserNote,
   isUsableProjectGoal,
   planRecordHasUsableGoal,
-  planRecordReadyToSkipChat,
   usableGoalFromChatTurns,
 } from '../../lib/spineSequenceGates';
 import {
@@ -747,7 +746,7 @@ export function AIChat() {
         return;
       }
       pushActivity(
-        `${continueFailureActivityLine(failureClass, msg)} — autopilot stopped (Retry Go for Foundation if routes are missing)`,
+        `${continueFailureActivityLine(failureClass, msg)} — autopilot stopped`,
         'error',
       );
       resetCodingActivity();
@@ -2393,18 +2392,28 @@ export function AIChat() {
       (userForcedCoding || fastPrototypeTurn || buildMode);
     const fastLaneCloser =
       isFoundationCloseGate(rawText) || detectBuildModeIntent(rawText) || Boolean(buildMode);
-    if (fastLaneCloser && chatGoal) {
+    const seedForPlan = String(chatGoal || rawText || '').trim();
+    let planOnDisk: Record<string, unknown> | null = null;
+    try {
+      const mpEarly = await fetch(withProjectQuery('/api/master-plan/read'), {
+        credentials: 'include',
+        cache: 'no-store',
+      });
+      planOnDisk = mpEarly.ok
+        ? ((await readResponseJson(mpEarly)) as Record<string, unknown>)
+        : null;
+    } catch {
+      planOnDisk = null;
+    }
+    const skipOk = shouldSkipGrokChatForExistingPlan({
+      plan: planOnDisk,
+      seedText: seedForPlan,
+    });
+    if (fastLaneCloser && chatGoal && !skipOk) {
       try {
-        const mpRes = await fetch(withProjectQuery('/api/master-plan/read'), {
-          credentials: 'include',
-          cache: 'no-store',
-        });
-        const plan = mpRes.ok
-          ? ((await readResponseJson(mpRes)) as Record<string, unknown>)
-          : null;
         if (
           shouldPersistPlanFromChatBeforeRename({
-            planEmpty: masterPlanRecordLooksEmpty(plan),
+            planEmpty: masterPlanRecordLooksEmpty(planOnDisk),
             chatHasUsableGoal: true,
           })
         ) {
@@ -2421,8 +2430,15 @@ export function AIChat() {
           });
         }
       } catch {
-        /* plan bootstrap best-effort — Go fill still runs on this workspace */
+        /* plan bootstrap best-effort — architecture chat still runs */
       }
+    }
+    if (fastLaneCloser && seedAlreadyHasWhoAndJob(seedForPlan) && !skipOk) {
+      skipGrokChat = false;
+      pushActivity(
+        'Architecture turn — writing Master Plan §§1–5 from the seed (then one Go). Same workspace.',
+        'info',
+      );
     }
     const seedProductName = identityFrozen
       ? singleProductName(getIdentityFreeze()?.projectName || getBrowserProjectName())
@@ -2595,7 +2611,7 @@ export function AIChat() {
         skipGrokChat = false;
         pushActivity('New product brief — previous plan and leftover routes cleared', 'info');
       } else if (maySkipChatIfPlanExists) {
-        const hasPlan = planRecordReadyToSkipChat(plan);
+        const hasPlan = skipOk;
         if (hasPlan) {
           planSliceFromDisk = parsePersistedSliceLabel(
             String((plan as Record<string, unknown>)[PRE_CODING_SUMMARY_KEY] ?? ''),

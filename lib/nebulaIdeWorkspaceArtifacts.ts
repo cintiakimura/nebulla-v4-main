@@ -46,7 +46,8 @@ import {
   writeProductIdentity,
 } from "./productIdentity";
 import { isReplacementProductBrief, leftoverPlanConflictsWithGoal } from "./productGoalFingerprint";
-import { applyFullBuildPlanFill } from "./fullBuildContract";
+import { applyFullBuildPlanFill, fillMissingSection3Features } from "./fullBuildContract";
+import { ensureCodingSkeletonOnPlan } from "./codingSkeleton";
 import { collapseWinningPalette } from "./uiGenerationEngine/v2/industryPalettes";
 
 export const MASTER_PLAN_TAB_KEYS = MASTER_PLAN_ALL_KEYS;
@@ -145,12 +146,10 @@ export function fillMissingMasterPlanSectionsLocal(opts: {
   }
 
   if (missing.includes("3. Features and KPIs")) {
-    next["3. Features and KPIs"] = [
-      "- Core flows from discovery (see Goal §1)",
-      "- Role-based access where applicable",
-      "- Structured data / uploads where required",
-      "- **KPI:** working preview, navigable routes, deployable MVP on Render",
-    ].join("\n");
+    next["3. Features and KPIs"] = fillMissingSection3Features({
+      section3: "",
+      goal: String(next["1. Goal of the app"] ?? goal),
+    }).section;
     updated.push("3. Features and KPIs");
   }
 
@@ -202,6 +201,17 @@ export function fillMissingMasterPlanSectionsLocal(opts: {
   if (patched.changed) {
     next["5. UI/UX design"] = patched.plan["5. UI/UX design"];
     if (!updated.includes("5. UI/UX design")) updated.push("5. UI/UX design");
+  }
+
+  const { plan: withSk } = ensureCodingSkeletonOnPlan(patched.changed ? patched.plan : next, {
+    goal: String((patched.changed ? patched.plan : next)["1. Goal of the app"] ?? goal),
+  });
+  const filledFb = applyFullBuildPlanFill(withSk);
+  Object.assign(next, filledFb.plan);
+  if (filledFb.filled) {
+    for (const key of ["2. Tech and Research", "3. Features and KPIs", "4. Pages and navigation"] as const) {
+      if (!updated.includes(key)) updated.push(key);
+    }
   }
 
   const uniq = [...new Set(updated)];

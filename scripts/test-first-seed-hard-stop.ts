@@ -66,8 +66,8 @@ assert.equal(planRecordReadyToSkipChat(stubPlan), false, "stub must not skip cha
 assert.equal(
   isNewProductSeedAgainstCurrent({
     userText: "Taskwise — a task board for teams",
-    chipName: "Helio Hub",
-    diskGoal: "Helio Hub solar dashboard",
+    chipName: "Quill Learn",
+    diskGoal: "Quill Learn reading practice for kids",
   }),
   true,
 );
@@ -77,7 +77,7 @@ assert.match(
   /NAME-ONLY/,
 );
 assert.match(chat, /shouldHoldFirstSeedBeatA/);
-assert.match(chat, /planRecordReadyToSkipChat/);
+assert.match(chat, /shouldSkipGrokChatForExistingPlan/);
 assert.match(chat, /mpSaved = beatAHold/);
 assert.match(chat, /let willCode =\s+agentAllowed &&\s+!beatAHold/);
 assert.match(chat, /forceGoPipeline &&\s+!beatAHold/);
