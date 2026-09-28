@@ -74,6 +74,57 @@ export function userNoteRequestsCompetitorResearch(text?: string | null): boolea
   );
 }
 
+/**
+ * Suggestions / competitors / opinion / brainstorm / market — that IS shape mode.
+ * Answer immediately. Never re-ask the build-vs-shape binary fork.
+ */
+export function userNoteRequestsShapeTurn(text?: string | null): boolean {
+  const t = String(text || '').trim();
+  if (!t) return false;
+  if (
+    /\b(suggest(?:ed)?(?:\s+\w+){0,3}\s+features?|feature suggestions?|suggest (some |the )?(ideas|features|pages))\b/i.test(
+      t,
+    )
+  ) {
+    return true;
+  }
+  if (/\b(brainstorm|shape (it |this |the (app|product) )?together|let'?s shape)\b/i.test(t)) {
+    return true;
+  }
+  if (
+    /\b(competitors?|competitive (landscape|set)|similar (apps?|products?)|what else (is|exists) on the market)\b/i.test(
+      t,
+    )
+  ) {
+    return true;
+  }
+  if (/\bsuggest features\s*\/\s*market\b/i.test(t) || /\bmarket\s*\/\s*opinion\b/i.test(t)) {
+    return true;
+  }
+  if (
+    /\b(your opinion|honest (take|opinion)|give (me )?(your )?opinion|what do you think|what would you (add|change|build))\b/i.test(
+      t,
+    )
+  ) {
+    return true;
+  }
+  if (/\b(ideas for (this|the app|features)|what (features|pages) should)\b/i.test(t)) {
+    return true;
+  }
+  return false;
+}
+
+/** Spoken Beat A closer — assistant-only. A user goal + “suggest features” must not match. */
+export function looksLikeBuildVsShapeCannedCloser(text?: string | null): boolean {
+  const t = String(text || '');
+  if (!t) return false;
+  return (
+    /I can build what you have in mind right now/i.test(t) &&
+    /shape it together/i.test(t) &&
+    /Which sounds better/i.test(t)
+  );
+}
+
 export function userNoteRequestsUiGeneration(text?: string | null): boolean {
   const t = String(text || '').trim();
   if (!t || t.length > 120) return false;

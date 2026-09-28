@@ -10,6 +10,7 @@
 import {
   detectChatMode,
   describeChatMode,
+  userNoteRequestsShapeTurn,
   type ChatMode,
   type ChatModeResult,
 } from './chatModeDetector';
@@ -184,7 +185,7 @@ export async function handleSmartChatMessage(
   if (hardGuidedInterview) {
     codingHint = 'guided-onboarding';
   } else if (discoveryRequired && mode === 'free') {
-    codingHint = 'brainstorm-loop';
+    codingHint = userNoteRequestsShapeTurn(userText) ? 'brainstorm-shape-plan' : 'brainstorm-loop';
   } else if (inferenceFirst || (mode === 'coding' && !masterPlanComplete)) {
     codingHint = 'fast-prototype';
   } else if (mode === 'coding') {

@@ -18,6 +18,7 @@ import {
   looksLikeStandaloneProductBrief,
 } from "./productGoalFingerprint";
 import { isNameOnlyProductSeed } from "./productIdentity";
+import { userNoteRequestsShapeTurn } from "../src/lib/chatModeDetector";
 
 /** go / hellos / you can start / let’s keep X and start — only then Code pass 1. */
 export function isFoundationCloseGate(text: string): boolean {
@@ -59,6 +60,7 @@ export function shouldHoldFirstSeedBeatA(opts: {
   const userText = String(opts.userText || "").trim();
   if (isFoundationCloseGate(userText)) return false;
   if (priorHasSpokenFork(opts.prior)) return false;
+  if (userNoteRequestsShapeTurn(userText)) return false;
   if (opts.isBootstrap) return true;
   if (!userText) return false;
   if (/^(together|shape it together|let'?s shape)[\s.!?]*$/i.test(userText)) return false;

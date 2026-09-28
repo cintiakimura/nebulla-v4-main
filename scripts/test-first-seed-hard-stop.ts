@@ -87,4 +87,14 @@ assert.equal(
   "do not relaunch empty Grok Code as success",
 );
 
+assert.equal(
+  shouldHoldFirstSeedBeatA({
+    userText:
+      "build an app to build simple todo list using pomodoro method. suggest features",
+    prior: [],
+    isBootstrap: false,
+  }),
+  false,
+);
+
 console.log("✓ first seed hard stop + stub plan does not skip chat");

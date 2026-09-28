@@ -143,6 +143,7 @@ import {
 } from '../../lib/uiStudioBetaEngine';
 import {
   userNoteRequestsCompetitorResearch,
+  userNoteRequestsShapeTurn,
   userNoteRequestsUiGeneration,
   userNoteSignalsFunctionalityOk,
 } from '../../lib/chatModeDetector';
@@ -1754,6 +1755,10 @@ export function AIChat() {
           discoveryRequired = true;
           chatMode = 'free';
           codingHint = 'brainstorm-loop';
+        } else if (userNoteRequestsShapeTurn(rawText)) {
+          discoveryRequired = true;
+          chatMode = 'free';
+          codingHint = 'brainstorm-shape-plan';
         } else if (runInferenceFirst) {
           // Default path: inference-first — auto Agent so files/plan apply.
           setStoredStartMode(
@@ -1770,7 +1775,11 @@ export function AIChat() {
           codingHint = 'fast-prototype';
         } else if (!masterPlanComplete && !interviewIntent) {
           // Keep the conversation loop; do not force Guided Q&A.
-          if (codingHint !== 'brainstorm-loop' && codingHint !== 'brainstorm-skip-lock') {
+          if (
+            codingHint !== 'brainstorm-loop' &&
+            codingHint !== 'brainstorm-skip-lock' &&
+            codingHint !== 'brainstorm-shape-plan'
+          ) {
             discoveryRequired = false;
           }
           if (
@@ -2188,6 +2197,10 @@ export function AIChat() {
       discoveryRequired = true;
       chatMode = 'free';
       codingHint = 'brainstorm-skip-lock';
+    } else if (userNoteRequestsShapeTurn(rawText) && !userForcedCoding) {
+      discoveryRequired = true;
+      chatMode = 'free';
+      codingHint = 'brainstorm-shape-plan';
     } else if (closeTurn.kind === 'correct' || closeTurn.kind === 'add-more') {
       discoveryRequired = true;
       chatMode = 'free';

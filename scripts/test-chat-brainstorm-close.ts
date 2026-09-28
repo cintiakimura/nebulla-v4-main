@@ -166,6 +166,18 @@ assert.equal(/2–4 feature ideas/.test(seed), false);
 assert.match(seed, /inferred workflow/);
 assert.match(seed, /lock it and build this product/);
 
+const shapeAppendix = chatModeSystemAppendix({
+  interactionMode: 'chat',
+  codingHint: 'brainstorm-shape-plan',
+  discoveryRequired: true,
+  mode: 'free',
+});
+assert.match(shapeAppendix, /ACTIVE MODE: SHAPE TURN/);
+assert.match(shapeAppendix, /NEVER re-ask/);
+assert.match(shapeAppendix, /<START_MASTERPLAN>/);
+assert.match(shapeAppendix, /START_CODING/);
+assert.equal(/A Master Plan is failure/.test(shapeAppendix), false);
+
 const snapfillClose = [
   "I think we've got what we need. Here's what I heard — tell me if this is right.",
   'Goal: keep patient scans so the clinician can find them later.',

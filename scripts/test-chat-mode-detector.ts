@@ -6,7 +6,9 @@ import assert from "node:assert/strict";
 import {
   detectChatMode,
   describeChatMode,
+  looksLikeBuildVsShapeCannedCloser,
   userNoteRequestsCompetitorResearch,
+  userNoteRequestsShapeTurn,
   userNoteRequestsUiGeneration,
   userNoteSignalsFunctionalityOk,
 } from "../src/lib/chatModeDetector.ts";
@@ -14,6 +16,9 @@ import {
   detectGuidedInterviewIntent,
   detectInferenceFirstIntent,
 } from "../src/lib/ideStartMode.ts";
+import { shouldHoldFirstSeedBeatA } from "../lib/newProductWorkspace.ts";
+import { chatModeSystemAppendix } from "../src/lib/grokChatArtifacts.ts";
+import { handleSmartChatMessage } from "../src/lib/smartChatHandler.ts";
 
 function section(name: string) {
   console.log(`\n✓ ${name}`);
@@ -52,7 +57,7 @@ section("incomplete plan: explicit interview → Guided");
   assert.equal(r.mode, "guided");
   assert.equal(r.discoveryRequired, true);
   assert.equal(r.inferenceFirst, false);
-  assert.equal(detectGuidedInterviewIntent("please brainstorm options with me"), true);
+  assert.equal(detectGuidedInterviewIntent("please interview me with architecture questions"), true);
 }
 
 section("incomplete plan: debug may run without Guided lock");
@@ -99,13 +104,59 @@ section("inference intent helpers");
     true,
   );
   assert.equal(detectInferenceFirstIntent("fix this bug"), false);
-  assert.equal(detectGuidedInterviewIntent("brainstorm with me"), true);
+  assert.equal(detectGuidedInterviewIntent("brainstorm with me"), false);
+  assert.equal(detectGuidedInterviewIntent("interview me"), true);
 }
 
 section("describeChatMode");
 {
   const msg = describeChatMode("guided", true);
   assert.match(msg, /Guided|Discovery|interview/i);
+}
+
+section("suggest features + goal is shape — not the build-vs-shape canned closer");
+{
+  const CANNED =
+    "I can build what you have in mind right now, or we can shape it together and land on something stronger. Which sounds better?";
+  const userMsg =
+    'build an app to build simple todo list using pomodoro method. suggest features / market / opinion';
+  assert.equal(looksLikeBuildVsShapeCannedCloser(CANNED), true);
+  assert.equal(looksLikeBuildVsShapeCannedCloser(userMsg), false);
+  assert.equal(userNoteRequestsShapeTurn(userMsg), true);
+  assert.equal(
+    shouldHoldFirstSeedBeatA({ userText: userMsg, prior: [], isBootstrap: false }),
+    false,
+  );
+  assert.equal(
+    shouldHoldFirstSeedBeatA({
+      userText: "suggest features",
+      prior: [
+        {
+          role: "assistant",
+          content: `That's a sharp Monday loop. If I understood correctly, this is what the app should do: a Pomodoro todo list. Is that right? ${CANNED}`,
+        },
+      ],
+    }),
+    false,
+  );
+
+  const shapeAppendix = chatModeSystemAppendix({
+    interactionMode: "chat",
+    codingHint: "brainstorm-shape-plan",
+    discoveryRequired: true,
+    mode: "free",
+  });
+  assert.match(shapeAppendix, /ACTIVE MODE: SHAPE TURN/);
+  assert.match(shapeAppendix, /NEVER re-ask/);
+  assert.match(shapeAppendix, /START_MASTERPLAN/);
+  assert.match(shapeAppendix, /THIS TURN FORBIDDEN: START_CODING/);
+
+  const smart = await handleSmartChatMessage(userMsg, {
+    masterPlanComplete: false,
+    interactionMode: "chat",
+  });
+  assert.equal(smart.codingHint, "brainstorm-shape-plan");
+  assert.equal(smart.handledLocally, false);
 }
 
 console.log("\nAll chat-mode detector tests passed.\n");

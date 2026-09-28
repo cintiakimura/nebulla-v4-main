@@ -106,12 +106,12 @@ export function detectQuickDraftIntent(text: string): boolean {
 }
 
 /**
- * Explicit opt-in to Guided / brainstorm interview (exception path).
+ * Explicit opt-in to Guided interview (exception path). Brainstorm is shape mode, not Guided.
  */
 export function detectGuidedInterviewIntent(text: string): boolean {
   const t = text.trim();
   if (!t) return false;
-  return /\b(brainstorm|interview me|full architecture interview|guided (discovery|interview)|ask me (the )?questions|one question at a time|explore (the )?options|let'?s discuss|walk me through (discovery|planning)|i want to (be )?interviewed)\b/i.test(
+  return /\b(interview me|full architecture interview|guided (discovery|interview)|ask me (the )?questions|one question at a time|walk me through (discovery|planning)|i want to (be )?interviewed)\b/i.test(
     t,
   );
 }
