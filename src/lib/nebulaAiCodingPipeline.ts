@@ -14,6 +14,8 @@ export {
   hasGrokFileBlocks,
   isArchitectureArtifactPath,
   isCodingIntent,
+  isGoAborting,
+  isGoCodeWaitActive,
   notifyWorkspaceFilesChanged,
   runGoCodeAndApply,
 } from './nebulaGrokCodingPipeline';

@@ -273,21 +273,82 @@ export function extractNamedRoutesFromPagesText(text: string): { name: string; r
       const heading = t.match(/^#{2,4}\s+(.+?)(?:\s+`(\/[^`]*)`|\s+\((`?\/[^)`]*)`?\))?\s*$/);
       if (heading) {
         const route = (heading[2] || heading[3] || "").replace(/`/g, "").trim();
-        add(heading[1], route);
+        if (route.startsWith("/")) add(heading[1], route);
+        else {
+          const emHead = String(heading[1] || "").match(/^(.+?)\s*[—–:]\s*(\/[\w\-./]*)\s*$/);
+          if (emHead) add(emHead[1], emHead[2]);
+        }
       }
       continue;
     }
     const bt = t.match(/`(\/[^`]*)`/) || t.match(/\((\/[^)]*)\)/);
-    if (!bt?.[1]?.startsWith("/")) continue;
-    const name = t
-      .replace(/^[-*•]\s+/, "")
-      .replace(/^\d+[.)]\s+/, "")
-      .replace(/`\/[^`]+`/g, "")
-      .replace(/[()]/g, "")
-      .replace(/\*\*/g, "")
-      .replace(/\s+/g, " ")
-      .trim();
-    add(name, bt[1]);
+    if (bt?.[1]?.startsWith("/")) {
+      const name = t
+        .replace(/^[-*•]\s+/, "")
+        .replace(/^\d+[.)]\s+/, "")
+        .replace(/`\/[^`]+`/g, "")
+        .replace(/[()]/g, "")
+        .replace(/\*\*/g, "")
+        .replace(/\s+/g, " ")
+        .trim();
+      add(name, bt[1]);
+      continue;
+    }
+    // Courier-like: "Request a pickup — /request" or "Track /track"
+    const em = t.match(
+      /^[-*•]?\s*(?:\d+[.)]\s*)?(.+?)\s*[—–:]\s*(\/[\w\-./]*)\s*$/,
+    );
+    if (em?.[2]?.startsWith("/")) {
+      add(em[1], em[2]);
+      continue;
+    }
+    const spaced = t.match(/^[-*•]?\s*(?:\d+[.)]\s*)?([A-Za-z][\w\s]{1,40}?)\s+(\/[\w][\w\-./]*)\s*$/);
+    if (spaced?.[2]?.startsWith("/")) {
+      add(spaced[1], spaced[2]);
+    }
+  }
+  const jsonPages = extractJsonNamedPages(text);
+  for (const p of jsonPages) add(p.name, p.route);
+  return out;
+}
+
+function extractJsonNamedPages(text: string): { name: string; route: string }[] {
+  const raw = String(text || "").trim();
+  if (!raw) return [];
+  const fromObj = (obj: unknown): { name: string; route: string }[] => {
+    if (!obj || typeof obj !== "object") return [];
+    const rec = obj as Record<string, unknown>;
+    const route = String(rec.route || rec.path || rec.href || "").trim();
+    const name = String(rec.name || rec.label || rec.title || "").trim();
+    if (!route.startsWith("/")) return [];
+    return [{ name: name || (route === "/" ? "Home" : route.slice(1)), route }];
+  };
+  if (raw.startsWith("[") || raw.startsWith("{")) {
+    try {
+      const data = JSON.parse(raw) as unknown;
+      const arr = Array.isArray(data)
+        ? data
+        : data && typeof data === "object"
+          ? ((data as Record<string, unknown>).pages as unknown[]) ||
+            ((data as Record<string, unknown>).nodes as unknown[]) ||
+            []
+          : [];
+      if (Array.isArray(arr) && arr.length) {
+        return arr.flatMap(fromObj);
+      }
+    } catch {
+      /* not JSON */
+    }
+  }
+  const out: { name: string; route: string }[] = [];
+  const re = /"route"\s*:\s*"(\/[^"]+)"/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(raw))) {
+    const around = raw.slice(Math.max(0, m.index - 80), m.index + 80);
+    const name =
+      around.match(/"(?:name|label|title)"\s*:\s*"([^"]+)"/)?.[1] ||
+      (m[1] === "/" ? "Home" : m[1]!.replace(/^\//, ""));
+    out.push({ name, route: m[1]! });
   }
   return out;
 }
@@ -701,11 +762,14 @@ export function formatPageContractsMarkdown(
         `### ${p.name} \`${p.route}\``,
         "",
         `- Purpose: ${purpose}`,
+        `- Roles: assumption: people doing this job`,
         `- Primary actions: Continue, back to Home`,
         `- Data entities: session, ${p.name.toLowerCase()}`,
         `- Authz: ${/teacher|parent|account|settings|progress/i.test(p.name) ? "signed-in adult" : "signed-in learner or public"}`,
-        `- Empty state: Nothing here yet — start from Home`,
-        `- Error state: Could not load — try again`,
+        `- Auth model: assumption: mock/local (no hosted BaaS)`,
+        `- Empty state: assumption: nothing here yet — start from Home`,
+        `- Error state: assumption: could not load — try again`,
+        `- Loading state: assumption: brief wait while mock data loads`,
         `- Nav links: \`/\`, ${pages
           .filter((x) => x.route !== p.route)
           .slice(0, 3)

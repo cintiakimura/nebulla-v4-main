@@ -12,6 +12,7 @@ import {
   inferFirstSliceRoutes,
   inferNamedPagesFromSection4,
   seedPagesFromGoal,
+  extractNamedRoutesFromPagesText,
 } from "./nebulaUiBrief";
 
 export { BUILD_MODE_PLAN_KEY };
@@ -43,7 +44,9 @@ const LOADING_RE = /\b(loading[_ ]?state|loading:)\b/i;
 const ASSUMPTION_RE = /\bassumption\s*:/i;
 const PURPOSE_RE = /\bpurpose\s*:/i;
 const ROLES_RE = /\broles?\s*:/i;
+const WHO_RE = /\bwho\s*:/i;
 const ACTIONS_RE = /\bprimary[_ ]?actions?\s*:/i;
+const ACTIONS_LOOSE_RE = /\bactions?\s*:/i;
 
 export function isBuildMode(v: unknown): v is BuildMode {
   return v === "full_build" || v === "fast_prototype";
@@ -141,7 +144,133 @@ function pageBlocks(s4: string): string[] {
   if (parts.length >= 2) return parts;
   const byRoute = text.split(/(?=\/[A-Za-z0-9_\-][\w\-./]*)/).map((p) => p.trim()).filter(Boolean);
   if (byRoute.length >= 2) return byRoute;
+  const byList = text.split(/(?=^[-*•]\s+)/m).map((p) => p.trim()).filter(Boolean);
+  if (byList.length >= 2) return byList;
   return [text];
+}
+
+function blockHasPurpose(t: string): boolean {
+  return PURPOSE_RE.test(t) || /\bthis (page|screen) (is|lets|helps)\b/i.test(t);
+}
+
+function blockHasRoles(t: string): boolean {
+  return ROLES_RE.test(t) || WHO_RE.test(t);
+}
+
+function blockHasActions(t: string): boolean {
+  return ACTIONS_RE.test(t) || ACTIONS_LOOSE_RE.test(t);
+}
+
+function section4HasRequiredFields(s4: string): boolean {
+  return (
+    blockHasPurpose(s4) &&
+    blockHasRoles(s4) &&
+    blockHasActions(s4) &&
+    (EMPTY_RE.test(s4) || ASSUMPTION_RE.test(s4)) &&
+    (ERROR_RE.test(s4) || ASSUMPTION_RE.test(s4)) &&
+    (LOADING_RE.test(s4) || ASSUMPTION_RE.test(s4))
+  );
+}
+
+function formatFilledPageContract(
+  page: { name: string; route: string },
+  opts: { goal: string; roles: string[]; purpose?: string; verb?: string },
+): string {
+  const roles =
+    opts.roles.length > 0 ? opts.roles.join(", ") : "assumption: people using this screen";
+  const purpose =
+    opts.purpose ||
+    (page.route === "/"
+      ? String(opts.goal || "").replace(/\s+/g, " ").trim().slice(0, 140) ||
+        "Primary landing — one clear next action"
+      : `Screen for ${page.name.toLowerCase()} — assumption: serves the goal`);
+  const action = opts.verb
+    ? opts.verb.replace(/_/g, " ")
+    : `Continue ${page.name.toLowerCase()}`;
+  return [
+    `### ${page.name} \`${page.route}\``,
+    "",
+    `- Purpose: ${purpose}`,
+    `- Roles: ${roles}`,
+    `- Primary actions: ${action}`,
+    `- Auth model: assumption: mock/local (no hosted BaaS)`,
+    `- Empty state: assumption: nothing here yet`,
+    `- Error state: assumption: could not load — try again`,
+    `- Loading state: assumption: brief wait while mock data loads`,
+  ].join("\n");
+}
+
+/** Rewrite thin / prose §4 into named contracts. Does not invent a product — only fills missing fields. */
+export function fillMissingSection4PageFields(opts: {
+  section4: string;
+  goal: string;
+  skeleton?: { roles?: string[]; routes?: { path: string; purpose: string }[]; verbs?: string[] } | null;
+}): { section: string; filled: boolean } {
+  const s4 = String(opts.section4 || "").trim();
+  const goal = String(opts.goal || "").trim();
+  const routes = inferFullBuildRoutes(goal, s4);
+  const named = extractNamedRoutesFromPagesText(s4);
+  if (named.length === 0 && routes.filter((r) => r.route !== "/").length < 1) {
+    return { section: s4, filled: false };
+  }
+  if (s4 && section4HasRequiredFields(s4) && named.length + routes.length > 0) {
+    return { section: s4, filled: false };
+  }
+  const pages = routes.length ? routes : named;
+  const roles = (opts.skeleton?.roles || []).map((r) => String(r).trim()).filter(Boolean);
+  const skRoutes = opts.skeleton?.routes || [];
+  const verbs = opts.skeleton?.verbs || [];
+  const next = pages
+    .map((p, i) => {
+      const sk = skRoutes.find((r) => r.path.toLowerCase() === p.route.toLowerCase());
+      return formatFilledPageContract(p, {
+        goal,
+        roles,
+        purpose: sk?.purpose,
+        verb: verbs[i] || verbs[0],
+      });
+    })
+    .join("\n\n");
+  return { section: next, filled: Boolean(next) && next !== s4 };
+}
+
+export function applyFullBuildPlanFill(
+  plan: Record<string, unknown> | Record<string, string>,
+): { plan: Record<string, unknown>; filled: boolean } {
+  const next = { ...(plan as Record<string, unknown>) };
+  const s1 = String(next[MASTER_PLAN_SECTION_KEYS[0]] ?? "").trim();
+  const s4 = String(next[MASTER_PLAN_SECTION_KEYS[3]] ?? "").trim();
+  const skeleton = readCodingSkeletonFromPlan(next);
+  const result = fillMissingSection4PageFields({ section4: s4, goal: s1, skeleton });
+  let filled = false;
+  if (result.filled) {
+    next[MASTER_PLAN_SECTION_KEYS[3]] = result.section;
+    filled = true;
+  }
+  const s2Key = MASTER_PLAN_SECTION_KEYS[1];
+  const s2 = String(next[s2Key] ?? "");
+  if (!AUTH_STATED_RE.test([s1, s2, String(next[MASTER_PLAN_SECTION_KEYS[3]] ?? "")].join("\n"))) {
+    const authLine =
+      skeleton?.auth === "none"
+        ? "Auth model: assumption: no sign-in for this pass (mock/local if we add it)."
+        : "Auth model: assumption: mock/local role gates. No hosted BaaS.";
+    next[s2Key] = `${s2.trim()}\n${authLine}`.trim();
+    filled = true;
+  }
+  return { plan: next, filled };
+}
+
+/**
+ * After MASTER_PLAN_INCOMPLETE: fill-missing once, then at most one Go if completeness is OK.
+ * A second 409 never auto-Gos.
+ */
+export function fullBuildIncompleteFollowUp(opts: {
+  alreadyFilled: boolean;
+  completenessOk: boolean;
+}): { fill: boolean; retryGo: boolean } {
+  if (!opts.alreadyFilled) return { fill: true, retryGo: false };
+  if (opts.completenessOk) return { fill: false, retryGo: true };
+  return { fill: false, retryGo: false };
 }
 
 export function assessFullBuildCompleteness(opts: {
@@ -199,13 +328,7 @@ export function assessFullBuildCompleteness(opts: {
   }
 
   const blocks = pageBlocks(s4);
-  const wholeHasFields =
-    PURPOSE_RE.test(s4) &&
-    ROLES_RE.test(s4) &&
-    ACTIONS_RE.test(s4) &&
-    (EMPTY_RE.test(s4) || ASSUMPTION_RE.test(s4)) &&
-    (ERROR_RE.test(s4) || ASSUMPTION_RE.test(s4)) &&
-    (LOADING_RE.test(s4) || ASSUMPTION_RE.test(s4));
+  const wholeHasFields = section4HasRequiredFields(s4);
 
   if (!isThin(s4, 40) && !wholeHasFields) {
     const missingStates = !EMPTY_RE.test(s4) && !ERROR_RE.test(s4) && !LOADING_RE.test(s4) && !ASSUMPTION_RE.test(s4);
@@ -222,7 +345,7 @@ export function assessFullBuildCompleteness(opts: {
         message: "Add one line each for empty, error, and loading on §4 pages — or label assumption: for that state.",
       });
     }
-    if (!PURPOSE_RE.test(s4) || !ROLES_RE.test(s4) || !ACTIONS_RE.test(s4)) {
+    if (!blockHasPurpose(s4) || !blockHasRoles(s4) || !blockHasActions(s4)) {
       gaps.push({
         code: "PAGE_FIELDS",
         message: "Each §4 page needs name, route, purpose, roles, and primary actions.",

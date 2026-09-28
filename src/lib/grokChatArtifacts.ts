@@ -465,7 +465,7 @@ CHAT_SCOREBOARD (UNBREAKABLE — silent; see nebulla-project/chat-information-ch
 export const CHAT_CLOSE_APPENDIX = `
 CHAT_CLOSE (UNBREAKABLE until confirm; see chat-information-checklist.md § Close):
 - Offer the close when they stop adding info or say that's enough — and Slots 1–4 are fillable without guessing. Three feature bullets are not enough.
-- Pattern: "I think we've got what we need. Here's what I heard — tell me if this is right." Then one short summary: Goal · Who · Features including inferred workflow/pages (where files live, how extract runs, history/dossier when the goal is keep documents) · Dependencies as real choices, not "later" · Walls you already named · UI — if empty, ASK ONCE (vibe / web vs mobile / density).
+- Pattern: "I think we've got what we need. Here's what I heard — tell me if this is right." ONLY if Full Build completeness would return OK (every §4 page has name, route, purpose, roles, primary actions). If Go returned MASTER_PLAN_INCOMPLETE, ask the one missing field — never say we have everything / lock the plan. Then one short summary: Goal · Who · Features including inferred workflow/pages (where files live, how extract runs, history/dossier when the goal is keep documents) · Dependencies as real choices, not "later" · Walls you already named · UI — if empty, ASK ONCE (vibe / web vs mobile / density).
 - End with: "If this is right, I'll lock it and build this product."
 - Forbidden in the summary: competitors, hex lists, security lecture, tool talk, code, file fences, <START_MASTERPLAN>, "mock OCR later", "phase 2."
 - Then WAIT. "I'm done" / "just build" once → still summarize and ask "this is what I'll lock — ok?" Do not end on "shall we go?"

@@ -6,6 +6,7 @@ import {
   pagesTextHasParseableRoutes,
   pagesForPlanFromGoalAndDisk,
   writeUiBriefMarkdown,
+  extractNamedRoutesFromPagesText,
 } from "./nebulaUiBrief";
 import { summarizeDesignReferencesForPrompt } from "./nebulaDesignReferences";
 import {
@@ -38,6 +39,7 @@ import {
 } from "./nebulaWorkspaceStorage";
 import { ensureProductIdentity, patchMasterPlanProductName, productNameFromPlan } from "./productIdentity";
 import { isReplacementProductBrief, leftoverPlanConflictsWithGoal } from "./productGoalFingerprint";
+import { applyFullBuildPlanFill } from "./fullBuildContract";
 import { collapseWinningPalette } from "./uiGenerationEngine/v2/industryPalettes";
 
 export const MASTER_PLAN_TAB_KEYS = MASTER_PLAN_ALL_KEYS;
@@ -146,6 +148,20 @@ export function fillMissingMasterPlanSectionsLocal(opts: {
       goalText,
     );
     updated.push("4. Pages and navigation");
+  } else {
+    const filled4 = applyFullBuildPlanFill(next);
+    if (filled4.filled) {
+      const s4 = String(filled4.plan["4. Pages and navigation"] ?? "");
+      if (s4 && s4 !== String(next["4. Pages and navigation"] ?? "")) {
+        next["4. Pages and navigation"] = s4;
+        updated.push("4. Pages and navigation");
+      }
+      const s2 = String(filled4.plan["2. Tech and Research"] ?? "");
+      if (s2 && s2 !== String(next["2. Tech and Research"] ?? "")) {
+        next["2. Tech and Research"] = s2;
+        if (!updated.includes("2. Tech and Research")) updated.push("2. Tech and Research");
+      }
+    }
   }
 
   if (missing.includes("5. UI/UX design")) {
@@ -339,24 +355,30 @@ export function mindMapPagesFromMasterPlan(
     if (heading) {
       const raw = heading[1];
       const routeIn = raw.match(/`(\/[^`]+)`/);
-      const name = raw.replace(/`[^`]+`/g, "").trim();
-      // Prefer explicit routes on headings (### Login `/login`)
-      add(name || raw, routeIn?.[1], true);
+      const em = raw.match(/^(.+?)\s*[—–:]\s*(\/[\w\-./]*)\s*$/);
+      const name = raw.replace(/`[^`]+`/g, "").replace(/\s*[—–:]\s*\/[\w\-./]*\s*$/, "").trim();
+      add(name || raw, routeIn?.[1] || em?.[2], true);
       continue;
     }
     const bullet = line.match(/^\s*[-*•]\s+(.+?)\s*$/);
     if (bullet) {
       const inner = bullet[1];
       if (PAGE_FIELD_LINE_RE.test(inner.replace(/\*\*/g, "").trim())) continue;
-      const routeInLine = inner.match(/`(\/[^`]+)`/);
+      const routeInLine = inner.match(/`(\/[^`]+)`/) || inner.match(/[—–:]\s*(\/[\w\-./]*)/);
       if (!routeInLine) continue; // do not invent routes from field-like bullets
-      const name = inner.replace(/`[^`]+`/g, "").replace(/\*\*/g, "").trim();
+      const name = inner.replace(/`[^`]+`/g, "").replace(/[—–:]\s*\/[\w\-./]*/g, "").replace(/\*\*/g, "").trim();
       if (name.length >= 2) add(name, routeInLine[1], true);
       continue;
     }
     const routeOnly = line.match(/`(\/[^`]+)`/);
     if (routeOnly?.[1] && !PAGE_FIELD_LINE_RE.test(line.trim())) {
       add(routeToLabel(routeOnly[1], projectLabel), routeOnly[1], true);
+    }
+  }
+
+  if (specs.length === 0) {
+    for (const p of extractNamedRoutesFromPagesText(section)) {
+      add(p.name, p.route, true);
     }
   }
 
@@ -653,6 +675,7 @@ export function syncMindMapFromMasterPlan(opts: {
             opts.projectLabel,
           );
         })();
+  // Always overwrite on disk so nodes not in §4 are discarded (no merge of extras).
 
   const target = path.join(opts.workspaceRoot, MIND_MAP_REL);
   fs.mkdirSync(path.dirname(target), { recursive: true });

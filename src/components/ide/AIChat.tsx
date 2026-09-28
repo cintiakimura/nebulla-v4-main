@@ -15,7 +15,6 @@ import {
   userFacingContinueFailureMessage,
 } from '../../lib/continueFailureTaxonomy';
 import { fetchNebulaPublicConfig } from '../../lib/nebulaPublicConfig';
-import { isAbortLikeError, isAbortLikeMessage } from '../../lib/abortLikeError';
 import { fetchJson, readResponseJson } from '../../lib/apiFetch';
 import { isUserAppProductPath } from '../../../lib/nebulaOrchestrationPaths';
 import {
@@ -88,8 +87,13 @@ import {
   applyArchitectureArtifactsFromAssistant,
   hasGrokFileBlocks,
   isCodingIntent,
+  isGoAborting,
+  isGoCodeWaitActive,
   runGoCodeAndApply,
 } from '../../lib/nebulaAiCodingPipeline';
+import { isFoundationGoInFlight } from '../../lib/foundationHeavyJob';
+import { abortHonestyUserLine, abortWithUserStopReason, isAbortLikeError, isAbortLikeMessage } from '../../lib/abortLikeError';
+import { fullBuildIncompleteFollowUp } from '../../../lib/fullBuildContract';
 import {
   isAssistantCodingPromise,
   isAssistantRefineClaim,
@@ -440,7 +444,10 @@ export function AIChat() {
     setGrokCodingActive(false);
     setV0WatchActive(false);
     setV0Live(false);
-    setGrokActivity((prev) => errorGrokActivity(prev, 'Coding stopped', detail));
+    const line = isAbortLikeMessage(detail)
+      ? abortHonestyUserLine(detail)
+      : detail;
+    setGrokActivity((prev) => errorGrokActivity(prev, 'Coding stopped', line));
   }, []);
 
   useEffect(() => {
@@ -975,13 +982,15 @@ export function AIChat() {
   const stopSending = useCallback(() => {
     autoSliceAbortRef.current = true;
     autoSliceInFlightRef.current = false;
-    sendingAbortRef.current?.abort();
+    if (sendingAbortRef.current) {
+      abortWithUserStopReason(sendingAbortRef.current);
+    }
     sendingAbortRef.current = null;
     sendingRef.current = false;
     setSending(false);
     const { projectName } = resolveActiveProjectIds(diskProjectKey);
     abortGoCodeWait(projectName);
-    holdCodingFailure('Stopped — coding cancelled. Chat is unlocked.');
+    holdCodingFailure('Stopped — you cancelled coding. Chat is unlocked.');
   }, [diskProjectKey, holdCodingFailure]);
 
   const clearVoiceIdleTimer = () => {
@@ -1634,6 +1643,11 @@ export function AIChat() {
     clearHandsFreeAutoSendTimers();
     if (sendingRef.current) {
       if (lastComposerSendRef.current === rawText) return;
+      const { projectName: goName } = resolveActiveProjectIds(diskProjectKey);
+      if (isFoundationGoInFlight(goName) || isGoCodeWaitActive(goName) || isGoAborting(goName)) {
+        // Do not cancel in-flight Go for a new chat message — only Stop does that.
+        return;
+      }
       stopSending();
     }
     lastComposerSendRef.current = rawText;
@@ -2009,8 +2023,15 @@ export function AIChat() {
     stickToBottomRef.current = true;
     setSending(true);
     sendingRef.current = true;
-    sendingAbortRef.current?.abort();
-    sendingAbortRef.current = new AbortController();
+    const { projectName: goLockName } = resolveActiveProjectIds(diskProjectKey);
+    if (!isFoundationGoInFlight(goLockName) && !isGoCodeWaitActive(goLockName)) {
+      if (sendingAbortRef.current) {
+        abortWithUserStopReason(sendingAbortRef.current);
+      }
+      sendingAbortRef.current = new AbortController();
+    } else if (!sendingAbortRef.current) {
+      sendingAbortRef.current = new AbortController();
+    }
     const sendAbort = sendingAbortRef.current;
     setSendError(null);
     const discoveryCompleteAck = detectOnboardingBuildStart(rawText, prior);
@@ -3143,7 +3164,8 @@ export function AIChat() {
           foundationGate.ok &&
           forceGoPipeline &&
           !beatAHold &&
-          !stayInBrainstormLoop
+          !stayInBrainstormLoop &&
+          !isGoAborting(projectName)
         ) {
           const foundationLanded = foundationLandedOnDisk();
           const editMode = foundationLanded && postCodeRefine;
@@ -3204,39 +3226,64 @@ export function AIChat() {
             onProgress: pushActivity,
             messages: goMessages,
           });
-          // Strict Go often blocks on security/sign-in — re-accept baseline once, then retry.
-          if (
-            !go.ok &&
-            go.blockedReason?.code === 'MASTER_PLAN_INCOMPLETE'
-          ) {
-            try {
-              const sec = await fetchJson<{ ok?: boolean; applied?: boolean }>(
-                withProjectQuery('/api/master-plan/accept-security-baseline'),
-                {
+          // 409: fill-missing §4 once. Retry Go only if completeness is then OK. Never auto-Go on a second 409.
+          if (!go.ok && go.blockedReason?.code === 'MASTER_PLAN_INCOMPLETE') {
+            const follow = fullBuildIncompleteFollowUp({ alreadyFilled: false, completenessOk: false });
+            if (follow.fill && !isGoAborting(projectName)) {
+              try {
+                const filled = await fetchJson<{
+                  ok?: boolean;
+                  filled?: boolean;
+                  allowGo?: boolean;
+                  ask?: string | null;
+                }>(withProjectQuery('/api/master-plan/fill-missing-section4'), {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
                   credentials: 'include',
-                  body: JSON.stringify(withProjectBody({})),
-                },
-              );
-              if (sec.applied) {
-                pushActivity(
-                  'Filled missing security/sign-in baseline — retrying Foundation coding…',
-                  'info',
-                );
+                  body: JSON.stringify(withProjectBody({ projectName })),
+                });
                 window.dispatchEvent(new CustomEvent('nebula-master-plan-updated'));
-              } else {
-                pushActivity('Retrying Foundation coding after Master Plan gate…', 'info');
+                const next = fullBuildIncompleteFollowUp({
+                  alreadyFilled: true,
+                  completenessOk: filled.allowGo === true,
+                });
+                if (next.retryGo && !isGoAborting(projectName) && !isGoCodeWaitActive(projectName)) {
+                  pushActivity('Filled missing page details from the goal — retrying coding once…', 'info');
+                  go = await runGoCodeAndApply({
+                    userId,
+                    projectName,
+                    userNote: goSliceInstruction,
+                    onProgress: pushActivity,
+                    messages: goMessages,
+                  });
+                  if (!go.ok && go.blockedReason?.code === 'MASTER_PLAN_INCOMPLETE') {
+                    const ask =
+                      (go as { ask?: string }).ask ||
+                      filled.ask ||
+                      go.blockedReason.message;
+                    pushActivity(ask, 'warn');
+                  }
+                } else {
+                  const ask = filled.ask || go.blockedReason.message;
+                  pushActivity(ask, 'warn');
+                  const stamp = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+                  setMessages((p) => {
+                    const nextMsgs = [
+                      ...p,
+                      {
+                        id: `a-plan-gap-${Date.now()}`,
+                        role: 'assistant' as const,
+                        content: ask,
+                        timestamp: stamp,
+                      },
+                    ];
+                    messagesRef.current = nextMsgs;
+                    return nextMsgs;
+                  });
+                }
+              } catch {
+                /* keep first go failure */
               }
-              go = await runGoCodeAndApply({
-                userId,
-                projectName,
-                userNote: goSliceInstruction,
-                onProgress: pushActivity,
-                messages: goMessages,
-              });
-            } catch {
-              /* keep first go failure */
             }
           }
           coding = {
@@ -3445,12 +3492,15 @@ export function AIChat() {
         console.warn('[AIChat] coding apply:', codingErr);
         if (isAbortLikeError(codingErr) && mpSaved > 0) {
           pushActivity(
-            'Coding request interrupted — Master Plan is saved. Send go to retry Foundation.',
+            `${abortHonestyUserLine(codingErr)} Master Plan is saved.`,
             'warn',
           );
         } else if (codingActivityRef.current) {
-          const fail =
-            codingErr instanceof Error ? codingErr.message : 'Could not write files to workspace';
+          const fail = isAbortLikeError(codingErr)
+            ? abortHonestyUserLine(codingErr)
+            : codingErr instanceof Error
+              ? codingErr.message
+              : 'Could not write files to workspace';
           setSendError(fail);
           holdCodingFailure(fail);
         }
@@ -3465,7 +3515,7 @@ export function AIChat() {
       const msg = e instanceof Error ? e.message : String(e);
       if (isAbortLikeError(e) && mpSaved > 0) {
         pushActivity(
-          'Request interrupted — Master Plan is saved. Send go to start Foundation.',
+          `${abortHonestyUserLine(e)} Master Plan is saved.`,
           'warn',
         );
         resetCodingActivity();

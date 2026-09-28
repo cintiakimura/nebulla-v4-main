@@ -7,9 +7,12 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
+  applyFullBuildPlanFill,
   assessFullBuildCompleteness,
   detectQuickDraftIntent,
+  fillMissingSection4PageFields,
   formatFullBuildApplyLine,
+  fullBuildIncompleteFollowUp,
   inferFullBuildRoutes,
   normalizeBuildMode,
   shouldClampToFastPrototypeSlice,
@@ -187,4 +190,49 @@ section("Studio blocked during Go + Live wins + autopilot still false");
   assert.match(canvas, /setShowMockup\(false\)/);
 }
 
+section("courier-like §4 prose → fill-missing → completeness OK");
+{
+  const courierGoal =
+    "Same-day motorcycle courier: send a parcel across town, track the rider, pay at drop-off.";
+  const prose = [
+    "Request a pickup — /request",
+    "Track the bike — /track",
+    "Rider accept — /driver",
+    "Account — /account",
+  ].join("\n");
+  const filled4 = fillMissingSection4PageFields({ section4: prose, goal: courierGoal });
+  assert.equal(filled4.filled, true);
+  assert.match(filled4.section, /Purpose:/i);
+  assert.match(filled4.section, /Roles:/i);
+  assert.match(filled4.section, /Primary actions:/i);
+  assert.match(filled4.section, /assumption:/i);
+  const raw = {
+    "1. Goal of the app": courierGoal,
+    "2. Tech and Research": "Web Next.js. Inferred stack. No live competitor search.",
+    "3. Features and KPIs": "Request pickup. Track rider. KPI: parcels dropped off same day.",
+    "4. Pages and navigation": prose,
+    "5. UI/UX design": "Mood street. Palette #111 #F5C518. Typography sans. Density comfortable.",
+  };
+  const { plan: withSk } = ensureCodingSkeletonOnPlan(raw, { goal: courierGoal, projectType: "Web App" });
+  const applied = applyFullBuildPlanFill(withSk);
+  assert.equal(applied.filled, true);
+  const r = assessFullBuildCompleteness({ plan: applied.plan });
+  assert.equal(r.allowGo, true, r.gaps.map((g) => `${g.code}: ${g.message}`).join(" | "));
+  const first = fullBuildIncompleteFollowUp({ alreadyFilled: false, completenessOk: false });
+  assert.deepEqual(first, { fill: true, retryGo: false });
+  const afterOk = fullBuildIncompleteFollowUp({ alreadyFilled: true, completenessOk: true });
+  assert.deepEqual(afterOk, { fill: false, retryGo: true });
+  const second409 = fullBuildIncompleteFollowUp({ alreadyFilled: true, completenessOk: false });
+  assert.deepEqual(second409, { fill: false, retryGo: false });
+}
+
+section("409 retry policy in chat — no blind second Go; abort honesty");
+{
+  const chat = fs.readFileSync(path.join(REPO, "src/components/ide/AIChat.tsx"), "utf8");
+  assert.match(chat, /fill-missing-section4/);
+  assert.match(chat, /fullBuildIncompleteFollowUp/);
+  assert.equal(/Retrying Foundation coding after Master Plan gate/.test(chat), false);
+}
+
 console.log("\n✓ full-build contract tests passed\n");
+

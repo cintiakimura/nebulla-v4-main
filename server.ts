@@ -179,6 +179,7 @@ import {
   shouldSkipPhaseALlm,
 } from "./lib/goSliceContract";
 import {
+  applyFullBuildPlanFill,
   assessFullBuildCompleteness,
   detectQuickDraftIntent,
   fullBuildGoBlockedMessage,
@@ -1559,6 +1560,47 @@ No approved UI code yet.
     }
   });
 
+  app.post("/api/master-plan/fill-missing-section4", (req, res) => {
+    try {
+      const pp = projectPathsFor(req);
+      let plan: Record<string, unknown> = {};
+      if (fs.existsSync(pp.masterPlanPath)) {
+        plan = JSON.parse(fs.readFileSync(pp.masterPlanPath, "utf8")) as Record<string, unknown>;
+      }
+      const ensured = ensureCodingSkeletonOnPlan(plan, {
+        goal: String(plan["1. Goal of the app"] || ""),
+      });
+      const filled = applyFullBuildPlanFill(ensured.plan);
+      persistMasterPlanJson(pp.workspaceRoot, pp.masterPlanPath, filled.plan);
+      applyPlanIdentityAndWinningPalette(
+        pp.workspaceRoot,
+        readMasterPlanFile(pp.masterPlanPath),
+      );
+      try {
+        syncMindMapFromMasterPlan({
+          workspaceRoot: pp.workspaceRoot,
+          masterPlanPath: pp.masterPlanPath,
+          projectLabel:
+            typeof req.body?.projectName === "string" && req.body.projectName.trim()
+              ? String(req.body.projectName).trim()
+              : "Untitled Project",
+        });
+      } catch {
+        /* ignore */
+      }
+      const completeness = assessFullBuildCompleteness({ plan: filled.plan });
+      res.json({
+        ok: true,
+        filled: filled.filled,
+        allowGo: completeness.allowGo,
+        ask: completeness.ask,
+        gaps: completeness.gaps,
+      });
+    } catch (e) {
+      res.status(500).json({ error: e instanceof Error ? e.message : "fill failed" });
+    }
+  });
+
   /** Propose §4 markdown for Mind Map extra routes (Accept merges via master-plan/update). */
   app.post("/api/master-plan/propose-section4-amendment", (req, res) => {
     try {
@@ -1685,6 +1727,15 @@ No approved UI code yet.
       persistMasterPlanJson(pp.workspaceRoot, pp.masterPlanPath, plan);
       const savedPlan = readMasterPlanFile(pp.masterPlanPath);
       const identityPass = applyPlanIdentityAndWinningPalette(pp.workspaceRoot, savedPlan);
+      try {
+        syncMindMapFromMasterPlan({
+          workspaceRoot: pp.workspaceRoot,
+          masterPlanPath: pp.masterPlanPath,
+          projectLabel: identityPass.productName || "Untitled Project",
+        });
+      } catch {
+        /* extras discarded on next successful sync */
+      }
       const v0Sync = ensureV0PromptSynced(pp);
       res.json({
         success: true,
@@ -1730,6 +1781,15 @@ No approved UI code yet.
         pp.workspaceRoot,
         readMasterPlanFile(pp.masterPlanPath),
       );
+      try {
+        syncMindMapFromMasterPlan({
+          workspaceRoot: pp.workspaceRoot,
+          masterPlanPath: pp.masterPlanPath,
+          projectLabel: identityPass.productName || "Untitled Project",
+        });
+      } catch {
+        /* extras discarded on next successful sync */
+      }
       const v0Sync = ensureV0PromptSynced(pp);
       res.json({
         success: true,
@@ -5478,6 +5538,15 @@ Rules:
           planForGate = writeBuildModeOnPlan(planForGate, buildMode) as Record<string, string>;
         }
         if (buildMode === "full_build") {
+          try {
+            const filled = applyFullBuildPlanFill(planForGate);
+            if (filled.filled) {
+              persistMasterPlanJson(ppGo.workspaceRoot, masterPlanPath, filled.plan);
+              planForGate = filled.plan as Record<string, string>;
+            }
+          } catch {
+            /* still evaluate the gate */
+          }
           const fullBuildGate = assessFullBuildCompleteness({ plan: planForGate });
           if (!fullBuildGate.allowGo) {
             const blocked = goBlocked("MASTER_PLAN_INCOMPLETE", fullBuildGoBlockedMessage(fullBuildGate));
@@ -5645,6 +5714,15 @@ Rules:
       if (!completeness.allowGo) {
         const blocked = goBlocked("MASTER_PLAN_INCOMPLETE");
         if (fullBuildGo) {
+          try {
+            const filledSnap = applyFullBuildPlanFill(planSnapshot);
+            if (filledSnap.filled) {
+              persistMasterPlanJson(ppGo.workspaceRoot, masterPlanPath, filledSnap.plan);
+              planSnapshot = filledSnap.plan as Record<string, string>;
+            }
+          } catch {
+            /* evaluate anyway */
+          }
           const fb = assessFullBuildCompleteness({ plan: planSnapshot });
           if (!fb.allowGo) {
             clearGoCodePending(ppGo.workspaceRoot);

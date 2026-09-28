@@ -128,7 +128,18 @@ export function classifyGoFailure(input: {
     return goBlocked("GO_MODEL_REJECTED", text);
   }
   if (/timed out after 3 minutes|go_timeout|abort(?:ed)?|timeout/i.test(lower)) {
-    return goBlocked("GO_TIMEOUT", text);
+    if (/signal is aborted|without reason/i.test(lower) && !/timed out after 3 minutes/i.test(lower)) {
+      return goBlocked("GO_FAILED", "Stopped: the coding request was cancelled.");
+    }
+    if (/you cancelled|coding cancelled/i.test(lower) && !/timed out after 3 minutes/i.test(lower)) {
+      return goBlocked("GO_FAILED", "Stopped — you cancelled coding.");
+    }
+    return goBlocked(
+      "GO_TIMEOUT",
+      /signal is aborted|without reason/i.test(lower)
+        ? "Stopped: the request timed out. Coding did not finish."
+        : text,
+    );
   }
   if (/research not complete|research_incomplete/i.test(lower)) {
     return goBlocked("RESEARCH_INCOMPLETE", text);

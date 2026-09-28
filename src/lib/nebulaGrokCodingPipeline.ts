@@ -24,7 +24,13 @@ import {
 } from './spineSequenceGates';
 import { getBrowserProjectKey, withProjectBody, withProjectQuery } from './nebulaProjectApi';
 import { dispatchStudioShowLiveApp, triggerUiStudioBetaAfterFilesApplied } from './uiStudioBetaEngine';
-import { markFoundationGoInFlight } from './foundationHeavyJob';
+import {
+  ABORT_HONESTY_LINES,
+  abortHonestyUserLine,
+  abortWithTimeoutReason,
+  isAbortLikeError,
+} from './abortLikeError';
+import { markFoundationGoInFlight, isFoundationGoInFlight } from './foundationHeavyJob';
 import { setGrokCodingActive } from './nebulaGrokCodingGate';
 import {
   buildEditExistingUserNote,
@@ -65,6 +71,7 @@ const GO_TIMEOUT_GRACE_POLL_MS = 6_000;
 const goCodePollInFlightByProject = new Map<string, Promise<GoCodePayload>>();
 const goCodePollAbortedByProject = new Set<string>();
 const goSessionAbortedByProject = new Set<string>();
+const goAbortingByProject = new Set<string>();
 const applyAbortByProject = new Map<string, AbortController>();
 
 function goPollProjectKey(projectName?: string): string {
@@ -80,6 +87,15 @@ function isGoSessionAborted(projectName: string): boolean {
   return goSessionAbortedByProject.has(goPollProjectKey(projectName));
 }
 
+export function isGoAborting(projectName?: string): boolean {
+  return goAbortingByProject.has(goPollProjectKey(projectName));
+}
+
+export function isGoCodeWaitActive(projectName?: string): boolean {
+  const key = goPollProjectKey(projectName);
+  return goCodePollInFlightByProject.has(key) || isGoAborting(projectName);
+}
+
 /** Unblock a hung apply POST without cancelling Grok Code / the Go session. */
 export function abortApplyWait(projectName: string): void {
   const key = goPollProjectKey(projectName);
@@ -93,6 +109,7 @@ export function abortApplyWait(projectName: string): void {
 /** Stop / timeout: abort poll + apply wait and drop in-flight so UI Gen is not refused. */
 export function abortGoCodeWait(projectName: string): void {
   const key = goPollProjectKey(projectName);
+  goAbortingByProject.add(key);
   goCodePollAbortedByProject.add(key);
   goSessionAbortedByProject.add(key);
   goCodePollInFlightByProject.delete(key);
@@ -173,13 +190,13 @@ function rejectAfter(ms: number, message: string): Promise<never> {
   });
 }
 
-function abortAfter(ms: number): { signal?: AbortSignal; cancel: () => void } {
+function abortAfter(ms: number, reason = 'Go request timed out'): { signal?: AbortSignal; cancel: () => void } {
   const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
   const w = typeof window !== 'undefined' ? window : null;
   const timer = controller
     ? w
-      ? w.setTimeout(() => controller.abort(), ms)
-      : setTimeout(() => controller.abort(), ms)
+      ? w.setTimeout(() => abortWithTimeoutReason(controller, reason), ms)
+      : setTimeout(() => abortWithTimeoutReason(controller, reason), ms)
     : null;
   return {
     signal: controller?.signal,
@@ -730,7 +747,7 @@ async function pollGoCodeUntilDoneInner(
   for (let i = 0; i < GO_MAX_POLLS; i++) {
     if (goCodePollAbortedByProject.has(key)) {
       goCodePollAbortedByProject.delete(key);
-      const stopped = goBlocked('GO_FAILED', 'Stopped — coding cancelled.');
+      const stopped = goBlocked('GO_FAILED', ABORT_HONESTY_LINES.user_stop);
       return { error: formatBlockedReasonLine(stopped), blockedReason: stopped, code: stopped.code };
     }
     if (Date.now() >= deadline) break;
@@ -738,7 +755,7 @@ async function pollGoCodeUntilDoneInner(
     if (sleepMs > 0) await sleep(sleepMs);
     if (goCodePollAbortedByProject.has(key)) {
       goCodePollAbortedByProject.delete(key);
-      const stopped = goBlocked('GO_FAILED', 'Stopped — coding cancelled.');
+      const stopped = goBlocked('GO_FAILED', ABORT_HONESTY_LINES.user_stop);
       return { error: formatBlockedReasonLine(stopped), blockedReason: stopped, code: stopped.code };
     }
     if (Date.now() >= deadline) break;
@@ -977,7 +994,10 @@ async function kickGoCodeJob(options: {
 
     const GO_KICK_TIMEOUT_MS = 55_000;
     const kickController = new AbortController();
-    const kickTimer = window.setTimeout(() => kickController.abort(), GO_KICK_TIMEOUT_MS);
+    const kickTimer = window.setTimeout(
+      () => abortWithTimeoutReason(kickController, ABORT_HONESTY_LINES.timeout),
+      GO_KICK_TIMEOUT_MS,
+    );
 
     let goRes: Response;
     try {
@@ -1031,7 +1051,10 @@ async function kickGoCodeJob(options: {
       for (let w = 0; w < 18; w++) {
         await sleep(5000);
         const retryController = new AbortController();
-        const retryTimer = window.setTimeout(() => retryController.abort(), GO_KICK_TIMEOUT_MS);
+        const retryTimer = window.setTimeout(
+          () => abortWithTimeoutReason(retryController, ABORT_HONESTY_LINES.timeout),
+          GO_KICK_TIMEOUT_MS,
+        );
         try {
           goRes = await fetch(withProjectQuery('/api/grok/go-code'), {
             method: 'POST',
@@ -1167,6 +1190,26 @@ export async function runGoCodeAndApply(options: {
       statusMessage: formatBlockedReasonLine(researchBlock),
       totalWritten: 0,
       blockedReason: researchBlock,
+    };
+  }
+  if (isGoAborting(projectName) || isGoSessionAborted(projectName)) {
+    const line = ABORT_HONESTY_LINES.superseded;
+    onProgress?.(line, 'warn');
+    return {
+      ok: false,
+      statusMessage: line,
+      totalWritten: 0,
+      blockedReason: goBlocked('GO_FAILED', line),
+    };
+  }
+  if (isFoundationGoInFlight(projectName)) {
+    const line = 'Coding is already running. Wait for it to finish, or hit Stop.';
+    onProgress?.(line, 'warn');
+    return {
+      ok: false,
+      statusMessage: line,
+      totalWritten: 0,
+      blockedReason: goBlocked('GO_FAILED', line),
     };
   }
   onProgress?.('Grok Code — Code pass 1 (waiting for generated files)…', 'info');
@@ -1541,17 +1584,35 @@ export async function runGoCodeAndApply(options: {
       productRouteCount: depth.productRoutes.length,
     };
   } catch (e) {
+    const userStopped = isGoSessionAborted(projectName);
+    if (isAbortLikeError(e) || userStopped) {
+      const line = abortHonestyUserLine(e, {
+        userStopped,
+        timeout: /timed out|timeout/i.test(e instanceof Error ? e.message : String(e || '')),
+      });
+      onProgress?.(line, 'warn');
+      return {
+        ok: false,
+        statusMessage: line,
+        totalWritten: 0,
+        blockedReason: goBlocked(userStopped ? 'GO_FAILED' : /timed out|timeout/i.test(line) ? 'GO_TIMEOUT' : 'GO_FAILED', line),
+      };
+    }
     const blocked = classifyGoFailure({
       error: e instanceof Error ? e.message : 'Go Code request failed',
     });
-    onProgress?.(formatBlockedReasonLine(blocked), blocked.code === 'MASTER_PLAN_INCOMPLETE' ? 'warn' : 'error');
+    const shown = /signal is aborted|without reason/i.test(blocked.message)
+      ? abortHonestyUserLine(blocked.message)
+      : formatBlockedReasonLine(blocked);
+    onProgress?.(shown, blocked.code === 'MASTER_PLAN_INCOMPLETE' ? 'warn' : 'error');
     return {
       ok: false,
-      statusMessage: formatBlockedReasonLine(blocked),
+      statusMessage: shown,
       totalWritten: 0,
-      blockedReason: blocked,
+      blockedReason: goBlocked(blocked.code, shown),
     };
   } finally {
+    goAbortingByProject.delete(goPollProjectKey(projectName));
     clearCodingLocks(projectName);
   }
 }

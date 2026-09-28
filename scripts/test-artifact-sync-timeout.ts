@@ -6,7 +6,8 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { isAbortLikeError, isAbortLikeMessage } from '../src/lib/abortLikeError.ts';
+import { abortHonestyUserLine, isAbortLikeError, isAbortLikeMessage } from '../src/lib/abortLikeError.ts';
+import { classifyGoFailure } from '../lib/goBlockedReason.ts';
 import {
   ARTIFACT_SYNC_TIMEOUT_MS,
   isArtifactSyncTimeoutError,
@@ -32,6 +33,11 @@ const root = path.join(__dirname, '..');
   assert.equal(isArtifactSyncTimeoutError(new Error('signal is aborted without reason')), true);
   assert.equal(isAbortLikeError(new Error('signal is aborted without reason')), true);
   assert.equal(isAbortLikeMessage('signal is aborted without reason'), true);
+  const honesty = abortHonestyUserLine(new Error('signal is aborted without reason'));
+  assert.equal(/signal is aborted without reason/i.test(honesty), false);
+  assert.match(honesty, /Stopped/);
+  const classified = classifyGoFailure({ error: 'signal is aborted without reason' });
+  assert.equal(/signal is aborted without reason/i.test(classified.message), false);
   assert.equal(isArtifactSyncTimeoutError(new Error('ENOENT')), false);
 }
 
@@ -166,7 +172,8 @@ const root = path.join(__dirname, '..');
   assert.match(chat, /research\.softAbort/);
   assert.match(chat, /isAbortLikeError/);
   assert.match(chat, /Master Plan is saved; continuing to mockup \/ Foundation/);
-  assert.match(chat, /Request interrupted — Master Plan is saved/);
+  assert.match(chat, /abortHonestyUserLine/);
+  assert.match(chat, /Master Plan is saved\./);
   // Direct Go path must not re-await a second post-coding workspace sync after Go already synced.
   const goHandler = chat.slice(chat.indexOf('runGoCodeAndApply({'));
   const secondGoBlock = goHandler.includes('const go = await runGoCodeAndApply')
