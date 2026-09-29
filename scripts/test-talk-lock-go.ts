@@ -40,6 +40,11 @@ import {
   isTalkStartRetryNudge,
   planAllowsGoAfterFill,
   talkLockedRoutes,
+  looksLikeUnsafeTalkGoal,
+  applyTalkSlotPersist,
+  planAllowsGoCodeKick,
+  isTalkPartnerStayOpen,
+  fullBuildGoUserNote,
 } from "../lib/fullBuildContract.ts";
 import { persistBuildPacketFromPlan, readBuildPacket } from "../lib/buildPacket.ts";
 import { ensureCodingSkeletonOnPlan } from "../lib/codingSkeleton.ts";
@@ -793,6 +798,46 @@ section("empty plan + wrap + You can start building → §1 + packet; Start skip
   const startBlock = chat.slice(startAt, chat.indexOf("await sendIdeAssistantGrokTurn"));
   assert.match(startBlock, /runGoCodeAndApply/);
   assert.doesNotMatch(startBlock, /sendIdeAssistantGrokTurn/);
+}
+
+section("Talk persist vs Build kick — wrap+Start empty tabs; name dump; I agree");
+{
+  const wrap =
+    "Quiet Cues is a calm check-in. Aqua Bell is the tone. People get a gentle daily cue. No Practice or Teacher leftover screens.";
+  assert.equal(looksLikeUnsafeTalkGoal(wrap), false);
+  let plan = applyApprovedWrapHandoff({}, wrap);
+  assert.match(String(plan["1. Goal of the app"] || ""), /Quiet Cues/);
+  plan = applyFullBuildPlanFill(plan).plan;
+  plan = markTalkWrapAccepted(freezePlan(plan), wrap);
+  assert.equal(isPlanFrozen(plan), true);
+  assert.equal(assessFullBuildCompleteness({ plan }).allowGo, true);
+  const compactGo = fullBuildGoUserNote(plan, []);
+  assert.equal(planAllowsGoCodeKick(plan, compactGo), true);
+  assert.equal(shouldStartGoAfterTalk({ plan, userText: compactGo, seedText: compactGo }), false);
+  const names =
+    "Here are some names: Lumen Learn, Quill Path, Quiet Cues. What do you think?";
+  assert.equal(looksLikeUnsafeTalkGoal(names), true);
+  const dumped = applyApprovedWrapHandoff({}, names);
+  assert.equal(String(dumped["1. Goal of the app"] || "").includes("Lumen Learn"), false);
+  const slot = applyTalkSlotPersist({}, { userText: "yes", assistantText: names });
+  assert.equal(String(slot["1. Goal of the app"] || "").includes("Lumen Learn"), false);
+  assert.equal(isTalkPartnerStayOpen("I agree"), true);
+  assert.equal(shouldStartGoAfterTalk({ plan, userText: "I agree", lastAssistantText: wrap }), false);
+  assert.equal(shouldOpenTalkTurn({ plan: completeCourierPlan(), userText: "I agree" }), true);
+  assert.equal(
+    shouldSkipGrokChatForExistingPlan({
+      plan,
+      seedText: wrap,
+      userText: "I agree",
+    }),
+    false,
+  );
+  const server = fs.readFileSync(path.join(REPO, "server.ts"), "utf8");
+  assert.match(server, /planAllowsGoCodeKick\(planRaw, note\)/);
+  assert.match(server, /!fullBuildGate\.allowGo && !isTalkWrapAccepted\(planForGate\)/);
+  const chat = fs.readFileSync(path.join(REPO, "src/components/ide/AIChat.tsx"), "utf8");
+  assert.match(chat, /isTalkPartnerStayOpen\(rawText\)/);
+  assert.match(chat, /isTalkSlotLockTurn\(rawText\)/);
 }
 
 console.log("\n✓ talk-lock-go tests passed\n");

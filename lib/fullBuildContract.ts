@@ -587,7 +587,7 @@ export function assessFullBuildCompleteness(opts: {
   if (isThin(s3, 24)) {
     gaps.push({ code: "FEATURES_EMPTY", message: "§3 Features is empty — name the core jobs as verbs." });
   }
-  if (isThin(s4, 40) || routes.filter((r) => r.route !== "/").length < 1) {
+  if (!wrapAccepted && (isThin(s4, 40) || routes.filter((r) => r.route !== "/").length < 1)) {
     gaps.push({
       code: "PAGES_EMPTY",
       message: "§4 needs every product route for this pass, not a single empty Home.",
@@ -603,7 +603,7 @@ export function assessFullBuildCompleteness(opts: {
       new RegExp(`\\b${slug}\\b`, "i").test(wrapOrPages)
     );
   };
-  if (implied.kid && implied.teacher) {
+  if (!wrapAccepted && implied.kid && implied.teacher) {
     const paths = new Set(routes.map((r) => r.route.toLowerCase()));
     const requirePractice = !wrapAccepted || wrapOrPagesNames("/practice");
     const requireTeacher = !wrapAccepted || wrapOrPagesNames("/teacher");
@@ -638,7 +638,7 @@ export function assessFullBuildCompleteness(opts: {
   const blocks = pageBlocks(s4);
   const wholeHasFields = section4HasRequiredFields(s4);
 
-  if (!isThin(s4, 40) && !wholeHasFields) {
+  if (!wrapAccepted && !isThin(s4, 40) && !wholeHasFields) {
     const missingStates = !EMPTY_RE.test(s4) && !ERROR_RE.test(s4) && !LOADING_RE.test(s4) && !ASSUMPTION_RE.test(s4);
     const missingAuth = !AUTH_STATED_RE.test(combined);
     if (missingStates && missingAuth) {
@@ -659,7 +659,7 @@ export function assessFullBuildCompleteness(opts: {
         message: "Each §4 page needs name, route, purpose, roles, and primary actions.",
       });
     }
-  } else if (wholeHasFields && blocks.length > 1) {
+  } else if (!wrapAccepted && wholeHasFields && blocks.length > 1) {
     const weak = blocks.filter(
       (b) =>
         b.length > 20 &&
@@ -885,13 +885,79 @@ export function markTalkWrapAccepted(
 }
 
 /** Start only: wrap → TALK_WRAP_TEXT_KEY + §1; §4 = wrap/Talk names only. */
+export function looksLikeUnsafeTalkGoal(text: string): boolean {
+  const t = String(text || "").replace(/\s+/g, " ").trim();
+  if (!t) return true;
+  if (isTalkLockProgressLine(t)) return true;
+  if (FIRST_SEED_TALK_CANNED_RE.test(t) && t.length < 160) return true;
+  if (/here are (some |a few )?(product )?names\b/i.test(t)) return true;
+  if (/\bname ideas\b|\bsuggest(ed)? names\b|\bcould call (it|this)\b/i.test(t)) return true;
+  if (/\b(lumen learn|quill path)\b/i.test(t) && /\b(or|option|names?|brainstorm)\b/i.test(t)) return true;
+  if (/\b\/practice\b/i.test(t) && /\b\/teacher\b/i.test(t) && !/\b(quiet cues|aqua bell)\b/i.test(t)) {
+    return true;
+  }
+  return false;
+}
+
+/** “I agree” / name brainstorm / market — Talk only, never skip-chat Full Build. */
+export function isTalkPartnerStayOpen(text: string): boolean {
+  const t = String(text || "").replace(/\s+/g, " ").trim();
+  if (!t) return false;
+  if (/^(i agree|agreed)[\s.!?]*$/i.test(t)) return true;
+  if (/\bsuggest( some)? names\b/i.test(t)) return true;
+  if (/\bwhat(?:'s| is) on the market\b/i.test(t)) return true;
+  return false;
+}
+
+export function isTalkSlotLockTurn(text: string): boolean {
+  const t = String(text || "").replace(/\s+/g, " ").trim();
+  if (!t) return false;
+  if (isTalkStartBuildingPhrase(t) || isTalkKeepTalking(t) || isTalkPartnerStayOpen(t)) return false;
+  if (/^(yes|yeah|yep|yup|good|that['’]?s enough|that is enough|that['’]?s it|love it|perfect)[\s.!?]*$/i.test(t)) {
+    return true;
+  }
+  if (/\b(that['’]?s the name|locked the name)\b/i.test(t)) return true;
+  if (/\bvibe\b/i.test(t) && t.split(/\s+/).length <= 12) return true;
+  return false;
+}
+
+/** Talk persist: wrap → §1; features → §3; screens → §4; vibe → §5. Never name-idea dumps. */
+export function applyTalkSlotPersist(
+  plan: Record<string, unknown> | Record<string, string>,
+  opts: { userText: string; assistantText: string },
+): Record<string, unknown> {
+  const next = { ...(plan as Record<string, unknown>) };
+  const asst = stripTalkCloseQuestion(opts.assistantText);
+  if (looksLikeUnsafeTalkGoal(asst) && !isTalkWrapDisplayText(asst)) return next;
+  if (
+    isTalkSlotLockTurn(opts.userText) &&
+    asst &&
+    !looksLikeUnsafeTalkGoal(asst) &&
+    (isTalkWrapDisplayText(asst) || lastAssistantOfferedTalkClose(asst))
+  ) {
+    const handed = applyApprovedWrapHandoff(next, asst);
+    return applyFullBuildPlanFill(handed).plan;
+  }
+  return next;
+}
+
+/** Go kick: wrap+Start freeze on disk, or a live Start phrase. Compact Go notes are not Start. */
+export function planAllowsGoCodeKick(
+  plan: Record<string, unknown> | null | undefined,
+  userText: string,
+): boolean {
+  if (isPlanFrozen(plan) && isTalkWrapAccepted(plan)) return true;
+  return shouldStartGoAfterTalk({ plan, userText, seedText: userText });
+}
+
+/** Start only: wrap → TALK_WRAP_TEXT_KEY + §1; §4 = wrap/Talk names only. */
 export function applyApprovedWrapHandoff(
   plan: Record<string, unknown> | Record<string, string>,
   wrapText: string,
 ): Record<string, unknown> {
   const wrap = stripTalkCloseQuestion(wrapText).replace(/\s+/g, " ").trim();
   const next = { ...(plan as Record<string, unknown>) };
-  if (!wrap) return next;
+  if (!wrap || looksLikeUnsafeTalkGoal(wrap)) return next;
   next[TALK_WRAP_TEXT_KEY] = wrap.slice(0, 4000);
   next[MASTER_PLAN_SECTION_KEYS[0]] = wrap.slice(0, 4000);
   const s4Key = MASTER_PLAN_SECTION_KEYS[3];
@@ -965,6 +1031,7 @@ export function isTalkStayOpenUserTurn(text: string): boolean {
   const t = String(text || "").replace(/\s+/g, " ").trim();
   if (!t) return false;
   if (isTalkKeepTalking(t)) return true;
+  if (isTalkPartnerStayOpen(t)) return true;
   if (isTalkStartBuildingPhrase(t)) return false;
   if (/^(no|nope|nah|não)[\s.!?]*$/i.test(t)) return true;
   if (isTalkContinueNotLock(t)) return true;
@@ -1306,6 +1373,7 @@ export function shouldSkipGrokChatForExistingPlan(opts: {
       isTalkStayOpenUserTurn(live) ||
       isTalkRepairTurn(live) ||
       isTalkKeepTalking(live) ||
+      isTalkPartnerStayOpen(live) ||
       isTalkContinueNotLock(live))
   ) {
     return false;

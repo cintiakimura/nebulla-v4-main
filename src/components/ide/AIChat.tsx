@@ -99,7 +99,7 @@ import {
 } from '../../lib/nebulaAiCodingPipeline';
 import { isFoundationGoInFlight } from '../../lib/foundationHeavyJob';
 import { abortHonestyUserLine, abortWithUserStopReason, isAbortLikeError, isAbortLikeMessage } from '../../lib/abortLikeError';
-import { applyApprovedWrapHandoff, applyTalkCloseDisplayPolicy, assessFullBuildCompleteness, freezePlan, fullBuildGoUserNote, fullBuildIncompleteFollowUp, formatFullBuildIncompleteStop, FULL_BUILD_INCOMPLETE_STOP, FULL_BUILD_NO_RETRY_ACTIVITY, isPlanFrozen, isTalkKeepTalking, isTalkRepairTurn, isTalkStayOpenUserTurn, lastAssistantOfferedTalkClose, lastTalkWrapFromThread, markTalkWrapAccepted, mayPersistMasterPlanFromChat, shouldOpenTalkTurn, shouldSkipGrokChatForExistingPlan, shouldStartGoAfterTalk, stripTalkCloseQuestion, TALK_CLOSE_QUESTION, userAcceptedTalkClose, userSaidTalkReady } from '../../../lib/fullBuildContract';
+import { applyApprovedWrapHandoff, applyTalkCloseDisplayPolicy, assessFullBuildCompleteness, freezePlan, fullBuildGoUserNote, fullBuildIncompleteFollowUp, formatFullBuildIncompleteStop, FULL_BUILD_INCOMPLETE_STOP, FULL_BUILD_NO_RETRY_ACTIVITY, isPlanFrozen, isTalkKeepTalking, isTalkPartnerStayOpen, isTalkRepairTurn, isTalkSlotLockTurn, isTalkStayOpenUserTurn, isTalkWrapDisplayText, lastAssistantOfferedTalkClose, lastTalkWrapFromThread, looksLikeUnsafeTalkGoal, markTalkWrapAccepted, mayPersistMasterPlanFromChat, shouldOpenTalkTurn, shouldSkipGrokChatForExistingPlan, shouldStartGoAfterTalk, stripTalkCloseQuestion, TALK_CLOSE_QUESTION, userAcceptedTalkClose, userSaidTalkReady } from '../../../lib/fullBuildContract';
 import {
   isAssistantCodingPromise,
   isAssistantRefineClaim,
@@ -2722,7 +2722,36 @@ export function AIChat() {
     }
     const startGoThisTurn = wantsLockAndBuild;
     if (openTalk && !startGoThisTurn) skipGrokChat = false;
+    if (isTalkPartnerStayOpen(rawText)) skipGrokChat = false;
     if (startGoThisTurn) skipGrokChat = true;
+
+    if (
+      !startGoThisTurn &&
+      isTalkSlotLockTurn(rawText) &&
+      (wrapFromThread || String(lastAssistantText || "").trim())
+    ) {
+      const slotSrc = wrapFromThread || stripTalkCloseQuestion(String(lastAssistantText || ""));
+      if (slotSrc && !looksLikeUnsafeTalkGoal(slotSrc)) {
+        try {
+          await fetchJson<{ ok?: boolean }>(withProjectQuery("/api/master-plan/fill-missing-section4"), {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            credentials: "include",
+            body: JSON.stringify(
+              withProjectBody({
+                projectName: getBrowserProjectName().trim(),
+                userNote: slotSrc,
+                replaceGoalFromTalk: true,
+                wrapText: slotSrc,
+              }),
+            ),
+          });
+          window.dispatchEvent(new CustomEvent("nebula-master-plan-updated"));
+        } catch {
+          /* Talk continues even if a slot write fails */
+        }
+      }
+    }
 
     if (startGoThisTurn) {
       const wrapPlain =
@@ -3022,6 +3051,32 @@ export function AIChat() {
           !userAcceptedTalkClose(rawText, { lastAssistantText, lastAssistantOfferedTalkClose: talkCloseOffered });
         displayText = formatFirstSeedTalkDisplay(raw, { allowCanned });
         hadCodingTag = false;
+      }
+      if (
+        !startGoThisTurn &&
+        !isTalkStayOpenUserTurn(rawText) &&
+        isTalkWrapDisplayText(displayText) &&
+        !looksLikeUnsafeTalkGoal(stripTalkCloseQuestion(displayText))
+      ) {
+        try {
+          const wrapBody = stripTalkCloseQuestion(displayText);
+          await fetchJson<{ ok?: boolean }>(withProjectQuery("/api/master-plan/fill-missing-section4"), {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            credentials: "include",
+            body: JSON.stringify(
+              withProjectBody({
+                projectName: getBrowserProjectName().trim(),
+                userNote: wrapBody,
+                replaceGoalFromTalk: true,
+                wrapText: wrapBody,
+              }),
+            ),
+          });
+          window.dispatchEvent(new CustomEvent("nebula-master-plan-updated"));
+        } catch {
+          /* still show the wrap question */
+        }
       }
       displayText = applyTalkCloseDisplayPolicy(displayText, {
         userText: rawText,

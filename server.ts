@@ -189,7 +189,10 @@ import {
   isPlanFrozen,
   markTalkWrapAccepted,
   readBuildModeFromPlan,
-  shouldStartGoAfterTalk,
+  planAllowsGoCodeKick,
+  isTalkWrapAccepted,
+  planAllowsGoCodeKick,
+  isTalkWrapAccepted,
   stripTalkCloseQuestion,
   TALK_WRAP_TEXT_KEY,
   writeBuildModeOnPlan,
@@ -5650,7 +5653,7 @@ Rules:
           planForGate = {};
           planRaw = {};
         }
-        if (!examStderr && !shouldStartGoAfterTalk({ plan: planRaw, userText: note, seedText: note })) {
+        if (!examStderr && !planAllowsGoCodeKick(planRaw, note)) {
           return res.status(409).json({
             ok: false,
             pending: false,
@@ -5725,7 +5728,7 @@ Rules:
             /* still evaluate the gate */
           }
           const fullBuildGate = assessFullBuildCompleteness({ plan: planForGate });
-          if (!fullBuildGate.allowGo) {
+          if (!fullBuildGate.allowGo && !isTalkWrapAccepted(planForGate) && !isTalkWrapAccepted(planRaw)) {
             const blocked = goBlocked("MASTER_PLAN_INCOMPLETE", fullBuildGoBlockedMessage(fullBuildGate));
             console.warn(
               "[go-code] 409 MASTER_PLAN_INCOMPLETE",
@@ -5915,7 +5918,7 @@ Rules:
             /* evaluate anyway */
           }
           const fb = assessFullBuildCompleteness({ plan: planSnapshot });
-          if (!fb.allowGo) {
+          if (!fb.allowGo && !isTalkWrapAccepted(planSnapshot)) {
             clearGoCodePending(ppGo.workspaceRoot);
             const hard = goBlocked("MASTER_PLAN_INCOMPLETE", fullBuildGoBlockedMessage(fb));
             console.warn(
