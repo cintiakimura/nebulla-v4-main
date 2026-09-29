@@ -16,11 +16,8 @@ import {
   formatWorkspaceEnrichmentBlock,
 } from './ideWorkspaceChatContext';
 import { buildNebulaAssistantSystemPrompt } from './nebulaAssistantSystemPrompt';
-import {
-  DEFAULT_AI_CHAT_MODEL,
-  resolveAiChatSelection,
-  type AiChatModelId,
-} from './aiProvider';
+import { resolveAiChatSelection, type AiChatModelId } from './aiProvider';
+import { MODEL_TALK } from '../../lib/talkBuildModels';
 import type { IdeLocaleCode } from './i18n/locales';
 import type { ContentLanguageMode } from './i18n/userLanguagePreferences';
 import { buildInferenceFirstMemoryAppendix } from './inferenceFirstMemory';
@@ -103,7 +100,7 @@ export async function sendIdeAssistantGrokTurn(options: {
     interactionMode === 'agent' &&
     !hasAppStatusPayload &&
     (options.buildMode ?? detectBuildModeIntent(textToSend));
-  const selection = resolveAiChatSelection(options.chatModel ?? DEFAULT_AI_CHAT_MODEL);
+  const selection = resolveAiChatSelection(options.chatModel ?? MODEL_TALK);
 
   const [wsMeta, planCtx, overview] = await Promise.all([
     fetchIdeWorkspaceMeta(true),

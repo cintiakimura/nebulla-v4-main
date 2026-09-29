@@ -1272,6 +1272,7 @@ export async function runGoCodeAndApply(options: {
   } catch {
     /* server TALK_NOT_LOCKED still applies on kick */
   }
+  onProgress?.('Writing files…', 'info');
   onProgress?.('Grok Code — Code pass 1 (waiting for generated files)…', 'info');
 
   markFoundationGoInFlight(projectName, true);
@@ -1758,58 +1759,11 @@ export async function handlePostGrokCodingTurn(options: {
 
   const appCodeBlocks = filterGrokContentToAppCodeFiles(assistantContent);
   if (appCodeBlocks) {
-    onProgress?.('Applying app file blocks from Grok coding handoff', 'info');
-    const apply = await applyGeneratedFiles(appCodeBlocks, {
-      userNote,
-      projectName,
-      onProgress,
-      skipPostSync: true,
-    });
-    if (apply.ok) {
-      const sliceLabel = parseGoSliceLabel(userNote) || parseGoSliceLabel(appCodeBlocks) || 'Foundation';
-      const exit = assessFoundationGoExit({
-        totalWritten: apply.writtenCount,
-        writtenPaths: apply.writtenPaths,
-        sliceLabel,
-        runnableRoot: apply.runnableRoot,
-        partialPlanOnly: isPlanOnlyApply(apply.writtenPaths),
-      });
-      if (exit.ok) {
-        void afterFilesAppliedArtifacts(userNote, projectName, onProgress);
-        const writtenForFinalUi = apply.writtenPaths.slice();
-        const sliceForFinalUi = sliceLabel;
-        queueMicrotask(() => {
-          void triggerUiStudioBetaAfterFilesApplied({
-            writtenPaths: writtenForFinalUi,
-            projectName,
-            onProgress,
-            sliceLabel: sliceForFinalUi,
-          }).catch((e) => {
-            console.warn('[nebulaGrokCodingPipeline] background post-apply UI:', e);
-          });
-        });
-        return {
-          ran: true,
-          ok: true,
-          statusMessage: apply.message,
-          writtenCount: apply.writtenCount,
-          writtenPaths: apply.writtenPaths,
-          sliceLabel,
-          productRouteCount: assessApplyRouteDepth(apply.writtenPaths).productRoutes.length,
-        };
-      }
-      onProgress?.(
-        'Chat handoff was not a product shell — launching Foundation Go (index.html alone is not done)',
-        'warn',
-      );
-      launchGoAfterThinHandoff = true;
-    } else {
-      onProgress?.(
-        `Chat file apply did not land (${apply.message || 'empty'}). Launching Foundation Go…`,
-        'warn',
-      );
-      launchGoAfterThinHandoff = true;
-    }
+    onProgress?.(
+      'Chat handoff was not a product shell — launching Foundation Go (index.html alone is not done)',
+      'warn',
+    );
+    launchGoAfterThinHandoff = true;
   }
 
   if (hasOnlyArchitectureFileBlocks(assistantContent)) {

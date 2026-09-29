@@ -190,9 +190,13 @@ import {
   markTalkWrapAccepted,
   readBuildModeFromPlan,
   shouldStartGoAfterTalk,
+  stripTalkCloseQuestion,
+  TALK_WRAP_TEXT_KEY,
   writeBuildModeOnPlan,
   type BuildMode,
 } from "./lib/fullBuildContract";
+import { persistBuildPacketFromPlan, readBuildPacket } from "./lib/buildPacket";
+import { MODEL_BUILD, resolveBuildModel } from "./lib/talkBuildModels";
 import { classifyGoFailure, goBlocked } from "./lib/goBlockedReason";
 import {
   buildCodedAppPreviewBridgeHtml,
@@ -1600,6 +1604,11 @@ No approved UI code yet.
               existing["4. Pages and navigation"] = talkPages.section;
             }
             persistMasterPlanJson(pp.workspaceRoot, pp.masterPlanPath, existing);
+            const wrapHint =
+              typeof body.wrapText === "string" ? body.wrapText : String(existing[TALK_WRAP_TEXT_KEY] || "");
+            if (wrapHint.trim()) {
+              persistBuildPacketFromPlan(pp.workspaceRoot, existing, wrapHint, "Foundation");
+            }
           }
           fillMissingMasterPlanSectionsLocal({
             workspaceRoot: pp.workspaceRoot,
@@ -1659,7 +1668,14 @@ No approved UI code yet.
       let frozen = freezePlan(filled.plan);
       const body = (req.body || {}) as Record<string, unknown>;
       if (body.talkWrapAccepted === true) {
-        frozen = markTalkWrapAccepted(frozen);
+        const wrapRaw = typeof body.wrapText === "string" ? body.wrapText : "";
+        frozen = markTalkWrapAccepted(frozen, stripTalkCloseQuestion(wrapRaw));
+        persistBuildPacketFromPlan(
+          pp.workspaceRoot,
+          frozen,
+          String(frozen[TALK_WRAP_TEXT_KEY] || wrapRaw || ""),
+          typeof body.sliceName === "string" && body.sliceName.trim() ? body.sliceName.trim() : "Foundation",
+        );
       }
       persistMasterPlanJson(pp.workspaceRoot, pp.masterPlanPath, frozen);
       res.json({
@@ -6066,7 +6082,17 @@ Strict rules:
       }
 
       const workflowContext = buildProjectWorkflowExecutionContext(req);
-      const codeModel = process.env.GROK_CODE_MODEL?.trim() || "grok-code-fast-1";
+      const codeModel = resolveBuildModel();
+      const wrapFromPlan = String(planSnapshot[TALK_WRAP_TEXT_KEY] || "").trim();
+      if (!readBuildPacket(ppGo.workspaceRoot)) {
+        persistBuildPacketFromPlan(
+          ppGo.workspaceRoot,
+          planSnapshot,
+          wrapFromPlan || inferGoalFromPlanRecord(planSnapshot, [note, convProject]),
+          parseGoSliceLabel(note) || "Foundation",
+        );
+      }
+      const buildPacket = readBuildPacket(ppGo.workspaceRoot);
       const goBuildModePrompt: BuildMode = detectQuickDraftIntent(note)
         ? "fast_prototype"
         : readBuildModeFromPlan(planSnapshot);
@@ -6142,9 +6168,9 @@ File blocks only: \`\`\`file:relative/path\` … \`\`\` — no chat prose.
 ${lockedUserConstraintsFromPlan(planSnapshot)}
 
 ${workflowContext}`
-        : `You are Grok Code (coding phase; same ${MAIN_AI_ENV_VAR} as the main brain). The user pressed **Go** in the Nebulla assistant.
+        : `You are Grok Build (${MODEL_BUILD}). Same API key as Talk. Coding only — no user-facing questions, no “what do you think?”, no feature invention beyond the packet.
 
-A short pre-coding summary was just saved to master-plan.json under the key "${PRE_CODING_SUMMARY_KEY}" (it appears again inside the master-plan snapshot below).
+A build packet was saved to nebula-project/build-packet.md. Implement only that packet.
 
 Follow project-execution-rules.md and nebulla-project/incremental-development.md strictly. Use the workflow context in order.
 
@@ -6207,7 +6233,10 @@ ${workflowContext}`;
         persist: true,
       });
       const skeletonForGo = readCodingSkeletonFromPlan(planSnapshot);
-      const compactUser = buildCompactGoCodeUserPrompt({
+      const compactUser = [
+        buildPacket.trim(),
+        "",
+        buildCompactGoCodeUserPrompt({
         sliceLine,
         goal: goalForCode,
         pagesSection: String(planSnapshot["4. Pages and navigation"] || ""),
@@ -6218,13 +6247,17 @@ ${workflowContext}`;
           .filter(Boolean)
           .join("\n\n"),
         uiBriefPageList: briefPages,
-        sessionFocus: note || (continuation ? "(foundation shell)" : "(next incomplete slice)"),
+        sessionFocus: "Implement only this packet. Not a chat turn.",
         continuation,
         productName: productIdentity.projectName,
         logoInitials: productIdentity.logoInitials,
         logoHint: productIdentity.logoHint,
         buildMode: goBuildModePrompt,
-      });
+      }),
+      ]
+        .filter(Boolean)
+        .join("\n")
+        .slice(0, 12000);
       const existingLinked = buildLinkedContextAppendix(readLinkedContext(ppGo.workspaceRoot));
       const codeMessages: { role: string; content: string }[] = [
         { role: "system", content: existingLinked ? `${codeSystemPrompt}\n\n${existingLinked}` : codeSystemPrompt },

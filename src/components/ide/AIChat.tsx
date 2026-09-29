@@ -99,7 +99,7 @@ import {
 } from '../../lib/nebulaAiCodingPipeline';
 import { isFoundationGoInFlight } from '../../lib/foundationHeavyJob';
 import { abortHonestyUserLine, abortWithUserStopReason, isAbortLikeError, isAbortLikeMessage } from '../../lib/abortLikeError';
-import { applyTalkCloseDisplayPolicy, assessFullBuildCompleteness, fillMissingSection4PageFields, freezePlan, fullBuildGoUserNote, fullBuildIncompleteFollowUp, formatFullBuildIncompleteStop, FULL_BUILD_INCOMPLETE_STOP, FULL_BUILD_NO_RETRY_ACTIVITY, isPlanFrozen, isTalkKeepTalking, isTalkRepairTurn, isTalkStayOpenUserTurn, lastAssistantOfferedTalkClose, markTalkWrapAccepted, mayPersistMasterPlanFromChat, shouldOpenTalkTurn, shouldSkipGrokChatForExistingPlan, shouldStartGoAfterTalk, TALK_CLOSE_QUESTION, userAcceptedTalkClose } from '../../../lib/fullBuildContract';
+import { applyTalkCloseDisplayPolicy, assessFullBuildCompleteness, fillMissingSection4PageFields, freezePlan, fullBuildGoUserNote, fullBuildIncompleteFollowUp, formatFullBuildIncompleteStop, FULL_BUILD_INCOMPLETE_STOP, FULL_BUILD_NO_RETRY_ACTIVITY, isPlanFrozen, isTalkKeepTalking, isTalkRepairTurn, isTalkStayOpenUserTurn, lastAssistantOfferedTalkClose, markTalkWrapAccepted, mayPersistMasterPlanFromChat, shouldOpenTalkTurn, shouldSkipGrokChatForExistingPlan, shouldStartGoAfterTalk, stripTalkCloseQuestion, TALK_CLOSE_QUESTION, userAcceptedTalkClose } from '../../../lib/fullBuildContract';
 import {
   isAssistantCodingPromise,
   isAssistantRefineClaim,
@@ -2741,6 +2741,7 @@ export function AIChat() {
               projectName: getBrowserProjectName().trim(),
               userNote: talkBrief || talkGoal || seedForPlan,
               replaceGoalFromTalk: true,
+              wrapText: stripTalkCloseQuestion(String(lastAssistantText || '')),
             }),
           ),
         });
@@ -2754,7 +2755,11 @@ export function AIChat() {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             credentials: 'include',
-            body: JSON.stringify(withProjectBody({ talkWrapAccepted: true })),
+            body: JSON.stringify(withProjectBody({
+              talkWrapAccepted: true,
+              wrapText: stripTalkCloseQuestion(String(lastAssistantText || '')),
+              sliceName: 'Foundation',
+            })),
           },
         );
         if (fr.plan) planOnDisk = fr.plan;
@@ -3465,7 +3470,11 @@ export function AIChat() {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
                   credentials: 'include',
-                  body: JSON.stringify(withProjectBody({ talkWrapAccepted: true })),
+                  body: JSON.stringify(withProjectBody({
+              talkWrapAccepted: true,
+              wrapText: stripTalkCloseQuestion(String(lastAssistantText || '')),
+              sliceName: 'Foundation',
+            })),
                 },
               );
               if (fr.plan) planOnDisk = fr.plan;

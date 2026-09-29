@@ -30,7 +30,8 @@ export const GO_BLOCKED_MESSAGES: Record<GoBlockedCode, string> = {
     "Stopped: ui-brief.md missing, too short, or has no pages. Finish Master Plan §§1–5, then Generate UI.",
   MASTER_PLAN_INCOMPLETE:
     "Stopped: Master Plan is too thin for Full Build. Missing sections were filled from the goal where possible. Not asking you to type go again.",
-  GO_MODEL_REJECTED: "Stopped: coding model rejected the request (invalid parameters). Retry Go — Foundation did not start.",
+  GO_MODEL_REJECTED:
+    "Stopped: Build model grok-build-0.1 unavailable or rejected the request. Slice did not start. Not falling back to Talk Grok.",
   GO_TIMEOUT: "Stopped: Grok Code timed out after 3 minutes. A narrower retry may run automatically.",
   GO_EMPTY_OUTPUT:
     "Stopped: Grok Code returned no file blocks (empty Code output). That is not a product — not asking you to type go again.",
@@ -126,6 +127,14 @@ export function classifyGoFailure(input: {
       return goBlocked(codeRaw, extractGoFailureText(input.error) || text);
     }
     return goBlocked("MASTER_PLAN_INCOMPLETE", text || undefined);
+  }
+  if (
+    status === 404 ||
+    /model.?not.?found|model_not_found|does not exist|unknown model|invalid model|could not find model/i.test(
+      lower,
+    )
+  ) {
+    return goBlocked("GO_MODEL_REJECTED");
   }
   if (status === 401 || status === 403 || /api key|unauthorized|invalid api key|401|403/i.test(lower)) {
     if (/invalid-argument|reasoning.?effort|does not support parameter/i.test(lower)) {

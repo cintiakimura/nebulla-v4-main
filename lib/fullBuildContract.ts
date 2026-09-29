@@ -23,6 +23,8 @@ export const PLAN_FROZEN_KEY = "planFrozen";
 export const PLAN_LOCKED_AT_KEY = "planLockedAt";
 /** Set only after wrap + Start this session — skip-chat Full Build requires it. */
 export const TALK_WRAP_ACCEPTED_AT_KEY = "talkWrapAcceptedAt";
+/** Verbatim wrap (no lock line) — copied into nebula-project/build-packet.md on Start. */
+export const TALK_WRAP_TEXT_KEY = "talkWrapText";
 
 export const TALK_CLOSE_QUESTION =
   "If this is what you want, say start. If not, say let’s keep talking.";
@@ -688,11 +690,14 @@ export function isTalkWrapAccepted(
 
 export function markTalkWrapAccepted(
   plan: Record<string, unknown> | Record<string, string>,
+  wrapText?: string,
 ): Record<string, unknown> {
   const next = { ...(plan as Record<string, unknown>) };
   if (!String(next[TALK_WRAP_ACCEPTED_AT_KEY] || "").trim()) {
     next[TALK_WRAP_ACCEPTED_AT_KEY] = new Date().toISOString();
   }
+  const wrap = String(wrapText || next[TALK_WRAP_TEXT_KEY] || "").trim();
+  if (wrap) next[TALK_WRAP_TEXT_KEY] = wrap.slice(0, 4000);
   return next;
 }
 

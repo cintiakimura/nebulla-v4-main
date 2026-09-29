@@ -27,7 +27,7 @@ export function mainAiProviderLabel(provider: MainAiProvider): string {
 /** Chat model id for the detected provider (override with MAIN_AI_CHAT_MODEL). */
 export function resolveMainAiChatModel(provider: MainAiProvider): string {
   const override = process.env.MAIN_AI_CHAT_MODEL?.trim();
-  if (override) return override;
+  if (override && !/grok-build|grok-code/i.test(override)) return override;
   switch (provider) {
     case "anthropic":
       return process.env.ANTHROPIC_CHAT_MODEL?.trim() || CLAUDE_FALLBACK_MODEL;
