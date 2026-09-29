@@ -9,17 +9,23 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { resolveUpstreamChatModel } from "../lib/aiChatCompletion.ts";
 import {
-  buildPacketIsStructuredHandoff,
-  extractWrapFromAssistant,
-  formatBuildPacketMarkdown,
-  persistBuildPacketFromPlan,
-  readBuildPacket,
-} from "../lib/buildPacket.ts";
-import {
+  applyApprovedWrapHandoff,
+  applyFullBuildPlanFill,
+  freezePlan,
+  markTalkWrapAccepted,
   shouldStartGoAfterTalk,
+  talkLockedRoutes,
   TALK_CLOSE_QUESTION,
   userAcceptedTalkClose,
 } from "../lib/fullBuildContract.ts";
+import {
+  buildPacketIsStructuredHandoff,
+  extractWrapFromAssistant,
+  formatBuildPacketMarkdown,
+  formatGoBuildUserPrompt,
+  persistBuildPacketFromPlan,
+  readBuildPacket,
+} from "../lib/buildPacket.ts";
 import { classifyGoFailure, GO_BLOCKED_MESSAGES } from "../lib/goBlockedReason.ts";
 import {
   MODEL_BUILD,
@@ -105,11 +111,46 @@ section("3 Build request body is packet / wrap, not continue the conversation");
   fs.rmSync(tmp, { recursive: true, force: true });
   const server = fs.readFileSync(path.join(REPO, "server.ts"), "utf8");
   assert.match(server, /sessionFocus: "Implement only this packet\. Not a chat turn\."/);
-  assert.match(server, /buildPacket\.trim\(\)/);
   assert.match(server, /formatWorkshopFileList\(listPaths/);
   assert.match(md, /Approved wrap/);
-  assert.match(server, /const compactUser = /);
-  assert.match(server, /formatExamRepairUserMessage\(buildPacket/);
+  assert.match(server, /formatGoBuildUserPrompt\(buildPacket/);
+  assert.match(server, /BUILD_PACKET_MISSING/);
+  const seedTitle = "Music starter seed title only";
+  const listenWrap =
+    "Public listen `/listen` for anyone with the link. Artist login `/login`. Out of scope: NFT. No dashboard or settings.";
+  const handoff = applyApprovedWrapHandoff(
+    {
+      "1. Goal of the app": seedTitle,
+      "4. Pages and navigation": "### Dashboard `/dashboard`\n### Practice `/practice`",
+    },
+    listenWrap,
+  );
+  const pktDir = fs.mkdtempSync(path.join(os.tmpdir(), "start-packet-"));
+  persistBuildPacketFromPlan(pktDir, handoff, listenWrap, "Foundation");
+  const startPkt = readBuildPacket(pktDir);
+  fs.rmSync(pktDir, { recursive: true, force: true });
+  assert.equal(buildPacketIsStructuredHandoff(startPkt), true);
+  assert.match(startPkt, /Implement only this packet/);
+  assert.match(startPkt, /Approved wrap/);
+  assert.match(startPkt, /Public listen/);
+  assert.doesNotMatch(startPkt, /Music starter seed title only/);
+  const s4start = startPkt.split("## §4")[1]?.split("## Explicit")[0] || "";
+  const locked = talkLockedRoutes(listenWrap, "");
+  assert.deepEqual(
+    locked.map((r) => r.route).sort(),
+    ["/listen", "/login"],
+  );
+  assert.match(s4start, /\/listen/);
+  assert.match(s4start, /\/login/);
+  assert.doesNotMatch(s4start, /`\/dashboard`/i);
+  assert.doesNotMatch(s4start, /`\/practice`/i);
+  assert.doesNotMatch(s4start, /`\/nft`/i);
+  assert.doesNotMatch(s4start, /`\/`/);
+  const goUser = formatGoBuildUserPrompt(startPkt, "## Existing app/src files\n- app/page.tsx");
+  assert.match(goUser, /Approved wrap/);
+  assert.match(goUser, /Existing app\/src files/);
+  const frozenFill = applyFullBuildPlanFill(markTalkWrapAccepted(freezePlan(handoff), listenWrap));
+  assert.doesNotMatch(String(frozenFill.plan["4. Pages and navigation"] || ""), /`\/dashboard`/i);
 }
 
 section("4 let’s keep talking → no Build call");
@@ -128,6 +169,12 @@ section("4 let’s keep talking → no Build call");
   );
   const chat = fs.readFileSync(path.join(REPO, "src/components/ide/AIChat.tsx"), "utf8");
   assert.match(chat, /isTalkKeepTalking\(rawText\)/);
+  const startAt = chat.indexOf("if (startGoThisTurn)");
+  assert.ok(startAt > 0);
+  assert.ok(chat.indexOf("applyApprovedWrapHandoff", startAt) > startAt);
+  const willCodeFreeze = chat.slice(chat.indexOf("if (willCode && foundationGate.ok)"));
+  assert.match(willCodeFreeze.slice(0, 1800), /startGoThisTurn/);
+  assert.match(willCodeFreeze.slice(0, 1800), /talkWrapAccepted: true/);
 }
 
 section("5 Talk gates — No I’m not saying like NFT is not Start");

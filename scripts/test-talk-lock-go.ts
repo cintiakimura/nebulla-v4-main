@@ -4,11 +4,14 @@
  */
 import assert from "node:assert/strict";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
+  applyApprovedWrapHandoff,
   applyFullBuildPlanFill,
   assessFullBuildCompleteness,
+  fillMissingSection4PageFields,
   formatFullBuildFirstSpokenLine,
   freezePlan,
   isPlanFrozen,
@@ -18,6 +21,7 @@ import {
   PLAN_FROZEN_KEY,
   PLAN_LOCKED_AT_KEY,
   TALK_WRAP_ACCEPTED_AT_KEY,
+  TALK_WRAP_TEXT_KEY,
   shouldOpenTalkTurn,
   shouldSkipGrokChatForExistingPlan,
   shouldStartGoAfterTalk,
@@ -30,7 +34,10 @@ import {
   isTalkStayOpenUserTurn,
   isTalkRepairTurn,
   isPostFreezeTalkRequest,
+  isTalkKeepTalking,
+  talkLockedRoutes,
 } from "../lib/fullBuildContract.ts";
+import { persistBuildPacketFromPlan, readBuildPacket } from "../lib/buildPacket.ts";
 import { ensureCodingSkeletonOnPlan } from "../lib/codingSkeleton.ts";
 import { hydrateMasterPlanDerivedSections } from "../lib/nebulaIdeWorkspaceArtifacts.ts";
 import { seedGoalOfTheAppSection, talkThreadGoalBrief, goalSectionFromTalkOnStart } from "../lib/spineSequenceClient.ts";
@@ -187,7 +194,7 @@ section("canned first line is not the unfrozen talk door");
   const iAccept = chat.indexOf("Plan frozen — one Go (no second interview)");
   const iGrok = chat.indexOf("await sendIdeAssistantGrokTurn");
   assert.ok(iAccept > 0 && iGrok > iAccept, "accept freeze+Go must run before Grok chat");
-  assert.match(chat.slice(Math.max(0, iAccept - 1200), iAccept), /\/api\/master-plan\/freeze/);
+  assert.match(chat.slice(Math.max(0, iAccept - 2800), iAccept), /\/api\/master-plan\/freeze/);
   assert.match(chat.slice(iAccept, iGrok), /runGoCodeAndApply/);
   assert.match(chat, /Queued until this build step finishes/);
   assert.match(chat, /pendingTalkDuringGoRef/);
@@ -476,6 +483,87 @@ section("5 after wrapAccepted + start → §1 is not the raw first seed");
     }),
     true,
   );
+}
+
+section("wrap+start packet/§4 are Talk names only — not seed dashboard/practice/NFT");
+{
+  const seed = "Music starter seed title only";
+  const wrap =
+    "Public listen `/listen` for anyone with the link. Artist login `/login`. Out of scope: NFT. No dashboard or settings.";
+  const seeded = {
+    "1. Goal of the app": seed,
+    "4. Pages and navigation":
+      "### Dashboard `/dashboard`\n### Settings `/settings`\n### Practice `/practice`",
+  };
+  const handoff = applyApprovedWrapHandoff(seeded, wrap);
+  assert.equal(String(handoff[TALK_WRAP_TEXT_KEY] || "").includes("Public listen"), true);
+  assert.match(String(handoff["1. Goal of the app"]), /Public listen/);
+  assert.doesNotMatch(String(handoff["1. Goal of the app"]), /^Music starter seed title only$/);
+  const s4 = String(handoff["4. Pages and navigation"] || "");
+  assert.match(s4, /\/listen/);
+  assert.match(s4, /\/login/);
+  assert.doesNotMatch(s4, /`\/dashboard`/i);
+  assert.doesNotMatch(s4, /`\/settings`/i);
+  assert.doesNotMatch(s4, /`\/practice`/i);
+  assert.doesNotMatch(s4, /`\/nft`/i);
+  assert.deepEqual(
+    talkLockedRoutes(wrap, "").map((r) => r.route).sort(),
+    ["/listen", "/login"],
+  );
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "wrap-packet-"));
+  persistBuildPacketFromPlan(tmp, handoff, wrap, "Foundation");
+  const packet = readBuildPacket(tmp);
+  fs.rmSync(tmp, { recursive: true, force: true });
+  const s4pkt = packet.split("## §4")[1]?.split("## Explicit")[0] || "";
+  assert.match(packet, /Public listen/);
+  assert.doesNotMatch(packet, /Music starter seed title only/);
+  assert.match(s4pkt, /\/listen/);
+  assert.match(s4pkt, /\/login/);
+  assert.doesNotMatch(s4pkt, /`\/dashboard`/i);
+  assert.doesNotMatch(s4pkt, /`\/practice`/i);
+  assert.doesNotMatch(s4pkt, /`\/nft`/i);
+
+  const frozen = markTalkWrapAccepted(freezePlan(handoff), wrap);
+  const afterFill = applyFullBuildPlanFill(frozen);
+  const s4b = String(afterFill.plan["4. Pages and navigation"] || "");
+  assert.match(s4b, /\/listen/);
+  assert.doesNotMatch(s4b, /`\/dashboard`/i);
+  assert.doesNotMatch(s4b, /`\/practice`/i);
+  const lockedFill = fillMissingSection4PageFields({
+    section4: s4b,
+    goal: String(afterFill.plan["1. Goal of the app"] || ""),
+    lockToNamedOnly: true,
+    wrapText: wrap,
+  });
+  assert.doesNotMatch(lockedFill.section, /\/practice/i);
+  assert.doesNotMatch(lockedFill.section, /\/teacher/i);
+  const fb = assessFullBuildCompleteness({ plan: afterFill.plan });
+  assert.equal(fb.gaps.some((g) => g.code === "PAGES_ROLES"), false, fb.gaps.map((g) => g.code).join(","));
+  assert.equal(fb.routes.some((r) => r.route === "/practice"), false);
+  assert.equal(fb.routes.some((r) => r.route === "/teacher"), false);
+
+  assert.equal(isTalkKeepTalking("let’s keep talking"), true);
+  assert.equal(
+    shouldStartGoAfterTalk({
+      plan: handoff,
+      userText: "let’s keep talking",
+      lastAssistantText: TALK_CLOSE_QUESTION,
+    }),
+    false,
+  );
+  const server = fs.readFileSync(path.join(REPO, "server.ts"), "utf8");
+  assert.match(server, /BUILD_PACKET_MISSING/);
+  assert.match(server, /formatGoBuildUserPrompt\(buildPacket/);
+  const freezeAt = server.indexOf('app.post("/api/master-plan/freeze"');
+  const freezeBody = server.slice(freezeAt, freezeAt + 1800);
+  assert.ok(
+    freezeBody.indexOf("persistBuildPacketFromPlan") < freezeBody.indexOf("freezePlan(filled.plan)"),
+    "packet persist must run after wrap rewrite and before freezePlan",
+  );
+  const chat = fs.readFileSync(path.join(REPO, "src/components/ide/AIChat.tsx"), "utf8");
+  assert.match(chat, /applyApprovedWrapHandoff/);
+  const startAt = chat.indexOf("if (startGoThisTurn)");
+  assert.match(chat.slice(startAt, startAt + 2800), /packetHandoff/);
 }
 
 console.log("\n✓ talk-lock-go tests passed\n");

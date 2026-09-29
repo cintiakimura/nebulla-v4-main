@@ -77,6 +77,10 @@ export function buildPacketIsStructuredHandoff(md: string): boolean {
   );
 }
 
+export function formatGoBuildUserPrompt(packet: string, fileList: string): string {
+  return [String(packet || "").trim(), "", String(fileList || "").trim()].filter(Boolean).join("\n");
+}
+
 export function persistBuildPacket(workspaceRoot: string, markdown: string): string {
   const rel = BUILD_PACKET_REL;
   const abs = path.join(workspaceRoot, rel);
@@ -103,9 +107,9 @@ export function persistBuildPacketFromPlan(
 ): string {
   const md = formatBuildPacketMarkdown({
     wrapText: extractWrapFromAssistant(wrapText),
-    goalSection: String(plan["1. Goal of the app"] || "").trim(),
+    goalSection: extractWrapFromAssistant(wrapText) || String(plan["1. Goal of the app"] || "").trim(),
     pagesSection: String(plan["4. Pages and navigation"] || "").trim(),
-    explicitOuts: extractExplicitOuts(`${wrapText}\n${String(plan["1. Goal of the app"] || "")}`),
+    explicitOuts: extractExplicitOuts(wrapText),
     sliceName,
   });
   return persistBuildPacket(workspaceRoot, md);

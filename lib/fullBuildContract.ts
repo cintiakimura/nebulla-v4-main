@@ -153,10 +153,97 @@ export function listMissingFullBuildRoutes(
     .map((p) => ({ name: p.name || p.route.replace(/^\//, ""), route: p.route }));
 }
 
+export type InferFullBuildRoutesOpts = {
+  /** After wrap+Start — named wrap/§4 screens only. No seedPages / implied /practice /teacher /login. */
+  lockToTalkNames?: boolean;
+  wrapText?: string;
+};
+
+const INVENTED_UNLESS_NAMED_RE = /^\/(dashboard|settings|practice|teacher|parent|progress|nft)$/i;
+
+function wrapBansRoute(wrap: string, route: string): boolean {
+  const w = String(wrap || "");
+  const slug = route.replace(/^\//, "");
+  if (route.toLowerCase() === "/nft" && /\bnft\b/i.test(w)) return true;
+  if (INVENTED_UNLESS_NAMED_RE.test(route) && new RegExp(`\\bno\\s+${slug}\\b`, "i").test(w)) {
+    return true;
+  }
+  if (
+    /\/(dashboard|settings|nft)/i.test(route) &&
+    /\b(out of scope|not in v1|won'?t include|will not include)\b/i.test(w) &&
+    new RegExp(`\\b${slug}\\b`, "i").test(w)
+  ) {
+    return true;
+  }
+  return false;
+}
+
+function extractTalkScreenPhrases(wrap: string): { name: string; route: string }[] {
+  const w = String(wrap || "");
+  const out: { name: string; route: string }[] = [];
+  const seen = new Set<string>();
+  const add = (name: string, route: string) => {
+    const r = route.startsWith("/") ? route : `/${route}`;
+    const key = r.toLowerCase();
+    if (seen.has(key) || wrapBansRoute(w, r)) return;
+    seen.add(key);
+    out.push({ name, route: r });
+  };
+  if (/\b(public\s+)?listen(?:ing)?\b/i.test(w)) add("Listen", "/listen");
+  if (/\b(artist\s+)?login\b|\bsign[\s-]?in\b/i.test(w)) add("Login", "/login");
+  return out;
+}
+
+/** Screens named in wrap and/or existing §4 — never seedPagesFromGoal extras. */
+export function talkLockedRoutes(
+  wrapText: string,
+  section4: string,
+): { name: string; route: string }[] {
+  const wrap = stripTalkCloseQuestion(wrapText);
+  const fromWrapPaths = extractNamedRoutesFromPagesText(wrap);
+  const phrases = extractTalkScreenPhrases(wrap);
+  const fromS4 = inferNamedPagesFromSection4(section4);
+  const wrapNamed = [...fromWrapPaths, ...phrases];
+  const wrapHasScreens = wrapNamed.filter((p) => p.route !== "/").length > 0;
+  const source = wrapHasScreens ? wrapNamed : fromS4;
+  const merged: { name: string; route: string }[] = [];
+  const seen = new Set<string>();
+  const add = (p: { name: string; route: string }) => {
+    const route = p.route.startsWith("/") ? p.route : `/${p.route}`;
+    const key = route.toLowerCase();
+    if (seen.has(key) || wrapBansRoute(wrap, route)) return;
+    if (wrapHasScreens && INVENTED_UNLESS_NAMED_RE.test(route)) {
+      const named =
+        fromWrapPaths.some((x) => x.route.toLowerCase() === key) ||
+        phrases.some((x) => x.route.toLowerCase() === key);
+      if (!named) return;
+    }
+    const name =
+      p.name.split(/\s+/).filter(Boolean).length > 5
+        ? route === "/"
+          ? "Home"
+          : route.replace(/^\//, "").replace(/[-_]/g, " ").replace(/^\w/, (c) => c.toUpperCase())
+        : p.name;
+    seen.add(key);
+    merged.push({ name, route });
+  };
+  for (const p of source) add(p);
+  const wrapNamesHome =
+    fromWrapPaths.some((p) => p.route === "/") ||
+    /\bhome\b/i.test(wrap) ||
+    /`\/`/.test(wrap);
+  if (!seen.has("/") && wrapNamesHome) merged.unshift({ name: "Home", route: "/" });
+  return merged;
+}
+
 export function inferFullBuildRoutes(
   goal: string,
   pagesSection = "",
+  opts?: InferFullBuildRoutesOpts,
 ): { name: string; route: string }[] {
+  if (opts?.lockToTalkNames) {
+    return talkLockedRoutes(opts.wrapText || "", pagesSection);
+  }
   const fromPlan = inferNamedPagesFromSection4(pagesSection);
   const seeded = seedPagesFromGoal(goal);
   const first = inferFirstSliceRoutes(goal, pagesSection, {
@@ -273,11 +360,18 @@ export function fillMissingSection4PageFields(opts: {
   section4: string;
   goal: string;
   skeleton?: { roles?: string[]; routes?: { path: string; purpose: string }[]; verbs?: string[] } | null;
+  /** Frozen / wrap+Start — existing wrap/§4 names only. */
+  lockToNamedOnly?: boolean;
+  wrapText?: string;
 }): { section: string; filled: boolean } {
   const s4 = String(opts.section4 || "").trim();
   const goal = String(opts.goal || "").trim();
-  const routes = inferFullBuildRoutes(goal, s4);
-  const named = extractNamedRoutesFromPagesText(s4);
+  const routes = opts.lockToNamedOnly
+    ? inferNamedPagesFromSection4(s4)
+    : inferFullBuildRoutes(goal, s4);
+  const named = opts.lockToNamedOnly
+    ? inferNamedPagesFromSection4(s4)
+    : extractNamedRoutesFromPagesText(s4);
   if (named.length === 0 && routes.filter((r) => r.route !== "/").length < 1) {
     return { section: s4, filled: false };
   }
@@ -302,28 +396,83 @@ export function fillMissingSection4PageFields(opts: {
   return { section: next, filled: Boolean(next) && next !== s4 };
 }
 
-function applyFrozenPlanMachineFill(
+function applyTalkLockedPlanFill(
   plan: Record<string, unknown>,
 ): { plan: Record<string, unknown>; filled: boolean } {
-  const next = { ...plan };
-  const s1 = String(next[MASTER_PLAN_SECTION_KEYS[0]] ?? "").trim();
-  const s2Key = MASTER_PLAN_SECTION_KEYS[1];
+  let next = { ...plan };
+  let filled = false;
+  const wrap = String(next[TALK_WRAP_TEXT_KEY] ?? "").trim();
+  const s1 = String(next[MASTER_PLAN_SECTION_KEYS[0]] ?? "").trim() || wrap;
   const s4Key = MASTER_PLAN_SECTION_KEYS[3];
-  const s2 = String(next[s2Key] ?? "");
-  const s4 = String(next[s4Key] ?? "");
-  if (AUTH_STATED_RE.test([s1, s2, s4].join("\n"))) {
-    return { plan: next, filled: false };
+
+  const s2Key = MASTER_PLAN_SECTION_KEYS[1];
+  const s2fill = fillMissingSection2Tech({
+    section2: String(next[s2Key] ?? ""),
+    goal: s1,
+  });
+  if (s2fill.filled) {
+    next[s2Key] = s2fill.section;
+    filled = true;
   }
-  const authLine = "Auth model: assumption: mock/local role gates. No hosted BaaS.";
-  next[s2Key] = `${s2.trim()}\n${authLine}`.trim();
-  return { plan: next, filled: true };
+
+  const ensured = ensureCodingSkeletonOnPlan(next, { goal: s1 });
+  if (ensured.plan !== next) {
+    next = ensured.plan;
+    filled = true;
+  }
+
+  const s3Key = MASTER_PLAN_SECTION_KEYS[2];
+  const features = fillMissingSection3Features({
+    section3: String(next[s3Key] ?? "").trim(),
+    goal: s1,
+  });
+  if (features.filled) {
+    next[s3Key] = features.section;
+    filled = true;
+  }
+
+  const result = fillMissingSection4PageFields({
+    section4: String(next[s4Key] ?? "").trim(),
+    goal: s1,
+    lockToNamedOnly: true,
+  });
+  if (result.filled) {
+    next[s4Key] = result.section;
+    filled = true;
+  }
+
+  const s2 = String(next[s2Key] ?? "");
+  if (!AUTH_STATED_RE.test([s1, s2, String(next[s4Key] ?? "")].join("\n"))) {
+    next[s2Key] = `${s2.trim()}\nAuth model: assumption: mock/local role gates. No hosted BaaS.`.trim();
+    filled = true;
+  }
+
+  const s5Key = MASTER_PLAN_SECTION_KEYS[4];
+  const s5fill = fillMissingSection5Ui({
+    section5: String(next[s5Key] ?? ""),
+    goal: s1,
+  });
+  if (s5fill.filled) {
+    next[s5Key] = s5fill.section;
+    filled = true;
+  }
+
+  return { plan: next, filled };
+}
+
+function planLocksTalkRoutes(plan: Record<string, unknown> | Record<string, string>): boolean {
+  return (
+    isPlanFrozen(plan) ||
+    isTalkWrapAccepted(plan) ||
+    Boolean(String((plan as Record<string, unknown>)[TALK_WRAP_TEXT_KEY] || "").trim())
+  );
 }
 
 export function applyFullBuildPlanFill(
   plan: Record<string, unknown> | Record<string, string>,
 ): { plan: Record<string, unknown>; filled: boolean } {
-  if (isPlanFrozen(plan)) {
-    return applyFrozenPlanMachineFill({ ...(plan as Record<string, unknown>) });
+  if (planLocksTalkRoutes(plan)) {
+    return applyTalkLockedPlanFill({ ...(plan as Record<string, unknown>) });
   }
   let next = { ...(plan as Record<string, unknown>) };
   const s1 = String(next[MASTER_PLAN_SECTION_KEYS[0]] ?? "").trim();
@@ -416,7 +565,10 @@ export function assessFullBuildCompleteness(opts: {
   const s4 = sectionText(plan, 4);
   const s5 = sectionText(plan, 5);
   const combined = [s1, s2, s3, s4, s5].join("\n");
-  const routes = inferFullBuildRoutes(s1, s4);
+  const wrapText = String(rawPlan[TALK_WRAP_TEXT_KEY] || "").trim();
+  const wrapAccepted = isTalkWrapAccepted(rawPlan);
+  const lockRoutes = wrapAccepted || Boolean(wrapText);
+  const routes = inferFullBuildRoutes(s1, s4, lockRoutes ? { lockToTalkNames: true, wrapText } : undefined);
 
   if (isThin(s1, 24)) {
     gaps.push({ code: "GOAL_EMPTY", message: "§1 Goal is empty — what should the app help someone do?" });
@@ -435,23 +587,40 @@ export function assessFullBuildCompleteness(opts: {
   }
 
   const implied = goalImpliesRoles(s1);
+  const wrapOrPages = `${wrapText}\n${s4}`;
+  const wrapOrPagesNames = (route: string) => {
+    const slug = route.replace(/^\//, "");
+    return (
+      wrapOrPages.toLowerCase().includes(route.toLowerCase()) ||
+      new RegExp(`\\b${slug}\\b`, "i").test(wrapOrPages)
+    );
+  };
   if (implied.kid && implied.teacher) {
     const paths = new Set(routes.map((r) => r.route.toLowerCase()));
-    if (!paths.has("/practice") && !paths.has("/teacher")) {
-      gaps.push({
-        code: "PAGES_ROLES",
-        message: "§4 is missing distinct kid practice and teacher routes implied by the goal.",
-      });
-    } else if (!paths.has("/practice") || !paths.has("/teacher")) {
-      gaps.push({
-        code: "PAGES_ROLES",
-        message: "§4 needs both a kid practice route and a teacher route.",
-      });
+    const requirePractice = !wrapAccepted || wrapOrPagesNames("/practice");
+    const requireTeacher = !wrapAccepted || wrapOrPagesNames("/teacher");
+    if (requirePractice || requireTeacher) {
+      if (requirePractice && requireTeacher && !paths.has("/practice") && !paths.has("/teacher")) {
+        gaps.push({
+          code: "PAGES_ROLES",
+          message: "§4 is missing distinct kid practice and teacher routes implied by the goal.",
+        });
+      } else if (requirePractice && !paths.has("/practice")) {
+        gaps.push({
+          code: "PAGES_ROLES",
+          message: "§4 needs a kid practice route named in wrap or §4.",
+        });
+      } else if (requireTeacher && !paths.has("/teacher")) {
+        gaps.push({
+          code: "PAGES_ROLES",
+          message: "§4 needs a teacher route named in wrap or §4.",
+        });
+      }
     }
   }
 
   const productRoutes = routes.filter((r) => r.route !== "/" && r.route !== "/login");
-  if (implied.kid && implied.teacher && productRoutes.length < 2) {
+  if (implied.kid && implied.teacher && productRoutes.length < 2 && !wrapAccepted) {
     gaps.push({
       code: "PAGES_THIN",
       message: "§4 lists Home alone — add practice and teacher (and login if people sign in).",
@@ -497,7 +666,11 @@ export function assessFullBuildCompleteness(opts: {
     }
   }
 
-  if (!AUTH_STATED_RE.test(combined) && (implied.auth || implied.teacher || /\broles?\b/i.test(s4))) {
+  if (
+    !wrapAccepted &&
+    !AUTH_STATED_RE.test(combined) &&
+    (implied.auth || implied.teacher || /\broles?\b/i.test(s4))
+  ) {
     if (!gaps.some((g) => g.code === "PAGE_STATES_AUTH")) {
       gaps.push({
         code: "AUTH_MODEL",
@@ -606,7 +779,9 @@ export function fullBuildGoUserNote(
 ): string {
   const goal = String(plan?.["1. Goal of the app"] || "");
   const s4 = String(plan?.["4. Pages and navigation"] || "");
-  const routes = inferFullBuildRoutes(goal, s4);
+  const wrap = String(plan?.[TALK_WRAP_TEXT_KEY] || "").trim();
+  const lock = isTalkWrapAccepted(plan) || Boolean(wrap);
+  const routes = inferFullBuildRoutes(goal, s4, lock ? { lockToTalkNames: true, wrapText: wrap } : undefined);
   const missing = listMissingFullBuildRoutes(routes, existingRelPaths);
   const apply = missing.length > 0 ? missing : routes;
   return [
@@ -698,6 +873,30 @@ export function markTalkWrapAccepted(
   }
   const wrap = String(wrapText || next[TALK_WRAP_TEXT_KEY] || "").trim();
   if (wrap) next[TALK_WRAP_TEXT_KEY] = wrap.slice(0, 4000);
+  return next;
+}
+
+/** Start only: wrap → TALK_WRAP_TEXT_KEY + §1; §4 = wrap/Talk names only. */
+export function applyApprovedWrapHandoff(
+  plan: Record<string, unknown> | Record<string, string>,
+  wrapText: string,
+): Record<string, unknown> {
+  const wrap = stripTalkCloseQuestion(wrapText).replace(/\s+/g, " ").trim();
+  const next = { ...(plan as Record<string, unknown>) };
+  if (!wrap) return next;
+  next[TALK_WRAP_TEXT_KEY] = wrap.slice(0, 4000);
+  next[MASTER_PLAN_SECTION_KEYS[0]] = wrap.slice(0, 4000);
+  const s4Key = MASTER_PLAN_SECTION_KEYS[3];
+  const locked = talkLockedRoutes(wrap, "");
+  if (locked.filter((p) => p.route !== "/").length > 0) {
+    const stub = locked.map((p) => `### ${p.name} \`${p.route}\``).join("\n");
+    const filled = fillMissingSection4PageFields({
+      section4: stub,
+      goal: wrap,
+      lockToNamedOnly: true,
+    });
+    next[s4Key] = filled.section || stub;
+  }
   return next;
 }
 

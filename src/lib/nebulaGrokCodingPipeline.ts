@@ -32,7 +32,7 @@ import {
 } from './abortLikeError';
 import { markFoundationGoInFlight, isFoundationGoInFlight } from './foundationHeavyJob';
 import { setGrokCodingActive } from './nebulaGrokCodingGate';
-import { FULL_BUILD_NO_RETRY_ACTIVITY, fullBuildGoUserNote, inferFullBuildRoutes, isPlanFrozen, listMissingFullBuildRoutes } from '../../lib/fullBuildContract';
+import { FULL_BUILD_NO_RETRY_ACTIVITY, fullBuildGoUserNote, inferFullBuildRoutes, isPlanFrozen, isTalkWrapAccepted, listMissingFullBuildRoutes, TALK_WRAP_TEXT_KEY } from '../../lib/fullBuildContract';
 import { workshopExamDecision } from '../../lib/workshopExamPolicy';
 import {
   buildEditExistingUserNote,
@@ -1332,6 +1332,9 @@ export async function runGoCodeAndApply(options: {
         expectedRoutes = inferFullBuildRoutes(
           String(plan['1. Goal of the app'] || ''),
           String(plan['4. Pages and navigation'] || ''),
+          isTalkWrapAccepted(plan) || String(plan[TALK_WRAP_TEXT_KEY] || '').trim()
+            ? { lockToTalkNames: true, wrapText: String(plan[TALK_WRAP_TEXT_KEY] || '') }
+            : undefined,
         );
       }
     } catch {

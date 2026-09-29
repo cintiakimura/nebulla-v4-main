@@ -99,7 +99,7 @@ import {
 } from '../../lib/nebulaAiCodingPipeline';
 import { isFoundationGoInFlight } from '../../lib/foundationHeavyJob';
 import { abortHonestyUserLine, abortWithUserStopReason, isAbortLikeError, isAbortLikeMessage } from '../../lib/abortLikeError';
-import { applyTalkCloseDisplayPolicy, assessFullBuildCompleteness, fillMissingSection4PageFields, freezePlan, fullBuildGoUserNote, fullBuildIncompleteFollowUp, formatFullBuildIncompleteStop, FULL_BUILD_INCOMPLETE_STOP, FULL_BUILD_NO_RETRY_ACTIVITY, isPlanFrozen, isTalkKeepTalking, isTalkRepairTurn, isTalkStayOpenUserTurn, lastAssistantOfferedTalkClose, markTalkWrapAccepted, mayPersistMasterPlanFromChat, shouldOpenTalkTurn, shouldSkipGrokChatForExistingPlan, shouldStartGoAfterTalk, stripTalkCloseQuestion, TALK_CLOSE_QUESTION, userAcceptedTalkClose } from '../../../lib/fullBuildContract';
+import { applyApprovedWrapHandoff, applyTalkCloseDisplayPolicy, assessFullBuildCompleteness, freezePlan, fullBuildGoUserNote, fullBuildIncompleteFollowUp, formatFullBuildIncompleteStop, FULL_BUILD_INCOMPLETE_STOP, FULL_BUILD_NO_RETRY_ACTIVITY, isPlanFrozen, isTalkKeepTalking, isTalkRepairTurn, isTalkStayOpenUserTurn, lastAssistantOfferedTalkClose, markTalkWrapAccepted, mayPersistMasterPlanFromChat, shouldOpenTalkTurn, shouldSkipGrokChatForExistingPlan, shouldStartGoAfterTalk, stripTalkCloseQuestion, TALK_CLOSE_QUESTION, userAcceptedTalkClose } from '../../../lib/fullBuildContract';
 import {
   isAssistantCodingPromise,
   isAssistantRefineClaim,
@@ -2673,7 +2673,7 @@ export function AIChat() {
         skipGrokChat = false;
         pushActivity('New product brief — previous plan and leftover routes cleared', 'info');
       } else if (maySkipChatIfPlanExists) {
-        const hasPlan = skipOk || fastLaneFillAllowGo === true;
+        const hasPlan = skipOk;
         if (hasPlan) {
           planSliceFromDisk = parsePersistedSliceLabel(
             String((plan as Record<string, unknown>)[PRE_CODING_SUMMARY_KEY] ?? ''),
@@ -2713,24 +2713,13 @@ export function AIChat() {
     if (startGoThisTurn) skipGrokChat = true;
 
     if (startGoThisTurn) {
+      const wrapPlain = stripTalkCloseQuestion(String(lastAssistantText || ""));
+      if (planOnDisk) planOnDisk = applyApprovedWrapHandoff(planOnDisk, wrapPlain);
       const talkBrief = talkThreadGoalBrief(prior, rawText);
       const talkGoal = goalSectionFromTalkOnStart({
         plan: planOnDisk,
-        threadBrief: talkBrief || seedForPlan,
+        threadBrief: wrapPlain || talkBrief || seedForPlan,
       });
-      if (talkGoal && planOnDisk) {
-        const talkPages = fillMissingSection4PageFields({
-          section4: talkBrief,
-          goal: talkGoal,
-        });
-        planOnDisk = {
-          ...planOnDisk,
-          "1. Goal of the app": talkGoal,
-          ...(talkPages.section.trim()
-            ? { "4. Pages and navigation": talkPages.section }
-            : {}),
-        };
-      }
       try {
         await fetchJson<{ ok?: boolean }>(withProjectQuery('/api/master-plan/fill-missing-section4'), {
           method: 'POST',
@@ -2739,9 +2728,9 @@ export function AIChat() {
           body: JSON.stringify(
             withProjectBody({
               projectName: getBrowserProjectName().trim(),
-              userNote: talkBrief || talkGoal || seedForPlan,
+              userNote: wrapPlain || talkBrief || talkGoal || seedForPlan,
               replaceGoalFromTalk: true,
-              wrapText: stripTalkCloseQuestion(String(lastAssistantText || '')),
+              wrapText: wrapPlain,
             }),
           ),
         });
@@ -2749,7 +2738,7 @@ export function AIChat() {
         /* freeze still persists the agreed §§ */
       }
       try {
-        const fr = await fetchJson<{ plan?: Record<string, unknown> }>(
+        const fr = await fetchJson<{ plan?: Record<string, unknown>; packetHandoff?: boolean }>(
           withProjectQuery('/api/master-plan/freeze'),
           {
             method: 'POST',
@@ -2757,14 +2746,23 @@ export function AIChat() {
             credentials: 'include',
             body: JSON.stringify(withProjectBody({
               talkWrapAccepted: true,
-              wrapText: stripTalkCloseQuestion(String(lastAssistantText || '')),
+              wrapText: wrapPlain,
               sliceName: 'Foundation',
             })),
           },
         );
         if (fr.plan) planOnDisk = fr.plan;
+        if (fr.packetHandoff !== true) {
+          pushActivity('Build packet missing — staying in Talk.', 'warn');
+          sendingRef.current = false;
+          setSending(false);
+          return;
+        }
       } catch {
-        if (planOnDisk) planOnDisk = markTalkWrapAccepted(freezePlan(planOnDisk));
+        pushActivity('Build packet missing — staying in Talk.', 'warn');
+        sendingRef.current = false;
+        setSending(false);
+        return;
       }
       const lockTs = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
       const lockLine = 'Plan is saved — starting the build on this workspace.';
@@ -3462,7 +3460,7 @@ export function AIChat() {
         if (willCode && foundationGate.ok) {
           sendingRef.current = true;
           setSending(true);
-          if (!isPlanFrozen(planOnDisk)) {
+          if (!isPlanFrozen(planOnDisk) && startGoThisTurn) {
             try {
               const fr = await fetchJson<{ plan?: Record<string, unknown>; projectKey?: string }>(
                 withProjectQuery('/api/master-plan/freeze'),
@@ -3479,7 +3477,22 @@ export function AIChat() {
               );
               if (fr.plan) planOnDisk = fr.plan;
             } catch {
-              if (planOnDisk) planOnDisk = markTalkWrapAccepted(freezePlan(planOnDisk));
+              if (planOnDisk) planOnDisk = markTalkWrapAccepted(freezePlan(applyApprovedWrapHandoff(planOnDisk, stripTalkCloseQuestion(String(lastAssistantText || '')))), stripTalkCloseQuestion(String(lastAssistantText || '')));
+            }
+          } else if (!isPlanFrozen(planOnDisk) && !startGoThisTurn) {
+            try {
+              const fr = await fetchJson<{ plan?: Record<string, unknown> }>(
+                withProjectQuery('/api/master-plan/freeze'),
+                {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  credentials: 'include',
+                  body: JSON.stringify(withProjectBody({})),
+                },
+              );
+              if (fr.plan) planOnDisk = fr.plan;
+            } catch {
+              if (planOnDisk) planOnDisk = freezePlan(planOnDisk);
             }
           }
         }

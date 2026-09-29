@@ -180,11 +180,11 @@ import {
   shouldSkipPhaseALlm,
 } from "./lib/goSliceContract";
 import {
+  applyApprovedWrapHandoff,
   applyFullBuildPlanFill,
   assessFullBuildCompleteness,
   detectQuickDraftIntent,
   freezePlan,
-  fillMissingSection4PageFields,
   fullBuildGoBlockedMessage,
   isPlanFrozen,
   markTalkWrapAccepted,
@@ -195,7 +195,7 @@ import {
   writeBuildModeOnPlan,
   type BuildMode,
 } from "./lib/fullBuildContract";
-import { persistBuildPacketFromPlan, readBuildPacket } from "./lib/buildPacket";
+import { persistBuildPacketFromPlan, readBuildPacket, buildPacketIsStructuredHandoff, formatGoBuildUserPrompt } from "./lib/buildPacket";
 import { MODEL_BUILD, resolveBuildModel } from "./lib/talkBuildModels";
 import {
   formatExamRepairUserMessage,
@@ -1590,7 +1590,8 @@ No approved UI code yet.
       const replaceGoalFromTalk = body.replaceGoalFromTalk === true;
       const rawName = typeof body.projectName === "string" ? body.projectName.trim() : "";
       const projectName = isReservedPlaceholderProductName(rawName) ? "" : rawName;
-      if (userNote) {
+      const wrapHint = typeof body.wrapText === "string" ? body.wrapText.trim() : "";
+      if (userNote || wrapHint) {
         let existing: Record<string, unknown> = {};
         try {
           if (fs.existsSync(pp.masterPlanPath)) {
@@ -1600,29 +1601,22 @@ No approved UI code yet.
           existing = {};
         }
         if (!isPlanFrozen(existing)) {
-          if (replaceGoalFromTalk) {
+          if (wrapHint) {
+            existing = applyApprovedWrapHandoff(existing, wrapHint);
+            persistMasterPlanJson(pp.workspaceRoot, pp.masterPlanPath, existing);
+          } else if (replaceGoalFromTalk && userNote) {
             const talkGoal = goalSectionFromTalkOnStart({ plan: existing, threadBrief: userNote });
             if (talkGoal) existing["1. Goal of the app"] = talkGoal;
-            const talkPages = fillMissingSection4PageFields({
-              section4: userNote,
-              goal: String(existing["1. Goal of the app"] || talkGoal || ""),
-            });
-            if (talkPages.section.trim()) {
-              existing["4. Pages and navigation"] = talkPages.section;
-            }
             persistMasterPlanJson(pp.workspaceRoot, pp.masterPlanPath, existing);
-            const wrapHint =
-              typeof body.wrapText === "string" ? body.wrapText : String(existing[TALK_WRAP_TEXT_KEY] || "");
-            if (wrapHint.trim()) {
-              persistBuildPacketFromPlan(pp.workspaceRoot, existing, wrapHint, "Foundation");
-            }
           }
-          fillMissingMasterPlanSectionsLocal({
-            workspaceRoot: pp.workspaceRoot,
-            masterPlanPath: pp.masterPlanPath,
-            projectName: projectName || "Untitled Project",
-            userNote,
-          });
+          if (!wrapHint && userNote) {
+            fillMissingMasterPlanSectionsLocal({
+              workspaceRoot: pp.workspaceRoot,
+              masterPlanPath: pp.masterPlanPath,
+              projectName: projectName || "Untitled Project",
+              userNote,
+            });
+          }
         }
       }
       let plan: Record<string, unknown> = {};
@@ -1635,6 +1629,9 @@ No approved UI code yet.
       });
       const filled = applyFullBuildPlanFill(ensured.plan);
       persistMasterPlanJson(pp.workspaceRoot, pp.masterPlanPath, filled.plan);
+      if (wrapHint) {
+        persistBuildPacketFromPlan(pp.workspaceRoot, filled.plan, wrapHint, "Foundation");
+      }
       applyPlanIdentityAndWinningPalette(
         pp.workspaceRoot,
         readMasterPlanFile(pp.masterPlanPath),
@@ -1671,19 +1668,32 @@ No approved UI code yet.
       if (fs.existsSync(pp.masterPlanPath)) {
         plan = JSON.parse(fs.readFileSync(pp.masterPlanPath, "utf8")) as Record<string, unknown>;
       }
-      const filled = applyFullBuildPlanFill(plan);
-      let frozen = freezePlan(filled.plan);
       const body = (req.body || {}) as Record<string, unknown>;
       if (body.talkWrapAccepted === true) {
         const wrapRaw = typeof body.wrapText === "string" ? body.wrapText : "";
-        frozen = markTalkWrapAccepted(frozen, stripTalkCloseQuestion(wrapRaw));
+        plan = applyApprovedWrapHandoff(plan, wrapRaw);
+        const filled = applyFullBuildPlanFill(plan);
         persistBuildPacketFromPlan(
           pp.workspaceRoot,
-          frozen,
-          String(frozen[TALK_WRAP_TEXT_KEY] || wrapRaw || ""),
+          filled.plan,
+          String(filled.plan[TALK_WRAP_TEXT_KEY] || wrapRaw || ""),
           typeof body.sliceName === "string" && body.sliceName.trim() ? body.sliceName.trim() : "Foundation",
         );
+        let frozen = freezePlan(filled.plan);
+        frozen = markTalkWrapAccepted(frozen, stripTalkCloseQuestion(wrapRaw));
+        persistMasterPlanJson(pp.workspaceRoot, pp.masterPlanPath, frozen);
+        const packet = readBuildPacket(pp.workspaceRoot);
+        return res.json({
+          ok: true,
+          projectKey: pp.projectKey,
+          planFrozen: true,
+          planLockedAt: frozen.planLockedAt,
+          plan: frozen,
+          packetHandoff: buildPacketIsStructuredHandoff(packet),
+        });
       }
+      const filled = applyFullBuildPlanFill(plan);
+      const frozen = freezePlan(filled.plan);
       persistMasterPlanJson(pp.workspaceRoot, pp.masterPlanPath, frozen);
       res.json({
         ok: true,
@@ -1691,6 +1701,7 @@ No approved UI code yet.
         planFrozen: true,
         planLockedAt: frozen.planLockedAt,
         plan: frozen,
+        packetHandoff: false,
       });
     } catch (e) {
       res.status(500).json({ error: e instanceof Error ? e.message : "freeze failed" });
@@ -6103,16 +6114,17 @@ Strict rules:
 
       const workflowContext = buildProjectWorkflowExecutionContext(req);
       const codeModel = resolveBuildModel();
-      const wrapFromPlan = String(planSnapshot[TALK_WRAP_TEXT_KEY] || "").trim();
-      if (!readBuildPacket(ppGo.workspaceRoot)) {
-        persistBuildPacketFromPlan(
-          ppGo.workspaceRoot,
-          planSnapshot,
-          wrapFromPlan || inferGoalFromPlanRecord(planSnapshot, [note, convProject]),
-          parseGoSliceLabel(note) || "Foundation",
-        );
-      }
       const buildPacket = readBuildPacket(ppGo.workspaceRoot);
+      if (!buildPacketIsStructuredHandoff(buildPacket)) {
+        return res.status(409).json({
+          ok: false,
+          pending: false,
+          preparing: false,
+          coding: false,
+          error: "Build packet missing — staying in Talk.",
+          code: "BUILD_PACKET_MISSING",
+        });
+      }
       const goBuildModePrompt: BuildMode = detectQuickDraftIntent(note)
         ? "fast_prototype"
         : readBuildModeFromPlan(planSnapshot);
@@ -6272,10 +6284,11 @@ ${workflowContext}`;
         logoHint: productIdentity.logoHint,
         buildMode: goBuildModePrompt,
       });
+      void compactSlice;
       const compactUser = (
         examStderr
           ? formatExamRepairUserMessage(buildPacket, examStderr, existingFiles)
-          : [buildPacket.trim(), "", existingFiles, "", compactSlice].filter(Boolean).join("\n")
+          : formatGoBuildUserPrompt(buildPacket, existingFiles)
       ).slice(0, 12000);
       const existingLinked = buildLinkedContextAppendix(readLinkedContext(ppGo.workspaceRoot));
       const codeMessages: { role: string; content: string }[] = [
