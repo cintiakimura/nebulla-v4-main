@@ -16,6 +16,10 @@ guardian-data/
 data/cloud-projects/
 # Privacy-safe contract telemetry JSONL (Layer 0)
 data/contract-telemetry.jsonl
+
+# Two-phase agent runtime (queue + progress). Keep plan.json / versions in git.
+master_plan/inbox/*.json
+master_plan/runtime/
 .vercel
 
 # Figma library ingest (large / license-sensitive — keep local)
