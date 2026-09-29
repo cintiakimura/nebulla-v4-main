@@ -12,6 +12,8 @@ import {
   formatFullBuildFirstSpokenLine,
   freezePlan,
   isPlanFrozen,
+  inferFullBuildRoutes,
+  listMissingFullBuildRoutes,
   PLAN_FROZEN_KEY,
   PLAN_LOCKED_AT_KEY,
   shouldOpenTalkTurn,
@@ -128,6 +130,47 @@ section("canned first line is not the unfrozen talk door");
   const spoken = formatFullBuildFirstSpokenLine(COURIER_SEED);
   assert.ok(spoken.length > 20);
   assert.notEqual(spoken, TALK_CLOSE_QUESTION);
+}
+
+section("frozen courier §4 is request/track/driver/account — not leftover education");
+{
+  const leftoverS4 = [
+    "### Practice `/practice`",
+    "### Parent `/parent`",
+    "### Request `/request`",
+    "### Track `/track`",
+    "### Driver `/driver`",
+    "### Account `/account`",
+  ].join("\n");
+  const mixed = inferFullBuildRoutes(COURIER_SEED, leftoverS4);
+  const mixedPaths = mixed.map((r) => r.route);
+  for (const r of ["/request", "/track", "/driver", "/account"]) {
+    assert.ok(mixedPaths.includes(r), mixedPaths.join(","));
+  }
+  assert.equal(mixedPaths.includes("/practice"), false);
+  assert.equal(mixedPaths.includes("/parent"), false);
+
+  const frozen = freezePlan(completeCourierPlan());
+  const allow = assessFullBuildCompleteness({ plan: frozen });
+  assert.equal(allow.allowGo, true);
+  const allowPaths = allow.routes.map((x) => x.route);
+  for (const r of ["/request", "/track", "/driver", "/account"]) {
+    assert.ok(allowPaths.includes(r), allowPaths.join(","));
+  }
+  assert.equal(allowPaths.includes("/practice"), false);
+  assert.equal(allowPaths.includes("/parent"), false);
+  const missing = listMissingFullBuildRoutes(allow.routes, ["app/page.tsx", "app/layout.tsx"]);
+  assert.ok(missing.some((m) => m.route === "/request"));
+  assert.ok(missing.some((m) => m.route === "/track"));
+  assert.equal(
+    shouldStartGoAfterTalk({
+      plan: frozen,
+      userText: "finish building",
+      seedText: "finish building",
+    }),
+    true,
+  );
+  assert.equal(userAcceptedTalkClose("finish code"), true);
 }
 
 section("frozen §§ stay — Go brief never becomes §1");

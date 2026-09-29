@@ -103,6 +103,47 @@ function goalImpliesRoles(goal: string): { kid: boolean; teacher: boolean; auth:
   return { kid, teacher, auth };
 }
 
+const COURIER_GOAL_RE = /\b(moto|motodrop|courier|delivery|dropoff|parcel)\b/i;
+const EDUCATION_LEFTOVER_ROUTE_RE = /^\/(practice|teacher|parent|learn|lesson|progress)$/i;
+
+/** Leftover kids/education routes must not ride along on a courier/delivery plan. */
+export function filterRoutesForCurrentGoal(
+  goal: string,
+  routes: { name: string; route: string }[],
+): { name: string; route: string }[] {
+  if (!COURIER_GOAL_RE.test(String(goal || ""))) return routes;
+  return routes.filter((p) => {
+    const r = p.route.startsWith("/") ? p.route : `/${p.route}`;
+    if (EDUCATION_LEFTOVER_ROUTE_RE.test(r)) return false;
+    if (/^\/login$/i.test(r)) return false;
+    return true;
+  });
+}
+
+export function pageFileCoversRoute(relPath: string, route: string): boolean {
+  const p = String(relPath || "").replace(/\\/g, "/").replace(/^\.\//, "");
+  const r = route.startsWith("/") ? route : `/${route}`;
+  if (r === "/") {
+    return /^(?:src\/)?app\/page\.(tsx|jsx|js)$/i.test(p) || /^pages\/index\.(tsx|jsx|js)$/i.test(p);
+  }
+  const slug = r.replace(/^\//, "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return (
+    new RegExp(`^(?:src\\/)?app\\/${slug}\\/page\\.(tsx|jsx|js)$`, "i").test(p) ||
+    new RegExp(`^(?:src\\/)?pages\\/${slug}\\.(tsx|jsx|js)$`, "i").test(p)
+  );
+}
+
+export function listMissingFullBuildRoutes(
+  expected: { name?: string; route: string }[],
+  existingRelPaths: string[],
+): { name: string; route: string }[] {
+  const paths = (existingRelPaths || []).map((x) => String(x || "").replace(/\\/g, "/"));
+  return expected
+    .filter((p) => p.route && p.route !== "/")
+    .filter((p) => !paths.some((file) => pageFileCoversRoute(file, p.route)))
+    .map((p) => ({ name: p.name || p.route.replace(/^\//, ""), route: p.route }));
+}
+
 export function inferFullBuildRoutes(
   goal: string,
   pagesSection = "",
@@ -128,13 +169,24 @@ export function inferFullBuildRoutes(
   if (fromPlan.filter((p) => p.route !== "/").length === 0) {
     for (const p of seeded) add(p);
   }
-  if (implied.kid && implied.teacher) {
+  if (implied.kid && implied.teacher && !COURIER_GOAL_RE.test(String(goal || ""))) {
     if (!seen.has("/practice")) add({ name: "Practice", route: "/practice" });
     if (!seen.has("/teacher")) add({ name: "Teacher", route: "/teacher" });
   }
-  if (implied.auth && !seen.has("/login")) add({ name: "Login", route: "/login" });
+  if (implied.auth && !seen.has("/login") && !COURIER_GOAL_RE.test(String(goal || ""))) {
+    add({ name: "Login", route: "/login" });
+  }
   if (!seen.has("/")) merged.unshift({ name: "Home", route: "/" });
-  return merged;
+  let out = filterRoutesForCurrentGoal(goal, merged);
+  if (COURIER_GOAL_RE.test(String(goal || "")) && out.filter((r) => r.route !== "/").length === 0) {
+    for (const p of seeded) {
+      const route = p.route.startsWith("/") ? p.route : `/${p.route}`;
+      if (!out.some((x) => x.route.toLowerCase() === route.toLowerCase())) {
+        out.push({ name: p.name, route });
+      }
+    }
+  }
+  return out;
 }
 
 export function formatFullBuildApplyLine(routes: { name: string; route: string }[]): string {
@@ -475,8 +527,6 @@ export function fullBuildCodingTaskLine(): string {
   return "FULL BUILD — implement every §4 route and the core jobs in this single Go. Mock/local data OK. Mockup is not the spec. File blocks only.";
 }
 
-const COURIER_GOAL_RE = /\b(moto|motodrop|courier|delivery|dropoff|parcel)\b/i;
-
 function fillMissingSection2Tech(opts: { section2: string; goal: string }): { section: string; filled: boolean } {
   const s2 = String(opts.section2 || "").trim();
   if (!isThin(s2, 24)) return { section: s2, filled: false };
@@ -541,14 +591,27 @@ export function fillMissingSection3Features(opts: {
 }
 
 /** Client Go note for Full Build — every §4 `file:` block; index.html is not success. */
-export function fullBuildGoUserNote(): string {
+export function fullBuildGoUserNote(
+  plan?: Record<string, unknown> | null,
+  existingRelPaths: string[] = [],
+): string {
+  const goal = String(plan?.["1. Goal of the app"] || "");
+  const s4 = String(plan?.["4. Pages and navigation"] || "");
+  const routes = inferFullBuildRoutes(goal, s4);
+  const missing = listMissingFullBuildRoutes(routes, existingRelPaths);
+  const apply = missing.length > 0 ? missing : routes;
   return [
-    formatFullBuildApplyLine([]),
+    formatFullBuildApplyLine(apply),
     "START_CODING — Full Build. Reply is ONLY ```file:relative/path``` blocks plus one short note. No Press Go. No plan essay.",
     fullBuildCodingTaskLine(),
-    "Minimum: ```file:app/layout.tsx``` + ```file:app/page.tsx``` + ```file:app/<route>/page.tsx``` for every §4 route (courier: /request /driver /track /account; kids: /practice /teacher). If you cannot finish all, still emit Home + 2–3 primary job routes.",
-    "BAN: only public/index.html, only nebula-ui-studio/*, only mockup HTML.",
-  ].join("\n");
+    "Minimum: ```file:app/layout.tsx``` + ```file:app/page.tsx``` + ```file:app/<route>/page.tsx``` for every §4 route.",
+    missing.length
+      ? `STILL MISSING (do not skip because Home exists): ${missing.map((r) => r.route).join(" ")}`
+      : "",
+    "BAN: leftover /practice /teacher /parent. BAN: only public/index.html, only nebula-ui-studio/*, only mockup HTML.",
+  ]
+    .filter(Boolean)
+    .join("\n");
 }
 
 export const FULL_BUILD_NO_RETRY_ACTIVITY =
@@ -651,6 +714,8 @@ export function userAcceptedTalkClose(text: string): boolean {
   if (/^(no|nope|nah)([\s,!.].*)?$/i.test(t)) return true;
   if (/\byou\s+can\s+start(\s+coding)?\b/i.test(t)) return true;
   if (/\bstart\s+coding\b/i.test(t)) return true;
+  if (/\b(finish building|finish code|finish coding)\b/i.test(t)) return true;
+  if (/^(continue|continue\.|continue!)$/i.test(t)) return true;
   if (/\bgo\s+ahead\b/i.test(t)) return true;
   if (
     /\b(looks good|that'?s (all|enough|fine|it)|nothing (else|more) to add|no add|build it|just build|you can build|let'?s (build|go))\b/i.test(

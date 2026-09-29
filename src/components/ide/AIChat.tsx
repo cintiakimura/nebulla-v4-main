@@ -2693,9 +2693,9 @@ export function AIChat() {
         const go = await runGoCodeAndApply({
           userId,
           projectName,
-          userNote: fullBuildGoUserNote(),
+          userNote: fullBuildGoUserNote(planOnDisk, diskPaths),
           onProgress: pushActivity,
-          messages: [{ role: 'user', content: fullBuildGoUserNote() }],
+          messages: [{ role: 'user', content: fullBuildGoUserNote(planOnDisk, diskPaths) }],
         });
         if (!go.ok && isGoAborting(projectName)) {
           holdCodingFailure('Stopped — you cancelled coding. Chat is unlocked.');
@@ -3446,7 +3446,7 @@ export function AIChat() {
             ? buildEditExistingUserNote(rawText)
             : fastPrototypeTurn
               ? FOUNDATION_SLICE_INSTRUCTION
-              : fullBuildGoUserNote();
+              : fullBuildGoUserNote(planOnDisk, diskPaths);
           if (editMode) editGoArmed = true;
           const goMessages = [
             {

@@ -555,11 +555,13 @@ section("source-shaped preview text is not App looks OK");
     ].join("\n"),
   );
   const live = buildLiveHtmlFromNextApp(root, "Leak Demo") || "";
-  assert.match(live, /Preview failed to render|next-app-live/);
+  assert.match(live, /Preview could not run this screen|next-app-live|<!doctype html>/i);
   assert.equal(/<p>useState<\/p>/i.test(live), false);
+  assert.doesNotMatch(live, /failed to render app\/page\.tsx/i);
+  assert.doesNotMatch(live, /<p>app\/page\.tsx<\/p>/i);
   const auth = resolveAppPreviewAuthority(root);
   assert.equal(auth.honesty === "real_routes", false);
-  assert.match(auth.statusLabel, /preview needs a render fix|Preview failed/i);
+  assert.match(auth.statusLabel, /preview needs a render fix|Preview could not run|Preview failed/i);
   assert.equal(/App looks OK/i.test(auth.statusLabel), false);
   assert.match(PREVIEW_RENDER_FIX_LABEL, /First version on disk/);
   fs.rmSync(root, { recursive: true, force: true });
@@ -583,7 +585,8 @@ section("iframe onLoad scrub rewrites leaked source (new empty workspace after d
     querySelectorAll: () => [{ innerText: "useState return (" }],
   };
   assert.equal(scrubPreviewDocumentIfSourceLeaked(doc, "app/page.tsx"), true);
-  assert.match(String(doc.body.innerHTML), /Preview failed to render/);
+  assert.match(String(doc.body.innerHTML), /Preview could not run this screen/);
+  assert.doesNotMatch(String(doc.body.innerHTML), /app\/page\.tsx/);
   assert.doesNotMatch(String(doc.body.innerHTML), /useState/);
   const clean = {
     body: { innerText: "Request a pickup", textContent: "Request a pickup", innerHTML: "<h1>Request a pickup</h1>" },

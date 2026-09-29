@@ -18,6 +18,7 @@ import {
   formatFullBuildApplyLine,
   fullBuildCodingTaskLine,
   inferFullBuildRoutes,
+  listMissingFullBuildRoutes,
   shouldClampToFastPrototypeSlice,
   type BuildMode,
 } from "./fullBuildContract";
@@ -283,10 +284,14 @@ export function shouldRunGoCodeSecondPass(opts: {
   totalWritten: number;
   writtenPaths: string[];
   partialPlanOnly?: boolean;
+  expectedRoutes?: { name?: string; route: string }[];
 }): boolean {
   if (opts.totalWritten <= 0 || !opts.writtenPaths?.length) return true;
   if (opts.partialPlanOnly) return true;
   if (isStaticHtmlProductApply(opts.writtenPaths)) return false;
+  if (opts.expectedRoutes && opts.expectedRoutes.length > 0) {
+    return listMissingFullBuildRoutes(opts.expectedRoutes, opts.writtenPaths).length > 0;
+  }
   return assessApplyRouteDepth(opts.writtenPaths).zeroProductRoutes;
 }
 

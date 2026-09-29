@@ -4,7 +4,7 @@
  */
 
 export const PREVIEW_RENDER_FIX_LABEL = "First version on disk — preview needs a render fix";
-export const PREVIEW_FAILED_RENDER_LINE = "Preview failed to render";
+export const PREVIEW_FAILED_RENDER_LINE = "Preview could not run this screen.";
 
 const SOURCE_LEAK_RE =
   /\b(useState|useEffect|useMemo|useCallback|useRef|useReducer)\b|\breturn\s*\(|\bexport\s+default\b|\bfrom\s+['"]react['"]|\bimport\s+(\{|['"]react)|\b['"]use client['"]|\bconst\s+\[\s*\w+|\bfunction\s+[A-Z]\w*\s*\(|\bclassName=\{/;
@@ -70,25 +70,24 @@ function sourcePathFromPreviewDoc(doc: {
   return "app/page.tsx";
 }
 
-export function buildPreviewFailedHtml(filePath: string): string {
-  const rel = String(filePath || "app/page.tsx").replace(/[<>]/g, "");
+export function buildPreviewFailedHtml(_filePath?: string): string {
   return `<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8"/>
 <meta name="nebulla-preview" content="next-app-live"/>
 <meta name="nebulla-preview-failed" content="1"/>
-<title>Preview failed</title>
+<title>Preview</title>
 <style>
 html,body{margin:0;background:#0B1220;color:#E8EEF6;font-family:ui-sans-serif,system-ui,sans-serif}
 header,main{padding:16px}
+p{margin:0 0 8px}
 </style>
 </head>
 <body>
 <header><strong>Live</strong></header>
 <main>
 <p>${PREVIEW_FAILED_RENDER_LINE}</p>
-<p>${rel}</p>
 </main>
 </body>
 </html>`;
@@ -96,16 +95,15 @@ header,main{padding:16px}
 
 function writePreviewFailedBody(
   doc: { body?: { innerHTML?: string } | null; documentElement?: { setAttribute?: (k: string, v: string) => void } | null },
-  filePath: string,
+  _filePath?: string,
 ): void {
-  const rel = String(filePath || "app/page.tsx").replace(/[<>]/g, "");
   try {
     doc.documentElement?.setAttribute?.("data-nebulla-source-scrubbed", "1");
   } catch {
     /* ignore */
   }
   if (doc.body) {
-    doc.body.innerHTML = `<header><strong>Live</strong></header><main><p>${PREVIEW_FAILED_RENDER_LINE}</p><p>${rel}</p></main>`;
+    doc.body.innerHTML = `<header><strong>Live</strong></header><main><p>${PREVIEW_FAILED_RENDER_LINE}</p></main>`;
   }
 }
 
@@ -182,22 +180,13 @@ export const PREVIEW_SOURCE_SCRUB_INLINE_SCRIPT = `
       return bits.join('\\n');
     } catch (e) { return ''; }
   }
-  function relPath(){
-    try {
-      var m = document.querySelector('meta[name="nebulla-next-source"]');
-      var c = m && m.getAttribute('content');
-      if (c && !/[<>]/.test(c)) return c;
-    } catch (e) {}
-    return 'app/page.tsx';
-  }
   function scrub(){
     try {
       if (!document.body) return;
       if (document.documentElement.getAttribute('data-nebulla-source-scrubbed') === '1') return;
       if (!leaked(scrape())) return;
       document.documentElement.setAttribute('data-nebulla-source-scrubbed','1');
-      var rel = String(relPath()).replace(/[<>]/g,'');
-      document.body.innerHTML = '<header><strong>Live</strong></header><main><p>Preview failed to render</p><p>'+rel+'</p></main>';
+      document.body.innerHTML = '<header><strong>Live</strong></header><main><p>Preview could not run this screen.</p></main>';
     } catch (e) {}
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', scrub);

@@ -243,16 +243,14 @@ export function isThinCodeShell(paths: string[]): boolean {
   return inferRoutesFromProductFiles(normalized).length === 0;
 }
 
+const AUTH_ONLY_ROUTE =
+  /^\/(login|auth|signin|sign-in|signup|register|sign-up)$/i;
+
 export function isAuthOnlyProductRoutes(paths: string[]): boolean {
   const routes = inferRoutesFromProductFiles(paths);
   if (routes.length === 0) return false;
-  return routes.every((r) =>
-    /^\/(login|auth|signin|sign-in|signup|register|sign-up)?$/i.test(r),
-  );
+  return routes.every((r) => AUTH_ONLY_ROUTE.test(r));
 }
-
-const AUTH_ONLY_ROUTE =
-  /^\/(login|auth|signin|sign-in|signup|register|sign-up)$/i;
 
 /** `/` plus at least one real product route (not login-only). */
 export function hasFoundationProductRoutes(productFiles: string[]): boolean {
@@ -376,7 +374,10 @@ export function resolveAppPreviewAuthority(workspaceRoot: string): AppPreviewAut
     if (workspaceHasNextAppRoot(workspaceRoot)) {
       const liveHtml = buildLiveHtmlFromNextApp(workspaceRoot) || "";
       const renderFailed =
-        /Preview failed to render/i.test(liveHtml) || previewHtmlHasLeakedSource(liveHtml);
+        /Preview could not run this screen/i.test(liveHtml) ||
+        /nebulla-preview-failed/i.test(liveHtml) ||
+        /Preview failed to render/i.test(liveHtml) ||
+        previewHtmlHasLeakedSource(liveHtml);
       return withHonesty(
         {
           mode: "next_app_live",

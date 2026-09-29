@@ -312,6 +312,20 @@ assert.equal(
 {
   assert.equal(
     shouldRunGoCodeSecondPass({
+      totalWritten: 4,
+      writtenPaths: ["app/page.tsx", "app/layout.tsx", "app/globals.css", "package.json"],
+      expectedRoutes: [
+        { name: "Request", route: "/request" },
+        { name: "Track", route: "/track" },
+        { name: "Driver", route: "/driver" },
+        { name: "Account", route: "/account" },
+      ],
+    }),
+    true,
+    "Home on disk must not skip remaining courier routes",
+  );
+  assert.equal(
+    shouldRunGoCodeSecondPass({
       totalWritten: 2,
       writtenPaths: ["app/page.tsx", "app/practice/page.tsx"],
     }),

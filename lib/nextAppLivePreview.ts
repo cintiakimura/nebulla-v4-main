@@ -118,6 +118,30 @@ function listNextAppRoutes(workspaceRoot: string): string[] {
   return [...routes];
 }
 
+function readExistingHtmlShell(workspaceRoot: string): string | null {
+  for (const rel of ["index.html", "public/index.html", "dist/index.html"]) {
+    const abs = path.join(workspaceRoot, rel);
+    if (!fs.existsSync(abs)) continue;
+    try {
+      const html = fs.readFileSync(abs, "utf8");
+      if (
+        html.trim().length > 80 &&
+        !previewHtmlHasLeakedSource(html) &&
+        !previewTextLooksLikeLeakedSource(html)
+      ) {
+        return html;
+      }
+    } catch {
+      /* next */
+    }
+  }
+  return null;
+}
+
+function liveCompileFailHtml(workspaceRoot: string): string {
+  return readExistingHtmlShell(workspaceRoot) || buildPreviewFailedHtml();
+}
+
 function routeLabel(route: string): string {
   if (route === "/") return "Home";
   const last = route.replace(/^\//, "").split("/").filter(Boolean).pop() || route;
@@ -139,7 +163,7 @@ export function buildLiveHtmlFromNextApp(
   const rawCopy = extractVisibleCopy(page.body);
   const copy = rawCopy.filter((t) => !previewTextLooksLikeLeakedSource(t));
   if (rawCopy.length > 0 && copy.length === 0) {
-    return buildPreviewFailedHtml(page.rel);
+    return liveCompileFailHtml(workspaceRoot);
   }
   const cssAbs = ["app/globals.css", "src/app/globals.css"]
     .map((rel) => path.join(workspaceRoot, rel))
@@ -160,7 +184,7 @@ export function buildLiveHtmlFromNextApp(
       ? copy.map((t) => `<p>${escapeHtml(t)}</p>`).join("")
       : `<p>${escapeHtml(title)}</p><button type="button">Continue</button>`;
   if (previewHtmlHasLeakedSource(body) || previewTextLooksLikeLeakedSource(body)) {
-    return buildPreviewFailedHtml(page.rel);
+    return liveCompileFailHtml(workspaceRoot);
   }
   return `<!doctype html>
 <html lang="en">

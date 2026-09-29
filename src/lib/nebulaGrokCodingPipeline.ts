@@ -32,7 +32,7 @@ import {
 } from './abortLikeError';
 import { markFoundationGoInFlight, isFoundationGoInFlight } from './foundationHeavyJob';
 import { setGrokCodingActive } from './nebulaGrokCodingGate';
-import { FULL_BUILD_NO_RETRY_ACTIVITY, fullBuildGoUserNote } from '../../lib/fullBuildContract';
+import { FULL_BUILD_NO_RETRY_ACTIVITY, fullBuildGoUserNote, inferFullBuildRoutes, listMissingFullBuildRoutes } from '../../lib/fullBuildContract';
 import {
   buildEditExistingUserNote,
   buildNarrowSliceInstruction,
@@ -1272,24 +1272,47 @@ export async function runGoCodeAndApply(options: {
     let activeNote = userNote;
     let activeMessages = baseMessages;
 
+    let expectedRoutes: { name: string; route: string }[] = [];
+    try {
+      const mpRes = await fetch(withProjectQuery('/api/master-plan/read'), {
+        credentials: 'include',
+        cache: 'no-store',
+      });
+      if (mpRes.ok) {
+        const plan = (await readResponseJson(mpRes)) as Record<string, unknown>;
+        expectedRoutes = inferFullBuildRoutes(
+          String(plan['1. Goal of the app'] || ''),
+          String(plan['4. Pages and navigation'] || ''),
+        );
+      }
+    } catch {
+      expectedRoutes = [];
+    }
+
     for (let pass = 0; pass < GO_CODE_MAX_PASSES; pass++) {
       if (isGoSessionAborted(projectName)) break;
       passes = pass + 1;
-      const continuation = pass > 0;
+      const missingBeforePass = listMissingFullBuildRoutes(expectedRoutes, allWrittenPaths);
       const passMessages = continuation
         ? [
             ...activeMessages,
             {
               role: 'user' as const,
-              content:
-                'CONTINUATION — pass 1 wrote zero product UI files. Output every §4 route now (layout, globals, pages). Do NOT stop at master-plan.json only.',
+              content: missingBeforePass.length
+                ? `CONTINUATION — Full Build. Home on disk does not finish this Go. Emit remaining §4 files now: ${missingBeforePass
+                    .map((r) => `${r.route} → app${r.route}/page.tsx`)
+                    .join('; ')}. No leftover /practice /teacher.`
+                : 'CONTINUATION — pass 1 wrote zero product UI files. Output every §4 route now (layout, globals, pages). Do NOT stop at master-plan.json only.',
             },
           ]
         : activeMessages;
 
       if (continuation) {
+        const missing = listMissingFullBuildRoutes(expectedRoutes, allWrittenPaths);
         onProgress?.(
-          `${goCodePassWaitLabel(2, noteSlice)} — empty or zero product routes after pass 1`,
+          missing.length
+            ? `${goCodePassWaitLabel(2, noteSlice)} — still missing ${missing.map((r) => r.route).join(' ')}`
+            : `${goCodePassWaitLabel(2, noteSlice)} — empty or zero product routes after pass 1`,
           'warn',
         );
       }
@@ -1527,10 +1550,11 @@ export async function runGoCodeAndApply(options: {
           totalWritten,
           writtenPaths: allWrittenPaths,
           partialPlanOnly,
+          expectedRoutes,
         })
       ) {
         onProgress?.(
-          'Slice files on disk — not starting Code pass 2 (product files already landed).',
+          'Slice files on disk — not starting Code pass 2 (every expected §4 route file is on disk).',
           'success',
         );
         break;
@@ -1552,7 +1576,7 @@ export async function runGoCodeAndApply(options: {
     const sliceLabel =
       parseGoSliceLabel(userNote) ||
       parseGoSliceLabel(lastCodeText) ||
-      parseGoSliceLabel('SLICE: Foundation');
+      (/Full Build/i.test(String(userNote || '')) ? 'Full Build' : parseGoSliceLabel('SLICE: Foundation'));
     const oversized = assessOversizedGoApply({ sliceLabel, writtenPaths: allWrittenPaths });
     const exit = assessFoundationGoExit({
       totalWritten,
@@ -1576,6 +1600,14 @@ export async function runGoCodeAndApply(options: {
       onProgress?.(oversized.message, 'warn');
     }
 
+    const stillMissing = listMissingFullBuildRoutes(expectedRoutes, allWrittenPaths);
+    if (stillMissing.length > 0 && totalWritten > 0) {
+      onProgress?.(
+        `Full Build still missing: ${stillMissing.map((m) => m.route).join(" ")}`,
+        "warn",
+      );
+    }
+
     const ok = exit.ok && totalWritten > 0;
     if (!ok && totalWritten === 0) {
       const blocked =
@@ -1597,7 +1629,7 @@ export async function runGoCodeAndApply(options: {
       onProgress?.(formatBlockedReasonLine(exit.blockedReason), totalWritten > 0 ? 'warn' : 'error');
     } else if (depth.authOnly && (!sliceLabel || /foundation/i.test(String(sliceLabel)))) {
       onProgress?.(
-        'Auth routes landed; Home/practice/parent screens from the plan are still missing — next slice should add those routes.',
+        'Auth routes landed; remaining product screens from this plan are still missing.',
         'warn',
       );
       if (totalWritten > 0) onProgress?.(statusMessage, 'success');
