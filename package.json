@@ -50,6 +50,7 @@
     "test:figma-sheet-catalog": "tsx scripts/test-figma-sheet-catalog.ts",
     "test:layout-catalog": "tsx scripts/test-layout-catalog-index.ts",
     "test:coded-app-style-pass": "tsx scripts/test-coded-app-style-pass.ts",
+    "test:product-goal-replace": "tsx scripts/test-product-goal-replace.ts",
     "test:identity-freeze": "tsx scripts/test-identity-freeze.ts",
     "test:new-project-isolation": "tsx scripts/test-new-project-isolation.ts",
     "test:final-ui": "tsx scripts/test-final-ui-pass.ts",
