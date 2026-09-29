@@ -10,22 +10,15 @@ import {
 import { continueFromLandingGoal } from '../lib/landingGoalHandoff';
 import { unlockTtsAudio } from '../lib/ttsPlayback';
 import { TtsVoicePicker } from './ide/TtsVoicePicker';
+import { startGrokDictation } from '../lib/grokVoiceDictation';
+import { resolveSttRequestLanguage, sttTranscriptMatchesUi } from '../../lib/grokVoiceStt';
+import { readLanguagePreferences, resolveLanguageState } from '../lib/i18n/userLanguagePreferences';
 
 const TYPES: { id: NonNullable<IdeStartProjectType>; label: string }[] = [
   { id: 'Web App', label: 'Web app' },
   { id: 'Mobile App', label: 'Mobile' },
   { id: 'Landing Page', label: 'Landing' },
 ];
-
-type SpeechRecognitionLike = {
-  lang: string;
-  interimResults: boolean;
-  onresult: ((ev: { results: ArrayLike<ArrayLike<{ transcript?: string }>> }) => void) | null;
-  onerror: (() => void) | null;
-  onend: (() => void) | null;
-  start: () => void;
-  stop: () => void;
-};
 
 /**
  * Hero goal composer — layout restored; Continue still runs agent handoff.
@@ -37,6 +30,9 @@ export function LandingHeroPrompt({ className }: { className?: string }) {
   const [busy, setBusy] = useState(false);
   const [listening, setListening] = useState(false);
   const recognitionRef = useRef<{ stop: () => void } | null>(null);
+  const draftRef = useRef(draft);
+  draftRef.current = draft;
+  const sendTimerRef = useRef<number | null>(null);
 
   const onContinue = useCallback(async () => {
     if (busy) return;
@@ -62,38 +58,73 @@ export function LandingHeroPrompt({ className }: { className?: string }) {
     });
   }, []);
 
+  const startTypeRef = useRef(startType);
+  startTypeRef.current = startType;
+
   const toggleMic = useCallback(() => {
     unlockTtsAudio();
-    const w = window as Window & {
-      SpeechRecognition?: new () => SpeechRecognitionLike;
-      webkitSpeechRecognition?: new () => SpeechRecognitionLike;
-    };
-    const SR = w.SpeechRecognition || w.webkitSpeechRecognition;
-    if (!SR) {
-      setError('Voice input is not supported in this browser.');
-      return;
-    }
     if (listening && recognitionRef.current) {
-      recognitionRef.current.stop();
+      void recognitionRef.current.stop();
+      recognitionRef.current = null;
       setListening(false);
       return;
     }
-    const rec = new SR();
-    recognitionRef.current = rec;
-    rec.lang = 'en-US';
-    rec.interimResults = false;
-    rec.onresult = (ev) => {
-      const transcript = ev.results[0]?.[0]?.transcript?.trim();
-      if (transcript) {
-        setDraft((prev) => (prev ? `${prev} ${transcript}` : transcript));
+    const langState = resolveLanguageState(readLanguagePreferences());
+    const language = resolveSttRequestLanguage({
+      contentLocale: langState.resolvedContentLocale,
+      lastTypedText: draftRef.current,
+      osLocale: typeof navigator !== 'undefined' ? navigator.language : '',
+    });
+    if (sendTimerRef.current) {
+      window.clearTimeout(sendTimerRef.current);
+      sendTimerRef.current = null;
+    }
+    void startGrokDictation({
+      language,
+      onPartial: (text) => {
+        if (
+          !sttTranscriptMatchesUi(text, {
+            contentLocale: langState.resolvedContentLocale,
+            lastTypedText: draftRef.current,
+          })
+        ) {
+          return;
+        }
+        setDraft((prev) => (prev ? `${prev} ${text}`.replace(/\s+/g, ' ').trim() : text));
         setError('');
-      }
-    };
-    rec.onerror = () => setListening(false);
-    rec.onend = () => setListening(false);
-    setListening(true);
-    setError('');
-    rec.start();
+      },
+      onUtterance: (text) => {
+        if (
+          !sttTranscriptMatchesUi(text, {
+            contentLocale: langState.resolvedContentLocale,
+            lastTypedText: draftRef.current,
+          })
+        ) {
+          return;
+        }
+        setDraft((prev) => {
+          const next = prev ? `${prev} ${text}`.replace(/\s+/g, ' ').trim() : text;
+          draftRef.current = next;
+          return next;
+        });
+        setError('');
+        if (sendTimerRef.current) window.clearTimeout(sendTimerRef.current);
+        sendTimerRef.current = window.setTimeout(() => {
+          sendTimerRef.current = null;
+          void continueFromLandingGoal(draftRef.current, startTypeRef.current);
+        }, 1400);
+      },
+      onError: () => setListening(false),
+    })
+      .then((session) => {
+        recognitionRef.current = session;
+        setListening(true);
+        setError('');
+      })
+      .catch(() => {
+        setListening(false);
+        setError('Voice input failed. Type your idea, then Start.');
+      });
   }, [listening]);
 
   return (

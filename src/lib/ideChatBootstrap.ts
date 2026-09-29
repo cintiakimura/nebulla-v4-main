@@ -14,12 +14,15 @@ export const IDE_CHAT_DISCOVERY_BOOTSTRAP =
 export const IDE_CHAT_FAST_PROJECT_BOOTSTRAP =
   "FAST PROJECT MODE. The user gave a product seed. Follow chat-personality.md, chat-thinking-rules.md, chat-conversation-loop.md, and chat-information-checklist.md. First spoken beat: Talk partner — reflect in their words + one push + one next (question OR draft). No extras. No Guided Discovery. Don't narrate searching. No feature catalog. No Foundation. No START_CODING.";
 
-/** Shared law for every hidden start turn (landing Build, idea, Fast Prototype, continue). */
+export const FIRST_SEED_TALK_ONLY_RULE =
+  `TURN 1 (no close yet): Talk only. Reflect the idea in their words + one push + “What do you think?” ` +
+  `Do NOT emit <START_MASTERPLAN>, </END_MASTERPLAN>, START_CODING, or \`\`\`file: blocks. ` +
+  `Do not infer a COMPLETE Master Plan on this turn. After they say Start / go / build / you can start / nothing to add: then infer complete Plan §§1–5 and one Full Build Go.`;
 export const BRAINSTORM_LOOP_BOOTSTRAP_RULES =
   `Follow nebulla-project/chat-conversation-loop.md and chat-information-checklist.md. ` +
   `Beat A: this text is the seed / continuation — not a ticket, even if it is a long spec. ` +
-  `FIRST REPLY after a product seed (then STOP and wait): Talk partner — reflect the job in their words, one push (risk or simpler first job), then one question OR a draft they can accept. Not an interview. ` +
-  `If they accept that first summary, fill missing fields as labeled assumption: and offer the lock. Never force more questions. ` +
+  `FIRST REPLY after a product seed (then STOP and wait): Talk partner — reflect the job in their words, one push, then “What do you think?” Not an interview. Never lock on turn 1. ` +
+  `Do not fill Master Plan fields on this turn. ` +
   `NAME-ONLY / job-word seed (Visual, overlay, mashed Visualual): do NOT say the project is simply called that. Do NOT invent a mash brand. Ask who + one Monday job. If they mean a Twitch/stream overlay (cam + last follower / subscriber / tipper), reflect THAT job. No fork until a job exists. ` +
   `No extras. Don't narrate searching (silent lookup is allowed later on name / Slot 4 / API turns — not on this first reply). No feature catalog. No Foundation. No START_CODING. Do NOT inject Guided Discovery. Never ask what kind of project, paste design or none, or one core feature after a product seed. ` +
   `FAST LANE (now / just build / go / hellos / full idea): infer the Monday loop silently. 1–2 light clarifiers only if the seed is empty (who + one job). Then lock and build the REAL loop — not a 3-button mock. Say they can push back. If Slot 1 was never confirmed, reflect first. ` +
@@ -58,6 +61,7 @@ export function buildFastPrototypeContinueBootstrap(userGoalOrBootstrap?: string
     : "";
   return (
     `${FAST_PROTOTYPE_CONTINUE_PREFIX} Stay in the conversation loop. Do NOT retry a Master Plan. ` +
+    `${FIRST_SEED_TALK_ONLY_RULE} ` +
     `${BRAINSTORM_LOOP_BOOTSTRAP_RULES}\n\n` +
     goalBlock +
     `If you already reflected the goal, do one Beat C or Beat D only. Remember typed and spoken share the same state.`
@@ -77,7 +81,7 @@ export function buildDiscoveryBootstrap(projectType?: NebulaProjectType | null):
     `No idea yet: What's up? What would you like to create today? ` +
     `If they already named a product, first beat only: Talk partner — reflect + one push + one next. ` +
     `Do NOT run Guided Discovery. Do NOT ask paste design or none / one core feature. ` +
-    `No bullets. Don't narrate searching. No Master Plan tags, no file blocks, no START_CODING.`
+    `No bullets. Don't narrate searching. No Master Plan tags, no file blocks, no START_CODING. ${FIRST_SEED_TALK_ONLY_RULE}`
   );
 }
 
@@ -96,8 +100,8 @@ export function buildIdeaDiscoveryBootstrap(
   return (
     `${IDEA_DISCOVERY_BOOTSTRAP_PREFIX} Follow chat-personality.md, chat-thinking-rules.md, chat-conversation-loop.md, and chat-information-checklist.md. ${typeClause}\n\n` +
     `User's idea prompt (opening line of the talk — not a spec to execute, even if long):\n"""\n${trimmed}\n"""\n\n` +
+    `${FIRST_SEED_TALK_ONLY_RULE}\n` +
     `${BRAINSTORM_LOOP_BOOTSTRAP_RULES}\n` +
-    `First reply = Talk partner: reflect in their words + one push + one next (question OR draft). Then wait. ` +
     `Skip anything they already answered. Never invent to fill a hole. ` +
     `URLs they pasted are citations — do not stall because you cannot open the link.`
   );
@@ -123,8 +127,8 @@ export function buildFastPrototypeBootstrap(
   return (
     `${FAST_PROTOTYPE_BOOTSTRAP_PREFIX} Same loop as typed chat and voice. ${typeClause}\n\n` +
     goalBlock +
+    `${FIRST_SEED_TALK_ONLY_RULE}\n` +
     `${BRAINSTORM_LOOP_BOOTSTRAP_RULES}\n` +
-    `First reply: Talk partner — reflect in their words + one push + one next (question OR draft). Then wait. ` +
     `Do NOT run Guided Discovery. Do NOT ask what kind of project / paste design or none / one core feature. ` +
     `Do NOT run the engineer interview. Do NOT write job-brief.md.`
   );
@@ -149,11 +153,9 @@ export function buildFullBuildBootstrap(
   return (
     `${FULL_BUILD_BOOTSTRAP_PREFIX} Same loop as typed chat and voice. ${typeClause}\n\n` +
     goalBlock +
+    `${FIRST_SEED_TALK_ONLY_RULE}\n` +
     `${BRAINSTORM_LOOP_BOOTSTRAP_RULES}\n` +
-    `FULL BUILD CONTRACT: Infer a COMPLETE Master Plan (§§1–5). §4 lists every product route this pass (not Home alone if the goal implies practice, teacher, login). Each page: name, route, purpose, roles, primary actions, plus empty/error/loading or labeled assumption:. Auth model stated (mock/local OK). Coding skeleton on the plan. ` +
-    `Ask at most one blocking question when a page would otherwise be invented. Do not start Go / Foundation / coding until that Plan is complete. ` +
-    `UI Gen v2 mockup is occupancy only (label Pre-code mockup). One Go implements every §4 route. Not autopilot. Not Fast Prototype 1–2 screens. ` +
-    `First reply: Talk partner — reflect in their words + one push + one next (question OR draft). Then wait. ` +
+    `FULL BUILD (after Start only): complete Plan §§1–5, then one Go of every §4 route. Mockup is occupancy. Not Fast Prototype 1–2 screens. ` +
     `Do NOT run Guided Discovery. Do NOT ask what kind of project / paste design or none / one core feature. ` +
     `Do NOT run the engineer interview. Do NOT write job-brief.md.`
   );

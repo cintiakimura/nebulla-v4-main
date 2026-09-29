@@ -114,7 +114,8 @@ assert.ok(isHiddenBootstrapUserMessage(fast));
     'Mobile App',
   );
   assert.ok(full.startsWith(FULL_BUILD_BOOTSTRAP_PREFIX));
-  assert.ok(full.includes('FULL BUILD CONTRACT'));
+  assert.ok(full.includes('TURN 1 (no close yet): Talk only'));
+  assert.equal(/Infer a COMPLETE Master Plan/.test(full), false);
   assert.ok(full.includes('every §4 route'));
   assert.ok(isHiddenBootstrapUserMessage(full));
 }
@@ -131,7 +132,7 @@ assert.equal(/https?:\/\//.test(cont), false);
 
 assert.match(CHAT_SCOREBOARD_APPENDIX, /Slot 1/);
 assert.match(CHAT_SCOREBOARD_APPENDIX, /emptiest required slot/);
-assert.match(CHAT_SCOREBOARD_APPENDIX, /OFFER the close/);
+assert.match(CHAT_SCOREBOARD_APPENDIX, /do not auto-offer the lock/);
 {
   const appendix = chatModeSystemAppendix({
     interactionMode: 'chat',

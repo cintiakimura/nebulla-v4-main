@@ -1,5 +1,6 @@
 import { extractMasterPlanInner, sourceHasMasterPlanBlock } from '../../lib/masterPlanTags';
-import { sanitizeAssistantChatText } from '../../lib/assistantChatSanitize';
+import { sanitizeAssistantChatText, looksLikeCodeOrStyleDump } from '../../lib/assistantChatSanitize';
+import { mayPersistMasterPlanFromChat } from '../../lib/fullBuildContract';
 import {
   MASTER_PLAN_SECTION_KEYS,
   masterPlanKeyForTabIndex,
@@ -147,7 +148,9 @@ export async function persistMasterPlanFromAssistantSource(
   source: string,
   onProgress?: (message: string) => void,
   extraGoalFallbacks: string[] = [],
+  talk?: { userText: string; lastAssistantText?: string },
 ): Promise<number> {
+  if (talk && !mayPersistMasterPlanFromChat(talk)) return 0;
   if (isOrchestrationOnlyPlanSource(source)) return 0;
   const inner = extractMasterPlanInner(source);
   const hasPlanShape =
@@ -340,6 +343,23 @@ export function formatAssistantForIdeChatDisplay(raw: string): IdeChatDisplayRes
   }
 
   return { displayText: text, filePaths: uniqPaths, hadMasterPlan, hadCodingTag };
+}
+
+const PLAN_SAVED_CHAT_FALLBACK_RE =
+  /Master Plan saved|updated the project quietly|Updates are in your project files/i;
+
+/** Strip tags for display. Never hide the first Talk turn as empty / “plan saved”. */
+export function formatFirstSeedTalkDisplay(raw: string): string {
+  const beforeTags = String(raw || '').split(/<START_MASTERPLAN>/i)[0];
+  const stripped = sanitizeAssistantChatText(beforeTags, { fallback: '' });
+  if (stripped && !looksLikeCodeOrStyleDump(stripped) && !PLAN_SAVED_CHAT_FALLBACK_RE.test(stripped)) {
+    return stripped;
+  }
+  const { displayText } = formatAssistantForIdeChatDisplay(raw);
+  if (displayText.trim() && !PLAN_SAVED_CHAT_FALLBACK_RE.test(displayText)) {
+    return displayText.trim();
+  }
+  return 'Got it — I’m with you on this. What do you think?';
 }
 
 function looksLikeResidualDump(text: string): boolean {

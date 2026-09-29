@@ -28,6 +28,9 @@ import {
   selectCloudProjectByName,
   setWorkspaceModePreference,
 } from '../../lib/nebulaCloud';
+import { startGrokDictation } from '../../lib/grokVoiceDictation';
+import { resolveSttRequestLanguage, sttTranscriptMatchesUi } from '../../../lib/grokVoiceStt';
+import { readLanguagePreferences, resolveLanguageState } from '../../lib/i18n/userLanguagePreferences';
 import {
   dispatchChatOpenFile,
   dispatchStartFreeChat,
@@ -54,16 +57,6 @@ type ListedProject = {
   name: string;
   updatedAt: string;
   source: 'guest' | 'cloud' | 'current';
-};
-
-type SpeechRecognitionLike = {
-  lang: string;
-  interimResults: boolean;
-  onresult: ((ev: { results: ArrayLike<ArrayLike<{ transcript?: string }>> }) => void) | null;
-  onerror: (() => void) | null;
-  onend: (() => void) | null;
-  start: () => void;
-  stop: () => void;
 };
 
 function projectInitials(name: string): string {
@@ -168,40 +161,61 @@ export function MyProjectsHome({
   const [startingIdea, setStartingIdea] = useState(false);
   const [listening, setListening] = useState(false);
   const recognitionRef = useRef<{ stop: () => void } | null>(null);
+  const ideaInputRef = useRef('');
+  const sendTimerRef = useRef<number | null>(null);
+  const startFromIdeaRef = useRef<() => void>(() => {});
 
   const busyStarting = Boolean(startingType) || startingIdea;
 
   const toggleMic = useCallback(() => {
-    const w = window as Window & {
-      SpeechRecognition?: new () => SpeechRecognitionLike;
-      webkitSpeechRecognition?: new () => SpeechRecognitionLike;
-    };
-    const SR = w.SpeechRecognition || w.webkitSpeechRecognition;
-    if (!SR) {
-      setStartError('Voice input is not supported in this browser.');
-      return;
-    }
     if (listening && recognitionRef.current) {
-      recognitionRef.current.stop();
+      void recognitionRef.current.stop();
+      recognitionRef.current = null;
       setListening(false);
       return;
     }
-    const rec = new SR();
-    recognitionRef.current = rec;
-    rec.lang = 'en-US';
-    rec.interimResults = false;
-    rec.onresult = (ev) => {
-      const transcript = ev.results[0]?.[0]?.transcript?.trim();
-      if (transcript) {
-        setIdeaInput((prev) => (prev ? `${prev} ${transcript}` : transcript));
+    const langState = resolveLanguageState(readLanguagePreferences());
+    const language = resolveSttRequestLanguage({
+      contentLocale: langState.resolvedContentLocale,
+      lastTypedText: ideaInputRef.current,
+      osLocale: typeof navigator !== 'undefined' ? navigator.language : '',
+    });
+    if (sendTimerRef.current) {
+      window.clearTimeout(sendTimerRef.current);
+      sendTimerRef.current = null;
+    }
+    void startGrokDictation({
+      language,
+      onUtterance: (text) => {
+        if (
+          !sttTranscriptMatchesUi(text, {
+            contentLocale: langState.resolvedContentLocale,
+            lastTypedText: ideaInputRef.current,
+          })
+        ) {
+          return;
+        }
+        const next = ideaInputRef.current ? `${ideaInputRef.current} ${text}`.replace(/\s+/g, ' ').trim() : text;
+        ideaInputRef.current = next;
+        setIdeaInput(next);
         setStartError('');
-      }
-    };
-    rec.onerror = () => setListening(false);
-    rec.onend = () => setListening(false);
-    setListening(true);
-    setStartError('');
-    rec.start();
+        if (sendTimerRef.current) window.clearTimeout(sendTimerRef.current);
+        sendTimerRef.current = window.setTimeout(() => {
+          sendTimerRef.current = null;
+          startFromIdeaRef.current();
+        }, 1400);
+      },
+      onError: () => setListening(false),
+    })
+      .then((session) => {
+        recognitionRef.current = session;
+        setListening(true);
+        setStartError('');
+      })
+      .catch(() => {
+        setListening(false);
+        setStartError('Voice input failed. Type your idea, then Start.');
+      });
   }, [listening]);
 
   useEffect(() => {
@@ -354,7 +368,7 @@ export function MyProjectsHome({
 
   const onStartFromIdea = useCallback(async () => {
     if (busyStarting) return;
-    const idea = ideaInput.trim();
+    const idea = (ideaInputRef.current || ideaInput).trim();
     setStartError('');
     setStartingIdea(true);
     try {
@@ -382,6 +396,9 @@ export function MyProjectsHome({
       setStartError(msg);
     }
   }, [busyStarting, ideaInput, ideaType, ensureFreshProject, enterBuild]);
+  startFromIdeaRef.current = () => {
+    void onStartFromIdea();
+  };
 
   const onJustChat = useCallback(() => {
     dispatchStartFreeChat();
@@ -487,6 +504,7 @@ export function MyProjectsHome({
           value={ideaInput}
           onChange={(e) => {
             setIdeaInput(e.target.value);
+            ideaInputRef.current = e.target.value;
             if (startError) setStartError('');
           }}
           rows={5}
@@ -583,6 +601,7 @@ export function MyProjectsHome({
             value={ideaInput}
             onChange={(e) => {
               setIdeaInput(e.target.value);
+            ideaInputRef.current = e.target.value;
               if (startError) setStartError('');
             }}
             rows={hasExistingWork ? 3 : 4}

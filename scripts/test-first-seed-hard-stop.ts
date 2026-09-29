@@ -78,7 +78,7 @@ assert.match(
 );
 assert.match(chat, /shouldHoldFirstSeedBeatA/);
 assert.match(chat, /shouldSkipGrokChatForExistingPlan/);
-assert.match(chat, /mpSaved = beatAHold/);
+assert.match(chat, /mayPersistMasterPlanFromChat/);
 assert.match(chat, /let willCode =\s+agentAllowed &&\s+!beatAHold/);
 assert.match(chat, /forceGoPipeline &&\s+!beatAHold/);
 assert.equal(

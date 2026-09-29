@@ -26,6 +26,36 @@ export function normalizeSttLanguage(code?: string | null): "en" | "fr" | "pt" {
   return "en";
 }
 
+const CJK_RE = /[\u3040-\u30ff\u3400-\u9fff\uac00-\ud7af]/;
+
+/** Pin STT to chat language. Never follow OS locale (zh) when the UI is English. */
+export function resolveSttRequestLanguage(opts: {
+  contentLocale?: string | null;
+  lastTypedText?: string | null;
+  osLocale?: string | null;
+}): "en" | "fr" | "pt" {
+  const content = normalizeSttLanguage(opts.contentLocale);
+  const typed = String(opts.lastTypedText || "");
+  if (CJK_RE.test(typed) && !/[a-zA-Z]{8,}/.test(typed)) {
+    return content;
+  }
+  return content;
+}
+
+/** Drop STT that is a different script from the UI unless they typed that script here. */
+export function sttTranscriptMatchesUi(transcript: string, opts: {
+  contentLocale?: string | null;
+  lastTypedText?: string | null;
+}): boolean {
+  const t = String(transcript || "").trim();
+  if (!t) return false;
+  const typed = String(opts.lastTypedText || "");
+  if (CJK_RE.test(t) && !CJK_RE.test(typed) && normalizeSttLanguage(opts.contentLocale) === "en") {
+    return false;
+  }
+  return true;
+}
+
 export function buildSttKeyterms(opts?: { productName?: string | null; extra?: string[] }): string[] {
   const seen = new Set<string>();
   const out: string[] = [];

@@ -846,6 +846,14 @@ export function userAcceptedTalkClose(
   return false;
 }
 
+/** Plan tabs / architecture apply only after Start — not on the first seed dump. */
+export function mayPersistMasterPlanFromChat(opts: {
+  userText: string;
+  lastAssistantText?: string;
+}): boolean {
+  return userAcceptedTalkClose(opts.userText, { lastAssistantText: opts.lastAssistantText });
+}
+
 export function shouldStartGoAfterTalk(opts: {
   plan: Record<string, unknown> | null | undefined;
   userText: string;

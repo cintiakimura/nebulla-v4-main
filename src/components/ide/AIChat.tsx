@@ -69,6 +69,8 @@ import {
   VOICE_FAILED_TYPE_HINT,
   type GrokDictationSession,
 } from '../../lib/grokVoiceDictation';
+import { resolveSttRequestLanguage, sttTranscriptMatchesUi } from '../../../lib/grokVoiceStt';
+import { sourceHasMasterPlanBlock } from '../../../lib/masterPlanTags';
 import {
   loadIdeChatTranscript,
   mergeChatTranscripts,
@@ -77,6 +79,7 @@ import {
 } from '../../lib/ideChatTranscript';
 import {
   formatAssistantForIdeChatDisplay,
+  formatFirstSeedTalkDisplay,
   persistMasterPlanFromAssistantSource,
   isOrchestrationOnlyPlanSource,
 } from '../../lib/grokChatArtifacts';
@@ -96,7 +99,7 @@ import {
 } from '../../lib/nebulaAiCodingPipeline';
 import { isFoundationGoInFlight } from '../../lib/foundationHeavyJob';
 import { abortHonestyUserLine, abortWithUserStopReason, isAbortLikeError, isAbortLikeMessage } from '../../lib/abortLikeError';
-import { applyTalkCloseDisplayPolicy, assessFullBuildCompleteness, freezePlan, fullBuildGoUserNote, fullBuildIncompleteFollowUp, formatFullBuildIncompleteStop, FULL_BUILD_INCOMPLETE_STOP, FULL_BUILD_NO_RETRY_ACTIVITY, isPlanFrozen, isTalkRepairTurn, isTalkStayOpenUserTurn, shouldOpenTalkTurn, shouldSkipGrokChatForExistingPlan, shouldStartGoAfterTalk, TALK_CLOSE_QUESTION, userAcceptedTalkClose } from '../../../lib/fullBuildContract';
+import { applyTalkCloseDisplayPolicy, assessFullBuildCompleteness, freezePlan, fullBuildGoUserNote, fullBuildIncompleteFollowUp, formatFullBuildIncompleteStop, FULL_BUILD_INCOMPLETE_STOP, FULL_BUILD_NO_RETRY_ACTIVITY, isPlanFrozen, isTalkRepairTurn, isTalkStayOpenUserTurn, mayPersistMasterPlanFromChat, shouldOpenTalkTurn, shouldSkipGrokChatForExistingPlan, shouldStartGoAfterTalk, TALK_CLOSE_QUESTION, userAcceptedTalkClose } from '../../../lib/fullBuildContract';
 import {
   isAssistantCodingPromise,
   isAssistantRefineClaim,
@@ -1179,10 +1182,22 @@ export function AIChat() {
     voiceDraftRef.current = prefix;
     unlockTtsAudio();
     void startGrokDictation({
-      language: contentLocaleRef.current,
+      language: resolveSttRequestLanguage({
+        contentLocale: contentLocaleRef.current,
+        lastTypedText: prefix,
+        osLocale: typeof navigator !== 'undefined' ? navigator.language : '',
+      }),
       productName: getBrowserProjectName(),
       onPartial: (text) => {
         if (!isHandsFreeRef.current) return;
+        if (
+          !sttTranscriptMatchesUi(text, {
+            contentLocale: contentLocaleRef.current,
+            lastTypedText: voiceDraftRef.current,
+          })
+        ) {
+          return;
+        }
         const shown = applyDictationLive(voiceDraftRef.current, text);
         setInput(shown);
         inputRef.current = shown;
@@ -1190,6 +1205,14 @@ export function AIChat() {
       },
       onUtterance: (text) => {
         if (!isHandsFreeRef.current) return;
+        if (
+          !sttTranscriptMatchesUi(text, {
+            contentLocale: contentLocaleRef.current,
+            lastTypedText: voiceDraftRef.current,
+          })
+        ) {
+          return;
+        }
         const shown = commitDictationUtterance(voiceDraftRef.current, text);
         voiceDraftRef.current = shown;
         setInput(shown);
@@ -2303,6 +2326,8 @@ export function AIChat() {
     const buildMode =
       !lockedChat &&
       !hasAppStatusPayload &&
+      !isBootstrapTrigger &&
+      !beatAHold &&
       (detectBuildModeIntent(rawText) ||
         userForcedCoding ||
         onboardingBuildStart ||
@@ -2438,7 +2463,12 @@ export function AIChat() {
       (userForcedCoding || fastPrototypeTurn || buildMode);
     let fastLaneFillAllowGo: boolean | null = null;
     let fastLaneFillAsk: string | null = null;
-    if (openTalk && chatGoal && !isPlanFrozen(planOnDisk)) {
+    if (
+      openTalk &&
+      chatGoal &&
+      !isPlanFrozen(planOnDisk) &&
+      userAcceptedTalkClose(rawText, { lastAssistantText })
+    ) {
       try {
         await fetchJson<{ ok?: boolean }>(withProjectQuery('/api/master-plan/bootstrap-from-chat'), {
           method: 'POST',
@@ -2861,7 +2891,11 @@ export function AIChat() {
       const masterPlanSource = (
         isOrchestrationOnlyPlanSource(planningPhase) ? raw : planningPhase || raw
       ).trim();
-      if (showWorkActivity && !skipGrokChat) {
+      const allowPlanPersist = mayPersistMasterPlanFromChat({
+        userText: rawText,
+        lastAssistantText,
+      });
+      if (showWorkActivity && !skipGrokChat && allowPlanPersist) {
         pushActivity(`Grok replied (${raw.length.toLocaleString()} chars)`, 'success');
         setGrokActivity((prev) =>
           advanceGrokActivity(prev, 2, {
@@ -2871,7 +2905,7 @@ export function AIChat() {
         );
       }
 
-      const persistedFromChat = beatAHold || isTalkStayOpenUserTurn(rawText) || isTalkRepairTurn(rawText)
+      const persistedFromChat = !allowPlanPersist
         ? 0
         : await persistMasterPlanFromAssistantSource(
         masterPlanSource,
@@ -2881,8 +2915,12 @@ export function AIChat() {
           peekPendingProjectIdea() || '',
           getBrowserProjectName(),
         ],
+        { userText: rawText, lastAssistantText },
       );
-      mpSaved = beatAHold || isTalkStayOpenUserTurn(rawText) || isTalkRepairTurn(rawText) ? 0 : Math.max(mpSaved, persistedFromChat);
+      mpSaved = allowPlanPersist ? Math.max(mpSaved, persistedFromChat) : 0;
+      if (!allowPlanPersist && sourceHasMasterPlanBlock(raw)) {
+        pushActivity('Talk first — plan not saved yet.', 'info');
+      }
       if (mpSaved > 0) {
         void rememberActiveCloudProject();
       }
@@ -2898,11 +2936,15 @@ export function AIChat() {
         /* keep last planOnDisk */
       }
 
-      if (/<NEBULA_UI_STUDIO_PROMPT>/i.test(masterPlanSource) && !isTalkStayOpenUserTurn(rawText) && !isTalkRepairTurn(rawText)) {
+      if (/<NEBULA_UI_STUDIO_PROMPT>/i.test(masterPlanSource) && allowPlanPersist && !isTalkStayOpenUserTurn(rawText) && !isTalkRepairTurn(rawText)) {
         dispatchOpenUiStudio({ tab: 'mockups' });
       }
 
       let { displayText, hadCodingTag } = formatAssistantForIdeChatDisplay(raw);
+      if (!allowPlanPersist) {
+        displayText = formatFirstSeedTalkDisplay(raw);
+        hadCodingTag = false;
+      }
       const priorAssistantTexts = prior
         .filter((m) => m.role === 'assistant' && String(m.content || '').trim())
         .map((m) => String(m.content));
@@ -3066,7 +3108,7 @@ export function AIChat() {
       }
 
       // Architecture docs (research + optional richer ui-brief) before mockup gate — not app code.
-      if (agentAllowed && (fastPrototypeTurn || willCode || mpSaved > 0) && hasGrokFileBlocks(raw)) {
+      if (agentAllowed && allowPlanPersist && (fastPrototypeTurn || willCode || mpSaved > 0) && hasGrokFileBlocks(raw)) {
         try {
           await applyArchitectureArtifactsFromAssistant(raw, {
             projectName,
@@ -3079,7 +3121,7 @@ export function AIChat() {
 
       // Auto-accept security baseline for inference-first so strict Go isn't stuck on Accept.
       // Includes auth/sign-in when kids/teachers/parents + private data are already implied.
-      if (agentAllowed && (fastPrototypeTurn || mpSaved > 0)) {
+      if (agentAllowed && allowPlanPersist && (fastPrototypeTurn || mpSaved > 0)) {
         try {
           const sec = await fetchJson<{ ok?: boolean; applied?: boolean; reason?: string }>(
             withProjectQuery('/api/master-plan/accept-security-baseline'),
@@ -4005,14 +4047,34 @@ export function AIChat() {
     voiceDraftRef.current = baseText;
     unlockTtsAudio();
     void startGrokDictation({
-      language: contentLocaleRef.current,
+      language: resolveSttRequestLanguage({
+        contentLocale: contentLocaleRef.current,
+        lastTypedText: baseText,
+        osLocale: typeof navigator !== 'undefined' ? navigator.language : '',
+      }),
       productName: getBrowserProjectName(),
       onPartial: (text) => {
+        if (
+          !sttTranscriptMatchesUi(text, {
+            contentLocale: contentLocaleRef.current,
+            lastTypedText: voiceDraftRef.current,
+          })
+        ) {
+          return;
+        }
         const shown = applyDictationLive(voiceDraftRef.current, text);
         setInput(shown);
         inputRef.current = shown;
       },
       onUtterance: (text) => {
+        if (
+          !sttTranscriptMatchesUi(text, {
+            contentLocale: contentLocaleRef.current,
+            lastTypedText: voiceDraftRef.current,
+          })
+        ) {
+          return;
+        }
         const shown = commitDictationUtterance(voiceDraftRef.current, text);
         voiceDraftRef.current = shown;
         setInput(shown);
