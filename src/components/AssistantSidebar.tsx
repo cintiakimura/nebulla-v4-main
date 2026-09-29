@@ -429,7 +429,9 @@ export function AssistantSidebar({
         latestMP = mpWrap;
         uiStudioApprovedCode = uiWrap;
 
-        systemPrompt = buildNebulaAssistantSystemPrompt(latestMP, uiStudioApprovedCode);
+        systemPrompt = buildNebulaAssistantSystemPrompt(latestMP, uiStudioApprovedCode, {
+          talkDiscovery: false,
+        });
         const lang = resolveLanguageState(readLanguagePreferences());
         systemPrompt += `\n\n${buildLanguagePromptAppendix({
           ideLocale: lang.resolvedIdeLocale,

@@ -411,6 +411,8 @@ export function AIChat() {
   const stickToBottomRef = useRef(true);
   const lastV0StatusRef = useRef<string>('');
   const pendingAgentResendRef = useRef<string | null>(null);
+  const pendingTalkDuringGoRef = useRef<string[]>([]);
+  const skipGoFromQueueRef = useRef(false);
   const foundationStallRecoveredRef = useRef(false);
   const applyStallStartedAtRef = useRef<number | null>(null);
   const autoSliceAbortRef = useRef(false);
@@ -1098,7 +1100,11 @@ export function AIChat() {
   const attemptHandsFreeAutoSend = useCallback(() => {
     handsFreeSendTimerRef.current = null;
     if (!openTalkDesiredRef.current || !isHandsFreeRef.current) return;
-    if (micInputBlockedRef.current || sendingRef.current) return;
+    if (micInputBlockedRef.current) return;
+    const { projectName: micGo } = resolveActiveProjectIds(diskProjectKey);
+    const goBusy =
+      isFoundationGoInFlight(micGo) || isGoCodeWaitActive(micGo) || isGoAborting(micGo);
+    if (sendingRef.current && !goBusy) return;
 
     const firstSpeechAt = handsFreeFirstSpeechAtRef.current;
     if (firstSpeechAt != null) {
@@ -1118,23 +1124,31 @@ export function AIChat() {
 
     resetHandsFreeSpeechTurn();
       void sendChatRef.current(t);
-  }, []);
+  }, [diskProjectKey]);
 
   const scheduleHandsFreeAutoSend = useCallback(() => {
     if (!openTalkDesiredRef.current || !isHandsFreeRef.current) return;
-    if (micInputBlockedRef.current || sendingRef.current) return;
+    if (micInputBlockedRef.current) return;
+    const { projectName: micGo } = resolveActiveProjectIds(diskProjectKey);
+    const goBusy =
+      isFoundationGoInFlight(micGo) || isGoCodeWaitActive(micGo) || isGoAborting(micGo);
+    if (sendingRef.current && !goBusy) return;
 
     clearHandsFreeAutoSendTimers();
     handsFreeGraceTimerRef.current = window.setTimeout(() => {
       handsFreeGraceTimerRef.current = null;
       if (!openTalkDesiredRef.current || !isHandsFreeRef.current) return;
-      if (micInputBlockedRef.current || sendingRef.current) return;
+      if (micInputBlockedRef.current) return;
+      const { projectName: micGo2 } = resolveActiveProjectIds(diskProjectKey);
+      const goBusy2 =
+        isFoundationGoInFlight(micGo2) || isGoCodeWaitActive(micGo2) || isGoAborting(micGo2);
+      if (sendingRef.current && !goBusy2) return;
 
       handsFreeSendTimerRef.current = window.setTimeout(() => {
         attemptHandsFreeAutoSend();
       }, OPEN_TALK_SILENCE_SEND_MS);
     }, OPEN_TALK_PAUSE_GRACE_MS);
-  }, [attemptHandsFreeAutoSend]);
+  }, [attemptHandsFreeAutoSend, diskProjectKey]);
 
   const noteHandsFreeSpeechActivity = useCallback(() => {
     if (handsFreeFirstSpeechAtRef.current == null) {
@@ -1648,11 +1662,9 @@ export function AIChat() {
     if (sendingRef.current) {
       if (lastComposerSendRef.current === rawText) return;
       const { projectName: goName } = resolveActiveProjectIds(diskProjectKey);
-      if (isFoundationGoInFlight(goName) || isGoCodeWaitActive(goName) || isGoAborting(goName)) {
-        // Do not cancel in-flight Go for a new chat message — only Stop does that.
-        return;
-      }
-      stopSending();
+      const goBusy =
+        isFoundationGoInFlight(goName) || isGoCodeWaitActive(goName) || isGoAborting(goName);
+      if (!goBusy) stopSending();
     }
     lastComposerSendRef.current = rawText;
     voiceDraftRef.current = '';
@@ -2025,6 +2037,16 @@ export function AIChat() {
     setInput('');
     inputRef.current = '';
     stickToBottomRef.current = true;
+    const { projectName: goLockNameEarly } = resolveActiveProjectIds(diskProjectKey);
+    const goBusyNow =
+      isFoundationGoInFlight(goLockNameEarly) ||
+      isGoCodeWaitActive(goLockNameEarly) ||
+      isGoAborting(goLockNameEarly);
+    if (goBusyNow && !isBootstrapTrigger) {
+      pendingTalkDuringGoRef.current.push(rawText);
+      pushActivity('Queued until this build step finishes', 'info');
+      return;
+    }
     setSending(true);
     sendingRef.current = true;
     const { projectName: goLockName } = resolveActiveProjectIds(diskProjectKey);
@@ -2107,12 +2129,16 @@ export function AIChat() {
     const lastAssistantText = [...prior]
       .reverse()
       .find((m) => m.role === 'assistant' && String(m.content || '').trim())?.content;
-    const wantsLockAndBuild = shouldStartGoAfterTalk({
-      plan: planOnDisk,
-      userText: rawText,
-      seedText: seedForPlan,
-      lastAssistantText,
-    });
+    const skipGoFromQueue = skipGoFromQueueRef.current;
+    skipGoFromQueueRef.current = false;
+    const wantsLockAndBuild =
+      !skipGoFromQueue &&
+      shouldStartGoAfterTalk({
+        plan: planOnDisk,
+        userText: rawText,
+        seedText: seedForPlan,
+        lastAssistantText,
+      });
     const beatAHold = shouldHoldFirstSeedBeatA({
       userText: rawText,
       prior,
@@ -2724,6 +2750,13 @@ export function AIChat() {
         resetCodingActivity();
         sendingRef.current = false;
         setSending(false);
+        const queued = pendingTalkDuringGoRef.current.splice(0);
+        if (queued.length) {
+          skipGoFromQueueRef.current = true;
+          window.setTimeout(() => {
+            void sendChatRef.current(queued.join('\n'));
+          }, 50);
+        }
       }
       return;
     }
@@ -3835,7 +3868,14 @@ export function AIChat() {
       voiceDraftRef.current = '';
       if (openTalkDesiredRef.current && !scheduledTts) {
         resumeOpenTalkIfWanted();
-    }
+      }
+      const queued = pendingTalkDuringGoRef.current.splice(0);
+      if (queued.length) {
+        skipGoFromQueueRef.current = true;
+        window.setTimeout(() => {
+          void sendChatRef.current(queued.join('\n'));
+        }, 50);
+      }
     }
   }, [sending, activePath, activeTab?.content, serverHasGrokKey, micInputBlocked, workspaceRootLabel, gitBranch, tabs, pauseHandsFreeListening, resumeOpenTalkIfWanted, beginCodingActivity, beginPlanActivity, holdCodingFailure, pushActivity, resetCodingActivity, workspacePaths.length, noteUserMessageForMirror, prefs.contentMode, resolvedIdeLocale, t, localeLabels]);
 

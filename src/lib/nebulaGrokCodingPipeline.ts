@@ -32,7 +32,7 @@ import {
 } from './abortLikeError';
 import { markFoundationGoInFlight, isFoundationGoInFlight } from './foundationHeavyJob';
 import { setGrokCodingActive } from './nebulaGrokCodingGate';
-import { FULL_BUILD_NO_RETRY_ACTIVITY, fullBuildGoUserNote, inferFullBuildRoutes, listMissingFullBuildRoutes } from '../../lib/fullBuildContract';
+import { FULL_BUILD_NO_RETRY_ACTIVITY, fullBuildGoUserNote, inferFullBuildRoutes, isPlanFrozen, listMissingFullBuildRoutes } from '../../lib/fullBuildContract';
 import {
   buildEditExistingUserNote,
   buildNarrowSliceInstruction,
@@ -1250,6 +1250,27 @@ export async function runGoCodeAndApply(options: {
       totalWritten: 0,
       blockedReason: goBlocked('GO_FAILED', line),
     };
+  }
+  try {
+    const mpRes = await fetch(withProjectQuery('/api/master-plan/read'), {
+      credentials: 'include',
+      cache: 'no-store',
+    });
+    if (mpRes.ok) {
+      const plan = (await readResponseJson(mpRes)) as Record<string, unknown>;
+      if (!isPlanFrozen(plan)) {
+        const line = 'Talk until the plan is locked — then one Go.';
+        onProgress?.(line, 'warn');
+        return {
+          ok: false,
+          statusMessage: line,
+          totalWritten: 0,
+          blockedReason: goBlocked('GO_FAILED', line),
+        };
+      }
+    }
+  } catch {
+    /* server TALK_NOT_LOCKED still applies on kick */
   }
   onProgress?.('Grok Code — Code pass 1 (waiting for generated files)…', 'info');
 

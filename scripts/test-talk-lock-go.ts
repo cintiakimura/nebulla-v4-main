@@ -116,6 +116,22 @@ section("you can start coding accepts close");
     userAcceptedTalkClose("ok let's use blue", { lastAssistantText: TALK_CLOSE_QUESTION }),
     false,
   );
+  assert.equal(
+    userAcceptedTalkClose("it's good", { lastAssistantText: TALK_CLOSE_QUESTION }),
+    true,
+  );
+  assert.equal(
+    userAcceptedTalkClose("okay", { lastAssistantText: TALK_CLOSE_QUESTION }),
+    true,
+  );
+  assert.equal(
+    userAcceptedTalkClose("is good for me", { lastAssistantText: TALK_CLOSE_QUESTION }),
+    true,
+  );
+  assert.equal(
+    userAcceptedTalkClose("good for me", { lastAssistantText: TALK_CLOSE_QUESTION }),
+    true,
+  );
   assert.equal(lastAssistantOfferedTalkClose(`Done.\n\n${TALK_CLOSE_QUESTION}`), true);
   const frozen = freezePlan(completeCourierPlan());
   assert.equal(
@@ -143,6 +159,17 @@ section("canned first line is not the unfrozen talk door");
   assert.ok(iAccept > 0 && iGrok > iAccept, "accept freeze+Go must run before Grok chat");
   assert.match(chat.slice(Math.max(0, iAccept - 1200), iAccept), /\/api\/master-plan\/freeze/);
   assert.match(chat.slice(iAccept, iGrok), /runGoCodeAndApply/);
+  assert.match(chat, /Queued until this build step finishes/);
+  assert.match(chat, /pendingTalkDuringGoRef/);
+  const pipeline = fs.readFileSync(path.join(REPO, "src/lib/nebulaGrokCodingPipeline.ts"), "utf8");
+  assert.match(pipeline, /Talk until the plan is locked/);
+  assert.match(pipeline, /isPlanFrozen/);
+  const prompt = fs.readFileSync(path.join(REPO, "src/lib/nebulaAssistantSystemPrompt.ts"), "utf8");
+  assert.match(prompt, /TALK \/ DISCOVERY/);
+  assert.match(prompt, /talkDiscovery/);
+  assert.match(prompt, /CODING \/ GO/);
+  const grokChat = fs.readFileSync(path.join(REPO, "src/lib/ideAssistantGrokChat.ts"), "utf8");
+  assert.match(grokChat, /talkDiscovery: !isPlanFrozen/);
   assert.doesNotMatch(chat, /formatFullBuildFirstSpokenLine\(seedForPlan\)/);
   const spoken = formatFullBuildFirstSpokenLine(COURIER_SEED);
   assert.ok(spoken.length > 20);

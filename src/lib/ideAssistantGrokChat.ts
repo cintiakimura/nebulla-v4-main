@@ -149,6 +149,7 @@ export async function sendIdeAssistantGrokTurn(options: {
       {
         providerLabel: selection.providerLabel,
         modelLabel: selection.label,
+        talkDiscovery: !isPlanFrozen(latestMP),
       },
     ) +
     `\n\n${IDE_CHAT_EXECUTION_APPENDIX}` +
