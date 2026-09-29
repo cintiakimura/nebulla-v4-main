@@ -348,8 +348,13 @@ export function formatAssistantForIdeChatDisplay(raw: string): IdeChatDisplayRes
 const PLAN_SAVED_CHAT_FALLBACK_RE =
   /Master Plan saved|updated the project quietly|Updates are in your project files/i;
 
+export const FIRST_SEED_TALK_CANNED = "Got it — I’m with you on this. What do you think?";
+
 /** Strip tags for display. Never hide the first Talk turn as empty / “plan saved”. */
-export function formatFirstSeedTalkDisplay(raw: string): string {
+export function formatFirstSeedTalkDisplay(
+  raw: string,
+  opts?: { allowCanned?: boolean },
+): string {
   const beforeTags = String(raw || '').split(/<START_MASTERPLAN>/i)[0];
   const stripped = sanitizeAssistantChatText(beforeTags, { fallback: '' });
   if (stripped && !looksLikeCodeOrStyleDump(stripped) && !PLAN_SAVED_CHAT_FALLBACK_RE.test(stripped)) {
@@ -359,7 +364,10 @@ export function formatFirstSeedTalkDisplay(raw: string): string {
   if (displayText.trim() && !PLAN_SAVED_CHAT_FALLBACK_RE.test(displayText)) {
     return displayText.trim();
   }
-  return 'Got it — I’m with you on this. What do you think?';
+  if (opts?.allowCanned === false) {
+    return stripped.trim() || 'Got it.';
+  }
+  return FIRST_SEED_TALK_CANNED;
 }
 
 function looksLikeResidualDump(text: string): boolean {

@@ -55,7 +55,7 @@ function storeRemove(key: string): void {
 }
 
 const CLOSE_OFFER_RE =
-  /I think we(?:'ve| have) got (?:what we need|it)|here'?s what I heard|this is what I(?:'ll| will) lock|If this is right[\s\S]{0,80}lock it and build|I think I have (?:everything|what) I need|If this is what you want, say start/i;
+  /I think we(?:'ve| have) got (?:what we need|it)|here'?s what I heard|this is what I(?:'ll| will) lock|If this is right[\s\S]{0,80}lock it and build|I think I have (?:everything|what) I need|Would you like me to start building|If this is what you want, say start/i;
 
 const CONFIRM_RE =
   /^(?:yes|yeah|yep|yup|ok|okay|sure|go(?:\s+ahead)?|looks?\s+good|that'?s\s+it|that\s+is\s+it|lock\s+it|lock\s+this\s+in|faz\s+isso|perfect|sounds?\s+good|let'?s\s+go|build\s+it|do\s+it|that'?s\s+right|isso)(?:[.!]|\s|$)/i;

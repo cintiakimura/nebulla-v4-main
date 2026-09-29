@@ -99,7 +99,7 @@ import {
 } from '../../lib/nebulaAiCodingPipeline';
 import { isFoundationGoInFlight } from '../../lib/foundationHeavyJob';
 import { abortHonestyUserLine, abortWithUserStopReason, isAbortLikeError, isAbortLikeMessage } from '../../lib/abortLikeError';
-import { applyApprovedWrapHandoff, applyTalkCloseDisplayPolicy, assessFullBuildCompleteness, freezePlan, fullBuildGoUserNote, fullBuildIncompleteFollowUp, formatFullBuildIncompleteStop, FULL_BUILD_INCOMPLETE_STOP, FULL_BUILD_NO_RETRY_ACTIVITY, isPlanFrozen, isTalkKeepTalking, isTalkRepairTurn, isTalkStayOpenUserTurn, lastAssistantOfferedTalkClose, markTalkWrapAccepted, mayPersistMasterPlanFromChat, shouldOpenTalkTurn, shouldSkipGrokChatForExistingPlan, shouldStartGoAfterTalk, stripTalkCloseQuestion, TALK_CLOSE_QUESTION, userAcceptedTalkClose } from '../../../lib/fullBuildContract';
+import { applyApprovedWrapHandoff, applyTalkCloseDisplayPolicy, assessFullBuildCompleteness, freezePlan, fullBuildGoUserNote, fullBuildIncompleteFollowUp, formatFullBuildIncompleteStop, FULL_BUILD_INCOMPLETE_STOP, FULL_BUILD_NO_RETRY_ACTIVITY, isPlanFrozen, isTalkKeepTalking, isTalkRepairTurn, isTalkStayOpenUserTurn, lastAssistantOfferedTalkClose, markTalkWrapAccepted, mayPersistMasterPlanFromChat, shouldOpenTalkTurn, shouldSkipGrokChatForExistingPlan, shouldStartGoAfterTalk, stripTalkCloseQuestion, TALK_CLOSE_QUESTION, userAcceptedTalkClose, userSaidTalkReady } from '../../../lib/fullBuildContract';
 import {
   isAssistantCodingPromise,
   isAssistantRefineClaim,
@@ -2158,7 +2158,14 @@ export function AIChat() {
     const lastAssistantText = [...prior]
       .reverse()
       .find((m) => m.role === 'assistant' && String(m.content || '').trim())?.content;
-    const talkCloseOffered = lastAssistantOfferedTalkClose(String(lastAssistantText || ''));
+    const talkCloseOffered =
+      lastAssistantOfferedTalkClose(String(lastAssistantText || '')) ||
+      prior.some(
+        (m) =>
+          m.role === 'assistant' && lastAssistantOfferedTalkClose(String(m.content || '')),
+      ) ||
+      prior.some((m) => m.role === 'user' && userSaidTalkReady(String(m.content || ''))) ||
+      userSaidTalkReady(rawText);
     const skipGoFromQueue = Boolean(opts?.skipGoFromQueue);
     const wantsLockAndBuild =
       !skipGoFromQueue &&
@@ -2972,7 +2979,11 @@ export function AIChat() {
 
       let { displayText, hadCodingTag } = formatAssistantForIdeChatDisplay(raw);
       if (!allowPlanPersist) {
-        displayText = formatFirstSeedTalkDisplay(raw);
+        const allowCanned =
+          prior.filter((m) => m.role === 'assistant' && String(m.content || '').trim()).length === 0 &&
+          !talkCloseOffered &&
+          !userAcceptedTalkClose(rawText, { lastAssistantText, lastAssistantOfferedTalkClose: talkCloseOffered });
+        displayText = formatFirstSeedTalkDisplay(raw, { allowCanned });
         hadCodingTag = false;
       }
       const priorAssistantTexts = prior

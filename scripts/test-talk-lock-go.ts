@@ -131,7 +131,7 @@ section("Start accept phrases after lock; coding/yes/ok are not Start");
   assert.equal(userAcceptedTalkClose("Yes — you can start coding.", lock), false);
   assert.equal(userAcceptedTalkClose("start coding", lock), false);
   assert.equal(userAcceptedTalkClose("go ahead", lock), false);
-  assert.equal(userAcceptedTalkClose("you can start"), false);
+  assert.equal(userAcceptedTalkClose("you can start"), true);
   assert.equal(userAcceptedTalkClose("yes"), false);
   assert.equal(userAcceptedTalkClose("ok"), false);
   assert.equal(userAcceptedTalkClose("perfect"), false);
@@ -341,6 +341,58 @@ section("you're rushing / suggest features — no lock sentence");
   }
 }
 
+section("alternate wrap + Start. / You can start. — Go; keep talking stays Talk");
+{
+  const plan = completeCourierPlan();
+  const altWrap = "Here's what I heard — tell me if this is right.";
+  assert.equal(lastAssistantOfferedTalkClose(altWrap), true);
+  assert.equal(lastAssistantOfferedTalkClose("Got it — I’m with you on this. What do you think?"), false);
+  assert.equal(
+    shouldStartGoAfterTalk({
+      plan,
+      userText: "Start.",
+      seedText: COURIER_SEED,
+      lastAssistantText: altWrap,
+    }),
+    true,
+  );
+  assert.equal(
+    shouldStartGoAfterTalk({
+      plan,
+      userText: "You can start.",
+      seedText: COURIER_SEED,
+      lastAssistantText: altWrap,
+    }),
+    true,
+  );
+  assert.equal(
+    shouldStartGoAfterTalk({
+      plan,
+      userText: "let’s keep talking",
+      seedText: COURIER_SEED,
+      lastAssistantText: altWrap,
+    }),
+    false,
+  );
+  const afterWrap = applyTalkCloseDisplayPolicy("Got it — I’m with you on this. What do you think?", {
+    userText: "Start.",
+    priorAssistantTexts: [altWrap],
+    isFirstAssistantReply: false,
+    planAllowsGo: true,
+    planFrozen: false,
+  });
+  assert.doesNotMatch(afterWrap, /I['’]m with you on this/);
+  assert.equal(
+    shouldStartGoAfterTalk({
+      plan,
+      userText: "start",
+      seedText: COURIER_SEED,
+      lastAssistantText: TALK_CLOSE_QUESTION,
+    }),
+    true,
+  );
+}
+
 section("after wrap + Start / you can start / go ahead and start — freeze + Go allowed");
 {
   const plan = completeCourierPlan();
@@ -352,8 +404,14 @@ section("after wrap + Start / you can start / go ahead and start — freeze + Go
     planFrozen: false,
   });
   assert.equal(lastAssistantOfferedTalkClose(wrapShown), true);
-  assert.match(wrapShown, /say start/);
-  for (const userText of ["Start", "start building", "you can start", "go ahead and start"]) {
+  assert.match(wrapShown, /Would you like me to start building, or would you like to keep talking\?/);
+  for (const userText of [
+    "Start",
+    "start building",
+    "you can start",
+    "go ahead and start",
+    "yes, start building",
+  ]) {
     assert.equal(userAcceptedTalkClose(userText, { lastAssistantText: TALK_CLOSE_QUESTION }), true);
     assert.equal(
       shouldStartGoAfterTalk({
@@ -397,6 +455,60 @@ section("after freeze, improve the UI/UX must not skip-chat Full Build");
     chat,
     /allowGo &&\s*\n\s*!isPlanFrozen\(planOnDisk\) &&\s*\n\s*!displayText.includes\(TALK_CLOSE_QUESTION\)/,
   );
+}
+
+section("two-option close: Start vs keep talking; user phrase wins; no canned after Start");
+{
+  const plan = completeCourierPlan();
+  const twoOpt = TALK_CLOSE_QUESTION;
+  assert.equal(twoOpt, "Would you like me to start building, or would you like to keep talking?");
+  assert.equal(
+    shouldStartGoAfterTalk({
+      plan,
+      userText: "start building",
+      seedText: COURIER_SEED,
+      lastAssistantText: twoOpt,
+    }),
+    true,
+  );
+  assert.equal(
+    shouldStartGoAfterTalk({
+      plan,
+      userText: "keep talking",
+      seedText: COURIER_SEED,
+      lastAssistantText: twoOpt,
+    }),
+    false,
+  );
+  assert.equal(isTalkKeepTalking("let’s keep talking"), true);
+  assert.equal(isTalkKeepTalking("talk"), true);
+  assert.equal(
+    shouldStartGoAfterTalk({
+      plan,
+      userText: "Start.",
+      seedText: COURIER_SEED,
+      lastAssistantText: "What do you think?",
+    }),
+    true,
+  );
+  const afterStart = applyTalkCloseDisplayPolicy("Got it — I’m with you on this. What do you think?", {
+    userText: "start building",
+    priorAssistantTexts: [twoOpt],
+    isFirstAssistantReply: false,
+    planAllowsGo: true,
+    planFrozen: false,
+  });
+  assert.doesNotMatch(afterStart, /I['’]m with you on this/);
+  assert.doesNotMatch(afterStart, /What do you think\?/);
+  const forgotClose = applyTalkCloseDisplayPolicy("I think we've got what we need. Here's the courier loop.", {
+    userText: "wrap this up",
+    priorAssistantTexts: ["What do you think?"],
+    isFirstAssistantReply: false,
+    planAllowsGo: true,
+    planFrozen: false,
+  });
+  assert.match(forgotClose, /Would you like me to start building, or would you like to keep talking\?/);
+  assert.equal(forgotClose.trim().endsWith(twoOpt), true);
 }
 
 section("1 lock not shown + shaping no → shouldStartGo false");

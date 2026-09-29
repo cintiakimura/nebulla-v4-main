@@ -129,6 +129,25 @@ section("bootstrap turn 1 is Talk only");
   const chat = fs.readFileSync(path.join(REPO, "src/components/ide/AIChat.tsx"), "utf8");
   assert.match(chat, /Talk first — plan not saved yet/);
   assert.match(chat, /formatFirstSeedTalkDisplay/);
+  assert.match(chat, /allowCanned/);
+  const cannedOff = formatFirstSeedTalkDisplay("<START_MASTERPLAN>x</START_MASTERPLAN>", { allowCanned: false });
+  assert.doesNotMatch(cannedOff, /I['’]m with you on this/);
+  const wrapShown = applyTalkCloseDisplayPolicy("Short wrap of the music loop.", {
+    userText: "wrap this up",
+    priorAssistantTexts: ["What do you think?"],
+    isFirstAssistantReply: false,
+    planAllowsGo: true,
+    planFrozen: false,
+  });
+  assert.equal(wrapShown.trim().endsWith(TALK_CLOSE_QUESTION), true);
+  const afterStart = applyTalkCloseDisplayPolicy("Got it — I’m with you on this. What do you think?", {
+    userText: "Start.",
+    priorAssistantTexts: [TALK_CLOSE_QUESTION],
+    isFirstAssistantReply: false,
+    planAllowsGo: true,
+    planFrozen: false,
+  });
+  assert.doesNotMatch(afterStart, /I['’]m with you on this/);
 }
 
 function section(name: string) {

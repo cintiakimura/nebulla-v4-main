@@ -418,6 +418,7 @@ export function talkThreadGoalBrief(
   const parts: string[] = [];
   const push = (raw: string) => {
     const t = String(raw || "")
+      .replace(/Would you like me to start building[\s\S]*$/i, "")
       .replace(/If this is what you want, say start[\s\S]*$/i, "")
       .replace(/I think I have (what|everything) I need[\s\S]*$/i, "")
       .replace(/\s+/g, " ")

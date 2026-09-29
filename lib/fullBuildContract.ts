@@ -27,11 +27,19 @@ export const TALK_WRAP_ACCEPTED_AT_KEY = "talkWrapAcceptedAt";
 export const TALK_WRAP_TEXT_KEY = "talkWrapText";
 
 export const TALK_CLOSE_QUESTION =
-  "If this is what you want, say start. If not, say let’s keep talking.";
+  "Would you like me to start building, or would you like to keep talking?";
 export const TALK_CLOSE_QUESTION_LEGACY =
-  "I think I have what I need. Start building, or add something?";
+  "If this is what you want, say start. If not, say let’s keep talking.";
 export const TALK_CLOSE_QUESTION_LEGACY_OLDER =
+  "I think I have what I need. Start building, or add something?";
+export const TALK_CLOSE_QUESTION_LEGACY_OLDEST =
   "I think I have everything I need. Anything you want to add?";
+
+/** Imperfect Grok wraps — Start phrases still count (do not require the two-option line). */
+const TALK_WRAP_OFFER_RE =
+  /would you like me to start building|would you like to keep talking|i think we['’]?ve got what we need|got what we need|here['’]?s what i heard|tell me if this is right|i think i have what i need|i think i have everything i need/i;
+
+export const FIRST_SEED_TALK_CANNED_RE = /I['’]m with you on this\.\s*What do you think\?/i;
 
 export type BuildMode = "full_build" | "fast_prototype";
 
@@ -923,10 +931,16 @@ export function planAllowsGoAfterFill(
 
 export function lastAssistantOfferedTalkClose(text: string): boolean {
   const s = String(text || "");
+  if (!s.trim()) return false;
+  if (FIRST_SEED_TALK_CANNED_RE.test(s) && !TALK_WRAP_OFFER_RE.test(s) && !s.includes(TALK_CLOSE_QUESTION)) {
+    return false;
+  }
   return (
     s.includes(TALK_CLOSE_QUESTION) ||
     s.includes(TALK_CLOSE_QUESTION_LEGACY) ||
-    s.includes(TALK_CLOSE_QUESTION_LEGACY_OLDER)
+    s.includes(TALK_CLOSE_QUESTION_LEGACY_OLDER) ||
+    s.includes(TALK_CLOSE_QUESTION_LEGACY_OLDEST) ||
+    TALK_WRAP_OFFER_RE.test(s)
   );
 }
 
@@ -935,6 +949,7 @@ export function stripTalkCloseQuestion(text: string): string {
     .replace(TALK_CLOSE_QUESTION, "")
     .replace(TALK_CLOSE_QUESTION_LEGACY, "")
     .replace(TALK_CLOSE_QUESTION_LEGACY_OLDER, "")
+    .replace(TALK_CLOSE_QUESTION_LEGACY_OLDEST, "")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
 }
@@ -950,6 +965,7 @@ export function isTalkStayOpenUserTurn(text: string): boolean {
   const t = String(text || "").replace(/\s+/g, " ").trim();
   if (!t) return false;
   if (isTalkKeepTalking(t)) return true;
+  if (isTalkStartBuildingPhrase(t)) return false;
   if (/^(no|nope|nah|não)[\s.!?]*$/i.test(t)) return true;
   if (isTalkContinueNotLock(t)) return true;
   if (/\?/.test(t)) return true;
@@ -1023,34 +1039,58 @@ export function applyTalkCloseDisplayPolicy(
   let text = String(displayText || "");
   const lastPrior = [...(opts.priorAssistantTexts || [])].reverse().find((p) => String(p || "").trim()) || "";
   const lastOffered = lastAssistantOfferedTalkClose(lastPrior);
-  const forbidden =
+  const startPick = isTalkStartBuildingPhrase(opts.userText);
+  const wrapTurn = isTalkWrapUserTurn(opts.userText);
+  const skipStamp =
     opts.planFrozen ||
     opts.isFirstAssistantReply ||
     isTalkStayOpenUserTurn(opts.userText) ||
     isTalkRepairTurn(opts.userText) ||
     isTalkKeepTalking(opts.userText) ||
-    lastOffered ||
+    startPick ||
     /\bsorry\b/i.test(text);
-  if (forbidden || !isTalkWrapUserTurn(opts.userText)) {
+  if (skipStamp || lastOffered || !wrapTurn) {
     text = stripTalkCloseQuestion(text);
   }
   if (
-    !forbidden &&
-    opts.planAllowsGo &&
-    isTalkWrapUserTurn(opts.userText) &&
-    !lastAssistantOfferedTalkClose(text)
+    lastOffered ||
+    startPick ||
+    (opts.priorAssistantTexts || []).some((p) => lastAssistantOfferedTalkClose(p))
   ) {
+    text = text.replace(FIRST_SEED_TALK_CANNED_RE, "").replace(/\n{3,}/g, "\n\n").trim();
+  }
+  if (!skipStamp && opts.planAllowsGo && wrapTurn && !text.includes(TALK_CLOSE_QUESTION)) {
+    text = stripBannedTalkCloseEndings(text);
     text = `${text.trim()}\n\n${TALK_CLOSE_QUESTION}`.trim();
   }
   return text;
 }
 
+function stripBannedTalkCloseEndings(text: string): string {
+  return stripTalkCloseQuestion(text)
+    .replace(FIRST_SEED_TALK_CANNED_RE, "")
+    .replace(/\n*What do you think\??\s*$/i, "")
+    .replace(/\n*tell me if this is right\.?\s*$/i, "")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
 const TALK_START_ACCEPT_RE =
-  /^(start( building)?|you can start|go ahead and start)[\s.!?]*$/i;
+  /^(yes[,.]?\s*)?(please\s+)?(start( building)?|you can start|go ahead and start|would like me to start( building)?)[\s.!?]*$/i;
+
+export function isTalkStartBuildingPhrase(text: string): boolean {
+  const t = String(text || "").replace(/\s+/g, " ").trim();
+  if (!t || /\bcoding\b/i.test(t)) return false;
+  if (TALK_START_ACCEPT_RE.test(t)) return true;
+  if (/^(yes[,.]?\s+)?start building[\s.!?]*$/i.test(t)) return true;
+  const words = t.split(/\s+/).filter(Boolean).length;
+  if (words <= 10 && /\bwould like me to start\b/i.test(t)) return true;
+  return false;
+}
 
 function talkMessageHasStartAccept(text: string): boolean {
   const t = String(text || "").replace(/\s+/g, " ").trim();
-  if (TALK_START_ACCEPT_RE.test(t)) return true;
+  if (isTalkStartBuildingPhrase(t)) return true;
   if (/\bstart building\b/i.test(t) || /\byou can start\b/i.test(t) || /\bgo ahead and start\b/i.test(t)) {
     return true;
   }
@@ -1081,24 +1121,31 @@ export function shouldOpenTalkTurn(opts: {
   return false;
 }
 
+export function userSaidTalkReady(text: string): boolean {
+  const t = String(text || "").replace(/\s+/g, " ").trim();
+  if (!t) return false;
+  return /\bhave everything we need\b/i.test(t) && !/\bnot\b.{0,20}everything we need/i.test(t);
+}
+
 export function userAcceptedTalkClose(
   text: string,
   opts?: { lastAssistantText?: string; lastAssistantOfferedTalkClose?: boolean },
 ): boolean {
   const t = String(text || "").replace(/\s+/g, " ").trim();
   if (!t) return false;
-  if (isTalkKeepTalking(t) || isTalkStayOpenUserTurn(t) || isTalkRepairTurn(t) || isTalkContinueNotLock(t)) {
+  if (isTalkKeepTalking(t)) return false;
+  if (isTalkStartBuildingPhrase(t)) return true;
+  if (isTalkStayOpenUserTurn(t) || isTalkRepairTurn(t) || isTalkContinueNotLock(t)) {
     return false;
   }
   const offered =
     lastAssistantOfferedTalkClose(opts?.lastAssistantText || "") ||
-    opts?.lastAssistantOfferedTalkClose === true;
+    opts?.lastAssistantOfferedTalkClose === true ||
+    userSaidTalkReady(t);
   if (!offered) return false;
-  const words = t.split(/\s+/).filter(Boolean).length;
-  if (words > 8) return false;
   if (/\bSTART_CODING\b/i.test(t)) return true;
-  if (TALK_START_ACCEPT_RE.test(t)) return true;
   if (talkMessageHasStartAccept(t) && /^(no|nope|nah|não)\b/i.test(t)) return true;
+  if (userSaidTalkReady(t) && talkMessageHasStartAccept(t) && !/\bcoding\b/i.test(t)) return true;
   return false;
 }
 
@@ -1123,14 +1170,16 @@ export function shouldStartGoAfterTalk(opts: {
   const seed = String(opts.userText || opts.seedText || "").trim();
   const goal = String(plan?.["1. Goal of the app"] || "").trim();
   if (seed && goal && isReplacementProductBrief(seed, goal)) return false;
-  if (
-    isTalkKeepTalking(live) ||
-    isTalkStayOpenUserTurn(live) ||
-    isTalkRepairTurn(live) ||
-    isPostFreezeTalkRequest(live) ||
-    isTalkContinueNotLock(live)
-  ) {
-    return false;
+  if (isTalkKeepTalking(live)) return false;
+  if (!isTalkStartBuildingPhrase(live)) {
+    if (
+      isTalkStayOpenUserTurn(live) ||
+      isTalkRepairTurn(live) ||
+      isPostFreezeTalkRequest(live) ||
+      isTalkContinueNotLock(live)
+    ) {
+      return false;
+    }
   }
   const acceptOpts = {
     lastAssistantText: opts.lastAssistantText,
