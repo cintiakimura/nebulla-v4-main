@@ -5,27 +5,26 @@ import { extractGoalFromUserNote } from '../../lib/spineSequenceClient';
 import { isBrainstormCloseConfirmedMessage } from './chatBrainstormClose';
 /** Empty chat only — never after a product seed. */
 export const IDE_CHAT_DISCOVERY_BOOTSTRAP =
-  "I'm ready. Follow chat-personality.md and chat-conversation-loop.md. No idea yet: warm greeting — What's up? What would you like to create today? If they already named a product, treat it as a seed: specific compliment + reflect the north star + Is that right? + the fork. Never Guided Discovery. Never ask what kind of project, paste design or none, or one core feature.";
+  "I'm ready. Follow chat-personality.md and chat-conversation-loop.md. No idea yet: warm greeting — What's up? What would you like to create today? If they already named a product, treat it as a seed: Talk partner — reflect the north star + one push + one next. Never Guided Discovery. Never ask what kind of project, paste design or none, or one core feature.";
 
 /**
  * Legacy / chat "Create a new project: …" path.
  * Prefer buildIdeaDiscoveryBootstrap for New Project → Start with a prompt.
  */
 export const IDE_CHAT_FAST_PROJECT_BOOTSTRAP =
-  "FAST PROJECT MODE. The user gave a product seed. Follow chat-personality.md, chat-thinking-rules.md, chat-conversation-loop.md, and chat-information-checklist.md. First spoken beat only: specific compliment + reflect the north star + Is that right? + fork: I can build what you have in mind right now, or we can shape it together and land on something stronger. Which sounds better? No extras. No Guided Discovery. Don't narrate searching. No feature catalog. No Foundation. No START_CODING.";
+  "FAST PROJECT MODE. The user gave a product seed. Follow chat-personality.md, chat-thinking-rules.md, chat-conversation-loop.md, and chat-information-checklist.md. First spoken beat: Talk partner — reflect in their words + one push + one next (question OR draft). No extras. No Guided Discovery. Don't narrate searching. No feature catalog. No Foundation. No START_CODING.";
 
 /** Shared law for every hidden start turn (landing Build, idea, Fast Prototype, continue). */
 export const BRAINSTORM_LOOP_BOOTSTRAP_RULES =
   `Follow nebulla-project/chat-conversation-loop.md and chat-information-checklist.md. ` +
   `Beat A: this text is the seed / continuation — not a ticket, even if it is a long spec. ` +
-  `FIRST REPLY after a product seed (then STOP and wait): (1) specific compliment — vary phrasing, keep warmth; ` +
-  `(2) reflect — “If I understood correctly, this is what the app should do: [goal in their words]. Is that right?”; ` +
-  `(3) one fork — “I can build what you have in mind right now, or we can shape it together and land on something stronger. Which sounds better?” ` +
+  `FIRST REPLY after a product seed (then STOP and wait): Talk partner — reflect the job in their words, one push (risk or simpler first job), then one question OR a draft they can accept. Not an interview. ` +
+  `If they accept that first summary, fill missing fields as labeled assumption: and offer the lock. Never force more questions. ` +
   `NAME-ONLY / job-word seed (Visual, overlay, mashed Visualual): do NOT say the project is simply called that. Do NOT invent a mash brand. Ask who + one Monday job. If they mean a Twitch/stream overlay (cam + last follower / subscriber / tipper), reflect THAT job. No fork until a job exists. ` +
   `No extras. Don't narrate searching (silent lookup is allowed later on name / Slot 4 / API turns — not on this first reply). No feature catalog. No Foundation. No START_CODING. Do NOT inject Guided Discovery. Never ask what kind of project, paste design or none, or one core feature after a product seed. ` +
   `FAST LANE (now / just build / go / hellos / full idea): infer the Monday loop silently. 1–2 light clarifiers only if the seed is empty (who + one job). Then lock and build the REAL loop — not a 3-button mock. Say they can push back. If Slot 1 was never confirmed, reflect first. ` +
   `LOCK LANE (brainstorm / shape together): silent scoreboard. Next spoken beat = emptiest required slot per turn (Who → Features+inferred workflow → Dependencies). Infer extra pages; don’t quiz. Never mock the workflow (dossier, review, save, extract) if it serves the north star. ` +
-  `Close: short summary (goal, who, loop including inferred pages — history/dossier when keep-documents — real dependencies, walls already named). Ask UI once only if they never answered vibe / web vs mobile. Then “If this is right, I’ll lock it and build this product.” Confirm → complete Plan §§1–5 → one Full Build Go of every §4 route. Fast Prototype thin draft only if they asked for a quick draft. ` +
+  `Close: short summary then exactly “I think I have everything I need. Anything you want to add?” Confirm → complete Plan §§1–5 → one Full Build Go of every §4 route. Fast Prototype thin draft only if they asked for a quick draft. ` +
   `Ban as the ending: “v1 / phase 2 / good enough for now / we can add that later / shall we go?” Mock a vendor only when classified user-choice or truly unavailable — never mock the workflow. ` +
   `Sensitivity: one warning + option + a buildable solution (not a legal audit). HIPAA only if they said health. ` +
   `Keep warmth on every beat. Coding only after close or explicit go / hellos / just build. First-message “hello” on an empty project is not coding. ` +
@@ -76,7 +75,7 @@ export function buildDiscoveryBootstrap(projectType?: NebulaProjectType | null):
   return (
     `${BOOTSTRAP_PREFIX} Follow chat-personality.md and chat-conversation-loop.md. ${rememberType} ` +
     `No idea yet: What's up? What would you like to create today? ` +
-    `If they already named a product, first beat only: specific compliment + reflect + Is that right? + the fork. ` +
+    `If they already named a product, first beat only: Talk partner — reflect + one push + one next. ` +
     `Do NOT run Guided Discovery. Do NOT ask paste design or none / one core feature. ` +
     `No bullets. Don't narrate searching. No Master Plan tags, no file blocks, no START_CODING.`
   );
@@ -98,7 +97,7 @@ export function buildIdeaDiscoveryBootstrap(
     `${IDEA_DISCOVERY_BOOTSTRAP_PREFIX} Follow chat-personality.md, chat-thinking-rules.md, chat-conversation-loop.md, and chat-information-checklist.md. ${typeClause}\n\n` +
     `User's idea prompt (opening line of the talk — not a spec to execute, even if long):\n"""\n${trimmed}\n"""\n\n` +
     `${BRAINSTORM_LOOP_BOOTSTRAP_RULES}\n` +
-    `First reply = specific compliment + “If I understood correctly, this is what the app should do: … Is that right?” + “I can build what you have in mind right now, or we can shape it together and land on something stronger. Which sounds better?” Then wait. ` +
+    `First reply = Talk partner: reflect in their words + one push + one next (question OR draft). Then wait. ` +
     `Skip anything they already answered. Never invent to fill a hole. ` +
     `URLs they pasted are citations — do not stall because you cannot open the link.`
   );
@@ -125,7 +124,7 @@ export function buildFastPrototypeBootstrap(
     `${FAST_PROTOTYPE_BOOTSTRAP_PREFIX} Same loop as typed chat and voice. ${typeClause}\n\n` +
     goalBlock +
     `${BRAINSTORM_LOOP_BOOTSTRAP_RULES}\n` +
-    `First reply: specific compliment + “If I understood correctly, this is what the app should do: … Is that right?” + “I can build what you have in mind right now, or we can shape it together and land on something stronger. Which sounds better?” Then wait. ` +
+    `First reply: Talk partner — reflect in their words + one push + one next (question OR draft). Then wait. ` +
     `Do NOT run Guided Discovery. Do NOT ask what kind of project / paste design or none / one core feature. ` +
     `Do NOT run the engineer interview. Do NOT write job-brief.md.`
   );
@@ -154,7 +153,7 @@ export function buildFullBuildBootstrap(
     `FULL BUILD CONTRACT: Infer a COMPLETE Master Plan (§§1–5). §4 lists every product route this pass (not Home alone if the goal implies practice, teacher, login). Each page: name, route, purpose, roles, primary actions, plus empty/error/loading or labeled assumption:. Auth model stated (mock/local OK). Coding skeleton on the plan. ` +
     `Ask at most one blocking question when a page would otherwise be invented. Do not start Go / Foundation / coding until that Plan is complete. ` +
     `UI Gen v2 mockup is occupancy only (label Pre-code mockup). One Go implements every §4 route. Not autopilot. Not Fast Prototype 1–2 screens. ` +
-    `First reply: specific compliment + “If I understood correctly, this is what the app should do: … Is that right?” + “I can build what you have in mind right now, or we can shape it together and land on something stronger. Which sounds better?” Then wait. ` +
+    `First reply: Talk partner — reflect in their words + one push + one next (question OR draft). Then wait. ` +
     `Do NOT run Guided Discovery. Do NOT ask what kind of project / paste design or none / one core feature. ` +
     `Do NOT run the engineer interview. Do NOT write job-brief.md.`
   );

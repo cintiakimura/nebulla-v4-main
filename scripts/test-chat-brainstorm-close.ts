@@ -129,10 +129,8 @@ assert.ok(isHiddenBootstrapUserMessage(boot));
 
 const seed = buildFastPrototypeBootstrap('motorcycle delivery', 'Web App');
 assert.match(seed, /THIS TURN FORBIDDEN/);
-assert.match(seed, /Is that right/);
-assert.match(seed, /I can build what you have in mind right now/);
-assert.match(seed, /shape it together and land on something stronger/);
-assert.match(seed, /Which sounds better/);
+assert.match(seed, /Talk partner/);
+assert.match(seed, /I think I have everything I need/);
 assert.match(seed, /Never ask what kind of project|Do NOT ask what kind of project|Do NOT inject Guided Discovery/i);
 assert.equal(/What's the main thing your app should do/i.test(seed), false);
 assert.match(seed, /Never ask what kind of project, paste design or none, or one core feature/i);
@@ -157,6 +155,7 @@ assert.match(loopAppendix, /If this is right, I'll lock it and build this produc
 assert.match(loopAppendix, /Do not ask "what else\?"/);
 assert.match(loopAppendix, /that's everything/);
 assert.match(loopAppendix, /I can build what you have in mind right now/);
+assert.match(loopAppendix, /Anything you want to add/);
 assert.match(loopAppendix, /HIPAA only if they said health/);
 assert.match(loopAppendix, /Guided Discovery OFF/);
 assert.equal(/INITIAL ONBOARDING/.test(loopAppendix), false);
@@ -164,7 +163,7 @@ assert.equal(/ENGINEER INTERVIEW/.test(loopAppendix), false);
 assert.equal(/v1 can mock this/.test(loopAppendix), false);
 assert.equal(/2–4 feature ideas/.test(seed), false);
 assert.match(seed, /inferred workflow/);
-assert.match(seed, /lock it and build this product/);
+assert.match(seed, /I think I have everything I need/);
 
 const shapeAppendix = chatModeSystemAppendix({
   interactionMode: 'chat',

@@ -693,21 +693,38 @@ export function planAllowsGoAfterFill(
   return assessFullBuildCompleteness({ plan: filled.plan }).allowGo;
 }
 
+export function lastAssistantOfferedTalkClose(text: string): boolean {
+  return String(text || "").includes(TALK_CLOSE_QUESTION);
+}
+
+/** Whole-reply agrees after the close question — not a mid-feature “ok”. */
+const TALK_CLOSE_GATED_YES_RE =
+  /^(ok|okay|yes|yeah|yep|perfect|it'?s good|it is good|good for me|is good for me)[\s.!?]*$/i;
+
 export function shouldOpenTalkTurn(opts: {
   plan: Record<string, unknown> | null | undefined;
   seedText?: string;
   userText?: string;
+  lastAssistantText?: string;
 }): boolean {
   const plan = opts.plan && typeof opts.plan === "object" ? opts.plan : null;
   const seed = String(opts.userText || opts.seedText || "").trim();
   const goal = String(plan?.["1. Goal of the app"] || "").trim();
   if (seed && goal && isReplacementProductBrief(seed, goal)) return true;
-  if (userAcceptedTalkClose(opts.userText || "") && planAllowsGoAfterFill(plan)) return false;
+  if (
+    userAcceptedTalkClose(opts.userText || "", { lastAssistantText: opts.lastAssistantText }) &&
+    planAllowsGoAfterFill(plan)
+  ) {
+    return false;
+  }
   if (!isPlanFrozen(plan)) return true;
   return false;
 }
 
-export function userAcceptedTalkClose(text: string): boolean {
+export function userAcceptedTalkClose(
+  text: string,
+  opts?: { lastAssistantText?: string },
+): boolean {
   const t = String(text || "").replace(/\s+/g, " ").trim();
   if (!t) return false;
   if (/\bSTART_CODING\b/i.test(t)) return true;
@@ -726,6 +743,9 @@ export function userAcceptedTalkClose(text: string): boolean {
   }
   if (/^(go|go\.|go!|build|build\s+it|now)[\s.!?]*$/i.test(t)) return true;
   if (/\byou\s+can\s+(start|build)\b/i.test(t)) return true;
+  if (TALK_CLOSE_GATED_YES_RE.test(t)) {
+    return lastAssistantOfferedTalkClose(opts?.lastAssistantText || "");
+  }
   return false;
 }
 
@@ -733,13 +753,16 @@ export function shouldStartGoAfterTalk(opts: {
   plan: Record<string, unknown> | null | undefined;
   userText: string;
   seedText?: string;
+  lastAssistantText?: string;
 }): boolean {
   const plan = opts.plan && typeof opts.plan === "object" ? opts.plan : null;
   const seed = String(opts.userText || opts.seedText || "").trim();
   const goal = String(plan?.["1. Goal of the app"] || "").trim();
   if (seed && goal && isReplacementProductBrief(seed, goal)) return false;
   if (isPlanFrozen(plan)) return true;
-  if (!userAcceptedTalkClose(opts.userText)) return false;
+  if (!userAcceptedTalkClose(opts.userText, { lastAssistantText: opts.lastAssistantText })) {
+    return false;
+  }
   if (!plan) return false;
   return planAllowsGoAfterFill(plan);
 }

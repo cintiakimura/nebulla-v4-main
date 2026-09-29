@@ -19,6 +19,7 @@ import {
   shouldOpenTalkTurn,
   shouldSkipGrokChatForExistingPlan,
   shouldStartGoAfterTalk,
+  lastAssistantOfferedTalkClose,
   TALK_CLOSE_QUESTION,
   userAcceptedTalkClose,
 } from "../lib/fullBuildContract.ts";
@@ -100,6 +101,22 @@ section("you can start coding accepts close");
   assert.equal(userAcceptedTalkClose("Yes — you can start coding."), true);
   assert.equal(userAcceptedTalkClose("start coding"), true);
   assert.equal(userAcceptedTalkClose("go ahead"), true);
+  assert.equal(userAcceptedTalkClose("yes"), false);
+  assert.equal(userAcceptedTalkClose("ok"), false);
+  assert.equal(userAcceptedTalkClose("perfect"), false);
+  assert.equal(
+    userAcceptedTalkClose("yes", { lastAssistantText: TALK_CLOSE_QUESTION }),
+    true,
+  );
+  assert.equal(
+    userAcceptedTalkClose("ok", { lastAssistantText: TALK_CLOSE_QUESTION }),
+    true,
+  );
+  assert.equal(
+    userAcceptedTalkClose("ok let's use blue", { lastAssistantText: TALK_CLOSE_QUESTION }),
+    false,
+  );
+  assert.equal(lastAssistantOfferedTalkClose(`Done.\n\n${TALK_CLOSE_QUESTION}`), true);
   const frozen = freezePlan(completeCourierPlan());
   assert.equal(
     shouldSkipGrokChatForExistingPlan({ plan: frozen, seedText: "you can start coding" }),

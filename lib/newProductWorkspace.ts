@@ -43,7 +43,7 @@ export function priorHasSpokenFork(prior?: { role?: string; content?: string }[]
   return (prior || []).some(
     (m) =>
       m.role === "assistant" &&
-      /is that right|which sounds better|shape it together|build what you have in mind/i.test(
+      /is that right|which sounds better|shape it together|build what you have in mind|anything you want to add|assumption:|if i (got|understood) this right/i.test(
         String(m.content || ""),
       ),
   );

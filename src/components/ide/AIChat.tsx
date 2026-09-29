@@ -2104,10 +2104,14 @@ export function AIChat() {
         }));
     const closeGate = isFoundationCloseGate(rawText);
     const seedForPlan = String(chatGoal || rawText || '').trim();
+    const lastAssistantText = [...prior]
+      .reverse()
+      .find((m) => m.role === 'assistant' && String(m.content || '').trim())?.content;
     const wantsLockAndBuild = shouldStartGoAfterTalk({
       plan: planOnDisk,
       userText: rawText,
       seedText: seedForPlan,
+      lastAssistantText,
     });
     const beatAHold = shouldHoldFirstSeedBeatA({
       userText: rawText,
@@ -2396,6 +2400,7 @@ export function AIChat() {
       plan: planOnDisk,
       seedText: seedForPlan,
       userText: rawText,
+      lastAssistantText,
     });
     let skipGrokChat = skipOk && !openTalk;
     const maySkipChatIfPlanExists =
@@ -2437,7 +2442,7 @@ export function AIChat() {
       Boolean(newProductSeed) &&
       !identityFrozen &&
       !isPlanFrozen(planOnDisk) &&
-      !userAcceptedTalkClose(rawText) &&
+      !userAcceptedTalkClose(rawText, { lastAssistantText }) &&
       !fastLaneCloser &&
       !userNoteRequestsNextSlice(rawText) &&
       !refineSameProduct &&
@@ -2539,7 +2544,7 @@ export function AIChat() {
       if (
         newSeed &&
         !isPlanFrozen(plan) &&
-        !userAcceptedTalkClose(rawText) &&
+        !userAcceptedTalkClose(rawText, { lastAssistantText }) &&
         !userNoteRequestsNextSlice(rawText) &&
         !isChatContinuityTurn(rawText) &&
         !isNameOnlyProductSeed(rawText)
@@ -2674,7 +2679,7 @@ export function AIChat() {
         if (planOnDisk) planOnDisk = freezePlan(planOnDisk);
       }
       const lockTs = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-      const lockLine = 'Plan locked — starting one Full Build on this workspace.';
+      const lockLine = 'Plan is saved — starting the build on this workspace.';
       setMessages((p) => {
         const next = [
           ...p,
