@@ -15,6 +15,7 @@ export const GO_BLOCKED_CODES = [
   "APPLY_EMPTY_PRODUCT",
   "KEY_AUTH",
   "GO_FAILED",
+  "GO_EXAM_FAILED",
 ] as const;
 
 export type GoBlockedCode = (typeof GO_BLOCKED_CODES)[number];
@@ -31,7 +32,7 @@ export const GO_BLOCKED_MESSAGES: Record<GoBlockedCode, string> = {
   MASTER_PLAN_INCOMPLETE:
     "Stopped: Master Plan is too thin for Full Build. Missing sections were filled from the goal where possible. Not asking you to type go again.",
   GO_MODEL_REJECTED:
-    "Stopped: Build model grok-build-0.1 unavailable or rejected the request. Slice did not start. Not falling back to Talk Grok.",
+    "Build model unavailable — slice stopped. Not falling back to Talk Grok.",
   GO_TIMEOUT: "Stopped: Grok Code timed out after 3 minutes. A narrower retry may run automatically.",
   GO_EMPTY_OUTPUT:
     "Stopped: Grok Code returned no file blocks (empty Code output). That is not a product — not asking you to type go again.",
@@ -41,6 +42,8 @@ export const GO_BLOCKED_MESSAGES: Record<GoBlockedCode, string> = {
     "Stopped: Foundation wrote no product routes (app/ or pages/). Not a product shell — retry Go.",
   KEY_AUTH: "Stopped: Main AI API key is missing or rejected. Set the key on the server and retry.",
   GO_FAILED: "Stopped: Foundation coding failed. See the message in chat — this is not a preview crash.",
+  GO_EXAM_FAILED:
+    "Typecheck failed after one repair. Slice stopped. Not opening Talk.",
 };
 
 const KNOWN = new Set<string>(GO_BLOCKED_CODES);
@@ -138,7 +141,7 @@ export function classifyGoFailure(input: {
   }
   if (status === 401 || status === 403 || /api key|unauthorized|invalid api key|401|403/i.test(lower)) {
     if (/invalid-argument|reasoning.?effort|does not support parameter/i.test(lower)) {
-      return goBlocked("GO_MODEL_REJECTED", text);
+      return goBlocked("GO_MODEL_REJECTED");
     }
     return goBlocked("KEY_AUTH", text);
   }
@@ -146,7 +149,7 @@ export function classifyGoFailure(input: {
     status === 400 ||
     /invalid-argument|invalid_request|does not support parameter|reasoning.?effort/i.test(lower)
   ) {
-    return goBlocked("GO_MODEL_REJECTED", text);
+    return goBlocked("GO_MODEL_REJECTED");
   }
   if (/timed out after 3 minutes|go_timeout|abort(?:ed)?|timeout/i.test(lower)) {
     if (/signal is aborted|without reason/i.test(lower) && !/timed out after 3 minutes/i.test(lower)) {
@@ -182,6 +185,9 @@ export function classifyGoFailure(input: {
   }
   if (/apply failed|APPLY_FAILED|wrote 0 file|apply timed out/i.test(lower)) {
     return goBlocked("APPLY_FAILED", text);
+  }
+  if (/typecheck failed|tsc --noemit|go_exam_failed|exam failed after/i.test(lower)) {
+    return goBlocked("GO_EXAM_FAILED", text);
   }
   return goBlocked("GO_FAILED", text || undefined);
 }

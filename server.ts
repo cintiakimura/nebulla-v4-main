@@ -197,6 +197,13 @@ import {
 } from "./lib/fullBuildContract";
 import { persistBuildPacketFromPlan, readBuildPacket } from "./lib/buildPacket";
 import { MODEL_BUILD, resolveBuildModel } from "./lib/talkBuildModels";
+import {
+  formatExamRepairUserMessage,
+  formatWorkshopFileList,
+  listPaths,
+  runExam,
+  writePath,
+} from "./lib/workshopFloor";
 import { classifyGoFailure, goBlocked } from "./lib/goBlockedReason";
 import {
   buildCodedAppPreviewBridgeHtml,
@@ -3279,14 +3286,12 @@ No approved UI code yet.
           skipped.push(b.relativePath);
           continue;
         }
-        const target = path.resolve(workspaceRoot, b.relativePath);
-        if (!target.startsWith(workspaceRoot)) {
+        const wrote = writePath(workspaceRoot, b.relativePath, b.body);
+        if (wrote.ok && wrote.relativePath) {
+          written.push(wrote.relativePath);
+        } else {
           skipped.push(b.relativePath);
-          continue;
         }
-        fs.mkdirSync(path.dirname(target), { recursive: true });
-        fs.writeFileSync(target, b.body, "utf8");
-        written.push(b.relativePath);
       }
 
       if (written.length > 0) {
@@ -5532,10 +5537,25 @@ Rules:
     }
   });
 
+  app.post("/api/workshop/exam", async (req, res) => {
+    try {
+      const { workspaceRoot } = projectPathsFor(req);
+      const result = await runExam(workspaceRoot);
+      res.json(result);
+    } catch (e) {
+      res.status(500).json({
+        ok: false,
+        stdout: "",
+        stderr: e instanceof Error ? e.message : "exam failed",
+      });
+    }
+  });
+
   /** Go: Grok 4 writes a short summary into master-plan.json only, then Grok Code runs (no full execution doc in MP). */
   app.post("/api/grok/go-code", async (req, res) => {
-    const { messages, userId, projectName, userNote, continuation: continuationRaw } = req.body || {};
+    const { messages, userId, projectName, userNote, continuation: continuationRaw, examStderr: examStderrRaw } = req.body || {};
     const continuation = Boolean(continuationRaw);
+    const examStderr = typeof examStderrRaw === "string" ? examStderrRaw.trim() : "";
     const apiKey = await resolveMainGrokApiKey(req);
 
     if (!apiKey) {
@@ -5619,7 +5639,7 @@ Rules:
           planForGate = {};
           planRaw = {};
         }
-        if (!shouldStartGoAfterTalk({ plan: planRaw, userText: note, seedText: note })) {
+        if (!examStderr && !shouldStartGoAfterTalk({ plan: planRaw, userText: note, seedText: note })) {
           return res.status(409).json({
             ok: false,
             pending: false,
@@ -6233,10 +6253,8 @@ ${workflowContext}`;
         persist: true,
       });
       const skeletonForGo = readCodingSkeletonFromPlan(planSnapshot);
-      const compactUser = [
-        buildPacket.trim(),
-        "",
-        buildCompactGoCodeUserPrompt({
+      const existingFiles = formatWorkshopFileList(listPaths(ppGo.workspaceRoot));
+      const compactSlice = buildCompactGoCodeUserPrompt({
         sliceLine,
         goal: goalForCode,
         pagesSection: String(planSnapshot["4. Pages and navigation"] || ""),
@@ -6253,11 +6271,12 @@ ${workflowContext}`;
         logoInitials: productIdentity.logoInitials,
         logoHint: productIdentity.logoHint,
         buildMode: goBuildModePrompt,
-      }),
-      ]
-        .filter(Boolean)
-        .join("\n")
-        .slice(0, 12000);
+      });
+      const compactUser = (
+        examStderr
+          ? formatExamRepairUserMessage(buildPacket, examStderr, existingFiles)
+          : [buildPacket.trim(), "", existingFiles, "", compactSlice].filter(Boolean).join("\n")
+      ).slice(0, 12000);
       const existingLinked = buildLinkedContextAppendix(readLinkedContext(ppGo.workspaceRoot));
       const codeMessages: { role: string; content: string }[] = [
         { role: "system", content: existingLinked ? `${codeSystemPrompt}\n\n${existingLinked}` : codeSystemPrompt },

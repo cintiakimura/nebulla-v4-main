@@ -98,7 +98,7 @@ section("Wiring — search tools on research + discovery Responses; not Go/UI");
   const chat = fs.readFileSync(path.join(root, "lib/aiChatCompletion.ts"), "utf8");
   assert.match(grokSearch, /grokResponsesExtras\(stroke, model\)/);
   assert.match(grokSearch, /\/v1\/responses/);
-  assert.match(goJob, /grokChatCompletionsExtras\("go", opts\.codeModel\)/);
+  assert.match(goJob, /grokChatCompletionsExtras\("go", model\)/);
   assert.equal(/web_search|x_search/.test(uiGrok), false);
   assert.equal(/web_search|x_search/.test(goJob), false);
   assert.match(chat, /grokChatCompletionsExtras\(stroke, model\)/);

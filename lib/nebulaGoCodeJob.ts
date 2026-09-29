@@ -9,6 +9,7 @@ import {
 import { grokChatCompletionsExtras } from "./grokRequestPolicy";
 import { classifyGoFailure, formatBlockedReasonLine, goBlocked } from "./goBlockedReason";
 import { lastGoCodeFitsGoal } from "./productGoalFingerprint";
+import { MODEL_BUILD_FALLBACK, shouldFallbackBuildModel } from "./talkBuildModels";
 
 export { GO_CODE_JOB_TIMEOUT_MS };
 
@@ -16,6 +17,46 @@ const activeJobs = new Set<string>();
 
 export function isGoCodeJobActive(workspaceRoot: string): boolean {
   return activeJobs.has(workspaceRoot);
+}
+
+async function fetchBuildCompletion(opts: {
+  apiKey: string;
+  codeModel: string;
+  codeMessages: { role: string; content: string }[];
+  signal: AbortSignal;
+}): Promise<{ ok: true; text: string; model: string } | { ok: false; status: number; errText: string; model: string }> {
+  const attempt = async (model: string) => {
+    const codeRes = await fetch("https://api.x.ai/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${opts.apiKey}`,
+      },
+      body: JSON.stringify({
+        model,
+        messages: opts.codeMessages,
+        stream: false,
+        ...grokChatCompletionsExtras("go", model),
+      }),
+      signal: opts.signal,
+    });
+    if (!codeRes.ok) {
+      const errText = await codeRes.text();
+      return { ok: false as const, status: codeRes.status, errText, model };
+    }
+    const codeData = (await codeRes.json()) as {
+      choices?: { message?: { content?: string } }[];
+    };
+    const text = codeData.choices?.[0]?.message?.content?.trim() || "";
+    return { ok: true as const, text, model };
+  };
+
+  const first = await attempt(opts.codeModel);
+  if (first.ok) return first;
+  if (shouldFallbackBuildModel(first.status, first.model)) {
+    return attempt(MODEL_BUILD_FALLBACK);
+  }
+  return first;
 }
 
 function pollBlockedPayload(
@@ -67,31 +108,21 @@ export function scheduleGoCodeJob(opts: GoCodeJobOptions): boolean {
     const GO_CODE_FETCH_TIMEOUT_MS = 300_000;
     const timer = setTimeout(() => controller.abort(), GO_CODE_FETCH_TIMEOUT_MS);
     try {
-      const codeRes = await fetch("https://api.x.ai/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${opts.apiKey}`,
-        },
-        body: JSON.stringify({
-          model: opts.codeModel,
-          messages: opts.codeMessages,
-          stream: false,
-          ...grokChatCompletionsExtras("go", opts.codeModel),
-        }),
+      const fetched = await fetchBuildCompletion({
+        apiKey: opts.apiKey,
+        codeModel: opts.codeModel,
+        codeMessages: opts.codeMessages,
         signal: controller.signal,
       });
-
-      if (!codeRes.ok) {
-        const errText = await codeRes.text();
-        const blocked = classifyGoFailure({ httpStatus: codeRes.status, error: errText });
+      if (fetched.ok === false) {
+        const blocked = classifyGoFailure({ httpStatus: fetched.status, error: fetched.errText });
         const errState = {
           status: "error" as const,
           startedAt: readGoCodePending(workspaceRoot)?.startedAt ?? Date.now(),
           preCodingSummary: opts.preCodingSummary,
           codeError: blocked.message,
           blockedReason: blocked,
-          codeModel: opts.codeModel,
+          codeModel: fetched.model,
           projectDisplayName: opts.projectDisplayName,
           conversationLogged: false,
           consumed: false,
@@ -100,11 +131,7 @@ export function scheduleGoCodeJob(opts: GoCodeJobOptions): boolean {
         writeGoCodeLastResult(workspaceRoot, errState);
         return;
       }
-
-      const codeData = (await codeRes.json()) as {
-        choices?: { message?: { content?: string } }[];
-      };
-      const codeText = codeData.choices?.[0]?.message?.content?.trim() || "";
+      const codeText = fetched.text;
 
       const emptyBlocked = codeText ? undefined : goBlocked("GO_EMPTY_OUTPUT");
       const doneState = {
@@ -112,7 +139,7 @@ export function scheduleGoCodeJob(opts: GoCodeJobOptions): boolean {
         startedAt: readGoCodePending(workspaceRoot)?.startedAt ?? Date.now(),
         preCodingSummary: opts.preCodingSummary,
         codeText: codeText || undefined,
-        codeModel: opts.codeModel,
+        codeModel: fetched.model,
         projectDisplayName: opts.projectDisplayName,
         codeError: emptyBlocked?.message,
         blockedReason: emptyBlocked,
@@ -120,7 +147,6 @@ export function scheduleGoCodeJob(opts: GoCodeJobOptions): boolean {
         consumed: false,
       };
       writeGoCodePending(workspaceRoot, doneState);
-      // Durable backup — survives missed one-shot polls until consume/apply.
       writeGoCodeLastResult(workspaceRoot, doneState);
     } catch (e) {
       const aborted = (e as { name?: string })?.name === "AbortError";

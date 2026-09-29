@@ -33,6 +33,7 @@ import {
 import { markFoundationGoInFlight, isFoundationGoInFlight } from './foundationHeavyJob';
 import { setGrokCodingActive } from './nebulaGrokCodingGate';
 import { FULL_BUILD_NO_RETRY_ACTIVITY, fullBuildGoUserNote, inferFullBuildRoutes, isPlanFrozen, listMissingFullBuildRoutes } from '../../lib/fullBuildContract';
+import { workshopExamDecision } from '../../lib/workshopExamPolicy';
 import {
   buildEditExistingUserNote,
   buildNarrowSliceInstruction,
@@ -949,15 +950,39 @@ async function recoverUnconsumedGoResult(
   return null;
 }
 
+async function fetchWorkshopExam(): Promise<{ ok: boolean; stdout: string; stderr: string }> {
+  try {
+    const res = await fetch(withProjectQuery('/api/workshop/exam'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...getGrokRequestHeaders() },
+      credentials: 'include',
+      body: JSON.stringify(withProjectBody({})),
+    });
+    const data = await readResponseJson<{ ok?: boolean; stdout?: string; stderr?: string }>(res);
+    return {
+      ok: data.ok === true,
+      stdout: String(data.stdout || ''),
+      stderr: String(data.stderr || ''),
+    };
+  } catch (e) {
+    return {
+      ok: false,
+      stdout: '',
+      stderr: e instanceof Error ? e.message : 'exam request failed',
+    };
+  }
+}
+
 async function kickGoCodeJob(options: {
   userId: string;
   projectName: string;
   userNote?: string;
   messages: { role: 'user' | 'assistant'; content: string }[];
   continuation?: boolean;
+  examStderr?: string;
   onProgress?: GrokActivityProgressFn;
 }): Promise<GoCodePayload> {
-  const { userId, projectName, userNote, messages, continuation, onProgress } = options;
+  const { userId, projectName, userNote, messages, continuation, examStderr, onProgress } = options;
   const codingLabel = goCodePassWaitLabel(continuation ? 2 : 1, parseGoSliceLabel(userNote));
 
   let prePoll: GoCodePayload | null = null;
@@ -1038,6 +1063,7 @@ async function kickGoCodeJob(options: {
             userNote: userNote?.trim() || undefined,
             messages,
             continuation: continuation || undefined,
+            examStderr: examStderr?.trim() || undefined,
           }),
         ),
       });
@@ -1092,6 +1118,7 @@ async function kickGoCodeJob(options: {
                 userNote: userNote?.trim() || undefined,
                 messages,
                 continuation: continuation || undefined,
+                examStderr: examStderr?.trim() || undefined,
               }),
             ),
           });
@@ -1357,7 +1384,8 @@ export async function runGoCodeAndApply(options: {
           blocked.code === 'KEY_AUTH' ||
           blocked.code === 'RESEARCH_INCOMPLETE' ||
           blocked.code === 'MASTER_PLAN_INCOMPLETE' ||
-          blocked.code === 'UI_BRIEF_MISSING';
+          blocked.code === 'UI_BRIEF_MISSING' ||
+          blocked.code === 'GO_MODEL_REJECTED';
         if (hardGate) {
           logGoCodeFinish(blocked.code === 'MASTER_PLAN_INCOMPLETE' ? '409' : blocked.code, {
             message: blocked.message,
@@ -1581,6 +1609,50 @@ export async function runGoCodeAndApply(options: {
           'success',
         );
         break;
+      }
+    }
+
+    if (totalWritten > 0 && !isGoSessionAborted(projectName)) {
+      onProgress?.('Exam — tsc --noEmit', 'info');
+      let examFails = 0;
+      let exam = await fetchWorkshopExam();
+      let examDecision = workshopExamDecision(exam.ok, examFails);
+      if (examDecision === 'retry') {
+        examFails += 1;
+        onProgress?.('Typecheck failed — one Build repair (MODEL_BUILD only)', 'warn');
+        const repairNote = `EXAM REPAIR — tsc --noEmit. Fix only the errors. File blocks only.`;
+        let data = await kickGoCodeJob({
+          userId,
+          projectName,
+          userNote: repairNote,
+          messages: [{ role: 'user', content: repairNote }],
+          continuation: true,
+          examStderr: exam.stderr,
+          onProgress,
+        });
+        const repairText = data.choices?.[0]?.message?.content?.trim() || '';
+        if (repairText && goOutputHasProductFileBlocks(repairText)) {
+          const apply = await applyGeneratedFiles(repairText, {
+            userNote: repairNote,
+            projectName,
+            onProgress,
+            skipPostSync: true,
+          });
+          totalWritten += apply.writtenCount;
+          allWrittenPaths.push(...apply.writtenPaths);
+        }
+        exam = await fetchWorkshopExam();
+        examDecision = workshopExamDecision(exam.ok, examFails);
+      }
+      if (examDecision === 'stop') {
+        const blocked = goBlocked('GO_EXAM_FAILED');
+        onProgress?.(formatBlockedReasonLine(blocked), 'error');
+        return {
+          ok: false,
+          statusMessage: formatBlockedReasonLine(blocked),
+          totalWritten,
+          blockedReason: blocked,
+        };
       }
     }
 

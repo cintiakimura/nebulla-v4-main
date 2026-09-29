@@ -20,14 +20,23 @@ import {
   TALK_CLOSE_QUESTION,
   userAcceptedTalkClose,
 } from "../lib/fullBuildContract.ts";
-import { classifyGoFailure } from "../lib/goBlockedReason.ts";
+import { classifyGoFailure, GO_BLOCKED_MESSAGES } from "../lib/goBlockedReason.ts";
 import {
   MODEL_BUILD,
+  MODEL_BUILD_FALLBACK,
   MODEL_TALK,
   isCodingFamilyModelId,
   resolveBuildModel,
   resolveTalkModel,
+  shouldFallbackBuildModel,
 } from "../lib/talkBuildModels.ts";
+import {
+  listPaths,
+  readPath,
+  writePath,
+  WORKSHOP_EXAM_TIMEOUT_MS,
+} from "../lib/workshopFloor.ts";
+import { workshopExamDecision, WORKSHOP_EXAM_MAX_RETRIES } from "../lib/workshopExamPolicy.ts";
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -61,7 +70,10 @@ section("2 After wrap+start, Code pass model === grok-build-0.1");
   assert.match(server, /You are Grok Build \(\$\{MODEL_BUILD\}\)/);
   assert.doesNotMatch(server, /GROK_CODE_MODEL \?\.trim\(\) \|\| "grok-code-fast-1"/);
   const job = fs.readFileSync(path.join(REPO, "lib/nebulaGoCodeJob.ts"), "utf8");
-  assert.match(job, /model: opts\.codeModel/);
+  assert.match(job, /fetchBuildCompletion/);
+  assert.match(job, /MODEL_BUILD_FALLBACK/);
+  assert.match(job, /shouldFallbackBuildModel/);
+  assert.doesNotMatch(job, /resolveTalkModel|GROK_CHAT_MODEL/);
 }
 
 section("3 Build request body is packet / wrap, not continue the conversation");
@@ -94,6 +106,10 @@ section("3 Build request body is packet / wrap, not continue the conversation");
   const server = fs.readFileSync(path.join(REPO, "server.ts"), "utf8");
   assert.match(server, /sessionFocus: "Implement only this packet\. Not a chat turn\."/);
   assert.match(server, /buildPacket\.trim\(\)/);
+  assert.match(server, /formatWorkshopFileList\(listPaths/);
+  assert.match(md, /Approved wrap/);
+  assert.match(server, /const compactUser = /);
+  assert.match(server, /formatExamRepairUserMessage\(buildPacket/);
 }
 
 section("4 let’s keep talking → no Build call");
@@ -138,17 +154,63 @@ section("Talk cannot apply file: from chat handoff");
   assert.match(pipeline, /Writing files…/);
 }
 
-section("grok-build-0.1 unavailable → GO_MODEL_REJECTED, no Talk fallback");
+section("grok-build-0.1 400/404 → fallback grok-code-fast-1, never Talk");
 {
+  assert.equal(MODEL_BUILD_FALLBACK, "grok-code-fast-1");
+  assert.equal(shouldFallbackBuildModel(404, MODEL_BUILD), true);
+  assert.equal(shouldFallbackBuildModel(400, MODEL_BUILD), true);
+  assert.equal(shouldFallbackBuildModel(404, MODEL_BUILD_FALLBACK), false);
+  assert.equal(shouldFallbackBuildModel(500, MODEL_BUILD), false);
   const missed = classifyGoFailure({
     httpStatus: 404,
     error: "model grok-build-0.1 not found",
   });
   assert.equal(missed.code, "GO_MODEL_REJECTED");
-  assert.match(missed.message, /grok-build-0\.1/);
-  assert.match(missed.message, /Not falling back to Talk Grok/);
-  const job = fs.readFileSync(path.join(REPO, "lib/nebulaGoCodeJob.ts"), "utf8");
-  assert.doesNotMatch(job, /resolveTalkModel|GROK_CHAT_MODEL/);
+  assert.equal(missed.message, GO_BLOCKED_MESSAGES.GO_MODEL_REJECTED);
+  assert.match(missed.message, /Build model unavailable/);
+  const bad400 = classifyGoFailure({
+    httpStatus: 400,
+    error: '{"code":"invalid-argument","error":"unknown model"}',
+  });
+  assert.equal(bad400.code, "GO_MODEL_REJECTED");
+  assert.match(bad400.message, /Build model unavailable/);
+}
+
+section("exam fail → exactly one retry then stop");
+{
+  assert.equal(WORKSHOP_EXAM_MAX_RETRIES, 1);
+  assert.equal(WORKSHOP_EXAM_TIMEOUT_MS, 60_000);
+  assert.equal(workshopExamDecision(true, 0), "pass");
+  assert.equal(workshopExamDecision(false, 0), "retry");
+  assert.equal(workshopExamDecision(false, 1), "stop");
+  const pipeline = fs.readFileSync(path.join(REPO, "src/lib/nebulaGrokCodingPipeline.ts"), "utf8");
+  assert.match(pipeline, /fetchWorkshopExam/);
+  assert.match(pipeline, /examStderr: exam\.stderr/);
+  assert.match(pipeline, /workshopExamDecision\(exam\.ok, examFails\)/);
+  assert.match(pipeline, /GO_EXAM_FAILED/);
+  const kicks = pipeline.match(/kickGoCodeJob\(/g) || [];
+  assert.ok(kicks.length >= 2, "main Go + one exam repair kick");
+  const examBlock = pipeline.slice(pipeline.indexOf("Exam — tsc --noEmit"));
+  const repairKicks = examBlock.match(/kickGoCodeJob\(/g) || [];
+  assert.equal(repairKicks.length, 1);
+  assert.doesNotMatch(examBlock.slice(0, 1800), /\/api\/grok\/chat/);
+}
+
+section("Go-only listPaths / writePath gates");
+{
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "workshop-floor-"));
+  fs.mkdirSync(path.join(tmp, "app"), { recursive: true });
+  fs.writeFileSync(path.join(tmp, "app", "page.tsx"), "export default function Page() { return null }\n");
+  assert.deepEqual(listPaths(tmp), ["app/page.tsx"]);
+  assert.match(String(readPath(tmp, "app/page.tsx")), /export default/);
+  const ok = writePath(tmp, "app/ok.tsx", "export const n = 1;\n");
+  assert.equal(ok.ok, true);
+  const denied = writePath(tmp, ".git/config", "nope");
+  assert.equal(denied.ok, false);
+  fs.rmSync(tmp, { recursive: true, force: true });
+  const server = fs.readFileSync(path.join(REPO, "server.ts"), "utf8");
+  assert.match(server, /writePath\(workspaceRoot, b\.relativePath, b\.body\)/);
+  assert.match(server, /app\.post\("\/api\/workshop\/exam"/);
 }
 
 assert.equal(extractWrapFromAssistant(`Summary.\n\n${TALK_CLOSE_QUESTION}`).includes("say start"), false);

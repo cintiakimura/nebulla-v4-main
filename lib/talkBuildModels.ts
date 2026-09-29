@@ -13,6 +13,8 @@ export const MODEL_TALK_UPSTREAM_DEFAULT = "grok-4";
 
 /** xAI coding model for Go Code / apply. Same API key as Talk. */
 export const MODEL_BUILD = "grok-build-0.1";
+/** If grok-build-0.1 400/404 — coding family only, never Talk Grok. */
+export const MODEL_BUILD_FALLBACK = "grok-code-fast-1";
 
 export function isBuildModelId(model: string): boolean {
   const m = String(model || "").trim().toLowerCase();
@@ -41,12 +43,20 @@ export function resolveTalkModel(clientHint?: string): string {
 
 /**
  * Go Code model. Default grok-build-0.1.
- * Optional env GROK_BUILD_MODEL only — do not fall back to Talk Grok or grok-code-fast-1.
+ * Optional env GROK_BUILD_MODEL. On API 400/404 the job may retry MODEL_BUILD_FALLBACK
+ * (grok-code-fast-1) — never Talk Grok.
  */
 export function resolveBuildModel(): string {
   const override = process.env.GROK_BUILD_MODEL?.trim();
   if (override) return override;
   return MODEL_BUILD;
+}
+
+export function shouldFallbackBuildModel(httpStatus: number, currentModel: string): boolean {
+  if (httpStatus !== 400 && httpStatus !== 404) return false;
+  const m = String(currentModel || "").trim().toLowerCase();
+  if (/grok-code-fast/.test(m)) return false;
+  return /grok-build/.test(m) || m === MODEL_BUILD.toLowerCase();
 }
 
 export function talkModelIsNotBuild(model: string): boolean {
