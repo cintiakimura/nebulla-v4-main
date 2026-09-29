@@ -21,10 +21,14 @@ export { BUILD_MODE_PLAN_KEY };
 /** Durable lock on master-plan.json — coding reads only this frozen plan. */
 export const PLAN_FROZEN_KEY = "planFrozen";
 export const PLAN_LOCKED_AT_KEY = "planLockedAt";
+/** Set only after wrap + Start this session — skip-chat Full Build requires it. */
+export const TALK_WRAP_ACCEPTED_AT_KEY = "talkWrapAcceptedAt";
 
-export const TALK_CLOSE_QUESTION = "I think I have what I need. Start building, or add something?";
-/** In-flight threads that still have the previous lock footer. */
+export const TALK_CLOSE_QUESTION =
+  "If this is what you want, say start. If not, say let’s keep talking.";
 export const TALK_CLOSE_QUESTION_LEGACY =
+  "I think I have what I need. Start building, or add something?";
+export const TALK_CLOSE_QUESTION_LEGACY_OLDER =
   "I think I have everything I need. Anything you want to add?";
 
 export type BuildMode = "full_build" | "fast_prototype";
@@ -675,7 +679,24 @@ export function isPlanFrozen(
   return Boolean(String(rec[PLAN_LOCKED_AT_KEY] || "").trim());
 }
 
-/** Sets lock flag + timestamp. Does not change §§1–5. */
+export function isTalkWrapAccepted(
+  plan: Record<string, unknown> | Record<string, string> | null | undefined,
+): boolean {
+  if (!plan || typeof plan !== "object") return false;
+  return Boolean(String((plan as Record<string, unknown>)[TALK_WRAP_ACCEPTED_AT_KEY] || "").trim());
+}
+
+export function markTalkWrapAccepted(
+  plan: Record<string, unknown> | Record<string, string>,
+): Record<string, unknown> {
+  const next = { ...(plan as Record<string, unknown>) };
+  if (!String(next[TALK_WRAP_ACCEPTED_AT_KEY] || "").trim()) {
+    next[TALK_WRAP_ACCEPTED_AT_KEY] = new Date().toISOString();
+  }
+  return next;
+}
+
+/** Sets lock flag + timestamp. Does not change §§1–5. Does not mark wrap+Start. */
 export function freezePlan(
   plan: Record<string, unknown> | Record<string, string>,
 ): Record<string, unknown> {
@@ -698,23 +719,34 @@ export function planAllowsGoAfterFill(
 
 export function lastAssistantOfferedTalkClose(text: string): boolean {
   const s = String(text || "");
-  return s.includes(TALK_CLOSE_QUESTION) || s.includes(TALK_CLOSE_QUESTION_LEGACY);
+  return (
+    s.includes(TALK_CLOSE_QUESTION) ||
+    s.includes(TALK_CLOSE_QUESTION_LEGACY) ||
+    s.includes(TALK_CLOSE_QUESTION_LEGACY_OLDER)
+  );
 }
 
 export function stripTalkCloseQuestion(text: string): string {
   return String(text || "")
     .replace(TALK_CLOSE_QUESTION, "")
     .replace(TALK_CLOSE_QUESTION_LEGACY, "")
+    .replace(TALK_CLOSE_QUESTION_LEGACY_OLDER, "")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
+}
+
+/** “Let’s keep talking” / keep talking / talk — stay Talk, never Start. */
+export function isTalkKeepTalking(text: string): boolean {
+  const t = String(text || "").replace(/\s+/g, " ").trim();
+  return /^(let['’]?s keep talking|keep talking|talk)[\s.!?]*$/i.test(t);
 }
 
 /** Question / research / hurry / wait / “No, I’m not saying…” — Talk only; never Go. */
 export function isTalkStayOpenUserTurn(text: string): boolean {
   const t = String(text || "").replace(/\s+/g, " ").trim();
   if (!t) return false;
-  if (/\bnothing to add\b/i.test(t) || /\bi have nothing to add\b/i.test(t)) return false;
-  if (/^(no|nope|nah|não)[\s.!?]*$/i.test(t)) return false;
+  if (isTalkKeepTalking(t)) return true;
+  if (/^(no|nope|nah|não)[\s.!?]*$/i.test(t)) return true;
   if (isTalkContinueNotLock(t)) return true;
   if (/\?/.test(t)) return true;
   if (/\b(suggest|research|hurry|together|wait)\b/i.test(t)) return true;
@@ -723,15 +755,17 @@ export function isTalkStayOpenUserTurn(text: string): boolean {
   return false;
 }
 
-/** “No, I’m not saying X” / how-to / NFT example — never a Start answer. */
+/** Questions / shaping / “No, I’m not saying…” — Talk only; never a Start answer. */
 export function isTalkContinueNotLock(text: string): boolean {
   const t = String(text || "").replace(/\s+/g, " ").trim();
   if (!t) return false;
-  if (/^(no|nope|nah|não)[\s.!?]*$/i.test(t)) return false;
+  if (isTalkKeepTalking(t)) return true;
+  if (talkMessageHasStartAccept(t) && t.split(/\s+/).filter(Boolean).length <= 12) return false;
+  if (/^(no|nope|nah|não)[\s.!?]*$/i.test(t)) return true;
   if (/^(no|não)\b/i.test(t) && t.length > 6) return true;
   if (/\bi('?m| am) not saying\b/i.test(t)) return true;
   if (
-    /\b(do you know|is there|how (do|can|would|should|to)|what (if|about|do you think)|suggest|example|\bnfts?\b|i don'?t know)\b/i.test(
+    /\b(do you know|is there|how (do|can|would|should|to)|what (if|about|do you think)|suggest|example|i don'?t know)\b/i.test(
       t,
     )
   ) {
@@ -783,15 +817,15 @@ export function applyTalkCloseDisplayPolicy(
   },
 ): string {
   let text = String(displayText || "");
-  const alreadyInThread = (opts.priorAssistantTexts || []).some((p) =>
-    lastAssistantOfferedTalkClose(p),
-  );
+  const lastPrior = [...(opts.priorAssistantTexts || [])].reverse().find((p) => String(p || "").trim()) || "";
+  const lastOffered = lastAssistantOfferedTalkClose(lastPrior);
   const forbidden =
     opts.planFrozen ||
     opts.isFirstAssistantReply ||
     isTalkStayOpenUserTurn(opts.userText) ||
     isTalkRepairTurn(opts.userText) ||
-    alreadyInThread ||
+    isTalkKeepTalking(opts.userText) ||
+    lastOffered ||
     /\bsorry\b/i.test(text);
   if (forbidden || !isTalkWrapUserTurn(opts.userText)) {
     text = stripTalkCloseQuestion(text);
@@ -807,9 +841,17 @@ export function applyTalkCloseDisplayPolicy(
   return text;
 }
 
-/** Whole-reply agrees after the close question — not a mid-feature “ok”. */
-const TALK_CLOSE_GATED_YES_RE =
-  /^(ok|okay|yes|yeah|yep|perfect|it'?s good|it is good|good for me|is good for me)[\s.!?]*$/i;
+const TALK_START_ACCEPT_RE =
+  /^(start( building)?|you can start|go ahead and start)[\s.!?]*$/i;
+
+function talkMessageHasStartAccept(text: string): boolean {
+  const t = String(text || "").replace(/\s+/g, " ").trim();
+  if (TALK_START_ACCEPT_RE.test(t)) return true;
+  if (/\bstart building\b/i.test(t) || /\byou can start\b/i.test(t) || /\bgo ahead and start\b/i.test(t)) {
+    return true;
+  }
+  return /^(no|nope|nah|não)[,.\s]+start[\s.!?]*$/i.test(t);
+}
 
 export function shouldOpenTalkTurn(opts: {
   plan: Record<string, unknown> | null | undefined;
@@ -835,23 +877,24 @@ export function shouldOpenTalkTurn(opts: {
   return false;
 }
 
-const TALK_SHORT_ACCEPT_RE =
-  /^(yes[—\-:,\s]+)?(start( building| coding)?|go([.]|!| ahead)?|build( it)?|lock|you can start( coding)?|nothing to add|i have nothing to add|let'?s (build|go)|just build|now)[\s.!?]*$/i;
-
 export function userAcceptedTalkClose(
   text: string,
-  opts?: { lastAssistantText?: string },
+  opts?: { lastAssistantText?: string; lastAssistantOfferedTalkClose?: boolean },
 ): boolean {
   const t = String(text || "").replace(/\s+/g, " ").trim();
   if (!t) return false;
-  if (isTalkStayOpenUserTurn(t) || isTalkRepairTurn(t) || isTalkContinueNotLock(t)) return false;
-  if (!lastAssistantOfferedTalkClose(opts?.lastAssistantText || "")) return false;
+  if (isTalkKeepTalking(t) || isTalkStayOpenUserTurn(t) || isTalkRepairTurn(t) || isTalkContinueNotLock(t)) {
+    return false;
+  }
+  const offered =
+    lastAssistantOfferedTalkClose(opts?.lastAssistantText || "") ||
+    opts?.lastAssistantOfferedTalkClose === true;
+  if (!offered) return false;
   const words = t.split(/\s+/).filter(Boolean).length;
   if (words > 8) return false;
   if (/\bSTART_CODING\b/i.test(t)) return true;
-  if (/^(no|nope|nah|não)[\s.!?]*$/i.test(t)) return true;
-  if (TALK_SHORT_ACCEPT_RE.test(t)) return true;
-  if (TALK_CLOSE_GATED_YES_RE.test(t)) return true;
+  if (TALK_START_ACCEPT_RE.test(t)) return true;
+  if (talkMessageHasStartAccept(t) && /^(no|nope|nah|não)\b/i.test(t)) return true;
   return false;
 }
 
@@ -859,8 +902,9 @@ export function userAcceptedTalkClose(
 export function mayPersistMasterPlanFromChat(opts: {
   userText: string;
   lastAssistantText?: string;
+  lastAssistantOfferedTalkClose?: boolean;
 }): boolean {
-  return userAcceptedTalkClose(opts.userText, { lastAssistantText: opts.lastAssistantText });
+  return userAcceptedTalkClose(opts.userText, opts);
 }
 
 export function shouldStartGoAfterTalk(opts: {
@@ -868,17 +912,28 @@ export function shouldStartGoAfterTalk(opts: {
   userText: string;
   seedText?: string;
   lastAssistantText?: string;
+  lastAssistantOfferedTalkClose?: boolean;
 }): boolean {
   const plan = opts.plan && typeof opts.plan === "object" ? opts.plan : null;
   const live = String(opts.userText || "").trim();
   const seed = String(opts.userText || opts.seedText || "").trim();
   const goal = String(plan?.["1. Goal of the app"] || "").trim();
   if (seed && goal && isReplacementProductBrief(seed, goal)) return false;
-  if (isTalkStayOpenUserTurn(live) || isTalkRepairTurn(live) || isPostFreezeTalkRequest(live) || isTalkContinueNotLock(live)) {
+  if (
+    isTalkKeepTalking(live) ||
+    isTalkStayOpenUserTurn(live) ||
+    isTalkRepairTurn(live) ||
+    isPostFreezeTalkRequest(live) ||
+    isTalkContinueNotLock(live)
+  ) {
     return false;
   }
-  if (isPlanFrozen(plan)) return true;
-  if (!userAcceptedTalkClose(opts.userText, { lastAssistantText: opts.lastAssistantText })) {
+  const acceptOpts = {
+    lastAssistantText: opts.lastAssistantText,
+    lastAssistantOfferedTalkClose: opts.lastAssistantOfferedTalkClose,
+  };
+  if (isPlanFrozen(plan) && isTalkWrapAccepted(plan)) return true;
+  if (!userAcceptedTalkClose(opts.userText, acceptOpts)) {
     return false;
   }
   if (!plan) return false;
@@ -886,8 +941,8 @@ export function shouldStartGoAfterTalk(opts: {
 }
 
 /**
- * Skip Grok talk only after THIS workspace plan is frozen for this seed.
- * Fresh / unfrozen plans always talk. Replacement briefs talk again.
+ * Skip Grok talk only after wrap + Start this session (talkWrapAcceptedAt).
+ * Frozen seed-only plans without wrap stay in Talk. Replacement briefs talk again.
  */
 export function shouldSkipGrokChatForExistingPlan(opts: {
   plan: Record<string, unknown> | null | undefined;
@@ -896,13 +951,14 @@ export function shouldSkipGrokChatForExistingPlan(opts: {
 }): boolean {
   const plan = opts.plan && typeof opts.plan === "object" ? opts.plan : null;
   if (!plan) return false;
-  if (!isPlanFrozen(plan)) return false;
+  if (!isPlanFrozen(plan) || !isTalkWrapAccepted(plan)) return false;
   const live = String(opts.userText || "").trim();
   if (
     live &&
     (isPostFreezeTalkRequest(live) ||
       isTalkStayOpenUserTurn(live) ||
       isTalkRepairTurn(live) ||
+      isTalkKeepTalking(live) ||
       isTalkContinueNotLock(live))
   ) {
     return false;
@@ -910,7 +966,6 @@ export function shouldSkipGrokChatForExistingPlan(opts: {
   const fb = assessFullBuildCompleteness({ plan });
   if (!fb.allowGo) return false;
   const seed = String(opts.seedText || "").trim();
-  if (userAcceptedTalkClose(seed)) return true;
   const goal = String(plan["1. Goal of the app"] || "").trim();
   const sk = readCodingSkeletonFromPlan(plan);
   if (seed && !skeletonFitsCurrentGoal(sk, seed)) return false;

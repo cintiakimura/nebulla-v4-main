@@ -17,7 +17,7 @@ export const IDE_CHAT_FAST_PROJECT_BOOTSTRAP =
 export const FIRST_SEED_TALK_ONLY_RULE =
   `TURN 1 (no close yet): Talk only. Reflect the idea in their words + one push + “What do you think?” ` +
   `Do NOT emit <START_MASTERPLAN>, </END_MASTERPLAN>, START_CODING, or \`\`\`file: blocks. ` +
-  `Do not infer a COMPLETE Master Plan on this turn. After they say Start / go / build / you can start / nothing to add: then infer complete Plan §§1–5 and one Full Build Go.`;
+  `Do not infer a COMPLETE Master Plan on this turn. After they say start / start building / you can start / go ahead and start: then infer complete Plan §§1–5 and one Full Build Go.`;
 export const BRAINSTORM_LOOP_BOOTSTRAP_RULES =
   `Follow nebulla-project/chat-conversation-loop.md and chat-information-checklist.md. ` +
   `Beat A: this text is the seed / continuation — not a ticket, even if it is a long spec. ` +
@@ -27,7 +27,7 @@ export const BRAINSTORM_LOOP_BOOTSTRAP_RULES =
   `No extras. Don't narrate searching (silent lookup is allowed later on name / Slot 4 / API turns — not on this first reply). No feature catalog. No Foundation. No START_CODING. Do NOT inject Guided Discovery. Never ask what kind of project, paste design or none, or one core feature after a product seed. ` +
   `FAST LANE (now / just build / go / hellos / full idea): infer the Monday loop silently. 1–2 light clarifiers only if the seed is empty (who + one job). Then lock and build the REAL loop — not a 3-button mock. Say they can push back. If Slot 1 was never confirmed, reflect first. ` +
   `LOCK LANE (brainstorm / shape together): silent scoreboard. Next spoken beat = emptiest required slot per turn (Who → Features+inferred workflow → Dependencies). Infer extra pages; don’t quiz. Never mock the workflow (dossier, review, save, extract) if it serves the north star. ` +
-  `Close: short summary then exactly “I think I have what I need. Start building, or add something?” Confirm Start → complete Plan §§1–5 → one Full Build Go of every §4 route. Fast Prototype thin draft only if they asked for a quick draft. ` +
+  `Close: 4–8 lines in their words, then exactly “If this is what you want, say start. If not, say let’s keep talking.” Nothing after that line. Confirm start / start building / you can start / go ahead and start → complete Plan §§1–5 → one Full Build Go of every §4 route. Fast Prototype thin draft only if they asked for a quick draft. ` +
   `Ban as the ending: “v1 / phase 2 / good enough for now / we can add that later / shall we go?” Mock a vendor only when classified user-choice or truly unavailable — never mock the workflow. ` +
   `Sensitivity: one warning + option + a buildable solution (not a legal audit). HIPAA only if they said health. ` +
   `Keep warmth on every beat. Coding only after close or explicit go / hellos / just build. First-message “hello” on an empty project is not coding. ` +

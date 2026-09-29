@@ -418,11 +418,15 @@ export function talkThreadGoalBrief(
   const parts: string[] = [];
   const push = (raw: string) => {
     const t = String(raw || "")
+      .replace(/If this is what you want, say start[\s\S]*$/i, "")
       .replace(/I think I have (what|everything) I need[\s\S]*$/i, "")
       .replace(/\s+/g, " ")
       .trim();
     if (!t || isHiddenTalkBootstrap(t) || isCodingCommandNote(t)) return;
-    if (/^(start|go|lock|nothing to add|you can start)\b/i.test(t) && t.split(/\s+/).length <= 8) {
+    if (
+      /^(start( building)?|you can start|go ahead and start|let['’]?s keep talking|keep talking)\b/i.test(t) &&
+      t.split(/\s+/).length <= 8
+    ) {
       return;
     }
     parts.push(t);
@@ -448,12 +452,6 @@ export function goalSectionFromTalkOnStart(opts: {
   const brief = String(opts.threadBrief || "").trim();
   if (!brief) return seedGoalOfTheAppSection(opts.plan, []);
   const distilled = distillBriefToGoalSection(brief, brief);
-  const nftOff = /\bnfts?\b/i.test(brief) && /\bnot saying\b/i.test(brief);
-  let out = distilled && isUsableProjectGoal(distilled)
-    ? distilled
-    : seedGoalOfTheAppSection({ ...(opts.plan || {}), "1. Goal of the app": "" }, [brief]);
-  if (nftOff && out && !/\bnft/i.test(out)) {
-    out = `${out}\nOut of scope: NFT wallets.`.slice(0, 900);
-  }
-  return out;
+  if (distilled && isUsableProjectGoal(distilled)) return distilled;
+  return seedGoalOfTheAppSection({ ...(opts.plan || {}), "1. Goal of the app": "" }, [brief]);
 }

@@ -14,8 +14,10 @@ import {
   isPlanFrozen,
   inferFullBuildRoutes,
   listMissingFullBuildRoutes,
+  markTalkWrapAccepted,
   PLAN_FROZEN_KEY,
   PLAN_LOCKED_AT_KEY,
+  TALK_WRAP_ACCEPTED_AT_KEY,
   shouldOpenTalkTurn,
   shouldSkipGrokChatForExistingPlan,
   shouldStartGoAfterTalk,
@@ -47,6 +49,10 @@ function completeCourierPlan(): Record<string, unknown> {
     projectType: "Web App",
   });
   return sk.plan;
+}
+
+function frozenAfterWrap(plan?: Record<string, unknown>) {
+  return markTalkWrapAccepted(freezePlan(plan || completeCourierPlan()));
 }
 
 function section(name: string) {
@@ -90,9 +96,10 @@ section("close + freeze — complete plan + accept keeps workspace key");
   );
 }
 
-section("Go reads frozen plan — skip chat; replacement brief talks again");
+section("Go reads frozen plan — skip chat only after wrap+Start; replacement brief talks again");
 {
-  const frozen = freezePlan(completeCourierPlan());
+  const frozen = frozenAfterWrap();
+  assert.ok(String(frozen[TALK_WRAP_ACCEPTED_AT_KEY] || "").trim());
   assert.equal(shouldSkipGrokChatForExistingPlan({ plan: frozen, seedText: COURIER_SEED }), true);
   assert.equal(shouldOpenTalkTurn({ plan: frozen, seedText: COURIER_SEED, userText: "add ratings" }), false);
   assert.equal(
@@ -105,25 +112,29 @@ section("Go reads frozen plan — skip chat; replacement brief talks again");
   assert.equal(shouldStartGoAfterTalk({ plan: frozen, userText: pizza, seedText: pizza }), false);
 }
 
-section("you can start coding accepts close");
+section("Start accept phrases after lock; coding/yes/ok are not Start");
 {
   const lock = { lastAssistantText: TALK_CLOSE_QUESTION };
+  assert.equal(userAcceptedTalkClose("start", lock), true);
+  assert.equal(userAcceptedTalkClose("start building", lock), true);
   assert.equal(userAcceptedTalkClose("you can start", lock), true);
-  assert.equal(userAcceptedTalkClose("you can start coding", lock), true);
-  assert.equal(userAcceptedTalkClose("Yes — you can start coding.", lock), true);
-  assert.equal(userAcceptedTalkClose("start coding", lock), true);
-  assert.equal(userAcceptedTalkClose("go ahead", lock), true);
+  assert.equal(userAcceptedTalkClose("go ahead and start", lock), true);
+  assert.equal(userAcceptedTalkClose("Start.", lock), true);
+  assert.equal(userAcceptedTalkClose("you can start coding", lock), false);
+  assert.equal(userAcceptedTalkClose("Yes — you can start coding.", lock), false);
+  assert.equal(userAcceptedTalkClose("start coding", lock), false);
+  assert.equal(userAcceptedTalkClose("go ahead", lock), false);
   assert.equal(userAcceptedTalkClose("you can start"), false);
   assert.equal(userAcceptedTalkClose("yes"), false);
   assert.equal(userAcceptedTalkClose("ok"), false);
   assert.equal(userAcceptedTalkClose("perfect"), false);
   assert.equal(
     userAcceptedTalkClose("yes", { lastAssistantText: TALK_CLOSE_QUESTION }),
-    true,
+    false,
   );
   assert.equal(
     userAcceptedTalkClose("ok", { lastAssistantText: TALK_CLOSE_QUESTION }),
-    true,
+    false,
   );
   assert.equal(
     userAcceptedTalkClose("ok let's use blue", { lastAssistantText: TALK_CLOSE_QUESTION }),
@@ -131,22 +142,27 @@ section("you can start coding accepts close");
   );
   assert.equal(
     userAcceptedTalkClose("it's good", { lastAssistantText: TALK_CLOSE_QUESTION }),
-    true,
+    false,
   );
   assert.equal(
     userAcceptedTalkClose("okay", { lastAssistantText: TALK_CLOSE_QUESTION }),
-    true,
+    false,
   );
   assert.equal(
     userAcceptedTalkClose("is good for me", { lastAssistantText: TALK_CLOSE_QUESTION }),
-    true,
+    false,
   );
   assert.equal(
     userAcceptedTalkClose("good for me", { lastAssistantText: TALK_CLOSE_QUESTION }),
-    true,
+    false,
   );
   assert.equal(lastAssistantOfferedTalkClose(`Done.\n\n${TALK_CLOSE_QUESTION}`), true);
-  const frozen = freezePlan(completeCourierPlan());
+  const frozenOnly = freezePlan(completeCourierPlan());
+  assert.equal(
+    shouldSkipGrokChatForExistingPlan({ plan: frozenOnly, seedText: COURIER_SEED }),
+    false,
+  );
+  const frozen = frozenAfterWrap();
   assert.equal(
     shouldSkipGrokChatForExistingPlan({ plan: frozen, seedText: COURIER_SEED }),
     true,
@@ -154,8 +170,9 @@ section("you can start coding accepts close");
   assert.equal(
     shouldStartGoAfterTalk({
       plan: frozen,
-      userText: "you can start coding",
-      seedText: "you can start coding",
+      userText: "you can start",
+      seedText: "you can start",
+      lastAssistantText: TALK_CLOSE_QUESTION,
     }),
     true,
   );
@@ -225,6 +242,14 @@ section("frozen courier §4 is request/track/driver/account — not leftover edu
       userText: "finish building",
       seedText: "finish building",
     }),
+    false,
+  );
+  assert.equal(
+    shouldStartGoAfterTalk({
+      plan: frozenAfterWrap(frozen),
+      userText: "finish building",
+      seedText: "finish building",
+    }),
     true,
   );
   assert.equal(userAcceptedTalkClose("Start", { lastAssistantText: TALK_CLOSE_QUESTION }), true);
@@ -262,7 +287,7 @@ section("first assistant reply must not contain the lock sentence");
     },
   );
   assert.equal(lastAssistantOfferedTalkClose(locked), false);
-  assert.doesNotMatch(locked, /Start building, or add something/);
+  assert.doesNotMatch(locked, /say start/);
 }
 
 section("user question after first reply — no lock sentence, no Go");
@@ -309,7 +334,7 @@ section("you're rushing / suggest features — no lock sentence");
   }
 }
 
-section("after wrap + Start / you can start / nothing to add — freeze + Go allowed");
+section("after wrap + Start / you can start / go ahead and start — freeze + Go allowed");
 {
   const plan = completeCourierPlan();
   const wrapShown = applyTalkCloseDisplayPolicy("Short summary of the courier loop.", {
@@ -320,8 +345,8 @@ section("after wrap + Start / you can start / nothing to add — freeze + Go all
     planFrozen: false,
   });
   assert.equal(lastAssistantOfferedTalkClose(wrapShown), true);
-  assert.match(wrapShown, /Start building, or add something/);
-  for (const userText of ["Start", "you can start", "nothing to add", "I have nothing to add"]) {
+  assert.match(wrapShown, /say start/);
+  for (const userText of ["Start", "start building", "you can start", "go ahead and start"]) {
     assert.equal(userAcceptedTalkClose(userText, { lastAssistantText: TALK_CLOSE_QUESTION }), true);
     assert.equal(
       shouldStartGoAfterTalk({
@@ -333,11 +358,15 @@ section("after wrap + Start / you can start / nothing to add — freeze + Go all
       true,
     );
   }
+  assert.equal(
+    userAcceptedTalkClose("nothing to add", { lastAssistantText: TALK_CLOSE_QUESTION }),
+    false,
+  );
 }
 
 section("after freeze, improve the UI/UX must not skip-chat Full Build");
 {
-  const frozen = freezePlan(completeCourierPlan());
+  const frozen = frozenAfterWrap();
   const improve = "improve the UI/UX";
   assert.equal(isPostFreezeTalkRequest(improve), true);
   assert.equal(
@@ -363,16 +392,67 @@ section("after freeze, improve the UI/UX must not skip-chat Full Build");
   );
 }
 
-section("No I'm not saying NFT is Talk — not lock+Go");
+section("1 lock not shown + shaping no → shouldStartGo false");
 {
   const nft =
     "No, I'm not saying like NFT. NFT was just an example… do you know if there's any solution regarding";
   const plan = completeCourierPlan();
   assert.equal(isTalkContinueNotLock(nft), true);
-  assert.equal(userAcceptedTalkClose(nft, { lastAssistantText: TALK_CLOSE_QUESTION }), false);
-  assert.equal(shouldStartGoAfterTalk({ plan, userText: nft, seedText: COURIER_SEED }), false);
-  assert.equal(mayPersistMasterPlanFromChat({ userText: nft, lastAssistantText: TALK_CLOSE_QUESTION }), false);
+  assert.equal(userAcceptedTalkClose(nft, { lastAssistantText: "What do you think?" }), false);
+  assert.equal(
+    shouldStartGoAfterTalk({
+      plan,
+      userText: nft,
+      seedText: COURIER_SEED,
+      lastAssistantText: "What do you think?",
+    }),
+    false,
+  );
+  assert.equal(mayPersistMasterPlanFromChat({ userText: nft, lastAssistantText: "What do you think?" }), false);
+}
+
+section("2 lock shown + start → shouldStartGo true");
+{
+  assert.equal(
+    shouldStartGoAfterTalk({
+      plan: completeCourierPlan(),
+      userText: "start",
+      seedText: COURIER_SEED,
+      lastAssistantText: TALK_CLOSE_QUESTION,
+    }),
+    true,
+  );
+}
+
+section("3 lock shown + let’s keep talking → shouldStartGo false");
+{
+  const keep = "let’s keep talking";
+  assert.equal(userAcceptedTalkClose(keep, { lastAssistantText: TALK_CLOSE_QUESTION }), false);
+  assert.equal(
+    shouldStartGoAfterTalk({
+      plan: completeCourierPlan(),
+      userText: keep,
+      seedText: COURIER_SEED,
+      lastAssistantText: TALK_CLOSE_QUESTION,
+    }),
+    false,
+  );
+}
+
+section("4 frozen seed-only plan without wrapAccepted → skip-chat Full Build false");
+{
+  const filled = applyFullBuildPlanFill({ "1. Goal of the app": COURIER_SEED });
+  const sk = ensureCodingSkeletonOnPlan(filled.plan, { goal: COURIER_SEED, projectType: "Web App" });
+  const frozen = freezePlan(sk.plan);
+  assert.equal(Boolean(String(frozen[TALK_WRAP_ACCEPTED_AT_KEY] || "").trim()), false);
+  assert.equal(shouldSkipGrokChatForExistingPlan({ plan: frozen, seedText: COURIER_SEED }), false);
+}
+
+section("5 after wrapAccepted + start → §1 is not the raw first seed");
+{
   const seed = "build an app help music artists can upload their own songs and albums";
+  const nft =
+    "No, I'm not saying like NFT. NFT was just an example… do you know if there's any solution regarding";
   const brief = talkThreadGoalBrief(
     [
       { role: "user", content: seed },
@@ -382,11 +462,20 @@ section("No I'm not saying NFT is Talk — not lock+Go");
       },
       { role: "user", content: nft },
     ],
-    nft,
+    "start",
   );
   const goal = goalSectionFromTalkOnStart({ plan: { "1. Goal of the app": seed }, threadBrief: brief });
   assert.notEqual(goal.replace(/\s+/g, " ").trim(), seed.replace(/\s+/g, " ").trim());
   assert.match(goal, /QR|link|mom|independent|watermark|ownership|no account|listener/i);
+  assert.equal(
+    shouldStartGoAfterTalk({
+      plan: completeCourierPlan(),
+      userText: "start",
+      seedText: seed,
+      lastAssistantText: TALK_CLOSE_QUESTION,
+    }),
+    true,
+  );
 }
 
 console.log("\n✓ talk-lock-go tests passed\n");

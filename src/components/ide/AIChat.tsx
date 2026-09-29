@@ -99,7 +99,7 @@ import {
 } from '../../lib/nebulaAiCodingPipeline';
 import { isFoundationGoInFlight } from '../../lib/foundationHeavyJob';
 import { abortHonestyUserLine, abortWithUserStopReason, isAbortLikeError, isAbortLikeMessage } from '../../lib/abortLikeError';
-import { applyTalkCloseDisplayPolicy, assessFullBuildCompleteness, freezePlan, fullBuildGoUserNote, fullBuildIncompleteFollowUp, formatFullBuildIncompleteStop, FULL_BUILD_INCOMPLETE_STOP, FULL_BUILD_NO_RETRY_ACTIVITY, isPlanFrozen, isTalkRepairTurn, isTalkStayOpenUserTurn, mayPersistMasterPlanFromChat, shouldOpenTalkTurn, shouldSkipGrokChatForExistingPlan, shouldStartGoAfterTalk, TALK_CLOSE_QUESTION, userAcceptedTalkClose } from '../../../lib/fullBuildContract';
+import { applyTalkCloseDisplayPolicy, assessFullBuildCompleteness, fillMissingSection4PageFields, freezePlan, fullBuildGoUserNote, fullBuildIncompleteFollowUp, formatFullBuildIncompleteStop, FULL_BUILD_INCOMPLETE_STOP, FULL_BUILD_NO_RETRY_ACTIVITY, isPlanFrozen, isTalkKeepTalking, isTalkRepairTurn, isTalkStayOpenUserTurn, lastAssistantOfferedTalkClose, markTalkWrapAccepted, mayPersistMasterPlanFromChat, shouldOpenTalkTurn, shouldSkipGrokChatForExistingPlan, shouldStartGoAfterTalk, TALK_CLOSE_QUESTION, userAcceptedTalkClose } from '../../../lib/fullBuildContract';
 import {
   isAssistantCodingPromise,
   isAssistantRefineClaim,
@@ -2087,6 +2087,9 @@ export function AIChat() {
     const sendAbort = sendingAbortRef.current;
     setSendError(null);
     const discoveryCompleteAck = detectOnboardingBuildStart(rawText, prior);
+    if (isTalkKeepTalking(rawText)) {
+      clearBrainstormCloseState(diskProjectKey);
+    }
     const closeTurn = isHiddenBootstrapUserMessage(rawText)
       ? { kind: 'loop' as const, summary: null, skipInsists: 0 }
       : resolveBrainstormCloseTurn(rawText, prior, diskProjectKey);
@@ -2155,6 +2158,7 @@ export function AIChat() {
     const lastAssistantText = [...prior]
       .reverse()
       .find((m) => m.role === 'assistant' && String(m.content || '').trim())?.content;
+    const talkCloseOffered = lastAssistantOfferedTalkClose(String(lastAssistantText || ''));
     const skipGoFromQueue = Boolean(opts?.skipGoFromQueue);
     const wantsLockAndBuild =
       !skipGoFromQueue &&
@@ -2163,6 +2167,7 @@ export function AIChat() {
         userText: rawText,
         seedText: seedForPlan,
         lastAssistantText,
+        lastAssistantOfferedTalkClose: talkCloseOffered,
       });
     const beatAHold = shouldHoldFirstSeedBeatA({
       userText: rawText,
@@ -2469,7 +2474,7 @@ export function AIChat() {
       openTalk &&
       chatGoal &&
       !isPlanFrozen(planOnDisk) &&
-      userAcceptedTalkClose(rawText, { lastAssistantText })
+      userAcceptedTalkClose(rawText, { lastAssistantText, lastAssistantOfferedTalkClose: talkCloseOffered })
     ) {
       try {
         await fetchJson<{ ok?: boolean }>(withProjectQuery('/api/master-plan/bootstrap-from-chat'), {
@@ -2501,7 +2506,7 @@ export function AIChat() {
       Boolean(newProductSeed) &&
       !identityFrozen &&
       !isPlanFrozen(planOnDisk) &&
-      !userAcceptedTalkClose(rawText, { lastAssistantText }) &&
+      !userAcceptedTalkClose(rawText, { lastAssistantText, lastAssistantOfferedTalkClose: talkCloseOffered }) &&
       !fastLaneCloser &&
       !userNoteRequestsNextSlice(rawText) &&
       !refineSameProduct &&
@@ -2603,7 +2608,7 @@ export function AIChat() {
       if (
         newSeed &&
         !isPlanFrozen(plan) &&
-        !userAcceptedTalkClose(rawText, { lastAssistantText }) &&
+        !userAcceptedTalkClose(rawText, { lastAssistantText, lastAssistantOfferedTalkClose: talkCloseOffered }) &&
         !userNoteRequestsNextSlice(rawText) &&
         !isChatContinuityTurn(rawText) &&
         !isNameOnlyProductSeed(rawText)
@@ -2714,7 +2719,17 @@ export function AIChat() {
         threadBrief: talkBrief || seedForPlan,
       });
       if (talkGoal && planOnDisk) {
-        planOnDisk = { ...planOnDisk, "1. Goal of the app": talkGoal };
+        const talkPages = fillMissingSection4PageFields({
+          section4: talkBrief,
+          goal: talkGoal,
+        });
+        planOnDisk = {
+          ...planOnDisk,
+          "1. Goal of the app": talkGoal,
+          ...(talkPages.section.trim()
+            ? { "4. Pages and navigation": talkPages.section }
+            : {}),
+        };
       }
       try {
         await fetchJson<{ ok?: boolean }>(withProjectQuery('/api/master-plan/fill-missing-section4'), {
@@ -2739,12 +2754,12 @@ export function AIChat() {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             credentials: 'include',
-            body: JSON.stringify(withProjectBody({})),
+            body: JSON.stringify(withProjectBody({ talkWrapAccepted: true })),
           },
         );
         if (fr.plan) planOnDisk = fr.plan;
       } catch {
-        if (planOnDisk) planOnDisk = freezePlan(planOnDisk);
+        if (planOnDisk) planOnDisk = markTalkWrapAccepted(freezePlan(planOnDisk));
       }
       const lockTs = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
       const lockLine = 'Plan is saved — starting the build on this workspace.';
@@ -2905,6 +2920,7 @@ export function AIChat() {
       const allowPlanPersist = mayPersistMasterPlanFromChat({
         userText: rawText,
         lastAssistantText,
+        lastAssistantOfferedTalkClose: talkCloseOffered,
       });
       if (showWorkActivity && !skipGrokChat && allowPlanPersist) {
         pushActivity(`Grok replied (${raw.length.toLocaleString()} chars)`, 'success');
@@ -2926,7 +2942,7 @@ export function AIChat() {
           peekPendingProjectIdea() || '',
           getBrowserProjectName(),
         ],
-        { userText: rawText, lastAssistantText },
+        { userText: rawText, lastAssistantText, lastAssistantOfferedTalkClose: talkCloseOffered },
       );
       mpSaved = allowPlanPersist ? Math.max(mpSaved, persistedFromChat) : 0;
       if (!allowPlanPersist && sourceHasMasterPlanBlock(raw)) {
@@ -3016,6 +3032,8 @@ export function AIChat() {
           plan: planOnDisk,
           userText: rawText,
           seedText: seedForPlan,
+          lastAssistantText,
+          lastAssistantOfferedTalkClose: talkCloseOffered,
         })
       ) {
         willCode = false;
@@ -3447,12 +3465,12 @@ export function AIChat() {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
                   credentials: 'include',
-                  body: JSON.stringify(withProjectBody({})),
+                  body: JSON.stringify(withProjectBody({ talkWrapAccepted: true })),
                 },
               );
               if (fr.plan) planOnDisk = fr.plan;
             } catch {
-              if (planOnDisk) planOnDisk = freezePlan(planOnDisk);
+              if (planOnDisk) planOnDisk = markTalkWrapAccepted(freezePlan(planOnDisk));
             }
           }
         }

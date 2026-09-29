@@ -184,8 +184,10 @@ import {
   assessFullBuildCompleteness,
   detectQuickDraftIntent,
   freezePlan,
+  fillMissingSection4PageFields,
   fullBuildGoBlockedMessage,
   isPlanFrozen,
+  markTalkWrapAccepted,
   readBuildModeFromPlan,
   shouldStartGoAfterTalk,
   writeBuildModeOnPlan,
@@ -1590,6 +1592,13 @@ No approved UI code yet.
           if (replaceGoalFromTalk) {
             const talkGoal = goalSectionFromTalkOnStart({ plan: existing, threadBrief: userNote });
             if (talkGoal) existing["1. Goal of the app"] = talkGoal;
+            const talkPages = fillMissingSection4PageFields({
+              section4: userNote,
+              goal: String(existing["1. Goal of the app"] || talkGoal || ""),
+            });
+            if (talkPages.section.trim()) {
+              existing["4. Pages and navigation"] = talkPages.section;
+            }
             persistMasterPlanJson(pp.workspaceRoot, pp.masterPlanPath, existing);
           }
           fillMissingMasterPlanSectionsLocal({
@@ -1647,7 +1656,11 @@ No approved UI code yet.
         plan = JSON.parse(fs.readFileSync(pp.masterPlanPath, "utf8")) as Record<string, unknown>;
       }
       const filled = applyFullBuildPlanFill(plan);
-      const frozen = freezePlan(filled.plan);
+      let frozen = freezePlan(filled.plan);
+      const body = (req.body || {}) as Record<string, unknown>;
+      if (body.talkWrapAccepted === true) {
+        frozen = markTalkWrapAccepted(frozen);
+      }
       persistMasterPlanJson(pp.workspaceRoot, pp.masterPlanPath, frozen);
       res.json({
         ok: true,
