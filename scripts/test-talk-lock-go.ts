@@ -22,6 +22,10 @@ import {
   lastAssistantOfferedTalkClose,
   TALK_CLOSE_QUESTION,
   userAcceptedTalkClose,
+  applyTalkCloseDisplayPolicy,
+  isTalkStayOpenUserTurn,
+  isTalkRepairTurn,
+  isPostFreezeTalkRequest,
 } from "../lib/fullBuildContract.ts";
 import { ensureCodingSkeletonOnPlan } from "../lib/codingSkeleton.ts";
 import { hydrateMasterPlanDerivedSections } from "../lib/nebulaIdeWorkspaceArtifacts.ts";
@@ -169,7 +173,7 @@ section("canned first line is not the unfrozen talk door");
   assert.match(prompt, /talkDiscovery/);
   assert.match(prompt, /CODING \/ GO/);
   const grokChat = fs.readFileSync(path.join(REPO, "src/lib/ideAssistantGrokChat.ts"), "utf8");
-  assert.match(grokChat, /talkDiscovery: !isPlanFrozen/);
+  assert.match(grokChat, /talkDiscovery = options.talkDiscovery/);
   assert.doesNotMatch(chat, /formatFullBuildFirstSpokenLine\(seedForPlan\)/);
   const spoken = formatFullBuildFirstSpokenLine(COURIER_SEED);
   assert.ok(spoken.length > 20);
@@ -234,6 +238,120 @@ section("frozen §§ stay — Go brief never becomes §1");
   assert.doesNotMatch(String(plan["1. Goal of the app"]), /SLICE:|CODING_SKELETON|FIRST-SLICE APPLY/);
   const seeded = seedGoalOfTheAppSection({ "1. Goal of the app": COURIER_SEED }, [dump]);
   assert.doesNotMatch(String(seeded), /SLICE:|CODING_SKELETON|FIRST-SLICE APPLY/);
+}
+
+section("first assistant reply must not contain the lock sentence");
+{
+  const locked = applyTalkCloseDisplayPolicy(
+    `Nice idea.\n\n${TALK_CLOSE_QUESTION}`,
+    {
+      userText: COURIER_SEED,
+      priorAssistantTexts: [],
+      isFirstAssistantReply: true,
+      planAllowsGo: true,
+      planFrozen: false,
+    },
+  );
+  assert.equal(lastAssistantOfferedTalkClose(locked), false);
+  assert.doesNotMatch(locked, /Start building, or add something/);
+}
+
+section("user question after first reply — no lock sentence, no Go");
+{
+  const plan = completeCourierPlan();
+  const q = "Who are the competitors?";
+  assert.equal(isTalkStayOpenUserTurn(q), true);
+  assert.equal(userAcceptedTalkClose(q, { lastAssistantText: TALK_CLOSE_QUESTION }), false);
+  assert.equal(shouldStartGoAfterTalk({ plan, userText: q, seedText: COURIER_SEED }), false);
+  const shown = applyTalkCloseDisplayPolicy(`Here is a take.\n\n${TALK_CLOSE_QUESTION}`, {
+    userText: q,
+    priorAssistantTexts: ["Got it — city courier."],
+    isFirstAssistantReply: false,
+    planAllowsGo: true,
+    planFrozen: false,
+  });
+  assert.equal(lastAssistantOfferedTalkClose(shown), false);
+}
+
+section("you're rushing / suggest features — no lock sentence");
+{
+  const rush = "you're rushing, stop rushing";
+  const features = "suggest features we should ship";
+  assert.equal(isTalkRepairTurn(rush), true);
+  assert.equal(isTalkStayOpenUserTurn(features), true);
+  for (const userText of [rush, features]) {
+    const shown = applyTalkCloseDisplayPolicy(`Ok sorry.\n\n${TALK_CLOSE_QUESTION}`, {
+      userText,
+      priorAssistantTexts: ["Got it."],
+      isFirstAssistantReply: false,
+      planAllowsGo: true,
+      planFrozen: false,
+    });
+    assert.equal(lastAssistantOfferedTalkClose(shown), false);
+    assert.equal(
+      shouldStartGoAfterTalk({
+        plan: completeCourierPlan(),
+        userText,
+        seedText: COURIER_SEED,
+        lastAssistantText: TALK_CLOSE_QUESTION,
+      }),
+      false,
+    );
+  }
+}
+
+section("after wrap + Start / you can start / nothing to add — freeze + Go allowed");
+{
+  const plan = completeCourierPlan();
+  const wrapShown = applyTalkCloseDisplayPolicy("Short summary of the courier loop.", {
+    userText: "wrap this up",
+    priorAssistantTexts: ["What do you think?"],
+    isFirstAssistantReply: false,
+    planAllowsGo: true,
+    planFrozen: false,
+  });
+  assert.equal(lastAssistantOfferedTalkClose(wrapShown), true);
+  assert.match(wrapShown, /Start building, or add something/);
+  for (const userText of ["Start", "you can start", "nothing to add", "I have nothing to add"]) {
+    assert.equal(userAcceptedTalkClose(userText, { lastAssistantText: TALK_CLOSE_QUESTION }), true);
+    assert.equal(
+      shouldStartGoAfterTalk({
+        plan,
+        userText,
+        seedText: COURIER_SEED,
+        lastAssistantText: TALK_CLOSE_QUESTION,
+      }),
+      true,
+    );
+  }
+}
+
+section("after freeze, improve the UI/UX must not skip-chat Full Build");
+{
+  const frozen = freezePlan(completeCourierPlan());
+  const improve = "improve the UI/UX";
+  assert.equal(isPostFreezeTalkRequest(improve), true);
+  assert.equal(
+    shouldSkipGrokChatForExistingPlan({
+      plan: frozen,
+      seedText: COURIER_SEED,
+      userText: improve,
+    }),
+    false,
+  );
+  assert.equal(shouldOpenTalkTurn({ plan: frozen, seedText: COURIER_SEED, userText: improve }), true);
+  assert.equal(
+    shouldStartGoAfterTalk({ plan: frozen, userText: improve, seedText: COURIER_SEED }),
+    false,
+  );
+  const chat = fs.readFileSync(path.join(REPO, "src/components/ide/AIChat.tsx"), "utf8");
+  assert.match(chat, /applyTalkCloseDisplayPolicy/);
+  assert.match(chat, /userText: rawText/);
+  assert.match(chat, /talkDiscovery: openTalk/);
+  assert.doesNotMatch(
+    chat,
+    /allowGo &&\s*\n\s*!isPlanFrozen\(planOnDisk\) &&\s*\n\s*!displayText.includes\(TALK_CLOSE_QUESTION\)/,
+  );
 }
 
 console.log("\n✓ talk-lock-go tests passed\n");

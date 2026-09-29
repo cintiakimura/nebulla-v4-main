@@ -96,7 +96,7 @@ import {
 } from '../../lib/nebulaAiCodingPipeline';
 import { isFoundationGoInFlight } from '../../lib/foundationHeavyJob';
 import { abortHonestyUserLine, abortWithUserStopReason, isAbortLikeError, isAbortLikeMessage } from '../../lib/abortLikeError';
-import { assessFullBuildCompleteness, freezePlan, fullBuildGoUserNote, fullBuildIncompleteFollowUp, formatFullBuildIncompleteStop, FULL_BUILD_INCOMPLETE_STOP, FULL_BUILD_NO_RETRY_ACTIVITY, isPlanFrozen, shouldOpenTalkTurn, shouldSkipGrokChatForExistingPlan, shouldStartGoAfterTalk, TALK_CLOSE_QUESTION, userAcceptedTalkClose } from '../../../lib/fullBuildContract';
+import { applyTalkCloseDisplayPolicy, assessFullBuildCompleteness, freezePlan, fullBuildGoUserNote, fullBuildIncompleteFollowUp, formatFullBuildIncompleteStop, FULL_BUILD_INCOMPLETE_STOP, FULL_BUILD_NO_RETRY_ACTIVITY, isPlanFrozen, isTalkRepairTurn, isTalkStayOpenUserTurn, shouldOpenTalkTurn, shouldSkipGrokChatForExistingPlan, shouldStartGoAfterTalk, TALK_CLOSE_QUESTION, userAcceptedTalkClose } from '../../../lib/fullBuildContract';
 import {
   isAssistantCodingPromise,
   isAssistantRefineClaim,
@@ -2421,6 +2421,7 @@ export function AIChat() {
     const skipOk = shouldSkipGrokChatForExistingPlan({
       plan: planOnDisk,
       seedText: seedForPlan,
+      userText: rawText,
     });
     const openTalk = shouldOpenTalkTurn({
       plan: planOnDisk,
@@ -2812,6 +2813,7 @@ export function AIChat() {
               codingHint,
               discoveryRequired,
               interactionMode: interactionModeRef.current,
+              talkDiscovery: openTalk,
               hasAppStatusPayload,
               appStatusTechnicalMessages,
               ideLocale: resolvedIdeLocale,
@@ -2869,7 +2871,7 @@ export function AIChat() {
         );
       }
 
-      const persistedFromChat = beatAHold
+      const persistedFromChat = beatAHold || isTalkStayOpenUserTurn(rawText) || isTalkRepairTurn(rawText)
         ? 0
         : await persistMasterPlanFromAssistantSource(
         masterPlanSource,
@@ -2880,7 +2882,7 @@ export function AIChat() {
           getBrowserProjectName(),
         ],
       );
-      mpSaved = beatAHold ? 0 : Math.max(mpSaved, persistedFromChat);
+      mpSaved = beatAHold || isTalkStayOpenUserTurn(rawText) || isTalkRepairTurn(rawText) ? 0 : Math.max(mpSaved, persistedFromChat);
       if (mpSaved > 0) {
         void rememberActiveCloudProject();
       }
@@ -2896,20 +2898,21 @@ export function AIChat() {
         /* keep last planOnDisk */
       }
 
-      if (/<NEBULA_UI_STUDIO_PROMPT>/i.test(masterPlanSource)) {
+      if (/<NEBULA_UI_STUDIO_PROMPT>/i.test(masterPlanSource) && !isTalkStayOpenUserTurn(rawText) && !isTalkRepairTurn(rawText)) {
         dispatchOpenUiStudio({ tab: 'mockups' });
       }
 
       let { displayText, hadCodingTag } = formatAssistantForIdeChatDisplay(raw);
-      if (
-        !startGoThisTurn &&
-        !skipGrokChat &&
-        assessFullBuildCompleteness({ plan: planOnDisk || {} }).allowGo &&
-        !isPlanFrozen(planOnDisk) &&
-        !displayText.includes(TALK_CLOSE_QUESTION)
-      ) {
-        displayText = `${displayText.trim()}\n\n${TALK_CLOSE_QUESTION}`.trim();
-      }
+      const priorAssistantTexts = prior
+        .filter((m) => m.role === 'assistant' && String(m.content || '').trim())
+        .map((m) => String(m.content));
+      displayText = applyTalkCloseDisplayPolicy(displayText, {
+        userText: rawText,
+        priorAssistantTexts,
+        isFirstAssistantReply: priorAssistantTexts.length === 0,
+        planAllowsGo: assessFullBuildCompleteness({ plan: planOnDisk || {} }).allowGo,
+        planFrozen: isPlanFrozen(planOnDisk),
+      });
       const agentAllowed = interactionModeRef.current === 'agent';
 
       const shortCodingNudge = isShortCodingGoNudge(displayText || raw);

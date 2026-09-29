@@ -85,6 +85,8 @@ export async function sendIdeAssistantGrokTurn(options: {
   ideLocale?: IdeLocaleCode;
   contentLocale?: IdeLocaleCode;
   contentMode?: ContentLanguageMode;
+  /** Talk voice after freeze (improve-UI / questions) — default: unfrozen plan. */
+  talkDiscovery?: boolean;
   signal?: AbortSignal;
 }): Promise<{
   assistantContent: string;
@@ -141,6 +143,8 @@ export async function sendIdeAssistantGrokTurn(options: {
     }
   }
 
+  const talkDiscovery = options.talkDiscovery ?? !isPlanFrozen(latestMP);
+
   let systemPrompt =
     buildNebulaAssistantSystemPrompt(
       latestMP,
@@ -149,13 +153,13 @@ export async function sendIdeAssistantGrokTurn(options: {
       {
         providerLabel: selection.providerLabel,
         modelLabel: selection.label,
-        talkDiscovery: !isPlanFrozen(latestMP),
+        talkDiscovery,
       },
     ) +
     `\n\n${IDE_CHAT_EXECUTION_APPENDIX}` +
     (modeAppendix ? `\n\n${modeAppendix}` : '') +
     (buildMode ? `\n\n${buildModeSystemAppendix()}` : '') +
-    (!isPlanFrozen(latestMP) ? `\n\n${TALK_UNTIL_LOCK_APPENDIX}` : '') +
+    (talkDiscovery ? `\n\n${TALK_UNTIL_LOCK_APPENDIX}` : '') +
     (inferenceMemory ? `\n\n${inferenceMemory}` : '') +
     (ideAppendix.trim()
       ? `\n\nIDE_EDITOR_SURFACE (active workspace file context — user may be editing here):\n${ideAppendix.trim()}`

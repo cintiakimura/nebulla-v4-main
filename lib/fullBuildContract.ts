@@ -22,7 +22,10 @@ export { BUILD_MODE_PLAN_KEY };
 export const PLAN_FROZEN_KEY = "planFrozen";
 export const PLAN_LOCKED_AT_KEY = "planLockedAt";
 
-export const TALK_CLOSE_QUESTION = "I think I have everything I need. Anything you want to add?";
+export const TALK_CLOSE_QUESTION = "I think I have what I need. Start building, or add something?";
+/** In-flight threads that still have the previous lock footer. */
+export const TALK_CLOSE_QUESTION_LEGACY =
+  "I think I have everything I need. Anything you want to add?";
 
 export type BuildMode = "full_build" | "fast_prototype";
 
@@ -694,7 +697,93 @@ export function planAllowsGoAfterFill(
 }
 
 export function lastAssistantOfferedTalkClose(text: string): boolean {
-  return String(text || "").includes(TALK_CLOSE_QUESTION);
+  const s = String(text || "");
+  return s.includes(TALK_CLOSE_QUESTION) || s.includes(TALK_CLOSE_QUESTION_LEGACY);
+}
+
+export function stripTalkCloseQuestion(text: string): string {
+  return String(text || "")
+    .replace(TALK_CLOSE_QUESTION, "")
+    .replace(TALK_CLOSE_QUESTION_LEGACY, "")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+/** Question / research / hurry / wait — Talk only; never the lock footer or Go. */
+export function isTalkStayOpenUserTurn(text: string): boolean {
+  const t = String(text || "").replace(/\s+/g, " ").trim();
+  if (!t) return false;
+  if (/\bnothing to add\b/i.test(t) || /\bi have nothing to add\b/i.test(t)) return false;
+  if (/\?/.test(t)) return true;
+  if (/\b(suggest|research|hurry|together|wait)\b/i.test(t)) return true;
+  if (/\b(i want to add|add something|not yet)\b/i.test(t)) return true;
+  if (/^(add)[\s.!?]*$/i.test(t)) return true;
+  return false;
+}
+
+/** Rush / apology — no lock sentence this turn. */
+export function isTalkRepairTurn(text: string): boolean {
+  const t = String(text || "").replace(/\s+/g, " ").trim();
+  if (!t) return false;
+  if (/\b(you'?re rushing|stop rushing|too (fast|quick|rushed)|slow down|don'?t rush)\b/i.test(t)) {
+    return true;
+  }
+  if (/\bsorry\b/i.test(t) && !/\b(start|build|go|lock)\b/i.test(t)) return true;
+  return false;
+}
+
+/** After freeze: Talk (or a later small pass) — never skip-chat Full Build. */
+export function isPostFreezeTalkRequest(text: string): boolean {
+  const t = String(text || "").replace(/\s+/g, " ").trim();
+  if (!t) return false;
+  if (/\?/.test(t)) return true;
+  if (/\bimprov(e|ing)\b[\s\S]{0,48}\b(ui|ux)\b/i.test(t)) return true;
+  if (/\bui\s*\/\s*ux\b/i.test(t)) return true;
+  if (/\badd (a |another |new )?page\b/i.test(t)) return true;
+  return false;
+}
+
+export function isTalkWrapUserTurn(text: string): boolean {
+  const t = String(text || "").replace(/\s+/g, " ").trim();
+  if (!t) return false;
+  if (isTalkStayOpenUserTurn(t) || isTalkRepairTurn(t)) return false;
+  return /\b(skip (the )?(talk|chat|summary)|wrap (this )?up)\b/i.test(t);
+}
+
+/** Lock footer at wrap only, once, never on turn 1 / questions / repair. */
+export function applyTalkCloseDisplayPolicy(
+  displayText: string,
+  opts: {
+    userText: string;
+    priorAssistantTexts: string[];
+    isFirstAssistantReply: boolean;
+    planAllowsGo: boolean;
+    planFrozen: boolean;
+  },
+): string {
+  let text = String(displayText || "");
+  const alreadyInThread = (opts.priorAssistantTexts || []).some((p) =>
+    lastAssistantOfferedTalkClose(p),
+  );
+  const forbidden =
+    opts.planFrozen ||
+    opts.isFirstAssistantReply ||
+    isTalkStayOpenUserTurn(opts.userText) ||
+    isTalkRepairTurn(opts.userText) ||
+    alreadyInThread ||
+    /\bsorry\b/i.test(text);
+  if (forbidden || !isTalkWrapUserTurn(opts.userText)) {
+    text = stripTalkCloseQuestion(text);
+  }
+  if (
+    !forbidden &&
+    opts.planAllowsGo &&
+    isTalkWrapUserTurn(opts.userText) &&
+    !lastAssistantOfferedTalkClose(text)
+  ) {
+    text = `${text.trim()}\n\n${TALK_CLOSE_QUESTION}`.trim();
+  }
+  return text;
 }
 
 /** Whole-reply agrees after the close question — not a mid-feature “ok”. */
@@ -708,9 +797,13 @@ export function shouldOpenTalkTurn(opts: {
   lastAssistantText?: string;
 }): boolean {
   const plan = opts.plan && typeof opts.plan === "object" ? opts.plan : null;
+  const live = String(opts.userText || "").trim();
   const seed = String(opts.userText || opts.seedText || "").trim();
   const goal = String(plan?.["1. Goal of the app"] || "").trim();
   if (seed && goal && isReplacementProductBrief(seed, goal)) return true;
+  if (isTalkStayOpenUserTurn(live) || isTalkRepairTurn(live) || isPostFreezeTalkRequest(live)) {
+    return true;
+  }
   if (
     userAcceptedTalkClose(opts.userText || "", { lastAssistantText: opts.lastAssistantText }) &&
     planAllowsGoAfterFill(plan)
@@ -727,8 +820,12 @@ export function userAcceptedTalkClose(
 ): boolean {
   const t = String(text || "").replace(/\s+/g, " ").trim();
   if (!t) return false;
+  if (isTalkStayOpenUserTurn(t) || isTalkRepairTurn(t)) return false;
   if (/\bSTART_CODING\b/i.test(t)) return true;
   if (/^(no|nope|nah)([\s,!.].*)?$/i.test(t)) return true;
+  if (/\bnothing to add\b/i.test(t) || /\bi have nothing to add\b/i.test(t)) return true;
+  if (/^(start|lock)[\s.!?]*$/i.test(t)) return true;
+  if (/\bstart building\b/i.test(t)) return true;
   if (/\byou\s+can\s+start(\s+coding)?\b/i.test(t)) return true;
   if (/\bstart\s+coding\b/i.test(t)) return true;
   if (/\b(finish building|finish code|finish coding)\b/i.test(t)) return true;
@@ -756,9 +853,13 @@ export function shouldStartGoAfterTalk(opts: {
   lastAssistantText?: string;
 }): boolean {
   const plan = opts.plan && typeof opts.plan === "object" ? opts.plan : null;
+  const live = String(opts.userText || "").trim();
   const seed = String(opts.userText || opts.seedText || "").trim();
   const goal = String(plan?.["1. Goal of the app"] || "").trim();
   if (seed && goal && isReplacementProductBrief(seed, goal)) return false;
+  if (isTalkStayOpenUserTurn(live) || isTalkRepairTurn(live) || isPostFreezeTalkRequest(live)) {
+    return false;
+  }
   if (isPlanFrozen(plan)) return true;
   if (!userAcceptedTalkClose(opts.userText, { lastAssistantText: opts.lastAssistantText })) {
     return false;
@@ -774,10 +875,18 @@ export function shouldStartGoAfterTalk(opts: {
 export function shouldSkipGrokChatForExistingPlan(opts: {
   plan: Record<string, unknown> | null | undefined;
   seedText: string;
+  userText?: string;
 }): boolean {
   const plan = opts.plan && typeof opts.plan === "object" ? opts.plan : null;
   if (!plan) return false;
   if (!isPlanFrozen(plan)) return false;
+  const live = String(opts.userText || "").trim();
+  if (
+    live &&
+    (isPostFreezeTalkRequest(live) || isTalkStayOpenUserTurn(live) || isTalkRepairTurn(live))
+  ) {
+    return false;
+  }
   const fb = assessFullBuildCompleteness({ plan });
   if (!fb.allowGo) return false;
   const seed = String(opts.seedText || "").trim();
