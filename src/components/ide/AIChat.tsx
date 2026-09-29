@@ -412,7 +412,6 @@ export function AIChat() {
   const lastV0StatusRef = useRef<string>('');
   const pendingAgentResendRef = useRef<string | null>(null);
   const pendingTalkDuringGoRef = useRef<string[]>([]);
-  const skipGoFromQueueRef = useRef(false);
   const foundationStallRecoveredRef = useRef(false);
   const applyStallStartedAtRef = useRef<number | null>(null);
   const autoSliceAbortRef = useRef(false);
@@ -1571,7 +1570,9 @@ export function AIChat() {
     setSendError(null);
   }, [activePath]);
 
-  const sendChatRef = useRef<(override?: string) => Promise<void>>(async () => {});
+  const sendChatRef = useRef<
+    (override?: string, opts?: { skipGoFromQueue?: boolean }) => Promise<void>
+  >(async () => {});
 
   // Foundation apply used to freeze on "Applying N files" / "Runnable skeleton filled".
   // Unlock coding; do not auto-start Primary. Heartbeats must not reset the apply clock.
@@ -1655,7 +1656,7 @@ export function AIChat() {
     return null;
   }
 
-  const sendChat = useCallback(async (textOverride?: string) => {
+  const sendChat = useCallback(async (textOverride?: string, opts?: { skipGoFromQueue?: boolean }) => {
     const rawText = (textOverride ?? inputRef.current).trim();
     if (!rawText) return;
     clearHandsFreeAutoSendTimers();
@@ -2129,8 +2130,7 @@ export function AIChat() {
     const lastAssistantText = [...prior]
       .reverse()
       .find((m) => m.role === 'assistant' && String(m.content || '').trim())?.content;
-    const skipGoFromQueue = skipGoFromQueueRef.current;
-    skipGoFromQueueRef.current = false;
+    const skipGoFromQueue = Boolean(opts?.skipGoFromQueue);
     const wantsLockAndBuild =
       !skipGoFromQueue &&
       shouldStartGoAfterTalk({
@@ -2752,9 +2752,8 @@ export function AIChat() {
         setSending(false);
         const queued = pendingTalkDuringGoRef.current.splice(0);
         if (queued.length) {
-          skipGoFromQueueRef.current = true;
           window.setTimeout(() => {
-            void sendChatRef.current(queued.join('\n'));
+            void sendChatRef.current(queued.join('\n'), { skipGoFromQueue: true });
           }, 50);
         }
       }
@@ -3871,9 +3870,8 @@ export function AIChat() {
       }
       const queued = pendingTalkDuringGoRef.current.splice(0);
       if (queued.length) {
-        skipGoFromQueueRef.current = true;
         window.setTimeout(() => {
-          void sendChatRef.current(queued.join('\n'));
+          void sendChatRef.current(queued.join('\n'), { skipGoFromQueue: true });
         }, 50);
       }
     }
