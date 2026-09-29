@@ -21,6 +21,8 @@ import {
   userAcceptedTalkClose,
 } from "../lib/fullBuildContract.ts";
 import { ensureCodingSkeletonOnPlan } from "../lib/codingSkeleton.ts";
+import { hydrateMasterPlanDerivedSections } from "../lib/nebulaIdeWorkspaceArtifacts.ts";
+import { seedGoalOfTheAppSection } from "../lib/spineSequenceClient.ts";
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -126,6 +128,25 @@ section("canned first line is not the unfrozen talk door");
   const spoken = formatFullBuildFirstSpokenLine(COURIER_SEED);
   assert.ok(spoken.length > 20);
   assert.notEqual(spoken, TALK_CLOSE_QUESTION);
+}
+
+section("frozen §§ stay — Go brief never becomes §1");
+{
+  const dump =
+    "START_CODING — SLICE: Foundation. FIRST-SLICE APPLY: files. CODING_SKELETON: marketplace";
+  const frozen = freezePlan({
+    ...completeCourierPlan(),
+    "1. Goal of the app": COURIER_SEED,
+  });
+  const { plan, changed } = hydrateMasterPlanDerivedSections("/tmp/unused-hydrate-frozen", {
+    ...(frozen as Record<string, string>),
+    planFrozen: "true",
+    planLockedAt: String(frozen[PLAN_LOCKED_AT_KEY] || "2026-01-01"),
+  });
+  assert.equal(changed, false);
+  assert.doesNotMatch(String(plan["1. Goal of the app"]), /SLICE:|CODING_SKELETON|FIRST-SLICE APPLY/);
+  const seeded = seedGoalOfTheAppSection({ "1. Goal of the app": COURIER_SEED }, [dump]);
+  assert.doesNotMatch(String(seeded), /SLICE:|CODING_SKELETON|FIRST-SLICE APPLY/);
 }
 
 console.log("\n✓ talk-lock-go tests passed\n");

@@ -478,4 +478,17 @@ section("Generate UI after routes is a style pass, not a draft remount");
   assert.match(canvas, /liveAvailable[\s\S]*style-pass/);
 }
 
+section("post-apply styling is 45s best-effort — no wait ticker");
+{
+  const engine = fs.readFileSync(path.join(REPO, "src/lib/uiStudioBetaEngine.ts"), "utf8");
+  const refresh = fs.readFileSync(path.join(REPO, "src/lib/postCodeUiRefresh.ts"), "utf8");
+  assert.match(refresh, /STYLE_PASS_TIMEOUT_MS = 45_000/);
+  assert.match(engine, /STYLE_PASS_TIMEOUT_MS/);
+  assert.match(engine, /Styling skipped — app files already on disk/);
+  assert.doesNotMatch(
+    engine.slice(engine.indexOf("export async function triggerUiStudioBetaAfterFilesApplied")),
+    /startGrokActivityWaitTicker/,
+  );
+}
+
 console.log("\n✓ coded app style pass tests passed\n");

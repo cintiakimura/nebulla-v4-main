@@ -5,6 +5,9 @@
 
 export const MAX_FINAL_UI_AUTOPILOT_RUNS = 2;
 
+/** Best-effort token pass after files land — never a second unbounded Grok wait. */
+export const STYLE_PASS_TIMEOUT_MS = 45_000;
+
 const METHODOLOGY =
   /^(nebula-project|nebulla-project|nebula-project)\//i;
 

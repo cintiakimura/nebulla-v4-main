@@ -846,7 +846,7 @@ async function pollGoCodeUntilDoneInner(
       if (phase === 'preparing' || (poll.pending && poll.preparing && !poll.coding)) {
         const elapsed = Number(poll.elapsedMs) || 0;
         if (elapsed >= 12_000 && i > 0 && i % 3 === 0) {
-          onProgress?.('Foundation still preparing — nudging server to schedule Grok Code', 'warn');
+          onProgress?.('Go still preparing — nudging server to schedule Grok Code', 'warn');
           try {
             const nudgeTimed = abortAfter(8_000);
             try {
@@ -1604,7 +1604,7 @@ export async function runGoCodeAndApply(options: {
     } else if (exit.ok && totalWritten > 0) {
       if (exit.warnRunnable) {
         onProgress?.(
-          'Foundation routes landed — add package.json / dev scripts so the app is runnable (soft warning).',
+          'Routes landed — add package.json / dev scripts so the app is runnable (soft warning).',
           'warn',
         );
       }

@@ -5594,7 +5594,10 @@ Rules:
           });
         }
         const existingGoGoal = String(planForGate["1. Goal of the app"] || "").trim();
-        if (!existingGoGoal || !isUsableProjectGoal(existingGoGoal)) {
+        if (
+          !isPlanFrozen(planRaw) &&
+          (!existingGoGoal || !isUsableProjectGoal(existingGoGoal))
+        ) {
           const seededGoGoal = seedGoalOfTheAppSection(planForGate, [note, convProject]);
           if (seededGoGoal) {
             try {

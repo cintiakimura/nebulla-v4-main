@@ -28,6 +28,17 @@ export function htmlLooksLikeShowablePreview(html: string): boolean {
   return /ui-gen-mockup|shell--phone|data-screen=/i.test(t);
 }
 
+/** Live “ready” only when the preview runner serves the coded app — not mockup, not source, not a file-list bridge. */
+export function previewRunnerServesCodedApp(meta: {
+  previewHonesty?: string | null;
+  previewMode?: string | null;
+}): boolean {
+  const honesty = String(meta.previewHonesty || "");
+  if (honesty !== "real_routes") return false;
+  if (!previewMetaDevServerUp(meta)) return false;
+  return previewIframeCanRunProduct(meta);
+}
+
 /** Dev server for THIS product root is up — not “files exist” / post_code_bridge. */
 export function previewMetaDevServerUp(meta: {
   previewHonesty?: string | null;

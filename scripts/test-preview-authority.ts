@@ -23,6 +23,7 @@ import {
   previewIframeCanRunProduct,
   previewMetaDevServerUp,
   previewMetaHasProductRoutes,
+  previewRunnerServesCodedApp,
 } from "../lib/workspaceCodedAppUi.ts";
 import {
   buildLiveHtmlFromNextApp,
@@ -347,6 +348,18 @@ section("canvas honesty — product preview / coded bridge is showable (not Figm
   assert.match(canvas, /previewMetaDevServerUp/);
   assert.equal(previewMetaDevServerUp({ previewHonesty: "real_routes", previewMode: "post_code_bridge" }), false);
   assert.equal(previewMetaDevServerUp({ previewHonesty: "real_routes", previewMode: "next_app_live" }), true);
+  assert.equal(
+    previewRunnerServesCodedApp({ previewHonesty: "real_routes", previewMode: "next_app_live" }),
+    true,
+  );
+  assert.equal(
+    previewRunnerServesCodedApp({ previewHonesty: "real_routes", previewMode: "post_code_bridge" }),
+    false,
+  );
+  assert.equal(
+    previewRunnerServesCodedApp({ previewHonesty: "thin_code_shell", previewMode: "next_app_live" }),
+    false,
+  );
   assert.match(canvas, /placeholder mockup|coded app/);
   assert.match(canvas, /onShowLiveApp/);
   assert.match(canvas, /liveAvailable/);

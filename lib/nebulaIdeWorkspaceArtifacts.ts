@@ -513,6 +513,9 @@ export function hydrateMasterPlanDerivedSections(
   plan: Record<string, string>
 ): { plan: Record<string, string>; changed: boolean } {
   const out = { ...plan };
+  if (isPlanFrozen(out)) {
+    return { plan: out, changed: false };
+  }
   let changed = false;
 
   const seededGoal = seedGoalOfTheAppSection(out);

@@ -140,7 +140,8 @@ assert.equal(
 {
   const engine = fs.readFileSync(path.join(root, 'src/lib/uiStudioBetaEngine.ts'), 'utf8');
   assert.match(engine, /style_tokens_only/);
-  assert.match(engine, /Styling the screens on the coded app/);
+  assert.match(engine, /Styling skipped — app files already on disk/);
+  assert.match(engine, /STYLE_PASS_TIMEOUT_MS/);
   assert.match(engine, /App Preview is ready/);
   assert.equal(/switch Studio/.test(engine), false);
   assert.equal(/dispatchOpenUiStudioBeta\(\)/.test(engine.slice(engine.indexOf('sync_preview_only'))), false);

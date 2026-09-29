@@ -296,7 +296,13 @@ export function BuildPreviewCanvas() {
                 setFailed(false);
                 setLiveLoadFailed(false);
                 retriedDeniedRef.current = false;
-                void refreshWaitState().then(() => bump());
+                void fetch(withProjectQuery('/api/app-preview/bootstrap'), {
+                  credentials: 'include',
+                  cache: 'no-store',
+                })
+                  .catch(() => undefined)
+                  .then(() => refreshWaitState())
+                  .then(() => bump());
               }}
             >
               Retry

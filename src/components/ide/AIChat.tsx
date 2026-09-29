@@ -2701,6 +2701,10 @@ export function AIChat() {
           holdCodingFailure('Stopped — you cancelled coding. Chat is unlocked.');
         } else if (!go.ok) {
           pushActivity(go.statusMessage || 'Full Build did not finish.', 'warn');
+        } else {
+          setGrokActivity((prev) =>
+            finishGrokActivity(prev, 'Full Build files on disk', goWorkSteps(), go.statusMessage),
+          );
         }
       } catch (codingErr) {
         if (isAbortLikeError(codingErr) && isGoAborting(projectName)) {
@@ -2711,6 +2715,10 @@ export function AIChat() {
           const fail = codingErr instanceof Error ? codingErr.message : 'Could not write files to workspace';
           holdCodingFailure(fail);
         }
+      } finally {
+        resetCodingActivity();
+        sendingRef.current = false;
+        setSending(false);
       }
       return;
     }
@@ -3146,7 +3154,7 @@ export function AIChat() {
         ) {
           mockupSkippedOrFailed = true;
           pushActivity(
-            'UI mockup already on disk — mockup deferred — coding Foundation',
+            'UI mockup already on disk — mockup deferred — coding Full Build',
             'info',
           );
         } else if (

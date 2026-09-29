@@ -78,13 +78,9 @@ export function isCodingCommandNote(note?: string | null): boolean {
   if (/^FAST PROTOTYPE (MODE|CONTINUE)\./i.test(t) && !/User goal \/ brief:/i.test(t)) {
     return true;
   }
-  if (
-    /\bSLICE:\s*(Foundation|Auth|Data\+API|Primary|Secondary|Polish)\b/i.test(t) &&
-    t.length < 900 &&
-    !/User goal \/ brief:/i.test(t)
-  ) {
-    return true;
-  }
+  if (/\bFIRST-SLICE APPLY\b/i.test(t)) return true;
+  if (/\bCODING_SKELETON\b/i.test(t)) return true;
+  if (/\bSLICE:\s*/i.test(t) && !/User goal \/ brief:/i.test(t)) return true;
   return false;
 }
 
@@ -263,6 +259,9 @@ export function isUsableProjectGoal(goal: string): boolean {
   if (t.length < 8) return false;
   if (!/[a-zA-Z]{3,}/.test(t)) return false;
   if (/\bSTART_CODING\b/i.test(t)) return false;
+  if (/\bFIRST-SLICE APPLY\b/i.test(t)) return false;
+  if (/\bCODING_SKELETON\b/i.test(t)) return false;
+  if (/\bSLICE:\s*/i.test(t)) return false;
   if (/\bPLAN_READY\b/i.test(t)) return false;
   if (/^FAST PROTOTYPE (MODE|CONTINUE)\./i.test(t)) return false;
   if (CODING_COMMAND_GOAL_RE.test(t)) return false;
@@ -349,7 +348,9 @@ export function seedGoalOfTheAppSection(
   extraFallbacks: string[] = [],
 ): string {
   const existing = pickPlanText(plan?.["1. Goal of the app"]);
-  const briefHint = extraFallbacks.filter(Boolean).join("\n");
+  const briefHint = extraFallbacks
+    .filter((x) => Boolean(x) && !isCodingCommandNote(x))
+    .join("\n");
   if (
     existing.length >= MIN_SEEDED_GOAL_CHARS &&
     isUsableProjectGoal(existing) &&

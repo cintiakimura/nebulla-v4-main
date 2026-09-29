@@ -1,5 +1,5 @@
 import { abortWithTimeoutReason, isAbortLikeError } from './abortLikeError';
-import { fetchJson } from './apiFetch';
+import { fetchJson, readResponseJson } from './apiFetch';
 import type { GrokActivityProgressFn } from './ideGrokActivityStatus';
 import { startGrokActivityWaitTicker } from './ideGrokActivityStatus';
 import { withProjectBody, withProjectQuery } from './nebulaProjectApi';
@@ -453,12 +453,26 @@ export async function runPostCodingWorkspaceSync(options?: {
       } catch {
         /* ignore */
       }
-      onProgress?.(
-        sync.timedOut || sync.softFailed
-          ? 'Workspace sync skipped/soft — App is ready on Live.'
-          : 'App is ready on Live.',
-        sync.timedOut || sync.softFailed ? 'warn' : 'success',
-      );
+      let liveLine = 'Files on disk — starting Live…';
+      let liveKind: 'success' | 'warn' | 'info' = 'info';
+      try {
+        const metaRes = await fetch(withProjectQuery('/api/app-preview/meta'), {
+          credentials: 'include',
+          cache: 'no-store',
+        });
+        const meta = (await readResponseJson(metaRes)) as {
+          previewHonesty?: string;
+          previewMode?: string;
+        };
+        const { previewRunnerServesCodedApp } = await import('../../lib/workspaceCodedAppUi');
+        if (metaRes.ok && previewRunnerServesCodedApp(meta)) {
+          liveLine = 'App is ready on Live.';
+          liveKind = 'success';
+        }
+      } catch {
+        /* files landed; runner not confirmed */
+      }
+      onProgress?.(liveLine, liveKind);
     } catch {
       /* ignore */
     }

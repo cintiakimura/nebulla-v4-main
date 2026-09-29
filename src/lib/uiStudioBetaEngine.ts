@@ -22,6 +22,7 @@ import {
   extractUiRouteKeys,
   looksLikeUiRelevantPaths,
   resolvePostCodeUiAction,
+  STYLE_PASS_TIMEOUT_MS,
   type PostCodeUiAction,
 } from './postCodeUiRefresh';
 import { figmaPickActivityLine } from './uiGenStatusLabels';
@@ -497,25 +498,36 @@ export async function triggerUiStudioBetaAfterFilesApplied(options: {
     return null;
   }
 
-  if (action === 'style_tokens_only') {
-    options.onProgress?.('Styling the screens on the coded app', 'info');
-    try {
-      await fetch(withProjectQuery('/api/coded-app/style-pass'), {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json', ...getGrokRequestHeaders() },
-        body: JSON.stringify(withProjectBody({})),
-      });
-    } catch {
-      /* keep coded Preview */
-    }
-    markPostCodeUiRefreshDone(projectKey, paths);
+  if (action === 'style_tokens_only' || action === 'run_final_ui' || action === 'regen_post_code') {
     try {
       dispatchStudioShowLiveApp();
       window.dispatchEvent(new CustomEvent('nebula-open-app-preview'));
     } catch {
       /* ignore */
     }
+    const ac = new AbortController();
+    const timer =
+      typeof window !== 'undefined'
+        ? window.setTimeout(() => ac.abort(), STYLE_PASS_TIMEOUT_MS)
+        : setTimeout(() => ac.abort(), STYLE_PASS_TIMEOUT_MS);
+    try {
+      const styleRes = await fetch(withProjectQuery('/api/coded-app/style-pass'), {
+        method: 'POST',
+        credentials: 'include',
+        signal: ac.signal,
+        headers: { 'Content-Type': 'application/json', ...getGrokRequestHeaders() },
+        body: JSON.stringify(withProjectBody({})),
+      });
+      void styleRes;
+    } catch (e) {
+      if (isAbortLikeError(e) || ac.signal.aborted) {
+        options.onProgress?.('Styling skipped — app files already on disk', 'warn');
+      }
+    } finally {
+      if (typeof window !== 'undefined') window.clearTimeout(timer);
+      else clearTimeout(timer);
+    }
+    markPostCodeUiRefreshDone(projectKey, paths);
     return { ok: true, skipped: true };
   }
 
@@ -533,39 +545,14 @@ export async function triggerUiStudioBetaAfterFilesApplied(options: {
     return null;
   }
 
-  const key = `final_ui:${projectKey}:${paths.slice().sort().join('|')}`;
-  if (key === lastAutoKey && inFlight) {
-    return inFlight;
-  }
-  lastAutoKey = key;
-  options.onProgress?.('Final UI — restyle after coding (layout draft)…', 'info');
-
-  const result = await runUiStudioBetaGeneration({
-    projectName: options.projectName,
-    writtenPaths: paths,
-    autoTriggered: true,
-    uiPhase: 'post_code',
-    sliceLabel: options.sliceLabel,
-    openPane: true,
-    onProgress: options.onProgress,
-  });
-
-  if (result?.ok && !(result as { skipped?: boolean }).skipped) {
-    markPostCodeUiRefreshDone(projectKey, paths);
-  } else if (!result?.ok) {
-    options.onProgress?.(
-      result?.error || 'Final UI miss — keeping coded App Preview',
-      'warn',
-    );
-  }
-
+  options.onProgress?.('Styling skipped — app files already on disk', 'warn');
   try {
     dispatchStudioShowLiveApp();
     window.dispatchEvent(new CustomEvent('nebula-open-app-preview'));
   } catch {
     /* ignore */
   }
-  return result;
+  return { ok: true, skipped: true };
 }
 
 /**

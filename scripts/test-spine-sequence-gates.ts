@@ -114,7 +114,7 @@ section("Gate C preparing does not expire at 90s without job");
 
 section("Gate A/B chat — no silent continue / false coding-ok");
 assert.equal(/Foundation may still start/.test(chat), false);
-assert.match(chat, /mockup deferred — coding Foundation/);
+assert.match(chat, /mockup deferred — coding Full Build/);
 assert.equal(/continuing Foundation anyway/.test(chat), false);
 assert.match(chat, /Full Build will not start/);
 assert.equal(
@@ -150,6 +150,14 @@ assert.equal(
 );
 assert.equal(isCodingCommandNote("continue"), true);
 assert.equal(isCodingCommandNote("START_CODING — SLICE: Primary — implement the next"), true);
+{
+  const dump =
+    "START_CODING — SLICE: Foundation+Primary. FIRST-SLICE APPLY: emit app/page.tsx. CODING_SKELETON: marketplace";
+  assert.equal(isUsableProjectGoal(dump), false);
+  assert.equal(isCodingCommandNote(dump), true);
+  const seeded = seedGoalOfTheAppSection({ "1. Goal of the app": dump }, [dump]);
+  assert.doesNotMatch(String(seeded), /SLICE:|CODING_SKELETON|FIRST-SLICE APPLY/);
+}
 assert.equal(
   extractGoalFromUserNote(
     'FAST PROTOTYPE MODE. User goal / brief:\n"""\nBuild a mobile education app for children aged 7–10 to practice daily reading.\n"""\n',
