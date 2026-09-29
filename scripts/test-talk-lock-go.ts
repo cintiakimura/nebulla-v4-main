@@ -23,13 +23,15 @@ import {
   TALK_CLOSE_QUESTION,
   userAcceptedTalkClose,
   applyTalkCloseDisplayPolicy,
+  mayPersistMasterPlanFromChat,
+  isTalkContinueNotLock,
   isTalkStayOpenUserTurn,
   isTalkRepairTurn,
   isPostFreezeTalkRequest,
 } from "../lib/fullBuildContract.ts";
 import { ensureCodingSkeletonOnPlan } from "../lib/codingSkeleton.ts";
 import { hydrateMasterPlanDerivedSections } from "../lib/nebulaIdeWorkspaceArtifacts.ts";
-import { seedGoalOfTheAppSection } from "../lib/spineSequenceClient.ts";
+import { seedGoalOfTheAppSection, talkThreadGoalBrief, goalSectionFromTalkOnStart } from "../lib/spineSequenceClient.ts";
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -69,7 +71,12 @@ section("close + freeze — complete plan + accept keeps workspace key");
   const plan = { ...completeCourierPlan(), projectKey: workspaceKey };
   assert.equal(assessFullBuildCompleteness({ plan }).allowGo, true);
   assert.equal(
-    shouldStartGoAfterTalk({ plan, userText: "no, build it", seedText: COURIER_SEED }),
+    shouldStartGoAfterTalk({
+      plan,
+      userText: "Start",
+      seedText: COURIER_SEED,
+      lastAssistantText: TALK_CLOSE_QUESTION,
+    }),
     true,
   );
   const frozen = freezePlan(plan);
@@ -100,11 +107,13 @@ section("Go reads frozen plan — skip chat; replacement brief talks again");
 
 section("you can start coding accepts close");
 {
-  assert.equal(userAcceptedTalkClose("you can start"), true);
-  assert.equal(userAcceptedTalkClose("you can start coding"), true);
-  assert.equal(userAcceptedTalkClose("Yes — you can start coding."), true);
-  assert.equal(userAcceptedTalkClose("start coding"), true);
-  assert.equal(userAcceptedTalkClose("go ahead"), true);
+  const lock = { lastAssistantText: TALK_CLOSE_QUESTION };
+  assert.equal(userAcceptedTalkClose("you can start", lock), true);
+  assert.equal(userAcceptedTalkClose("you can start coding", lock), true);
+  assert.equal(userAcceptedTalkClose("Yes — you can start coding.", lock), true);
+  assert.equal(userAcceptedTalkClose("start coding", lock), true);
+  assert.equal(userAcceptedTalkClose("go ahead", lock), true);
+  assert.equal(userAcceptedTalkClose("you can start"), false);
   assert.equal(userAcceptedTalkClose("yes"), false);
   assert.equal(userAcceptedTalkClose("ok"), false);
   assert.equal(userAcceptedTalkClose("perfect"), false);
@@ -139,7 +148,7 @@ section("you can start coding accepts close");
   assert.equal(lastAssistantOfferedTalkClose(`Done.\n\n${TALK_CLOSE_QUESTION}`), true);
   const frozen = freezePlan(completeCourierPlan());
   assert.equal(
-    shouldSkipGrokChatForExistingPlan({ plan: frozen, seedText: "you can start coding" }),
+    shouldSkipGrokChatForExistingPlan({ plan: frozen, seedText: COURIER_SEED }),
     true,
   );
   assert.equal(
@@ -218,7 +227,7 @@ section("frozen courier §4 is request/track/driver/account — not leftover edu
     }),
     true,
   );
-  assert.equal(userAcceptedTalkClose("finish code"), true);
+  assert.equal(userAcceptedTalkClose("Start", { lastAssistantText: TALK_CLOSE_QUESTION }), true);
 }
 
 section("frozen §§ stay — Go brief never becomes §1");
@@ -352,6 +361,32 @@ section("after freeze, improve the UI/UX must not skip-chat Full Build");
     chat,
     /allowGo &&\s*\n\s*!isPlanFrozen\(planOnDisk\) &&\s*\n\s*!displayText.includes\(TALK_CLOSE_QUESTION\)/,
   );
+}
+
+section("No I'm not saying NFT is Talk — not lock+Go");
+{
+  const nft =
+    "No, I'm not saying like NFT. NFT was just an example… do you know if there's any solution regarding";
+  const plan = completeCourierPlan();
+  assert.equal(isTalkContinueNotLock(nft), true);
+  assert.equal(userAcceptedTalkClose(nft, { lastAssistantText: TALK_CLOSE_QUESTION }), false);
+  assert.equal(shouldStartGoAfterTalk({ plan, userText: nft, seedText: COURIER_SEED }), false);
+  assert.equal(mayPersistMasterPlanFromChat({ userText: nft, lastAssistantText: TALK_CLOSE_QUESTION }), false);
+  const seed = "build an app help music artists can upload their own songs and albums";
+  const brief = talkThreadGoalBrief(
+    [
+      { role: "user", content: seed },
+      {
+        role: "assistant",
+        content: "Mom and independent artists upload songs. Public listeners use a link or QR with no account. Optional signup later. Mark ownership without NFT wallets. What do you think?",
+      },
+      { role: "user", content: nft },
+    ],
+    nft,
+  );
+  const goal = goalSectionFromTalkOnStart({ plan: { "1. Goal of the app": seed }, threadBrief: brief });
+  assert.notEqual(goal.replace(/\s+/g, " ").trim(), seed.replace(/\s+/g, " ").trim());
+  assert.match(goal, /QR|link|mom|independent|watermark|ownership|no account|listener/i);
 }
 
 console.log("\n✓ talk-lock-go tests passed\n");

@@ -116,6 +116,7 @@ import {
   isUsableProjectGoal,
   looksLikeRawUserPrompt,
   seedGoalOfTheAppSection,
+  goalSectionFromTalkOnStart,
   uiBriefUsable,
 } from "./lib/spineSequenceGates";
 import {
@@ -1573,6 +1574,7 @@ No approved UI code yet.
       const pp = projectPathsFor(req);
       const body = (req.body || {}) as Record<string, unknown>;
       const userNote = typeof body.userNote === "string" ? body.userNote.trim() : "";
+      const replaceGoalFromTalk = body.replaceGoalFromTalk === true;
       const rawName = typeof body.projectName === "string" ? body.projectName.trim() : "";
       const projectName = isReservedPlaceholderProductName(rawName) ? "" : rawName;
       if (userNote) {
@@ -1585,6 +1587,11 @@ No approved UI code yet.
           existing = {};
         }
         if (!isPlanFrozen(existing)) {
+          if (replaceGoalFromTalk) {
+            const talkGoal = goalSectionFromTalkOnStart({ plan: existing, threadBrief: userNote });
+            if (talkGoal) existing["1. Goal of the app"] = talkGoal;
+            persistMasterPlanJson(pp.workspaceRoot, pp.masterPlanPath, existing);
+          }
           fillMissingMasterPlanSectionsLocal({
             workspaceRoot: pp.workspaceRoot,
             masterPlanPath: pp.masterPlanPath,

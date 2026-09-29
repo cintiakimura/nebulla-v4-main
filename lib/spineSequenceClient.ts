@@ -402,3 +402,58 @@ export function usableGoalFromChatTurns(
   }
   return "";
 }
+
+function isHiddenTalkBootstrap(text: string): boolean {
+  const t = String(text || "").trim();
+  return /^(FULL BUILD MODE\.|FAST PROTOTYPE MODE\.|FAST PROTOTYPE CONTINUE\.|IDEA PROMPT DISCOVERY\.|FAST PROJECT MODE\.|I'm ready\. Follow)/i.test(
+    t,
+  );
+}
+
+/** Visible Talk (not the first-box seed alone) — used to rewrite §1 on Start. */
+export function talkThreadGoalBrief(
+  prior: { role?: string; content?: string }[] | null | undefined,
+  currentText?: string,
+): string {
+  const parts: string[] = [];
+  const push = (raw: string) => {
+    const t = String(raw || "")
+      .replace(/I think I have (what|everything) I need[\s\S]*$/i, "")
+      .replace(/\s+/g, " ")
+      .trim();
+    if (!t || isHiddenTalkBootstrap(t) || isCodingCommandNote(t)) return;
+    if (/^(start|go|lock|nothing to add|you can start)\b/i.test(t) && t.split(/\s+/).length <= 8) {
+      return;
+    }
+    parts.push(t);
+  };
+  for (const m of prior || []) {
+    if (m.role !== "user" && m.role !== "assistant") continue;
+    push(String(m.content || ""));
+  }
+  push(String(currentText || ""));
+  const fromTalk = parts.filter((_, i) => i > 0);
+  const opening = parts[0] || "";
+  if (fromTalk.length) {
+    return [`From Talk: ${fromTalk.join(" ")}`, opening].join("\n\n").slice(0, 4000);
+  }
+  return opening.slice(0, 4000);
+}
+
+/** §1 from Talk constraints — never leave the raw first prompt as the Goal tab. */
+export function goalSectionFromTalkOnStart(opts: {
+  plan?: Record<string, unknown> | null;
+  threadBrief: string;
+}): string {
+  const brief = String(opts.threadBrief || "").trim();
+  if (!brief) return seedGoalOfTheAppSection(opts.plan, []);
+  const distilled = distillBriefToGoalSection(brief, brief);
+  const nftOff = /\bnfts?\b/i.test(brief) && /\bnot saying\b/i.test(brief);
+  let out = distilled && isUsableProjectGoal(distilled)
+    ? distilled
+    : seedGoalOfTheAppSection({ ...(opts.plan || {}), "1. Goal of the app": "" }, [brief]);
+  if (nftOff && out && !/\bnft/i.test(out)) {
+    out = `${out}\nOut of scope: NFT wallets.`.slice(0, 900);
+  }
+  return out;
+}

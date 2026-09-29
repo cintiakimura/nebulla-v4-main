@@ -18,6 +18,8 @@ export {
   isCodingCommandNote,
   extractGoalFromUserNote,
   usableGoalFromChatTurns,
+  talkThreadGoalBrief,
+  goalSectionFromTalkOnStart,
   extractGoalFromMemoryMarkdown,
   extractProductGoalFromSection,
   firstPurposeSentences,

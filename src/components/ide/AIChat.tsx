@@ -229,6 +229,8 @@ import {
   isUsableProjectGoal,
   planRecordHasUsableGoal,
   usableGoalFromChatTurns,
+  talkThreadGoalBrief,
+  goalSectionFromTalkOnStart,
 } from '../../lib/spineSequenceGates';
 import { ideContextSnippetForChat, useIdeWorkspace } from '@/components/ide/IdeWorkspaceContext';
 import { useIdeCenterTabs } from '@/components/ide/IdeCenterTabsContext';
@@ -2706,6 +2708,14 @@ export function AIChat() {
     if (startGoThisTurn) skipGrokChat = true;
 
     if (startGoThisTurn) {
+      const talkBrief = talkThreadGoalBrief(prior, rawText);
+      const talkGoal = goalSectionFromTalkOnStart({
+        plan: planOnDisk,
+        threadBrief: talkBrief || seedForPlan,
+      });
+      if (talkGoal && planOnDisk) {
+        planOnDisk = { ...planOnDisk, "1. Goal of the app": talkGoal };
+      }
       try {
         await fetchJson<{ ok?: boolean }>(withProjectQuery('/api/master-plan/fill-missing-section4'), {
           method: 'POST',
@@ -2714,7 +2724,8 @@ export function AIChat() {
           body: JSON.stringify(
             withProjectBody({
               projectName: getBrowserProjectName().trim(),
-              userNote: seedForPlan,
+              userNote: talkBrief || talkGoal || seedForPlan,
+              replaceGoalFromTalk: true,
             }),
           ),
         });
