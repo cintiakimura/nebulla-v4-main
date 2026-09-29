@@ -35,6 +35,10 @@ import {
   isTalkRepairTurn,
   isPostFreezeTalkRequest,
   isTalkKeepTalking,
+  lastTalkWrapFromThread,
+  isTalkStartBuildingPhrase,
+  isTalkStartRetryNudge,
+  planAllowsGoAfterFill,
   talkLockedRoutes,
 } from "../lib/fullBuildContract.ts";
 import { persistBuildPacketFromPlan, readBuildPacket } from "../lib/buildPacket.ts";
@@ -124,7 +128,9 @@ section("Start accept phrases after lock; coding/yes/ok are not Start");
   const lock = { lastAssistantText: TALK_CLOSE_QUESTION };
   assert.equal(userAcceptedTalkClose("start", lock), true);
   assert.equal(userAcceptedTalkClose("start building", lock), true);
-  assert.equal(userAcceptedTalkClose("you can start", lock), true);
+  assert.equal(userAcceptedTalkClose("you can start building", lock), true);
+  assert.equal(isTalkStartBuildingPhrase("You can start building"), true);
+  assert.equal(isTalkStartBuildingPhrase("start coding"), false);
   assert.equal(userAcceptedTalkClose("go ahead and start", lock), true);
   assert.equal(userAcceptedTalkClose("Start.", lock), true);
   assert.equal(userAcceptedTalkClose("you can start coding", lock), false);
@@ -457,7 +463,34 @@ section("after freeze, improve the UI/UX must not skip-chat Full Build");
   );
 }
 
-section("two-option close: Start vs keep talking; user phrase wins; no canned after Start");
+section("wrap body + What do you think? → two-option close only");
+{
+  const wrapBody = [
+    "SoundSeed is locked as the name.",
+    "Artists upload songs and albums. Listeners open a public link with no account.",
+    "Optional signup later. Mark ownership without NFT wallets.",
+    "Anything else you want to add or tweak before we wrap this up? What do you think?",
+  ].join("\n");
+  const shown = applyTalkCloseDisplayPolicy(wrapBody, {
+    userText: "sounds right",
+    priorAssistantTexts: ["A private album toggle could wait."],
+    isFirstAssistantReply: false,
+    planAllowsGo: false,
+    planFrozen: false,
+  });
+  assert.equal(shown.trim().endsWith(TALK_CLOSE_QUESTION), true);
+  assert.doesNotMatch(shown, /What do you think\?/);
+  assert.doesNotMatch(shown, /Anything else you want to add/);
+  const mid = applyTalkCloseDisplayPolicy("A private album toggle could wait.\n\nWhat do you think?", {
+    userText: "what about private albums",
+    priorAssistantTexts: ["Got it — SoundSeed."],
+    isFirstAssistantReply: false,
+    planAllowsGo: true,
+    planFrozen: false,
+  });
+  assert.match(mid, /What do you think\?/);
+  assert.equal(mid.includes(TALK_CLOSE_QUESTION), false);
+}
 {
   const plan = completeCourierPlan();
   const twoOpt = TALK_CLOSE_QUESTION;
@@ -675,7 +708,91 @@ section("wrap+start packet/§4 are Talk names only — not seed dashboard/practi
   const chat = fs.readFileSync(path.join(REPO, "src/components/ide/AIChat.tsx"), "utf8");
   assert.match(chat, /applyApprovedWrapHandoff/);
   const startAt = chat.indexOf("if (startGoThisTurn)");
-  assert.match(chat.slice(startAt, startAt + 2800), /packetHandoff/);
+  const startBlock = chat.slice(startAt, startAt + 6500);
+  assert.match(startBlock, /packetHandoff/);
+  assert.match(startBlock, /runGoCodeAndApply/);
+  assert.match(startBlock, /applyApprovedWrapHandoff\(/);
+  const goAt = startBlock.indexOf("runGoCodeAndApply");
+  const afterGo = startBlock.slice(goAt);
+  assert.ok(goAt >= 0);
+  assert.match(afterGo, /\breturn;/);
+}
+
+section("empty plan + wrap + You can start building → §1 + packet; Start skips Talk");
+{
+  const wrap =
+    "SoundSeed is for independent artists who upload songs and albums. Listeners open a public link with no account. Optional signup later. Mark ownership without NFT wallets.";
+  assert.equal(planAllowsGoAfterFill({}), false);
+  assert.equal(planAllowsGoAfterFill(null), false);
+  assert.equal(
+    shouldStartGoAfterTalk({
+      plan: null,
+      userText: "You can start building",
+      lastAssistantText: wrap,
+    }),
+    true,
+  );
+  const handed = applyApprovedWrapHandoff({}, wrap);
+  assert.match(String(handed["1. Goal of the app"] || ""), /SoundSeed|independent artists/i);
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "talk-start-empty-"));
+  persistBuildPacketFromPlan(tmp, handed, wrap, "Foundation");
+  const pkt = readBuildPacket(tmp);
+  assert.match(pkt, /Approved wrap/);
+  assert.match(pkt, /SoundSeed|independent artists/i);
+  fs.rmSync(tmp, { recursive: true, force: true });
+  assert.equal(
+    lastTalkWrapFromThread([wrap, "Understood — locking the plan… starting the build now."]),
+    wrap,
+  );
+  const quiet = applyTalkCloseDisplayPolicy("I’ve updated the project quietly. Got it.", {
+    userText: "You can start building",
+    priorAssistantTexts: [wrap],
+    isFirstAssistantReply: false,
+    planAllowsGo: true,
+    planFrozen: false,
+  });
+  assert.doesNotMatch(quiet, /updated the project quietly/i);
+  assert.doesNotMatch(quiet, /^Got it\.?$/i);
+  const canned = applyTalkCloseDisplayPolicy("Got it.", {
+    userText: "start building",
+    priorAssistantTexts: [TALK_CLOSE_QUESTION],
+    isFirstAssistantReply: false,
+    planAllowsGo: true,
+    planFrozen: false,
+  });
+  assert.doesNotMatch(canned, /^Got it\.?$/i);
+  assert.equal(
+    shouldStartGoAfterTalk({
+      plan: null,
+      userText: "start coding",
+      lastAssistantText: wrap,
+    }),
+    false,
+  );
+  assert.equal(shouldOpenTalkTurn({ plan: null, userText: "start coding", lastAssistantText: wrap }), true);
+  assert.equal(
+    shouldStartGoAfterTalk({
+      plan: null,
+      userText: "go",
+      lastAssistantText: "Understood — locking the plan… starting the build now.",
+      priorAssistantTexts: [wrap],
+    }),
+    true,
+  );
+  assert.equal(
+    shouldStartGoAfterTalk({
+      plan: null,
+      userText: "go",
+      lastAssistantText: "What do you think?",
+    }),
+    false,
+  );
+  assert.equal(isTalkStartRetryNudge("go"), true);
+  const chat = fs.readFileSync(path.join(REPO, "src/components/ide/AIChat.tsx"), "utf8");
+  const startAt = chat.indexOf("if (startGoThisTurn)");
+  const startBlock = chat.slice(startAt, chat.indexOf("await sendIdeAssistantGrokTurn"));
+  assert.match(startBlock, /runGoCodeAndApply/);
+  assert.doesNotMatch(startBlock, /sendIdeAssistantGrokTurn/);
 }
 
 console.log("\n✓ talk-lock-go tests passed\n");

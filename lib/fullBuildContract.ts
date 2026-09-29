@@ -1025,6 +1025,25 @@ export function isTalkWrapUserTurn(text: string): boolean {
   return /\b(skip (the )?(talk|chat|summary)|wrap (this )?up)\b/i.test(t);
 }
 
+/** Assistant recap/wrap — stamp the two-option close. Mid-feature “What do you think?” is not this. */
+export function isTalkWrapDisplayText(text: string): boolean {
+  const t = String(text || "").trim();
+  if (!t) return false;
+  if (FIRST_SEED_TALK_CANNED_RE.test(t) && t.replace(/\s+/g, " ").length < 160) return false;
+  if (
+    /locked the name|here['’]?s what i (heard|got)|got what we need|before we wrap|wrap this up|\brecap\b/i.test(
+      t,
+    )
+  ) {
+    return true;
+  }
+  if (/anything else (you want to add|you['’]?d like to add|to add|to tweak)/i.test(t)) return true;
+  const endsWdyt = /what do you think\??\s*$/i.test(t);
+  const lines = t.split(/\n/).map((l) => l.trim()).filter(Boolean);
+  if (endsWdyt && (lines.length >= 4 || t.length >= 240)) return true;
+  return false;
+}
+
 /** Lock footer at wrap only, once, never on turn 1 / questions / repair. */
 export function applyTalkCloseDisplayPolicy(
   displayText: string,
@@ -1040,8 +1059,8 @@ export function applyTalkCloseDisplayPolicy(
   const lastPrior = [...(opts.priorAssistantTexts || [])].reverse().find((p) => String(p || "").trim()) || "";
   const lastOffered = lastAssistantOfferedTalkClose(lastPrior);
   const startPick = isTalkStartBuildingPhrase(opts.userText);
-  const wrapTurn = isTalkWrapUserTurn(opts.userText);
-  const skipStamp =
+  const wrapDisplay = isTalkWrapDisplayText(text) || isTalkWrapUserTurn(opts.userText);
+  const blocked =
     opts.planFrozen ||
     opts.isFirstAssistantReply ||
     isTalkStayOpenUserTurn(opts.userText) ||
@@ -1049,43 +1068,95 @@ export function applyTalkCloseDisplayPolicy(
     isTalkKeepTalking(opts.userText) ||
     startPick ||
     /\bsorry\b/i.test(text);
-  if (skipStamp || lastOffered || !wrapTurn) {
-    text = stripTalkCloseQuestion(text);
-  }
   if (
     lastOffered ||
     startPick ||
     (opts.priorAssistantTexts || []).some((p) => lastAssistantOfferedTalkClose(p))
   ) {
-    text = text.replace(FIRST_SEED_TALK_CANNED_RE, "").replace(/\n{3,}/g, "\n\n").trim();
+    text = text
+      .replace(FIRST_SEED_TALK_CANNED_RE, "")
+      .replace(/I['’]ve updated the project quietly[\s\S]*/i, "")
+      .replace(/^Got it\.?\s*$/i, "")
+      .replace(/\n{3,}/g, "\n\n")
+      .trim();
   }
-  if (!skipStamp && opts.planAllowsGo && wrapTurn && !text.includes(TALK_CLOSE_QUESTION)) {
+  if (blocked || lastOffered || !wrapDisplay) {
+    text = stripTalkCloseQuestion(text);
+  }
+  if (wrapDisplay && !blocked && !lastOffered) {
     text = stripBannedTalkCloseEndings(text);
-    text = `${text.trim()}\n\n${TALK_CLOSE_QUESTION}`.trim();
+    if (!text.includes(TALK_CLOSE_QUESTION)) {
+      text = `${text.trim()}\n\n${TALK_CLOSE_QUESTION}`.trim();
+    }
   }
   return text;
 }
 
 function stripBannedTalkCloseEndings(text: string): string {
-  return stripTalkCloseQuestion(text)
-    .replace(FIRST_SEED_TALK_CANNED_RE, "")
-    .replace(/\n*What do you think\??\s*$/i, "")
-    .replace(/\n*tell me if this is right\.?\s*$/i, "")
-    .replace(/\n{3,}/g, "\n\n")
-    .trim();
+  let t = stripTalkCloseQuestion(text).replace(FIRST_SEED_TALK_CANNED_RE, "").trim();
+  const trailing = [
+    /\n*what do you think\??\s*$/i,
+    /\n*tell me if this is right\.?\s*$/i,
+    /\n*ready to start\??\s*$/i,
+    /\n*is there anything else\??\s*$/i,
+    /\n*anything else you want to add or tweak before we wrap this up\??\s*$/i,
+    /\n*(is there )?anything else( you['’]?d | you want )?(to add|to tweak|to change)[\s\S]{0,80}\?\s*$/i,
+  ];
+  let prev = "";
+  while (t !== prev) {
+    prev = t;
+    for (const re of trailing) t = t.replace(re, "").trim();
+  }
+  return t.replace(/\n{3,}/g, "\n\n").trim();
 }
 
 const TALK_START_ACCEPT_RE =
-  /^(yes[,.]?\s*)?(please\s+)?(start( building)?|you can start|go ahead and start|would like me to start( building)?)[\s.!?]*$/i;
+  /^(yes[,.]?\s*)?(please\s+)?((you can|go ahead and) start( building)?|start( building)?|would like me to start( building)?)[\s.!?]*$/i;
 
 export function isTalkStartBuildingPhrase(text: string): boolean {
   const t = String(text || "").replace(/\s+/g, " ").trim();
   if (!t || /\bcoding\b/i.test(t)) return false;
   if (TALK_START_ACCEPT_RE.test(t)) return true;
   if (/^(yes[,.]?\s+)?start building[\s.!?]*$/i.test(t)) return true;
+  if (/^you can start building[\s.!?]*$/i.test(t)) return true;
   const words = t.split(/\s+/).filter(Boolean).length;
   if (words <= 10 && /\bwould like me to start\b/i.test(t)) return true;
   return false;
+}
+
+/** Grok lock/progress line — not the product wrap. */
+export function isTalkLockProgressLine(text: string): boolean {
+  const t = String(text || "").replace(/\s+/g, " ").trim();
+  if (!t) return false;
+  return (
+    /locking the plan/i.test(t) ||
+    /starting the build now/i.test(t) ||
+    /^plan is saved\b/i.test(t) ||
+    /^understood\b.{0,40}lock/i.test(t)
+  );
+}
+
+/** Bare “go” after a lock attempt — IDE Go, not a new Talk beat. */
+export function isTalkStartRetryNudge(text: string): boolean {
+  const t = String(text || "").replace(/\s+/g, " ").trim();
+  if (!t || /\bcoding\b/i.test(t)) return false;
+  return /^(go)[\s.!?]*$/i.test(t);
+}
+
+/** Last real wrap (skip lock-progress / canned / Got it). */
+export function lastTalkWrapFromThread(assistantTexts: string[]): string {
+  for (let i = (assistantTexts || []).length - 1; i >= 0; i--) {
+    const raw = String(assistantTexts[i] || "").trim();
+    if (!raw) continue;
+    if (isTalkLockProgressLine(raw)) continue;
+    if (/^got it\.?$/i.test(raw)) continue;
+    if (FIRST_SEED_TALK_CANNED_RE.test(raw) && raw.replace(/\s+/g, " ").length < 120) continue;
+    if (/updated the project quietly/i.test(raw)) continue;
+    const plain = stripTalkCloseQuestion(raw);
+    if (!plain) continue;
+    if (lastAssistantOfferedTalkClose(raw) || plain.length >= 40) return plain;
+  }
+  return "";
 }
 
 function talkMessageHasStartAccept(text: string): boolean {
@@ -1108,6 +1179,14 @@ export function shouldOpenTalkTurn(opts: {
   const seed = String(opts.userText || opts.seedText || "").trim();
   const goal = String(plan?.["1. Goal of the app"] || "").trim();
   if (seed && goal && isReplacementProductBrief(seed, goal)) return true;
+  if (isTalkStartBuildingPhrase(live)) return false;
+  if (
+    isTalkStartRetryNudge(live) &&
+    (isTalkLockProgressLine(String(opts.lastAssistantText || "")) ||
+      lastAssistantOfferedTalkClose(String(opts.lastAssistantText || "")))
+  ) {
+    return false;
+  }
   if (isTalkStayOpenUserTurn(live) || isTalkRepairTurn(live) || isPostFreezeTalkRequest(live)) {
     return true;
   }
@@ -1164,6 +1243,7 @@ export function shouldStartGoAfterTalk(opts: {
   seedText?: string;
   lastAssistantText?: string;
   lastAssistantOfferedTalkClose?: boolean;
+  priorAssistantTexts?: string[];
 }): boolean {
   const plan = opts.plan && typeof opts.plan === "object" ? opts.plan : null;
   const live = String(opts.userText || "").trim();
@@ -1171,15 +1251,28 @@ export function shouldStartGoAfterTalk(opts: {
   const goal = String(plan?.["1. Goal of the app"] || "").trim();
   if (seed && goal && isReplacementProductBrief(seed, goal)) return false;
   if (isTalkKeepTalking(live)) return false;
-  if (!isTalkStartBuildingPhrase(live)) {
-    if (
-      isTalkStayOpenUserTurn(live) ||
-      isTalkRepairTurn(live) ||
-      isPostFreezeTalkRequest(live) ||
-      isTalkContinueNotLock(live)
-    ) {
-      return false;
-    }
+  const wrapInChat = lastTalkWrapFromThread([
+    ...(opts.priorAssistantTexts || []),
+    String(opts.lastAssistantText || ""),
+  ]);
+  if (isTalkStartBuildingPhrase(live)) {
+    return true;
+  }
+  if (isTalkStartRetryNudge(live)) {
+    return Boolean(
+      lastAssistantOfferedTalkClose(String(opts.lastAssistantText || "")) ||
+        isTalkLockProgressLine(String(opts.lastAssistantText || "")) ||
+        (opts.priorAssistantTexts || []).some((p) => lastAssistantOfferedTalkClose(p) || isTalkLockProgressLine(p)) ||
+        (isPlanFrozen(plan) && isTalkWrapAccepted(plan)),
+    );
+  }
+  if (
+    isTalkStayOpenUserTurn(live) ||
+    isTalkRepairTurn(live) ||
+    isPostFreezeTalkRequest(live) ||
+    isTalkContinueNotLock(live)
+  ) {
+    return false;
   }
   const acceptOpts = {
     lastAssistantText: opts.lastAssistantText,
@@ -1189,6 +1282,7 @@ export function shouldStartGoAfterTalk(opts: {
   if (!userAcceptedTalkClose(opts.userText, acceptOpts)) {
     return false;
   }
+  if (wrapInChat) return true;
   if (!plan) return false;
   return planAllowsGoAfterFill(plan);
 }

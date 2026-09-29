@@ -99,7 +99,7 @@ import {
 } from '../../lib/nebulaAiCodingPipeline';
 import { isFoundationGoInFlight } from '../../lib/foundationHeavyJob';
 import { abortHonestyUserLine, abortWithUserStopReason, isAbortLikeError, isAbortLikeMessage } from '../../lib/abortLikeError';
-import { applyApprovedWrapHandoff, applyTalkCloseDisplayPolicy, assessFullBuildCompleteness, freezePlan, fullBuildGoUserNote, fullBuildIncompleteFollowUp, formatFullBuildIncompleteStop, FULL_BUILD_INCOMPLETE_STOP, FULL_BUILD_NO_RETRY_ACTIVITY, isPlanFrozen, isTalkKeepTalking, isTalkRepairTurn, isTalkStayOpenUserTurn, lastAssistantOfferedTalkClose, markTalkWrapAccepted, mayPersistMasterPlanFromChat, shouldOpenTalkTurn, shouldSkipGrokChatForExistingPlan, shouldStartGoAfterTalk, stripTalkCloseQuestion, TALK_CLOSE_QUESTION, userAcceptedTalkClose, userSaidTalkReady } from '../../../lib/fullBuildContract';
+import { applyApprovedWrapHandoff, applyTalkCloseDisplayPolicy, assessFullBuildCompleteness, freezePlan, fullBuildGoUserNote, fullBuildIncompleteFollowUp, formatFullBuildIncompleteStop, FULL_BUILD_INCOMPLETE_STOP, FULL_BUILD_NO_RETRY_ACTIVITY, isPlanFrozen, isTalkKeepTalking, isTalkRepairTurn, isTalkStayOpenUserTurn, lastAssistantOfferedTalkClose, lastTalkWrapFromThread, markTalkWrapAccepted, mayPersistMasterPlanFromChat, shouldOpenTalkTurn, shouldSkipGrokChatForExistingPlan, shouldStartGoAfterTalk, stripTalkCloseQuestion, TALK_CLOSE_QUESTION, userAcceptedTalkClose, userSaidTalkReady } from '../../../lib/fullBuildContract';
 import {
   isAssistantCodingPromise,
   isAssistantRefineClaim,
@@ -2158,6 +2158,10 @@ export function AIChat() {
     const lastAssistantText = [...prior]
       .reverse()
       .find((m) => m.role === 'assistant' && String(m.content || '').trim())?.content;
+    const priorAssistantTexts = prior
+      .filter((m) => m.role === 'assistant' && String(m.content || '').trim())
+      .map((m) => String(m.content));
+    const wrapFromThread = lastTalkWrapFromThread(priorAssistantTexts);
     const talkCloseOffered =
       lastAssistantOfferedTalkClose(String(lastAssistantText || '')) ||
       prior.some(
@@ -2175,6 +2179,7 @@ export function AIChat() {
         seedText: seedForPlan,
         lastAssistantText,
         lastAssistantOfferedTalkClose: talkCloseOffered,
+        priorAssistantTexts,
       });
     const beatAHold = shouldHoldFirstSeedBeatA({
       userText: rawText,
@@ -2720,18 +2725,46 @@ export function AIChat() {
     if (startGoThisTurn) skipGrokChat = true;
 
     if (startGoThisTurn) {
-      const wrapPlain = stripTalkCloseQuestion(String(lastAssistantText || ""));
-      if (planOnDisk) planOnDisk = applyApprovedWrapHandoff(planOnDisk, wrapPlain);
+      const wrapPlain =
+        wrapFromThread ||
+        lastTalkWrapFromThread([String(lastAssistantText || "")]) ||
+        stripTalkCloseQuestion(String(lastAssistantText || ""));
+      const stamp = () => new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+      const sayIde = (content: string) => {
+        setMessages((p) => {
+          const next = [
+            ...p,
+            {
+              id: `a-start-${Date.now()}`,
+              role: "assistant" as const,
+              content,
+              timestamp: stamp(),
+            },
+          ];
+          messagesRef.current = next;
+          return next;
+        });
+      };
+      if (!String(wrapPlain || "").trim()) {
+        sayIde("I can’t start building yet — there’s no wrap summary in chat to write into the plan.");
+        sendingRef.current = false;
+        setSending(false);
+        return;
+      }
+      planOnDisk = applyApprovedWrapHandoff(
+        planOnDisk && typeof planOnDisk === "object" ? planOnDisk : {},
+        wrapPlain,
+      );
       const talkBrief = talkThreadGoalBrief(prior, rawText);
       const talkGoal = goalSectionFromTalkOnStart({
         plan: planOnDisk,
         threadBrief: wrapPlain || talkBrief || seedForPlan,
       });
       try {
-        await fetchJson<{ ok?: boolean }>(withProjectQuery('/api/master-plan/fill-missing-section4'), {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          credentials: 'include',
+        await fetchJson<{ ok?: boolean }>(withProjectQuery("/api/master-plan/fill-missing-section4"), {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
           body: JSON.stringify(
             withProjectBody({
               projectName: getBrowserProjectName().trim(),
@@ -2742,75 +2775,79 @@ export function AIChat() {
           ),
         });
       } catch {
-        /* freeze still persists the agreed §§ */
+        /* freeze still persists wrap → §1 + packet */
       }
       try {
         const fr = await fetchJson<{ plan?: Record<string, unknown>; packetHandoff?: boolean }>(
-          withProjectQuery('/api/master-plan/freeze'),
+          withProjectQuery("/api/master-plan/freeze"),
           {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            credentials: 'include',
-            body: JSON.stringify(withProjectBody({
-              talkWrapAccepted: true,
-              wrapText: wrapPlain,
-              sliceName: 'Foundation',
-            })),
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            credentials: "include",
+            body: JSON.stringify(
+              withProjectBody({
+                talkWrapAccepted: true,
+                wrapText: wrapPlain,
+                sliceName: "Foundation",
+              }),
+            ),
           },
         );
         if (fr.plan) planOnDisk = fr.plan;
         if (fr.packetHandoff !== true) {
-          pushActivity('Build packet missing — staying in Talk.', 'warn');
+          sayIde("Build packet missing after freeze — Go did not start.");
+          pushActivity("Build packet missing — staying in Talk.", "warn");
           sendingRef.current = false;
           setSending(false);
           return;
         }
-      } catch {
-        pushActivity('Build packet missing — staying in Talk.', 'warn');
+      } catch (frErr) {
+        const why = frErr instanceof Error ? frErr.message : "freeze failed";
+        sayIde(`Could not freeze the plan (${why}). Go did not start.`);
+        pushActivity("Build packet missing — staying in Talk.", "warn");
         sendingRef.current = false;
         setSending(false);
         return;
       }
-      const lockTs = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-      const lockLine = 'Plan is saved — starting the build on this workspace.';
-      setMessages((p) => {
-        const next = [
-          ...p,
-          { id: `a-lock-${Date.now()}`, role: 'assistant' as const, content: lockLine, timestamp: lockTs },
-        ];
-        messagesRef.current = next;
-        return next;
+      try {
+        window.dispatchEvent(new CustomEvent("nebula-master-plan-updated"));
+      } catch {
+        /* ignore */
+      }
+      const lockLine = "Plan is saved — starting the build on this workspace.";
+      sayIde(lockLine);
+      pushActivity("Plan frozen — one Go (no second interview)", "info");
+      beginCodingActivity("Grok Code — writing files to workspace", goWorkSteps(), {
+        subhead: "Full Build",
+        initialLog: "Running Grok Code — apply starts after Code pass 1 returns files",
       });
-      pushActivity('Plan frozen — one Go (no second interview)', 'info');
-      beginCodingActivity('Grok Code — writing files to workspace', goWorkSteps(), {
-        subhead: 'Full Build',
-        initialLog: 'Running Grok Code — apply starts after Code pass 1 returns files',
-      });
-      setInferenceFirstStage('coding', diskProjectKey);
+      setInferenceFirstStage("coding", diskProjectKey);
       try {
         const go = await runGoCodeAndApply({
           userId,
           projectName,
           userNote: fullBuildGoUserNote(planOnDisk, diskPaths),
           onProgress: pushActivity,
-          messages: [{ role: 'user', content: fullBuildGoUserNote(planOnDisk, diskPaths) }],
+          messages: [{ role: "user", content: fullBuildGoUserNote(planOnDisk, diskPaths) }],
         });
         if (!go.ok && isGoAborting(projectName)) {
-          holdCodingFailure('Stopped — you cancelled coding. Chat is unlocked.');
+          holdCodingFailure("Stopped — you cancelled coding. Chat is unlocked.");
         } else if (!go.ok) {
-          pushActivity(go.statusMessage || 'Full Build did not finish.', 'warn');
+          sayIde(go.statusMessage || "Full Build did not finish (missing key or model).");
+          pushActivity(go.statusMessage || "Full Build did not finish.", "warn");
         } else {
           setGrokActivity((prev) =>
-            finishGrokActivity(prev, 'Full Build files on disk', goWorkSteps(), go.statusMessage),
+            finishGrokActivity(prev, "Full Build files on disk", goWorkSteps(), go.statusMessage),
           );
         }
       } catch (codingErr) {
         if (isAbortLikeError(codingErr) && isGoAborting(projectName)) {
-          holdCodingFailure('Stopped — you cancelled coding. Chat is unlocked.');
+          holdCodingFailure("Stopped — you cancelled coding. Chat is unlocked.");
         } else if (isAbortLikeError(codingErr)) {
-          pushActivity('Research / UI mockup skipped — Full Build continues from the locked plan.', 'warn');
+          pushActivity("Research / UI mockup skipped — Full Build continues from the locked plan.", "warn");
         } else {
-          const fail = codingErr instanceof Error ? codingErr.message : 'Could not write files to workspace';
+          const fail = codingErr instanceof Error ? codingErr.message : "Could not write files to workspace";
+          sayIde(fail);
           holdCodingFailure(fail);
         }
       } finally {
@@ -2820,7 +2857,7 @@ export function AIChat() {
         const queued = pendingTalkDuringGoRef.current.splice(0);
         if (queued.length) {
           window.setTimeout(() => {
-            void sendChatRef.current(queued.join('\n'), { skipGoFromQueue: true });
+            void sendChatRef.current(queued.join("\n"), { skipGoFromQueue: true });
           }, 50);
         }
       }
@@ -2986,9 +3023,6 @@ export function AIChat() {
         displayText = formatFirstSeedTalkDisplay(raw, { allowCanned });
         hadCodingTag = false;
       }
-      const priorAssistantTexts = prior
-        .filter((m) => m.role === 'assistant' && String(m.content || '').trim())
-        .map((m) => String(m.content));
       displayText = applyTalkCloseDisplayPolicy(displayText, {
         userText: rawText,
         priorAssistantTexts,
@@ -3048,6 +3082,7 @@ export function AIChat() {
           seedText: seedForPlan,
           lastAssistantText,
           lastAssistantOfferedTalkClose: talkCloseOffered,
+          priorAssistantTexts,
         })
       ) {
         willCode = false;
@@ -3481,7 +3516,7 @@ export function AIChat() {
                   credentials: 'include',
                   body: JSON.stringify(withProjectBody({
               talkWrapAccepted: true,
-              wrapText: stripTalkCloseQuestion(String(lastAssistantText || '')),
+              wrapText: wrapFromThread || stripTalkCloseQuestion(String(lastAssistantText || '')),
               sliceName: 'Foundation',
             })),
                 },
