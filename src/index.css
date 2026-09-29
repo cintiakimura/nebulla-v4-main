@@ -1360,38 +1360,14 @@
 }
 
 .nebulla-ide-shell .landing-hero-split {
-  display: grid;
+  display: block;
   width: 100%;
-  max-width: 72rem;
+  max-width: 36rem;
   margin: 0 auto;
-  gap: 2.25rem;
-  align-items: center;
-}
-
-@media (min-width: 960px) {
-  .nebulla-ide-shell .landing-hero-split {
-    grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr);
-    gap: 3.5rem;
-  }
 }
 
 .nebulla-ide-shell .landing-hero-copy {
   text-align: left;
-}
-
-.nebulla-ide-shell .landing-hero-photo {
-  overflow: hidden;
-  border: 1px solid var(--shell-border);
-  border-radius: 14px;
-  background: #fff;
-}
-
-.nebulla-ide-shell .landing-hero-photo img {
-  display: block;
-  width: 100%;
-  height: auto;
-  object-fit: cover;
-  aspect-ratio: 3 / 2;
 }
 
 .nebulla-ide-shell .nebula-landing-page .landing-header-btn {

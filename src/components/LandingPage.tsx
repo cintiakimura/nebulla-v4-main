@@ -110,14 +110,6 @@ export function LandingPage({ onEnter }: LandingPageProps) {
                 </p>
                 <LandingHeroPrompt className="mt-8 w-full" />
               </div>
-              <div className="landing-hero-photo">
-                <img
-                  src="/images/landing-hero.png"
-                  alt="KG field device with screen and ethernet port"
-                  width={1600}
-                  height={1067}
-                />
-              </div>
             </div>
           </section>
 
