@@ -1292,6 +1292,7 @@ export async function runGoCodeAndApply(options: {
     for (let pass = 0; pass < GO_CODE_MAX_PASSES; pass++) {
       if (isGoSessionAborted(projectName)) break;
       passes = pass + 1;
+      const continuation = pass > 0;
       const missingBeforePass = listMissingFullBuildRoutes(expectedRoutes, allWrittenPaths);
       const passMessages = continuation
         ? [
@@ -1576,7 +1577,7 @@ export async function runGoCodeAndApply(options: {
     const sliceLabel =
       parseGoSliceLabel(userNote) ||
       parseGoSliceLabel(lastCodeText) ||
-      (/Full Build/i.test(String(userNote || '')) ? 'Full Build' : parseGoSliceLabel('SLICE: Foundation'));
+      parseGoSliceLabel('SLICE: Foundation');
     const oversized = assessOversizedGoApply({ sliceLabel, writtenPaths: allWrittenPaths });
     const exit = assessFoundationGoExit({
       totalWritten,
