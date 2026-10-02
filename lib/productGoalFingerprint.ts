@@ -182,6 +182,7 @@ export function shouldSkipLeftoverProductFile(relativePath: string, goal: string
   if (!slug) return false;
   const g = String(goal || "");
   const documentLock = /\b(mydossier|dossiers?|documents?|ocr|tesseract|scans?|client[- ]?side extract)\b/i.test(g);
+  if (detectProductDomain(g) !== "education" && EDUCATION_LEFTOVER_SLUGS.has(slug)) return true;
   if (!documentLock && DOCUMENT_LEFTOVER_SLUGS.has(slug)) return true;
   if (isPokerWorkflowGoal(g) && DOCUMENT_LEFTOVER_SLUGS.has(slug)) return true;
   return false;
@@ -195,10 +196,9 @@ export function lastGoCodeFitsGoal(codeText: string, goal: string): boolean {
   if (shouldSkipLeftoverProductFile("app/dossiers/page.tsx", g) && /app\/dossiers\/page/i.test(body)) {
     return false;
   }
-  if (shouldSkipLeftoverProductFile("app/forms/page.tsx", g) && /app\/forms\/page/i.test(body)) {
+  if (detectProductDomain(g) !== "education" && /app\/(practice|teacher|parent|lesson)\/page/i.test(body)) {
     return false;
   }
-  return true;
 }
 
 /** New Fast Prototype / New Project brief — not Continue / next slice. */

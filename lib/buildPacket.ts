@@ -3,7 +3,7 @@
  */
 import fs from "fs";
 import path from "path";
-import { stripTalkCloseQuestion } from "./fullBuildContract";
+import { extractProductWrapForGoal } from "./fullBuildContract";
 
 export const BUILD_PACKET_REL = "nebula-project/build-packet.md";
 
@@ -16,7 +16,7 @@ export type BuildPacketFields = {
 };
 
 export function extractWrapFromAssistant(text: string): string {
-  return stripTalkCloseQuestion(String(text || "")).replace(/\s+/g, " ").trim().slice(0, 4000);
+  return extractProductWrapForGoal(text).replace(/\s+/g, " ").trim().slice(0, 4000);
 }
 
 /** Outs spoken in wrap / Talk — generic markers only (no demo-app product rules). */

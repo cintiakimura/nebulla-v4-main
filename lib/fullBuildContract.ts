@@ -885,9 +885,55 @@ export function markTalkWrapAccepted(
 }
 
 /** Start only: wrap → TALK_WRAP_TEXT_KEY + §1; §4 = wrap/Talk names only. */
+export function looksLikeStartInstructionWrap(text: string): boolean {
+  const t = String(text || "").replace(/\s+/g, " ").trim();
+  if (!t) return true;
+  if (/say start to freeze/i.test(t)) return true;
+  if (/^say start\b/i.test(t) && t.length < 120) return true;
+  return false;
+}
+
+export function isEducationProductGoal(text: string): boolean {
+  const g = String(text || "").toLowerCase();
+  return /\b(kids?|child|children|student|learner|classroom|lesson|teacher|tutor|school|education|reading app)\b/.test(
+    g,
+  );
+}
+
+export function looksLikeLeftoverEducationShell(text: string): boolean {
+  const t = String(text || "");
+  if (isEducationProductGoal(t)) return false;
+  return /\bbeacon path\b/i.test(t) || /one short lesson/i.test(t) || /\bstart practice\b/i.test(t);
+}
+
+/** Product wrap for §1 — name / who / job. Never “say start” or leftover education copy. */
+export function extractProductWrapForGoal(text: string): string {
+  let t = stripTalkCloseQuestion(String(text || ""));
+  t = t
+    .replace(/Would you like me to start building[\s\S]*$/i, "")
+    .replace(/If this is what you want, say start[\s\S]*$/i, "")
+    .replace(/say start to freeze[^.!?\n]*/gi, "")
+    .replace(/\bsay start\b[^.!?\n]*/gi, "")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+  if (looksLikeLeftoverEducationShell(t) && !isEducationProductGoal(t)) {
+    t = t
+      .replace(/beacon path[^.!?\n]*/gi, "")
+      .replace(/one short lesson[^.!?\n]*/gi, "")
+      .replace(/start practice[^.!?\n]*/gi, "")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+  if (looksLikeStartInstructionWrap(t) && t.length < 160) return "";
+  if (looksLikeLeftoverEducationShell(t) && !isEducationProductGoal(t) && t.length < 200) return "";
+  return t.slice(0, 4000);
+}
+
 export function looksLikeUnsafeTalkGoal(text: string): boolean {
   const t = String(text || "").replace(/\s+/g, " ").trim();
   if (!t) return true;
+  if (looksLikeStartInstructionWrap(t)) return true;
+  if (looksLikeLeftoverEducationShell(t)) return true;
   if (isTalkLockProgressLine(t)) return true;
   if (FIRST_SEED_TALK_CANNED_RE.test(t) && t.length < 160) return true;
   if (/here are (some |a few )?(product )?names\b/i.test(t)) return true;
@@ -955,7 +1001,7 @@ export function applyApprovedWrapHandoff(
   plan: Record<string, unknown> | Record<string, string>,
   wrapText: string,
 ): Record<string, unknown> {
-  const wrap = stripTalkCloseQuestion(wrapText).replace(/\s+/g, " ").trim();
+  const wrap = extractProductWrapForGoal(wrapText).replace(/\s+/g, " ").trim();
   const next = { ...(plan as Record<string, unknown>) };
   if (!wrap || looksLikeUnsafeTalkGoal(wrap)) return next;
   next[TALK_WRAP_TEXT_KEY] = wrap.slice(0, 4000);
@@ -1219,9 +1265,11 @@ export function lastTalkWrapFromThread(assistantTexts: string[]): string {
     if (/^got it\.?$/i.test(raw)) continue;
     if (FIRST_SEED_TALK_CANNED_RE.test(raw) && raw.replace(/\s+/g, " ").length < 120) continue;
     if (/updated the project quietly/i.test(raw)) continue;
-    const plain = stripTalkCloseQuestion(raw);
-    if (!plain) continue;
-    if (lastAssistantOfferedTalkClose(raw) || plain.length >= 40) return plain;
+    const product = extractProductWrapForGoal(raw);
+    if (!product) continue;
+    if (looksLikeStartInstructionWrap(raw) && product.length < 40) continue;
+    if (looksLikeLeftoverEducationShell(product)) continue;
+    if (lastAssistantOfferedTalkClose(raw) || product.length >= 40) return product;
   }
   return "";
 }
